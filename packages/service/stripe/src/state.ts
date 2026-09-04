@@ -1,4 +1,4 @@
-import type { KeyValueStore } from "@crvouga/mockingbird-kv"
+import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { Collection, IdSequence } from "@crvouga/mockingbird-service"
 
 export type Address = {
@@ -84,15 +84,15 @@ export class StripeState {
   readonly prices: Collection<PriceRecord>
   readonly ids: IdSequence
 
-  constructor(kv: KeyValueStore) {
-    this.customers = new Collection(kv, "customers")
-    this.products = new Collection(kv, "products")
-    this.prices = new Collection(kv, "prices")
-    this.ids = new IdSequence(kv, "stripe")
+  constructor(sqlite: SqliteClient, namespace: string) {
+    this.customers = new Collection(sqlite, namespace, "customers")
+    this.products = new Collection(sqlite, namespace, "products")
+    this.prices = new Collection(sqlite, namespace, "prices")
+    this.ids = new IdSequence(sqlite, namespace, "stripe")
   }
 
   async requestLogUrl() {
-    const id = await this.ids.next("req_")
+    const id = this.ids.next("req_")
     return `https://dashboard.stripe.com/acct_mockingbird/test/workbench/logs?object=${id}`
   }
 }

@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { MemoryKV } from "@crvouga/mockingbird-kv-memory"
 import { type OpenAPIDocument, parseOpenAPIDocument } from "@crvouga/mockingbird-openapi"
+import { createDefaultSqlite, type SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import {
+  bootSqlite,
   Collection,
   coerce,
   createService,
@@ -53,11 +54,13 @@ const handlers: OperationHandlers = {
   },
 }
 
-const build = (kv = new MemoryKV(), replacement?: OperationHandlers) =>
+const ready = (sqlite?: SqliteClient) => bootSqlite(sqlite ?? createDefaultSqlite())
+
+const build = (sqlite = ready(), replacement?: OperationHandlers) =>
   createService({
     document,
     handlers: replacement ?? handlers,
-    kv,
+    sqlite,
     namespace: "things",
     notFound: () => jsonResponse(404, { error: "nope" }),
     unsupported: () => jsonResponse(501, { error: "unsupported" }),
@@ -80,7 +83,7 @@ describe("createService", () => {
           if (unsupported) partial["things.delete"] = async () => new Response()
           const problems = verifyOperations(document, partial)
           expect(problems.length).toBe(omit.length + (extra ? 1 : 0) + (unsupported ? 1 : 0))
-          expect(() => build(new MemoryKV(), partial)).toThrow(OperationRegistryError)
+          expect(() => build(ready(), partial)).toThrow(OperationRegistryError)
         },
       ),
       params,
@@ -142,21 +145,22 @@ describe("createService", () => {
   test("reset clears only this service's namespace", async () => {
     await fc.assert(
       fc.asyncProperty(
-        fc.array(fc.tuple(fc.string({ minLength: 1 }), fc.uint8Array()), { maxLength: 5 }),
+        fc.array(fc.tuple(fc.stringMatching(/^[a-z]{1,8}$/), fc.integer()), {
+          minLength: 1,
+          maxLength: 5,
+        }),
         async (entries) => {
-          const kv = new MemoryKV()
-          const service = build(kv)
+          const sqlite = ready()
+          const service = build(sqlite)
+          const other = new Collection<number>(sqlite, "other", "items")
+          const mine = new Collection<number>(sqlite, "things", "items")
           for (const [key, value] of entries) {
-            await service.kv.set(key, value)
-            await kv.set(`other:${key}`, value)
+            mine.insert(key, value)
+            other.insert(key, value)
           }
           await service.reset()
-          let mine = 0
-          for await (const _ of service.kv.list()) mine++
-          expect(mine).toBe(0)
-          let others = 0
-          for await (const _ of kv.list({ prefix: "other:" })) others++
-          expect(others).toBe(new Set(entries.map(([k]) => k)).size)
+          expect(mine.list()).toEqual([])
+          expect(other.list().length).toBe(new Set(entries.map(([k]) => k)).size)
         },
       ),
       params,
@@ -185,28 +189,28 @@ describe("Collection", () => {
           { maxLength: 20 },
         ),
         async (ops) => {
-          const collection = new Collection<number>(new MemoryKV(), "c")
+          const collection = new Collection<number>(ready(), "ns", "c")
           const model = new Map<string, { seq: number; value: number }>()
           let seq = 0
           for (const op of ops) {
             if (op.op === "insert") {
-              await collection.insert(op.id, op.value)
+              collection.insert(op.id, op.value)
               model.set(op.id, { seq: ++seq, value: op.value })
             } else if (op.op === "update") {
-              const result = await collection.update(op.id, op.value)
+              const result = collection.update(op.id, op.value)
               const existing = model.get(op.id)
               expect(result === undefined).toBe(existing === undefined)
               if (existing) existing.value = op.value
             } else {
-              expect(await collection.delete(op.id)).toBe(model.delete(op.id))
+              expect(collection.delete(op.id)).toBe(model.delete(op.id))
             }
           }
-          const listed = await collection.list()
+          const listed = collection.list()
           const expected = [...model.entries()]
             .sort((a, b) => b[1].seq - a[1].seq)
             .map(([id, v]) => ({ id, seq: v.seq, value: v.value }))
           expect(listed).toEqual(expected)
-          const oldest = await collection.list({ order: "oldest" })
+          const oldest = collection.list({ order: "oldest" })
           expect(oldest).toEqual([...expected].reverse())
         },
       ),
@@ -216,17 +220,17 @@ describe("Collection", () => {
 })
 
 describe("IdSequence", () => {
-  test("ids are unique, prefixed, fixed-length, deterministic per kv history, and never collide across prefixes", async () => {
+  test("ids are unique, prefixed, fixed-length, deterministic per sequence history, and never collide across prefixes", async () => {
     await fc.assert(
       fc.asyncProperty(
         fc.array(fc.constantFrom("cus_", "prod_", "price_"), { minLength: 1, maxLength: 30 }),
         async (prefixes) => {
-          const a = new IdSequence(new MemoryKV())
-          const b = new IdSequence(new MemoryKV())
+          const a = new IdSequence(ready(), "ns")
+          const b = new IdSequence(ready(), "ns")
           const seen = new Set<string>()
           for (const prefix of prefixes) {
-            const id = await a.next(prefix)
-            expect(await b.next(prefix)).toBe(id)
+            const id = a.next(prefix)
+            expect(b.next(prefix)).toBe(id)
             expect(id.startsWith(prefix)).toBe(true)
             expect(id.length).toBe(prefix.length + 14)
             expect(/^[A-Za-z0-9_]+$/.test(id)).toBe(true)

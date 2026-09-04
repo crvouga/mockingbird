@@ -1,4 +1,4 @@
-import { json, type KeyValueStore, namespace } from "@crvouga/mockingbird-kv"
+import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 
 const ALPHABET = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
@@ -30,23 +30,31 @@ export const opaqueToken = (input: string, length: number): string => {
 }
 
 /**
- * Sequential id source persisted in kv. Ids are deterministic for a given kv history
- * (`cus_` + 14 opaque chars, like `cus_Qh3kLm9zXcVbN2`), so reproductions stay stable.
+ * Sequential id source persisted in SQLite. Ids are deterministic for a given
+ * sequence history (`cus_` + 14 opaque chars), so reproductions stay stable.
  */
 export class IdSequence {
-  private readonly counters
-
   constructor(
-    kv: KeyValueStore,
+    private readonly sqlite: SqliteClient,
+    private readonly namespace: string,
     private readonly salt = "mockingbird",
-  ) {
-    this.counters = json<number>(namespace(kv, "ids"))
-  }
+  ) {}
 
-  async next(prefix: string, length = 14): Promise<string> {
-    const current = (await this.counters.get(prefix)) ?? 0
-    const value = current + 1
-    await this.counters.set(prefix, value)
-    return `${prefix}${opaqueToken(`${this.salt}:${prefix}:${value}`, length)}`
+  next(prefix: string, length = 14): string {
+    return this.sqlite.transaction(() => {
+      const row = this.sqlite
+        .prepare(
+          "SELECT value FROM mockingbird_sequences WHERE namespace = ? AND name = ? AND kind = 'id'",
+        )
+        .get<{ value: number }>(this.namespace, prefix)
+      const value = (row?.value ?? 0) + 1
+      this.sqlite
+        .prepare(
+          `INSERT INTO mockingbird_sequences (namespace, name, kind, value) VALUES (?, ?, 'id', ?)
+           ON CONFLICT(namespace, name, kind) DO UPDATE SET value = excluded.value`,
+        )
+        .run(this.namespace, prefix, value)
+      return `${prefix}${opaqueToken(`${this.salt}:${prefix}:${value}`, length)}`
+    })
   }
 }

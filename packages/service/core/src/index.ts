@@ -14,6 +14,7 @@ export type {
   ServiceOptions,
 } from "./service.js"
 export {
+  bootSqlite,
   createService,
   defineOperations,
   OperationRegistryError,

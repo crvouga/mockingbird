@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service",
   "version": "0.1.0",
-  "description": "Generic service runtime: Fetch-native APIs, Hono dispatch keyed by OpenAPI operationId, namespaced kv, request parsing and operation registries.",
+  "description": "Generic service runtime: Fetch-native APIs, Hono dispatch keyed by OpenAPI operationId, SQLite-backed collections, request parsing and operation registries.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-core": "workspace:*",
-    "@crvouga/mockingbird-kv": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
@@ -52,6 +52,6 @@
   "devDependencies": {
     "fast-check": "4.9.0",
     "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/mockingbird-kv-memory": "workspace:*"
+    "@crvouga/sqlite-mem": "1.15.0"
   }
 }

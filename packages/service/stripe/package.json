@@ -49,7 +49,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-core": "workspace:*",
-    "@crvouga/mockingbird-kv": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
@@ -58,7 +58,7 @@
   "devDependencies": {
     "fast-check": "4.9.0",
     "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/mockingbird-kv-memory": "workspace:*",
+    "@crvouga/sqlite-mem": "1.15.0",
     "@crvouga/mockingbird-parity": "workspace:*",
     "@crvouga/mockingbird-openbao": "workspace:*",
     "yaml": "2.9.0",

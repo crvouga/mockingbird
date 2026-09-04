@@ -1,7 +1,6 @@
 import { readFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import { MemoryKV } from "@crvouga/mockingbird-kv-memory"
 import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, StripeAPI } from "../src/index.js"
@@ -45,7 +44,7 @@ await parity({
     minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
   },
   mock: {
-    create: () => new StripeAPI({ kv: new MemoryKV() }),
+    create: () => new StripeAPI(),
     headers: () => ({ authorization: "Bearer sk_test_mockingbird" }),
   },
   redact: createRedactor(credentials.secrets),

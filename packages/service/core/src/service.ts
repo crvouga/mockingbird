@@ -5,14 +5,20 @@ import {
   type FormObject,
   readBody,
 } from "@crvouga/mockingbird-http-codec"
-import { clearNamespace, type KeyValueStore, namespace } from "@crvouga/mockingbird-kv"
 import { listOperations, type OpenAPIDocument, type Operation } from "@crvouga/mockingbird-openapi"
 import { operationMetadata } from "@crvouga/mockingbird-openapi-metadata"
+import {
+  clearNamespace,
+  migrateCore,
+  resolveSqlite,
+  type SqliteClient,
+} from "@crvouga/mockingbird-sqlite"
 import { type Context, Hono } from "hono"
 
 /** Options every provider constructor accepts. */
 export type APIOptions = {
-  kv: KeyValueStore
+  /** Sync SQLite client. Defaults to `@crvouga/sqlite-mem`. */
+  sqlite?: SqliteClient
   /** Clock used for `created`-style fields. Default `Date.now`. */
   now?: () => number
 }
@@ -25,8 +31,10 @@ export type OperationContext = {
   /** Query string decoded with bracket notation (`created[gte]=1` -> `{ created: { gte: "1" } }`). */
   query: FormObject
   body: DecodedBody
-  /** Service-scoped kv. */
-  kv: KeyValueStore
+  /** Shared SQLite client for this service (already migrated). */
+  sqlite: SqliteClient
+  /** Service namespace used for records / sequences. */
+  namespace: string
   operation: Operation
   now: () => number
 }
@@ -78,8 +86,8 @@ export const verifyOperations = (
 export type ServiceOptions = {
   document: OpenAPIDocument
   handlers: OperationHandlers
-  kv: KeyValueStore
-  /** kv namespace isolating this service's state. */
+  sqlite: SqliteClient
+  /** Namespace isolating this service's records and sequences. */
   namespace: string
   now?: (() => number) | undefined
   /** Response for paths/methods outside the contract. */
@@ -94,8 +102,9 @@ export type ServiceOptions = {
 
 export type Service = FetchAPI & {
   app: Hono
-  kv: KeyValueStore
-  /** Delete every key in the service namespace. */
+  sqlite: SqliteClient
+  namespace: string
+  /** Delete every record and sequence in the service namespace. */
   reset(): Promise<void>
 }
 
@@ -118,11 +127,21 @@ const routeOrder = (a: Operation, b: Operation) => {
 
 const queryOf = (url: URL): FormObject => decodeFormPairs(url.searchParams.entries())
 
+/**
+ * Resolve optional `sqlite`, run core migrations, and return the ready client.
+ * Call this from every provider constructor before building state.
+ */
+export const bootSqlite = (sqlite?: SqliteClient): SqliteClient => {
+  const client = resolveSqlite(sqlite)
+  migrateCore(client)
+  return client
+}
+
 /** Build a Fetch-native service whose routes are exactly the document's operations. */
 export const createService = (options: ServiceOptions): Service => {
   const problems = verifyOperations(options.document, options.handlers)
   if (problems.length > 0) throw new OperationRegistryError(problems)
-  const kv = namespace(options.kv, options.namespace)
+  migrateCore(options.sqlite)
   const now = options.now ?? (() => Date.now())
   const app = new Hono()
   app.notFound((c) => options.notFound(c.req.raw))
@@ -146,7 +165,8 @@ export const createService = (options: ServiceOptions): Service => {
         params: c.req.param(),
         query: queryOf(url),
         body: await readBody(request),
-        kv,
+        sqlite: options.sqlite,
+        namespace: options.namespace,
         operation,
         now,
       }
@@ -159,10 +179,11 @@ export const createService = (options: ServiceOptions): Service => {
 
   return {
     app,
-    kv,
+    sqlite: options.sqlite,
+    namespace: options.namespace,
     fetch: async (request) => app.fetch(request),
     reset: async () => {
-      await clearNamespace(options.kv, options.namespace)
+      clearNamespace(options.sqlite, options.namespace)
     },
   }
 }

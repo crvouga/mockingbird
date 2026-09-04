@@ -1,0 +1,230 @@
+openapi: 3.1.0
+info:
+  title: GeneByGene API (Mockingbird subset)
+  description: |
+    Stateful mock subset of the GeneByGene Nucleus API.
+    Developer guide: https://api.genebygene.com/assets/GxG%20API%20Services%20Developer%20Guide%202022.pdf
+    Swagger UI: https://api.genebygene.com/swagger/index.html
+    Staging API: https://staging-api.genebygene.com
+    Staging auth: https://staging-auth.genebygene.com/connect/token
+  version: "2.0"
+  x-mockingbird-upstream:
+    docs: https://api.genebygene.com/assets/GxG%20API%20Services%20Developer%20Guide%202022.pdf
+    swagger: https://api.genebygene.com/swagger/index.html
+    note: Hand-authored subset from the public developer guide (products + orders + client_credentials token).
+servers:
+  - url: https://staging-api.genebygene.com
+security:
+  - bearerAuth: []
+paths:
+  /connect/token:
+    post:
+      operationId: PostConnectToken
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id, client_secret]
+              properties:
+                grant_type:
+                  type: string
+                  enum: [client_credentials]
+                client_id:
+                  type: string
+                  minLength: 1
+                client_secret:
+                  type: string
+                  minLength: 1
+      responses:
+        "200":
+          description: Access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Invalid grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v2/products:
+    get:
+      operationId: GetProducts
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Product list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v2/orders:
+    post:
+      operationId: PostOrders
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderBody"
+      responses:
+        "200":
+          description: Created order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /api/v2/orders/{orderId}:
+    get:
+      operationId: GetOrder
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: order
+              missing: order_missing
+      responses:
+        "200":
+          description: Order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+    Product:
+      type: object
+      required: [productId, name]
+      properties:
+        productId:
+          type: string
+          x-mockingbird-resource:
+            type: product
+            identity: true
+        name:
+          type: string
+        description:
+          type: ["string", "null"]
+    CreateOrderBody:
+      type: object
+      required: [productId, quantity]
+      properties:
+        productId:
+          type: string
+          x-mockingbird-resource-ref:
+            type: product
+            missing: product_missing
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 100
+    Order:
+      type: object
+      required: [orderId, status, quantity, productId, createdAt]
+      properties:
+        orderId:
+          type: string
+          x-mockingbird-resource:
+            type: order
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        status:
+          type: string
+          enum: [Pending, Submitted, Completed, Cancelled]
+        quantity:
+          type: integer
+        productId:
+          type: string
+          x-mockingbird-resource-ref:
+            type: product
+            missing: product_missing
+        createdAt:
+          type: string
+          format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
+        message:
+          type: string

@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-genebygene",
   "version": "0.1.0",
-  "description": "Stateful mock of the GeneByGene API driven by its OpenAPI contract and verified by differential property tests against the GeneByGene sandbox.",
+  "description": "Stateful mock of the GeneByGene Nucleus API (token, products, orders) verified by differential property tests against the GeneByGene staging sandbox.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -35,23 +35,32 @@
     "layer": "service"
   },
   "scripts": {
+    "generate": "mockingbird-codegen",
+    "generate:check": "mockingbird-codegen --check",
+    "openapi:check": "mockingbird-codegen --validate",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
+    "parity": "bun scripts/parity.ts",
     "portability": "bun ../../../scripts/portability.ts",
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
-    "@crvouga/mockingbird-kv": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-http-codec": "workspace:*"
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "hono": "4.11.9"
   },
   "devDependencies": {
     "fast-check": "4.9.0",
     "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/mockingbird-kv-memory": "workspace:*",
+    "@crvouga/sqlite-mem": "1.15.0",
     "@crvouga/mockingbird-parity": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*"
+    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*"
   }
 }

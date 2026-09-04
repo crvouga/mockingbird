@@ -43,10 +43,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-core": "workspace:*",
-    "@crvouga/mockingbird-kv": "workspace:*",
-    "@crvouga/mockingbird-kv-memory": "workspace:*",
-    "@crvouga/mockingbird-kv-local-storage": "workspace:*",
-    "@crvouga/mockingbird-kv-file": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",
     "@crvouga/mockingbird-service-junction": "workspace:*",

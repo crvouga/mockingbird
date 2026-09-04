@@ -1,12 +1,13 @@
 import type { FetchAPI } from "@crvouga/mockingbird-core"
-import { type KeyValueStore, namespace } from "@crvouga/mockingbird-kv"
 import {
   type APIOptions,
+  bootSqlite,
   createService,
   defineOperations,
   jsonResponse,
   type Service,
 } from "@crvouga/mockingbird-service"
+import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import { customerHandlers } from "./customers.js"
 import { StripeError, stripeErrorBody } from "./errors.js"
@@ -29,16 +30,18 @@ const unrecognizedUrl = (request: Request) => {
 }
 
 /**
- * Stateful mock of the Stripe API. State lives in the `stripe` namespace of the supplied kv, so
- * several services can share one store and `reset()` only clears Stripe's part.
+ * Stateful mock of the Stripe API. State lives in SQLite under the `stripe`
+ * namespace. Pass `sqlite` to share a client across services; omit it to get a
+ * fresh `@crvouga/sqlite-mem` database.
  */
 export class StripeAPI implements FetchAPI {
   readonly app: Hono
-  readonly kv: KeyValueStore
+  readonly sqlite: SqliteClient
   private readonly service: Service
 
-  constructor(options: APIOptions) {
-    const state = new StripeState(namespace(options.kv, STRIPE_NAMESPACE))
+  constructor(options: APIOptions = {}) {
+    const sqlite = bootSqlite(options.sqlite)
+    const state = new StripeState(sqlite, STRIPE_NAMESPACE)
     const handlers = defineOperations<SupportedOperationId>({
       ...customerHandlers(state),
       ...productHandlers(state),
@@ -49,7 +52,7 @@ export class StripeAPI implements FetchAPI {
     this.service = createService({
       document,
       handlers,
-      kv: options.kv,
+      sqlite,
       namespace: STRIPE_NAMESPACE,
       now: options.now,
       notFound: (request) => errorResponse({ status: 404, message: unrecognizedUrl(request) }),
@@ -63,7 +66,7 @@ export class StripeAPI implements FetchAPI {
           : errorResponse({ status: 401, message: MISSING_API_KEY }),
     })
     this.app = this.service.app
-    this.kv = this.service.kv
+    this.sqlite = this.service.sqlite
   }
 
   fetch(request: Request): Promise<Response> {
