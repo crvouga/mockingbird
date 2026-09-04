@@ -1,0 +1,53 @@
+{
+  "name": "@crvouga/mockingbird-kv-properties",
+  "version": "0.1.0",
+  "description": "fast-check conformance suite for KeyValueStore implementations. Point it at any adapter; failures shrink to a minimal command sequence.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/kv/properties"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/kv/properties#readme",
+  "keywords": [
+    "mockingbird",
+    "kv",
+    "fast-check",
+    "property-based-testing"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "kv-properties"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-kv": "^0.1.0",
+    "fast-check": "4.9.0"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-testing": "^0.1.0"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@crvouga/mockingbird-testing",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Internal test glue: derive fast-check parameters from the environment (FC_SEED, FC_NUM_RUNS).",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "testing"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test"
+  },
+  "peerDependencies": {
+    "fast-check": "4.9.0"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0"
+  }
+}

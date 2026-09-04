@@ -1,0 +1,53 @@
+{
+  "name": "@crvouga/mockingbird-openapi-codegen",
+  "version": "0.1.0",
+  "description": "Turns a provider's openapi.yaml into a portable generated TypeScript module plus a SUPPORT.md coverage matrix; validates Mockingbird metadata.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "private": true,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/openapi/codegen"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/openapi/codegen#readme",
+  "keywords": [
+    "mockingbird",
+    "openapi",
+    "codegen"
+  ],
+  "mockingbird": {
+    "runtime": "node",
+    "layer": "openapi"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*"
+  },
+  "bin": {
+    "mockingbird-codegen": "./dist/cli.js"
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "@crvouga/mockingbird-parity",
+  "version": "0.1.0",
+  "description": "Differential property-based test runner: executes generated API walks against a real sandbox API and a Mockingbird mock, comparing every canonicalised response.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/parity/runner"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/parity/runner#readme",
+  "keywords": [
+    "mockingbird",
+    "parity",
+    "runner"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "parity"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-openapi-arbitrary": "workspace:*",
+    "@crvouga/mockingbird-model": "workspace:*",
+    "@crvouga/mockingbird-commands": "workspace:*",
+    "@crvouga/mockingbird-canonicalize": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "fast-check": "4.9.0"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-testing": "workspace:*"
+  }
+}

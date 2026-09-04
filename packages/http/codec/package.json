@@ -1,0 +1,49 @@
+{
+  "name": "@crvouga/mockingbird-http-codec",
+  "version": "0.1.0",
+  "description": "Content-type codecs shared by Mockingbird's mock servers and differential runner: JSON and bracket-notation form encoding.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/http/codec"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/http/codec#readme",
+  "keywords": [
+    "mockingbird",
+    "form-urlencoded",
+    "codec"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "http-codec"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-testing": "^0.1.0",
+    "fast-check": "4.9.0"
+  }
+}

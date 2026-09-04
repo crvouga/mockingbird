@@ -1,0 +1,55 @@
+{
+  "name": "@crvouga/mockingbird-canonicalize",
+  "version": "0.1.0",
+  "description": "Strict, provider-neutral canonicalisation of HTTP exchanges for differential comparison: symbolic id replacement, declared volatile fields, parity headers, structural diff.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/parity/canonicalize"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/parity/canonicalize#readme",
+  "keywords": [
+    "mockingbird",
+    "parity",
+    "canonicalize"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "parity"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-model": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*"
+  }
+}

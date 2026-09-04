@@ -1,0 +1,52 @@
+{
+  "name": "@crvouga/mockingbird-openapi-metadata",
+  "version": "0.1.0",
+  "description": "Mockingbird's x-mockingbird-* OpenAPI extensions: types, readers, semantic validation and schema-guided value annotation (identities, volatile fields).",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/openapi/metadata"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/openapi/metadata#readme",
+  "keywords": [
+    "mockingbird",
+    "openapi",
+    "extensions"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "openapi-metadata"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-openapi": "^0.1.0"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-testing": "^0.1.0",
+    "fast-check": "4.9.0"
+  }
+}

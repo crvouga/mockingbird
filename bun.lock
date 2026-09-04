@@ -1,0 +1,416 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "mockingbird-monorepo",
+      "devDependencies": {
+        "@biomejs/biome": "2.5.12",
+        "@types/bun": "1.4.0",
+        "@types/node": "22.20.1",
+        "turbo": "2.10.12",
+        "typescript": "5.9.3",
+      },
+    },
+    "packages/adapters/bun": {
+      "name": "@crvouga/mockingbird-adapter-bun",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-core": "workspace:*",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/adapters/node": {
+      "name": "@crvouga/mockingbird-adapter-node",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-core": "workspace:*",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "@types/node": "22.20.1",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/auth/openbao": {
+      "name": "@crvouga/mockingbird-openbao",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/core": {
+      "name": "@crvouga/mockingbird-core",
+      "version": "0.1.0",
+      "devDependencies": {
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/facade": {
+      "name": "@crvouga/mockingbird",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-adapter-bun": "workspace:*",
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-kv": "workspace:*",
+        "@crvouga/mockingbird-kv-file": "workspace:*",
+        "@crvouga/mockingbird-kv-local-storage": "workspace:*",
+        "@crvouga/mockingbird-kv-memory": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-genebygene": "workspace:*",
+        "@crvouga/mockingbird-service-junction": "workspace:*",
+        "@crvouga/mockingbird-service-stripe": "workspace:*",
+      },
+    },
+    "packages/http/codec": {
+      "name": "@crvouga/mockingbird-http-codec",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "^0.1.0",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/kv/core": {
+      "name": "@crvouga/mockingbird-kv",
+      "version": "0.1.0",
+      "devDependencies": {
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/kv/file": {
+      "name": "@crvouga/mockingbird-kv-file",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-kv": "^0.1.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-kv-properties": "^0.1.0",
+        "@crvouga/mockingbird-testing": "^0.1.0",
+        "@types/node": "22.20.1",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/kv/local-storage": {
+      "name": "@crvouga/mockingbird-kv-local-storage",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-kv": "^0.1.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-kv-properties": "^0.1.0",
+        "@crvouga/mockingbird-testing": "^0.1.0",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/kv/memory": {
+      "name": "@crvouga/mockingbird-kv-memory",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-kv": "^0.1.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-kv-properties": "^0.1.0",
+        "@crvouga/mockingbird-testing": "^0.1.0",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/kv/properties": {
+      "name": "@crvouga/mockingbird-kv-properties",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-kv": "^0.1.0",
+        "fast-check": "4.9.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "^0.1.0",
+      },
+    },
+    "packages/openapi/arbitrary": {
+      "name": "@crvouga/mockingbird-openapi-arbitrary",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-openapi": "^0.1.0",
+        "fast-check": "4.9.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "^0.1.0",
+      },
+    },
+    "packages/openapi/codegen": {
+      "name": "@crvouga/mockingbird-openapi-codegen",
+      "version": "0.1.0",
+      "bin": {
+        "mockingbird-codegen": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "yaml": "2.9.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "@types/node": "22.20.1",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/openapi/core": {
+      "name": "@crvouga/mockingbird-openapi",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "^0.1.0",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/openapi/metadata": {
+      "name": "@crvouga/mockingbird-openapi-metadata",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-openapi": "^0.1.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "^0.1.0",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/parity/canonicalize": {
+      "name": "@crvouga/mockingbird-canonicalize",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-model": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/parity/commands": {
+      "name": "@crvouga/mockingbird-commands",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-model": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-arbitrary": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+      },
+    },
+    "packages/parity/model": {
+      "name": "@crvouga/mockingbird-model",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/parity/runner": {
+      "name": "@crvouga/mockingbird-parity",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-canonicalize": "workspace:*",
+        "@crvouga/mockingbird-commands": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-model": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-arbitrary": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
+      },
+    },
+    "packages/service/core": {
+      "name": "@crvouga/mockingbird-service",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-kv": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-kv-memory": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/service/genebygene": {
+      "name": "@crvouga/mockingbird-service-genebygene",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-kv": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-kv-memory": "workspace:*",
+        "@crvouga/mockingbird-openbao": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/service/junction": {
+      "name": "@crvouga/mockingbird-service-junction",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-kv": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-kv-memory": "workspace:*",
+        "@crvouga/mockingbird-openbao": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/service/stripe": {
+      "name": "@crvouga/mockingbird-service-stripe",
+      "version": "0.1.0",
+      "dependencies": {
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-kv": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-kv-memory": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-openbao": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+        "yaml": "2.9.0",
+      },
+    },
+    "packages/testing": {
+      "name": "@crvouga/mockingbird-testing",
+      "version": "0.1.0",
+      "devDependencies": {
+        "fast-check": "4.9.0",
+      },
+      "peerDependencies": {
+        "fast-check": "4.9.0",
+      },
+    },
+  },
+  "packages": {
+    "@biomejs/biome": ["@biomejs/biome@2.5.12", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.5.12", "@biomejs/cli-darwin-x64": "2.5.12", "@biomejs/cli-linux-arm64": "2.5.12", "@biomejs/cli-linux-arm64-musl": "2.5.12", "@biomejs/cli-linux-x64": "2.5.12", "@biomejs/cli-linux-x64-musl": "2.5.12", "@biomejs/cli-win32-arm64": "2.5.12", "@biomejs/cli-win32-x64": "2.5.12" }, "bin": { "biome": "bin/biome" } }, "sha512-Lw4VHZRebrReBBnlHa12JQjnIBm3JJAA55PDB9LbBVBF0q4RYphm6KfmIjqtPhf61MxZ5Q9KoK8R8x+7per5Aw=="],
+
+    "@biomejs/cli-darwin-arm64": ["@biomejs/cli-darwin-arm64@2.5.12", "", { "os": "darwin", "cpu": "arm64" }, "sha512-lCRY1rwgNeWNgTr4DI/u6ZwXTRwRLHAvbaio1YLLGS+4r1nhvB2ssyPqIpfUSmRveNfv0fn/N58C7CAdK2XVrg=="],
+
+    "@biomejs/cli-darwin-x64": ["@biomejs/cli-darwin-x64@2.5.12", "", { "os": "darwin", "cpu": "x64" }, "sha512-vhPgwnh+6tN3ArdAXuET99xaNbFt7CG82Bqn+omHVLC5xdVx45JsYjGPmUIGNzjDek5XdNCP1HKksK7fn8+3bQ=="],
+
+    "@biomejs/cli-linux-arm64": ["@biomejs/cli-linux-arm64@2.5.12", "", { "os": "linux", "cpu": "arm64" }, "sha512-2gp8aVwXYKdAtmBfRFCUuyDMcfN1ahHqUkGfLYrZlNRFmryMATLVvJgWKvyA8wu4Rwn5OSxM1UcUmOuOFNGeBQ=="],
+
+    "@biomejs/cli-linux-arm64-musl": ["@biomejs/cli-linux-arm64-musl@2.5.12", "", { "os": "linux", "cpu": "arm64" }, "sha512-couHYjFLL5uuI8ne6zhT7KwEsXo5YP7ry/2xmEqah7qanu0YmfDi3mwJg47YXSuv/NpZj22CZzcRH/5c4gjPSQ=="],
+
+    "@biomejs/cli-linux-x64": ["@biomejs/cli-linux-x64@2.5.12", "", { "os": "linux", "cpu": "x64" }, "sha512-SnvOs3TSTiuia4SQOUNe1aWC9RT4+YkjcKnOhL/nsKOV0k5ycgBkDzF0lUxKn1V7Q8CLTRq6iV23ZAivHomRoA=="],
+
+    "@biomejs/cli-linux-x64-musl": ["@biomejs/cli-linux-x64-musl@2.5.12", "", { "os": "linux", "cpu": "x64" }, "sha512-8A0oDW58/w9f/PQNYuq0sGUZtGtGrkNF4Z6n0PUoXpLCshi85vtKTv1XSznQawhdE4MXJ8ufpzHXyLFe87M/+w=="],
+
+    "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.5.12", "", { "os": "win32", "cpu": "arm64" }, "sha512-b9vtoZFsuZt1pdjNwJvXl0f+BpayRzV008uS2+JpmwIKdSE2qdu4A/l04FESwLoou5g2E/Qlec0xwJydZplH+A=="],
+
+    "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.12", "", { "os": "win32", "cpu": "x64" }, "sha512-B1R/l+CwEpKFSuqiwePzPNRk1EiJN8kc0UhdafNz6MZN9v5OFP9HYP1irptvWzHrwVI4blVNGMbxc5zt70m3IA=="],
+
+    "@crvouga/mockingbird": ["@crvouga/mockingbird@workspace:packages/facade"],
+
+    "@crvouga/mockingbird-adapter-bun": ["@crvouga/mockingbird-adapter-bun@workspace:packages/adapters/bun"],
+
+    "@crvouga/mockingbird-adapter-node": ["@crvouga/mockingbird-adapter-node@workspace:packages/adapters/node"],
+
+    "@crvouga/mockingbird-canonicalize": ["@crvouga/mockingbird-canonicalize@workspace:packages/parity/canonicalize"],
+
+    "@crvouga/mockingbird-commands": ["@crvouga/mockingbird-commands@workspace:packages/parity/commands"],
+
+    "@crvouga/mockingbird-core": ["@crvouga/mockingbird-core@workspace:packages/core"],
+
+    "@crvouga/mockingbird-http-codec": ["@crvouga/mockingbird-http-codec@workspace:packages/http/codec"],
+
+    "@crvouga/mockingbird-kv": ["@crvouga/mockingbird-kv@workspace:packages/kv/core"],
+
+    "@crvouga/mockingbird-kv-file": ["@crvouga/mockingbird-kv-file@workspace:packages/kv/file"],
+
+    "@crvouga/mockingbird-kv-local-storage": ["@crvouga/mockingbird-kv-local-storage@workspace:packages/kv/local-storage"],
+
+    "@crvouga/mockingbird-kv-memory": ["@crvouga/mockingbird-kv-memory@workspace:packages/kv/memory"],
+
+    "@crvouga/mockingbird-kv-properties": ["@crvouga/mockingbird-kv-properties@workspace:packages/kv/properties"],
+
+    "@crvouga/mockingbird-model": ["@crvouga/mockingbird-model@workspace:packages/parity/model"],
+
+    "@crvouga/mockingbird-openapi": ["@crvouga/mockingbird-openapi@workspace:packages/openapi/core"],
+
+    "@crvouga/mockingbird-openapi-arbitrary": ["@crvouga/mockingbird-openapi-arbitrary@workspace:packages/openapi/arbitrary"],
+
+    "@crvouga/mockingbird-openapi-codegen": ["@crvouga/mockingbird-openapi-codegen@workspace:packages/openapi/codegen"],
+
+    "@crvouga/mockingbird-openapi-metadata": ["@crvouga/mockingbird-openapi-metadata@workspace:packages/openapi/metadata"],
+
+    "@crvouga/mockingbird-openbao": ["@crvouga/mockingbird-openbao@workspace:packages/auth/openbao"],
+
+    "@crvouga/mockingbird-parity": ["@crvouga/mockingbird-parity@workspace:packages/parity/runner"],
+
+    "@crvouga/mockingbird-service": ["@crvouga/mockingbird-service@workspace:packages/service/core"],
+
+    "@crvouga/mockingbird-service-genebygene": ["@crvouga/mockingbird-service-genebygene@workspace:packages/service/genebygene"],
+
+    "@crvouga/mockingbird-service-junction": ["@crvouga/mockingbird-service-junction@workspace:packages/service/junction"],
+
+    "@crvouga/mockingbird-service-stripe": ["@crvouga/mockingbird-service-stripe@workspace:packages/service/stripe"],
+
+    "@crvouga/mockingbird-testing": ["@crvouga/mockingbird-testing@workspace:packages/testing"],
+
+    "@turbo/darwin-64": ["@turbo/darwin-64@2.10.12", "", { "os": "darwin", "cpu": "x64" }, "sha512-9nKgKoF6ZOUsM+or0OtNf+TTJSfGvDNP7ZFv/ZGWVwOSCkumyctQiTeHwB4UNljHTnC41AqylgbunLDHoccNrA=="],
+
+    "@turbo/darwin-arm64": ["@turbo/darwin-arm64@2.10.12", "", { "os": "darwin", "cpu": "arm64" }, "sha512-H4Elb1jqTZVeIC9bbcNwjSzemZ6RegoTOVHeuV5Osirt2Z8UguTyisMEkvZjPVZgMeN9J4ERZBFad40tFnkb7w=="],
+
+    "@turbo/linux-64": ["@turbo/linux-64@2.10.12", "", { "os": [ "linux", "android", ], "cpu": "x64" }, "sha512-lr7KIotukvjZwEXiFSYAeOH3BWzjFVBbSzTbv0fuGFsNukYyH0+g1hB5ecqnJkgkYU+KHEMG1edOhnjiKON1wQ=="],
+
+    "@turbo/linux-arm64": ["@turbo/linux-arm64@2.10.12", "", { "os": [ "linux", "android", ], "cpu": "arm64" }, "sha512-f0pZDTtvzB5SuNwuXBaKbZHUCMCukgc8nMlHEuvLmj91Fzec+MEbr3cAvGNor5htEDqZnO6Lxt9N/GPI/77oGA=="],
+
+    "@turbo/windows-64": ["@turbo/windows-64@2.10.12", "", { "os": "win32", "cpu": "x64" }, "sha512-SDOueJRjS/QcykWf2KCRtTLmIl5YMKsLbXkXQGhDwcTXvKXZiS5ih5lBl/gkwZIpYFjqA/rAlfMzlAFcVHNe0g=="],
+
+    "@turbo/windows-arm64": ["@turbo/windows-arm64@2.10.12", "", { "os": "win32", "cpu": "arm64" }, "sha512-0i0mVUa4kKk+/B3RwEwPMf9CB+T7ul56hn5FFHNA4VUNTOoLBEd6aNf3FaKfCatDNZ6cicCEf6if9QUTVyzzcA=="],
+
+    "@types/bun": ["@types/bun@1.4.0", "", { "dependencies": { "bun-types": "1.4.0" } }, "sha512-K+lZULY23vRgK/CfTjFIV+tyifaNdSMlPh9j+6mQ/cLfpOznLyAuzgV/JQysyECpkBQLVMSyvjlr2fBUSA9wFQ=="],
+
+    "@types/node": ["@types/node@22.20.1", "", { "dependencies": { "undici-types": "~6.21.0" } }, "sha512-EANqOCF9QFyra+4pfxUcX9STKJpCLjMbObVzljIJomAWSnuSIEAvyzEU53GaajbXJEgdh0iEcPL+DGvpUd4k1Q=="],
+
+    "bun-types": ["bun-types@1.4.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-iIKw23BspnQQYd3prITOBxeUsxBHnwzX6YJfGMuNOZzeNcMmVqzIIVGRm1l69ogaPQmb4wB6BN8mA5bE9YuC5Q=="],
+
+    "fast-check": ["fast-check@4.9.0", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-7ms6T7SybUev/PQITciI0yLM2pOSFy5zpG8Ty7tQofcVaQUvrMXp6CBwqF6fThLCLOrfBtuHAtwq6Yu4XPCllg=="],
+
+    "hono": ["hono@4.11.9", "", {}, "sha512-Eaw2YTGM6WOxA6CXbckaEvslr2Ne4NFsKrvc0v97JD5awbmeBLO5w9Ho9L9kmKonrwF9RJlW6BxT1PVv/agBHQ=="],
+
+    "pure-rand": ["pure-rand@8.4.2", "", {}, "sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng=="],
+
+    "turbo": ["turbo@2.10.12", "", { "optionalDependencies": { "@turbo/darwin-64": "2.10.12", "@turbo/darwin-arm64": "2.10.12", "@turbo/linux-64": "2.10.12", "@turbo/linux-arm64": "2.10.12", "@turbo/windows-64": "2.10.12", "@turbo/windows-arm64": "2.10.12" }, "bin": { "turbo": "bin/turbo" } }, "sha512-AswgMPnpOoaVZHrrSBejETzEbuIA69OVGwfkHwfrY0A23VjWXBANzgq9+OymWOHAIArB7D1+1z498WY8fGg1Jw=="],
+
+    "typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
+
+    "undici-types": ["undici-types@6.21.0", "", {}, "sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ=="],
+
+    "yaml": ["yaml@2.9.0", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA=="],
+  }
+}

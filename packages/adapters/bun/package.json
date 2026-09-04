@@ -1,0 +1,52 @@
+{
+  "name": "@crvouga/mockingbird-adapter-bun",
+  "version": "0.1.0",
+  "description": "Serve any Mockingbird FetchAPI with Bun.serve.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/adapters/bun"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/adapters/bun#readme",
+  "keywords": [
+    "mockingbird",
+    "adapter",
+    "bun"
+  ],
+  "mockingbird": {
+    "runtime": "bun",
+    "layer": "adapter"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-core": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*"
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "name": "@crvouga/mockingbird-kv",
+  "version": "0.1.0",
+  "description": "The KeyValueStore contract every Mockingbird service persists through, plus generic combinators (namespace, json, utf8).",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/kv/core"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/kv/core#readme",
+  "keywords": [
+    "mockingbird",
+    "kv",
+    "key-value"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "kv"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0"
+  }
+}

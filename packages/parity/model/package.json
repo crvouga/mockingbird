@@ -1,0 +1,49 @@
+{
+  "name": "@crvouga/mockingbird-model",
+  "version": "0.1.0",
+  "description": "Provider-neutral symbolic resource model for differential testing: handles, per-side id tables, placeholders and canonical tokens.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/parity/model"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/parity/model#readme",
+  "keywords": [
+    "mockingbird",
+    "parity",
+    "model"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "parity"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*"
+  }
+}

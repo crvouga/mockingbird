@@ -1,0 +1,53 @@
+{
+  "name": "@crvouga/mockingbird-adapter-node",
+  "version": "0.1.0",
+  "description": "Serve any Mockingbird FetchAPI over node:http.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/adapters/node"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/adapters/node#readme",
+  "keywords": [
+    "mockingbird",
+    "adapter",
+    "node"
+  ],
+  "mockingbird": {
+    "runtime": "node",
+    "layer": "adapter"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-core": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*"
+  }
+}

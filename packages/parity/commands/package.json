@@ -1,0 +1,56 @@
+{
+  "name": "@crvouga/mockingbird-commands",
+  "version": "0.1.0",
+  "description": "Stateful fast-check command generation for OpenAPI-driven random API walks: operation eligibility, symbolic resource references, shrink-friendly commands.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/parity/commands"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/parity/commands#readme",
+  "keywords": [
+    "mockingbird",
+    "parity",
+    "commands"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "parity"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-openapi-arbitrary": "workspace:*",
+    "@crvouga/mockingbird-model": "workspace:*",
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-http-codec": "workspace:*"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-testing": "workspace:*"
+  }
+}

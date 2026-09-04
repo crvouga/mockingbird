@@ -1,0 +1,53 @@
+{
+  "name": "@crvouga/mockingbird-openapi-arbitrary",
+  "version": "0.1.0",
+  "description": "OpenAPI / JSON Schema to fast-check arbitraries: boundary-weighted valid values and single-violation invalid values.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/openapi/arbitrary"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/openapi/arbitrary#readme",
+  "keywords": [
+    "mockingbird",
+    "openapi",
+    "json-schema",
+    "fast-check"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "openapi-arbitrary"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-openapi": "^0.1.0",
+    "fast-check": "4.9.0"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-testing": "^0.1.0"
+  }
+}

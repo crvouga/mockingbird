@@ -1,0 +1,46 @@
+{
+  "name": "mockingbird-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.4.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "bun": ">=1.2.0"
+  },
+  "workspaces": [
+    "packages/core",
+    "packages/facade",
+    "packages/testing",
+    "packages/kv/*",
+    "packages/http/*",
+    "packages/openapi/*",
+    "packages/parity/*",
+    "packages/service/*",
+    "packages/adapters/*",
+    "packages/auth/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "generate": "turbo run generate",
+    "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:tests check:format",
+    "parity": "turbo run parity --concurrency=1",
+    "parity:stripe": "turbo run parity --filter=@crvouga/mockingbird-service-stripe",
+    "parity:junction": "turbo run parity --filter=@crvouga/mockingbird-service-junction",
+    "parity:genebygene": "turbo run parity --filter=@crvouga/mockingbird-service-genebygene",
+    "check:boundaries": "bun scripts/check-boundaries.ts",
+    "check:tests": "bun scripts/check-test-files.ts",
+    "check:format": "biome format .",
+    "format": "biome format --write .",
+    "release:publish": "bun scripts/publish-released.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@types/bun": "1.4.0",
+    "@types/node": "22.20.1",
+    "turbo": "2.10.12",
+    "typescript": "5.9.3"
+  }
+}

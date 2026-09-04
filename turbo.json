@@ -1,0 +1,107 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "ui": "stream",
+  "globalDependencies": ["tsconfig.base.json", "biome.json"],
+  "globalEnv": ["CI"],
+  "globalPassThroughEnv": ["TURBO_TOKEN", "TURBO_TEAM", "TURBO_API"],
+  "tasks": {
+    "generate": {
+      "dependsOn": ["^build"],
+      "inputs": ["openapi.yaml", "codegen.json"],
+      "outputs": ["src/generated/**", "SUPPORT.md"]
+    },
+    "generate:check": {
+      "dependsOn": ["^build"],
+      "inputs": ["openapi.yaml", "codegen.json", "src/generated/**", "SUPPORT.md"]
+    },
+    "openapi:check": {
+      "dependsOn": ["^build"],
+      "inputs": ["openapi.yaml"]
+    },
+    "build": {
+      "dependsOn": ["^build", "generate"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "!README.md"],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build", "generate"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"]
+    },
+    "lint": {
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/biome.json"]
+    },
+    "test": {
+      "dependsOn": ["build", "^build"],
+      "env": ["FC_SEED", "FC_NUM_RUNS", "MOCKINGBIRD_MAX_COMMANDS", "MOCKINGBIRD_TRACE"],
+      "inputs": ["$TURBO_DEFAULT$", "!README.md"],
+      "outputs": []
+    },
+    "portability": {
+      "dependsOn": ["build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!README.md",
+        "$TURBO_ROOT$/scripts/portability.ts"
+      ]
+    },
+    "pack:check": {
+      "dependsOn": ["build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "$TURBO_ROOT$/scripts/pack-check.ts"]
+    },
+    "parity": {
+      "dependsOn": ["build"],
+      "cache": false,
+      "passThroughEnv": [
+        "FC_SEED",
+        "FC_NUM_RUNS",
+        "MOCKINGBIRD_MAX_COMMANDS",
+        "MOCKINGBIRD_TRACE",
+        "MOCKINGBIRD_CREDENTIALS",
+        "MOCKINGBIRD_OPENBAO_ADDR",
+        "MOCKINGBIRD_OPENBAO_TOKEN",
+        "MOCKINGBIRD_OPENBAO_JWT",
+        "MOCKINGBIRD_OPENBAO_JWT_ROLE",
+        "MOCKINGBIRD_OPENBAO_JWT_MOUNT",
+        "MOCKINGBIRD_OPENBAO_PATH_STRIPE",
+        "MOCKINGBIRD_OPENBAO_PATH_JUNCTION",
+        "MOCKINGBIRD_OPENBAO_PATH_GENEBYGENE",
+        "MOCKINGBIRD_STRIPE_SECRET_KEY",
+        "MOCKINGBIRD_JUNCTION_API_KEY",
+        "MOCKINGBIRD_GENEBYGENE_CLIENT_ID",
+        "MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET",
+        "MOCKINGBIRD_STRIPE_BASE_URL",
+        "MOCKINGBIRD_JUNCTION_BASE_URL",
+        "MOCKINGBIRD_GENEBYGENE_BASE_URL",
+        "MOCKINGBIRD_GENEBYGENE_TOKEN_URL",
+        "VAULT_ADDR",
+        "VAULT_TOKEN",
+        "BAO_ADDR",
+        "BAO_TOKEN",
+        "HOME"
+      ]
+    },
+    "//#check:boundaries": {
+      "inputs": [
+        "scripts/check-boundaries.ts",
+        "scripts/lib/**",
+        "packages/*/package.json",
+        "packages/*/*/package.json",
+        "packages/**/src/**/*.ts",
+        "!packages/**/node_modules/**",
+        "!packages/**/dist/**"
+      ]
+    },
+    "//#check:tests": {
+      "inputs": [
+        "scripts/check-test-files.ts",
+        "scripts/lib/**",
+        "packages/**/*.test.ts",
+        "!packages/**/node_modules/**"
+      ]
+    },
+    "//#check:format": {
+      "inputs": ["biome.json", "scripts/**", "docs/**", "*.json", "*.md", ".github/**"]
+    }
+  }
+}

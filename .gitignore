@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.turbo/
+*.tgz
+.mockingbird/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+coverage/
+.parity-artifacts/
