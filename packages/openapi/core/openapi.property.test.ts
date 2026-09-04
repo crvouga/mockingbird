@@ -208,3 +208,23 @@ test("validateValue accepts values produced by their own schema shape and reject
     params,
   )
 })
+
+test("validateValue admits null for nullable enums without listing null in enum", () => {
+  const document: OpenAPIDocument = {
+    openapi: "3.1.0",
+    info: { title: "t", version: "1" },
+    paths: {},
+  }
+  fc.assert(
+    fc.property(fc.constantFrom("graduated", "volume"), (member) => {
+      const schema: SchemaObject = {
+        type: ["string", "null"],
+        enum: ["graduated", "volume"],
+      }
+      expect(validateValue(document, schema, member)).toEqual([])
+      expect(validateValue(document, schema, null)).toEqual([])
+      expect(validateValue(document, schema, "other").length).toBeGreaterThan(0)
+    }),
+    params,
+  )
+})

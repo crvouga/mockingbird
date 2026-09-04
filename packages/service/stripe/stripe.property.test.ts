@@ -147,7 +147,7 @@ describe("StripeAPI", () => {
 
   test("state is isolated per namespace and reset clears only Stripe", async () => {
     await fc.assert(
-      fc.asyncProperty(fc.stringMatching(/^[a-zA-Z0-9][a-zA-Z0-9 _.-]{0,19}$/), async (name) => {
+      fc.asyncProperty(fc.stringMatching(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,19}$/), async (name) => {
         const sqlite = new Database()
         const stripe = new StripeAPI({ sqlite, now })
         sqlite

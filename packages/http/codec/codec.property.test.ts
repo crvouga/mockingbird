@@ -39,7 +39,8 @@ test("decodeBody(encodeBody(json)) is identity for JSON values", () => {
     fc.property(fc.jsonValue(), (value) => {
       const encoded = encodeBody("application/json", value)
       const decoded = decodeBody(encoded.contentType, new TextEncoder().encode(encoded.body))
-      expect(decoded).toEqual({ kind: "json", value })
+      // JSON has no distinct -0; stringify/parse collapse it to +0.
+      expect(decoded).toEqual({ kind: "json", value: JSON.parse(JSON.stringify(value)) })
     }),
     params,
   )

@@ -168,7 +168,15 @@ export const validateValue = (
       return errors
     }
   }
-  if (s.enum && !s.enum.some((candidate) => deepEqual(candidate, value))) fail("value not in enum")
+  // OpenAPI commonly pairs `type: ["string","null"]` with an enum of the non-null values;
+  // null is admitted by the type union and must not fail the enum check.
+  if (
+    s.enum &&
+    !(value === null && types.includes("null")) &&
+    !s.enum.some((candidate) => deepEqual(candidate, value))
+  ) {
+    fail("value not in enum")
+  }
   if (s.const !== undefined && !deepEqual(s.const, value)) fail("value does not equal const")
   if (typeof value === "string") {
     const length = graphemeLength(value)
