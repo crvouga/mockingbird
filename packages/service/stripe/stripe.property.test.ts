@@ -20,128 +20,128 @@ describe("StripeAPI", () => {
   test(
     "self-parity: independent instances agree on every random walk and conform to the spec",
     async () => {
-    const reference = new StripeAPI({ now })
-    const report = await parity({
-      provider: "stripe",
-      spec: document,
-      real: {
-        baseUrl: `https://${MOCK_HOST}`,
-        allowedHosts: [MOCK_HOST],
-        headers: () => AUTH,
-        fetch: (request) => reference.fetch(request),
-      },
-      mock: {
-        create: () => new StripeAPI({ now }),
-        baseUrl: `https://${MOCK_HOST}`,
-        headers: () => AUTH,
-      },
-      cleanup: async () => {
-        await reference.reset()
-      },
-      numRuns: params.numRuns ?? 40,
-      maxCommands: 25,
-      ...(params.seed === undefined ? {} : { seed: params.seed }),
-      env: process.env,
-      sleep: async () => {},
-      log: () => {},
-    })
-    expect(report.walks).toBeGreaterThan(0)
-    expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
-      supportedOperationIds.length / 2,
-    )
-  },
+      const reference = new StripeAPI({ now })
+      const report = await parity({
+        provider: "stripe",
+        spec: document,
+        real: {
+          baseUrl: `https://${MOCK_HOST}`,
+          allowedHosts: [MOCK_HOST],
+          headers: () => AUTH,
+          fetch: (request) => reference.fetch(request),
+        },
+        mock: {
+          create: () => new StripeAPI({ now }),
+          baseUrl: `https://${MOCK_HOST}`,
+          headers: () => AUTH,
+        },
+        cleanup: async () => {
+          await reference.reset()
+        },
+        numRuns: params.numRuns ?? 40,
+        maxCommands: 25,
+        ...(params.seed === undefined ? {} : { seed: params.seed }),
+        env: process.env,
+        sleep: async () => {},
+        log: () => {},
+      })
+      expect(report.walks).toBeGreaterThan(0)
+      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
+        supportedOperationIds.length / 2,
+      )
+    },
     { timeout: 60_000 },
   )
 
   test(
     "self-parity with an injected sqlite-mem client",
     async () => {
-    const reference = new StripeAPI({ sqlite: new Database(), now })
-    const report = await parity({
-      provider: "stripe",
-      spec: document,
-      real: {
-        baseUrl: `https://${MOCK_HOST}`,
-        allowedHosts: [MOCK_HOST],
-        headers: () => AUTH,
-        fetch: (request) => reference.fetch(request),
-      },
-      mock: {
-        create: () => new StripeAPI({ sqlite: new Database(), now }),
-        baseUrl: `https://${MOCK_HOST}`,
-        headers: () => AUTH,
-      },
-      cleanup: async () => {
-        await reference.reset()
-      },
-      numRuns: params.numRuns ?? 10,
-      maxCommands: 15,
-      ...(params.seed === undefined ? {} : { seed: params.seed }),
-      env: process.env,
-      sleep: async () => {},
-      log: () => {},
-    })
-    expect(report.walks).toBeGreaterThan(0)
-  },
+      const reference = new StripeAPI({ sqlite: new Database(), now })
+      const report = await parity({
+        provider: "stripe",
+        spec: document,
+        real: {
+          baseUrl: `https://${MOCK_HOST}`,
+          allowedHosts: [MOCK_HOST],
+          headers: () => AUTH,
+          fetch: (request) => reference.fetch(request),
+        },
+        mock: {
+          create: () => new StripeAPI({ sqlite: new Database(), now }),
+          baseUrl: `https://${MOCK_HOST}`,
+          headers: () => AUTH,
+        },
+        cleanup: async () => {
+          await reference.reset()
+        },
+        numRuns: params.numRuns ?? 10,
+        maxCommands: 15,
+        ...(params.seed === undefined ? {} : { seed: params.seed }),
+        env: process.env,
+        sleep: async () => {},
+        log: () => {},
+      })
+      expect(report.walks).toBeGreaterThan(0)
+    },
     { timeout: 30_000 },
   )
 
   test(
     "a deliberately divergent instance is caught and shrunk",
     async () => {
-    await fc.assert(
-      fc.asyncProperty(fc.integer(), async (seed) => {
-        const reference = new StripeAPI({ now })
-        const faulty = () => {
-          const api = new StripeAPI({ now })
-          return {
-            fetch: async (request: Request) => {
-              const response = await api.fetch(request)
-              if (
-                request.method !== "POST" ||
-                !new URL(request.url).pathname.endsWith("/v1/customers")
-              )
-                return response
-              const body = (await response.json()) as Record<string, unknown>
-              return Response.json(
-                { ...body, balance: 1 },
-                { status: response.status, headers: { "content-type": "application/json" } },
-              )
-            },
+      await fc.assert(
+        fc.asyncProperty(fc.integer(), async (seed) => {
+          const reference = new StripeAPI({ now })
+          const faulty = () => {
+            const api = new StripeAPI({ now })
+            return {
+              fetch: async (request: Request) => {
+                const response = await api.fetch(request)
+                if (
+                  request.method !== "POST" ||
+                  !new URL(request.url).pathname.endsWith("/v1/customers")
+                )
+                  return response
+                const body = (await response.json()) as Record<string, unknown>
+                return Response.json(
+                  { ...body, balance: 1 },
+                  { status: response.status, headers: { "content-type": "application/json" } },
+                )
+              },
+            }
           }
-        }
-        const failure = await parity({
-          provider: "stripe",
-          spec: document,
-          real: {
-            baseUrl: `https://${MOCK_HOST}`,
-            allowedHosts: [MOCK_HOST],
-            headers: () => AUTH,
-            fetch: (r) => reference.fetch(r),
-          },
-          mock: { create: faulty, baseUrl: `https://${MOCK_HOST}`, headers: () => AUTH },
-          cleanup: async () => {
-            await reference.reset()
-          },
-          only: ["PostCustomers"],
-          numRuns: 20,
-          maxCommands: 6,
-          seed,
-          invalidProbability: 0,
-          sleep: async () => {},
-          log: () => {},
-        }).then(
-          () => undefined,
-          (error: unknown) => error,
-        )
-        expect(failure).toBeInstanceOf(ParityError)
-        const error = failure as ParityError
-        expect(error.details.kind).toBe("mismatch")
-        expect(error.details.history.length).toBeLessThanOrEqual(1)
-      }),
-      { ...params, numRuns: 3 },
-    )
-  },
+          const failure = await parity({
+            provider: "stripe",
+            spec: document,
+            real: {
+              baseUrl: `https://${MOCK_HOST}`,
+              allowedHosts: [MOCK_HOST],
+              headers: () => AUTH,
+              fetch: (r) => reference.fetch(r),
+            },
+            mock: { create: faulty, baseUrl: `https://${MOCK_HOST}`, headers: () => AUTH },
+            cleanup: async () => {
+              await reference.reset()
+            },
+            only: ["PostCustomers"],
+            numRuns: 20,
+            maxCommands: 6,
+            seed,
+            invalidProbability: 0,
+            sleep: async () => {},
+            log: () => {},
+          }).then(
+            () => undefined,
+            (error: unknown) => error,
+          )
+          expect(failure).toBeInstanceOf(ParityError)
+          const error = failure as ParityError
+          expect(error.details.kind).toBe("mismatch")
+          expect(error.details.history.length).toBeLessThanOrEqual(1)
+        }),
+        { ...params, numRuns: 3 },
+      )
+    },
     { timeout: 30_000 },
   )
 

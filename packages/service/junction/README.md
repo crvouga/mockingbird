@@ -1,11 +1,14 @@
 # @crvouga/mockingbird-service-junction
 
-Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user surface.
+Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user and lab-testing surfaces.
 
 - API overview / environments / auth: https://docs.junction.com/api-details/junction-api
 - Create user: https://docs.junction.com/api-reference/user/create-user
 - Get user: https://docs.junction.com/api-reference/user/get-user
 - Delete user: https://docs.junction.com/api-reference/user/delete-user
+- Update user: https://docs.junction.com/api-reference/user/update-user
+- Lab tests: https://docs.junction.com/api-reference/lab-tests
+- Orders: https://docs.junction.com/api-reference/order-v3
 - Coverage: [SUPPORT.md](./SUPPORT.md)
 
 Auth header: `x-vital-api-key`. Sandbox keys look like `sk_us_*` / `sk_eu_*`.

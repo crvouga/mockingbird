@@ -2,7 +2,7 @@
 # Used by: bun run secrets:doctor | secrets:check | secrets:sync
 # See docs/SECRETS.md
 #
-# Live parity sandbox keys live under secret/data/mockingbird/<provider>
+# Live parity sandbox keys live under the flat secret/data/secret
 # (see @crvouga/mockingbird-openbao). Publish uses npm OIDC, not Vault.
 addr: https://vault.chrisvouga.dev
 mount: secret

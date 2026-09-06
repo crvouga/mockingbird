@@ -68,5 +68,7 @@ if (oidcReady) {
 } else if (npmToken) {
   console.log("  - NPM_TOKEN is set (legacy); prefer Trusted Publishing — see docs/SECRETS.md")
 } else {
-  console.log("  - no npm credentials in this shell (local dry-run / configure Trusted Publishing for CI)")
+  console.log(
+    "  - no npm credentials in this shell (local dry-run / configure Trusted Publishing for CI)",
+  )
 }

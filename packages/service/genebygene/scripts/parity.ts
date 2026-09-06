@@ -94,9 +94,5 @@ await parity({
     create: () => new GeneByGeneAPI(),
     headers: () => ({}),
   },
-  redact: createRedactor([
-    ...credentials.secrets,
-    accessToken,
-    credentials.values.client_secret,
-  ]),
+  redact: createRedactor([...credentials.secrets, accessToken, credentials.values.client_secret]),
 })

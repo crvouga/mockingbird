@@ -3,7 +3,6 @@ import { invalidRequest, parameterInvalidEmpty, resourceMissing } from "./errors
 import {
   mergeMetadata,
   optionalBoolean,
-  optionalString,
   parseUnitAmountDecimal,
   strip,
   unitAmountOf,

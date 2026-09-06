@@ -1,4 +1,4 @@
-import { type FetchLike, OpenBaoClient } from "./client.js"
+import { type FetchLike, OpenBaoClient, OpenBaoError } from "./client.js"
 
 export const DEFAULT_OPENBAO_ADDRESS = "https://vault.chrisvouga.dev"
 export const DEFAULT_JWT_MOUNT = "jwt"
@@ -72,6 +72,10 @@ export const credentialsFromEnv = <Field extends string>(
  *      (`MOCKINGBIRD_OPENBAO_JWT`, exchanged via `MOCKINGBIRD_OPENBAO_JWT_ROLE` at
  *      `MOCKINGBIRD_OPENBAO_JWT_MOUNT`), or the token file the caller injects.
  * `MOCKINGBIRD_CREDENTIALS=env|openbao` forces one source.
+ *
+ * Every failure names the provider, the expected secret fields, the environment variables
+ * that can supply them, and the exact OpenBao endpoint and secret path it read (or would
+ * read), so a missing secret is actionable at a glance.
  */
 export const loadCredentials = async <Field extends string>(
   spec: CredentialSpec<Field>,
@@ -82,19 +86,24 @@ export const loadCredentials = async <Field extends string>(
   if (mode !== "auto" && mode !== "env" && mode !== "openbao")
     throw new CredentialError(`MOCKINGBIRD_CREDENTIALS must be env, openbao, or auto; got ${mode}`)
 
+  const fields = Object.keys(spec.fields) as Field[]
+  const envPairs = fields.map((field) => `${spec.fields[field]} (secret field "${field}")`)
+  const secretFields = fields.map((field) => `"${field}"`).join(", ")
+  const envVars = fields.map((field) => spec.fields[field]).join(", ")
+
   if (mode !== "openbao") {
     const fromEnv = credentialsFromEnv(spec, env)
     if (fromEnv) return { values: fromEnv, source: "env", secrets: Object.values<string>(fromEnv) }
     if (mode === "env")
       throw new CredentialError(
-        `MOCKINGBIRD_CREDENTIALS=env but ${Object.values<string>(spec.fields).join(", ")} are not all set`,
+        `MOCKINGBIRD_CREDENTIALS=env but not all credentials are set in the environment; set ${envPairs.join(", ")}`,
       )
   }
-
   const address =
     first(env, ["MOCKINGBIRD_OPENBAO_ADDR", "BAO_ADDR", "VAULT_ADDR"]) ?? DEFAULT_OPENBAO_ADDRESS
   const client = new OpenBaoClient({ address, ...(options.fetch ? { fetch: options.fetch } : {}) })
-
+  const path = first(env, [envPathName(spec.provider)]) ?? spec.defaultPath ?? `secret/data/secret`
+  const url = `${address}/v1/${path}`
   let token = first(env, ["MOCKINGBIRD_OPENBAO_TOKEN", "BAO_TOKEN", "VAULT_TOKEN"])
   let revoke = false
   if (token === undefined) {
@@ -115,24 +124,26 @@ export const loadCredentials = async <Field extends string>(
   }
   if (token === undefined)
     throw new CredentialError(
-      `no credentials for ${spec.provider}: set ${Object.values<string>(spec.fields).join(", ")} or authenticate to OpenBao (bao login, MOCKINGBIRD_OPENBAO_TOKEN, or MOCKINGBIRD_OPENBAO_JWT)`,
+      `no credentials for ${spec.provider}: set ${envPairs.join(", ")} or store ${secretFields} at ${url} (path via ${envPathName(spec.provider)}, auth via bao login / MOCKINGBIRD_OPENBAO_TOKEN / MOCKINGBIRD_OPENBAO_JWT)`,
     )
 
-  const path =
-    first(env, [envPathName(spec.provider)]) ??
-    spec.defaultPath ??
-    `secret/data/mockingbird/${spec.provider}`
   try {
     const data = await client.readKv2(token, path)
     const out: Partial<Record<Field, string>> = {}
-    for (const field of Object.keys(spec.fields) as Field[]) {
+    for (const field of fields) {
       const value = data[field]
       if (value === undefined || value === "")
-        throw new CredentialError(`secret ${path} is missing field ${field}`)
+        throw new CredentialError(
+          `OpenBao secret at ${url} (provider "${spec.provider}") is missing field "${field}"; add it there or set ${spec.fields[field]} in the environment`,
+        )
       out[field] = value
     }
     const values = out as Record<Field, string>
     return { values, source: "openbao", secrets: [...Object.values<string>(values), token] }
+  } catch (error) {
+    if (error instanceof OpenBaoError)
+      error.message = `${error.message}; reading ${spec.provider} credentials from ${url} failed, the secret should contain ${secretFields} or set ${envVars} in the environment`
+    throw error
   } finally {
     if (revoke) await client.revokeSelf(token)
   }

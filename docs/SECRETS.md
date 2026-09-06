@@ -4,8 +4,9 @@
 **npm Trusted Publishing (OIDC)** — not Automation tokens.
 
 Live parity sandbox credentials live in the self-hosted Vault / OpenBao at
-`https://vault.chrisvouga.dev` under `secret/data/mockingbird/<provider>`. CI publish never
-reads those keys; only `bun run parity*` does (via `@crvouga/mockingbird-openbao`).
+`https://vault.chrisvouga.dev` under the flat KV v2 secret `secret/data/secret`
+(shown as `secret/secret` in the UI). CI publish never reads those keys; only
+`bun run parity*` does (via `@crvouga/mockingbird-openbao`).
 
 Inventory:
 
@@ -45,9 +46,9 @@ workspace package whose version is not already on npm (idempotent).
 
 | Provider | Vault path (KV v2 under `secret`) | Fields | Env overrides |
 | --- | --- | --- | --- |
-| Stripe | `mockingbird/stripe` | `secret_key` | `MOCKINGBIRD_STRIPE_SECRET_KEY` |
-| Junction | `mockingbird/junction` | `api_key` | `MOCKINGBIRD_JUNCTION_API_KEY` |
-| GeneByGene | `mockingbird/genebygene` | `client_id`, `client_secret` | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID`, `MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET` |
+| Stripe | `secret/data/secret` | `secret_key` | `MOCKINGBIRD_STRIPE_SECRET_KEY` |
+| Junction | `secret/data/secret` | `api_key` | `MOCKINGBIRD_JUNCTION_API_KEY` |
+| GeneByGene | `secret/data/secret` | `client_id`, `client_secret` | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID`, `MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET` |
 
 Default OpenBao address: `https://vault.chrisvouga.dev` (`MOCKINGBIRD_OPENBAO_ADDR` / `VAULT_ADDR`).
 Auth: `VAULT_TOKEN` / `BAO_TOKEN` / `~/.vault-token`, or JWT (`MOCKINGBIRD_OPENBAO_JWT`).
@@ -67,5 +68,5 @@ bun run parity:genebygene
 | npm Trusted Publisher (OIDC) | each package on npm | **Yes** (CI publish) |
 | `GITHUB_TOKEN` | Built into GitHub Actions | Automatic |
 | `GH_PAT` | Optional Vault `personal/prd/github` | No (local only) |
-| Provider sandbox keys | Vault `mockingbird/*` | For live parity only |
+| Provider sandbox keys | Vault `secret/data/secret` | For live parity only |
 | `NPM_TOKEN` | — | **Not used** |

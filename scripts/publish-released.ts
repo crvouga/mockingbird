@@ -7,7 +7,7 @@
  *   bun run release:publish
  *   bun run release:publish -- --dry-run
  */
-import { readdirSync, readFileSync, existsSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { $ } from "bun"
 import { npmViewVersion, redactSecrets, root } from "./secrets/lib.ts"
@@ -22,9 +22,7 @@ type Pkg = {
 
 const collectPackages = (): Pkg[] => {
   const out: Pkg[] = []
-  const roots = [
-    join(root, "packages"),
-  ]
+  const roots = [join(root, "packages")]
   const walk = (dir: string) => {
     if (!existsSync(dir)) return
     for (const entry of readdirSync(dir, { withFileTypes: true })) {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Database } from "@crvouga/sqlite-mem"
 import { fcParameters } from "@crvouga/mockingbird-testing"
+import { Database } from "@crvouga/sqlite-mem"
 import fc from "fast-check"
 import {
   CORE_MIGRATIONS,
@@ -38,33 +38,33 @@ describe("migrate", () => {
   test(
     "applies pending migrations once; a second call is a no-op",
     () => {
-    fc.assert(
-      fc.property(fc.nat({ max: 5 }), (extra) => {
-        const sqlite = createDefaultSqlite()
-        migrateCore(sqlite)
-        const first = listAppliedMigrations(sqlite)
-        expect(first).toEqual(CORE_MIGRATIONS.map((m) => m.id))
-        expect(tableExists(sqlite, "mockingbird_records")).toBe(true)
-        expect(tableExists(sqlite, "mockingbird_sequences")).toBe(true)
+      fc.assert(
+        fc.property(fc.nat({ max: 5 }), (extra) => {
+          const sqlite = createDefaultSqlite()
+          migrateCore(sqlite)
+          const first = listAppliedMigrations(sqlite)
+          expect(first).toEqual(CORE_MIGRATIONS.map((m) => m.id))
+          expect(tableExists(sqlite, "mockingbird_records")).toBe(true)
+          expect(tableExists(sqlite, "mockingbird_sequences")).toBe(true)
 
-        migrateCore(sqlite)
-        expect(listAppliedMigrations(sqlite)).toEqual(first)
+          migrateCore(sqlite)
+          expect(listAppliedMigrations(sqlite)).toEqual(first)
 
-        const more = Array.from({ length: extra }, (_, i) => ({
-          id: `extra_${i}`,
-          sql: `CREATE TABLE IF NOT EXISTS extra_${i} (id INTEGER PRIMARY KEY)`,
-        }))
-        migrate(sqlite, [...CORE_MIGRATIONS, ...more])
-        expect(listAppliedMigrations(sqlite)).toEqual([
-          ...CORE_MIGRATIONS.map((m) => m.id),
-          ...more.map((m) => m.id),
-        ])
-        migrate(sqlite, [...CORE_MIGRATIONS, ...more])
-        expect(listAppliedMigrations(sqlite).length).toBe(CORE_MIGRATIONS.length + extra)
-      }),
-      params,
-    )
-  },
+          const more = Array.from({ length: extra }, (_, i) => ({
+            id: `extra_${i}`,
+            sql: `CREATE TABLE IF NOT EXISTS extra_${i} (id INTEGER PRIMARY KEY)`,
+          }))
+          migrate(sqlite, [...CORE_MIGRATIONS, ...more])
+          expect(listAppliedMigrations(sqlite)).toEqual([
+            ...CORE_MIGRATIONS.map((m) => m.id),
+            ...more.map((m) => m.id),
+          ])
+          migrate(sqlite, [...CORE_MIGRATIONS, ...more])
+          expect(listAppliedMigrations(sqlite).length).toBe(CORE_MIGRATIONS.length + extra)
+        }),
+        params,
+      )
+    },
     { timeout: 30_000 },
   )
 })

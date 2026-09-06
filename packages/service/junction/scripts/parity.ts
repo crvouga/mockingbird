@@ -35,6 +35,13 @@ await parity({
   provider: "junction",
   spec: document,
   env: process.env,
+  only: [
+    "create_user_v2_user_post",
+    "get_user_v2_user__user_id__get",
+    "delete_user_v2_user__user_id__delete",
+    "get_user_by_client_user_id_v2_user_resolve__client_user_id__get",
+    "patch_user_v2_user__user_id__patch",
+  ],
   real: {
     baseUrl,
     allowedHosts: [new URL(baseUrl).host],

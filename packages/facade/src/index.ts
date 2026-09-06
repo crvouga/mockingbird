@@ -1,15 +1,15 @@
 export type { FetchAPI, FetchHandler } from "@crvouga/mockingbird-core"
 export { fromFetchHandler, toFetchHandler } from "@crvouga/mockingbird-core"
+export type { APIOptions } from "@crvouga/mockingbird-service"
+export {
+  document as geneByGeneDocument,
+  GeneByGeneAPI,
+} from "@crvouga/mockingbird-service-genebygene"
+export { document as junctionDocument, JunctionAPI } from "@crvouga/mockingbird-service-junction"
+export { document as stripeDocument, StripeAPI } from "@crvouga/mockingbird-service-stripe"
 export type { SqliteClient, SqliteStatement, SqliteValue } from "@crvouga/mockingbird-sqlite"
 export {
   createDefaultSqlite,
-  resolveSqlite,
   migrateCore,
+  resolveSqlite,
 } from "@crvouga/mockingbird-sqlite"
-export type { APIOptions } from "@crvouga/mockingbird-service"
-export { StripeAPI, document as stripeDocument } from "@crvouga/mockingbird-service-stripe"
-export { JunctionAPI, document as junctionDocument } from "@crvouga/mockingbird-service-junction"
-export {
-  GeneByGeneAPI,
-  document as geneByGeneDocument,
-} from "@crvouga/mockingbird-service-genebygene"

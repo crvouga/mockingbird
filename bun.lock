@@ -65,6 +65,9 @@
         "@crvouga/mockingbird-service-stripe": "workspace:*",
         "@crvouga/mockingbird-sqlite": "workspace:*",
       },
+      "devDependencies": {
+        "fast-check": "4.9.0",
+      },
     },
     "packages/http/codec": {
       "name": "@crvouga/mockingbird-http-codec",

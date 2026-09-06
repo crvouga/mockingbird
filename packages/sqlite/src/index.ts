@@ -2,4 +2,4 @@ export type { SqliteClient, SqliteRunResult, SqliteStatement, SqliteValue } from
 export { createDefaultSqlite, resolveSqlite } from "./default.js"
 export type { Migration } from "./migrate.js"
 export { listAppliedMigrations, migrate } from "./migrate.js"
-export { clearNamespace, CORE_MIGRATIONS, migrateCore } from "./schema.js"
+export { CORE_MIGRATIONS, clearNamespace, migrateCore } from "./schema.js"

@@ -1,5 +1,5 @@
-import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { Collection, IdSequence } from "@crvouga/mockingbird-service"
+import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 
 export type Address = {
   city: string | null

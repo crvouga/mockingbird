@@ -101,7 +101,7 @@ describe("openbao credentials", () => {
           }
           const path =
             input.overridePath === undefined
-              ? `secret/data/mockingbird/${input.provider}`
+              ? `secret/data/secret`
               : `secret/data/${input.overridePath}`
           const bao = fakeBao({
             jwt: input.jwt,
@@ -168,6 +168,7 @@ describe("openbao credentials", () => {
           wrongToken: secret,
           realToken: secret,
           mode: fc.constantFrom("env", "openbao", "auto", "bogus"),
+          withToken: fc.boolean(),
         }),
         async (input) => {
           fc.pre(input.wrongToken !== input.realToken)
@@ -180,21 +181,65 @@ describe("openbao credentials", () => {
             MOCKINGBIRD_CREDENTIALS: input.mode,
             MOCKINGBIRD_OPENBAO_ADDR: DEFAULT_OPENBAO_ADDRESS,
           }
-          if (input.mode === "openbao" || input.mode === "auto")
-            env.MOCKINGBIRD_OPENBAO_TOKEN = input.wrongToken
+          if (input.withToken) env.MOCKINGBIRD_OPENBAO_TOKEN = input.wrongToken
           const outcome = await loadCredentials(spec, { env, fetch: bao.fetch }).then(
             () => "ok",
             (error: unknown) => error,
           )
-          if (input.mode === "bogus" || input.mode === "env") {
+          const url = `${DEFAULT_OPENBAO_ADDRESS}/v1/secret/data/secret`
+          if (input.mode === "bogus") {
             expect(outcome).toBeInstanceOf(CredentialError)
-          } else {
+          } else if (input.mode === "env") {
+            expect(outcome).toBeInstanceOf(CredentialError)
+            expect((outcome as CredentialError).message).toContain("MOCKINGBIRD_X_FIELD")
+          } else if (input.withToken) {
             expect(outcome).toBeInstanceOf(OpenBaoError)
             expect((outcome as OpenBaoError).status).toBe(403)
+            expect((outcome as OpenBaoError).message).toContain(url)
+            expect((outcome as OpenBaoError).message).toContain("MOCKINGBIRD_X_FIELD")
             expect((outcome as OpenBaoError).message).not.toContain(input.wrongToken)
+          } else {
+            expect(outcome).toBeInstanceOf(CredentialError)
+            const message = (outcome as CredentialError).message
+            expect(message).toContain(input.provider)
+            expect(message).toContain("MOCKINGBIRD_X_FIELD")
+            expect(message).toContain(url)
+            expect(message).toContain(`MOCKINGBIRD_OPENBAO_PATH_${input.provider.toUpperCase()}`)
           }
         },
       ),
+      params,
+    )
+  })
+
+  test("a secret that exists but lacks a field names the field, the url, and the env alternative", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.record({ provider: slug, field: slug, token: secret }), async (input) => {
+        const envVar = `MOCKINGBIRD_${input.provider.toUpperCase()}_KEY`
+        const spec = { provider: input.provider, fields: { [input.field]: envVar } }
+        const path = `secret/data/secret`
+        const bao = fakeBao({
+          jwt: "j",
+          jwtRole: "r",
+          issuedToken: input.token,
+          secrets: { [path]: { other: "unrelated" } },
+        })
+        const error = await loadCredentials(spec, {
+          env: {
+            MOCKINGBIRD_OPENBAO_ADDR: DEFAULT_OPENBAO_ADDRESS,
+            MOCKINGBIRD_OPENBAO_TOKEN: input.token,
+          },
+          fetch: bao.fetch,
+        }).then(
+          () => undefined,
+          (e: unknown) => e,
+        )
+        expect(error).toBeInstanceOf(CredentialError)
+        const message = (error as CredentialError).message
+        expect(message).toContain(`"${input.field}"`)
+        expect(message).toContain(`${DEFAULT_OPENBAO_ADDRESS}/v1/${path}`)
+        expect(message).toContain(envVar)
+      }),
       params,
     )
   })

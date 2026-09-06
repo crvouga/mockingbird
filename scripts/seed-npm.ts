@@ -51,5 +51,7 @@ if (result.exitCode !== 0) {
   console.error(result.stderr.toString() || result.stdout.toString())
   process.exit(result.exitCode)
 }
-console.log("Seeded. Next: attach Trusted Publisher for workflow ci.yml on repo crvouga/mockingbird")
+console.log(
+  "Seeded. Next: attach Trusted Publisher for workflow ci.yml on repo crvouga/mockingbird",
+)
 console.log(NPM_TRUSTED_PUBLISHER_URL)

@@ -14,36 +14,36 @@ describe("JunctionAPI", () => {
   test(
     "self-parity: independent instances agree on every random walk and conform to the spec",
     async () => {
-    const reference = new JunctionAPI({ now })
-    const report = await parity({
-      provider: "junction",
-      spec: document,
-      real: {
-        baseUrl: `https://${MOCK_HOST}`,
-        allowedHosts: [MOCK_HOST],
-        headers: () => AUTH,
-        fetch: (request) => reference.fetch(request),
-      },
-      mock: {
-        create: () => new JunctionAPI({ now }),
-        baseUrl: `https://${MOCK_HOST}`,
-        headers: () => AUTH,
-      },
-      cleanup: async () => {
-        await reference.reset()
-      },
-      numRuns: params.numRuns ?? 20,
-      maxCommands: 15,
-      ...(params.seed === undefined ? {} : { seed: params.seed }),
-      env: process.env,
-      sleep: async () => {},
-      log: () => {},
-    })
-    expect(report.walks).toBeGreaterThan(0)
-    expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
-      supportedOperationIds.length / 2,
-    )
-  },
+      const reference = new JunctionAPI({ now })
+      const report = await parity({
+        provider: "junction",
+        spec: document,
+        real: {
+          baseUrl: `https://${MOCK_HOST}`,
+          allowedHosts: [MOCK_HOST],
+          headers: () => AUTH,
+          fetch: (request) => reference.fetch(request),
+        },
+        mock: {
+          create: () => new JunctionAPI({ now }),
+          baseUrl: `https://${MOCK_HOST}`,
+          headers: () => AUTH,
+        },
+        cleanup: async () => {
+          await reference.reset()
+        },
+        numRuns: params.numRuns ?? 20,
+        maxCommands: 30,
+        ...(params.seed === undefined ? {} : { seed: params.seed }),
+        env: process.env,
+        sleep: async () => {},
+        log: () => {},
+      })
+      expect(report.walks).toBeGreaterThan(0)
+      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
+        supportedOperationIds.length / 2,
+      )
+    },
     { timeout: 30_000 },
   )
 

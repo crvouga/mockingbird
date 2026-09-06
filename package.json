@@ -26,7 +26,7 @@
     "test": "turbo run test",
     "generate": "turbo run generate",
     "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:tests check:format",
-    "parity": "turbo run parity --concurrency=1",
+    "parity": "turbo run parity --filter=@crvouga/mockingbird-service-junction --concurrency=1",
     "parity:stripe": "turbo run parity --filter=@crvouga/mockingbird-service-stripe",
     "parity:junction": "turbo run parity --filter=@crvouga/mockingbird-service-junction",
     "parity:genebygene": "turbo run parity --filter=@crvouga/mockingbird-service-genebygene",

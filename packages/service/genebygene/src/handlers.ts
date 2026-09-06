@@ -1,15 +1,24 @@
-import { HttpError, jsonResponse, type OperationContext, opaqueToken } from "@crvouga/mockingbird-service"
+import {
+  HttpError,
+  jsonResponse,
+  type OperationContext,
+  opaqueToken,
+} from "@crvouga/mockingbird-service"
 import type { GeneByGeneState } from "./state.js"
 
 const requireBearer = (context: OperationContext) => {
   const auth = context.request.headers.get("authorization")
-  if (!auth || !auth.toLowerCase().startsWith("bearer ")) {
+  if (!auth?.toLowerCase().startsWith("bearer ")) {
     throw new HttpError(401, { error: "unauthorized", message: "Bearer token required" })
   }
 }
 
 const jsonBody = (context: OperationContext): Record<string, unknown> => {
-  if (context.body.kind !== "json" || typeof context.body.value !== "object" || context.body.value === null) {
+  if (
+    context.body.kind !== "json" ||
+    typeof context.body.value !== "object" ||
+    context.body.value === null
+  ) {
     throw new HttpError(400, { message: "expected a JSON object body" })
   }
   return context.body.value as Record<string, unknown>
@@ -23,7 +32,11 @@ const formBody = (context: OperationContext): Record<string, string> => {
     }
     return out
   }
-  if (context.body.kind === "json" && typeof context.body.value === "object" && context.body.value) {
+  if (
+    context.body.kind === "json" &&
+    typeof context.body.value === "object" &&
+    context.body.value
+  ) {
     const out: Record<string, string> = {}
     for (const [key, value] of Object.entries(context.body.value as Record<string, unknown>)) {
       if (typeof value === "string") out[key] = value
@@ -68,7 +81,8 @@ export const geneByGeneHandlers = (state: GeneByGeneState) => ({
     const body = jsonBody(context)
     const productId = body.productId
     const quantity = body.quantity
-    if (typeof productId !== "string") throw new HttpError(400, { message: "productId is required" })
+    if (typeof productId !== "string")
+      throw new HttpError(400, { message: "productId is required" })
     if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1) {
       throw new HttpError(400, { message: "quantity must be a positive integer" })
     }

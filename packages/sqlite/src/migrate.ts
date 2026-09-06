@@ -25,7 +25,10 @@ const ensureMigrationsTable = (sqlite: SqliteClient) => {
 export const migrate = (sqlite: SqliteClient, migrations: readonly Migration[]): void => {
   ensureMigrationsTable(sqlite)
   const applied = new Set(
-    sqlite.prepare("SELECT id FROM schema_migrations").all<{ id: string }>().map((row) => row.id),
+    sqlite
+      .prepare("SELECT id FROM schema_migrations")
+      .all<{ id: string }>()
+      .map((row) => row.id),
   )
   const pending = migrations.filter((migration) => !applied.has(migration.id))
   if (pending.length === 0) return

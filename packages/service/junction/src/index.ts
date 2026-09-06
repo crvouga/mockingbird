@@ -11,6 +11,7 @@ import {
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
+import { orderHandlers } from "./orders.js"
 import { JunctionState } from "./state.js"
 import { userHandlers } from "./users.js"
 
@@ -20,7 +21,7 @@ export { document, operationIds, supportedOperationIds } from "./generated/opena
 export const JUNCTION_NAMESPACE = "junction"
 
 /**
- * Stateful mock of the Junction (Vital) API user surface.
+ * Stateful mock of the Junction (Vital) API user and lab-testing surfaces.
  *
  * Docs: https://docs.junction.com/
  * Auth: `x-vital-api-key` — https://docs.junction.com/api-details/junction-api
@@ -35,6 +36,7 @@ export class JunctionAPI implements FetchAPI {
     const state = new JunctionState(sqlite, JUNCTION_NAMESPACE)
     const handlers = defineOperations<SupportedOperationId>({
       ...userHandlers(state),
+      ...orderHandlers(state),
     })
     this.service = createService({
       document,

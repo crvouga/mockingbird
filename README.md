@@ -65,7 +65,7 @@ OpenAPI spec
 | Package | Provider | Docs | Status |
 | --- | --- | --- | --- |
 | [`@crvouga/mockingbird-service-stripe`](packages/service/stripe) | [Stripe](https://docs.stripe.com/api) | [API reference](https://docs.stripe.com/api) · [test keys](https://docs.stripe.com/keys) · [SUPPORT.md](packages/service/stripe/SUPPORT.md) | Implemented (customers, products, prices) |
-| [`@crvouga/mockingbird-service-junction`](packages/service/junction) | [Junction (Vital)](https://docs.junction.com/) | [API overview](https://docs.junction.com/api-details/junction-api) · [create user](https://docs.junction.com/api-reference/user/create-user) · [get user](https://docs.junction.com/api-reference/user/get-user) · [delete user](https://docs.junction.com/api-reference/user/delete-user) · [SUPPORT.md](packages/service/junction/SUPPORT.md) · [package README](packages/service/junction/README.md) | Implemented (user CRUD) |
+| [`@crvouga/mockingbird-service-junction`](packages/service/junction) | [Junction (Vital)](https://docs.junction.com/) | [API overview](https://docs.junction.com/api-details/junction-api) · [create user](https://docs.junction.com/api-reference/user/create-user) · [get user](https://docs.junction.com/api-reference/user/get-user) · [delete user](https://docs.junction.com/api-reference/user/delete-user) · [lab tests](https://docs.junction.com/api-reference/lab-tests) · [orders](https://docs.junction.com/api-reference/order-v3) · [SUPPORT.md](packages/service/junction/SUPPORT.md) · [package README](packages/service/junction/README.md) | Implemented (user CRUD + helpers, lab-testing) |
 | [`@crvouga/mockingbird-service-genebygene`](packages/service/genebygene) | [GeneByGene](https://api.genebygene.com/swagger/index.html) | [Developer guide (PDF)](https://api.genebygene.com/assets/GxG%20API%20Services%20Developer%20Guide%202022.pdf) · [Swagger UI](https://api.genebygene.com/swagger/index.html) · [SUPPORT.md](packages/service/genebygene/SUPPORT.md) · [package README](packages/service/genebygene/README.md) | Implemented (token, products, orders) |
 
 The umbrella package is [`@crvouga/mockingbird`](packages/facade). Granular `@crvouga/mockingbird-*` packages are the source of truth.
@@ -76,9 +76,9 @@ State lives in SQLite under a per-service namespace. Several services can share 
 
 | Command | Sandbox | Credential |
 | --- | --- | --- |
-| `bun run parity:stripe` | `https://api.stripe.com` (test mode) | `MOCKINGBIRD_STRIPE_SECRET_KEY` (`sk_test_*`) or Vault `mockingbird/stripe` |
-| `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `MOCKINGBIRD_JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) or Vault `mockingbird/junction` |
-| `bun run parity:genebygene` | staging auth + API | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` or Vault `mockingbird/genebygene` |
+| `bun run parity:stripe` | `https://api.stripe.com` (test mode) | `MOCKINGBIRD_STRIPE_SECRET_KEY` (`sk_test_*`) or Vault `secret/data/secret` |
+| `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `MOCKINGBIRD_JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) or Vault `secret/data/secret` |
+| `bun run parity:genebygene` | staging auth + API | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` or Vault `secret/data/secret` |
 
 ## Packages
 

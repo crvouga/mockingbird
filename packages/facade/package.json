@@ -50,5 +50,8 @@
     "@crvouga/mockingbird-service-genebygene": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@crvouga/mockingbird-adapter-bun": "workspace:*"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0"
   }
 }

@@ -346,7 +346,10 @@ export const schemaArbitrary = (
           : fc.array(items, { minLength: min, maxLength: max }),
         weight: boundaryWeights(max).random,
       },
-      { arbitrary: fc.constantFrom(...lengths).chain(sized), weight: boundaryWeights(max).boundary },
+      {
+        arbitrary: fc.constantFrom(...lengths).chain(sized),
+        weight: boundaryWeights(max).boundary,
+      },
     )
   }
 
