@@ -291,6 +291,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PostOrderResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: Not Found
           content:
@@ -345,7 +351,7 @@ paths:
       parameters:
         - name: user_id
           in: query
-          required: false
+          required: true
           schema:
             type: string
             format: uuid
@@ -374,6 +380,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GetOrdersResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "422":
           description: Validation Error
           content:
@@ -396,8 +408,9 @@ paths:
       x-mockingbird:
         supported: true
         parity:
-          enabled: true
+          enabled: false
           safe: true
+          reason: order transactions are not available to the sandbox team (feature not available)
       responses:
         "200":
           description: Successful Response
@@ -427,8 +440,9 @@ paths:
       x-mockingbird:
         supported: true
         parity:
-          enabled: true
+          enabled: false
           safe: true
+          reason: lab results are not available to the sandbox team (feature not available)
       responses:
         "200":
           description: Successful Response
@@ -776,6 +790,8 @@ components:
         - received.testkit.requisition_created
         - received.testkit.requisition_bypassed
         - received.testkit.registered
+        - received.walk_in_test.ordered
+        - received.at_home_phlebotomy.ordered
         - collecting_sample.testkit.transit_customer
         - collecting_sample.testkit.out_for_delivery
         - collecting_sample.testkit.with_customer
@@ -907,33 +923,69 @@ components:
           format: date-time
           x-mockingbird-volatile:
             kind: timestamp
+    ClientFacingWalkInOrder:
+      type: object
+      required: [id, appointment_id, created_at, updated_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-volatile:
+            kind: id
+        appointment_id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
+        updated_at:
+          type: string
+          format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
     ClientFacingTestKitOrderDetails:
       type: object
       required: [type]
       properties:
         type:
           type: string
-          const: testkit
+          enum: [testkit, walk_in_test, at_home_phlebotomy]
         data:
           anyOf:
             - $ref: "#/components/schemas/ClientFacingTestkitOrder"
+            - $ref: "#/components/schemas/ClientFacingWalkInOrder"
             - type: "null"
     ClientFacingPatientDetailsCompatible:
       type: object
-      required: [dob, gender]
+      required: [first_name, last_name, dob, gender, phone_number, email]
       properties:
         first_name:
-          type: ["string", "null"]
+          type: string
+          minLength: 1
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9 .,-]*$"
         last_name:
-          type: ["string", "null"]
+          type: string
+          minLength: 1
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9 .,-]*$"
         dob:
           type: string
+          format: date-time
         gender:
           type: string
+          minLength: 1
+          pattern: "\\S"
         phone_number:
-          type: ["string", "null"]
+          type: string
+          minLength: 1
+          pattern: "^\\+1[2-9]\\d{9}$"
         email:
-          type: ["string", "null"]
+          type: string
+          format: email
+          minLength: 1
     PatientAddressCompatible:
       type: object
       required: [first_line, city, state, zip, country]
@@ -943,16 +995,25 @@ components:
           default: ""
         first_line:
           type: string
+          minLength: 1
+          pattern: "\\S"
         second_line:
           type: ["string", "null"]
         city:
           type: string
+          minLength: 1
+          pattern: "\\S"
         state:
           type: string
+          minLength: 1
+          enum: [AL, AK, AZ, AR, CA, CO, CT, DE, FL, GA, HI, ID, IL, IN, IA, KS, KY, LA, ME, MD, MA, MI, MN, MS, MO, MT, NE, NV, NH, NJ, NM, NY, NC, ND, OH, OK, OR, PA, RI, SC, SD, TN, TX, UT, VT, VA, WA, WV, WI, WY]
         zip:
           type: string
+          pattern: "^\\d{5}(-\\d{4})?$"
         country:
           type: string
+          minLength: 1
+          pattern: "\\S"
         access_notes:
           type: ["string", "null"]
         phone_number:
@@ -973,12 +1034,18 @@ components:
             - type: string
               format: date-time
             - type: "null"
+          x-mockingbird-volatile:
+            kind: timestamp
         created_at:
           type: string
           format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
         updated_at:
           type: string
           format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
     ClientFacingOrderTransaction:
       type: object
       required: [id, status, orders]
@@ -1214,6 +1281,7 @@ components:
             format: uuid
             x-mockingbird-resource-ref:
               type: lab_test
+              missing: "00000000-0000-4000-8000-000000000000"
     CreateOrderRequest:
       type: object
       required: [user_id, patient_details, patient_address, order_set]

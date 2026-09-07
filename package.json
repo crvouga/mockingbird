@@ -26,6 +26,9 @@
     "test": "turbo run test",
     "generate": "turbo run generate",
     "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:tests check:format",
+    "check:full": "bun scripts/ci-local.ts",
+    "pack:check": "turbo run pack:check",
+    "portability": "turbo run portability",
     "parity": "turbo run parity --filter=@crvouga/mockingbird-service-junction --concurrency=1",
     "parity:stripe": "turbo run parity --filter=@crvouga/mockingbird-service-stripe",
     "parity:junction": "turbo run parity --filter=@crvouga/mockingbird-service-junction",
@@ -34,6 +37,7 @@
     "check:tests": "bun scripts/check-test-files.ts",
     "check:format": "biome format .",
     "format": "biome format --write .",
+    "prepare": "husky",
     "release:preflight": "bun scripts/release-preflight.ts",
     "release:publish": "bun scripts/publish-released.ts",
     "npm:seed": "bun scripts/seed-npm.ts",
@@ -42,11 +46,14 @@
     "secrets:sync": "bun scripts/secrets/sync-github.ts"
   },
   "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "2.5.12",
     "@commitlint/cli": "19.8.1",
     "@commitlint/config-conventional": "19.8.1",
     "@types/bun": "1.4.0",
     "@types/node": "22.20.1",
+    "husky": "^9.1.7",
+    "publint": "^0.3.23",
     "turbo": "2.10.12",
     "typescript": "5.9.3"
   }

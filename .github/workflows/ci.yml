@@ -86,6 +86,18 @@ jobs:
       - name: Build
         run: bun run build
 
+      - name: Package integrity (publint + arethetypeswrong)
+        run: bun run pack:check
+
+      - name: Portability
+        run: bun run portability
+
+      - name: Boundaries
+        run: bun run check:boundaries
+
+      - name: Test naming (property-based only)
+        run: bun run check:tests
+
   test:
     name: Test
     needs: [quality]
@@ -139,6 +151,12 @@ jobs:
 
       - name: Build
         run: bun run build
+
+      - name: Package integrity (publint + arethetypeswrong)
+        run: bun run pack:check
+
+      - name: Portability
+        run: bun run portability
 
       - name: Release preflight
         run: bun run release:preflight

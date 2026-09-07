@@ -231,23 +231,54 @@ export const userHandlers = (state: JunctionState) => ({
     if (!patchable.some((key) => body[key] !== undefined)) {
       throw new HttpError(400, { detail: "Nothing to patch" })
     }
-    if (body.client_user_id !== undefined) {
-      const raw = body.client_user_id
-      if (raw === null) {
-        throw new HttpError(422, {
-          detail: [
-            {
-              type: "value_error",
-              loc: ["body"],
-              msg: "Value error, client_user_id is not a field that can be reset to null.",
-              input: body,
-              ctx: { error: {} },
-            },
-          ],
-        })
+    const validationError = (): unknown => {
+      const tz = body.fallback_time_zone
+      if (tz !== undefined && tz !== null) {
+        if (typeof tz !== "string") return stringError("fallback_time_zone", tz)
+        if (!isValidIanaTimezone(tz)) {
+          return {
+            type: "value_error",
+            loc: ["body", "fallback_time_zone"],
+            msg: `Value error, Invalid IANA time zone: ${tz}`,
+            input: tz,
+            ctx: { error: {} },
+          }
+        }
       }
-      if (typeof raw !== "string")
-        throw new HttpError(422, { detail: [stringError("client_user_id", raw)] })
+      const birth = body.fallback_birth_date
+      if (birth !== undefined && birth !== null) {
+        if (typeof birth !== "string") return stringError("fallback_birth_date", birth)
+        if (!isValidDate(birth)) return dateError("fallback_birth_date", birth)
+      }
+      const start = body.ingestion_start
+      if (start !== undefined && start !== null) {
+        if (typeof start !== "string") return stringError("ingestion_start", start)
+        if (!isValidDate(start)) return dateError("ingestion_start", start)
+      }
+      const end = body.ingestion_end
+      if (end !== undefined && end !== null) {
+        if (typeof end !== "string") return stringError("ingestion_end", end)
+        if (!isValidDate(end)) return dateError("ingestion_end", end)
+      }
+      const cid = body.client_user_id
+      if (cid !== undefined) {
+        if (cid === null) {
+          return {
+            type: "value_error",
+            loc: ["body"],
+            msg: "Value error, client_user_id is not a field that can be reset to null.",
+            input: body,
+            ctx: { error: {} },
+          }
+        }
+        if (typeof cid !== "string") return stringError("client_user_id", cid)
+      }
+      return undefined
+    }
+    const error = validationError()
+    if (error) throw new HttpError(422, { detail: [error] })
+    if (body.client_user_id !== undefined) {
+      const raw = body.client_user_id as string
       const taken = state.byClientId.get(raw)
       if (taken && taken.user_id !== id)
         throw new HttpError(409, { detail: "Client user id already exists" })
@@ -257,31 +288,11 @@ export const userHandlers = (state: JunctionState) => ({
     }
     if (body.fallback_time_zone !== undefined) {
       const raw = body.fallback_time_zone
-      if (raw !== null && typeof raw !== "string")
-        throw new HttpError(422, { detail: [stringError("fallback_time_zone", raw)] })
-      if (typeof raw === "string" && !isValidIanaTimezone(raw)) {
-        throw new HttpError(422, {
-          detail: [
-            {
-              type: "value_error",
-              loc: ["body", "fallback_time_zone"],
-              msg: `Value error, Invalid IANA time zone: ${raw}`,
-              input: raw,
-              ctx: { error: {} },
-            },
-          ],
-        })
-      }
       user.fallback_time_zone =
         typeof raw === "string" ? { id: raw, source_slug: "manual", updated_at: now } : null
     }
     if (body.fallback_birth_date !== undefined) {
       const raw = body.fallback_birth_date
-      if (raw !== null && typeof raw !== "string")
-        throw new HttpError(422, { detail: [stringError("fallback_birth_date", raw)] })
-      if (typeof raw === "string" && !isValidDate(raw)) {
-        throw new HttpError(422, { detail: [dateError("fallback_birth_date", raw)] })
-      }
       user.fallback_birth_date =
         typeof raw === "string" ? { value: raw, source_slug: "manual", updated_at: now } : null
     }
@@ -290,11 +301,6 @@ export const userHandlers = (state: JunctionState) => ({
     let newStart = user.ingestion_start
     if (startProvided) {
       const raw = body.ingestion_start
-      if (raw !== null && typeof raw !== "string")
-        throw new HttpError(422, { detail: [stringError("ingestion_start", raw)] })
-      if (typeof raw === "string" && !isValidDate(raw)) {
-        throw new HttpError(422, { detail: [dateError("ingestion_start", raw)] })
-      }
       newStart = typeof raw === "string" ? raw : null
     }
     let newEnd = user.ingestion_end
@@ -302,11 +308,6 @@ export const userHandlers = (state: JunctionState) => ({
       newEnd = null
     } else if (endProvided) {
       const raw = body.ingestion_end
-      if (raw !== null && typeof raw !== "string")
-        throw new HttpError(422, { detail: [stringError("ingestion_end", raw)] })
-      if (typeof raw === "string" && !isValidDate(raw)) {
-        throw new HttpError(422, { detail: [dateError("ingestion_end", raw)] })
-      }
       newEnd = typeof raw === "string" ? raw : "0001-01-01"
     } else if (startProvided) {
       newEnd = "0001-01-01"

@@ -4,7 +4,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 
 - operations in spec: **13**
 - supported by the mock: **13**
-- parity enabled: **13**
+- parity enabled: **11**
 
 | operationId | route | mock | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -19,5 +19,5 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `create_order_v3_order_post` | `POST /v3/order` | ✅ supported | ✅ |  |
 | `get_order_v3_order__order_id__get` | `GET /v3/order/{order_id}` | ✅ supported | ✅ |  |
 | `get_orders_v3_orders_get` | `GET /v3/orders` | ✅ supported | ✅ |  |
-| `get_order_transaction_v3_order_transaction__transaction_id__get` | `GET /v3/order_transaction/{transaction_id}` | ✅ supported | ✅ |  |
-| `get_order_transaction_result_v3_order_transaction__transaction_id__result_get` | `GET /v3/order_transaction/{transaction_id}/result` | ✅ supported | ✅ |  |
+| `get_order_transaction_v3_order_transaction__transaction_id__get` | `GET /v3/order_transaction/{transaction_id}` | ✅ supported | ❌ disabled | order transactions are not available to the sandbox team (feature not available) |
+| `get_order_transaction_result_v3_order_transaction__transaction_id__result_get` | `GET /v3/order_transaction/{transaction_id}/result` | ✅ supported | ❌ disabled | lab results are not available to the sandbox team (feature not available) |

@@ -6,6 +6,13 @@ Each mock speaks the provider's real surface (`fetch(Request) → Response`), ke
 
 Pass an optional `sqlite` client that matches Mockingbird's owned `SqliteClient` port, or omit it to get a fresh [`@crvouga/sqlite-mem`](https://www.npmjs.com/package/@crvouga/sqlite-mem) database. Migrations run on boot.
 
+## Requirements
+
+- **Node.js ≥ 22** or **Bun ≥ 1.2** (ESM only).
+- npm is required for the package-integrity gates (`bunx publint`, `bunx attw`); Bun runs the rest.
+
+Install with `bun install` (uses [workspaces](https://bun.sh/docs/install/workspaces) + [Turborepo](https://turbo.build/repo/docs/overview)). A git hook lints commit messages on the spot — see [Development](#development--quality-gates).
+
 ## Testing
 
 **Example-based tests are banned.** No hardcoded request/response pairs, no fixture walks, no `it("creates a customer")`. Every test in this repo is a `*.property.test.ts` suite.
@@ -92,9 +99,41 @@ State lives in SQLite under a per-service namespace. Several services can share 
 | Adapters | `adapter-node`, `adapter-bun` |
 | Auth | `openbao` (sandbox credentials for live parity) |
 
+## Development & quality gates
+
+Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + quality + tests) without the network-only release job.
+
+```bash
+bun install            # workspaces + generates dist
+bun run check          # every gate below, in parallel, cached by turbo
+bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
+```
+
+| Gate | Command | What it enforces |
+| --- | --- | --- |
+| Format | `bun run check:format` | [Biome](https://biomejs.dev) formatting |
+| Lint | `bun run lint` | Biome lint (types, style, complexity) |
+| Typecheck | `bun run typecheck` | `tsc` for every package |
+| Boundaries | `bun run check:boundaries` | Intra-workspace dep graph: internal deps resolve, no cycles, no self-deps, every module import is declared in `package.json` |
+| Test naming | `bun run check:tests` | Every suite is `*.property.test.ts` (example-based tests are banned) |
+| Package integrity | `bun run pack:check` | `dist` + `exports` + `files`, tarball contents, [publint](https://publint.dev), [arethetypeswrong](https://arethetypeswrong.github.io) (ESM-only consumer resolution) |
+| Portability | `bun run portability` | Built `dist` matches the package's `mockingbird.runtime` (portable / node / bun) — no Node/Bun-only API usage where it isn't allowed |
+| Generate & OpenAPI | `bun run generate` / `bun run openapi:check` | Regenerate and verify provider contracts |
+| Test | `bun run test` | Property-based suites (`FC_NUM_RUNS=20` in CI) |
+
+### Git hooks (Husky)
+
+[`commit-msg`](.husky/commit-msg) runs [commitlint](https://commitlint.js.org) via `bunx` for **every commit**, so Conventional Commits are enforced before they reach a PR. Disable hooks per-repo with `HUSKY=0` in `package.json` scripts, or bypass a single commit with `git commit --no-verify` (not recommended).
+
+Keep the committed hook file in `.husky/commit-msg` — the generated `.husky/_` shims are gitignored and are produced by the `prepare` script (`husky`) on install.
+
+### Package publishing
+
+Public packages use `publishConfig.access = "public"` and `publishConfig.provenance = true` (npm Trusted Publishing / OIDC). `bun run pack:check` is the pre-publish gate that confirms each package actually packs, resolves types for an ESM-only consumer, and ships `dist`.
+
 ## Releasing
 
-Publishes use **npm Trusted Publishing (OIDC)** on push to `main` (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). Conventional Commits are enforced on PRs. Maintainer secrets and Vault paths: [docs/SECRETS.md](docs/SECRETS.md).
+Publishes use **npm Trusted Publishing (OIDC)** on push to `main` (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The release job builds, runs `pack:check` + `portability`, then `release:preflight` and `release:publish` — so nothing ships that isn't verified. Conventional Commits are enforced on PRs (and by the Husky hook). Maintainer secrets and Vault paths: [docs/SECRETS.md](docs/SECRETS.md).
 
 ```bash
 bun run secrets:doctor
@@ -103,4 +142,6 @@ bun run release:preflight
 bun run release:publish -- --dry-run
 ```
 
-Requires Node.js ≥ 22 or Bun ≥ 1.2. ESM only. MIT.
+Local replica of the whole CI (minus the main-only release job): `bun run check:full`.
+
+MIT.

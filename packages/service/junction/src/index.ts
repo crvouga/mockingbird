@@ -70,23 +70,19 @@ export class JunctionAPI implements FetchAPI {
 /** Collapse `.`/`..` path segments the way the real server does before routing. */
 const normalizePath = (request: Request): Request => {
   const url = new URL(request.url)
-  let pathname: string
-  try {
-    pathname = decodeURIComponent(url.pathname)
-  } catch {
-    pathname = url.pathname
-  }
+  const pathname = url.pathname.replace(/%2f/gi, "/")
   const segments = pathname.split("/")
   const out: string[] = []
   for (const segment of segments) {
-    if (segment === "" || segment === ".") continue
+    if (segment === ".") continue
     if (segment === "..") {
       out.pop()
       continue
     }
     out.push(segment)
   }
-  const normalized = `/${out.join("/")}`
+  while (out.length > 1 && out[out.length - 1] === "") out.pop()
+  const normalized = out.join("/")
   if (normalized === url.pathname) return request
   const next = new URL(url)
   next.pathname = normalized
