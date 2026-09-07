@@ -122,6 +122,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
     delete:
       operationId: delete_user_v2_user__user_id__delete
       x-mockingbird:
@@ -203,9 +209,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClientFacingUser"
+                anyOf:
+                  - $ref: "#/components/schemas/ClientFacingUser"
+                  - $ref: "#/components/schemas/PaginatedUsersResponse"
         "404":
           description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
           content:
             application/json:
               schema:
@@ -483,10 +497,28 @@ components:
             additionalProperties: true
         fallback_time_zone:
           type: ["object", "null"]
-          additionalProperties: true
+          properties:
+            id:
+              type: string
+            source_slug:
+              type: string
+            updated_at:
+              type: string
+              format: date-time
+              x-mockingbird-volatile:
+                kind: timestamp
         fallback_birth_date:
           type: ["object", "null"]
-          additionalProperties: true
+          properties:
+            value:
+              type: string
+            source_slug:
+              type: string
+            updated_at:
+              type: string
+              format: date-time
+              x-mockingbird-volatile:
+                kind: timestamp
         ingestion_start:
           type: ["string", "null"]
         ingestion_end:

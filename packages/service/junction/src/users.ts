@@ -32,6 +32,19 @@ const render = (user: UserRecord) => ({
   ingestion_end: user.ingestion_end,
 })
 
+const listUsers = (state: JunctionState, offset: number, limit: number) => {
+  const all = state.users.list({ order: "oldest" })
+  return {
+    users: all.slice(offset, offset + limit).map((entry) => render(entry.value)),
+    total: all.length,
+    offset,
+    limit,
+  }
+}
+
+const isValidUuid = (value: string): boolean =>
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)
+
 function notFound(detail: string): never {
   throw new HttpError(404, { detail })
 }
@@ -154,6 +167,11 @@ export const userHandlers = (state: JunctionState) => ({
 
   get_user_v2_user__user_id__get: async (context: OperationContext) => {
     const id = context.params.user_id ?? ""
+    if (!isValidUuid(id)) {
+      throw new HttpError(422, {
+        detail: `Invalid format for parameter user_id: error unmarshaling '${id}' text as *uuid.UUID: invalid UUID length: ${id.length}`,
+      })
+    }
     const user = state.users.get(id)
     if (user) return jsonResponse(200, render(user))
     if (state.deletedUsers.has(id)) {
@@ -304,12 +322,6 @@ export const userHandlers = (state: JunctionState) => ({
     const limit = queryInt(context, "limit", 100)
     if (offset < 0 || limit < 1 || limit > 500)
       throw new HttpError(422, { detail: "offset must be >= 0 and limit must be 1..500" })
-    const all = state.users.list({ order: "oldest" })
-    return jsonResponse(200, {
-      users: all.slice(offset, offset + limit).map((entry) => render(entry.value)),
-      total: all.length,
-      offset,
-      limit,
-    })
+    return jsonResponse(200, listUsers(state, offset, limit))
   },
 })

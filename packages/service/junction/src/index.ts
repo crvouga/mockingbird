@@ -59,10 +59,36 @@ export class JunctionAPI implements FetchAPI {
   }
 
   fetch(request: Request): Promise<Response> {
-    return this.service.fetch(request)
+    return this.service.fetch(normalizePath(request))
   }
 
   reset(): Promise<void> {
     return this.service.reset()
   }
+}
+
+/** Collapse `.`/`..` path segments the way the real server does before routing. */
+const normalizePath = (request: Request): Request => {
+  const url = new URL(request.url)
+  let pathname: string
+  try {
+    pathname = decodeURIComponent(url.pathname)
+  } catch {
+    pathname = url.pathname
+  }
+  const segments = pathname.split("/")
+  const out: string[] = []
+  for (const segment of segments) {
+    if (segment === "" || segment === ".") continue
+    if (segment === "..") {
+      out.pop()
+      continue
+    }
+    out.push(segment)
+  }
+  const normalized = `/${out.join("/")}`
+  if (normalized === url.pathname) return request
+  const next = new URL(url)
+  next.pathname = normalized
+  return new Request(next, request)
 }
