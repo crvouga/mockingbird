@@ -57,42 +57,47 @@ const allowedHosts = [new URL(baseUrl).host, new URL(tokenUrl).host]
  * staging auth, and CRUD orders once product ids are discovered from the real catalog by
  * enabling GetProducts in a follow-up once catalogs are aligned.
  */
-await parity({
-  provider: "genebygene",
-  spec: document,
-  env: process.env,
-  only: ["PostConnectToken"],
-  real: {
-    baseUrl: new URL(tokenUrl).origin,
-    allowedHosts,
-    headers: () => ({}),
-    minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
-    fetch: async (request) => {
-      // Rewrite mock token path to the staging auth host.
-      const url = new URL(request.url)
-      if (url.pathname.endsWith("/connect/token")) {
+try {
+  await parity({
+    provider: "genebygene",
+    spec: document,
+    env: process.env,
+    only: ["PostConnectToken"],
+    real: {
+      baseUrl: new URL(tokenUrl).origin,
+      allowedHosts,
+      headers: () => ({}),
+      minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
+      fetch: async (request) => {
+        // Rewrite mock token path to the staging auth host.
+        const url = new URL(request.url)
+        if (url.pathname.endsWith("/connect/token")) {
+          return fetch(
+            new Request(tokenUrl, {
+              method: request.method,
+              headers: request.headers,
+              body: request.body,
+              duplex: "half",
+            } as RequestInit),
+          )
+        }
         return fetch(
-          new Request(tokenUrl, {
+          new Request(`${baseUrl}${url.pathname}${url.search}`, {
             method: request.method,
-            headers: request.headers,
+            headers: { ...Object.fromEntries(request.headers), ...authHeaders },
             body: request.body,
             duplex: "half",
           } as RequestInit),
         )
-      }
-      return fetch(
-        new Request(`${baseUrl}${url.pathname}${url.search}`, {
-          method: request.method,
-          headers: { ...Object.fromEntries(request.headers), ...authHeaders },
-          body: request.body,
-          duplex: "half",
-        } as RequestInit),
-      )
+      },
     },
-  },
-  mock: {
-    create: () => new GeneByGeneAPI(),
-    headers: () => ({}),
-  },
-  redact: createRedactor([...credentials.secrets, accessToken, credentials.values.client_secret]),
-})
+    mock: {
+      create: () => new GeneByGeneAPI(),
+      headers: () => ({}),
+    },
+    redact: createRedactor([...credentials.secrets, accessToken, credentials.values.client_secret]),
+  })
+} catch (error) {
+  console.error(`\n${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+}

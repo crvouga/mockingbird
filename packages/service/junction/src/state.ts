@@ -197,12 +197,14 @@ export class JunctionState {
   readonly users: Collection<UserRecord>
   readonly ids: IdSequence
   readonly byClientId: Collection<{ user_id: string }>
+  readonly deletedUsers: Collection<{ user_id: string }>
   readonly orders: Collection<OrderRecord>
   readonly orderByTransaction: Collection<{ order_id: string }>
 
   constructor(sqlite: SqliteClient, namespace: string) {
     this.users = new Collection(sqlite, namespace, "users")
     this.byClientId = new Collection(sqlite, namespace, "users_by_client")
+    this.deletedUsers = new Collection(sqlite, namespace, "users_deleted")
     this.orders = new Collection(sqlite, namespace, "orders")
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
     this.ids = new IdSequence(sqlite, namespace, "junction")

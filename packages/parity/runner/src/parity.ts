@@ -110,6 +110,12 @@ const integerEnv = (env: Record<string, string | undefined>, name: string) => {
   return value
 }
 
+/** Drop fast-check's shrink trail ("Encountered failures were: …") — the minimal repro is on the Counterexample line. */
+const minimalCounterexample = (message: string) => {
+  const idx = message.indexOf("\nEncountered failures were:")
+  return idx >= 0 ? message.slice(0, idx) : message
+}
+
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 const assertAllowedHost = (baseUrl: string, allowedHosts: readonly string[]) => {
@@ -185,10 +191,18 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   const realHeaders = options.real.headers ?? (() => ({}))
   const mockBaseUrl = options.mock.baseUrl ?? `https://mock.${options.provider}.local`
 
+  log(`${options.provider} parity`)
+  log(`  real  ${options.real.baseUrl}`)
+  log(`  mock  ${mockBaseUrl}`)
+  log(`  seed  ${seed}  runs ${numRuns}  max ${maxCommands} commands`)
+  log("")
+
   const exercised: Record<string, number> = {}
   let walks = 0
   let operations = 0
   let lastWalkEnd = 0
+  let done = 0
+  const width = String(numRuns).length
 
   const commands = fc.commands(
     [
@@ -226,8 +240,10 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
       validateMock: options.validateMock ?? true,
       trace: trace ? log : undefined,
     }
+    let ok = false
     try {
       await fc.asyncModelRun(() => ({ model: { table }, real: context }), steps)
+      ok = true
     } finally {
       walks++
       operations += context.history.length
@@ -251,6 +267,13 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
           },
         })
       }
+      if (ok) {
+        done++
+        const ops = context.history.length
+        log(
+          `  [${String(done).padStart(width, " ")}/${numRuns}] ✓ ${ops} op${ops === 1 ? "" : "s"}`,
+        )
+      }
     }
   })
 
@@ -265,11 +288,11 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
         : { interruptAfterTimeLimit: options.timeLimitMs, markInterruptAsFailure: false }),
     })
   } catch (error) {
-    const header = `${options.provider} parity failed (seed ${seed}, FC_SEED=${seed} to replay)`
+    const header = `✗ ${options.provider} parity FAILED (seed ${seed}, FC_SEED=${seed} to replay)`
     if (error instanceof Error && error.cause instanceof ParityError) {
       // Surface the minimal reproduction: fast-check's shrunk counterexample plus the divergence.
       const cause = error.cause
-      cause.message = `${header}\n${error.message}\n\n${cause.message}`
+      cause.message = `${header}\n${minimalCounterexample(error.message)}\n\n${cause.message}`
       throw cause
     }
     if (error instanceof Error) error.message = `${header}\n${error.message}`
@@ -284,11 +307,12 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
     exercised,
     planned: plans.map((plan) => plan.operation.operationId),
   }
+  log("")
   log(formatReport(report))
   return report
 }
 
 export const formatReport = (report: ParityReport) =>
-  `${report.provider} parity: ${report.walks} walks / ${report.operations.toLocaleString()} operations / ${Object.keys(report.exercised).length}/${report.planned.length} operationIds ✓ (seed ${report.seed})`
+  `✓ ${report.provider} parity passed: ${report.walks} walks / ${report.operations.toLocaleString()} operations / ${Object.keys(report.exercised).length}/${report.planned.length} operationIds (seed ${report.seed})`
 
 export { ParityError }

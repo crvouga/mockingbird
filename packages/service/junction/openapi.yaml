@@ -158,8 +158,20 @@ paths:
       responses:
         "204":
           description: Successful Response
+        "400":
+          description: Nothing to patch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "409":
+          description: Conflict
           content:
             application/json:
               schema:

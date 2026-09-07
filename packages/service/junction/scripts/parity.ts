@@ -19,10 +19,13 @@ const readTokenFile = async () => {
 }
 
 const credentials = await loadCredentials(
-  { provider: "junction", fields: { api_key: "MOCKINGBIRD_JUNCTION_API_KEY" } },
+  {
+    provider: "junction",
+    fields: { MOCKINGBIRD_JUNCTION_API_KEY: "MOCKINGBIRD_JUNCTION_API_KEY" },
+  },
   { env: process.env, readTokenFile },
 )
-const apiKey = credentials.values.api_key
+const apiKey = credentials.values.MOCKINGBIRD_JUNCTION_API_KEY
 if (!TEST_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))) {
   console.error("junction parity: refusing to run with a key that is not a sandbox team key")
   process.exit(2)
@@ -31,38 +34,43 @@ if (!TEST_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))) {
 const baseUrl = process.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? `https://${JUNCTION_HOST}`
 const authHeaders = { "x-vital-api-key": apiKey }
 
-await parity({
-  provider: "junction",
-  spec: document,
-  env: process.env,
-  only: [
-    "create_user_v2_user_post",
-    "get_user_v2_user__user_id__get",
-    "delete_user_v2_user__user_id__delete",
-    "get_user_by_client_user_id_v2_user_resolve__client_user_id__get",
-    "patch_user_v2_user__user_id__patch",
-  ],
-  real: {
-    baseUrl,
-    allowedHosts: [new URL(baseUrl).host],
-    headers: () => authHeaders,
-    minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
-  },
-  mock: {
-    create: () => new JunctionAPI(),
-    headers: () => ({ "x-vital-api-key": "sk_us_mockingbird" }),
-  },
-  redact: createRedactor(credentials.secrets),
-  cleanup: async ({ table, real }) => {
-    for (const resource of table.all()) {
-      const id = resource.ids.real
-      if (id === undefined || resource.type !== "user") continue
-      await real.fetch(
-        new Request(`${real.baseUrl}/v2/user/${id}`, {
-          method: "DELETE",
-          headers: authHeaders,
-        }),
-      )
-    }
-  },
-})
+try {
+  await parity({
+    provider: "junction",
+    spec: document,
+    env: process.env,
+    only: [
+      "create_user_v2_user_post",
+      "get_user_v2_user__user_id__get",
+      "delete_user_v2_user__user_id__delete",
+      "get_user_by_client_user_id_v2_user_resolve__client_user_id__get",
+      "patch_user_v2_user__user_id__patch",
+    ],
+    real: {
+      baseUrl,
+      allowedHosts: [new URL(baseUrl).host],
+      headers: () => authHeaders,
+      minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
+    },
+    mock: {
+      create: () => new JunctionAPI(),
+      headers: () => ({ "x-vital-api-key": "sk_us_mockingbird" }),
+    },
+    redact: createRedactor(credentials.secrets),
+    cleanup: async ({ table, real }) => {
+      for (const resource of table.all()) {
+        const id = resource.ids.real
+        if (id === undefined || resource.type !== "user") continue
+        await real.fetch(
+          new Request(`${real.baseUrl}/v2/user/${id}`, {
+            method: "DELETE",
+            headers: authHeaders,
+          }),
+        )
+      }
+    },
+  })
+} catch (error) {
+  console.error(`\n${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+}

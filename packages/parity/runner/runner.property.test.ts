@@ -316,7 +316,8 @@ describe("parity runner", () => {
           "customers.retrieve",
           "customers.update",
         ])
-        expect(result.lines.at(-1)).toContain("reference parity: 10 walks")
+        expect(result.lines.at(-1)).toContain("reference parity passed")
+        expect(result.lines.at(-1)).toContain("10 walks")
       }),
       { ...params, numRuns: 5 },
     )

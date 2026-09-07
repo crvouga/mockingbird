@@ -46,8 +46,8 @@ workspace package whose version is not already on npm (idempotent).
 
 | Provider | Vault path (KV v2 under `secret`) | Fields | Env overrides |
 | --- | --- | --- | --- |
-| Stripe | `secret/data/secret` | `secret_key` | `MOCKINGBIRD_STRIPE_SECRET_KEY` |
-| Junction | `secret/data/secret` | `api_key` | `MOCKINGBIRD_JUNCTION_API_KEY` |
+| Stripe | `secret/data/secret` | `MOCKINGBIRD_STRIPE_SECRET_KEY`, `MOCKINGBIRD_STRIPE_PUBLISHABLE_KEY` | `MOCKINGBIRD_STRIPE_SECRET_KEY` |
+| Junction | `secret/data/secret` | `MOCKINGBIRD_JUNCTION_API_KEY` | `MOCKINGBIRD_JUNCTION_API_KEY` |
 | GeneByGene | `secret/data/secret` | `client_id`, `client_secret` | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID`, `MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET` |
 
 Default OpenBao address: `https://vault.chrisvouga.dev` (`MOCKINGBIRD_OPENBAO_ADDR` / `VAULT_ADDR`).
