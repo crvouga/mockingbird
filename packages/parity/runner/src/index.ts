@@ -9,5 +9,6 @@ export type {
   MismatchDetails,
   Redactor,
   TransportDetails,
+  WebhookDetails,
 } from "./report.js"
 export { formatFailure, ParityError, redactHeaders, redactValue } from "./report.js"

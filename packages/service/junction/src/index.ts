@@ -12,11 +12,17 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
 import { orderHandlers } from "./orders.js"
-import { JunctionState } from "./state.js"
+import {
+  JunctionState,
+  type JunctionWebhookEvent,
+  type JunctionWebhookOptions,
+  type WebhookPublisher,
+} from "./state.js"
 import { userHandlers } from "./users.js"
 
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
+export type { JunctionWebhookEvent, JunctionWebhookOptions, WebhookPublisher } from "./state.js"
 
 export const JUNCTION_NAMESPACE = "junction"
 
@@ -26,14 +32,21 @@ export const JUNCTION_NAMESPACE = "junction"
  * Docs: https://docs.junction.com/
  * Auth: `x-vital-api-key` — https://docs.junction.com/api-details/junction-api
  */
+export type JunctionAPIOptions = APIOptions & {
+  onWebhook?: WebhookPublisher
+  webhook?: JunctionWebhookOptions
+}
+
 export class JunctionAPI implements FetchAPI {
   readonly app: Hono
   readonly sqlite: SqliteClient
   private readonly service: Service
+  private readonly state: JunctionState
 
-  constructor(options: APIOptions = {}) {
+  constructor(options: JunctionAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
-    const state = new JunctionState(sqlite, JUNCTION_NAMESPACE)
+    const state = new JunctionState(sqlite, JUNCTION_NAMESPACE, options.onWebhook, options.webhook)
+    this.state = state
     const handlers = defineOperations<SupportedOperationId>({
       ...userHandlers(state),
       ...orderHandlers(state),
@@ -64,6 +77,14 @@ export class JunctionAPI implements FetchAPI {
 
   reset(): Promise<void> {
     return this.service.reset()
+  }
+
+  webhookEvents(): JunctionWebhookEvent[] {
+    return this.state.webhookEventsInOrder()
+  }
+
+  webhookDeliveryAttempts() {
+    return this.state.webhookDeliveryAttemptsInOrder()
   }
 }
 

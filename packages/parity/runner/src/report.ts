@@ -60,6 +60,19 @@ export type TransportDetails = CommandContext & {
   cause: unknown
 }
 
+export type LatencyDetails = CommandContext & {
+  kind: "latency"
+  realMs: number
+  mockMs: number
+}
+
+export type WebhookDetails = CommandContext & {
+  kind: "webhook-mismatch"
+  realEvents: readonly unknown[]
+  mockEvents: readonly unknown[]
+  firstDifference: string
+}
+
 export type ConformanceDetails = CommandContext & {
   kind: "mock-conformance"
   request: ConcreteRequest
@@ -67,31 +80,12 @@ export type ConformanceDetails = CommandContext & {
   problems: string[]
 }
 
-export type FailureDetails = MismatchDetails | TransportDetails | ConformanceDetails
-
-const block = (title: string, value: unknown) =>
-  `${title}:\n${indent(JSON.stringify(value, null, 2) ?? "undefined")}`
-const indent = (text: string) =>
-  text
-    .split("\n")
-    .map((line) => `  ${line}`)
-    .join("\n")
-
-const describeRequest = (request: ConcreteRequest, redact: Redactor) => ({
-  method: request.method.toUpperCase(),
-  path: redact(request.path),
-  query: request.query.map(([k, v]) => [k, redact(v)]),
-  headers: redactHeaders(request.headers, redact),
-  body: request.body
-    ? { contentType: request.body.contentType, body: redact(request.body.body) }
-    : undefined,
-})
-
-const describeResponse = (response: Exchange, redact: Redactor) => ({
-  status: response.status,
-  headers: redactHeaders(response.headers, redact),
-  body: redactValue(response.body, redact),
-})
+export type FailureDetails =
+  | MismatchDetails
+  | TransportDetails
+  | LatencyDetails
+  | WebhookDetails
+  | ConformanceDetails
 
 export const formatFailure = (details: FailureDetails, redact: Redactor): string => {
   const lines: string[] = [
@@ -101,22 +95,23 @@ export const formatFailure = (details: FailureDetails, redact: Redactor): string
     ...details.history.map((entry, i) => `  ${i + 1}. ${redact(entry)}`),
   ]
   switch (details.kind) {
+    case "latency":
+      lines.push(`latency: real=${details.realMs.toFixed(2)}ms mock=${details.mockMs.toFixed(2)}ms`)
+      break
+    case "webhook-mismatch":
+      lines.push(`webhook: ${details.firstDifference}`)
+      break
     case "mismatch":
       lines.push(
         "differences:",
         ...details.differences.map((d) => `  ${redact(formatDifference(d))}`),
-        block("real request", describeRequest(details.real.request, redact)),
-        block("mock request", describeRequest(details.mock.request, redact)),
-        block("real response", describeResponse(details.real.response, redact)),
-        block("mock response", describeResponse(details.mock.response, redact)),
-        block("canonical real", redactValue(details.real.canonical, redact)),
-        block("canonical mock", redactValue(details.mock.canonical, redact)),
+        `status: real=${details.real.response.status} mock=${details.mock.response.status}`,
       )
       break
     case "real-transport":
     case "mock-transport":
       lines.push(
-        block("request", describeRequest(details.request, redact)),
+        `request: ${details.request.method.toUpperCase()} ${redact(details.request.path)}`,
         `cause: ${redact(details.cause instanceof Error ? `${details.cause.name}: ${details.cause.message}` : String(details.cause))}`,
       )
       break
@@ -124,8 +119,7 @@ export const formatFailure = (details: FailureDetails, redact: Redactor): string
       lines.push(
         "problems:",
         ...details.problems.map((p) => `  ${redact(p)}`),
-        block("request", describeRequest(details.request, redact)),
-        block("response", describeResponse(details.response, redact)),
+        `status: ${details.response.status}`,
       )
       break
   }

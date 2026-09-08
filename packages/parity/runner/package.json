@@ -51,9 +51,8 @@
     "@crvouga/mockingbird-commands": "workspace:*",
     "@crvouga/mockingbird-canonicalize": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
     "fast-check": "4.9.0"
   },
-  "devDependencies": {
-    "@crvouga/mockingbird-testing": "workspace:*"
-  }
+  "devDependencies": {}
 }

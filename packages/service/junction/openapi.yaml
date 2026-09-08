@@ -297,6 +297,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+        "500":
+          description: Internal Server Error
         "404":
           description: Not Found
           content:

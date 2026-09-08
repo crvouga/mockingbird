@@ -10,6 +10,7 @@ import {
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { ResourceTable } from "@crvouga/mockingbird-model"
 import type { OpenAPIDocument } from "@crvouga/mockingbird-openapi"
+import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import { type ExecutionContext, executeCommand, type FetchLike, type Target } from "./execute.js"
 import { ParityError, type Redactor } from "./report.js"
@@ -33,10 +34,30 @@ export type MockTarget = {
   headers?: Target["headers"]
 }
 
+export type WalkWebhookEvents = {
+  real: readonly unknown[]
+  mock: readonly unknown[]
+}
+
+export type WebhookParityOptions = {
+  collectReal: (scope: Scope) => Promise<readonly unknown[]>
+  collectMock: (mock: FetchAPI, scope: Scope) => Promise<readonly unknown[]>
+}
+
+const webhookPayload = (events: readonly unknown[]) => JSON.stringify(events)
+
+const webhookEventNames = (events: readonly unknown[]) =>
+  events.map((event) => {
+    if (typeof event !== "object" || event === null || Array.isArray(event)) return "unknown"
+    const eventType = (event as Record<string, unknown>).event_type
+    return typeof eventType === "string" ? eventType : "unknown"
+  })
+
 export type WalkCleanup = (context: {
   table: ResourceTable
   real: { fetch: (request: Request) => Promise<Response>; baseUrl: string }
   scope: Scope
+  webhookEvents?: WalkWebhookEvents
 }) => Promise<void>
 
 export type ParityOptions = {
@@ -72,6 +93,7 @@ export type ParityOptions = {
   shrink?: boolean
   /** Stop generating new walks after this many milliseconds; completed walks still count. */
   timeLimitMs?: number
+  webhooks?: WebhookParityOptions
 }
 
 export type ParityReport = {
@@ -160,8 +182,9 @@ const throttled = (
 export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   const env = options.env ?? {}
   const seed = options.seed ?? integerEnv(env, "FC_SEED") ?? Date.now() % 0x7fffffff
-  const numRuns = options.numRuns ?? integerEnv(env, "FC_NUM_RUNS") ?? 25
-  const maxCommands = options.maxCommands ?? integerEnv(env, "MOCKINGBIRD_MAX_COMMANDS") ?? 30
+  const numRuns = options.numRuns ?? integerEnv(env, "FC_NUM_RUNS") ?? DEFAULT_PROPERTY_RUNS
+  const maxCommands =
+    options.maxCommands ?? integerEnv(env, "MOCKINGBIRD_MAX_COMMANDS") ?? DEFAULT_PARITY_STEPS
   const trace = env.MOCKINGBIRD_TRACE === "1" || env.MOCKINGBIRD_TRACE === "true"
   const log = options.log ?? ((line: string) => console.log(line))
   const now = options.now ?? (() => Date.now())
@@ -192,9 +215,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   const mockBaseUrl = options.mock.baseUrl ?? `https://mock.${options.provider}.local`
 
   log(`${options.provider} parity`)
-  log(`  real  ${options.real.baseUrl}`)
-  log(`  mock  ${mockBaseUrl}`)
-  log(`  seed  ${seed}  runs ${numRuns}  max ${maxCommands} commands`)
+  log(`  seed ${seed}  runs ${numRuns}  max ${maxCommands}`)
   log("")
 
   const exercised: Record<string, number> = {}
@@ -243,39 +264,84 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
       trace: trace ? log : undefined,
     }
     let ok = false
+    let walkError: unknown
     try {
       await fc.asyncModelRun(() => ({ model: { table }, real: context }), steps)
       ok = true
-    } finally {
-      walks++
-      operations += context.history.length
-      for (const entry of context.history) {
-        const operationId = entry.split(" ")[0] ?? entry
-        exercised[operationId] = (exercised[operationId] ?? 0) + 1
-      }
-      lastWalkEnd = now()
-      if (options.cleanup) {
-        await options.cleanup({
-          table,
-          scope,
-          real: {
-            baseUrl: options.real.baseUrl,
-            fetch: async (request) => {
-              const headers = new Headers(request.headers)
-              const extra: Record<string, string> = await realHeaders()
-              for (const [name, value] of Object.entries(extra)) headers.set(name, value)
-              return realFetch(new Request(request, { headers }))
-            },
+    } catch (error) {
+      walkError = error
+    }
+
+    walks++
+    operations += context.history.length
+    for (const entry of context.history) {
+      const operationId = entry.split(" ")[0] ?? entry
+      exercised[operationId] = (exercised[operationId] ?? 0) + 1
+    }
+    lastWalkEnd = now()
+
+    let webhookFailure: ParityError | undefined
+    let webhookEvents: WalkWebhookEvents | undefined
+    const firstStep = [...steps][0]
+    const firstCommand = firstStep instanceof Step ? firstStep.command : ({} as LogicalCommand)
+    if (options.webhooks) {
+      const realEvents = await options.webhooks.collectReal(scope)
+      const mockEvents = await options.webhooks.collectMock(mock, scope)
+      webhookEvents = { real: realEvents, mock: mockEvents }
+      log(
+        `  [${String(walkNumber).padStart(width, " ")}/${numRuns}] webhook events real=${realEvents.length} mock=${mockEvents.length} real_types=${webhookEventNames(realEvents).join(",") || "none"} mock_types=${webhookEventNames(mockEvents).join(",") || "none"}`,
+      )
+      if (webhookPayload(realEvents) !== webhookPayload(mockEvents)) {
+        const firstDifference =
+          realEvents.length !== mockEvents.length
+            ? `event count real=${realEvents.length} mock=${mockEvents.length}`
+            : `event payload/order differs at index ${realEvents.findIndex((event, index) => JSON.stringify(event) !== JSON.stringify(mockEvents[index]))}`
+        webhookFailure = new ParityError(
+          {
+            provider: options.provider,
+            operationId: "webhooks",
+            method: "WALK",
+            path: "",
+            command: firstCommand,
+            history: [...context.history],
+            kind: "webhook-mismatch",
+            realEvents,
+            mockEvents,
+            firstDifference,
           },
-        })
-      }
-      if (ok) {
-        done++
-        const ops = context.history.length
-        log(
-          `  [${String(done).padStart(width, " ")}/${numRuns}] ✓ ${ops} op${ops === 1 ? "" : "s"}`,
+          context.redact,
         )
       }
+    }
+
+    if (options.cleanup) {
+      await options.cleanup({
+        table,
+        scope,
+        ...(webhookEvents === undefined ? {} : { webhookEvents }),
+        real: {
+          baseUrl: options.real.baseUrl,
+          fetch: async (request) => {
+            const headers = new Headers(request.headers)
+            const extra: Record<string, string> = await realHeaders()
+            for (const [name, value] of Object.entries(extra)) headers.set(name, value)
+            return realFetch(new Request(request, { headers }))
+          },
+        },
+      })
+    }
+
+    if (webhookFailure) throw webhookFailure
+    if (walkError !== undefined) throw walkError
+    if (ok) {
+      done++
+      const ops = context.history.length
+      const webhookSummary = options.webhooks
+        ? `; webhook parity ✓ (${webhookEvents?.real.length ?? 0} events)`
+        : ""
+      log(
+        `  [${String(done).padStart(width, " ")}/${numRuns}] ✓ ${ops} op${ops === 1 ? "" : "s"}${webhookSummary}`,
+      )
     }
   })
 

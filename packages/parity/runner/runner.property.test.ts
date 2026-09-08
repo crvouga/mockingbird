@@ -288,7 +288,10 @@ const run = (
     real: {
       baseUrl: "https://real.reference.local",
       allowedHosts: ["real.reference.local"],
-      fetch: (r) => real.fetch(r),
+      fetch: async (r) => {
+        await new Promise((resolve) => setTimeout(resolve, 1))
+        return real.fetch(r)
+      },
     },
     mock: { create: () => referenceServer("M", fault, clock) },
     clockSkewSeconds: 0,

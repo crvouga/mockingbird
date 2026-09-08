@@ -31,7 +31,7 @@ comment out, or loosen a check to make it pass.
    Replay a specific failing walk with the seed printed in the error:
    ```bash
    FC_SEED=2032472120 bun run parity:junction
-   FC_SEED=2032472120 MOCKINGBIRD_MAX_COMMANDS=12 bun run parity:junction   # shorter walk, faster
+   FC_SEED=2032472120 bun run parity:junction -- --runs 10 --steps 12   # shorter run, faster
    MOCKINGBIRD_TRACE=1 bun run parity:junction                              # trace each step
    ```
    The self-parity property suite (two independent mocks) needs **no** credentials and is great

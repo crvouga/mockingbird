@@ -7,6 +7,42 @@ export { LAB_TEST_CATALOG, labTestById } from "./catalog.js"
 
 export type UserInfoRecord = Record<string, unknown>
 
+export type JunctionWebhookEvent = {
+  event_type: "labtest.order.created" | "labtest.order.updated"
+  data: Record<string, unknown>
+  team_id: string
+  user_id: string
+  client_user_id: string
+}
+
+export type WebhookEventRecord = {
+  sequence: number
+  event: JunctionWebhookEvent
+}
+
+export type WebhookDeliveryAttempt = {
+  message_id: string
+  event: JunctionWebhookEvent
+  attempt: number
+  scheduled_at: string
+  timeout_ms: number
+  acknowledged: boolean
+}
+
+export const WEBHOOK_RETRY_DELAYS_MS = [
+  0, 5_000, 300_000, 1_800_000, 7_200_000, 18_000_000, 36_000_000, 36_000_000,
+] as const
+
+const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+
+const seededRandom = (seed: number) => {
+  let value = seed >>> 0
+  return () => {
+    value = (value * 1664525 + 1013904223) >>> 0
+    return value / 0x1_0000_0000
+  }
+}
+
 export type UserRecord = {
   user_id: string
   team_id: string
@@ -42,7 +78,7 @@ export type OrderEventRecord = {
 
 export type OrderTransactionEmbed = {
   id: string
-  status: "active" | "cancelled"
+  status: "active" | "completed" | "cancelled"
   orders: Array<{
     id: string
     low_level_status: string
@@ -88,19 +124,46 @@ export type OrderRecord = {
   order_transaction: OrderTransactionEmbed
 }
 
+export type WebhookPublisher = (event: JunctionWebhookEvent) => void
+
+export type JunctionWebhookOptions = {
+  seed?: number
+  jitterRatio?: number
+  timeoutMs?: number
+}
+
 export class JunctionState {
+  private readonly publishEvent: WebhookPublisher | undefined
+  private readonly webhookRandom: () => number
+  private readonly webhookJitterRatio: number
+  private readonly webhookTimeoutMs: number
   readonly users: Collection<UserRecord>
   readonly ids: IdSequence
   readonly byClientId: Collection<{ user_id: string }>
   readonly deletedUsers: Collection<{ user_id: string }>
   readonly userInfo: Collection<UserInfoRecord>
   readonly orders: Collection<OrderRecord>
-  readonly orderIdempotency: Collection<{ order_id: string; response: unknown }>
+  readonly orderIdempotency: Collection<{
+    order_id: string
+    response: unknown
+    fingerprint: string
+  }>
   readonly cancelIdempotency: Collection<{ order_id: string; response: unknown }>
 
   readonly orderByTransaction: Collection<{ order_id: string }>
+  readonly webhookEvents: Collection<WebhookEventRecord>
+  readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
 
-  constructor(sqlite: SqliteClient, namespace: string) {
+  constructor(
+    sqlite: SqliteClient,
+    namespace: string,
+    publisher?: WebhookPublisher,
+    webhookOptions: JunctionWebhookOptions = {},
+  ) {
+    this.publishEvent = publisher
+    this.webhookRandom = seededRandom(webhookOptions.seed ?? 0x4a554e43)
+    this.webhookJitterRatio = Math.max(0, Math.min(webhookOptions.jitterRatio ?? 0.1, 1))
+    this.webhookTimeoutMs = Math.max(1, webhookOptions.timeoutMs ?? 15_000)
     this.users = new Collection(sqlite, namespace, "users")
     this.byClientId = new Collection(sqlite, namespace, "users_by_client")
     this.deletedUsers = new Collection(sqlite, namespace, "users_deleted")
@@ -109,6 +172,8 @@ export class JunctionState {
     this.orderIdempotency = new Collection(sqlite, namespace, "orders_idempotency")
     this.cancelIdempotency = new Collection(sqlite, namespace, "cancel_idempotency")
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
+    this.webhookEvents = new Collection(sqlite, namespace, "webhook_events")
+    this.webhookDeliveryAttempts = new Collection(sqlite, namespace, "webhook_delivery_attempts")
     this.ids = new IdSequence(sqlite, namespace, "junction")
   }
 
@@ -128,6 +193,54 @@ export class JunctionState {
 
   testkitIdFor(orderId: string): string {
     return deterministicUuid(`junction:testkit:${orderId}`)
+  }
+
+  publishWebhook(event: JunctionWebhookEvent, now = Date.now()): void {
+    const sequence = this.webhookEvents.nextSequence()
+    const snapshot = clone(event)
+    this.webhookEvents.insert(String(sequence), { sequence, event: snapshot })
+    const messageId = deterministicUuid(`junction:webhook:${sequence}`)
+    for (const [index, delay] of WEBHOOK_RETRY_DELAYS_MS.entries()) {
+      const jitter =
+        delay === 0 ? 0 : delay * this.webhookJitterRatio * (this.webhookRandom() * 2 - 1)
+      const scheduledAt = new Date(now + Math.max(0, Math.round(delay + jitter))).toISOString()
+      this.webhookDeliveryAttempts.insert(`${messageId}:${index + 1}`, {
+        message_id: messageId,
+        event: clone(snapshot),
+        attempt: index + 1,
+        scheduled_at: scheduledAt,
+        timeout_ms: this.webhookTimeoutMs,
+        acknowledged: index === 0,
+      })
+    }
+    this.publishEvent?.(snapshot)
+  }
+
+  webhookEventsInOrder(): JunctionWebhookEvent[] {
+    return this.webhookEvents.list({ order: "oldest" }).map((entry) => clone(entry.value.event))
+  }
+
+  webhookDeliveryAttemptsInOrder(): WebhookDeliveryAttempt[] {
+    return this.webhookDeliveryAttempts.list({ order: "oldest" }).map((entry) => clone(entry.value))
+  }
+
+  publishOrderWebhook(
+    order: OrderRecord,
+    eventType: JunctionWebhookEvent["event_type"],
+    now = Date.now(),
+  ): void {
+    const user = this.users.get(order.user_id)
+    if (!user) return
+    this.publishWebhook(
+      {
+        event_type: eventType,
+        data: order as unknown as Record<string, unknown>,
+        team_id: order.team_id,
+        user_id: order.user_id,
+        client_user_id: user.client_user_id,
+      },
+      now,
+    )
   }
 
   isoNow(now: () => number): string {

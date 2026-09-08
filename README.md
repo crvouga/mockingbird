@@ -50,6 +50,9 @@ Replay a failing walk with the seed printed in the error:
 ```bash
 FC_SEED=12345 bun test
 FC_SEED=12345 FC_NUM_RUNS=100 bun test
+
+# Junction parity accepts explicit walk parameters
+bun parity -- --runs 10 --steps 10
 MOCKINGBIRD_TRACE=1 bun run parity:stripe
 ```
 

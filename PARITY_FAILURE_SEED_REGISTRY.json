@@ -1,0 +1,29 @@
+{
+  "description": "Regression registry for parity seeds that have exposed a mock-versus-oracle mismatch. Add every newly discovered failing seed here before fixing it.",
+  "entries": [
+    {
+      "provider": "junction",
+      "seed": 8895623,
+      "status": "fixed",
+      "failure": "create_order_v3_order_post validation mismatch"
+    },
+    {
+      "provider": "junction",
+      "seed": 9415898,
+      "status": "fixed",
+      "failure": "empty patient field validation mismatch"
+    },
+    {
+      "provider": "junction",
+      "seed": 9529070,
+      "status": "fixed",
+      "failure": "patient validation status and ordering mismatch"
+    },
+    {
+      "provider": "junction",
+      "seed": 10036791,
+      "status": "fixed",
+      "failure": "Unicode UUID validation mismatch"
+    }
+  ]
+}

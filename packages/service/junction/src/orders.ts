@@ -93,12 +93,28 @@ const stringTypeError = (loc: string[], value: unknown) => ({
   input: value,
 })
 
+const stringTooShortError = (loc: string[], value: string) => ({
+  type: "string_too_short",
+  loc,
+  msg: "String should have at least 1 character",
+  input: value,
+  ctx: { min_length: 1 },
+})
+
 const patternError = (loc: string[], value: unknown, pattern: string) => ({
   type: "string_pattern_mismatch",
   loc,
   msg: `String should match pattern '${pattern}'`,
   input: value,
   ctx: { pattern },
+})
+
+const stateError = (value: unknown) => ({
+  type: "value_error",
+  loc: ["body", "patient_address", "state"],
+  msg: `Value error, Invalid state: ${value}`,
+  input: value,
+  ctx: { error: {} },
 })
 
 const phoneError = (loc: string[], value: unknown) => ({
@@ -111,6 +127,22 @@ const phoneError = (loc: string[], value: unknown) => ({
 
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+
+const uuidError = (value: string) => {
+  const characters = Array.from(value)
+  const invalidIndex = characters.findIndex((character) => !/^[0-9a-f-]$/i.test(character))
+  const error =
+    invalidIndex >= 0
+      ? `invalid character: expected an optional prefix of \`urn:uuid:\` followed by [0-9a-fA-F-], found \`${characters[invalidIndex]}\` at ${invalidIndex + 1}`
+      : `invalid length: expected length 32 for simple format, found ${value.replaceAll("-", "").length}`
+  return {
+    type: "uuid_parsing",
+    loc: ["body", "lab_account_id"],
+    msg: `Input should be a valid UUID, ${error}`,
+    input: value,
+    ctx: { error },
+  }
+}
 
 const isValidPhone = (value: string): boolean => {
   const digits = value.replace(/\D/g, "")
@@ -148,16 +180,9 @@ const pyIso = (value: string): string => {
 
 const orderValidation = (body: Record<string, unknown>): unknown[] => {
   const errors: unknown[] = []
-  const labAccountId = body.lab_account_id
-  if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
-    errors.push({
-      type: "uuid_parsing",
-      loc: ["body", "lab_account_id"],
-      msg: "Input should be a valid UUID, invalid length: expected length 32 for simple format, found 0",
-      input: labAccountId,
-      ctx: { error: "invalid length: expected length 32 for simple format, found 0" },
-    })
-  }
+  const userId = body.user_id
+  if (userId === undefined) errors.push(missingError(["body", "user_id"], body))
+  else if (typeof userId !== "string") errors.push(stringTypeError(["body", "user_id"], userId))
   const aoeAnswers = body.aoe_answers
   if (Array.isArray(aoeAnswers)) {
     for (const [index, answer] of aoeAnswers.entries()) {
@@ -165,9 +190,13 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
       const record = answer as Record<string, unknown>
       for (const field of ["marker_id", "question_id", "answer"]) {
         if (record[field] === undefined)
-          errors.push(missingError(["body", "aoe_answers", index, field].map(String), answer))
+          errors.push(missingError(["body", "aoe_answers", index, field], answer))
       }
     }
+  }
+  const labAccountId = body.lab_account_id
+  if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
+    errors.push(uuidError(labAccountId))
   }
   const pd = body.patient_details
   if (pd === undefined) {
@@ -187,34 +216,41 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
         errors.push(stringTypeError(["body", "patient_details", field], p[field]))
       else if (
         (field === "first_name" || field === "last_name") &&
+        typeof p[field] === "string" &&
+        p[field].length === 0
+      )
+        errors.push(stringTooShortError(["body", "patient_details", field], p[field]))
+      else if (
+        (field === "first_name" || field === "last_name") &&
         !isValidName(p[field] as string)
       )
         errors.push(nameError(field, p[field]))
-    }
-    if (typeof p.dob === "string") {
-      if (/^\d{4}-\d{2}-\d{2}$/.test(p.dob)) {
-        // valid date-only
-      } else if (/^\d{4}-\d{2}-\d{2}T/.test(p.dob)) {
-        if (!/^\d{4}-\d{2}-\d{2}T00:00:00/.test(p.dob)) {
+      else if (field === "dob") {
+        const dob = p[field] as string
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+          continue
+        }
+        if (/^\d{4}-\d{2}-\d{2}T/.test(dob)) {
+          if (!/^\d{4}-\d{2}-\d{2}T00:00:00/.test(dob)) {
+            errors.push({
+              type: "date_from_datetime_inexact",
+              loc: ["body", "patient_details", "dob"],
+              msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
+              input: pyIso(dob),
+            })
+          }
+        } else if (!isValidDate(dob)) {
           errors.push({
-            type: "date_from_datetime_inexact",
+            type: "date_from_datetime_parsing",
             loc: ["body", "patient_details", "dob"],
-            msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
-            input: pyIso(p.dob),
+            msg: "Input should be a valid date or datetime, invalid character in year",
+            input: dob,
+            ctx: { error: "invalid character in year" },
           })
         }
-      } else if (!isValidDate(p.dob)) {
-        errors.push({
-          type: "date_from_datetime_parsing",
-          loc: ["body", "patient_details", "dob"],
-          msg: "Input should be a valid date or datetime, invalid character in year",
-          input: p.dob,
-          ctx: { error: "invalid character in year" },
-        })
+      } else if (field === "phone_number" && !isValidPhone(p[field] as string)) {
+        errors.push(phoneError(["body", "patient_details", "phone_number"], p[field]))
       }
-    }
-    if (typeof p.phone_number === "string" && !isValidPhone(p.phone_number)) {
-      errors.push(phoneError(["body", "patient_details", "phone_number"], p.phone_number))
     }
   }
   const pa = body.patient_address
@@ -233,6 +269,9 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
       if (a[field] === undefined) errors.push(missingError(["body", "patient_address", field], a))
       else if (typeof a[field] !== "string")
         errors.push(stringTypeError(["body", "patient_address", field], a[field]))
+    }
+    if (typeof a.state === "string" && !/^[A-Z]{2}$/.test(a.state)) {
+      errors.push(stateError(a.state))
     }
     if (typeof a.zip === "string" && !/^\d{5}(-\d{4})?$/.test(a.zip)) {
       errors.push(patternError(["body", "patient_address", "zip"], a.zip, "^\\d{5}(-\\d{4})?$"))
@@ -300,7 +339,23 @@ export const orderHandlers = (state: JunctionState) => ({
   },
 
   create_order_v3_order_post: async (context: OperationContext) => {
-    const body = trimStrings(jsonObject(context)) as Record<string, unknown>
+    const rawBody = jsonObject(context)
+    const body = trimStrings(rawBody) as Record<string, unknown>
+    body.aoe_answers = rawBody.aoe_answers
+    const patient = rawBody.patient_details
+    if (
+      typeof patient === "object" &&
+      patient !== null &&
+      !Array.isArray(patient) &&
+      Object.entries(patient).some(
+        ([key, value]) => ["first_name", "last_name"].includes(key) && typeof value !== "string",
+      )
+    ) {
+      return new Response("Internal Server Error", {
+        status: 500,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      })
+    }
     const errors = orderValidation(body)
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
     const userId = body.user_id
@@ -326,9 +381,16 @@ export const orderHandlers = (state: JunctionState) => ({
     const method =
       typeof body.collection_method === "string" ? body.collection_method : labTest.method
     const idempotencyKey = body.idempotency_key
+    const requestFingerprint = JSON.stringify(body)
     if (typeof idempotencyKey === "string" && idempotencyKey.length > 0) {
       const replay = state.orderIdempotency.get(idempotencyKey)
-      if (replay) return jsonResponse(200, replay.response)
+      if (replay) {
+        if (replay.fingerprint !== requestFingerprint)
+          throw new HttpError(400, {
+            detail: "Idempotency key was reused with a different request",
+          })
+        return jsonResponse(200, replay.response)
+      }
     }
     const eventStatus = `received.${method}.ordered`
     const event = {
@@ -388,7 +450,12 @@ export const orderHandlers = (state: JunctionState) => ({
     state.orderByTransaction.insert(transactionId, { order_id: orderId })
     const response = { order, status: "SUCCESS", message: "Order submitted" }
     if (typeof idempotencyKey === "string" && idempotencyKey.length > 0)
-      state.orderIdempotency.insert(idempotencyKey, { order_id: orderId, response })
+      state.orderIdempotency.insert(idempotencyKey, {
+        order_id: orderId,
+        response,
+        fingerprint: requestFingerprint,
+      })
+    state.publishOrderWebhook(order, "labtest.order.created", context.now())
     return jsonResponse(200, response)
   },
 
@@ -415,6 +482,7 @@ export const orderHandlers = (state: JunctionState) => ({
         transactionOrder.updated_at = new Date(context.now()).toISOString()
       }
       state.orders.update(id, order)
+      state.publishOrderWebhook(order, "labtest.order.updated", context.now())
     }
     const response = { order, status: "SUCCESS", message: "Order cancelled" }
     return jsonResponse(200, response)
@@ -427,9 +495,28 @@ export const orderHandlers = (state: JunctionState) => ({
     const finalStatus = context.query.final_status
     if (typeof finalStatus !== "string" || finalStatus.length === 0)
       throw new HttpError(422, { detail: "final_status is required" })
+    const now = state.isoNow(context.now)
+    const lowLevelStatus = finalStatus.split(".").at(-1) ?? finalStatus
+    const event = {
+      id: order.events.length + 1,
+      created_at: now,
+      status: finalStatus,
+      status_detail: null,
+    }
     order.status = finalStatus
-    order.updated_at = state.isoNow(context.now)
+    order.updated_at = now
+    order.events.push(event)
+    order.last_event = event
+    const transactionOrder = order.order_transaction.orders.find((entry) => entry.id === id)
+    if (transactionOrder) {
+      transactionOrder.low_level_status = lowLevelStatus
+      transactionOrder.low_level_status_created_at = new Date(context.now()).toISOString()
+      transactionOrder.updated_at = new Date(context.now()).toISOString()
+    }
+    if (finalStatus.startsWith("completed")) order.order_transaction.status = "completed"
+    if (finalStatus.startsWith("cancelled")) order.order_transaction.status = "cancelled"
     state.orders.update(id, order)
+    state.publishOrderWebhook(order, "labtest.order.updated", context.now())
     return new Response(null, { status: 204 })
   },
 
@@ -509,15 +596,18 @@ export const orderHandlers = (state: JunctionState) => ({
   },
 })
 
-const orderSummary = (order: OrderRecord) => ({
-  id: order.id,
-  origin: "initial",
-  parent_id: null,
-  last_status: "ordered",
-  last_status_created_at: order.created_at,
-  updated_at: order.updated_at,
-  created_at: order.created_at,
-})
+const orderSummary = (order: OrderRecord) => {
+  const transactionOrder = order.order_transaction.orders.find((entry) => entry.id === order.id)
+  return {
+    id: order.id,
+    origin: transactionOrder?.origin ?? "initial",
+    parent_id: transactionOrder?.parent_id ?? null,
+    last_status: transactionOrder?.low_level_status ?? "ordered",
+    last_status_created_at: transactionOrder?.low_level_status_created_at ?? order.created_at,
+    updated_at: order.updated_at,
+    created_at: order.created_at,
+  }
+}
 
 const biomarker = (order: OrderRecord, created_at: string) =>
   (order.lab_test.markers ?? []).map((marker) => ({

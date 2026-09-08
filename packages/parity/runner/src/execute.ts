@@ -8,7 +8,6 @@ import {
 import {
   type ConcreteRequest,
   concretize,
-  describeCommand,
   type LogicalCommand,
   type OperationPlan,
   type Scope,
@@ -51,6 +50,8 @@ export type StepOutcome = {
   operationId: string
   status: number
   discovered: number
+  realMs: number
+  mockMs: number
 }
 
 const toExchange = async (response: Response): Promise<Exchange> => {
@@ -106,23 +107,24 @@ export const executeCommand = async (
   }
   const realRequest = concretize(command, plan, context.table, "real", context.scope)
   const mockRequest = concretize(command, plan, context.table, "mock", context.scope)
-  context.step?.(
-    `${context.provider} step ${context.history.length + 1}: ${describeCommand(command)}`,
-  )
+  context.step?.(`${context.provider} ${command.operationId}`)
 
+  const realStartedAt = performance.now()
   const realResponse = await send(
     context.real,
     realRequest,
     (cause) => ({ ...base, kind: "real-transport", request: realRequest, cause }),
     context.redact,
   )
+  const realMs = performance.now() - realStartedAt
+  const mockStartedAt = performance.now()
   const mockResponse = await send(
     context.mock,
     mockRequest,
     (cause) => ({ ...base, kind: "mock-transport", request: mockRequest, cause }),
     context.redact,
   )
-
+  const mockMs = performance.now() - mockStartedAt
   const declared = responseForStatus(plan.operation.responses, realResponse.status)
   const schema = responseSchema(declared, realResponse.headers["content-type"])
   const headers = declared ? parityHeaders(context.document, declared) : []
@@ -193,8 +195,17 @@ export const executeCommand = async (
       context.redact,
     )
   }
+  if (mockMs >= realMs) {
+    throw new ParityError({ ...base, kind: "latency", realMs, mockMs }, context.redact)
+  }
   context.trace?.(
     `${context.provider} ${realRequest.method.toUpperCase()} ${context.redact(realRequest.path)} -> ${realResponse.status} (+${discovered})`,
   )
-  return { operationId: command.operationId, status: realResponse.status, discovered }
+  return {
+    operationId: command.operationId,
+    status: realResponse.status,
+    discovered,
+    realMs,
+    mockMs,
+  }
 }
