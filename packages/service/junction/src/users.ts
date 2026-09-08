@@ -104,6 +104,16 @@ const dateError = (path: string, value: unknown) => {
 }
 
 export const userHandlers = (state: JunctionState) => ({
+  patch_user_info_v2_user__user_id__info_patch: async (context: OperationContext) => {
+    const id = context.params.user_id ?? ""
+    if (!state.users.has(id)) notFound("User not found")
+    const body = jsonBody(context)
+    const existing = state.userInfo.get(id) ?? {}
+    const info = { ...existing, ...body }
+    state.userInfo.insert(id, info)
+    return jsonResponse(200, info)
+  },
+
   create_user_v2_user_post: async (context: OperationContext) => {
     const body = jsonBody(context)
     const clientUserId = body.client_user_id

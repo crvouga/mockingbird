@@ -79,7 +79,7 @@ const isValidDate = (value: string): boolean => {
   return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
 }
 
-const missingError = (loc: string[], input: unknown) => ({
+const missingError = (loc: Array<string | number>, input: unknown) => ({
   type: "missing",
   loc,
   msg: "Field required",
@@ -108,6 +108,9 @@ const phoneError = (loc: string[], value: unknown) => ({
   input: value,
   ctx: { error: {} },
 })
+
+const isUuid = (value: string): boolean =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
 const isValidPhone = (value: string): boolean => {
   const digits = value.replace(/\D/g, "")
@@ -145,6 +148,27 @@ const pyIso = (value: string): string => {
 
 const orderValidation = (body: Record<string, unknown>): unknown[] => {
   const errors: unknown[] = []
+  const labAccountId = body.lab_account_id
+  if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
+    errors.push({
+      type: "uuid_parsing",
+      loc: ["body", "lab_account_id"],
+      msg: "Input should be a valid UUID, invalid length: expected length 32 for simple format, found 0",
+      input: labAccountId,
+      ctx: { error: "invalid length: expected length 32 for simple format, found 0" },
+    })
+  }
+  const aoeAnswers = body.aoe_answers
+  if (Array.isArray(aoeAnswers)) {
+    for (const [index, answer] of aoeAnswers.entries()) {
+      if (typeof answer !== "object" || answer === null || Array.isArray(answer)) continue
+      const record = answer as Record<string, unknown>
+      for (const field of ["marker_id", "question_id", "answer"]) {
+        if (record[field] === undefined)
+          errors.push(missingError(["body", "aoe_answers", index, field].map(String), answer))
+      }
+    }
+  }
   const pd = body.patient_details
   if (pd === undefined) {
     errors.push(missingError(["body", "patient_details"], body))
@@ -299,7 +323,13 @@ export const orderHandlers = (state: JunctionState) => ({
     const nowMicro = new Date(context.now()).toISOString()
     const orderId = state.nextOrderId()
     const transactionId = state.transactionIdFor(orderId)
-    const method = labTest.method
+    const method =
+      typeof body.collection_method === "string" ? body.collection_method : labTest.method
+    const idempotencyKey = body.idempotency_key
+    if (typeof idempotencyKey === "string" && idempotencyKey.length > 0) {
+      const replay = state.orderIdempotency.get(idempotencyKey)
+      if (replay) return jsonResponse(200, replay.response)
+    }
     const eventStatus = `received.${method}.ordered`
     const event = {
       id: 1,
@@ -356,7 +386,51 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     state.orders.insert(orderId, order)
     state.orderByTransaction.insert(transactionId, { order_id: orderId })
-    return jsonResponse(200, { order, status: "SUCCESS", message: "Order submitted" })
+    const response = { order, status: "SUCCESS", message: "Order submitted" }
+    if (typeof idempotencyKey === "string" && idempotencyKey.length > 0)
+      state.orderIdempotency.insert(idempotencyKey, { order_id: orderId, response })
+    return jsonResponse(200, response)
+  },
+
+  cancel_order_v3_order__order_id__cancel_post: async (context: OperationContext) => {
+    const id = context.params.order_id ?? ""
+    const order = state.orders.get(id)
+    if (!order) notFound("This order doesn't exist")
+    if (order.status !== "cancelled") {
+      const now = state.isoNow(context.now)
+      order.status = "cancelled"
+      order.updated_at = now
+      const event = {
+        id: order.events.length + 1,
+        created_at: now,
+        status: "cancelled",
+        status_detail: null,
+      }
+      order.events.push(event)
+      order.last_event = event
+      order.order_transaction.status = "cancelled"
+      const transactionOrder = order.order_transaction.orders[0]
+      if (transactionOrder) {
+        transactionOrder.low_level_status = "cancelled"
+        transactionOrder.updated_at = new Date(context.now()).toISOString()
+      }
+      state.orders.update(id, order)
+    }
+    const response = { order, status: "SUCCESS", message: "Order cancelled" }
+    return jsonResponse(200, response)
+  },
+
+  simulate_order_v3_order__order_id__test_post: async (context: OperationContext) => {
+    const id = context.params.order_id ?? ""
+    const order = state.orders.get(id)
+    if (!order) notFound("This order doesn't exist")
+    const finalStatus = context.query.final_status
+    if (typeof finalStatus !== "string" || finalStatus.length === 0)
+      throw new HttpError(422, { detail: "final_status is required" })
+    order.status = finalStatus
+    order.updated_at = state.isoNow(context.now)
+    state.orders.update(id, order)
+    return new Response(null, { status: 204 })
   },
 
   get_order_v3_order__order_id__get: async (context: OperationContext) => {

@@ -309,6 +309,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /v2/user/{user_id}/info:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    patch:
+      operationId: patch_user_info_v2_user__user_id__info_patch
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInfoPatchBody"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /v3/order/{order_id}:
     parameters:
       - name: order_id
@@ -334,6 +368,64 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientFacingOrder"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/cancel:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: cancel_order_v3_order__order_id__cancel_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PostOrderResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/test:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: simulate_order_v3_order__order_id__test_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: final_status
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Successful Response
         "404":
           description: Not Found
           content:
@@ -537,6 +629,27 @@ components:
           type: ["string", "null"]
         ingestion_end:
           type: ["string", "null"]
+    UserInfoPatchBody:
+      type: object
+      properties:
+        first_name:
+          type: [string, "null"]
+        last_name:
+          type: [string, "null"]
+        dob:
+          type: [string, "null"]
+        gender:
+          type: [string, "null"]
+        phone_number:
+          type: [string, "null"]
+        email:
+          type: [string, "null"]
+        address:
+          type: [object, "null"]
+          additionalProperties: true
+    UserInfo:
+      type: object
+      additionalProperties: true
     ClientUserIDConflictResponse:
       type: object
       required: [detail]
@@ -1306,6 +1419,21 @@ components:
           anyOf:
             - type: string
             - type: "null"
+        collection_method:
+          $ref: "#/components/schemas/LabTestCollectionMethod"
+        lab_account_id:
+          anyOf:
+            - type: string
+            - type: "null"
+        idempotency_key:
+          type: [string, "null"]
+        idempotency_error:
+          type: [string, "null"]
+        aoe_answers:
+          type: [array, "null"]
+          items:
+            type: object
+            additionalProperties: true
     PostOrderResponse:
       type: object
       required: [order, status, message]

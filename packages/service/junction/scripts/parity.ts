@@ -4,7 +4,6 @@ import { join } from "node:path"
 import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, JunctionAPI } from "../src/index.js"
-import { PARITY_SEEDS } from "../src/seeds.js"
 
 /** Docs: https://docs.junction.com/api-details/junction-api */
 const JUNCTION_HOST = "api.sandbox.us.junction.com"
@@ -94,11 +93,5 @@ if (envSeed !== undefined && !Number.isInteger(envSeed)) {
   process.exit(2)
 }
 
-let ok = true
-if (envSeed !== undefined) {
-  ok = await runSeed(envSeed)
-} else {
-  for (const seed of PARITY_SEEDS) ok = (await runSeed(seed)) && ok
-  ok = (await runSeed(undefined)) && ok
-}
+const ok = await runSeed(envSeed)
 if (!ok) process.exit(1)

@@ -5,6 +5,8 @@ import type { LabTestRecord } from "./catalog.js"
 export type { CatalogMarker, LabTestRecord } from "./catalog.js"
 export { LAB_TEST_CATALOG, labTestById } from "./catalog.js"
 
+export type UserInfoRecord = Record<string, unknown>
+
 export type UserRecord = {
   user_id: string
   team_id: string
@@ -40,7 +42,7 @@ export type OrderEventRecord = {
 
 export type OrderTransactionEmbed = {
   id: string
-  status: "active"
+  status: "active" | "cancelled"
   orders: Array<{
     id: string
     low_level_status: string
@@ -91,14 +93,21 @@ export class JunctionState {
   readonly ids: IdSequence
   readonly byClientId: Collection<{ user_id: string }>
   readonly deletedUsers: Collection<{ user_id: string }>
+  readonly userInfo: Collection<UserInfoRecord>
   readonly orders: Collection<OrderRecord>
+  readonly orderIdempotency: Collection<{ order_id: string; response: unknown }>
+  readonly cancelIdempotency: Collection<{ order_id: string; response: unknown }>
+
   readonly orderByTransaction: Collection<{ order_id: string }>
 
   constructor(sqlite: SqliteClient, namespace: string) {
     this.users = new Collection(sqlite, namespace, "users")
     this.byClientId = new Collection(sqlite, namespace, "users_by_client")
     this.deletedUsers = new Collection(sqlite, namespace, "users_deleted")
+    this.userInfo = new Collection(sqlite, namespace, "user_info")
     this.orders = new Collection(sqlite, namespace, "orders")
+    this.orderIdempotency = new Collection(sqlite, namespace, "orders_idempotency")
+    this.cancelIdempotency = new Collection(sqlite, namespace, "cancel_idempotency")
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
     this.ids = new IdSequence(sqlite, namespace, "junction")
   }

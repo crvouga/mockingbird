@@ -44,6 +44,8 @@
     "lint": "biome check .",
     "test": "bun test",
     "parity": "bun scripts/parity.ts",
+    "client-parity": "bun scripts/client-parity.ts",
+    "client-parity:live": "JUNCTION_LIVE_PARITY=1 bun scripts/client-parity-live.ts",
     "portability": "bun ../../../scripts/portability.ts",
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
@@ -56,12 +58,13 @@
     "hono": "4.11.9"
   },
   "devDependencies": {
-    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
     "@crvouga/sqlite-mem": "1.15.0",
-    "@crvouga/mockingbird-parity": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*",
-    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
-    "@crvouga/mockingbird-openapi-metadata": "workspace:*"
+    "@tryvital/vital-node": "3.1.511",
+    "fast-check": "4.9.0"
   }
 }
