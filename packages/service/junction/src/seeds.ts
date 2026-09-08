@@ -5,4 +5,4 @@
  * new seed whenever a parity run fails — the seed is printed on the `FC_SEED=<seed> to replay`
  * line of the failure output.
  */
-export const PARITY_SEEDS: readonly number[] = [2058813869, 2061032686]
+export const PARITY_SEEDS: readonly number[] = [2058813869, 2061032686, 10416389]

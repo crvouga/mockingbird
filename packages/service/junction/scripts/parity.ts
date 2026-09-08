@@ -1,13 +1,18 @@
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import type { Scope } from "@crvouga/mockingbird-commands"
+import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
 import { parity } from "@crvouga/mockingbird-parity"
 import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import { document, JunctionAPI } from "../src/index.js"
+import { PARITY_SEEDS } from "../src/seeds.js"
 
 /** Docs: https://docs.junction.com/api-details/junction-api */
 const JUNCTION_HOST = "api.sandbox.us.junction.com"
+const FAILURE_STATE_DIR = ".parity-artifacts/junction"
+const LAST_FAILED_SEED_PATH = `${FAILURE_STATE_DIR}/last-failed-seed`
 const TEST_KEY_PREFIXES = ["sk_us_", "sk_eu_"]
 const DEFAULT_MIN_INTERVAL_MS = 50
 
@@ -66,34 +71,58 @@ if (!TEST_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))) {
 
 const baseUrl = Bun.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? `https://${JUNCTION_HOST}`
 const webhookReceiverUrl = Bun.env.MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL?.replace(/\/$/, "")
-if (!webhookReceiverUrl) {
-  throw new Error(
-    "MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL is required; deploy or start the stable webhook receiver before parity",
-  )
-}
+const webhookParity =
+  webhookReceiverUrl === undefined
+    ? undefined
+    : {
+        collectReal: async (scope: Scope) => {
+          const response = await fetch(`${webhookReceiverUrl}/events/${scope.runId}`)
+          if (!response.ok) throw new Error(`webhook receiver returned ${response.status}`)
+          return (await response.json()) as readonly unknown[]
+        },
+        collectMock: async (mock: FetchAPI) => {
+          const service = mock as unknown as JunctionAPI
+          return service.webhookEvents()
+        },
+      }
 const authHeaders = { "x-vital-api-key": apiKey }
+
+const clearSandboxUsers = async () => {
+  const response = await fetch(`${baseUrl}/v2/user?offset=0&limit=500`, {
+    headers: authHeaders,
+  })
+  if (!response.ok) throw new Error(`failed to list sandbox users: ${response.status}`)
+  const payload = (await response.json()) as { users?: unknown[] }
+  for (const entry of payload.users ?? []) {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue
+    const userId = (entry as Record<string, unknown>).user_id
+    if (typeof userId !== "string") continue
+    const deletion = await fetch(`${baseUrl}/v2/user/${userId}`, {
+      method: "DELETE",
+      headers: authHeaders,
+    })
+    if (!deletion.ok && deletion.status !== 404) {
+      throw new Error(`failed to clear sandbox user: ${deletion.status}`)
+    }
+  }
+}
 
 const runSeed = async (seed: number | undefined) => {
   try {
-    console.log(`junction webhook receiver: ${webhookReceiverUrl}`)
+    if (webhookReceiverUrl) {
+      console.log(`junction webhook parity: enabled (${webhookReceiverUrl})`)
+    } else {
+      console.warn(
+        "junction webhook parity: skipped; configure MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL with a deployed receiver URL, then register the webhook URL in the Junction sandbox dashboard using `bun run webhook:register`",
+      )
+    }
+    await clearSandboxUsers()
     await parity({
       provider: "junction",
       spec: document,
       env: Bun.env,
       numRuns: cliOptions.runs ?? DEFAULT_PROPERTY_RUNS,
       maxCommands: cliOptions.steps ?? DEFAULT_PARITY_STEPS,
-      only: [
-        "create_user_v2_user_post",
-        "get_user_v2_user__user_id__get",
-        "delete_user_v2_user__user_id__delete",
-        "get_user_by_client_user_id_v2_user_resolve__client_user_id__get",
-        "patch_user_v2_user__user_id__patch",
-        "get_paginated_lab_tests_for_team_v3_lab_test_get",
-        "get_lab_test_for_team_v3_lab_tests__lab_test_id__get",
-        "create_order_v3_order_post",
-        "get_order_v3_order__order_id__get",
-        "get_orders_v3_orders_get",
-      ],
       real: {
         baseUrl,
         allowedHosts: [new URL(baseUrl).host],
@@ -107,14 +136,7 @@ const runSeed = async (seed: number | undefined) => {
         create: () => new JunctionAPI(),
         headers: () => ({ "x-vital-api-key": "sk_us_mockingbird" }),
       },
-      webhooks: {
-        collectReal: async (scope) => {
-          const response = await fetch(`${webhookReceiverUrl}/events/${scope.runId}`)
-          if (!response.ok) throw new Error(`webhook receiver returned ${response.status}`)
-          return (await response.json()) as readonly unknown[]
-        },
-        collectMock: async (mock) => (mock instanceof JunctionAPI ? mock.webhookEvents() : []),
-      },
+      ...(webhookParity === undefined ? {} : { webhooks: webhookParity }),
       redact: createRedactor(credentials.secrets),
       shrink: false,
       cleanup: async ({ table, real, scope }) => {
@@ -146,5 +168,36 @@ if (envSeed !== undefined && !Number.isInteger(envSeed)) {
   process.exit(2)
 }
 
-const ok = await runSeed(envSeed)
+const readLastFailedSeed = async () => {
+  try {
+    const value = (await readFile(LAST_FAILED_SEED_PATH, "utf8")).trim()
+    const seed = Number(value)
+    return Number.isSafeInteger(seed) ? seed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const writeLastFailedSeed = async (seed: number) => {
+  await mkdir(FAILURE_STATE_DIR, { recursive: true })
+  await writeFile(LAST_FAILED_SEED_PATH, `${seed}\n`)
+}
+
+const clearLastFailedSeed = async () => {
+  await rm(LAST_FAILED_SEED_PATH, { force: true })
+}
+
+const lastFailedSeed = envSeed === undefined ? await readLastFailedSeed() : undefined
+const seeds =
+  envSeed !== undefined ? [envSeed] : lastFailedSeed !== undefined ? [lastFailedSeed] : PARITY_SEEDS
+let ok = true
+for (const seed of seeds) {
+  const passed = await runSeed(seed)
+  if (!passed) {
+    await writeLastFailedSeed(seed)
+    ok = false
+    break
+  }
+  await clearLastFailedSeed()
+}
 if (!ok) process.exit(1)

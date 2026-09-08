@@ -3,12 +3,7 @@ import { ParityError, parity } from "@crvouga/mockingbird-parity"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import { Database } from "@crvouga/sqlite-mem"
 import fc from "fast-check"
-import {
-  document,
-  JunctionAPI,
-  type JunctionWebhookEvent,
-  supportedOperationIds,
-} from "./src/index.js"
+import { document, JunctionAPI, type JunctionWebhookEvent } from "./src/index.js"
 
 const params = fcParameters(process.env)
 const MOCK_HOST = "mock.junction.local"
@@ -40,17 +35,16 @@ describe("JunctionAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
-        numRuns: params.numRuns ?? 20,
+        numRuns: params.numRuns ?? 25,
         maxCommands: 30,
+        coverageBias: 10,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
         log: () => {},
       })
       expect(report.walks).toBeGreaterThan(0)
-      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
-        supportedOperationIds.length / 2,
-      )
+      expect(new Set(Object.keys(report.exercised)).size).toBe(report.planned.length)
     },
     { timeout: 30_000 },
   )

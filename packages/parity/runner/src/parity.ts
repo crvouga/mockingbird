@@ -8,7 +8,7 @@ import {
   type Scope,
 } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
-import { ResourceTable } from "@crvouga/mockingbird-model"
+import { collectPlaceholders, pickRef, ResourceTable } from "@crvouga/mockingbird-model"
 import type { OpenAPIDocument } from "@crvouga/mockingbird-openapi"
 import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
@@ -91,6 +91,14 @@ export type ParityOptions = {
   invalidProbability?: number
   /** Shrink failing walks to a minimal reproduction (costs extra real requests). Default true. */
   shrink?: boolean
+  /** Relative weight per operationId for command selection (unlisted default to 1). */
+  weights?: Record<string, number>
+  /** Bias toward operations not yet exercised in a walk (default 1, i.e. off). */
+  coverageBias?: number
+  /** Chance references may target deleted resources. Default 0.15. */
+  deletedRefProbability?: number
+  /** Resource types to mark deleted after each operationId. */
+  deletionTypes?: Record<string, readonly string[]>
   /** Stop generating new walks after this many milliseconds; completed walks still count. */
   timeLimitMs?: number
   webhooks?: WebhookParityOptions
@@ -107,7 +115,9 @@ export type ParityReport = {
 }
 
 type WalkModel = { table: ResourceTable }
-type WalkReal = ExecutionContext
+type WalkReal = ExecutionContext & {
+  history: string[]
+}
 
 class Step implements fc.AsyncCommand<WalkModel, WalkReal> {
   constructor(readonly command: LogicalCommand) {}
@@ -116,7 +126,20 @@ class Step implements fc.AsyncCommand<WalkModel, WalkReal> {
   }
   async run(_model: WalkModel, context: WalkReal) {
     await executeCommand(context, this.command)
+    const deletionTypes = context.deletionTypes?.[this.command.operationId] ?? []
+    if (deletionTypes.length > 0) {
+      for (const placeholder of collectPlaceholders([this.command.parameters, this.command.body])) {
+        if (placeholder.$mockingbird !== "ref" || !deletionTypes.includes(placeholder.type))
+          continue
+        const ref = pickRef(context.table, placeholder.type, placeholder.pick)
+        if (ref) context.table.markDeleted(ref.handle)
+      }
+    }
     context.history.push(describeCommand(this.command))
+    if (context.coverage) {
+      context.coverage[this.command.operationId] =
+        (context.coverage[this.command.operationId] ?? 0) + 1
+    }
   }
   toString() {
     return describeCommand(this.command)
@@ -191,6 +214,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   const sleep = options.sleep ?? defaultSleep
   const redact = options.redact ?? ((text: string) => text)
   const clockSkewSeconds = options.clockSkewSeconds ?? 2
+  const deletedRefProbability = options.deletedRefProbability ?? 0.15
   const runId = options.runId ?? `mockingbird-parity-${seed.toString(16)}`
 
   assertAllowedHost(options.real.baseUrl, options.real.allowedHosts)
@@ -224,6 +248,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   let lastWalkEnd = 0
   let done = 0
   const width = String(numRuns).length
+  const coverage: Record<string, number> = {}
 
   const commands = fc.commands(
     [
@@ -233,6 +258,9 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
         ...(options.invalidProbability === undefined
           ? {}
           : { invalidProbability: options.invalidProbability }),
+        ...(options.weights === undefined ? {} : { weights: options.weights }),
+        ...(options.coverageBias === undefined ? {} : { coverageBias: options.coverageBias }),
+        coverage,
       }).map((command) => new Step(command)),
     ],
     { maxCommands, size: "max" },
@@ -259,6 +287,9 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
       },
       redact,
       history: [],
+      coverage,
+      deletedRefProbability,
+      deletionTypes: options.deletionTypes ?? {},
       validateMock: options.validateMock ?? true,
       step: (line) => log(`  [${String(walkNumber).padStart(width, " ")}/${numRuns}] ${line}`),
       trace: trace ? log : undefined,

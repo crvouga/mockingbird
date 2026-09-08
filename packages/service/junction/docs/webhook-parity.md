@@ -1,18 +1,25 @@
 # Junction webhook parity receiver
 
-Junction live parity requires a reachable webhook receiver. The receiver is a Cloudflare Worker with a stable `workers.dev` URL and a Durable Object that keeps events isolated by parity run ID.
+Junction webhook parity verifies that the real Junction sandbox and the mock publish identical webhook events (same set, same order, same exact payloads) after each parity walk. It needs a reachable receiver. The receiver is a Cloudflare Worker with a stable `workers.dev` URL and a Durable Object that keeps events isolated by parity run ID.
 
-## Configuration
+## Optional by default
 
-Required environment variables:
+Webhook event parity is **optional**. If `MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL` is unset, `bun run parity:junction` prints a warning and runs the regular API parity without webhook event checks. It never silently treats zero events as a valid result, and it never fails because webhook parity is not configured.
+
+To enable webhook parity:
+
+```sh
+bun run webhook:deploy
+export MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL="$(deployed workers.dev URL)"
+bun run webhook:register   # health-checks the receiver and prints the webhook URL + event types to configure
+bun run parity:junction
+```
+
+The only required variable is:
 
 - `MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL` — deployed Worker base URL, for example `https://mockingbird-junction-webhooks.<account>.workers.dev`.
-- `MOCKINGBIRD_JUNCTION_MANAGEMENT_KEY` — Junction Management API key (`mg_*`), loaded from Vault.
-- `MOCKINGBIRD_JUNCTION_ORG_ID` — Junction organization UUID.
-- `MOCKINGBIRD_JUNCTION_TEAM_ID` — Junction sandbox team UUID.
-- Cloudflare Wrangler credentials (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`) for CI deployment.
 
-The Management API key is separate from the Junction sandbox Team API key. It is sent in `X-Management-Key` only.
+Cloudflare Wrangler credentials (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`) are needed only to deploy the Worker.
 
 ## Local setup
 
@@ -28,17 +35,24 @@ For live Junction delivery, the local receiver must be reachable from the public
 
 ```sh
 bun run webhook:deploy
-export MOCKINGBIRD_JUNCTION_WEBHOOK_URL="$MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL/junction/webhooks"
+export MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL="https://mockingbird-junction-webhooks.<account>.workers.dev"
 bun run webhook:register
 ```
 
-Registration reconciles the sandbox webhook at:
+`webhook:register` health-checks the receiver at `/health` and prints the exact webhook URL to register in the Junction sandbox dashboard:
 
 ```text
-https://api.management.junction.com/v1/org/{org_id}/team/{team_id}/sandbox/webhook
+https://mockingbird-junction-webhooks.<account>.workers.dev/junction/webhooks
 ```
 
-The registration command is idempotent. It lists existing endpoints, reuses the matching URL when configured correctly, and fails instead of silently accepting a disabled or incorrectly filtered endpoint. It prints the exact endpoint URL and Junction webhook ID.
+plus the event types to enable:
+
+```text
+labtest.order.created
+labtest.order.updated
+```
+
+Registration is dashboard-driven and does not require a Junction Management API key, organization ID, or team ID.
 
 ## Receiver contract
 
@@ -66,7 +80,11 @@ Then run:
 
 ```sh
 bun run webhook:register
-MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL="$MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL" bun run parity:junction
+MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL="https://mockingbird-junction-webhooks.<account>.workers.dev" bun run parity:junction
 ```
 
-If the receiver URL is missing, parity fails immediately instead of treating zero events as a valid webhook parity result.
+## Troubleshooting
+
+- `junction webhook parity: skipped; configure MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL ...` — the warning parity prints when webhook parity is off. Deploy the receiver, set the URL above, register the webhook URL and event types in the Junction sandbox dashboard, then rerun.
+- `junction webhook receiver returned <status>` — the receiver is configured but unreachable or failing. Check `/health` on the deployed Worker and the Wrangler logs (`bun run webhook:dev` locally, `wrangler tail` for the deployed Worker).
+- `Junction webhook receiver returned <status>` from `webhook:register` — the receiver health check failed; the Worker is not reachable at `MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL`.

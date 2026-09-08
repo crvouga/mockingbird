@@ -331,8 +331,9 @@ export const userHandlers = (state: JunctionState) => ({
   get_teams_users_v2_user_get: async (context: OperationContext) => {
     const offset = queryInt(context, "offset", 0)
     const limit = queryInt(context, "limit", 100)
-    if (offset < 0 || limit < 1 || limit > 500)
-      throw new HttpError(422, { detail: "offset must be >= 0 and limit must be 1..500" })
+    if (offset < 0 || limit < 1 || limit > 500) {
+      throw new HttpError(500, "Internal Server Error", { "content-type": "text/plain" })
+    }
     return jsonResponse(200, listUsers(state, offset, limit))
   },
 })

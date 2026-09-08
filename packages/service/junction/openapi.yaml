@@ -91,6 +91,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+        "500":
+          description: Internal Server Error
+          content:
+            text/plain:
+              schema:
+                type: string
   /v2/user/{user_id}:
     parameters:
       - name: user_id
@@ -319,6 +325,9 @@ paths:
         schema:
           type: string
           format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
     patch:
       operationId: patch_user_info_v2_user__user_id__info_patch
       x-mockingbird:
@@ -341,6 +350,12 @@ paths:
                 $ref: "#/components/schemas/UserInfo"
         "404":
           description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
           content:
             application/json:
               schema:
@@ -384,6 +399,9 @@ paths:
         schema:
           type: string
           format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
     post:
       operationId: cancel_order_v3_order__order_id__cancel_post
       x-mockingbird:
@@ -412,6 +430,9 @@ paths:
         schema:
           type: string
           format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
     post:
       operationId: simulate_order_v3_order__order_id__test_post
       x-mockingbird:
@@ -425,6 +446,17 @@ paths:
           required: true
           schema:
             type: string
+            enum:
+              - completed.testkit.completed
+              - cancelled.testkit.cancelled
+              - failed.testkit.failed
+              - completed.walk_in_test.completed
+              - cancelled.walk_in_test.cancelled
+              - completed.at_home_phlebotomy.completed
+              - completed.on_site_collection.completed
+              - pending.appointment_scheduled
+              - pending.redraw_available
+              - pending.partial_results
       responses:
         "204":
           description: Successful Response
@@ -565,6 +597,7 @@ components:
           type: string
           minLength: 1
           maxLength: 64
+          examples: [mbr_8891, patient-1042, user.profile_52]
         fallback_time_zone:
           type: ["string", "null"]
           enum: [America/Los_Angeles, America/New_York, Europe/London, UTC, null]
@@ -1081,26 +1114,32 @@ components:
         first_name:
           type: string
           minLength: 1
-          pattern: "^[a-zA-Z0-9][a-zA-Z0-9 .,-]*$"
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9 .,'-]*$"
+          examples: [Ada, Chris, Maria, Jun]
         last_name:
           type: string
           minLength: 1
-          pattern: "^[a-zA-Z0-9][a-zA-Z0-9 .,-]*$"
+          pattern: "^[a-zA-Z0-9][a-zA-Z0-9 .,'-]*$"
+          examples: [Lovelace, Vouga, Delgado, Park]
         dob:
           type: string
           format: date-time
+          examples: [1990-06-15T00:00:00.000Z, 1983-02-02T00:00:00.000Z]
         gender:
           type: string
           minLength: 1
           pattern: "\\S"
+          examples: [male, female, other, prefer_not_to_say]
         phone_number:
           type: string
           minLength: 1
           pattern: "^\\+1[2-9]\\d{9}$"
+          examples: ["+14155550123", "+12125550987", "+13105554444"]
         email:
           type: string
           format: email
           minLength: 1
+          examples: [ada@example.com, chris@example.com, maria@example.com]
     PatientAddressCompatible:
       type: object
       required: [first_line, city, state, zip, country]
@@ -1108,16 +1147,19 @@ components:
         receiver_name:
           type: string
           default: ""
+          examples: [Ada Lovelace, Chris Vouga]
         first_line:
           type: string
           minLength: 1
           pattern: "\\S"
+          examples: ["1 Main St", "450 Market St", "88 Kearny St"]
         second_line:
           type: ["string", "null"]
         city:
           type: string
           minLength: 1
           pattern: "\\S"
+          examples: [San Diego, San Francisco, New York]
         state:
           type: string
           minLength: 1
@@ -1125,14 +1167,32 @@ components:
         zip:
           type: string
           pattern: "^\\d{5}(-\\d{4})?$"
+          examples: ["92101", "94105", "10001"]
         country:
           type: string
           minLength: 1
           pattern: "\\S"
+          examples: [US]
         access_notes:
           type: ["string", "null"]
+          examples: [null]
         phone_number:
           type: ["string", "null"]
+          examples: ["+14155550123", null]
+    AoeAnswerRequest:
+      type: object
+      required: [marker_id, question_id, answer]
+      properties:
+        marker_id:
+          type: integer
+          examples: [2075, 1975]
+        question_id:
+          type: integer
+          examples: [1]
+        answer:
+          type: string
+          minLength: 1
+          examples: [No, Yes]
     ClientFacingOrderInTransaction:
       type: object
       required: [id, created_at, updated_at]
@@ -1434,8 +1494,7 @@ components:
         aoe_answers:
           type: [array, "null"]
           items:
-            type: object
-            additionalProperties: true
+            $ref: "#/components/schemas/AoeAnswerRequest"
     PostOrderResponse:
       type: object
       required: [order, status, message]

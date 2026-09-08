@@ -1,2 +1,2 @@
-export const DEFAULT_PROPERTY_RUNS = 20
-export const DEFAULT_PARITY_STEPS = 20
+export const DEFAULT_PROPERTY_RUNS = 25
+export const DEFAULT_PARITY_STEPS = 30

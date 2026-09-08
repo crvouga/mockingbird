@@ -7,6 +7,30 @@ import {
 import type { JunctionState, OrderRecord } from "./state.js"
 import { LAB_TEST_CATALOG, labTestById, MOCK_TEAM_ID } from "./state.js"
 
+type AoeQuestion = {
+  id: number
+  required: boolean
+  code: string
+  value: string
+  type: string
+  sequence: number
+  answers: Array<{ id: number; code: string; value: string }>
+  constraint: unknown
+  default: unknown
+}
+
+const aoeQuestion = (markerId: number, questionId: number): AoeQuestion | undefined => {
+  for (const test of LAB_TEST_CATALOG) {
+    for (const marker of test.markers ?? []) {
+      if (marker.id !== markerId) continue
+      const aoe = marker.aoe as { questions?: AoeQuestion[] } | null | undefined
+      if (!aoe) return undefined
+      return aoe.questions?.find((question) => question.id === questionId) ?? undefined
+    }
+  }
+  return undefined
+}
+
 function notFound(message: string): never {
   throw new HttpError(404, { detail: message })
 }
@@ -191,6 +215,35 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
       for (const field of ["marker_id", "question_id", "answer"]) {
         if (record[field] === undefined)
           errors.push(missingError(["body", "aoe_answers", index, field], answer))
+      }
+      if (
+        typeof record.marker_id === "number" &&
+        typeof record.question_id === "number" &&
+        typeof record.answer === "string"
+      ) {
+        const question = aoeQuestion(record.marker_id, record.question_id)
+        if (!question) {
+          errors.push({
+            type: "value_error",
+            loc: ["body", "aoe_answers", index],
+            msg: "Value error, Unknown AOE question for marker",
+            input: answer,
+            ctx: { error: {} },
+          })
+        } else if (
+          !question.answers.some(
+            (entry: { code: string; value: string }) =>
+              entry.value === record.answer || entry.code === record.answer,
+          )
+        ) {
+          errors.push({
+            type: "value_error",
+            loc: ["body", "aoe_answers", index, "answer"],
+            msg: "Value error, Answer is not one of the allowed choices",
+            input: record.answer,
+            ctx: { error: {} },
+          })
+        }
       }
     }
   }

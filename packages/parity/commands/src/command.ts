@@ -48,6 +48,18 @@ export type CommandArbitraryOptions = {
   optionalProbability?: number
   /** Chance an optional request body is present. Default 0.9. */
   bodyProbability?: number
+  /** Relative weight per operationId; unlisted operations default to 1. */
+  weights?: Record<string, number>
+  /**
+   * Multiplier applied to operations not yet exercised in the current walk when
+   * `coverage` is provided, so early steps favor untouched operations. Default 1 (off).
+   */
+  coverageBias?: number
+  /**
+   * Operations exercised so far in the current walk (operationId → count). When set,
+   * untouched operations are weighted up by `coverageBias`; cleared per walk.
+   */
+  coverage?: Record<string, number>
 }
 
 const MAX_PICK = 1 << 16
@@ -179,16 +191,33 @@ export const planCommandArbitrary = (
 /**
  * Arbitrary over commands for every plan. Operations that create resources without needing any
  * are weighted up so walks accumulate state early instead of skipping ineligible commands.
+ * `weights` (operationId → relative weight) overrides that default, and `coverage` biases
+ * untouched operations up at the start of every walk.
  */
 export const commandArbitrary = (
   options: CommandArbitraryOptions,
 ): fc.Arbitrary<LogicalCommand> => {
   if (options.plans.length === 0) throw new RangeError("no operations to generate commands for")
+  const coverageBias = options.coverageBias ?? 1
+  const coverage = options.coverage
+  const weights = options.weights
   return fc.oneof(
-    ...options.plans.map((plan) => ({
-      arbitrary: planCommandArbitrary(plan, options),
-      weight: plan.produces.length > 0 && plan.requires.length === 0 ? PRODUCER_WEIGHT : 1,
-    })),
+    ...options.plans.map((plan) => {
+      const defaultWeight =
+        plan.produces.length > 0 && plan.requires.length === 0 ? PRODUCER_WEIGHT : 1
+      const explicit = weights?.[plan.operation.operationId]
+      const base = explicit === undefined ? defaultWeight : explicit
+      const bias =
+        coverage !== undefined &&
+        coverageBias > 1 &&
+        (coverage[plan.operation.operationId] ?? 0) === 0
+          ? coverageBias
+          : 1
+      return {
+        arbitrary: planCommandArbitrary(plan, options),
+        weight: Math.max(1, Math.round(base * bias)),
+      }
+    }),
   )
 }
 

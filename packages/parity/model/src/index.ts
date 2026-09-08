@@ -16,6 +16,7 @@ export type SymbolicResource = {
   type: string
   handle: number
   ids: Partial<Record<Side, string>>
+  status: "active" | "deleted"
 }
 
 /** Canonical stand-in for a resource id, identical on both sides. */
@@ -24,6 +25,10 @@ export const canonicalToken = (type: string, handle: number) => `resource:${type
 export const describeRef = (ref: SymbolicRef) => `${ref.type} #${ref.handle}`
 
 const idKey = (side: Side, type: string, id: string) => `${side}\u0000${type}\u0000${id}`
+
+type ResourceSelectionOptions = {
+  includeDeleted?: boolean
+}
 
 /**
  * Bidirectional table between symbolic handles and per-side concrete ids.
@@ -37,7 +42,12 @@ export class ResourceTable {
 
   /** Create a new symbolic resource with no ids bound yet. */
   allocate(type: string): SymbolicResource {
-    const resource: SymbolicResource = { type, handle: this.nextHandle++, ids: {} }
+    const resource: SymbolicResource = {
+      type,
+      handle: this.nextHandle++,
+      ids: {},
+      status: "active",
+    }
     this.byHandle.set(resource.handle, resource)
     const handles = this.byType.get(type) ?? []
     handles.push(resource.handle)
@@ -83,13 +93,31 @@ export class ResourceTable {
     return this.byHandle.get(ref.handle)?.ids[side]
   }
 
-  /** Handles of every resource of `type`, in allocation order. */
-  handles(type: string): readonly number[] {
-    return this.byType.get(type) ?? []
+  /** Mark a resource deleted while retaining it for negative-reference coverage. */
+  markDeleted(handle: number): void {
+    const resource = this.byHandle.get(handle)
+    if (!resource) throw new RangeError(`unknown handle ${handle}`)
+    resource.status = "deleted"
+  }
+
+  /** Handles of active resources of `type`, in allocation order. */
+  handles(type: string, options: ResourceSelectionOptions = {}): readonly number[] {
+    const handles = this.byType.get(type) ?? []
+    if (options.includeDeleted) return handles
+    return handles.filter((handle) => this.byHandle.get(handle)?.status === "active")
+  }
+
+  /** Handles of every resource, including deleted resources. */
+  handlesAll(type: string): readonly number[] {
+    return this.handles(type, { includeDeleted: true })
   }
 
   count(type: string): number {
     return this.handles(type).length
+  }
+
+  countAll(type: string): number {
+    return this.handlesAll(type).length
   }
 
   /** Every resource in allocation order. */
@@ -175,8 +203,11 @@ export const pickRef = (
   table: ResourceTable,
   type: string,
   pick: number,
+  deletedRefProbability = 0,
 ): SymbolicRef | undefined => {
-  const handles = table.handles(type)
+  const includeDeleted =
+    deletedRefProbability > 0 && pick % 100 < Math.round(deletedRefProbability * 100)
+  const handles = table.handles(type, { includeDeleted })
   if (handles.length === 0) return undefined
   const handle = handles[pick % handles.length]
   return handle === undefined ? undefined : { type, handle }

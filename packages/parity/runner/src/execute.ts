@@ -40,6 +40,9 @@ export type ExecutionContext = {
   mock: Target
   redact: Redactor
   history: string[]
+  coverage?: Record<string, number>
+  deletedRefProbability: number
+  deletionTypes: Record<string, readonly string[]>
   /** Also validate the mock response body against the OpenAPI response schema. */
   validateMock: boolean
   step?: ((line: string) => void) | undefined
@@ -105,8 +108,22 @@ export const executeCommand = async (
     command,
     history: [...context.history],
   }
-  const realRequest = concretize(command, plan, context.table, "real", context.scope)
-  const mockRequest = concretize(command, plan, context.table, "mock", context.scope)
+  const realRequest = concretize(
+    command,
+    plan,
+    context.table,
+    "real",
+    context.scope,
+    context.deletedRefProbability,
+  )
+  const mockRequest = concretize(
+    command,
+    plan,
+    context.table,
+    "mock",
+    context.scope,
+    context.deletedRefProbability,
+  )
   context.step?.(`${context.provider} ${command.operationId}`)
 
   const realStartedAt = performance.now()
@@ -142,7 +159,7 @@ export const executeCommand = async (
         )
       }
     } else if (
-      mockDeclared?.content &&
+      mockSchema &&
       mockResponse.body.kind !== "json" &&
       mockResponse.body.kind !== "form"
     ) {

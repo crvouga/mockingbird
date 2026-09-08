@@ -57,11 +57,12 @@ export const resolveForSide = (
   table: ResourceTable,
   side: Side,
   scope: Scope,
+  deletedRefProbability = 0,
 ): unknown =>
   resolvePlaceholders(value, (placeholder: Placeholder) => {
     switch (placeholder.$mockingbird) {
       case "ref": {
-        const ref = pickRef(table, placeholder.type, placeholder.pick)
+        const ref = pickRef(table, placeholder.type, placeholder.pick, deletedRefProbability)
         const id = ref === undefined ? undefined : table.idOf(ref, side)
         if (id === undefined) throw new UnresolvedReferenceError(placeholder.type, side)
         return id
@@ -87,11 +88,15 @@ export const concretize = (
   table: ResourceTable,
   side: Side,
   scope: Scope,
+  deletedRefProbability = 0,
 ): ConcreteRequest => {
-  const parameters = resolveForSide(command.parameters, table, side, scope) as Record<
-    string,
-    unknown
-  >
+  const parameters = resolveForSide(
+    command.parameters,
+    table,
+    side,
+    scope,
+    deletedRefProbability,
+  ) as Record<string, unknown>
   const pathValues: Record<string, string> = {}
   const query: Array<[string, string]> = []
   const headers: Record<string, string> = {}
@@ -117,7 +122,10 @@ export const concretize = (
   const body =
     command.body === undefined || command.mediaType === undefined
       ? undefined
-      : encodeBody(command.mediaType, resolveForSide(command.body, table, side, scope))
+      : encodeBody(
+          command.mediaType,
+          resolveForSide(command.body, table, side, scope, deletedRefProbability),
+        )
   return {
     method: plan.operation.method,
     path: expandPathTemplate(plan.operation.path, pathValues),

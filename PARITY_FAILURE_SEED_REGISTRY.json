@@ -24,6 +24,12 @@
       "seed": 10036791,
       "status": "fixed",
       "failure": "Unicode UUID validation mismatch"
+    },
+    {
+      "provider": "junction",
+      "seed": 10416389,
+      "status": "fixed",
+      "failure": "AOE answer whitespace validation mismatch"
     }
   ]
 }
