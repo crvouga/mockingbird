@@ -21,7 +21,10 @@ describe("GeneByGeneAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: (request) => reference.fetch(request),
+          fetch: async (request) => {
+            await new Promise((resolve) => setTimeout(resolve, 10))
+            return reference.fetch(request)
+          },
         },
         mock: {
           create: () => new GeneByGeneAPI({ now }),
