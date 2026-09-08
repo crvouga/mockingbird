@@ -13,6 +13,7 @@ import { PARITY_SEEDS } from "../src/seeds.js"
 const JUNCTION_HOST = "api.sandbox.us.junction.com"
 const FAILURE_STATE_DIR = ".parity-artifacts/junction"
 const LAST_FAILED_SEED_PATH = `${FAILURE_STATE_DIR}/last-failed-seed`
+const FAILURE_REGISTRY_PATH = join(import.meta.dir, "../../../../PARITY_FAILURE_SEED_REGISTRY.json")
 const TEST_KEY_PREFIXES = ["sk_us_", "sk_eu_"]
 const DEFAULT_MIN_INTERVAL_MS = 50
 
@@ -88,21 +89,25 @@ const webhookParity =
 const authHeaders = { "x-vital-api-key": apiKey }
 
 const clearSandboxUsers = async () => {
-  const response = await fetch(`${baseUrl}/v2/user?offset=0&limit=500`, {
-    headers: authHeaders,
-  })
-  if (!response.ok) throw new Error(`failed to list sandbox users: ${response.status}`)
-  const payload = (await response.json()) as { users?: unknown[] }
-  for (const entry of payload.users ?? []) {
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue
-    const userId = (entry as Record<string, unknown>).user_id
-    if (typeof userId !== "string") continue
-    const deletion = await fetch(`${baseUrl}/v2/user/${userId}`, {
-      method: "DELETE",
+  for (;;) {
+    const response = await fetch(`${baseUrl}/v2/user?offset=0&limit=500`, {
       headers: authHeaders,
     })
-    if (!deletion.ok && deletion.status !== 404) {
-      throw new Error(`failed to clear sandbox user: ${deletion.status}`)
+    if (!response.ok) throw new Error(`failed to list sandbox users: ${response.status}`)
+    const payload = (await response.json()) as { users?: unknown[] }
+    const users = payload.users ?? []
+    if (users.length === 0) return
+    for (const entry of users) {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue
+      const userId = (entry as Record<string, unknown>).user_id
+      if (typeof userId !== "string") continue
+      const deletion = await fetch(`${baseUrl}/v2/user/${userId}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      })
+      if (!deletion.ok && deletion.status !== 404) {
+        throw new Error(`failed to clear sandbox user: ${deletion.status}`)
+      }
     }
   }
 }
@@ -156,6 +161,7 @@ const runSeed = async (seed: number | undefined) => {
     return true
   } catch (error) {
     console.error(`\n${error instanceof Error ? error.message : String(error)}`)
+    if (seed !== undefined) await recordFailedSeed(seed, error)
     return false
   }
 }
@@ -183,6 +189,19 @@ const writeLastFailedSeed = async (seed: number) => {
   await writeFile(LAST_FAILED_SEED_PATH, `${seed}\n`)
 }
 
+const recordFailedSeed = async (seed: number, error: unknown) => {
+  const raw = await readFile(FAILURE_REGISTRY_PATH, "utf8")
+  const registry = JSON.parse(raw) as {
+    description: string
+    entries: Array<{ provider: string; seed: number; status: string; failure: string }>
+  }
+  if (registry.entries.some((entry) => entry.provider === "junction" && entry.seed === seed)) return
+  const failure =
+    error instanceof Error ? (error.message.split("\n")[0] ?? error.message) : String(error)
+  registry.entries.push({ provider: "junction", seed, status: "unfixed", failure })
+  await writeFile(FAILURE_REGISTRY_PATH, `${JSON.stringify(registry, null, 2)}\n`)
+}
+
 const clearLastFailedSeed = async () => {
   await rm(LAST_FAILED_SEED_PATH, { force: true })
 }
@@ -195,6 +214,7 @@ for (const seed of seeds) {
   const passed = await runSeed(seed)
   if (!passed) {
     await writeLastFailedSeed(seed)
+    await recordFailedSeed(seed, "parity failure")
     ok = false
     break
   }

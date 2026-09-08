@@ -5,7 +5,7 @@ import {
   createService,
   defineOperations,
   HttpError,
-  jsonResponse,
+  jsonRes,
   type Service,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
@@ -57,7 +57,7 @@ export class JunctionAPI implements FetchAPI {
       sqlite,
       namespace: JUNCTION_NAMESPACE,
       now: options.now,
-      notFound: () => jsonResponse(404, { detail: "Not Found" }),
+      notFound: () => jsonRes(404, { detail: "Not Found" }),
       onError: (error) => {
         if (error instanceof HttpError) return error.toResponse()
         throw error
@@ -65,7 +65,7 @@ export class JunctionAPI implements FetchAPI {
       before: (context) =>
         context.request.headers.has("x-vital-api-key")
           ? undefined
-          : jsonResponse(401, { detail: "Missing x-vital-api-key" }),
+          : jsonRes(401, { detail: "Missing x-vital-api-key" }),
     })
     this.app = this.service.app
     this.sqlite = this.service.sqlite

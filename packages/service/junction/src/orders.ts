@@ -1,6 +1,6 @@
 import {
   HttpError,
-  jsonResponse,
+  jsonRes,
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
@@ -382,13 +382,13 @@ const PHYSICIAN = { first_name: "Leo", last_name: "Damasco", npi: "1134326366" }
 
 export const orderHandlers = (state: JunctionState) => ({
   get_paginated_lab_tests_for_team_v3_lab_test_get: async () =>
-    jsonResponse(200, { data: LAB_TEST_CATALOG, next_cursor: null }),
+    jsonRes(200, { data: LAB_TEST_CATALOG, next_cursor: null }),
 
   get_lab_test_for_team_v3_lab_tests__lab_test_id__get: async (context: OperationContext) => {
     const id = context.params.lab_test_id ?? ""
     const test = labTestById(id)
     if (!test) notFound("Lab test does not exist")
-    return jsonResponse(200, test)
+    return jsonRes(200, test)
   },
 
   create_order_v3_order_post: async (context: OperationContext) => {
@@ -442,7 +442,7 @@ export const orderHandlers = (state: JunctionState) => ({
           throw new HttpError(400, {
             detail: "Idempotency key was reused with a different request",
           })
-        return jsonResponse(200, replay.response)
+        return jsonRes(200, replay.response)
       }
     }
     const eventStatus = `received.${method}.ordered`
@@ -509,13 +509,13 @@ export const orderHandlers = (state: JunctionState) => ({
         fingerprint: requestFingerprint,
       })
     state.publishOrderWebhook(order, "labtest.order.created", context.now())
-    return jsonResponse(200, response)
+    return jsonRes(200, response)
   },
 
   cancel_order_v3_order__order_id__cancel_post: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
     const order = state.orders.get(id)
-    if (!order) notFound("This order doesn't exist")
+    if (!order) notFound("Order doesn't exist")
     if (order.status !== "cancelled") {
       const now = state.isoNow(context.now)
       order.status = "cancelled"
@@ -538,13 +538,13 @@ export const orderHandlers = (state: JunctionState) => ({
       state.publishOrderWebhook(order, "labtest.order.updated", context.now())
     }
     const response = { order, status: "SUCCESS", message: "Order cancelled" }
-    return jsonResponse(200, response)
+    return jsonRes(200, response)
   },
 
   simulate_order_v3_order__order_id__test_post: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
     const order = state.orders.get(id)
-    if (!order) notFound("This order doesn't exist")
+    if (!order) notFound("Order doesn't exist")
     const finalStatus = context.query.final_status
     if (typeof finalStatus !== "string" || finalStatus.length === 0)
       throw new HttpError(422, { detail: "final_status is required" })
@@ -577,7 +577,7 @@ export const orderHandlers = (state: JunctionState) => ({
     const id = context.params.order_id ?? ""
     const order = state.orders.get(id)
     if (!order) notFound("This order doesn't exist")
-    return jsonResponse(200, order)
+    return jsonRes(200, order)
   },
 
   get_orders_v3_orders_get: async (context: OperationContext) => {
@@ -593,7 +593,7 @@ export const orderHandlers = (state: JunctionState) => ({
     let all = state.orders.list({ order: "oldest" })
     if (userId !== undefined) all = all.filter((entry) => entry.value.user_id === userId)
     const pageItems = all.slice((page - 1) * size, page * size)
-    return jsonResponse(200, {
+    return jsonRes(200, {
       orders: pageItems.map((entry) => entry.value),
       total: all.length,
       page,
@@ -608,7 +608,7 @@ export const orderHandlers = (state: JunctionState) => ({
     const binding = state.orderByTransaction.get(id)
     const order = binding ? state.orders.get(binding.order_id) : undefined
     if (!order) notFound("Order transaction not found")
-    return jsonResponse(200, {
+    return jsonRes(200, {
       id,
       team_id: MOCK_TEAM_ID,
       status: order.order_transaction.status,
@@ -624,7 +624,7 @@ export const orderHandlers = (state: JunctionState) => ({
     const order = binding ? state.orders.get(binding.order_id) : undefined
     if (!order) notFound("Order transaction not found")
     const user = order.user_id ? state.users.get(order.user_id) : undefined
-    return jsonResponse(200, {
+    return jsonRes(200, {
       metadata: {
         age: "41",
         dob: "1983-06-23",

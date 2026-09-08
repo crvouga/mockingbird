@@ -161,7 +161,8 @@ export const executeCommand = async (
     } else if (
       mockSchema &&
       mockResponse.body.kind !== "json" &&
-      mockResponse.body.kind !== "form"
+      mockResponse.body.kind !== "form" &&
+      mediaTypeOf(mockResponse.headers["content-type"]) !== "text/plain"
     ) {
       problems.push(`expected a structured body, got ${mockResponse.body.kind}`)
     }

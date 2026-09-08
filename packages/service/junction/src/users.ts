@@ -1,4 +1,4 @@
-import { HttpError, jsonResponse, type OperationContext } from "@crvouga/mockingbird-service"
+import { HttpError, jsonRes, type OperationContext } from "@crvouga/mockingbird-service"
 import type { JunctionState, UserRecord } from "./state.js"
 import { MOCK_TEAM_ID } from "./state.js"
 
@@ -29,14 +29,14 @@ const render = (user: UserRecord) => ({
   fallback_time_zone: user.fallback_time_zone,
   fallback_birth_date: user.fallback_birth_date,
   ingestion_start: user.ingestion_start,
-  ingestion_end: user.ingestion_end,
+  ingestion_end: user.ingestion_start === null ? null : user.ingestion_end,
 })
 
 const listUsers = (state: JunctionState, offset: number, limit: number) => {
   const all = state.users.list({ order: "oldest" })
   return {
     users: all.slice(offset, offset + limit).map((entry) => render(entry.value)),
-    total: all.length,
+    total: Math.max(0, Math.min(limit, all.length - offset)),
     offset,
     limit,
   }
@@ -111,7 +111,7 @@ export const userHandlers = (state: JunctionState) => ({
     const existing = state.userInfo.get(id) ?? {}
     const info = { ...existing, ...body }
     state.userInfo.insert(id, info)
-    return jsonResponse(200, info)
+    return jsonRes(200, info)
   },
 
   create_user_v2_user_post: async (context: OperationContext) => {
@@ -172,7 +172,7 @@ export const userHandlers = (state: JunctionState) => ({
     }
     state.users.insert(userId, user)
     state.byClientId.insert(clientUserId, { user_id: userId })
-    return jsonResponse(200, render(user))
+    return jsonRes(200, render(user))
   },
 
   get_user_v2_user__user_id__get: async (context: OperationContext) => {
@@ -183,7 +183,7 @@ export const userHandlers = (state: JunctionState) => ({
       })
     }
     const user = state.users.get(id)
-    if (user) return jsonResponse(200, render(user))
+    if (user) return jsonRes(200, render(user))
     if (state.deletedUsers.has(id)) {
       throw new HttpError(404, { detail: "You have scheduled this user for deletion." })
     }
@@ -204,7 +204,7 @@ export const userHandlers = (state: JunctionState) => ({
     state.users.delete(id)
     state.byClientId.delete(user.client_user_id)
     state.deletedUsers.insert(id, { user_id: id })
-    return jsonResponse(200, { success: true })
+    return jsonRes(200, { success: true })
   },
 
   get_user_by_client_user_id_v2_user_resolve__client_user_id__get: async (
@@ -215,7 +215,7 @@ export const userHandlers = (state: JunctionState) => ({
     if (!binding) notFound("User not found")
     const user = state.users.get(binding.user_id)
     if (!user) notFound("User not found")
-    return jsonResponse(200, render(user))
+    return jsonRes(200, render(user))
   },
 
   patch_user_v2_user__user_id__patch: async (context: OperationContext) => {
@@ -314,13 +314,11 @@ export const userHandlers = (state: JunctionState) => ({
       newStart = typeof raw === "string" ? raw : null
     }
     let newEnd = user.ingestion_end
-    if (newStart === null) {
-      newEnd = null
-    } else if (endProvided) {
-      const raw = body.ingestion_end
-      newEnd = typeof raw === "string" ? raw : "0001-01-01"
-    } else if (startProvided) {
-      newEnd = "0001-01-01"
+    if (endProvided) {
+      const rawEnd = body.ingestion_end
+      newEnd = typeof rawEnd === "string" ? rawEnd : "0001-01-01"
+    } else if (startProvided && newStart !== null) {
+      newEnd = newEnd ?? "0001-01-01"
     }
     user.ingestion_start = newStart
     user.ingestion_end = newEnd
@@ -334,6 +332,6 @@ export const userHandlers = (state: JunctionState) => ({
     if (offset < 0 || limit < 1 || limit > 500) {
       throw new HttpError(500, "Internal Server Error", { "content-type": "text/plain" })
     }
-    return jsonResponse(200, listUsers(state, offset, limit))
+    return jsonRes(200, listUsers(state, offset, limit))
   },
 })

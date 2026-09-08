@@ -1,7 +1,7 @@
 import { JSON_MEDIA_TYPE } from "@crvouga/mockingbird-http-codec"
 
 /** JSON response with a normalised content type. */
-export const jsonResponse = (
+export const jsonRes = (
   status: number,
   body: unknown,
   headers: Record<string, string> = {},
@@ -23,7 +23,14 @@ export class HttpError extends Error {
   }
 
   toResponse(): Response {
-    return jsonResponse(this.status, this.body, this.headers)
+    const contentType = this.headers["content-type"]?.split(";", 1)[0]?.trim().toLowerCase()
+    if (contentType === "text/plain") {
+      return new Response(String(this.body), {
+        status: this.status,
+        headers: this.headers,
+      })
+    }
+    return jsonRes(this.status, this.body, this.headers)
   }
 }
 

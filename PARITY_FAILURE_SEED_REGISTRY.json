@@ -30,6 +30,12 @@
       "seed": 10416389,
       "status": "fixed",
       "failure": "AOE answer whitespace validation mismatch"
+    },
+    {
+      "provider": "junction",
+      "seed": 2058813869,
+      "status": "unfixed",
+      "failure": "✗ junction parity FAILED (seed 2058813869, FC_SEED=2058813869 to replay)"
     }
   ]
 }

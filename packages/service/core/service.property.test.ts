@@ -10,7 +10,7 @@ import {
   createService,
   HttpError,
   IdSequence,
-  jsonResponse,
+  jsonRes,
   type OperationHandlers,
   OperationRegistryError,
   opaqueToken,
@@ -44,13 +44,13 @@ const document: OpenAPIDocument = parseOpenAPIDocument({
 
 const handlers: OperationHandlers = {
   "things.create": async (ctx) =>
-    jsonResponse(200, { op: "create", body: ctx.body, query: ctx.query }),
-  "things.list": async (ctx) => jsonResponse(200, { op: "list", query: ctx.query }),
-  "things.search": async () => jsonResponse(200, { op: "search" }),
+    jsonRes(200, { op: "create", body: ctx.body, query: ctx.query }),
+  "things.list": async (ctx) => jsonRes(200, { op: "list", query: ctx.query }),
+  "things.search": async () => jsonRes(200, { op: "search" }),
   "things.retrieve": async (ctx) => {
     if (ctx.params.thing === "boom") throw new HttpError(418, { error: "teapot" })
     if (ctx.params.thing === "crash") throw new Error("unexpected")
-    return jsonResponse(200, { op: "retrieve", id: ctx.params.thing })
+    return jsonRes(200, { op: "retrieve", id: ctx.params.thing })
   },
 }
 
@@ -62,10 +62,10 @@ const build = (sqlite = ready(), replacement?: OperationHandlers) =>
     handlers: replacement ?? handlers,
     sqlite,
     namespace: "things",
-    notFound: () => jsonResponse(404, { error: "nope" }),
-    unsupported: () => jsonResponse(501, { error: "unsupported" }),
+    notFound: () => jsonRes(404, { error: "nope" }),
+    unsupported: () => jsonRes(501, { error: "unsupported" }),
     onError: (error) =>
-      error instanceof HttpError ? error.toResponse() : jsonResponse(500, { error: "internal" }),
+      error instanceof HttpError ? error.toResponse() : jsonRes(500, { error: "internal" }),
   })
 
 describe("createService", () => {
