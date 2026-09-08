@@ -8,6 +8,7 @@ import {
 import {
   type ConcreteRequest,
   concretize,
+  describeCommand,
   type LogicalCommand,
   type OperationPlan,
   type Scope,
@@ -42,6 +43,7 @@ export type ExecutionContext = {
   history: string[]
   /** Also validate the mock response body against the OpenAPI response schema. */
   validateMock: boolean
+  step?: ((line: string) => void) | undefined
   trace?: ((line: string) => void) | undefined
 }
 
@@ -104,6 +106,9 @@ export const executeCommand = async (
   }
   const realRequest = concretize(command, plan, context.table, "real", context.scope)
   const mockRequest = concretize(command, plan, context.table, "mock", context.scope)
+  context.step?.(
+    `${context.provider} step ${context.history.length + 1}: ${describeCommand(command)}`,
+  )
 
   const realResponse = await send(
     context.real,

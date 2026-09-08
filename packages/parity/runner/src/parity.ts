@@ -218,6 +218,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   )
 
   const property = fc.asyncProperty(commands, async (steps) => {
+    const walkNumber = walks + 1
     const gap = lastWalkEnd + (clockSkewSeconds + 1) * 1000 - now()
     if (lastWalkEnd > 0 && gap > 0) await sleep(gap)
     const table = new ResourceTable()
@@ -238,6 +239,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
       redact,
       history: [],
       validateMock: options.validateMock ?? true,
+      step: (line) => log(`  [${String(walkNumber).padStart(width, " ")}/${numRuns}] ${line}`),
       trace: trace ? log : undefined,
     }
     let ok = false
