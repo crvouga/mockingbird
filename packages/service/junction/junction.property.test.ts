@@ -35,7 +35,7 @@ describe("JunctionAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
-        numRuns: params.numRuns ?? 25,
+        numRuns: params.numRuns ?? 100,
         maxCommands: 30,
         coverageBias: 10,
         ...(params.seed === undefined ? {} : { seed: params.seed }),

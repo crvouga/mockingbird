@@ -116,17 +116,27 @@ const dateError = (path: string, value: unknown) => {
 
 const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
   const errors: unknown[] = []
+  const required =
+    body.address !== undefined ||
+    body.first_name === null ||
+    body.last_name === null ||
+    body.email === null ||
+    (typeof body.email === "string" && (body.email === "" || !body.email.includes("@"))) ||
+    body.phone_number === null ||
+    body.gender === null ||
+    (body.dob !== undefined &&
+      (body.dob === null || (typeof body.dob === "string" && !isValidDate(body.dob))))
   const pushString = (field: string, value: unknown) => {
-    if (value === undefined) errors.push(missingError(field, body))
-    else if (typeof value !== "string") errors.push(stringError(field, value))
+    if (required && value === undefined) errors.push(missingError(field, body))
+    else if (value !== undefined && typeof value !== "string")
+      errors.push(stringError(field, value))
   }
   pushString("first_name", body.first_name)
   pushString("last_name", body.last_name)
-  if (body.email === undefined) {
-    errors.push(missingError("email", body))
-  } else if (typeof body.email !== "string") {
+  if (required && body.email === undefined) errors.push(missingError("email", body))
+  else if (body.email !== undefined && typeof body.email !== "string")
     errors.push(stringError("email", body.email))
-  } else if (body.email === "" || !body.email.includes("@")) {
+  else if (typeof body.email === "string" && (body.email === "" || !body.email.includes("@"))) {
     errors.push({
       type: "value_error",
       loc: ["body", "email"],
@@ -135,9 +145,7 @@ const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
       ctx: { reason: "An email address must have an @-sign." },
     })
   }
-  if (body.phone_number === undefined) {
-    errors.push(missingError("phone_number", body))
-  } else if (body.phone_number === null) {
+  if (body.phone_number === null)
     errors.push({
       type: "value_error",
       loc: ["body", "phone_number"],
@@ -145,26 +153,24 @@ const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
       input: null,
       ctx: { error: {} },
     })
-  } else if (typeof body.phone_number !== "string") {
+  else if (required && body.phone_number === undefined)
+    errors.push(missingError("phone_number", body))
+  else if (body.phone_number !== undefined && typeof body.phone_number !== "string")
     errors.push(stringError("phone_number", body.phone_number))
-  }
-  if (body.gender === undefined) {
-    errors.push(missingError("gender", body))
-  } else if (typeof body.gender !== "string") {
+  if (required && body.gender === undefined) errors.push(missingError("gender", body))
+  else if (body.gender !== undefined && typeof body.gender !== "string")
     errors.push(stringError("gender", body.gender))
-  }
-  if (body.dob === undefined) {
-    errors.push(missingError("dob", body))
-  } else if (typeof body.dob === "string") {
+  if (required && body.dob === undefined) errors.push(missingError("dob", body))
+  else if (typeof body.dob === "string") {
     if (!isValidDate(body.dob)) errors.push(dateError("dob", body.dob))
-  } else if (body.dob === null) {
+  } else if (body.dob === null)
     errors.push({
       type: "date_type",
       loc: ["body", "dob"],
       msg: "Input should be a valid date",
       input: body.dob,
     })
-  } else {
+  else if (body.dob !== undefined)
     errors.push({
       type: "date_from_datetime_parsing",
       loc: ["body", "dob"],
@@ -172,24 +178,25 @@ const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
       input: body.dob,
       ctx: { error: "invalid character in year" },
     })
-  }
-  if (body.address === undefined) {
-    errors.push(missingError("address", body))
-  } else if (body.address === null) {
+  if (required && body.address === undefined) errors.push(missingError("address", body))
+  else if (body.address === null)
     errors.push({
       type: "model_attributes_type",
       loc: ["body", "address"],
       msg: "Input should be a valid dictionary or object to extract fields from",
       input: body.address,
     })
-  } else if (typeof body.address !== "object" || Array.isArray(body.address)) {
+  else if (
+    body.address !== undefined &&
+    (typeof body.address !== "object" || Array.isArray(body.address))
+  )
     errors.push({
       type: "model_attributes_type",
       loc: ["body", "address"],
       msg: "Input should be a valid dictionary or object to extract fields from",
       input: body.address,
     })
-  } else {
+  else if (body.address !== undefined) {
     const address = body.address as Record<string, unknown>
     for (const field of ["first_line", "country", "zip", "city", "state"] as const) {
       if (address[field] === undefined) errors.push(missingError(`address.${field}`, address))

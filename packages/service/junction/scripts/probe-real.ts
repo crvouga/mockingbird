@@ -48,7 +48,7 @@ const createUser = async (clientUserId: string): Promise<string> => {
 }
 
 const listResponse = await fetch(`${baseUrl}/v3/lab_test`, { headers })
-const catalog = (await listResponse.json()) as { data: Array<Record<string, unknown>> }
+const _catalog = (await listResponse.json()) as { data: Array<Record<string, unknown>> }
 const testId = "c533549c-1e62-4afe-9a0e-0567a9b2bcc2"
 
 const userId = await createUser(`probeAoe2.${Date.now()}`)

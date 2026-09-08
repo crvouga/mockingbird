@@ -210,6 +210,7 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
   const userId = body.user_id
   if (userId === undefined) errors.push(missingError(["body", "user_id"], body))
   else if (typeof userId !== "string") errors.push(stringTypeError(["body", "user_id"], userId))
+  else if (!isUuid(userId)) errors.push(uuidError(userId))
   const labAccountId = body.lab_account_id
   if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
     errors.push(uuidError(labAccountId))
@@ -452,7 +453,11 @@ export const orderHandlers = (state: JunctionState) => ({
     const labTestIds = (body.order_set as Record<string, unknown>).lab_test_ids as string[]
     const labTests = labTestIds.map((id) => labTestById(id))
     if (labTests.some((test) => test === undefined))
-      throw new HttpError(400, { detail: "Test does not exist" })
+      throw new HttpError(422, {
+        detail: labTests.flatMap((test, index) =>
+          test === undefined ? [uuidError(labTestIds[index] ?? "", index)] : [],
+        ),
+      })
     const labTest = labTests[0] as NonNullable<(typeof labTests)[number]>
 
     const nowIso = state.isoNow(context.now)
@@ -551,7 +556,7 @@ export const orderHandlers = (state: JunctionState) => ({
       const event = {
         id: order.events.length + 1,
         created_at: now,
-        status: "cancelled",
+        status: "cancelled.testkit.cancelled",
         status_detail: null,
       }
       order.events.push(event)

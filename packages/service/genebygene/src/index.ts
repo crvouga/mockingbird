@@ -5,7 +5,7 @@ import {
   createService,
   defineOperations,
   HttpError,
-  jsonResponse,
+  jsonRes,
   type Service,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
@@ -43,7 +43,7 @@ export class GeneByGeneAPI implements FetchAPI {
       sqlite,
       namespace: GENEBYGENE_NAMESPACE,
       now: options.now,
-      notFound: () => jsonResponse(404, { message: "Not Found" }),
+      notFound: () => jsonRes(404, { message: "Not Found" }),
       onError: (error) => {
         if (error instanceof HttpError) return error.toResponse()
         throw error

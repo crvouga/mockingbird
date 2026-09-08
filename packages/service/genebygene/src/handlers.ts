@@ -1,6 +1,6 @@
 import {
   HttpError,
-  jsonResponse,
+  jsonRes,
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
@@ -62,7 +62,7 @@ export const geneByGeneHandlers = (state: GeneByGeneState) => ({
       })
     }
     const token = opaqueToken(`gbg:${body.client_id}:${body.client_secret}`, 32)
-    return jsonResponse(200, {
+    return jsonRes(200, {
       access_token: token,
       token_type: "Bearer",
       expires_in: 3600,
@@ -73,7 +73,7 @@ export const geneByGeneHandlers = (state: GeneByGeneState) => ({
     requireBearer(context)
     state.ensureSeedProducts()
     const products = state.products.list({ order: "oldest" }).map((row) => row.value)
-    return jsonResponse(200, products)
+    return jsonRes(200, products)
   },
 
   PostOrders: async (context: OperationContext) => {
@@ -98,7 +98,7 @@ export const geneByGeneHandlers = (state: GeneByGeneState) => ({
       createdAt: state.isoNow(context.now),
     }
     state.orders.insert(orderId, order)
-    return jsonResponse(200, order)
+    return jsonRes(200, order)
   },
 
   GetOrder: async (context: OperationContext) => {
@@ -106,6 +106,6 @@ export const geneByGeneHandlers = (state: GeneByGeneState) => ({
     const id = context.params.orderId ?? ""
     const order = state.orders.get(id)
     if (!order) throw new HttpError(404, { message: "order not found" })
-    return jsonResponse(200, order)
+    return jsonRes(200, order)
   },
 })

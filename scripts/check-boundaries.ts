@@ -278,7 +278,7 @@ for (const file of files) {
   const owner = await resolveOwner(file)
   if (!owner) continue
   const rel = relative(root, file)
-  const inSrc = rel.split("/").includes("src")
+  const inSrc = rel.split("/").includes("src") && !file.endsWith(".test.ts")
   const text = await Bun.file(file).text()
 
   for (const specifier of findModuleSpecifiers(text)) {
