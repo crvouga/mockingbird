@@ -312,7 +312,7 @@ export const userHandlers = (state: JunctionState) => ({
     if (!binding) notFound("User not found")
     const user = state.users.get(binding.user_id)
     if (!user) notFound("User not found")
-    return jsonRes(200, render(user, true))
+    return jsonRes(200, render(user))
   },
 
   patch_user_v2_user__user_id__patch: async (context: OperationContext) => {

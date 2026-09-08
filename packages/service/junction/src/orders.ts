@@ -161,7 +161,10 @@ const uuidError = (value: string, index?: number) => {
       : `invalid length: expected length 32 for simple format, found ${value.replaceAll("-", "").length}`
   return {
     type: "uuid_parsing",
-    loc: index === undefined ? ["body", "lab_account_id"] : ["body", "order_set", "lab_test_ids", index],
+    loc:
+      index === undefined
+        ? ["body", "lab_account_id"]
+        : ["body", "order_set", "lab_test_ids", index],
     msg: `Input should be a valid UUID, ${error}`,
     input: value,
     ctx: { error },
@@ -207,6 +210,10 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
   const userId = body.user_id
   if (userId === undefined) errors.push(missingError(["body", "user_id"], body))
   else if (typeof userId !== "string") errors.push(stringTypeError(["body", "user_id"], userId))
+  const labAccountId = body.lab_account_id
+  if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
+    errors.push(uuidError(labAccountId))
+  }
   const os = body.order_set
   if (os === undefined) {
     errors.push(missingError(["body", "order_set"], body))
@@ -375,10 +382,6 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
         }
       }
     }
-  }
-  const labAccountId = body.lab_account_id
-  if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
-    errors.push(uuidError(labAccountId))
   }
   return errors
 }

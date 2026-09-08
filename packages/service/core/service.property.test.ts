@@ -43,8 +43,7 @@ const document: OpenAPIDocument = parseOpenAPIDocument({
 })
 
 const handlers: OperationHandlers = {
-  "things.create": async (ctx) =>
-    jsonRes(200, { op: "create", body: ctx.body, query: ctx.query }),
+  "things.create": async (ctx) => jsonRes(200, { op: "create", body: ctx.body, query: ctx.query }),
   "things.list": async (ctx) => jsonRes(200, { op: "list", query: ctx.query }),
   "things.search": async () => jsonRes(200, { op: "search" }),
   "things.retrieve": async (ctx) => {
