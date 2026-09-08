@@ -28,7 +28,10 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: (request) => reference.fetch(request),
+          fetch: async (request) => {
+            await new Promise((resolve) => setTimeout(resolve, 10))
+            return reference.fetch(request)
+          },
         },
         mock: {
           create: () => new StripeAPI({ now }),
@@ -64,7 +67,10 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: (request) => reference.fetch(request),
+          fetch: async (request) => {
+            await new Promise((resolve) => setTimeout(resolve, 10))
+            return reference.fetch(request)
+          },
         },
         mock: {
           create: () => new StripeAPI({ sqlite: new Database(), now }),
