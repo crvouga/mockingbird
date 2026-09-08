@@ -6,10 +6,13 @@ const baseUrl = process.env.JUNCTION_MOCK_BASE_URL ?? "https://junction.mockingb
 
 const withMockFetch = async <T>(api: JunctionAPI, run: (client: VitalClient) => Promise<T>) => {
   const originalFetch = globalThis.fetch
-  globalThis.fetch = async (input, init) => {
-    const request = input instanceof Request ? new Request(input, init) : new Request(input, init)
-    return api.fetch(request)
-  }
+  globalThis.fetch = Object.assign(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? new Request(input, init) : new Request(input, init)
+      return api.fetch(request)
+    },
+    { preconnect: originalFetch.preconnect },
+  )
   try {
     return await run(new VitalClient({ apiKey, environment: baseUrl }))
   } finally {

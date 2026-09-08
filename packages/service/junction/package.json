@@ -46,6 +46,9 @@
     "parity": "bun scripts/parity.ts",
     "client-parity": "bun scripts/client-parity.ts",
     "client-parity:live": "JUNCTION_LIVE_PARITY=1 bun scripts/client-parity-live.ts",
+    "webhook:dev": "wrangler dev --config webhook-receiver/wrangler.jsonc",
+    "webhook:deploy": "wrangler deploy --config webhook-receiver/wrangler.jsonc",
+    "webhook:register": "bun scripts/register-webhook.ts",
     "portability": "bun ../../../scripts/portability.ts",
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
@@ -58,6 +61,7 @@
     "hono": "4.11.9"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260908.1",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-openbao": "workspace:*",
@@ -65,6 +69,7 @@
     "@crvouga/mockingbird-testing": "workspace:*",
     "@crvouga/sqlite-mem": "1.15.0",
     "@tryvital/vital-node": "3.1.511",
-    "fast-check": "4.9.0"
+    "fast-check": "4.9.0",
+    "wrangler": "^4.129.1"
   }
 }

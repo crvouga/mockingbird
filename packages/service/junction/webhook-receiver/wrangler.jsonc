@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json.schemastore.org/wrangler.json",
+  "name": "mockingbird-junction-webhooks",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": {
+    "enabled": true
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "WEBHOOK_EVENTS",
+        "class_name": "WebhookEvents"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["WebhookEvents"]
+    }
+  ]
+}

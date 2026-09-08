@@ -65,10 +65,17 @@ if (!TEST_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))) {
 }
 
 const baseUrl = Bun.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? `https://${JUNCTION_HOST}`
+const webhookReceiverUrl = Bun.env.MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL?.replace(/\/$/, "")
+if (!webhookReceiverUrl) {
+  throw new Error(
+    "MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL is required; deploy or start the stable webhook receiver before parity",
+  )
+}
 const authHeaders = { "x-vital-api-key": apiKey }
 
 const runSeed = async (seed: number | undefined) => {
   try {
+    console.log(`junction webhook receiver: ${webhookReceiverUrl}`)
     await parity({
       provider: "junction",
       spec: document,
@@ -102,9 +109,7 @@ const runSeed = async (seed: number | undefined) => {
       },
       webhooks: {
         collectReal: async (scope) => {
-          const receiverUrl = Bun.env.MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL
-          if (!receiverUrl) return []
-          const response = await fetch(`${receiverUrl.replace(/\/$/, "")}/events/${scope.runId}`)
+          const response = await fetch(`${webhookReceiverUrl}/events/${scope.runId}`)
           if (!response.ok) throw new Error(`webhook receiver returned ${response.status}`)
           return (await response.json()) as readonly unknown[]
         },
