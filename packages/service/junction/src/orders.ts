@@ -152,7 +152,7 @@ const phoneError = (loc: string[], value: unknown) => ({
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
-const uuidError = (value: string) => {
+const uuidError = (value: string, index?: number) => {
   const characters = Array.from(value)
   const invalidIndex = characters.findIndex((character) => !/^[0-9a-f-]$/i.test(character))
   const error =
@@ -161,7 +161,7 @@ const uuidError = (value: string) => {
       : `invalid length: expected length 32 for simple format, found ${value.replaceAll("-", "").length}`
   return {
     type: "uuid_parsing",
-    loc: ["body", "lab_account_id"],
+    loc: index === undefined ? ["body", "lab_account_id"] : ["body", "order_set", "lab_test_ids", index],
     msg: `Input should be a valid UUID, ${error}`,
     input: value,
     ctx: { error },
@@ -207,6 +207,135 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
   const userId = body.user_id
   if (userId === undefined) errors.push(missingError(["body", "user_id"], body))
   else if (typeof userId !== "string") errors.push(stringTypeError(["body", "user_id"], userId))
+  const os = body.order_set
+  if (os === undefined) {
+    errors.push(missingError(["body", "order_set"], body))
+  } else if (typeof os !== "object" || os === null || Array.isArray(os)) {
+    errors.push({
+      type: "model_attributes_type",
+      loc: ["body", "order_set"],
+      msg: "Input should be a valid dictionary or object to extract fields from",
+      input: os,
+    })
+  } else {
+    const o = os as Record<string, unknown>
+    const ids = o.lab_test_ids
+    if (ids === undefined) errors.push(missingError(["body", "order_set", "lab_test_ids"], o))
+    else if (!Array.isArray(ids)) {
+      errors.push({
+        type: "string_type",
+        loc: ["body", "order_set", "lab_test_ids"],
+        msg: "Input should be a valid string",
+        input: ids,
+      })
+    } else {
+      ids.forEach((id, index) => {
+        if (typeof id !== "string" || !isUuid(id)) errors.push(uuidError(String(id), index))
+      })
+    }
+  }
+  const pd = body.patient_details
+  if (pd === undefined) {
+    errors.push(missingError(["body", "patient_details"], body))
+  } else if (typeof pd !== "object" || pd === null || Array.isArray(pd)) {
+    errors.push({
+      type: "model_attributes_type",
+      loc: ["body", "patient_details"],
+      msg: "Input should be a valid dictionary or object to extract fields from",
+      input: pd,
+    })
+  } else {
+    const p = pd as Record<string, unknown>
+    for (const field of ["first_name", "last_name", "dob", "gender", "phone_number", "email"]) {
+      if (p[field] === undefined) errors.push(missingError(["body", "patient_details", field], p))
+      else if (typeof p[field] !== "string")
+        errors.push(stringTypeError(["body", "patient_details", field], p[field]))
+      else if (
+        (field === "first_name" || field === "last_name") &&
+        typeof p[field] === "string" &&
+        p[field].length === 0
+      )
+        errors.push(stringTooShortError(["body", "patient_details", field], p[field]))
+      else if (
+        (field === "first_name" || field === "last_name") &&
+        !isValidName(p[field] as string)
+      )
+        errors.push(nameError(field, p[field]))
+      else if (field === "dob") {
+        const dob = p[field] as string
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+          if (new Date(`${dob}T00:00:00Z`).getTime() > Date.now()) {
+            errors.push({
+              type: "value_error",
+              loc: ["body", "patient_details", "dob"],
+              msg: "Value error, dob cannot be in the future",
+              input: `${dob}T00:00:00+00:00`,
+              ctx: { error: {} },
+            })
+          }
+          continue
+        }
+        if (/^\d{4}-\d{2}-\d{2}T/.test(dob)) {
+          if (!/^\d{4}-\d{2}-\d{2}T00:00:00/.test(dob)) {
+            errors.push({
+              type: "date_from_datetime_inexact",
+              loc: ["body", "patient_details", "dob"],
+              msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
+              input: pyIso(dob),
+            })
+          } else {
+            const dateOnly = dob.slice(0, 10)
+            if (new Date(`${dateOnly}T00:00:00Z`).getTime() > Date.now()) {
+              errors.push({
+                type: "value_error",
+                loc: ["body", "patient_details", "dob"],
+                msg: "Value error, dob cannot be in the future",
+                input: `${dateOnly}T00:00:00+00:00`,
+                ctx: { error: {} },
+              })
+            }
+          }
+        } else if (!isValidDate(dob)) {
+          errors.push({
+            type: "date_from_datetime_parsing",
+            loc: ["body", "patient_details", "dob"],
+            msg: "Input should be a valid date or datetime, invalid character in year",
+            input: dob,
+            ctx: { error: "invalid character in year" },
+          })
+        }
+      } else if (field === "phone_number" && !isValidPhone(p[field] as string)) {
+        errors.push(phoneError(["body", "patient_details", "phone_number"], p[field]))
+      }
+    }
+  }
+  const pa = body.patient_address
+  if (pa === undefined) {
+    errors.push(missingError(["body", "patient_address"], body))
+  } else if (typeof pa !== "object" || pa === null || Array.isArray(pa)) {
+    errors.push({
+      type: "model_attributes_type",
+      loc: ["body", "patient_address"],
+      msg: "Input should be a valid dictionary or object to extract fields from",
+      input: pa,
+    })
+  } else {
+    const a = pa as Record<string, unknown>
+    for (const field of ["first_line", "city", "state", "zip", "country"]) {
+      if (a[field] === undefined) errors.push(missingError(["body", "patient_address", field], a))
+      else if (typeof a[field] !== "string")
+        errors.push(stringTypeError(["body", "patient_address", field], a[field]))
+    }
+    if (typeof a.state === "string" && !/^[A-Z]{2}$/.test(a.state)) {
+      errors.push(stateError(a.state))
+    }
+    if (typeof a.zip === "string" && !/^\d{5}(-\d{4})?$/.test(a.zip)) {
+      errors.push(patternError(["body", "patient_address", "zip"], a.zip, "^\\d{5}(-\\d{4})?$"))
+    }
+    if (typeof a.phone_number === "string" && !isValidPhone(a.phone_number)) {
+      errors.push(phoneError(["body", "patient_address", "phone_number"], a.phone_number))
+    }
+  }
   const aoeAnswers = body.aoe_answers
   if (Array.isArray(aoeAnswers)) {
     for (const [index, answer] of aoeAnswers.entries()) {
@@ -250,110 +379,6 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
   const labAccountId = body.lab_account_id
   if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
     errors.push(uuidError(labAccountId))
-  }
-  const pd = body.patient_details
-  if (pd === undefined) {
-    errors.push(missingError(["body", "patient_details"], body))
-  } else if (typeof pd !== "object" || pd === null || Array.isArray(pd)) {
-    errors.push({
-      type: "model_attributes_type",
-      loc: ["body", "patient_details"],
-      msg: "Input should be a valid dictionary or object to extract fields from",
-      input: pd,
-    })
-  } else {
-    const p = pd as Record<string, unknown>
-    for (const field of ["first_name", "last_name", "dob", "gender", "phone_number", "email"]) {
-      if (p[field] === undefined) errors.push(missingError(["body", "patient_details", field], p))
-      else if (typeof p[field] !== "string")
-        errors.push(stringTypeError(["body", "patient_details", field], p[field]))
-      else if (
-        (field === "first_name" || field === "last_name") &&
-        typeof p[field] === "string" &&
-        p[field].length === 0
-      )
-        errors.push(stringTooShortError(["body", "patient_details", field], p[field]))
-      else if (
-        (field === "first_name" || field === "last_name") &&
-        !isValidName(p[field] as string)
-      )
-        errors.push(nameError(field, p[field]))
-      else if (field === "dob") {
-        const dob = p[field] as string
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
-          continue
-        }
-        if (/^\d{4}-\d{2}-\d{2}T/.test(dob)) {
-          if (!/^\d{4}-\d{2}-\d{2}T00:00:00/.test(dob)) {
-            errors.push({
-              type: "date_from_datetime_inexact",
-              loc: ["body", "patient_details", "dob"],
-              msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
-              input: pyIso(dob),
-            })
-          }
-        } else if (!isValidDate(dob)) {
-          errors.push({
-            type: "date_from_datetime_parsing",
-            loc: ["body", "patient_details", "dob"],
-            msg: "Input should be a valid date or datetime, invalid character in year",
-            input: dob,
-            ctx: { error: "invalid character in year" },
-          })
-        }
-      } else if (field === "phone_number" && !isValidPhone(p[field] as string)) {
-        errors.push(phoneError(["body", "patient_details", "phone_number"], p[field]))
-      }
-    }
-  }
-  const pa = body.patient_address
-  if (pa === undefined) {
-    errors.push(missingError(["body", "patient_address"], body))
-  } else if (typeof pa !== "object" || pa === null || Array.isArray(pa)) {
-    errors.push({
-      type: "model_attributes_type",
-      loc: ["body", "patient_address"],
-      msg: "Input should be a valid dictionary or object to extract fields from",
-      input: pa,
-    })
-  } else {
-    const a = pa as Record<string, unknown>
-    for (const field of ["first_line", "city", "state", "zip", "country"]) {
-      if (a[field] === undefined) errors.push(missingError(["body", "patient_address", field], a))
-      else if (typeof a[field] !== "string")
-        errors.push(stringTypeError(["body", "patient_address", field], a[field]))
-    }
-    if (typeof a.state === "string" && !/^[A-Z]{2}$/.test(a.state)) {
-      errors.push(stateError(a.state))
-    }
-    if (typeof a.zip === "string" && !/^\d{5}(-\d{4})?$/.test(a.zip)) {
-      errors.push(patternError(["body", "patient_address", "zip"], a.zip, "^\\d{5}(-\\d{4})?$"))
-    }
-    if (typeof a.phone_number === "string" && !isValidPhone(a.phone_number)) {
-      errors.push(phoneError(["body", "patient_address", "phone_number"], a.phone_number))
-    }
-  }
-  const os = body.order_set
-  if (os === undefined) {
-    errors.push(missingError(["body", "order_set"], body))
-  } else if (typeof os !== "object" || os === null || Array.isArray(os)) {
-    errors.push({
-      type: "model_attributes_type",
-      loc: ["body", "order_set"],
-      msg: "Input should be a valid dictionary or object to extract fields from",
-      input: os,
-    })
-  } else {
-    const o = os as Record<string, unknown>
-    const ids = o.lab_test_ids
-    if (ids === undefined) errors.push(missingError(["body", "order_set", "lab_test_ids"], o))
-    else if (!Array.isArray(ids) || ids.length === 0)
-      errors.push({
-        type: "string_type",
-        loc: ["body", "order_set", "lab_test_ids"],
-        msg: "Input should be a valid string",
-        input: ids,
-      })
   }
   return errors
 }

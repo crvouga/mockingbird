@@ -20,7 +20,7 @@ const jsonBody = (context: OperationContext): Record<string, unknown> => {
   return value as Record<string, unknown>
 }
 
-const render = (user: UserRecord) => ({
+const render = (user: UserRecord, rawEnd = false) => ({
   user_id: user.user_id,
   team_id: user.team_id,
   client_user_id: user.client_user_id,
@@ -29,14 +29,18 @@ const render = (user: UserRecord) => ({
   fallback_time_zone: user.fallback_time_zone,
   fallback_birth_date: user.fallback_birth_date,
   ingestion_start: user.ingestion_start,
-  ingestion_end: user.ingestion_start === null ? null : user.ingestion_end,
+  ingestion_end: rawEnd
+    ? user.ingestion_end
+    : user.ingestion_start === null
+      ? null
+      : (user.ingestion_end ?? "0001-01-01"),
 })
 
 const listUsers = (state: JunctionState, offset: number, limit: number) => {
-  const all = state.users.list({ order: "oldest" })
+  const all = state.users.list({ order: "newest" })
   return {
-    users: all.slice(offset, offset + limit).map((entry) => render(entry.value)),
-    total: Math.max(0, Math.min(limit, all.length - offset)),
+    users: all.slice(offset, offset + limit).map((entry) => render(entry.value, true)),
+    total: Math.max(0, all.length - offset),
     offset,
     limit,
   }
@@ -78,9 +82,16 @@ const isValidDate = (value: string): boolean => {
 
 const stringError = (path: string, value: unknown) => ({
   type: "string_type",
-  loc: ["body", path],
+  loc: ["body", ...path.split(".")],
   msg: "Input should be a valid string",
   input: value,
+})
+
+const missingError = (path: string, input: unknown) => ({
+  type: "missing",
+  loc: ["body", ...path.split(".")],
+  msg: "Field required",
+  input,
 })
 
 const dateError = (path: string, value: unknown) => {
@@ -88,7 +99,7 @@ const dateError = (path: string, value: unknown) => {
   if (input === "" || input.length < 4) {
     return {
       type: "date_from_datetime_parsing",
-      loc: ["body", path],
+      loc: ["body", ...path.split(".")],
       msg: "Input should be a valid date or datetime, input is too short",
       input: value,
       ctx: { error: "input is too short" },
@@ -96,18 +107,104 @@ const dateError = (path: string, value: unknown) => {
   }
   return {
     type: "date_from_datetime_parsing",
-    loc: ["body", path],
+    loc: ["body", ...path.split(".")],
     msg: "Input should be a valid date or datetime, invalid character in year",
     input: value,
     ctx: { error: "invalid character in year" },
   }
 }
 
+const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
+  const errors: unknown[] = []
+  const pushString = (field: string, value: unknown) => {
+    if (value === undefined) errors.push(missingError(field, body))
+    else if (typeof value !== "string") errors.push(stringError(field, value))
+  }
+  pushString("first_name", body.first_name)
+  pushString("last_name", body.last_name)
+  if (body.email === undefined) {
+    errors.push(missingError("email", body))
+  } else if (typeof body.email !== "string") {
+    errors.push(stringError("email", body.email))
+  } else if (body.email === "" || !body.email.includes("@")) {
+    errors.push({
+      type: "value_error",
+      loc: ["body", "email"],
+      msg: "value is not a valid email address: An email address must have an @-sign.",
+      input: body.email,
+      ctx: { reason: "An email address must have an @-sign." },
+    })
+  }
+  if (body.phone_number === undefined) {
+    errors.push(missingError("phone_number", body))
+  } else if (body.phone_number === null) {
+    errors.push({
+      type: "value_error",
+      loc: ["body", "phone_number"],
+      msg: "Value error, Phone number cannot be None",
+      input: null,
+      ctx: { error: {} },
+    })
+  } else if (typeof body.phone_number !== "string") {
+    errors.push(stringError("phone_number", body.phone_number))
+  }
+  if (body.gender === undefined) {
+    errors.push(missingError("gender", body))
+  } else if (typeof body.gender !== "string") {
+    errors.push(stringError("gender", body.gender))
+  }
+  if (body.dob === undefined) {
+    errors.push(missingError("dob", body))
+  } else if (typeof body.dob === "string") {
+    if (!isValidDate(body.dob)) errors.push(dateError("dob", body.dob))
+  } else if (body.dob === null) {
+    errors.push({
+      type: "date_type",
+      loc: ["body", "dob"],
+      msg: "Input should be a valid date",
+      input: body.dob,
+    })
+  } else {
+    errors.push({
+      type: "date_from_datetime_parsing",
+      loc: ["body", "dob"],
+      msg: "Input should be a valid date or datetime, invalid character in year",
+      input: body.dob,
+      ctx: { error: "invalid character in year" },
+    })
+  }
+  if (body.address === undefined) {
+    errors.push(missingError("address", body))
+  } else if (body.address === null) {
+    errors.push({
+      type: "model_attributes_type",
+      loc: ["body", "address"],
+      msg: "Input should be a valid dictionary or object to extract fields from",
+      input: body.address,
+    })
+  } else if (typeof body.address !== "object" || Array.isArray(body.address)) {
+    errors.push({
+      type: "model_attributes_type",
+      loc: ["body", "address"],
+      msg: "Input should be a valid dictionary or object to extract fields from",
+      input: body.address,
+    })
+  } else {
+    const address = body.address as Record<string, unknown>
+    for (const field of ["first_line", "country", "zip", "city", "state"] as const) {
+      if (address[field] === undefined) errors.push(missingError(`address.${field}`, address))
+    }
+  }
+  return errors
+}
+
 export const userHandlers = (state: JunctionState) => ({
   patch_user_info_v2_user__user_id__info_patch: async (context: OperationContext) => {
     const id = context.params.user_id ?? ""
-    if (!state.users.has(id)) notFound("User not found")
     const body = jsonBody(context)
+    const errors = userInfoValidationErrors(body)
+    if (errors.length > 0) throw new HttpError(422, { detail: errors })
+    if (!state.users.has(id)) notFound("User not found")
     const existing = state.userInfo.get(id) ?? {}
     const info = { ...existing, ...body }
     state.userInfo.insert(id, info)
@@ -215,7 +312,7 @@ export const userHandlers = (state: JunctionState) => ({
     if (!binding) notFound("User not found")
     const user = state.users.get(binding.user_id)
     if (!user) notFound("User not found")
-    return jsonRes(200, render(user))
+    return jsonRes(200, render(user, true))
   },
 
   patch_user_v2_user__user_id__patch: async (context: OperationContext) => {
@@ -308,20 +405,14 @@ export const userHandlers = (state: JunctionState) => ({
     }
     const startProvided = body.ingestion_start !== undefined
     const endProvided = body.ingestion_end !== undefined
-    let newStart = user.ingestion_start
     if (startProvided) {
       const raw = body.ingestion_start
-      newStart = typeof raw === "string" ? raw : null
+      user.ingestion_start = typeof raw === "string" ? raw : null
     }
-    let newEnd = user.ingestion_end
     if (endProvided) {
       const rawEnd = body.ingestion_end
-      newEnd = typeof rawEnd === "string" ? rawEnd : "0001-01-01"
-    } else if (startProvided && newStart !== null) {
-      newEnd = newEnd ?? "0001-01-01"
+      user.ingestion_end = typeof rawEnd === "string" ? rawEnd : null
     }
-    user.ingestion_start = newStart
-    user.ingestion_end = newEnd
     state.users.update(id, user)
     return new Response(null, { status: 204 })
   },
