@@ -345,7 +345,7 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
     }
   }
   const aoeAnswers = body.aoe_answers
-  if (Array.isArray(aoeAnswers)) {
+  if (Array.isArray(aoeAnswers) && errors.length === 0) {
     for (const [index, answer] of aoeAnswers.entries()) {
       if (typeof answer !== "object" || answer === null || Array.isArray(answer)) continue
       const record = answer as Record<string, unknown>
@@ -369,8 +369,7 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
           })
         } else if (
           !question.answers.some(
-            (entry: { code: string; value: string }) =>
-              entry.value === record.answer || entry.code === record.answer,
+            (entry: { code: string; value: string }) => entry.code === record.answer,
           )
         ) {
           errors.push({
@@ -589,7 +588,7 @@ export const orderHandlers = (state: JunctionState) => ({
       status: finalStatus,
       status_detail: null,
     }
-    order.status = finalStatus
+    order.status = finalStatus.split(".")[0] ?? finalStatus
     order.updated_at = now
     order.events.push(event)
     order.last_event = event
