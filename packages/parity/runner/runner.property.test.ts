@@ -289,7 +289,7 @@ const run = (
       baseUrl: "https://real.reference.local",
       allowedHosts: ["real.reference.local"],
       fetch: async (r) => {
-        await new Promise((resolve) => setTimeout(resolve, 1))
+        await new Promise((resolve) => setTimeout(resolve, 10))
         return real.fetch(r)
       },
     },
@@ -324,7 +324,7 @@ describe("parity runner", () => {
       }),
       { ...params, numRuns: 5 },
     )
-  })
+  }, 30_000)
 
   test("every injected fault is detected, attributed to the right operation, and shrinks to a short walk", async () => {
     const faults: Array<[Fault, string, number]> = [
@@ -363,7 +363,7 @@ describe("parity runner", () => {
       ),
       { ...params, numRuns: 12 },
     )
-  })
+  }, 60_000)
 
   test("the same seed reproduces the same shrunk failure", async () => {
     await fc.assert(
@@ -379,7 +379,7 @@ describe("parity runner", () => {
       }),
       { ...params, numRuns: 3 },
     )
-  })
+  }, 60_000)
 
   test("refuses hosts outside the allow list before contacting anything", async () => {
     await fc.assert(
