@@ -62,17 +62,15 @@ direct `fetch` calls, webhook handlers, and dev-tools clients (September 2026).
 
 ## Tiered parity strategy
 
-1. **Differential walker** (`bun run parity`): only the deterministic allowlist in
-   `scripts/parity.ts` runs — users, catalog, orders, simulate, result metadata,
-   serviceability, cancellation reasons. Resource-table canonicalization maps IDs and
-   `x-mockingbird-volatile` fields.
-2. **Scenario parity** (`scripts/client-parity-live.ts`): one full SDK scenario
-   (user → catalog → serviceability → order → appointment reads → simulate) executed against
-   mock and sandbox with a volatility-aware normalizer diffing each step.
-3. **State-space suites**: `junction.scheduling.property.test.ts` and
-   `junction.property.test.ts` exercise booking key single-use/expiry, idempotent PSC
-   booking, cancel cascades, delayed simulate transitions, and result gating against the
-   mock directly.
+1. **Seed differential walker** (`bun run parity`, default `--mode=seed`): warmup N on the
+   tryvital sandbox → `JunctionAPI.seedFrom` → lockstep M. Geviti-weighted allowlist in
+   `scripts/parity.ts`. Living QA proof matrix: [qa-drop-in.md](./qa-drop-in.md).
+2. **Empty-start walker** (`bun run parity -- --mode=empty`): classic fresh-mock differential
+   for regression on deterministic ops.
+3. **State-space suites**: `junction.scheduling.property.test.ts`,
+   `junction.property.test.ts`, and `junction.seed.property.test.ts` (mock↔mock seed round-trip).
+4. **Deprecated as proof**: `scripts/client-parity*.ts` example scenarios — do not treat as
+   drop-in evidence.
 
 ## Known real-side quirks the mock mirrors
 

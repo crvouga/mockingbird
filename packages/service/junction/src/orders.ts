@@ -7,13 +7,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
-import {
-  expectedResultsFor,
-  LAB_TEST_CATALOG,
-  labTestById,
-  MOCK_TEAM_ID,
-  TEAM_LABS,
-} from "./state.js"
+import { MOCK_TEAM_ID } from "./state.js"
 
 const RESULT_TYPES = ["numeric", "range", "comment", "coded_value"] as const
 const INTERPRETATIONS = ["normal", "abnormal", "critical", "unknown"] as const
@@ -54,8 +48,12 @@ type AoeQuestion = {
   default: unknown
 }
 
-const aoeQuestion = (markerId: number, questionId: number): AoeQuestion | undefined => {
-  for (const test of LAB_TEST_CATALOG) {
+const aoeQuestion = (
+  state: JunctionState,
+  markerId: number,
+  questionId: number,
+): AoeQuestion | undefined => {
+  for (const test of state.listLabTests()) {
     for (const marker of test.markers ?? []) {
       if (marker.id !== markerId) continue
       const aoe = marker.aoe as { questions?: AoeQuestion[] } | null | undefined
@@ -527,18 +525,22 @@ const orderDobError = (dob: string) => {
   }
 }
 
-const aoeValidationError = (body: Record<string, unknown>): string | undefined => {
+const aoeValidationError = (
+  state: JunctionState,
+  body: Record<string, unknown>,
+): string | undefined => {
   const answers = body.aoe_answers
   if (!Array.isArray(answers)) return undefined
   for (const answer of answers) {
     if (typeof answer !== "object" || answer === null || Array.isArray(answer)) continue
     const record = answer as Record<string, unknown>
     if (typeof record.marker_id !== "number") continue
-    const marker = LAB_TEST_CATALOG.flatMap((test) => test.markers ?? []).find(
-      (entry) => entry.id === record.marker_id,
-    )
+    const marker = state
+      .listLabTests()
+      .flatMap((test) => test.markers ?? [])
+      .find((entry) => entry.id === record.marker_id)
     if (!marker?.aoe) return `Marker id ${record.marker_id} does not have AOE.`
-    const question = aoeQuestion(record.marker_id, record.question_id as number)
+    const question = aoeQuestion(state, record.marker_id, record.question_id as number)
     if (!question)
       return `Invalid question_id ${String(record.question_id)} for marker id ${record.marker_id}.`
     const answerCode = typeof record.answer === "string" ? record.answer.toUpperCase() : ""
@@ -639,24 +641,24 @@ const finalStatusError = (value: string) => ({
 
 export const orderHandlers = (state: JunctionState) => ({
   get_paginated_lab_tests_for_team_v3_lab_test_get: async () =>
-    jsonRes(200, { data: LAB_TEST_CATALOG, next_cursor: null }),
+    jsonRes(200, { data: state.listLabTests(), next_cursor: null }),
 
   get_lab_test_for_team_v3_lab_tests__lab_test_id__get: async (context: OperationContext) => {
     const id = context.params.lab_test_id ?? ""
-    const test = labTestById(id)
+    const test = state.labTestById(id)
     if (!test) notFound("Lab test does not exist")
     return jsonRes(200, test)
   },
 
-  get_labs_v3_lab_tests_labs_get: async () => jsonRes(200, TEAM_LABS),
+  get_labs_v3_lab_tests_labs_get: async () => jsonRes(200, state.listLabs()),
 
   get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get: async (
     context: OperationContext,
   ) => {
     const id = context.params.lab_test_id ?? ""
-    const test = labTestById(id)
+    const test = state.labTestById(id)
     if (!test) notFound("Lab test does not exist")
-    const expected = expectedResultsFor(id)
+    const expected = state.expectedResultsFor(id)
     const markers = (test.markers ?? []).map((marker) => ({
       ...marker,
       expected_results: expected,
@@ -682,7 +684,7 @@ export const orderHandlers = (state: JunctionState) => ({
       .filter((marker) => providerId === null || marker.provider_id === providerId)
       .map((marker) => ({
         ...marker,
-        expected_results: expectedResultsFor(order.lab_test.id),
+        expected_results: state.expectedResultsFor(order.lab_test.id),
       }))
     return jsonRes(200, paginateMarkers(context.query, markers))
   },
@@ -737,7 +739,7 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     if (body.collection_method === "testkit")
       throw new HttpError(400, { detail: "Cannot set collection_method to TESTKIT" })
-    const aoeError = aoeValidationError(body)
+    const aoeError = aoeValidationError(state, body)
     if (aoeError) throw new HttpError(400, { detail: aoeError })
     const rawOrderSet = body.order_set
     if (rawOrderSet === undefined && body.lab_test_id === undefined) {
@@ -755,7 +757,7 @@ export const orderHandlers = (state: JunctionState) => ({
     const details = body.patient_details as Record<string, unknown>
     const address = body.patient_address as Record<string, unknown>
     const labTestIds = (body.order_set as Record<string, unknown>).lab_test_ids as string[]
-    const labTests = labTestIds.map((id) => labTestById(id))
+    const labTests = labTestIds.map((id) => state.labTestById(id))
     if (labTests.some((test) => test === undefined))
       throw new HttpError(422, {
         detail: labTests.flatMap((test, index) =>

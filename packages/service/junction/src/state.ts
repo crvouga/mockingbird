@@ -1,9 +1,39 @@
 import { Collection, IdSequence, opaqueToken } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import type { LabTestRecord } from "./catalog.js"
+import {
+  EXPECTED_RESULTS,
+  type ExpectedResult,
+  type LabTestRecord,
+  LAB_TEST_CATALOG,
+  TEAM_LABS,
+} from "./catalog.js"
 
 export type { CatalogMarker, ExpectedResult, LabTestRecord } from "./catalog.js"
 export { expectedResultsFor, LAB_TEST_CATALOG, labTestById, TEAM_LABS } from "./catalog.js"
+
+export type GetCacheEntry = {
+  status: number
+  headers: Record<string, string>
+  body: unknown
+}
+
+const sortedQueryString = (params: URLSearchParams): string => {
+  const entries = [...params.entries()].sort(([left], [right]) => left.localeCompare(right))
+  return new URLSearchParams(entries).toString()
+}
+
+export const observationCacheKey = (
+  url: URL | string,
+  method = "GET",
+  body?: unknown,
+): string => {
+  const parsed = typeof url === "string" ? new URL(url, "https://observation.local") : url
+  const query = sortedQueryString(parsed.searchParams)
+  const pathAndQuery = `${parsed.pathname}${query ? `?${query}` : ""}`
+  const head = `${method.toUpperCase()} ${pathAndQuery}`
+  if (body === undefined) return head
+  return `${head} ${JSON.stringify(body)}`
+}
 
 export type UserInfoRecord = Record<string, unknown>
 
@@ -234,6 +264,11 @@ export class JunctionState {
   readonly webhookEvents: Collection<WebhookEventRecord>
   readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
 
+  readonly labTests: Collection<LabTestRecord>
+  readonly labs: Collection<Record<string, unknown>>
+  readonly expectedResults: Collection<ExpectedResult[]>
+  readonly getCache: Collection<GetCacheEntry>
+
   constructor(
     sqlite: SqliteClient,
     namespace: string,
@@ -262,22 +297,146 @@ export class JunctionState {
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
     this.webhookEvents = new Collection(sqlite, namespace, "webhook_events")
     this.webhookDeliveryAttempts = new Collection(sqlite, namespace, "webhook_delivery_attempts")
+    this.labTests = new Collection(sqlite, namespace, "lab_tests")
+    this.labs = new Collection(sqlite, namespace, "labs")
+    this.expectedResults = new Collection(sqlite, namespace, "expected_results")
+    this.getCache = new Collection(sqlite, namespace, "get_cache")
     this.ids = new IdSequence(sqlite, namespace, "junction")
+    this.seedDefaultCatalog()
+  }
+
+  seedDefaultCatalog(): void {
+    this.replaceCatalog({
+      labTests: [...LAB_TEST_CATALOG],
+      labs: [...TEAM_LABS],
+      expectedResults: Object.fromEntries(
+        Object.entries(EXPECTED_RESULTS).map(([id, results]) => [id, [...results]]),
+      ),
+    })
+  }
+
+  private clearCollection<T>(collection: Collection<T>): void {
+    for (const entry of collection.list()) collection.delete(entry.id)
+  }
+
+  labKeyOf(lab: Record<string, unknown>): string {
+    if (lab.id !== undefined && lab.id !== null) return String(lab.id)
+    if (typeof lab.slug === "string" && lab.slug.length > 0) return lab.slug
+    return opaqueToken(`junction:lab:${JSON.stringify(lab)}`, 16)
+  }
+
+  labTestById(id: string): LabTestRecord | undefined {
+    return this.labTests.get(id)
+  }
+
+  listLabTests(): LabTestRecord[] {
+    return this.labTests.list({ order: "oldest" }).map((entry) => entry.value)
+  }
+
+  listLabs(): Record<string, unknown>[] {
+    return this.labs.list({ order: "oldest" }).map((entry) => entry.value)
+  }
+
+  expectedResultsFor(labTestId: string): ExpectedResult[] {
+    return this.expectedResults.get(labTestId) ?? []
+  }
+
+  replaceCatalog(input: {
+    labTests: readonly LabTestRecord[]
+    labs: readonly Record<string, unknown>[]
+    expectedResults: Readonly<Record<string, readonly ExpectedResult[]>>
+  }): void {
+    this.clearCollection(this.labTests)
+    this.clearCollection(this.labs)
+    this.clearCollection(this.expectedResults)
+    for (const test of input.labTests) this.labTests.insert(test.id, clone(test))
+    for (const lab of input.labs) this.labs.insert(this.labKeyOf(lab), clone(lab))
+    for (const [labTestId, results] of Object.entries(input.expectedResults)) {
+      this.expectedResults.insert(labTestId, clone([...results]))
+    }
+  }
+
+  putGetCache(key: string, entry: GetCacheEntry): void {
+    this.getCache.insert(key, clone(entry))
+  }
+
+  getGetCache(key: string): GetCacheEntry | undefined {
+    const entry = this.getCache.get(key)
+    return entry ? clone(entry) : undefined
+  }
+
+  installGetCache(entries: Iterable<[string, GetCacheEntry]>): void {
+    for (const [key, entry] of entries) this.putGetCache(key, entry)
+  }
+
+  cacheKeyForRequest(
+    method: string,
+    pathname: string,
+    searchParams?: URLSearchParams | string | Record<string, string> | null,
+    body?: unknown,
+  ): string {
+    const params = new URLSearchParams()
+    if (searchParams instanceof URLSearchParams) {
+      for (const [key, value] of searchParams.entries()) params.append(key, value)
+    } else if (typeof searchParams === "string") {
+      const raw = searchParams.startsWith("?") ? searchParams.slice(1) : searchParams
+      for (const [key, value] of new URLSearchParams(raw).entries()) params.append(key, value)
+    } else if (searchParams && typeof searchParams === "object") {
+      for (const [key, value] of Object.entries(searchParams)) params.append(key, value)
+    }
+    const query = sortedQueryString(params)
+    const url = `https://observation.local${pathname}${query ? `?${query}` : ""}`
+    return observationCacheKey(url, method, body)
+  }
+
+  insertUser(user: UserRecord): void {
+    this.users.insert(user.user_id, clone(user))
+    this.byClientId.insert(user.client_user_id, { user_id: user.user_id })
+  }
+
+  insertOrder(order: OrderRecord): void {
+    this.orders.insert(order.id, clone(order))
+    const transactionId = order.order_transaction?.id
+    if (typeof transactionId === "string" && transactionId.length > 0) {
+      this.orderByTransaction.insert(transactionId, { order_id: order.id })
+    }
+  }
+
+  insertAppointment(appointment: AppointmentRecord): void {
+    this.appointments.insert(appointment.id, clone(appointment))
+    this.appointmentsByOrder.insert(appointment.order_id, { appointment_id: appointment.id })
   }
 
   nextUserId(): string {
+    for (let attempt = 0; attempt < 64; attempt += 1) {
+      const token = this.ids.next("usr_")
+      const id = deterministicUuid(`junction:user:${token}`)
+      if (!this.users.has(id) && !this.deletedUsers.has(id)) return id
+    }
     const token = this.ids.next("usr_")
-    return deterministicUuid(`junction:user:${token}`)
+    return deterministicUuid(`junction:user:post-seed:${token}:${this.users.list().length}`)
   }
 
   nextOrderId(): string {
+    for (let attempt = 0; attempt < 64; attempt += 1) {
+      const token = this.ids.next("ord_")
+      const id = deterministicUuid(`junction:order:${token}`)
+      if (!this.orders.has(id)) return id
+    }
     const token = this.ids.next("ord_")
-    return deterministicUuid(`junction:order:${token}`)
+    return deterministicUuid(`junction:order:post-seed:${token}:${this.orders.list().length}`)
   }
 
   nextAppointmentId(): string {
+    for (let attempt = 0; attempt < 64; attempt += 1) {
+      const token = this.ids.next("apt_")
+      const id = deterministicUuid(`junction:appointment:${token}`)
+      if (!this.appointments.has(id)) return id
+    }
     const token = this.ids.next("apt_")
-    return deterministicUuid(`junction:appointment:${token}`)
+    return deterministicUuid(
+      `junction:appointment:post-seed:${token}:${this.appointments.list().length}`,
+    )
   }
 
   bookingKeyFor(input: string): string {

@@ -4,22 +4,28 @@ import { join } from "node:path"
 import type { Scope } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
-import { parity } from "@crvouga/mockingbird-parity"
+import { parity, seedParity } from "@crvouga/mockingbird-parity"
 import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import { document, JunctionAPI } from "../src/index.js"
 import { PARITY_SEEDS } from "../src/seeds.js"
 
-/** Docs: https://docs.junction.com/api-details/junction-api */
-const JUNCTION_HOST = "api.sandbox.us.junction.com"
+/** Docs: https://docs.junction.com/api-details/junction-api — Geviti QA uses tryvital.io */
+const DEFAULT_JUNCTION_HOST = "api.sandbox.tryvital.io"
 const FAILURE_STATE_DIR = ".parity-artifacts/junction"
 const LAST_FAILED_SEED_PATH = `${FAILURE_STATE_DIR}/last-failed-seed`
 const FAILURE_REGISTRY_PATH = join(import.meta.dir, "../../../../PARITY_FAILURE_SEED_REGISTRY.json")
 const TEST_KEY_PREFIXES = ["sk_us_", "sk_eu_"]
 const DEFAULT_MIN_INTERVAL_MS = 50
+const DEFAULT_WARMUP = 15
+
+type ParityMode = "seed" | "empty"
 
 type ParityCLIOptions = {
   runs?: number
   steps?: number
+  warmup?: number
+  compare?: number
+  mode: ParityMode
 }
 
 const parsePositiveInteger = (value: string, name: string): number => {
@@ -31,18 +37,36 @@ const parsePositiveInteger = (value: string, name: string): number => {
 }
 
 const parseCLIOptions = (args: readonly string[]): ParityCLIOptions => {
-  const options: ParityCLIOptions = {}
+  const options: ParityCLIOptions = { mode: "seed" }
   for (let index = 0; index < args.length; index += 1) {
-    const flag = args[index]
-    if (flag !== "--runs" && flag !== "--steps") {
-      throw new Error(`unknown parity option ${flag ?? ""}`)
+    const raw = args[index] ?? ""
+    const eq = raw.indexOf("=")
+    const flag = eq >= 0 ? raw.slice(0, eq) : raw
+    const inline = eq >= 0 ? raw.slice(eq + 1) : undefined
+    if (flag === "--mode") {
+      const value = inline ?? args[index + 1]
+      if (inline === undefined) index += 1
+      if (value !== "seed" && value !== "empty")
+        throw new Error(`--mode must be seed or empty, got ${value ?? ""}`)
+      options.mode = value
+      continue
     }
-    const value = args[index + 1]
+    if (
+      flag !== "--runs" &&
+      flag !== "--steps" &&
+      flag !== "--warmup" &&
+      flag !== "--compare"
+    ) {
+      throw new Error(`unknown parity option ${flag}`)
+    }
+    const value = inline ?? args[index + 1]
+    if (inline === undefined) index += 1
     if (value === undefined) throw new Error(`${flag} requires a value`)
     const parsed = parsePositiveInteger(value, flag)
     if (flag === "--runs") options.runs = parsed
-    else options.steps = parsed
-    index += 1
+    else if (flag === "--steps") options.steps = parsed
+    else if (flag === "--warmup") options.warmup = parsed
+    else options.compare = parsed
   }
   return options
 }
@@ -70,7 +94,7 @@ if (!TEST_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))) {
   process.exit(2)
 }
 
-const baseUrl = Bun.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? `https://${JUNCTION_HOST}`
+const baseUrl = Bun.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? `https://${DEFAULT_JUNCTION_HOST}`
 const webhookReceiverUrl = Bun.env.MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL?.replace(/\/$/, "")
 const webhookParity =
   webhookReceiverUrl === undefined
@@ -126,6 +150,86 @@ const clearSandboxUsers = async () => {
   }
 }
 
+/** Ops with parity.enabled=false that seedParity still exercises after observation seeding. */
+const QA_FORCE_INCLUDE = [
+  "get_area_info_v3_order_area_info_get",
+  "get_psc_info_v3_order_psc_info_get",
+  "get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post",
+  "get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get",
+  "book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post",
+  "get_result_raw_v3_order__order_id__result_get",
+] as const
+
+const QA_WEIGHTED_OPS = [
+  "create_user_v2_user_post",
+  "get_teams_users_v2_user_get",
+  "get_user_v2_user__user_id__get",
+  "delete_user_v2_user__user_id__delete",
+  "patch_user_v2_user__user_id__patch",
+  "get_user_by_client_user_id_v2_user_resolve__client_user_id__get",
+  "patch_user_info_v2_user__user_id__info_patch",
+  "get_latest_user_info_user_v2_user__user_id__info_latest_get",
+  "get_paginated_lab_tests_for_team_v3_lab_test_get",
+  "get_lab_test_for_team_v3_lab_tests__lab_test_id__get",
+  "get_labs_v3_lab_tests_labs_get",
+  "get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get",
+  "list_order_set_markers_v3_lab_tests_list_order_set_markers_post",
+  "create_order_v3_order_post",
+  "get_order_v3_order__order_id__get",
+  "cancel_order_v3_order__order_id__cancel_post",
+  "simulate_order_v3_order__order_id__test_post",
+  "get_result_metadata_v3_order__order_id__result_metadata_get",
+  "get_result_raw_v3_order__order_id__result_get",
+  "get_orders_v3_orders_get",
+  "get_area_info_v3_order_area_info_get",
+  "get_psc_info_v3_order_psc_info_get",
+  "get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post",
+  "get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get",
+  "book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post",
+  "get_phlebotomy_appointment_cancellation_reason_v3_order_phlebotomy_appointment_cancellation_reasons_get",
+  "get_psc_appointment_cancellation_reason_v3_order_psc_appointment_cancellation_reasons_get",
+] as const
+
+const QA_WEIGHTS: Record<string, number> = {
+  create_user_v2_user_post: 3,
+  create_order_v3_order_post: 4,
+  get_order_v3_order__order_id__get: 3,
+  get_area_info_v3_order_area_info_get: 4,
+  get_psc_info_v3_order_psc_info_get: 4,
+  simulate_order_v3_order__order_id__test_post: 3,
+  get_orders_v3_orders_get: 2,
+  delete_user_v2_user__user_id__delete: 2,
+  cancel_order_v3_order__order_id__cancel_post: 2,
+  get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post: 3,
+  book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post: 3,
+  get_result_raw_v3_order__order_id__result_get: 2,
+}
+
+const cleanup = async ({
+  table,
+  real,
+  scope,
+}: {
+  table: { all: () => Array<{ type: string; ids: { real?: string } }> }
+  real: { fetch: (request: Request) => Promise<Response>; baseUrl: string }
+  scope: Scope
+}) => {
+  for (const resource of table.all()) {
+    const id = resource.ids.real
+    if (id === undefined) continue
+    if (resource.type === "user") {
+      await real.fetch(
+        new Request(`${real.baseUrl}/v2/user/${id}`, {
+          method: "DELETE",
+          headers: { ...authHeaders, "x-mockingbird-scope": scope.runId },
+        }),
+      )
+      await Bun.sleep(DEFAULT_MIN_INTERVAL_MS)
+    }
+  }
+  await clearSandboxUsers()
+}
+
 const runSeed = async (seed: number | undefined) => {
   try {
     if (webhookReceiverUrl) {
@@ -135,45 +239,21 @@ const runSeed = async (seed: number | undefined) => {
         "junction webhook parity: skipped; configure MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL with a deployed receiver URL, then register the webhook URL in the Junction sandbox dashboard using `bun run webhook:register`",
       )
     }
+    console.log(`junction parity mode=${cliOptions.mode} oracle=${baseUrl}`)
     await clearSandboxUsers()
-    // Let the sandbox recover from the wipe before the first walk hits create_user.
     await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * 4)
-    await parity({
+
+    const shared = {
       provider: "junction",
       spec: document,
       env: Bun.env,
       numRuns: cliOptions.runs ?? DEFAULT_PROPERTY_RUNS,
       maxCommands: cliOptions.steps ?? DEFAULT_PARITY_STEPS,
-      // In-process mock can spike above a fast sandbox RTT (SQLite/event-loop jitter).
       latencyToleranceMs: 500,
-      // Tiered parity: only deterministic operations run in the differential walker.
-      // Availability/booking/results/pdf/transactions are non-deterministic on the real
-      // side (external provider state, signed URLs, async result processing) and are
-      // covered by the scenario scripts (client-parity-live) instead.
-      only: [
-        "create_user_v2_user_post",
-        "get_teams_users_v2_user_get",
-        "get_user_v2_user__user_id__get",
-        "delete_user_v2_user__user_id__delete",
-        "patch_user_v2_user__user_id__patch",
-        "get_user_by_client_user_id_v2_user_resolve__client_user_id__get",
-        "patch_user_info_v2_user__user_id__info_patch",
-        "get_latest_user_info_user_v2_user__user_id__info_latest_get",
-        "get_paginated_lab_tests_for_team_v3_lab_test_get",
-        "get_lab_test_for_team_v3_lab_tests__lab_test_id__get",
-        "get_labs_v3_lab_tests_labs_get",
-        "get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get",
-        "create_order_v3_order_post",
-        "get_order_v3_order__order_id__get",
-        "cancel_order_v3_order__order_id__cancel_post",
-        "simulate_order_v3_order__order_id__test_post",
-        "get_result_metadata_v3_order__order_id__result_metadata_get",
-        "get_orders_v3_orders_get",
-        "get_area_info_v3_order_area_info_get",
-        "get_psc_info_v3_order_psc_info_get",
-        "get_phlebotomy_appointment_cancellation_reason_v3_order_phlebotomy_appointment_cancellation_reasons_get",
-        "get_psc_appointment_cancellation_reason_v3_order_psc_appointment_cancellation_reasons_get",
-      ],
+      only: [...QA_WEIGHTED_OPS],
+      forceInclude: [...QA_FORCE_INCLUDE],
+      weights: QA_WEIGHTS,
+      coverageBias: 5,
       real: {
         baseUrl,
         allowedHosts: [new URL(baseUrl).host],
@@ -190,27 +270,30 @@ const runSeed = async (seed: number | undefined) => {
       ...(webhookParity === undefined ? {} : { webhooks: webhookParity }),
       redact: createRedactor(credentials.secrets),
       shrink: false,
-      cleanup: async ({ table, real, scope }) => {
-        for (const resource of table.all()) {
-          const id = resource.ids.real
-          if (id === undefined) continue
-          if (resource.type === "user") {
-            await real.fetch(
-              new Request(`${real.baseUrl}/v2/user/${id}`, {
-                method: "DELETE",
-                headers: { ...authHeaders, "x-mockingbird-scope": scope.runId },
-              }),
-            )
-            await Bun.sleep(DEFAULT_MIN_INTERVAL_MS)
-          }
-        }
-        // Sweep orphans left when a prior walk's create succeeded on real but never
-        // entered the resource table (or a delete was lost), which otherwise pollutes
-        // get_teams_users totals on later walks.
-        await clearSandboxUsers()
-      },
+      cleanup,
       ...(seed === undefined ? {} : { seed }),
-    })
+    }
+
+    if (cliOptions.mode === "empty") {
+      await parity(shared)
+    } else {
+      await seedParity({
+        ...shared,
+        warmupCommands: cliOptions.warmup ?? DEFAULT_WARMUP,
+        compareCommands: cliOptions.compare ?? cliOptions.steps ?? DEFAULT_PARITY_STEPS,
+        seedMock: async ({ mock, real, getCache }) => {
+          const api = mock as JunctionAPI
+          await api.seedFrom(
+            {
+              fetch: (request) => real.fetch(request),
+              baseUrl: real.baseUrl,
+              headers: await real.headers(),
+            },
+            { getCache },
+          )
+        },
+      })
+    }
     return true
   } catch (error) {
     console.error(`\n${error instanceof Error ? error.message : String(error)}`)

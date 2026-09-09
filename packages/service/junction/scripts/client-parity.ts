@@ -93,6 +93,9 @@ export type SchedulingScenarioResult = {
 }
 
 /**
+ * DEPRECATED AS PROOF — use `bun run parity` (seedParity) and docs/qa-drop-in.md instead.
+ * Kept as a manual SDK probe only.
+ *
  * Full lab-testing + scheduling scenario executed through the Vital SDK client:
  * user creation, catalog, serviceability, order lifecycle, appointment lifecycle,
  * and results. Booking itself is excluded (real-side slots are provider-owned), but

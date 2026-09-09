@@ -14,6 +14,28 @@ import type {
   JunctionState,
 } from "./state.js"
 
+const cachedResponse = (state: JunctionState, context: OperationContext) => {
+  const body =
+    context.request.method.toUpperCase() === "GET" || context.request.method.toUpperCase() === "HEAD"
+      ? undefined
+      : context.body.kind === "json"
+        ? context.body.value
+        : context.body.kind === "form"
+          ? context.body.value
+          : undefined
+  const key = state.cacheKeyForRequest(
+    context.request.method,
+    context.url.pathname,
+    context.url.searchParams,
+    body,
+  )
+  const cached = state.getGetCache(key)
+  if (!cached) return undefined
+  const headers = new Headers(cached.headers)
+  if (!headers.has("content-type")) headers.set("content-type", "application/json")
+  return new Response(JSON.stringify(cached.body), { status: cached.status, headers })
+}
+
 const PHLEBOTOMY_PROVIDERS = ["getlabs", "phlebfinders"] as const
 type PhlebotomyProviderName = (typeof PHLEBOTOMY_PROVIDERS)[number]
 
@@ -714,6 +736,8 @@ export const schedulingHandlers = (state: JunctionState) => ({
     async () => jsonRes(200, PSC_CANCELLATION_REASONS),
 
   get_area_info_v3_order_area_info_get: async (context: OperationContext) => {
+    const hit = cachedResponse(state, context)
+    if (hit) return hit
     const rawZip = zipCodeOf(context, true) ?? ""
     const radius = radiusOf(context)
     if (!/^\d{5}(?:-?\d{4})?$/.test(rawZip)) {
@@ -734,6 +758,8 @@ export const schedulingHandlers = (state: JunctionState) => ({
   },
 
   get_psc_info_v3_order_psc_info_get: async (context: OperationContext) => {
+    const hit = cachedResponse(state, context)
+    if (hit) return hit
     const zip = zipCodeOf(context, true) ?? ""
     const labIdRaw = context.query.lab_id
     if (labIdRaw === undefined) {
@@ -845,6 +871,8 @@ export const schedulingHandlers = (state: JunctionState) => ({
   get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post: async (
     context: OperationContext,
   ) => {
+    const hit = cachedResponse(state, context)
+    if (hit) return hit
     const body = jsonObject(context)
     const zip = typeof body.zip_code === "string" ? body.zip_code : ""
     if (!/^\d{5}$/.test(zip)) {
@@ -889,6 +917,8 @@ export const schedulingHandlers = (state: JunctionState) => ({
   get_psc_appointment_availability_v3_order_psc_appointment_availability_post: async (
     context: OperationContext,
   ) => {
+    const hit = cachedResponse(state, context)
+    if (hit) return hit
     const lab = context.query.lab
     if (lab !== "quest") {
       throw new HttpError(422, {

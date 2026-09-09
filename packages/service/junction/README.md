@@ -3,16 +3,9 @@
 Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user, lab-testing,
 and scheduling surfaces.
 
-- API overview / environments / auth: https://docs.junction.com/api-details/junction-api
-- Create user: https://docs.junction.com/api-reference/user/create-user
-- Get user: https://docs.junction.com/api-reference/user/get-user
-- Delete user: https://docs.junction.com/api-reference/user/delete-user
-- Update user: https://docs.junction.com/api-reference/user/update-user
-- Lab tests: https://docs.junction.com/api-reference/lab-tests
-- Orders: https://docs.junction.com/api-reference/order-v3
-- Appointments (phlebotomy): https://docs.junction.com/api-reference/lab-testing/appointments
-- Appointments (PSC): https://docs.junction.com/api-reference/lab-testing/psc-appointments
-- Coverage: [SUPPORT.md](./SUPPORT.md), [docs/geviti-coverage.md](./docs/geviti-coverage.md)
+- Coverage: [SUPPORT.md](./SUPPORT.md), [docs/geviti-coverage.md](./docs/geviti-coverage.md),
+  [docs/qa-drop-in.md](./docs/qa-drop-in.md) (Geviti QA proof matrix)
+- Follow-on Geviti wiring: [docs/geviti-followon.md](./docs/geviti-followon.md)
 
 Auth header: `x-vital-api-key`. Sandbox keys look like `sk_us_*` / `sk_eu_*`.
 
@@ -30,18 +23,31 @@ const created = await junction.fetch(
     body: JSON.stringify({ client_user_id: "app-user-1" }),
   }),
 )
+
+await junction.seedFrom({
+  fetch: globalThis.fetch,
+  baseUrl: "https://api.sandbox.tryvital.io",
+  headers: { "x-vital-api-key": "sk_us_..." },
+})
 ```
 
-Live parity against the sandbox (credentials from env or OpenBao):
+## Parity (monkey proof)
+
+Primary proof is **seedParity**: warmup N on the oracle → `seedFrom` → lockstep M.
 
 ```bash
+# Default mode=seed against api.sandbox.tryvital.io
 bun run parity
-# MOCKINGBIRD_JUNCTION_API_KEY=sk_us_... bun run parity
+bun run parity -- --warmup 15 --compare 30 --runs 25
+
+# Legacy empty-start differential
+bun run parity -- --mode=empty
 ```
 
-Parity is tiered: the differential walker covers deterministic operations
-(users, catalog, orders, simulate, result metadata, serviceability, cancellation reasons);
-availability/booking/results live in the SDK scenario
-(`scripts/client-parity-live.ts`, gated by `JUNCTION_LIVE_PARITY=1`), and the full
-state space (single-use booking keys, expiries, cascades, delayed simulate) is covered by
-the property suites run with `bun test`.
+Offline monkey (no network): `bun test junction.seed.property.test.ts`.
+
+Scheduling state-space (booking keys, cascades, delayed simulate): `bun test`.
+
+Example SDK scenarios (`client-parity*.ts`) are **deprecated as proof** — keep only as
+manual probes. Drop-in for Geviti QA is claimed only when [docs/qa-drop-in.md](./docs/qa-drop-in.md)
+is fully `monkey-green`.

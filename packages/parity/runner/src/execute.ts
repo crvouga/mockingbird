@@ -59,6 +59,41 @@ export type StepOutcome = {
   mockMs: number
 }
 
+/** Outcome of a real-only warmup command, including the request/exchange for observation caching. */
+export type WarmupOutcome = StepOutcome & {
+  request: ConcreteRequest
+  exchange: Exchange
+}
+
+/**
+ * Build an observation cache key from a concretized request.
+ * Format: `${METHOD} ${pathname}?${sortedQuery}` with optional ` ${JSON.stringify(body)}` for POST bodies.
+ */
+export const observationCacheKey = (request: ConcreteRequest, body?: unknown): string => {
+  const params = new URLSearchParams()
+  for (const [name, value] of request.query) params.append(name, value)
+  const sorted = [...params.entries()].sort(([left], [right]) => left.localeCompare(right))
+  const query = new URLSearchParams(sorted).toString()
+  const pathAndQuery = `${request.path}${query ? `?${query}` : ""}`
+  const head = `${request.method.toUpperCase()} ${pathAndQuery}`
+  if (body === undefined) return head
+  return `${head} ${JSON.stringify(body)}`
+}
+
+/** Parse a concrete request body for use as an observation cache key fragment. */
+export const requestBodyForCacheKey = (request: ConcreteRequest): unknown => {
+  if (!request.body) return undefined
+  const contentType = request.body.contentType.toLowerCase()
+  if (contentType.includes("json")) {
+    try {
+      return JSON.parse(request.body.body) as unknown
+    } catch {
+      return request.body.body
+    }
+  }
+  return request.body.body
+}
+
 const toExchange = async (response: Response): Promise<Exchange> => {
   const headers: Record<string, string> = {}
   response.headers.forEach((value, name) => {
@@ -227,5 +262,71 @@ export const executeCommand = async (
     discovered,
     realMs,
     mockMs,
+  }
+}
+
+/**
+ * Run one logical command on the real side only. Discovers identities by pairing the real body
+ * with itself so the resource table registers identical real/mock oracle ids (ready for a later
+ * seed). Does not contact the mock. Throws {@link ParityError} on real transport failure.
+ */
+export const executeWarmupCommand = async (
+  context: ExecutionContext,
+  command: LogicalCommand,
+): Promise<WarmupOutcome> => {
+  const plan = context.plans.get(command.operationId)
+  if (!plan) throw new RangeError(`no plan for operation ${command.operationId}`)
+  const base = {
+    provider: context.provider,
+    operationId: command.operationId,
+    method: plan.operation.method,
+    path: plan.operation.path,
+    command,
+    history: [...context.history],
+  }
+  const request = concretize(
+    command,
+    plan,
+    context.table,
+    "real",
+    context.scope,
+    context.deletedRefProbability,
+  )
+  context.step?.(`${context.provider} warmup ${command.operationId}`)
+
+  const realStartedAt = performance.now()
+  const exchange = await send(
+    context.real,
+    request,
+    (cause) => ({ ...base, kind: "real-transport", request, cause }),
+    context.redact,
+  )
+  const realMs = performance.now() - realStartedAt
+
+  const declared = responseForStatus(plan.operation.responses, exchange.status)
+  const schema = responseSchema(declared, exchange.headers["content-type"])
+
+  let discovered = 0
+  if (exchange.body.kind === "json") {
+    discovered = discoverIdentities(
+      context.document,
+      schema,
+      exchange.body.value,
+      exchange.body.value,
+      context.table,
+    ).length
+  }
+
+  context.trace?.(
+    `${context.provider} warmup ${request.method.toUpperCase()} ${context.redact(request.path)} -> ${exchange.status} (+${discovered})`,
+  )
+  return {
+    operationId: command.operationId,
+    status: exchange.status,
+    discovered,
+    realMs,
+    mockMs: 0,
+    request,
+    exchange,
   }
 }

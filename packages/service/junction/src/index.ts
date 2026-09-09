@@ -15,6 +15,12 @@ import { orderHandlers } from "./orders.js"
 import { resultsHandlers } from "./results.js"
 import { schedulingHandlers } from "./scheduling.js"
 import {
+  type SeedObservations,
+  type SeedReport,
+  type SeedSource,
+  seedFrom as seedStateFrom,
+} from "./seed-from.js"
+import {
   JunctionState,
   type JunctionWebhookEvent,
   type JunctionWebhookOptions,
@@ -24,7 +30,14 @@ import { userHandlers } from "./users.js"
 
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
-export type { JunctionWebhookEvent, JunctionWebhookOptions, WebhookPublisher } from "./state.js"
+export type { SeedObservations, SeedReport, SeedSource } from "./seed-from.js"
+export type {
+  GetCacheEntry,
+  JunctionWebhookEvent,
+  JunctionWebhookOptions,
+  WebhookPublisher,
+} from "./state.js"
+export { observationCacheKey } from "./state.js"
 
 export const JUNCTION_NAMESPACE = "junction"
 
@@ -79,8 +92,13 @@ export class JunctionAPI implements FetchAPI {
     return this.service.fetch(normalizePath(request))
   }
 
-  reset(): Promise<void> {
-    return this.service.reset()
+  async reset(): Promise<void> {
+    await this.service.reset()
+    this.state.seedDefaultCatalog()
+  }
+
+  seedFrom(source: SeedSource, observations?: SeedObservations): Promise<SeedReport> {
+    return seedStateFrom(this.state, source, observations)
   }
 
   webhookEvents(): JunctionWebhookEvent[] {

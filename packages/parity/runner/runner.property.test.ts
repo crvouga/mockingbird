@@ -3,7 +3,7 @@ import { decodeForm } from "@crvouga/mockingbird-http-codec"
 import { type OpenAPIDocument, parseOpenAPIDocument } from "@crvouga/mockingbird-openapi"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
-import { ParityError, parity } from "./src/index.js"
+import { ParityError, parity, seedParity } from "./src/index.js"
 
 const params = fcParameters(process.env)
 
@@ -406,6 +406,40 @@ describe("parity runner", () => {
       { ...params, numRuns: 10 },
     )
   })
+
+  test("seedParity invokes seedMock after warmup (smoke)", async () => {
+    let tick = 1_700_000_000_000
+    const clock = () => (tick += 1000)
+    const real = referenceServer("R", "none", clock)
+    const mock = referenceServer("R", "none", clock)
+    let seedCalls = 0
+
+    const report = await seedParity({
+      provider: "reference",
+      spec,
+      seed: 1,
+      numRuns: 1,
+      warmupCommands: 4,
+      compareCommands: 0,
+      shrink: false,
+      real: {
+        baseUrl: "https://real.reference.local",
+        allowedHosts: ["real.reference.local"],
+        fetch: (r) => real.fetch(r),
+      },
+      mock: { create: () => mock },
+      seedMock: async () => {
+        seedCalls++
+      },
+      clockSkewSeconds: 0,
+      now: clock,
+      sleep: async () => {},
+      log: () => {},
+    })
+
+    expect(report.walks).toBe(1)
+    expect(seedCalls).toBe(1)
+  }, 15_000)
 })
 
 const findParityError = (error: unknown): ParityError | undefined => {

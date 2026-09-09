@@ -84,6 +84,11 @@ export type PlanOptions = {
   includeUnsafe?: boolean
   /** Restrict to these operation ids. */
   only?: readonly string[]
+  /**
+   * Include these supported operation ids even when `parity.enabled` is false.
+   * Used by seedParity so Geviti QA surfaces can be exercised after observation seeding.
+   */
+  forceInclude?: readonly string[]
 }
 
 /** Plans for every operation the differential runner may generate. */
@@ -92,12 +97,15 @@ export const planOperations = (
   options: PlanOptions = {},
 ): OperationPlan[] => {
   const only = options.only ? new Set(options.only) : undefined
+  const forceInclude = options.forceInclude ? new Set(options.forceInclude) : undefined
   const plans: OperationPlan[] = []
   for (const operation of listOperations(document)) {
     if (only && !only.has(operation.operationId)) continue
     const metadata = operationMetadata(operation.operation)
-    if (!metadata.supported || !metadata.parity.enabled) continue
-    if (!metadata.parity.safe && !options.includeUnsafe) continue
+    if (!metadata.supported) continue
+    const forced = forceInclude?.has(operation.operationId) === true
+    if (!metadata.parity.enabled && !forced) continue
+    if (!metadata.parity.safe && !options.includeUnsafe && !forced) continue
     const body = pickBody(operation)
     const produces = new Set<string>()
     for (const response of successResponses(operation)) {

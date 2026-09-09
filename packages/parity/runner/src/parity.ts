@@ -76,6 +76,8 @@ export type ParityOptions = {
   runId?: string
   includeUnsafe?: boolean
   only?: readonly string[]
+  /** Include supported ops even when OpenAPI marks parity.enabled=false (seedParity). */
+  forceInclude?: readonly string[]
   /** Remove real-side resources after each walk. */
   cleanup?: WalkCleanup
   /** Also validate every mock response against the OpenAPI response schema. Default true. */
@@ -227,6 +229,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   const plans = planOperations(options.spec, {
     includeUnsafe: options.includeUnsafe ?? false,
     ...(options.only ? { only: options.only } : {}),
+    ...(options.forceInclude ? { forceInclude: options.forceInclude } : {}),
   })
   if (plans.length === 0)
     throw new Error(`${options.provider}: no parity-enabled operations in spec`)
