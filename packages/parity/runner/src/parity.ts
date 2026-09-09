@@ -102,6 +102,11 @@ export type ParityOptions = {
   /** Stop generating new walks after this many milliseconds; completed walks still count. */
   timeLimitMs?: number
   webhooks?: WebhookParityOptions
+  /**
+   * Milliseconds of mock-side latency tolerated before a latency failure. Useful for
+   * in-process self-parity where both sides race the same scheduler. Default 0.
+   */
+  latencyToleranceMs?: number
 }
 
 export type ParityReport = {
@@ -291,6 +296,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
       deletedRefProbability,
       deletionTypes: options.deletionTypes ?? {},
       validateMock: options.validateMock ?? true,
+      latencyToleranceMs: options.latencyToleranceMs ?? 0,
       step: (line) => log(`  [${String(walkNumber).padStart(width, " ")}/${numRuns}] ${line}`),
       trace: trace ? log : undefined,
     }

@@ -45,6 +45,8 @@ export type ExecutionContext = {
   deletionTypes: Record<string, readonly string[]>
   /** Also validate the mock response body against the OpenAPI response schema. */
   validateMock: boolean
+  /** Milliseconds of mock-side latency tolerated before a latency failure. */
+  latencyToleranceMs: number
   step?: ((line: string) => void) | undefined
   trace?: ((line: string) => void) | undefined
 }
@@ -213,7 +215,7 @@ export const executeCommand = async (
       context.redact,
     )
   }
-  if (mockMs >= realMs) {
+  if (mockMs >= realMs + context.latencyToleranceMs) {
     throw new ParityError({ ...base, kind: "latency", realMs, mockMs }, context.redact)
   }
   context.trace?.(
