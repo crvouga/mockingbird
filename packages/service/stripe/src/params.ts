@@ -167,9 +167,9 @@ export const parseParams = (
     const issues = parsed.issues.filter((item) => topLevelKey(item.path) === key)
     const issue =
       key === "package_dimensions"
-        ? (["height", "length", "width", "weight"] as const)
+        ? ((["width", "height", "length", "weight"] as const)
             .map((field) => issues.find((item) => item.path === `package_dimensions[${field}]`))
-            .find((item) => item !== undefined) ?? issues[0]
+            .find((item) => item !== undefined) ?? issues[0])
         : issues[0]
     if (issue) throw issueToError(issue)
     options.validate?.[key]?.(params)
