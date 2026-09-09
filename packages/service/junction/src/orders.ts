@@ -152,7 +152,7 @@ const phoneError = (loc: string[], value: unknown) => ({
 const isUuid = (value: string): boolean =>
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 
-const uuidError = (value: string, index?: number) => {
+const uuidError = (value: string, index?: number, loc?: string[]) => {
   const characters = Array.from(value)
   const invalidIndex = characters.findIndex((character) => !/^[0-9a-f-]$/i.test(character))
   const error =
@@ -162,9 +162,10 @@ const uuidError = (value: string, index?: number) => {
   return {
     type: "uuid_parsing",
     loc:
-      index === undefined
+      loc ??
+      (index === undefined
         ? ["body", "lab_account_id"]
-        : ["body", "order_set", "lab_test_ids", index],
+        : ["body", "order_set", "lab_test_ids", index]),
     msg: `Input should be a valid UUID, ${error}`,
     input: value,
     ctx: { error },
@@ -269,7 +270,15 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
         !isValidName(p[field] as string)
       )
         errors.push(nameError(field, p[field]))
-      else if (field === "dob") {
+      else if (field === "email" && (p[field] as string) === "") {
+        errors.push({
+          type: "value_error",
+          loc: ["body", "patient_details", "email"],
+          msg: "value is not a valid email address: An email address must have an @-sign.",
+          input: p[field],
+          ctx: { reason: "An email address must have an @-sign." },
+        })
+      } else if (field === "dob") {
         const dob = p[field] as string
         if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
           if (new Date(`${dob}T00:00:00Z`).getTime() > Date.now()) {
@@ -344,46 +353,28 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
       errors.push(phoneError(["body", "patient_address", "phone_number"], a.phone_number))
     }
   }
-  const aoeAnswers = body.aoe_answers
-  if (Array.isArray(aoeAnswers) && errors.length === 0) {
-    for (const [index, answer] of aoeAnswers.entries()) {
-      if (typeof answer !== "object" || answer === null || Array.isArray(answer)) continue
-      const record = answer as Record<string, unknown>
-      for (const field of ["marker_id", "question_id", "answer"]) {
-        if (record[field] === undefined)
-          errors.push(missingError(["body", "aoe_answers", index, field], answer))
-      }
-      if (
-        typeof record.marker_id === "number" &&
-        typeof record.question_id === "number" &&
-        typeof record.answer === "string"
-      ) {
-        const question = aoeQuestion(record.marker_id, record.question_id)
-        if (!question) {
-          errors.push({
-            type: "value_error",
-            loc: ["body", "aoe_answers", index],
-            msg: "Value error, Unknown AOE question for marker",
-            input: answer,
-            ctx: { error: {} },
-          })
-        } else if (
-          !question.answers.some(
-            (entry: { code: string; value: string }) => entry.code === record.answer,
-          )
-        ) {
-          errors.push({
-            type: "value_error",
-            loc: ["body", "aoe_answers", index, "answer"],
-            msg: "Value error, Answer is not one of the allowed choices",
-            input: record.answer,
-            ctx: { error: {} },
-          })
-        }
-      }
-    }
-  }
   return errors
+}
+
+const aoeValidationError = (body: Record<string, unknown>): string | undefined => {
+  const answers = body.aoe_answers
+  if (!Array.isArray(answers)) return undefined
+  for (const answer of answers) {
+    if (typeof answer !== "object" || answer === null || Array.isArray(answer)) continue
+    const record = answer as Record<string, unknown>
+    if (typeof record.marker_id !== "number") continue
+    const marker = LAB_TEST_CATALOG.flatMap((test) => test.markers ?? []).find(
+      (entry) => entry.id === record.marker_id,
+    )
+    if (!marker?.aoe) return `Marker id ${record.marker_id} does not have AOE.`
+    const question = aoeQuestion(record.marker_id, record.question_id as number)
+    if (!question)
+      return `Invalid question_id ${String(record.question_id)} for marker id ${record.marker_id}.`
+    const answerCode = typeof record.answer === "string" ? record.answer.toUpperCase() : ""
+    if (!question.answers.some((entry) => entry.code === answerCode))
+      return `Invalid answer ${answerCode} for question ${question.value}.`
+  }
+  return undefined
 }
 
 const METHOD_DETAILS = (method: string, id: string, at: string) => {
@@ -394,8 +385,9 @@ const METHOD_DETAILS = (method: string, id: string, at: string) => {
         data: { id, shipment: null, created_at: at, updated_at: at },
       }
     case "walk_in_test":
+    case "on_site_collection":
       return {
-        type: "walk_in_test",
+        type: method,
         data: { id, appointment_id: null, created_at: at, updated_at: at },
       }
     default:
@@ -407,6 +399,72 @@ const METHOD_DETAILS = (method: string, id: string, at: string) => {
 }
 
 const PHYSICIAN = { first_name: "Leo", last_name: "Damasco", npi: "1134326366" }
+const FINAL_STATUSES = [
+  "received.walk_in_test.ordered",
+  "received.walk_in_test.requisition_created",
+  "received.walk_in_test.requisition_bypassed",
+  "completed.walk_in_test.completed",
+  "sample_with_lab.walk_in_test.partial_results",
+  "failed.walk_in_test.sample_error",
+  "cancelled.walk_in_test.cancelled",
+  "collecting_sample.walk_in_test.appointment_pending",
+  "collecting_sample.walk_in_test.appointment_scheduled",
+  "collecting_sample.walk_in_test.appointment_cancelled",
+  "collecting_sample.walk_in_test.redraw_available",
+  "received.at_home_phlebotomy.ordered",
+  "received.at_home_phlebotomy.requisition_created",
+  "received.at_home_phlebotomy.requisition_bypassed",
+  "collecting_sample.at_home_phlebotomy.appointment_pending",
+  "collecting_sample.at_home_phlebotomy.appointment_scheduled",
+  "collecting_sample.at_home_phlebotomy.draw_completed",
+  "collecting_sample.at_home_phlebotomy.appointment_cancelled",
+  "completed.at_home_phlebotomy.completed",
+  "sample_with_lab.at_home_phlebotomy.partial_results",
+  "cancelled.at_home_phlebotomy.cancelled",
+  "failed.at_home_phlebotomy.sample_error",
+  "received.testkit.ordered",
+  "received.testkit.awaiting_registration",
+  "received.testkit.requisition_created",
+  "received.testkit.requisition_bypassed",
+  "received.testkit.registered",
+  "collecting_sample.testkit.transit_customer",
+  "collecting_sample.testkit.out_for_delivery",
+  "collecting_sample.testkit.with_customer",
+  "collecting_sample.testkit.transit_lab",
+  "sample_with_lab.testkit.delivered_to_lab",
+  "sample_with_lab.testkit.lab_processing_blocked",
+  "completed.testkit.completed",
+  "failed.testkit.failure_to_deliver_to_customer",
+  "failed.testkit.failure_to_deliver_to_lab",
+  "failed.testkit.sample_error",
+  "failed.testkit.lost",
+  "cancelled.testkit.cancelled",
+  "cancelled.testkit.do_not_process",
+  "collecting_sample.testkit.problem_in_transit_customer",
+  "collecting_sample.testkit.problem_in_transit_lab",
+  "received.on_site_collection.ordered",
+  "received.on_site_collection.requisition_created",
+  "received.on_site_collection.requisition_bypassed",
+  "sample_with_lab.on_site_collection.draw_completed",
+  "completed.on_site_collection.completed",
+  "cancelled.on_site_collection.cancelled",
+  "sample_with_lab.on_site_collection.partial_results",
+  "failed.on_site_collection.sample_error",
+  "completed.walk_in_test.corrected",
+  "completed.at_home_phlebotomy.corrected",
+  "completed.on_site_collection.corrected",
+  "completed.testkit.corrected",
+] as const
+
+const finalStatusError = (value: string) => ({
+  type: "enum",
+  loc: ["query", "final_status"],
+  msg: `Input should be ${FINAL_STATUSES.map((status) => `'${status}'`)
+    .join(", ")
+    .replace(/, ([^,]*)$/, " or $1")}`,
+  input: value,
+  ctx: { expected: FINAL_STATUSES.map((status) => `'${status}'`).join(", ") },
+})
 
 export const orderHandlers = (state: JunctionState) => ({
   get_paginated_lab_tests_for_team_v3_lab_test_get: async () =>
@@ -439,6 +497,19 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     const errors = orderValidation(body)
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
+    const rawAddress = body.patient_address
+    if (
+      typeof rawAddress === "object" &&
+      rawAddress !== null &&
+      !Array.isArray(rawAddress) &&
+      typeof (rawAddress as Record<string, unknown>).country === "string" &&
+      /[^A-Za-z ]/.test((rawAddress as Record<string, string>).country ?? "")
+    ) {
+      return new Response("Internal Server Error", {
+        status: 500,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      })
+    }
     const userId = body.user_id
     if (typeof userId !== "string") throw new HttpError(422, { detail: "user_id must be a string" })
     if (!state.users.has(userId) && !state.deletedUsers.has(userId))
@@ -447,6 +518,10 @@ export const orderHandlers = (state: JunctionState) => ({
     if (typeof phone === "string" && /^\+1\d{10}$/.test(phone) && phone.slice(2, 5) === "555") {
       throw new HttpError(400, { detail: "Phone number is not correct" })
     }
+    if (body.collection_method === "testkit")
+      throw new HttpError(400, { detail: "Cannot set collection_method to TESTKIT" })
+    const aoeError = aoeValidationError(body)
+    if (aoeError) throw new HttpError(400, { detail: aoeError })
     const details = body.patient_details as Record<string, unknown>
     const address = body.patient_address as Record<string, unknown>
     const labTestIds = (body.order_set as Record<string, unknown>).lab_test_ids as string[]
@@ -575,11 +650,17 @@ export const orderHandlers = (state: JunctionState) => ({
 
   simulate_order_v3_order__order_id__test_post: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
+    const finalStatus = context.query.final_status
+    if (!isUuid(id))
+      throw new HttpError(422, { detail: [uuidError(id, undefined, ["path", "order_id"])] })
     const order = state.orders.get(id)
     if (!order) notFound("Order doesn't exist")
-    const finalStatus = context.query.final_status
-    if (typeof finalStatus !== "string" || finalStatus.length === 0)
-      throw new HttpError(422, { detail: "final_status is required" })
+    if (
+      typeof finalStatus !== "string" ||
+      !FINAL_STATUSES.includes(finalStatus as (typeof FINAL_STATUSES)[number])
+    )
+      throw new HttpError(422, { detail: [finalStatusError(String(finalStatus ?? ""))] })
+    if (!order) notFound("Order doesn't exist")
     const now = state.isoNow(context.now)
     const lowLevelStatus = finalStatus.split(".").at(-1) ?? finalStatus
     const event = {
@@ -588,7 +669,7 @@ export const orderHandlers = (state: JunctionState) => ({
       status: finalStatus,
       status_detail: null,
     }
-    order.status = finalStatus.split(".")[0] ?? finalStatus
+    order.status = finalStatus
     order.updated_at = now
     order.events.push(event)
     order.last_event = event

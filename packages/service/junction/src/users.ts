@@ -70,6 +70,8 @@ const isValidIanaTimezone = (value: string): boolean => {
   }
 }
 
+const isValidPhone = (value: string): boolean => /^\+\d{10,15}$/.test(value)
+
 const isValidDate = (value: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
   const [year, month, day] = value.split("-").map(Number)
@@ -96,7 +98,7 @@ const missingError = (path: string, input: unknown) => ({
 
 const dateError = (path: string, value: unknown) => {
   const input = String(value)
-  if (input === "" || input.length < 4) {
+  if (input.length <= 7) {
     return {
       type: "date_from_datetime_parsing",
       loc: ["body", ...path.split(".")],
@@ -119,21 +121,24 @@ const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
   const required =
     body.address !== undefined ||
     body.first_name === null ||
+    body.first_name === "" ||
     body.last_name === null ||
+    body.last_name === "" ||
     body.email === null ||
     (typeof body.email === "string" && (body.email === "" || !body.email.includes("@"))) ||
     body.phone_number === null ||
     body.gender === null ||
     (body.dob !== undefined &&
       (body.dob === null || (typeof body.dob === "string" && !isValidDate(body.dob))))
-  const pushString = (field: string, value: unknown) => {
-    if (required && value === undefined) errors.push(missingError(field, body))
+  const pushString = (field: string, value: unknown, isRequired = required) => {
+    if (isRequired && value === undefined) errors.push(missingError(field, body))
     else if (value !== undefined && typeof value !== "string")
       errors.push(stringError(field, value))
   }
-  pushString("first_name", body.first_name)
+  pushString("first_name", body.first_name, body.last_name !== undefined)
   pushString("last_name", body.last_name)
-  if (required && body.email === undefined) errors.push(missingError("email", body))
+  if (body.last_name !== undefined && body.email === undefined)
+    errors.push(missingError("email", body))
   else if (body.email !== undefined && typeof body.email !== "string")
     errors.push(stringError("email", body.email))
   else if (typeof body.email === "string" && (body.email === "" || !body.email.includes("@"))) {
@@ -157,6 +162,14 @@ const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
     errors.push(missingError("phone_number", body))
   else if (body.phone_number !== undefined && typeof body.phone_number !== "string")
     errors.push(stringError("phone_number", body.phone_number))
+  else if (typeof body.phone_number === "string" && !isValidPhone(body.phone_number))
+    errors.push({
+      type: "value_error",
+      loc: ["body", "phone_number"],
+      msg: `Value error, Invalid phone number: ${body.phone_number}`,
+      input: body.phone_number,
+      ctx: { error: {} },
+    })
   if (required && body.gender === undefined) errors.push(missingError("gender", body))
   else if (body.gender !== undefined && typeof body.gender !== "string")
     errors.push(stringError("gender", body.gender))
@@ -427,7 +440,7 @@ export const userHandlers = (state: JunctionState) => ({
   get_teams_users_v2_user_get: async (context: OperationContext) => {
     const offset = queryInt(context, "offset", 0)
     const limit = queryInt(context, "limit", 100)
-    if (offset < 0 || limit < 1 || limit > 500) {
+    if (offset < 0 || limit < 0 || limit > 500) {
       throw new HttpError(500, "Internal Server Error", { "content-type": "text/plain" })
     }
     return jsonRes(200, listUsers(state, offset, limit))

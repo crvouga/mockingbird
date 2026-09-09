@@ -156,13 +156,21 @@ export const parseParams = (
   const unknown = parsed.issues.find((issue) => issue.kind === "unknown")
   if (unknown) throw issueToError(unknown)
   const params = (parsed.value ?? {}) as Params
+  if (Array.isArray(params.preferred_locales) && params.preferred_locales.length === 0)
+    delete params.preferred_locales
   const declared = Object.keys(schema.properties ?? {})
   const order = [
     ...(options.order ?? []),
     ...declared.filter((key) => !(options.order ?? []).includes(key)),
   ]
   for (const key of order) {
-    const issue = parsed.issues.find((item) => topLevelKey(item.path) === key)
+    const issues = parsed.issues.filter((item) => topLevelKey(item.path) === key)
+    const issue =
+      key === "package_dimensions"
+        ? (["height", "length", "width", "weight"] as const)
+            .map((field) => issues.find((item) => item.path === `package_dimensions[${field}]`))
+            .find((item) => item !== undefined) ?? issues[0]
+        : issues[0]
     if (issue) throw issueToError(issue)
     options.validate?.[key]?.(params)
   }
@@ -190,6 +198,13 @@ const querySchema = (context: OperationContext): SchemaObject => {
 export const bodyParams = (context: OperationContext, options: ParamOptions = {}): Params => {
   const body = context.body
   const raw = body.kind === "form" ? (body.value as FormValue) : {}
+  if (
+    typeof raw === "object" &&
+    raw !== null &&
+    !Array.isArray(raw) &&
+    raw.preferred_locales === ""
+  )
+    delete raw.preferred_locales
   return parseParams(formBodySchema(context), raw, options)
 }
 

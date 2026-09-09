@@ -34,8 +34,14 @@
     {
       "provider": "junction",
       "seed": 2058813869,
-      "status": "unfixed",
-      "failure": "✗ junction parity FAILED (seed 2058813869, FC_SEED=2058813869 to replay)"
+      "status": "fixed",
+      "failure": "Junction validation and parity latency mismatch"
+    },
+    {
+      "provider": "junction",
+      "seed": 2061032686,
+      "status": "fixed",
+      "failure": "simulate order validation mismatch for missing order and invalid patient data"
     }
   ]
 }
