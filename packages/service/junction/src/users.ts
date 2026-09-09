@@ -437,6 +437,21 @@ export const userHandlers = (state: JunctionState) => ({
     return new Response(null, { status: 204 })
   },
 
+  get_latest_user_info_user_v2_user__user_id__info_latest_get: async (
+    context: OperationContext,
+  ) => {
+    const id = context.params.user_id ?? ""
+    if (!isValidUuid(id)) {
+      throw new HttpError(422, {
+        detail: `Invalid format for parameter user_id: error unmarshaling '${id}' text as *uuid.UUID: invalid UUID length: ${id.length}`,
+      })
+    }
+    if (!state.users.has(id)) notFound("User not found")
+    const info = state.userInfo.get(id)
+    if (!info) notFound("No user info found")
+    return jsonRes(200, info)
+  },
+
   get_teams_users_v2_user_get: async (context: OperationContext) => {
     const offset = queryInt(context, "offset", 0)
     const limit = queryInt(context, "limit", 100)

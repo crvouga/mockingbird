@@ -1,0 +1,67 @@
+{
+  "name": "@crvouga/mockingbird-service-medplum",
+  "version": "0.1.0",
+  "description": "Stateful Medplum mock that self-hosts the real Medplum server as a child process on embedded Postgres and Redis, exposed through the Mockingbird FetchAPI contract.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/medplum"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/medplum#readme",
+  "keywords": [
+    "mockingbird",
+    "service",
+    "medplum",
+    "fhir"
+  ],
+  "mockingbird": {
+    "runtime": "node",
+    "layer": "service"
+  },
+  "engines": {
+    "node": ">=22.18.0"
+  },
+  "scripts": {
+    "generate": "mockingbird-codegen",
+    "generate:check": "mockingbird-codegen --check",
+    "openapi:check": "mockingbird-codegen --validate",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-core": "workspace:*",
+    "embedded-postgres": "16.14.0-beta.17",
+    "redis-memory-server": "0.17.1"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@types/bun": "1.4.0",
+    "@types/node": "22.20.1",
+    "fast-check": "4.9.0"
+  }
+}

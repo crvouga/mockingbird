@@ -19,6 +19,15 @@
     "packages/adapters/*",
     "packages/auth/*"
   ],
+  "trustedDependencies": [
+    "embedded-postgres",
+    "@embedded-postgres/darwin-arm64",
+    "@embedded-postgres/darwin-x64",
+    "@embedded-postgres/linux-arm64",
+    "@embedded-postgres/linux-x64",
+    "@embedded-postgres/windows-x64",
+    "redis-memory-server"
+  ],
   "scripts": {
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",

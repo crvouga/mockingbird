@@ -77,10 +77,13 @@ OpenAPI spec
 | [`@crvouga/mockingbird-service-stripe`](packages/service/stripe) | [Stripe](https://docs.stripe.com/api) | [API reference](https://docs.stripe.com/api) · [test keys](https://docs.stripe.com/keys) · [SUPPORT.md](packages/service/stripe/SUPPORT.md) | Implemented (customers, products, prices) |
 | [`@crvouga/mockingbird-service-junction`](packages/service/junction) | [Junction (Vital)](https://docs.junction.com/) | [API overview](https://docs.junction.com/api-details/junction-api) · [create user](https://docs.junction.com/api-reference/user/create-user) · [get user](https://docs.junction.com/api-reference/user/get-user) · [delete user](https://docs.junction.com/api-reference/user/delete-user) · [lab tests](https://docs.junction.com/api-reference/lab-tests) · [orders](https://docs.junction.com/api-reference/order-v3) · [SUPPORT.md](packages/service/junction/SUPPORT.md) · [package README](packages/service/junction/README.md) | Implemented (user CRUD + helpers, lab-testing) |
 | [`@crvouga/mockingbird-service-genebygene`](packages/service/genebygene) | [GeneByGene](https://api.genebygene.com/swagger/index.html) | [Developer guide (PDF)](https://api.genebygene.com/assets/GxG%20API%20Services%20Developer%20Guide%202022.pdf) · [Swagger UI](https://api.genebygene.com/swagger/index.html) · [SUPPORT.md](packages/service/genebygene/SUPPORT.md) · [package README](packages/service/genebygene/README.md) | Implemented (token, products, orders) |
+| [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) | [Medplum](https://www.medplum.com/docs/api) | [Self-hosting: install from scratch](https://www.medplum.com/docs/self-hosting/install-from-scratch) · [package README](packages/service/medplum/README.md) | Implemented (self-hosted real server: FHIR CRUD + auth, embedded Postgres/Redis) |
 
 The umbrella package is [`@crvouga/mockingbird`](packages/facade). Granular `@crvouga/mockingbird-*` packages are the source of truth.
 
 State lives in SQLite under a per-service namespace. Several services can share one client; `reset()` only clears that service's records and sequences.
+
+Exception: [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) self-hosts the real Medplum server as a child process (one-time cached clone + build) with embedded Postgres and Redis on ephemeral ports — it does not use the SQLite layer.
 
 ### Live parity
 

@@ -32,7 +32,15 @@
     },
     "test": {
       "dependsOn": ["build", "^build"],
-      "env": ["FC_SEED", "FC_NUM_RUNS", "MOCKINGBIRD_MAX_COMMANDS", "MOCKINGBIRD_TRACE"],
+      "env": [
+        "FC_SEED",
+        "FC_NUM_RUNS",
+        "MOCKINGBIRD_MAX_COMMANDS",
+        "MOCKINGBIRD_TRACE",
+        "MOCKINGBIRD_MEDPLUM_E2E",
+        "MOCKINGBIRD_MEDPLUM_VERSION",
+        "MEDPLUM_MOCK_CACHE_DIR"
+      ],
       "inputs": ["$TURBO_DEFAULT$", "!README.md"],
       "outputs": []
     },

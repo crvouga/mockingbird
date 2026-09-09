@@ -65,14 +65,17 @@ describe("Junction lifecycle", () => {
               method: "POST",
             },
           )
-          expect(response.status).toBe(204)
+          expect(response.status).toBe(200)
+          expect(await response.text()).toBe("Success")
         }
         const latest = (await (await request(api, `/v3/order/${order.order.id}`)).json()) as {
           status: string
+          last_event: { status: string }
           order_transaction: { status: string }
         }
         if (schedule.some(Boolean)) {
-          expect(latest.status).toBe("completed.testkit.completed")
+          expect(latest.status).toBe("completed")
+          expect(latest.last_event.status).toBe("completed.testkit.completed")
           expect(latest.order_transaction.status).toBe("completed")
         }
       }),

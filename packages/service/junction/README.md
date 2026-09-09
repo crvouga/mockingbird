@@ -1,6 +1,7 @@
 # @crvouga/mockingbird-service-junction
 
-Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user and lab-testing surfaces.
+Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user, lab-testing,
+and scheduling surfaces.
 
 - API overview / environments / auth: https://docs.junction.com/api-details/junction-api
 - Create user: https://docs.junction.com/api-reference/user/create-user
@@ -9,7 +10,9 @@ Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user and
 - Update user: https://docs.junction.com/api-reference/user/update-user
 - Lab tests: https://docs.junction.com/api-reference/lab-tests
 - Orders: https://docs.junction.com/api-reference/order-v3
-- Coverage: [SUPPORT.md](./SUPPORT.md)
+- Appointments (phlebotomy): https://docs.junction.com/api-reference/lab-testing/appointments
+- Appointments (PSC): https://docs.junction.com/api-reference/lab-testing/psc-appointments
+- Coverage: [SUPPORT.md](./SUPPORT.md), [docs/geviti-coverage.md](./docs/geviti-coverage.md)
 
 Auth header: `x-vital-api-key`. Sandbox keys look like `sk_us_*` / `sk_eu_*`.
 
@@ -35,3 +38,10 @@ Live parity against the sandbox (credentials from env or OpenBao):
 bun run parity
 # MOCKINGBIRD_JUNCTION_API_KEY=sk_us_... bun run parity
 ```
+
+Parity is tiered: the differential walker covers deterministic operations
+(users, catalog, orders, simulate, result metadata, serviceability, cancellation reasons);
+availability/booking/results live in the SDK scenario
+(`scripts/client-parity-live.ts`, gated by `JUNCTION_LIVE_PARITY=1`), and the full
+state space (single-use booking keys, expiries, cascades, delayed simulate) is covered by
+the property suites run with `bun test`.

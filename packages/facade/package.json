@@ -48,6 +48,7 @@
     "@crvouga/mockingbird-service-stripe": "workspace:*",
     "@crvouga/mockingbird-service-junction": "workspace:*",
     "@crvouga/mockingbird-service-genebygene": "workspace:*",
+    "@crvouga/mockingbird-service-medplum": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@crvouga/mockingbird-adapter-bun": "workspace:*"
   },

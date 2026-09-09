@@ -7,8 +7,82 @@ export { LAB_TEST_CATALOG, labTestById } from "./catalog.js"
 
 export type UserInfoRecord = Record<string, unknown>
 
+export type AppointmentModality = "phlebotomy" | "patient_service_center"
+export type AppointmentProviderName = "getlabs" | "phlebfinders" | "quest"
+export type AppointmentStatus =
+  | "confirmed"
+  | "pending"
+  | "reserved"
+  | "in_progress"
+  | "completed"
+  | "cancelled"
+export type AppointmentEventStatus =
+  | "pending"
+  | "reserved"
+  | "scheduled"
+  | "completed"
+  | "cancelled"
+  | "in_progress"
+
+export type AppointmentEventRecord = {
+  created_at: string
+  status: AppointmentEventStatus
+  data: Record<string, unknown> | null
+}
+
+export type AppointmentRecord = {
+  id: string
+  order_id: string
+  user_id: string
+  provider_id: string
+  external_id: string | null
+  type: AppointmentModality
+  provider: AppointmentProviderName
+  status: AppointmentStatus
+  event_status: AppointmentEventStatus
+  start_at: string | null
+  end_at: string | null
+  iana_timezone: string | null
+  address: Record<string, unknown>
+  location: { lng: number; lat: number }
+  can_reschedule: boolean
+  booking_key: string | null
+  site_code: string | null
+  appointment_notes: string | null
+  order_transaction_id: string | null
+  event_data: Record<string, unknown> | null
+  events: AppointmentEventRecord[]
+  created_at: string
+  updated_at: string
+}
+
+export type BookingKeyRecord = {
+  key: string
+  start: string
+  end: string
+  expires_at: string | null
+  price: number
+  is_priority: boolean
+  num_appointments_available: number
+  modality: AppointmentModality
+  provider: AppointmentProviderName
+  site_code: string | null
+  zip_code: string
+  address: Record<string, unknown>
+  location: { lng: number; lat: number }
+  consumed_by_order_id: string | null
+  created_at: string
+}
+
+export type PendingSimulateTransition = {
+  order_id: string
+  due_at: number
+  final_status: string
+  flags: Record<string, unknown> | null
+}
+
 export type JunctionWebhookEvent = {
-  event_type: "labtest.order.created" | "labtest.order.updated"
+  event_type: "labtest.order.created" | "labtest.order.updated" | "labtest.appointment.updated"
   data: Record<string, unknown>
   team_id: string
   user_id: string
@@ -116,8 +190,9 @@ export type OrderRecord = {
   priority: boolean
   activate_by: null
   icd_codes: null
-  interpretation: null
-  has_missing_results: null
+  interpretation: string | null
+  has_missing_results: boolean | null
+  result_types: string[] | null
   expected_result_by_date: null
   worst_case_result_by_date: null
   origin: string
@@ -150,6 +225,11 @@ export class JunctionState {
   }>
   readonly cancelIdempotency: Collection<{ order_id: string; response: unknown }>
 
+  readonly appointments: Collection<AppointmentRecord>
+  readonly appointmentsByOrder: Collection<{ appointment_id: string }>
+  readonly bookingKeys: Collection<BookingKeyRecord>
+  readonly pendingSimulateTransitions: Collection<PendingSimulateTransition>
+
   readonly orderByTransaction: Collection<{ order_id: string }>
   readonly webhookEvents: Collection<WebhookEventRecord>
   readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
@@ -171,6 +251,14 @@ export class JunctionState {
     this.orders = new Collection(sqlite, namespace, "orders")
     this.orderIdempotency = new Collection(sqlite, namespace, "orders_idempotency")
     this.cancelIdempotency = new Collection(sqlite, namespace, "cancel_idempotency")
+    this.appointments = new Collection(sqlite, namespace, "appointments")
+    this.appointmentsByOrder = new Collection(sqlite, namespace, "appointments_by_order")
+    this.bookingKeys = new Collection(sqlite, namespace, "booking_keys")
+    this.pendingSimulateTransitions = new Collection(
+      sqlite,
+      namespace,
+      "pending_simulate_transitions",
+    )
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
     this.webhookEvents = new Collection(sqlite, namespace, "webhook_events")
     this.webhookDeliveryAttempts = new Collection(sqlite, namespace, "webhook_delivery_attempts")
@@ -185,6 +273,19 @@ export class JunctionState {
   nextOrderId(): string {
     const token = this.ids.next("ord_")
     return deterministicUuid(`junction:order:${token}`)
+  }
+
+  nextAppointmentId(): string {
+    const token = this.ids.next("apt_")
+    return deterministicUuid(`junction:appointment:${token}`)
+  }
+
+  bookingKeyFor(input: string): string {
+    return deterministicUuid(`junction:booking:${input}`)
+  }
+
+  appointmentProviderIdFor(input: string): string {
+    return opaqueToken(`junction:appointment-provider:${input}`, 12)
   }
 
   transactionIdFor(orderId: string): string {
@@ -241,6 +342,46 @@ export class JunctionState {
       },
       now,
     )
+  }
+
+  publishAppointmentWebhook(
+    appointment: AppointmentRecord,
+    teamId: string,
+    now = Date.now(),
+  ): void {
+    const user = this.users.get(appointment.user_id)
+    if (!user) return
+    this.publishWebhook(
+      {
+        event_type: "labtest.appointment.updated",
+        data: appointment as unknown as Record<string, unknown>,
+        team_id: teamId,
+        user_id: appointment.user_id,
+        client_user_id: user.client_user_id,
+      },
+      now,
+    )
+  }
+
+  queueSimulateTransition(transition: PendingSimulateTransition): void {
+    this.pendingSimulateTransitions.insert(
+      `${transition.order_id}:${transition.due_at}`,
+      transition,
+    )
+  }
+
+  /** Apply any simulate transitions whose delay has elapsed; called lazily on reads. */
+  applyDueSimulateTransitions(
+    nowMs: number,
+    apply: (order: OrderRecord, finalStatus: string, flags: Record<string, unknown> | null) => void,
+  ): void {
+    for (const entry of this.pendingSimulateTransitions.list({ order: "oldest" })) {
+      const transition = entry.value
+      if (transition.due_at > nowMs) continue
+      const order = this.orders.get(transition.order_id)
+      if (order) apply(order, transition.final_status, transition.flags)
+      this.pendingSimulateTransitions.delete(entry.id)
+    }
   }
 
   isoNow(now: () => number): string {

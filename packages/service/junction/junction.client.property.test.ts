@@ -119,7 +119,8 @@ describe("Junction client-facing lifecycle", () => {
         method: "POST",
       },
     )
-    expect(simulated.status).toBe(204)
+    expect(simulated.status).toBe(200)
+    expect(await simulated.text()).toBe("Success")
     const transaction = await json(await request(api, `/v3/order_transaction/${transactionId}`))
     expect(transaction.status).toBe("completed")
     const attempts = api.webhookDeliveryAttempts()

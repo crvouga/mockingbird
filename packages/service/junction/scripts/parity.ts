@@ -128,6 +128,34 @@ const runSeed = async (seed: number | undefined) => {
       env: Bun.env,
       numRuns: cliOptions.runs ?? DEFAULT_PROPERTY_RUNS,
       maxCommands: cliOptions.steps ?? DEFAULT_PARITY_STEPS,
+      // Tiered parity: only deterministic operations run in the differential walker.
+      // Availability/booking/results/pdf/transactions are non-deterministic on the real
+      // side (external provider state, signed URLs, async result processing) and are
+      // covered by the scenario scripts (client-parity-live) instead.
+      only: [
+        "create_user_v2_user_post",
+        "get_teams_users_v2_user_get",
+        "get_user_v2_user__user_id__get",
+        "delete_user_v2_user__user_id__delete",
+        "patch_user_v2_user__user_id__patch",
+        "get_user_by_client_user_id_v2_user_resolve__client_user_id__get",
+        "patch_user_info_v2_user__user_id__info_patch",
+        "get_latest_user_info_user_v2_user__user_id__info_latest_get",
+        "get_paginated_lab_tests_for_team_v3_lab_test_get",
+        "get_lab_test_for_team_v3_lab_tests__lab_test_id__get",
+        "get_labs_v3_lab_tests_labs_get",
+        "get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get",
+        "create_order_v3_order_post",
+        "get_order_v3_order__order_id__get",
+        "cancel_order_v3_order__order_id__cancel_post",
+        "simulate_order_v3_order__order_id__test_post",
+        "get_result_metadata_v3_order__order_id__result_metadata_get",
+        "get_orders_v3_orders_get",
+        "get_area_info_v3_order_area_info_get",
+        "get_psc_info_v3_order_psc_info_get",
+        "get_phlebotomy_appointment_cancellation_reason_v3_order_phlebotomy_appointment_cancellation_reasons_get",
+        "get_psc_appointment_cancellation_reason_v3_order_psc_appointment_cancellation_reasons_get",
+      ],
       real: {
         baseUrl,
         allowedHosts: [new URL(baseUrl).host],
@@ -147,13 +175,15 @@ const runSeed = async (seed: number | undefined) => {
       cleanup: async ({ table, real, scope }) => {
         for (const resource of table.all()) {
           const id = resource.ids.real
-          if (id === undefined || resource.type !== "user") continue
-          await real.fetch(
-            new Request(`${real.baseUrl}/v2/user/${id}`, {
-              method: "DELETE",
-              headers: { ...authHeaders, "x-mockingbird-scope": scope.runId },
-            }),
-          )
+          if (id === undefined) continue
+          if (resource.type === "user") {
+            await real.fetch(
+              new Request(`${real.baseUrl}/v2/user/${id}`, {
+                method: "DELETE",
+                headers: { ...authHeaders, "x-mockingbird-scope": scope.runId },
+              }),
+            )
+          }
         }
       },
       ...(seed === undefined ? {} : { seed }),

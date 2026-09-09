@@ -6,6 +6,11 @@ export {
   GeneByGeneAPI,
 } from "@crvouga/mockingbird-service-genebygene"
 export { document as junctionDocument, JunctionAPI } from "@crvouga/mockingbird-service-junction"
+export type { MedplumAPIOptions } from "@crvouga/mockingbird-service-medplum"
+export {
+  createMedplumAPI,
+  MedplumAPI,
+} from "@crvouga/mockingbird-service-medplum"
 export { document as stripeDocument, StripeAPI } from "@crvouga/mockingbird-service-stripe"
 export type { SqliteClient, SqliteStatement, SqliteValue } from "@crvouga/mockingbird-sqlite"
 export {

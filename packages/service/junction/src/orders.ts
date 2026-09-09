@@ -4,8 +4,36 @@ import {
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
+import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
 import { LAB_TEST_CATALOG, labTestById, MOCK_TEAM_ID } from "./state.js"
+
+const RESULT_TYPES = ["numeric", "range", "comment", "coded_value"] as const
+const INTERPRETATIONS = ["normal", "abnormal", "critical", "unknown"] as const
+
+const simulationFlagsOf = (context: OperationContext): Record<string, unknown> | null => {
+  const body = context.body
+  if (body.kind !== "json") return null
+  const value = body.value
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null
+  const raw = value as Record<string, unknown>
+  const flags: Record<string, unknown> = {}
+  if (
+    typeof raw.interpretation === "string" &&
+    INTERPRETATIONS.includes(raw.interpretation as never)
+  )
+    flags.interpretation = raw.interpretation
+  if (Array.isArray(raw.result_types)) {
+    const types = raw.result_types.filter(
+      (entry): entry is string =>
+        typeof entry === "string" && RESULT_TYPES.includes(entry as never),
+    )
+    if (types.length > 0) flags.result_types = types
+  }
+  if (typeof raw.has_missing_results === "boolean")
+    flags.has_missing_results = raw.has_missing_results
+  return Object.keys(flags).length > 0 ? flags : null
+}
 
 type AoeQuestion = {
   id: number
@@ -477,6 +505,70 @@ export const orderHandlers = (state: JunctionState) => ({
     return jsonRes(200, test)
   },
 
+  get_labs_v3_lab_tests_labs_get: async () => {
+    const labs = new Map<string, Record<string, unknown>>()
+    for (const test of LAB_TEST_CATALOG) {
+      const lab = test.lab as Record<string, unknown> | null
+      if (!lab || typeof lab.id !== "number") continue
+      labs.set(String(lab.id), lab)
+    }
+    return jsonRes(200, [...labs.values()])
+  },
+
+  get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get: async (
+    context: OperationContext,
+  ) => {
+    const id = context.params.lab_test_id ?? ""
+    const test = labTestById(id)
+    if (!test) notFound("Lab test does not exist")
+    const markers = (test.markers ?? []).map((marker) => ({
+      ...marker,
+      expected_results: [
+        {
+          id: marker.id,
+          name: marker.name,
+          slug: marker.slug,
+          provider_id: marker.provider_id,
+          lab_id: marker.lab_id ?? null,
+          required: false,
+        },
+      ],
+    }))
+    return jsonRes(200, { markers, total: markers.length, page: 1, size: markers.length, pages: 1 })
+  },
+
+  list_order_set_markers_v3_lab_tests_list_order_set_markers_post: async (
+    context: OperationContext,
+  ) => {
+    const body = jsonObject(context)
+    const orderSetId = body.order_set_id
+    if (typeof orderSetId !== "string" || !isUuid(orderSetId)) {
+      throw new HttpError(422, {
+        detail: [uuidError(String(orderSetId ?? ""), 0, ["body", "order_set_id"])],
+      })
+    }
+    const binding = state.orderByTransaction.get(orderSetId)
+    const order = binding ? state.orders.get(binding.order_id) : undefined
+    if (!order) notFound("Order set not found")
+    const providerId = typeof body.provider_id === "string" ? body.provider_id : null
+    const markers = (order.lab_test.markers ?? [])
+      .filter((marker) => providerId === null || marker.provider_id === providerId)
+      .map((marker) => ({
+        ...marker,
+        expected_results: [
+          {
+            id: marker.id,
+            name: marker.name,
+            slug: marker.slug,
+            provider_id: marker.provider_id,
+            lab_id: marker.lab_id ?? null,
+            required: false,
+          },
+        ],
+      }))
+    return jsonRes(200, { markers, total: markers.length, page: 1, size: markers.length, pages: 1 })
+  },
+
   create_order_v3_order_post: async (context: OperationContext) => {
     const rawBody = jsonObject(context)
     const body = trimStrings(rawBody) as Record<string, unknown>
@@ -587,6 +679,7 @@ export const orderHandlers = (state: JunctionState) => ({
       icd_codes: null,
       interpretation: null,
       has_missing_results: null,
+      result_types: null,
       expected_result_by_date: null,
       worst_case_result_by_date: null,
       origin: "initial",
@@ -643,6 +736,7 @@ export const orderHandlers = (state: JunctionState) => ({
       }
       state.orders.update(id, order)
       state.publishOrderWebhook(order, "labtest.order.updated", context.now())
+      cascadeCancelAppointments(state, id, context.now())
     }
     const response = { order, status: "SUCCESS", message: "Order cancelled" }
     return jsonRes(200, response)
@@ -660,37 +754,43 @@ export const orderHandlers = (state: JunctionState) => ({
       !FINAL_STATUSES.includes(finalStatus as (typeof FINAL_STATUSES)[number])
     )
       throw new HttpError(422, { detail: [finalStatusError(String(finalStatus ?? ""))] })
-    if (!order) notFound("Order doesn't exist")
-    const now = state.isoNow(context.now)
-    const lowLevelStatus = finalStatus.split(".").at(-1) ?? finalStatus
-    const event = {
-      id: order.events.length + 1,
-      created_at: now,
-      status: finalStatus,
-      status_detail: null,
+    const delayRaw = context.query.delay
+    let delaySeconds = 0
+    if (delayRaw !== undefined) {
+      if (typeof delayRaw !== "string" || !/^\d+$/.test(delayRaw))
+        throw new HttpError(422, { detail: "delay must be a non-negative integer" })
+      delaySeconds = Number(delayRaw)
     }
-    order.status = finalStatus
-    order.updated_at = now
-    order.events.push(event)
-    order.last_event = event
-    const transactionOrder = order.order_transaction.orders.find((entry) => entry.id === id)
-    if (transactionOrder) {
-      transactionOrder.low_level_status = lowLevelStatus
-      transactionOrder.low_level_status_created_at = new Date(context.now()).toISOString()
-      transactionOrder.updated_at = new Date(context.now()).toISOString()
+    const flags = simulationFlagsOf(context)
+    if (delaySeconds > 0) {
+      state.queueSimulateTransition({
+        order_id: id,
+        due_at: context.now() + delaySeconds * 1000,
+        final_status: finalStatus,
+        flags,
+      })
+      return new Response("Success", {
+        status: 200,
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      })
     }
-    if (finalStatus.startsWith("completed")) order.order_transaction.status = "completed"
-    if (finalStatus.startsWith("cancelled")) order.order_transaction.status = "cancelled"
-    state.orders.update(id, order)
-    state.publishOrderWebhook(order, "labtest.order.updated", context.now())
-    return new Response(null, { status: 204 })
+    applySimulateTransition(state, order, finalStatus, flags, context)
+    return new Response("Success", {
+      status: 200,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    })
   },
 
   get_order_v3_order__order_id__get: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
     const order = state.orders.get(id)
     if (!order) notFound("This order doesn't exist")
-    return jsonRes(200, order)
+    state.applyDueSimulateTransitions(context.now(), (due, finalStatus, flags) => {
+      applySimulateTransition(state, due, finalStatus, flags, context)
+    })
+    const fresh = state.orders.get(id)
+    if (!fresh) notFound("This order doesn't exist")
+    return jsonRes(200, fresh)
   },
 
   get_orders_v3_orders_get: async (context: OperationContext) => {

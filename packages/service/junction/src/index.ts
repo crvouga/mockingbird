@@ -12,6 +12,8 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
 import { orderHandlers } from "./orders.js"
+import { resultsHandlers } from "./results.js"
+import { schedulingHandlers } from "./scheduling.js"
 import {
   JunctionState,
   type JunctionWebhookEvent,
@@ -50,6 +52,8 @@ export class JunctionAPI implements FetchAPI {
     const handlers = defineOperations<SupportedOperationId>({
       ...userHandlers(state),
       ...orderHandlers(state),
+      ...schedulingHandlers(state),
+      ...resultsHandlers(state),
     })
     this.service = createService({
       document,

@@ -6,8 +6,34 @@
 - A lab test describes markers, partner laboratory, supported collection methods, and an orderable test ID.
 - An order is one unit of laboratory work for one patient.
 - An order transaction is the testing journey and groups an initial order with related orders such as redraws.
+- An appointment is a scheduled sample collection: at-home phlebotomy or a patient service center visit. An order has at most one active appointment.
+- A booking key is a single-use, expiring token representing one available slot. It is returned by availability endpoints and consumed by booking.
 - A result may be partial while work is active and final when the transaction is completed.
 - `sample_id` can be absent at creation and appear later.
+
+## Scheduling
+
+Availability is generated deterministically from the zip code, start date, and provider (or
+PSC site codes), so identical inputs return identical slots on independent mock instances.
+
+1. Check serviceability (`GET /v3/order/area/info`) and, for PSC, site info
+   (`GET /v3/order/psc/info`).
+2. Request availability. Phlebotomy takes the patient address in the body; PSC takes
+   `lab=quest` plus optional `zip_code`/`site_codes` in the query.
+3. Book with a `booking_key` from the availability response. PSC booking additionally
+   requires `site_code` and honors `x-idempotency-key` replays.
+4. Booking moves the order to the modality-specific `appointment_scheduled` event, sets the
+   appointment to `status: confirmed` / `event_status: scheduled`, and emits
+   `labtest.appointment.updated` plus a `labtest.order.updated` webhook.
+5. Reschedule consumes a new unclaimed booking key for the same modality; cancelled
+   appointments refuse reschedule. Cancel requires a valid cancellation reason id
+   (snake_case `cancellation_reason_id` for phlebotomy, camelCase `cancellationReasonId`
+   for PSC) and, for the "Other" reason, a note.
+6. Cancelling the order cascades to its active appointment.
+
+Booking keys are single-use, modality-bound, and expire one hour before the slot start.
+Unknown, consumed, expired, or wrong-modality keys are rejected with `400`. The mock keeps
+one active appointment per order, mirroring real provider duplicate-booking protection.
 
 ## Ordering
 
@@ -22,7 +48,10 @@ The same idempotency key must make a safe retry return the original order. Reusi
 
 ## Status semantics
 
-`order.status` describes one order's operational state. The documented lifecycle includes values such as `received`, `collecting_sample`, `sample_with_lab`, and `completed`; the API may add values, so consumers must preserve unknown strings.
+`order.status` describes one order's operational state as a top-level value: `received`,
+`collecting_sample`, `sample_with_lab`, `completed`, `cancelled`, or `failed`. The dotted
+three-part status (`received.walk_in_test.ordered`) lives on order events and
+`last_event.status`; the API may add values, so consumers must preserve unknown strings.
 
 `order_transaction.status` describes the whole testing journey and is one of `active`, `completed`, or `cancelled` in the documented contract. A related redraw keeps the original transaction while retaining its own order status.
 
@@ -30,19 +59,33 @@ The low-level order status is more detailed and can include `ordered`, `requisit
 
 Cancellation and completion must update the order status, event history, last event, transaction summary, and low-level order projection together. Invalid transitions should be rejected or represented as a stable no-op according to the endpoint contract.
 
+## Sandbox simulation
+
+`POST /v3/order/{id}/test?final_status=<dotted-status>` drives transitions. It accepts
+`delay` (seconds) — the transition is queued and applied lazily on later reads once the
+clock passes `due_at` — and an optional `simulationFlags` body (`interpretation`,
+`result_types`, `has_missing_results`) that is projected onto the order and results. The
+real API responds `200` with the text body `Success`, and the mock matches.
+
 ## Results
 
-- Partial results can be available while an order or transaction is active.
+- Partial results can be available while an order or transaction is active; the mock returns
+  an empty result set until the order reaches `sample_with_lab` or `completed`.
 - Final transaction results should be fetched after the transaction reaches `completed`.
 - Transaction results combine findings from all related orders.
 - Order-specific results and PDFs are separate concepts from transaction results.
 - Unknown result statuses must not crash consumers.
+- Simulation flags surface in results: `interpretation` on every line plus metadata,
+  `result_types` selecting each line's `type` (numeric/range/comment/coded_value), and
+  `has_missing_results` populating `missing_results`.
+- PDFs (`/result/pdf`, `/requisition/pdf`) are minimal deterministic `%PDF-` documents —
+  enough for content-type and byte-shape checks, not renderable reports.
 
-The current mock returns deterministic structured synthetic markers. It does not represent real PHI, laboratory values, or PDFs.
+The current mock returns deterministic structured synthetic markers. It does not represent real PHI, laboratory values, or real PDFs.
 
 ## Webhooks
 
-Every event has `event_type`, `data`, `team_id`, `user_id`, and `client_user_id`. Lab order events include `labtest.order.created` and `labtest.order.updated`.
+Every event has `event_type`, `data`, `team_id`, `user_id`, and `client_user_id`. Lab order events include `labtest.order.created` and `labtest.order.updated`; appointment lifecycle changes emit `labtest.appointment.updated` with the appointment payload.
 
 Webhook delivery is at-least-once. Consumers must deduplicate and tolerate retries and out-of-order messages. A webhook is a notification that data changed; the API remains the source of truth.
 

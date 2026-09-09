@@ -1,0 +1,381 @@
+openapi: 3.1.0
+info:
+  title: Medplum API (Mockingbird subset)
+  description: |
+    Self-hosted Medplum server subset exercised by the Mockingbird differential properties.
+    The mock runs the real Medplum server (self-hosting: install from scratch,
+    https://www.medplum.com/docs/self-hosting/install-from-scratch) on embedded Postgres and Redis.
+  version: "4.0"
+  x-mockingbird-upstream:
+    docs: https://www.medplum.com/docs/api
+    selfHosting: https://www.medplum.com/docs/self-hosting/install-from-scratch
+    note: Hand-authored subset covering the auth flow, FHIR Patient CRUD, and project invite.
+servers:
+  - url: http://localhost:8103
+security:
+  - bearerAuth: []
+paths:
+  /healthcheck:
+    get:
+      operationId: GetHealthcheck
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: Infrastructure endpoint used for boot polling; excluded from differential walks.
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /auth/login:
+    post:
+      operationId: PostAuthLogin
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: Seeded-admin credential flow; exercised by lifecycle helpers, not by differential walks.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login accepted; exchange `code` at /oauth2/token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationOutcome"
+  /oauth2/token:
+    post:
+      operationId: PostOauth2Token
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: One-time token exchange; tokens are minted per login, so walks cannot replay them.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/TokenRequest"
+      responses:
+        "200":
+          description: Access token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenResponse"
+        "400":
+          description: Invalid grant
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationOutcome"
+  /fhir/R4/Patient:
+    get:
+      operationId: SearchPatient
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: _count
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Search bundle
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/Bundle"
+    post:
+      operationId: CreatePatient
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/PatientInput"
+      responses:
+        "201":
+          description: Created Patient
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+        "400":
+          description: Bad Request
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/OperationOutcome"
+  /fhir/R4/Patient/{id}:
+    get:
+      operationId: ReadPatient
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: patient
+              missing: not_found
+      responses:
+        "200":
+          description: Patient
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+        "404":
+          description: Not Found
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/OperationOutcome"
+    put:
+      operationId: UpdatePatient
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: patient
+              missing: not_found
+      requestBody:
+        required: true
+        content:
+          application/fhir+json:
+            schema:
+              $ref: "#/components/schemas/PatientInput"
+      responses:
+        "200":
+          description: Updated Patient
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+        "404":
+          description: Not Found
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/OperationOutcome"
+    delete:
+      operationId: DeletePatient
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: patient
+              missing: not_found
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/OperationOutcome"
+        "404":
+          description: Not Found
+          content:
+            application/fhir+json:
+              schema:
+                $ref: "#/components/schemas/OperationOutcome"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        ok:
+          type: boolean
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+        password:
+          type: string
+        scope:
+          type: string
+        codeChallenge:
+          type: string
+        codeChallengeMethod:
+          type: string
+    LoginResponse:
+      type: object
+      required: [code]
+      properties:
+        code:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+    TokenRequest:
+      type: object
+      required: [grant_type, code, client_id]
+      properties:
+        grant_type:
+          type: string
+          enum: [authorization_code]
+        code:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        client_id:
+          type: string
+        code_verifier:
+          type: string
+    TokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in]
+      properties:
+        access_token:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        token_type:
+          type: string
+          enum: [Bearer]
+        expires_in:
+          type: integer
+    HumanName:
+      type: object
+      properties:
+        family:
+          type: string
+        given:
+          type: array
+          items:
+            type: string
+    PatientInput:
+      type: object
+      required: [resourceType]
+      properties:
+        resourceType:
+          type: string
+          enum: [Patient]
+        name:
+          type: array
+          items:
+            $ref: "#/components/schemas/HumanName"
+    Patient:
+      type: object
+      required: [resourceType, id, meta]
+      properties:
+        resourceType:
+          type: string
+          enum: [Patient]
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: patient
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        meta:
+          type: object
+          properties:
+            versionId:
+              type: string
+              x-mockingbird-volatile:
+                kind: id
+            lastUpdated:
+              type: string
+              format: date-time
+              x-mockingbird-volatile:
+                kind: timestamp
+        name:
+          type: array
+          items:
+            $ref: "#/components/schemas/HumanName"
+    Bundle:
+      type: object
+      required: [resourceType, type]
+      properties:
+        resourceType:
+          type: string
+          enum: [Bundle]
+        type:
+          type: string
+          enum: [searchset]
+        total:
+          type: integer
+        entry:
+          type: array
+          items:
+            type: object
+            properties:
+              resource:
+                $ref: "#/components/schemas/Patient"
+    OperationOutcome:
+      type: object
+      required: [resourceType, issue]
+      properties:
+        resourceType:
+          type: string
+          enum: [OperationOutcome]
+        issue:
+          type: array
+          items:
+            type: object

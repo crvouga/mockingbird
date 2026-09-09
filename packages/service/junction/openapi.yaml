@@ -17,6 +17,23 @@ info:
     Get order transaction: https://docs.junction.com/api-reference/lab-testing/order-transactions/get-order-transaction
     Get order transaction result: https://docs.junction.com/api-reference/lab-testing/results/get-order-transaction-results
     Lab tests: https://docs.junction.com/api-reference/lab-testing/tests-paginated
+    Appointment availability: https://docs.junction.com/api-reference/lab-testing/appointments/get-appointment-availability
+    Book appointment: https://docs.junction.com/api-reference/lab-testing/appointments/book-appointment
+    Get appointment: https://docs.junction.com/api-reference/lab-testing/appointments/get-appointment
+    Reschedule appointment: https://docs.junction.com/api-reference/lab-testing/appointments/reschedule-appointment
+    Cancel appointment: https://docs.junction.com/api-reference/lab-testing/appointments/cancel-appointment
+    Appointment cancellation reasons: https://docs.junction.com/api-reference/lab-testing/appointments/get-appointment-cancellation-reasons
+    Area info: https://docs.junction.com/api-reference/lab-testing/service-areas/get-area-info
+    PSC info: https://docs.junction.com/api-reference/lab-testing/service-areas/get-psc-info
+    Lab locations: https://docs.junction.com/api-reference/lab-testing/service-areas/get-lab-locations
+    Raw results: https://docs.junction.com/api-reference/lab-testing/results/get-lab-results
+    Result metadata: https://docs.junction.com/api-reference/lab-testing/results/get-lab-results-metadata
+    Result PDF: https://docs.junction.com/api-reference/lab-testing/results/get-lab-result-pdf
+    Requisition form PDF: https://docs.junction.com/api-reference/lab-testing/orders/get-requisition-form
+    List labs: https://docs.junction.com/api-reference/lab-testing/tests/get-labs
+    Test markers: https://docs.junction.com/api-reference/lab-testing/tests/get-markers-for-lab-test
+    Order-set markers: https://docs.junction.com/api-reference/lab-testing/results/get-order-set-markers
+    Latest user info: https://docs.junction.com/api-reference/user/get-latest-user-info
   version: "0.4.758"
   x-mockingbird-upstream:
     docs: https://docs.junction.com/
@@ -230,6 +247,86 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /v2/user/{user_id}/info:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    patch:
+      operationId: patch_user_info_v2_user__user_id__info_patch
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserInfoPatchBody"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/user/{user_id}/info/latest:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_latest_user_info_user_v2_user__user_id__info_latest_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfo"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /v3/lab_test:
     get:
       operationId: get_paginated_lab_tests_for_team_v3_lab_test_get
@@ -276,6 +373,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /v3/lab_tests/labs:
+    get:
+      operationId: get_labs_v3_lab_tests_labs_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientFacingLab"
+  /v3/lab_tests/{lab_test_id}/markers:
+    parameters:
+      - name: lab_test_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: lab_test
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetMarkersResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/lab_tests/list_order_set_markers:
+    post:
+      operationId: list_order_set_markers_v3_lab_tests_list_order_set_markers_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ListOrderSetMarkersRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetMarkersResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /v3/order:
     post:
       operationId: create_order_v3_order_post
@@ -317,39 +495,600 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
-  /v2/user/{user_id}/info:
-    parameters:
-      - name: user_id
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          x-mockingbird-resource-ref:
-            type: user
-            missing: "00000000-0000-4000-8000-000000000000"
-    patch:
-      operationId: patch_user_info_v2_user__user_id__info_patch
+  /v3/order/area/info:
+    get:
+      operationId: get_area_info_v3_order_area_info_get
       x-mockingbird:
         supported: true
         parity:
           enabled: true
           safe: true
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UserInfoPatchBody"
+      parameters:
+        - name: zip_code
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 5
+        - name: radius
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AllowedRadius"
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserInfo"
+                $ref: "#/components/schemas/AreaInfo"
         "404":
           description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/psc/info:
+    get:
+      operationId: get_psc_info_v3_order_psc_info_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: zip_code
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 5
+        - name: lab_id
+          in: query
+          required: true
+          schema:
+            type: integer
+        - name: radius
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AllowedRadius"
+        - name: capabilities
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              $ref: "#/components/schemas/LabLocationCapability"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PscInfo"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/phlebotomy/appointment/availability:
+    post:
+      operationId: get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            availability slots are provider-side data whose values shift between sandbox calls;
+            covered by the mock-internal scheduling property suite instead
+      parameters:
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsAddress"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentAvailabilitySlots"
+        "404":
+          description: No availability found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/phlebotomy/appointment/cancellation-reasons:
+    get:
+      operationId: get_phlebotomy_appointment_cancellation_reason_v3_order_phlebotomy_appointment_cancellation_reasons_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientFacingAppointmentCancellationReason"
+  /v3/order/psc/appointment/availability:
+    post:
+      operationId: get_psc_appointment_availability_v3_order_psc_appointment_availability_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            availability slots are provider-side data whose values shift between sandbox calls;
+            covered by the mock-internal scheduling property suite instead
+      parameters:
+        - name: lab
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/AppointmentPscLabs"
+        - name: start_date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+        - name: site_codes
+          in: query
+          required: false
+          schema:
+            type: string
+            description: JSON-encoded array of site codes
+        - name: zip_code
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: radius
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AllowedRadius"
+        - name: allow_stale
+          in: query
+          required: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentAvailabilitySlots"
+        "404":
+          description: No slots found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/psc/appointment/cancellation-reasons:
+    get:
+      operationId: get_psc_appointment_cancellation_reason_v3_order_psc_appointment_cancellation_reasons_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientFacingAppointmentCancellationReason"
+  /v3/order/{order_id}/phlebotomy/appointment:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            appointment payloads embed provider-side slot data; covered by the mock-internal
+            scheduling property suite instead
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "404":
+          description: No appointment for this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/phlebotomy/appointment/book:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    post:
+      operationId: book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            booking depends on live provider slot state; covered by the mock-internal scheduling
+            property suite instead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentBookingRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "400":
+          description: Booking failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/phlebotomy/appointment/reschedule:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    patch:
+      operationId: reschedule_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_reschedule_patch
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            rescheduling depends on live provider slot state; covered by the mock-internal
+            scheduling property suite instead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentRescheduleRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "404":
+          description: No appointment for this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/phlebotomy/appointment/cancel:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    patch:
+      operationId: cancel_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_cancel_patch
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            cancellation depends on live provider appointment state; covered by the mock-internal
+            scheduling property suite instead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhlebotomyAppointmentCancelRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "404":
+          description: No appointment for this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/psc/appointment:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_psc_appointment_v3_order__order_id__psc_appointment_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            appointment payloads embed provider-side slot data; covered by the mock-internal
+            scheduling property suite instead
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "404":
+          description: No appointment for this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/psc/appointment/book:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    post:
+      operationId: book_psc_appointment_v3_order__order_id__psc_appointment_book_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            booking depends on live provider slot state; covered by the mock-internal scheduling
+            property suite instead
+      parameters:
+        - name: x-idempotency-key
+          in: header
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PscAppointmentBookingRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "400":
+          description: Booking failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/psc/appointment/reschedule:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    patch:
+      operationId: reschedule_psc_appointment_v3_order__order_id__psc_appointment_reschedule_patch
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            rescheduling depends on live provider slot state; covered by the mock-internal
+            scheduling property suite instead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentRescheduleRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "404":
+          description: No appointment for this order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/psc/appointment/cancel:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    patch:
+      operationId: cancel_psc_appointment_v3_order__order_id__psc_appointment_cancel_patch
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            cancellation depends on live provider appointment state; covered by the mock-internal
+            scheduling property suite instead
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PscAppointmentCancelRequest"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingAppointment"
+        "404":
+          description: No appointment for this order
           content:
             application/json:
               schema:
@@ -501,9 +1240,27 @@ paths:
               - completed.at_home_phlebotomy.corrected
               - completed.on_site_collection.corrected
               - completed.testkit.corrected
+        - name: delay
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            description: Seconds to defer the status transition
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SimulationFlags"
       responses:
-        "204":
+        "200":
           description: Successful Response
+          content:
+            text/plain:
+              schema:
+                type: string
+                examples: [Success]
         "404":
           description: Not Found
           content:
@@ -512,6 +1269,141 @@ paths:
                 $ref: "#/components/schemas/HTTPValidationError"
         "422":
           description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/result:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_result_raw_v3_order__order_id__result_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            results carry provider-side specimen data; covered by the mock-internal results
+            property suite instead
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabResultsRaw"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/result/metadata:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_result_metadata_v3_order__order_id__result_metadata_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LabResultsMetadata"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/result/pdf:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_result_pdf_v3_order__order_id__result_pdf_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            PDF bytes are provider-rendered; compared by shape (byteLength) only in the scenario
+            script
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v3/order/{order_id}/requisition/pdf:
+    parameters:
+      - name: order_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_order_requisition_pdf_v3_order__order_id__requisition_pdf_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            PDF bytes are provider-rendered; compared by shape (byteLength) only in the scenario
+            script
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Not Found
           content:
             application/json:
               schema:
@@ -819,6 +1711,8 @@ components:
       properties:
         id:
           type: integer
+          x-mockingbird-volatile:
+            kind: id
         slug:
           type: string
         name:
@@ -845,6 +1739,8 @@ components:
       properties:
         id:
           type: integer
+          x-mockingbird-volatile:
+            kind: id
         name:
           type: string
         slug:
@@ -947,6 +1843,527 @@ components:
             $ref: "#/components/schemas/ClientFacingLabTest"
         next_cursor:
           type: ["string", "null"]
+    ClientFacingResult:
+      type: object
+      required: [name, slug, type]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        provider_id:
+          type: ["string", "null"]
+        type:
+          $ref: "#/components/schemas/ResultType"
+        value:
+          type: ["number", "null"]
+        unit:
+          type: ["string", "null"]
+        low_value:
+          type: ["number", "null"]
+        high_value:
+          type: ["number", "null"]
+        string_value:
+          type: ["string", "null"]
+        coded_value:
+          type: ["string", "null"]
+        is_abnormal:
+          type: boolean
+          default: false
+        notes:
+          type: ["string", "null"]
+    GetMarkersResponse:
+      type: object
+      required: [markers]
+      properties:
+        markers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientFacingMarkerComplete"
+        total:
+          type: ["integer", "null"]
+        page:
+          type: ["integer", "null"]
+        size:
+          type: ["integer", "null"]
+        pages:
+          type: ["integer", "null"]
+    ClientFacingExpectedResult:
+      type: object
+      required: [id, name, slug, required]
+      properties:
+        id:
+          type: integer
+          x-mockingbird-volatile:
+            kind: id
+        name:
+          type: string
+        slug:
+          type: string
+        lab_id:
+          type: ["integer", "null"]
+        provider_id:
+          type: ["string", "null"]
+        required:
+          type: boolean
+        loinc:
+          type: ["object", "null"]
+          additionalProperties: true
+    ClientFacingMarkerComplete:
+      type: object
+      required: [id, name, slug, expected_results]
+      properties:
+        id:
+          type: integer
+          x-mockingbird-volatile:
+            kind: id
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: ["string", "null"]
+        lab_id:
+          type: ["integer", "null"]
+        provider_id:
+          type: ["string", "null"]
+        type:
+          anyOf:
+            - $ref: "#/components/schemas/MarkerType"
+            - type: "null"
+        unit:
+          type: ["string", "null"]
+        price:
+          type: ["string", "null"]
+        a_la_carte_enabled:
+          type: boolean
+          default: false
+        common_tat_days:
+          type: ["integer", "null"]
+        worst_case_tat_days:
+          type: ["integer", "null"]
+        is_orderable:
+          type: ["boolean", "null"]
+          default: true
+        expected_results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientFacingExpectedResult"
+    ListOrderSetMarkersRequest:
+      type: object
+      required: [order_set_id]
+      properties:
+        order_set_id:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order_transaction
+            missing: "00000000-0000-4000-8000-000000000000"
+        provider_id:
+          type: ["string", "null"]
+    AllowedRadius:
+      type: integer
+      enum: [10, 20, 25, 50, 100]
+    AppointmentPscLabs:
+      type: string
+      enum: [quest]
+    AppointmentProvider:
+      type: string
+      enum: [getlabs, phlebfinders, quest]
+    AppointmentType:
+      type: string
+      enum: [phlebotomy, patient_service_center]
+    AppointmentStatus:
+      type: string
+      enum: [confirmed, pending, reserved, in_progress, completed, cancelled]
+    AppointmentEventStatus:
+      type: string
+      enum: [pending, reserved, scheduled, completed, cancelled, in_progress]
+    AppointmentServiceType:
+      type: string
+      enum: [appointment-ready, appointment-request]
+    Billing:
+      type: string
+      enum: [client_bill, commercial_insurance, patient_bill_passthrough, patient_bill]
+    LabLocationCapability:
+      type: string
+      enum: [stat, appointment_scheduling_via_junction, appointment_scheduling_with_lab]
+    LngLat:
+      type: object
+      required: [lng, lat]
+      properties:
+        lng:
+          type: number
+        lat:
+          type: number
+    UsAddress:
+      type: object
+      required: [first_line, city, state, zip_code]
+      properties:
+        first_line:
+          type: string
+          minLength: 1
+        second_line:
+          type: ["string", "null"]
+        city:
+          type: string
+          minLength: 1
+        state:
+          type: string
+          minLength: 1
+        zip_code:
+          type: string
+          minLength: 1
+        unit:
+          type: ["string", "null"]
+    AppointmentLocation:
+      type: object
+      required: [location, address, code, name]
+      properties:
+        location:
+          $ref: "#/components/schemas/LngLat"
+        distance:
+          type: ["number", "null"]
+        address:
+          $ref: "#/components/schemas/UsAddress"
+        code:
+          type: string
+        name:
+          type: string
+        iana_timezone:
+          type: ["string", "null"]
+    TimeSlot:
+      type: object
+      required: [start, end, price, is_priority, num_appointments_available]
+      properties:
+        booking_key:
+          type: ["string", "null"]
+          x-mockingbird-resource:
+            type: booking_key
+            identity: true
+          x-mockingbird-volatile:
+            kind: token
+        start:
+          type: string
+          format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
+        end:
+          type: string
+          format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
+        expires_at:
+          type: ["string", "null"]
+          x-mockingbird-volatile:
+            kind: timestamp
+        price:
+          type: number
+        is_priority:
+          type: boolean
+        num_appointments_available:
+          type: integer
+    DaySlots:
+      type: object
+      required: [date, slots]
+      properties:
+        location:
+          anyOf:
+            - $ref: "#/components/schemas/AppointmentLocation"
+            - type: "null"
+        date:
+          type: string
+          format: date
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimeSlot"
+    AppointmentAvailabilitySlots:
+      type: object
+      required: [slots]
+      properties:
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/DaySlots"
+        timezone:
+          type: ["string", "null"]
+    AppointmentBookingRequest:
+      type: object
+      required: [booking_key]
+      properties:
+        booking_key:
+          type: string
+          minLength: 1
+          x-mockingbird-resource-ref:
+            type: booking_key
+    AppointmentRescheduleRequest:
+      type: object
+      required: [booking_key]
+      properties:
+        booking_key:
+          type: string
+          minLength: 1
+          x-mockingbird-resource-ref:
+            type: booking_key
+    PscAppointmentBookingRequest:
+      type: object
+      required: [booking_key, site_code]
+      properties:
+        booking_key:
+          type: string
+          minLength: 1
+          x-mockingbird-resource-ref:
+            type: booking_key
+        site_code:
+          type: string
+          minLength: 1
+    PhlebotomyAppointmentCancelRequest:
+      type: object
+      required: [cancellation_reason_id]
+      properties:
+        cancellation_reason_id:
+          type: string
+          minLength: 1
+        notes:
+          type: ["string", "null"]
+    PscAppointmentCancelRequest:
+      type: object
+      required: [cancellationReasonId]
+      properties:
+        cancellationReasonId:
+          type: string
+          minLength: 1
+        note:
+          type: ["string", "null"]
+    ClientFacingAppointmentEvent:
+      type: object
+      required: [created_at, status]
+      properties:
+        created_at:
+          type: string
+          format: date-time
+          x-mockingbird-volatile:
+            kind: timestamp
+        status:
+          $ref: "#/components/schemas/AppointmentEventStatus"
+        data:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+    ClientFacingAppointment:
+      type: object
+      required:
+        - id
+        - user_id
+        - order_id
+        - address
+        - location
+        - type
+        - provider
+        - status
+        - provider_id
+        - can_reschedule
+        - event_status
+        - events
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-resource:
+            type: appointment
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        user_id:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+        order_id:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: order
+        address:
+          $ref: "#/components/schemas/UsAddress"
+        location:
+          $ref: "#/components/schemas/LngLat"
+        start_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          x-mockingbird-volatile:
+            kind: timestamp
+        end_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: "null"
+          x-mockingbird-volatile:
+            kind: timestamp
+        iana_timezone:
+          type: ["string", "null"]
+        type:
+          $ref: "#/components/schemas/AppointmentType"
+        provider:
+          $ref: "#/components/schemas/AppointmentProvider"
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        provider_id:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        external_id:
+          type: ["string", "null"]
+          x-mockingbird-volatile:
+            kind: id
+        can_reschedule:
+          type: boolean
+        event_status:
+          $ref: "#/components/schemas/AppointmentEventStatus"
+        event_data:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: "null"
+        order_transaction_id:
+          type: ["string", "null"]
+          x-mockingbird-resource-ref:
+            type: order_transaction
+        appointment_notes:
+          type: ["string", "null"]
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientFacingAppointmentEvent"
+    ClientFacingAppointmentCancellationReason:
+      type: object
+      required: [id, name, is_refundable]
+      properties:
+        id:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        name:
+          type: string
+        is_refundable:
+          type: boolean
+    PhlebotomyAreaInfo:
+      type: object
+      required: [is_served, providers]
+      properties:
+        is_served:
+          type: boolean
+        providers:
+          type: array
+          items:
+            $ref: "#/components/schemas/PhlebotomyProviderInfo"
+    PhlebotomyProviderInfo:
+      type: object
+      required: [name, service_types]
+      properties:
+        name:
+          $ref: "#/components/schemas/AppointmentProvider"
+        service_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppointmentServiceType"
+    PscAreaInfoDetails:
+      type: object
+      required: [appointment_with_vital, within_radius, radius]
+      properties:
+        appointment_with_vital:
+          type: boolean
+        within_radius:
+          type: number
+        radius:
+          type: string
+        capabilities:
+          type: ["array", "null"]
+          items:
+            $ref: "#/components/schemas/LabLocationCapability"
+    PscAreaInfo:
+      type: object
+      required: [patient_service_centers, supported_bill_types, lab_id]
+      properties:
+        patient_service_centers:
+          $ref: "#/components/schemas/PscAreaInfoDetails"
+        supported_bill_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/Billing"
+        lab_id:
+          type: integer
+    AreaInfo:
+      type: object
+      required: [zip_code, phlebotomy, central_labs]
+      properties:
+        zip_code:
+          type: string
+        phlebotomy:
+          $ref: "#/components/schemas/PhlebotomyAreaInfo"
+        central_labs:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/PscAreaInfo"
+    LabLocationMetadata:
+      type: object
+      required: [name, state, city, zip_code, first_line]
+      properties:
+        name:
+          type: string
+        state:
+          type: string
+        city:
+          type: string
+        zip_code:
+          type: string
+        first_line:
+          type: string
+        second_line:
+          type: ["string", "null"]
+        phone_number:
+          type: ["string", "null"]
+        fax_number:
+          type: ["string", "null"]
+        hours:
+          type: ["object", "null"]
+          additionalProperties: true
+    ClientFacingLabLocation:
+      type: object
+      required: [metadata, distance, site_code, supported_bill_types, location, capabilities]
+      properties:
+        metadata:
+          $ref: "#/components/schemas/LabLocationMetadata"
+        distance:
+          type: number
+        site_code:
+          type: string
+        supported_bill_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/Billing"
+        location:
+          $ref: "#/components/schemas/LngLat"
+        capabilities:
+          type: array
+          items:
+            $ref: "#/components/schemas/LabLocationCapability"
+    PscInfo:
+      type: object
+      required: [lab_id, slug, patient_service_centers]
+      properties:
+        lab_id:
+          type: integer
+        slug:
+          type: string
+        patient_service_centers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientFacingLabLocation"
     OrderTopLevelStatus:
       type: string
       enum: [received, collecting_sample, sample_with_lab, completed, cancelled, failed]
@@ -1803,6 +3220,20 @@ components:
           anyOf:
             - $ref: "#/components/schemas/ClientFacingOrderTransaction"
             - type: "null"
+    SimulationFlags:
+      type: object
+      properties:
+        interpretation:
+          anyOf:
+            - type: string
+              enum: [normal, abnormal, critical, unknown]
+            - type: "null"
+        result_types:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResultType"
+        has_missing_results:
+          type: boolean
     GetOrdersResponse:
       type: object
       required: [orders]
