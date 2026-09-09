@@ -171,7 +171,7 @@ function orderNotFound(message: string): never {
 export const resultsHandlers = (state: JunctionState) => ({
   get_result_raw_v3_order__order_id__result_get: async (context: OperationContext) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context)
+    const order = requireOrder(state, orderId, context, "Order not found")
     const user = state.users.get(order.user_id)
     if (!resultsReady(order)) {
       return jsonRes(200, {
@@ -221,14 +221,14 @@ export const resultsHandlers = (state: JunctionState) => ({
     context: OperationContext,
   ) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context)
+    const order = requireOrder(state, orderId, context, "Order not found")
     const user = state.users.get(order.user_id)
     return jsonRes(200, metadataOf(order, user?.client_user_id ?? order.user_id))
   },
 
   get_result_pdf_v3_order__order_id__result_pdf_get: async (context: OperationContext) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context)
+    const order = requireOrder(state, orderId, context, "Order not found")
     if (!resultsReady(order)) orderNotFound("Results are not available yet")
     const bytes = deterministicPdf(`Lab results ${order.id}`)
     return new Response(bytes as unknown as BodyInit, {
@@ -241,7 +241,7 @@ export const resultsHandlers = (state: JunctionState) => ({
     context: OperationContext,
   ) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context)
+    const order = requireOrder(state, orderId, context, "This order doesn't exist")
     const bytes = deterministicPdf(`Requisition ${order.id}`)
     return new Response(bytes as unknown as BodyInit, {
       status: 200,

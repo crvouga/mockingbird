@@ -27,7 +27,21 @@ describe("Junction client-facing lifecycle", () => {
 
     const info = await request(api, `/v2/user/${userId}/info`, {
       method: "PATCH",
-      body: JSON.stringify({ first_name: "Ada" }),
+      body: JSON.stringify({
+        first_name: "Ada",
+        last_name: "Lovelace",
+        dob: "1990-01-01",
+        gender: "female",
+        phone_number: "+14155551234",
+        email: "ada@example.com",
+        address: {
+          first_line: "1 Main St",
+          city: "San Diego",
+          state: "CA",
+          zip: "92101",
+          country: "US",
+        },
+      }),
       headers: { "content-type": "application/json" },
     })
     expect(info.status).toBe(200)

@@ -159,78 +159,6 @@ const PSC_LABS = [
 /** Lab 3 (USSL) exists in the catalog but is excluded from PSC info in the sandbox. */
 export const UNSUPPORTED_PSC_LAB_ID = 3
 
-type PscSite = {
-  site_code: string
-  name: string
-  first_line: string
-  city: string
-  state: string
-  zip_code: string
-  location: { lng: number; lat: number }
-  distance: number
-  phone_number: string
-  hours: Record<string, string>
-}
-
-const PSC_SITES: PscSite[] = [
-  {
-    site_code: "L10194",
-    name: "Labcorp - 123 Harbor Blvd",
-    first_line: "123 Harbor Blvd",
-    city: "Fullerton",
-    state: "CA",
-    zip_code: "92835",
-    location: { lng: -117.9438, lat: 33.8116 },
-    distance: 2.4,
-    phone_number: "+17145550123",
-    hours: {
-      monday: "07:30-16:00",
-      tuesday: "07:30-16:00",
-      wednesday: "07:30-16:00",
-      thursday: "07:30-16:00",
-      friday: "07:30-12:00",
-    },
-  },
-  {
-    site_code: "L10257",
-    name: "Labcorp - 450 Market St",
-    first_line: "450 Market St",
-    city: "San Francisco",
-    state: "CA",
-    zip_code: "94105",
-    location: { lng: -122.4008, lat: 37.7898 },
-    distance: 1.7,
-    phone_number: "+14155550188",
-    hours: {
-      monday: "07:00-15:30",
-      tuesday: "07:00-15:30",
-      wednesday: "07:00-15:30",
-      thursday: "07:00-15:30",
-      friday: "07:00-12:00",
-    },
-  },
-  {
-    site_code: "Q10170",
-    name: "USSL - 15150 Avenue of Science",
-    first_line: "15150 Avenue of Science, Suite 100",
-    city: "San Diego",
-    state: "CA",
-    zip_code: "92128",
-    location: { lng: -117.0752, lat: 33.0104 },
-    distance: 0.9,
-    phone_number: "+18585550199",
-    hours: {
-      monday: "08:00-17:00",
-      tuesday: "08:00-17:00",
-      wednesday: "08:00-17:00",
-      thursday: "08:00-17:00",
-      friday: "08:00-14:00",
-    },
-  },
-]
-
-const isServicedZip = (zip: string): boolean => /^\d{5}$/.test(zip) && Number(zip.slice(0, 3)) > 0
-
 const AREA_LAB_BILLS: Readonly<Record<string, readonly string[]>> = {
   sonora_quest: ["client_bill"],
   labcorp: ["client_bill", "commercial_insurance", "patient_bill"],
@@ -654,18 +582,23 @@ function invalidBookingKey(): never {
 
 type Order = NonNullable<ReturnType<JunctionState["orders"]["get"]>>
 
-const requireOrder = (state: JunctionState, orderId: string, context: OperationContext): Order => {
+const requireOrder = (
+  state: JunctionState,
+  orderId: string,
+  context: OperationContext,
+  missingMessage = "This order doesn't exist.",
+): Order => {
   if (!isUuid(orderId)) {
     throw new HttpError(422, { detail: [uuidError(orderId, ["path", "order_id"])] })
   }
   const order: Order | undefined = state.orders.get(orderId)
-  if (order === undefined) notFound("Order doesn't exist")
+  if (order === undefined) notFound(missingMessage)
   const loaded: Order = order
   state.applyDueSimulateTransitions(context.now(), (_due, finalStatus, flags) => {
     applySimulateTransition(state, loaded, finalStatus, flags, context)
   })
   const fresh: Order | undefined = state.orders.get(orderId)
-  if (fresh === undefined) notFound("Order doesn't exist")
+  if (fresh === undefined) notFound(missingMessage)
   return fresh
 }
 

@@ -38,9 +38,10 @@ const render = (user: UserRecord, rawEnd = false) => ({
 
 const listUsers = (state: JunctionState, offset: number, limit: number) => {
   const all = state.users.list({ order: "newest" })
+  const users = all.slice(offset, offset + limit).map((entry) => render(entry.value, true))
   return {
-    users: all.slice(offset, offset + limit).map((entry) => render(entry.value, true)),
-    total: Math.max(0, all.length - offset),
+    users,
+    total: users.length === 0 ? 0 : all.length,
     offset,
     limit,
   }
@@ -69,8 +70,6 @@ const isValidIanaTimezone = (value: string): boolean => {
     return false
   }
 }
-
-const isValidPhone = (value: string): boolean => /^\+\d{10,15}$/.test(value)
 
 const isValidDate = (value: string): boolean => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -116,103 +115,271 @@ const dateError = (path: string, value: unknown) => {
   }
 }
 
+/** Pydantic-style email validation mirroring the sandbox's error reasons. */
+const emailErrorOf = (value: string): { msg: string; reason: string } | undefined => {
+  if (!value.includes("@")) {
+    return {
+      msg: "value is not a valid email address: An email address must have an @-sign.",
+      reason: "An email address must have an @-sign.",
+    }
+  }
+  const [local = "", ...domainParts] = value.split("@")
+  const domain = domainParts.join("@")
+  if (local === "") {
+    return {
+      msg: "value is not a valid email address: There must be something before the @-sign.",
+      reason: "There must be something before the @-sign.",
+    }
+  }
+  if (domain === "") {
+    return {
+      msg: "value is not a valid email address: There must be something after the @-sign.",
+      reason: "There must be something after the @-sign.",
+    }
+  }
+  if (/\s/.test(local)) {
+    return {
+      msg: `value is not a valid email address: The email address contains invalid characters before the @-sign: ${describeLocalChar(local)}.`,
+      reason: `The email address contains invalid characters before the @-sign: ${describeLocalChar(local)}.`,
+    }
+  }
+  if (domain.includes("@") || /[^a-zA-Z0-9.\-_]/.test(domain)) {
+    return {
+      msg: `value is not a valid email address: The part after the @-sign contains invalid characters: '@'.`,
+      reason: `The part after the @-sign contains invalid characters: '@'.`,
+    }
+  }
+  if (!domain.includes(".")) {
+    return {
+      msg: "value is not a valid email address: The part after the @-sign is not valid. It should have a period.",
+      reason: "The part after the @-sign is not valid. It should have a period.",
+    }
+  }
+  return undefined
+}
+
+const describeLocalChar = (local: string): string => {
+  for (const character of local) {
+    if (/\s/.test(character)) return character === " " ? "SPACE" : "WS"
+  }
+  return characterDescription(local)
+}
+
+const characterDescription = (value: string): string => {
+  for (const character of value) {
+    if (!/[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]/.test(character)) {
+      const code = character.codePointAt(0) ?? 0
+      if (code > 126) return "NON printable"
+      return `'${character}'`
+    }
+  }
+  return "SPACE"
+}
+
+const emailValidationError = (value: string) => {
+  const error = emailErrorOf(value)
+  if (!error) return undefined
+  return {
+    type: "value_error",
+    loc: ["body", "email"],
+    msg: error.msg,
+    input: value,
+    ctx: { reason: error.reason },
+  }
+}
+
+/** Pydantic date parsing mirroring the sandbox's `date` field error taxonomy. */
+const dobValidationError = (value: unknown) => {
+  if (typeof value === "string") {
+    const codePoints = [...value]
+    if (codePoints.some((character) => (character.codePointAt(0) ?? 0) > 127)) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, invalid character in year",
+        input: value,
+        ctx: { error: "invalid character in year" },
+      }
+    }
+    if (/^\d+$/.test(value)) {
+      return {
+        type: "date_from_datetime_inexact",
+        loc: ["body", "dob"],
+        msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
+        input: value,
+      }
+    }
+    if (value.length < 10) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, input is too short",
+        input: value,
+        ctx: { error: "input is too short" },
+      }
+    }
+    const iso = value.match(/^(\d{4})([-/])(\d{2}|[^-])\2(\d{2}|[^-]*)(.*)$/)
+    if (iso === null) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, invalid character in year",
+        input: value,
+        ctx: { error: "invalid character in year" },
+      }
+    }
+    const [, year = "", separator = "-", monthRaw = "", dayRaw = "", rest = ""] = iso
+    if (separator !== "-") {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, invalid date separator, expected `-`",
+        input: value,
+        ctx: { error: "invalid date separator, expected `-`" },
+      }
+    }
+    if (!/^\d+$/.test(year ?? "")) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, invalid character in year",
+        input: value,
+        ctx: { error: "invalid character in year" },
+      }
+    }
+    if (!/^\d+$/.test(monthRaw ?? "")) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, invalid character in month",
+        input: value,
+        ctx: { error: "invalid character in month" },
+      }
+    }
+    if (!/^\d+$/.test(dayRaw ?? "")) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, invalid character in day",
+        input: value,
+        ctx: { error: "invalid character in day" },
+      }
+    }
+    const month = Number(monthRaw)
+    if (month < 1 || month > 12) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, month value is outside expected range of 1-12",
+        input: value,
+        ctx: { error: "month value is outside expected range of 1-12" },
+      }
+    }
+    const day = Number(dayRaw)
+    const yearNumber = Number(year)
+    const daysInMonth = new Date(Date.UTC(yearNumber, month, 0)).getUTCDate()
+    if (day < 1 || day > daysInMonth) {
+      return {
+        type: "date_from_datetime_parsing",
+        loc: ["body", "dob"],
+        msg: "Input should be a valid date or datetime, day value is outside expected range",
+        input: value,
+        ctx: { error: "day value is outside expected range" },
+      }
+    }
+    if (rest !== "" && !/^T00:00:00(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/.test(rest)) {
+      return {
+        type: "date_from_datetime_inexact",
+        loc: ["body", "dob"],
+        msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
+        input: value,
+      }
+    }
+    return undefined
+  }
+  if (typeof value === "number") {
+    return {
+      type: "date_from_datetime_inexact",
+      loc: ["body", "dob"],
+      msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
+      input: value,
+    }
+  }
+  return {
+    type: "date_type",
+    loc: ["body", "dob"],
+    msg: "Input should be a valid date",
+    input: value,
+  }
+}
+
 const userInfoValidationErrors = (body: Record<string, unknown>): unknown[] => {
   const errors: unknown[] = []
-  const required =
-    body.address !== undefined ||
-    body.first_name === null ||
-    body.first_name === "" ||
-    body.last_name === null ||
-    body.last_name === "" ||
-    body.email === null ||
-    (typeof body.email === "string" && (body.email === "" || !body.email.includes("@"))) ||
-    body.phone_number === null ||
-    body.gender === null ||
-    (body.dob !== undefined &&
-      (body.dob === null || (typeof body.dob === "string" && !isValidDate(body.dob))))
-  const pushString = (field: string, value: unknown, isRequired = required) => {
-    if (isRequired && value === undefined) errors.push(missingError(field, body))
-    else if (value !== undefined && typeof value !== "string")
-      errors.push(stringError(field, value))
+  const push = (error: unknown) => {
+    if (error) errors.push(error)
   }
-  pushString("first_name", body.first_name, body.last_name !== undefined)
-  pushString("last_name", body.last_name)
-  if (body.last_name !== undefined && body.email === undefined)
-    errors.push(missingError("email", body))
-  else if (body.email !== undefined && typeof body.email !== "string")
-    errors.push(stringError("email", body.email))
-  else if (typeof body.email === "string" && (body.email === "" || !body.email.includes("@"))) {
-    errors.push({
-      type: "value_error",
-      loc: ["body", "email"],
-      msg: "value is not a valid email address: An email address must have an @-sign.",
-      input: body.email,
-      ctx: { reason: "An email address must have an @-sign." },
-    })
+
+  // Field-by-field, in the sandbox's fixed order; each field emits its missing OR
+  // type/value error before moving to the next.
+  for (const field of ["first_name", "last_name"] as const) {
+    const value = body[field]
+    if (value === undefined) push(missingError(field, body))
+    else if (typeof value !== "string") push(stringError(field, value))
   }
-  if (body.phone_number === null)
-    errors.push({
+
+  const email = body.email
+  if (email === undefined) push(missingError("email", body))
+  else if (typeof email !== "string") push(stringError("email", email))
+  else push(emailValidationError(email))
+
+  const phone = body.phone_number
+  if (phone === undefined) push(missingError("phone_number", body))
+  else if (phone === null) {
+    push({
       type: "value_error",
       loc: ["body", "phone_number"],
       msg: "Value error, Phone number cannot be None",
       input: null,
       ctx: { error: {} },
     })
-  else if (required && body.phone_number === undefined)
-    errors.push(missingError("phone_number", body))
-  else if (body.phone_number !== undefined && typeof body.phone_number !== "string")
-    errors.push(stringError("phone_number", body.phone_number))
-  else if (typeof body.phone_number === "string" && !isValidPhone(body.phone_number))
-    errors.push({
-      type: "value_error",
-      loc: ["body", "phone_number"],
-      msg: `Value error, Invalid phone number: ${body.phone_number}`,
-      input: body.phone_number,
-      ctx: { error: {} },
-    })
-  if (required && body.gender === undefined) errors.push(missingError("gender", body))
-  else if (body.gender !== undefined && typeof body.gender !== "string")
-    errors.push(stringError("gender", body.gender))
-  if (required && body.dob === undefined) errors.push(missingError("dob", body))
-  else if (typeof body.dob === "string") {
-    if (!isValidDate(body.dob)) errors.push(dateError("dob", body.dob))
-  } else if (body.dob === null)
-    errors.push({
-      type: "date_type",
-      loc: ["body", "dob"],
-      msg: "Input should be a valid date",
-      input: body.dob,
-    })
-  else if (body.dob !== undefined)
-    errors.push({
-      type: "date_from_datetime_parsing",
-      loc: ["body", "dob"],
-      msg: "Input should be a valid date or datetime, invalid character in year",
-      input: body.dob,
-      ctx: { error: "invalid character in year" },
-    })
-  if (required && body.address === undefined) errors.push(missingError("address", body))
-  else if (body.address === null)
-    errors.push({
+  } else if (typeof phone === "string") {
+    const digits = phone.replace(/\D/g, "")
+    if (digits.length < 10 || !/^[\d\s()+-]*$/.test(phone)) {
+      push({
+        type: "value_error",
+        loc: ["body", "phone_number"],
+        msg: `Value error, Invalid phone number: ${phone}`,
+        input: phone,
+        ctx: { error: {} },
+      })
+    }
+  }
+
+  const gender = body.gender
+  if (gender === undefined) push(missingError("gender", body))
+  else if (typeof gender !== "string") push(stringError("gender", gender))
+
+  if (body.dob === undefined) push(missingError("dob", body))
+  else push(dobValidationError(body.dob))
+
+  const address = body.address
+  if (address === undefined) push(missingError("address", body))
+  else if (address === null || typeof address !== "object" || Array.isArray(address)) {
+    push({
       type: "model_attributes_type",
       loc: ["body", "address"],
       msg: "Input should be a valid dictionary or object to extract fields from",
-      input: body.address,
+      input: address,
     })
-  else if (
-    body.address !== undefined &&
-    (typeof body.address !== "object" || Array.isArray(body.address))
-  )
-    errors.push({
-      type: "model_attributes_type",
-      loc: ["body", "address"],
-      msg: "Input should be a valid dictionary or object to extract fields from",
-      input: body.address,
-    })
-  else if (body.address !== undefined) {
-    const address = body.address as Record<string, unknown>
+  } else {
+    const addressRecord = address as Record<string, unknown>
     for (const field of ["first_line", "country", "zip", "city", "state"] as const) {
-      if (address[field] === undefined) errors.push(missingError(`address.${field}`, address))
+      const value = addressRecord[field]
+      if (value === undefined) push(missingError(`address.${field}`, addressRecord))
+      else if (typeof value !== "string") push(stringError(`address.${field}`, value))
+    }
+    if (addressRecord.second_line !== undefined && typeof addressRecord.second_line !== "string") {
+      push(stringError("address.second_line", addressRecord.second_line))
     }
   }
   return errors
@@ -226,7 +393,28 @@ export const userHandlers = (state: JunctionState) => ({
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
     if (!state.users.has(id)) notFound("User not found")
     const existing = state.userInfo.get(id) ?? {}
-    const info = { ...existing, ...body }
+    const rawAddress =
+      typeof body.address === "object" && body.address !== null && !Array.isArray(body.address)
+        ? (body.address as Record<string, unknown>)
+        : undefined
+    const info = {
+      ...existing,
+      ...body,
+      ...(rawAddress === undefined
+        ? {}
+        : {
+            address: {
+              first_line: rawAddress.first_line ?? "",
+              second_line: typeof rawAddress.second_line === "string" ? rawAddress.second_line : "",
+              country: rawAddress.country ?? "",
+              zip: rawAddress.zip ?? "",
+              city: rawAddress.city ?? "",
+              state: rawAddress.state ?? "",
+              access_notes:
+                typeof rawAddress.access_notes === "string" ? rawAddress.access_notes : null,
+            },
+          }),
+    }
     state.userInfo.insert(id, info)
     return jsonRes(200, info)
   },
@@ -446,9 +634,9 @@ export const userHandlers = (state: JunctionState) => ({
         detail: `Invalid format for parameter user_id: error unmarshaling '${id}' text as *uuid.UUID: invalid UUID length: ${id.length}`,
       })
     }
-    if (!state.users.has(id)) notFound("User not found")
+    if (!state.users.has(id) && !state.deletedUsers.has(id)) notFound("User not found")
     const info = state.userInfo.get(id)
-    if (!info) notFound("No user info found")
+    if (!info) notFound("User demographics data not found")
     return jsonRes(200, info)
   },
 

@@ -7,7 +7,13 @@ import {
 } from "@crvouga/mockingbird-service"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
-import { expectedResultsFor, LAB_TEST_CATALOG, labTestById, MOCK_TEAM_ID } from "./state.js"
+import {
+  expectedResultsFor,
+  LAB_TEST_CATALOG,
+  labTestById,
+  MOCK_TEAM_ID,
+  TEAM_LABS,
+} from "./state.js"
 
 const RESULT_TYPES = ["numeric", "range", "comment", "coded_value"] as const
 const INTERPRETATIONS = ["normal", "abnormal", "critical", "unknown"] as const
@@ -189,17 +195,6 @@ const patientAddress = (input: Record<string, unknown>): Record<string, unknown>
   access_notes: null,
 })
 
-const isValidDate = (value: string): boolean => {
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) return true
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const [year, month, day] = value.split("-").map(Number)
-  const y = year ?? 0
-  const m = month ?? 0
-  const d = day ?? 0
-  const date = new Date(Date.UTC(y, m - 1, d))
-  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d
-}
-
 const missingError = (loc: Array<string | number>, input: unknown) => ({
   type: "missing",
   loc,
@@ -314,24 +309,24 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
     errors.push(uuidError(labAccountId))
   }
   const os = body.order_set
-  if (os === undefined) {
-    errors.push(missingError(["body", "order_set"], body))
-  } else if (typeof os !== "object" || os === null || Array.isArray(os)) {
+  const osWrongType =
+    os !== undefined && (typeof os !== "object" || os === null || Array.isArray(os))
+  if (osWrongType) {
     errors.push({
       type: "model_attributes_type",
       loc: ["body", "order_set"],
       msg: "Input should be a valid dictionary or object to extract fields from",
       input: os,
     })
-  } else {
+  } else if (os !== undefined) {
     const o = os as Record<string, unknown>
     const ids = o.lab_test_ids
     if (ids === undefined) errors.push(missingError(["body", "order_set", "lab_test_ids"], o))
     else if (!Array.isArray(ids)) {
       errors.push({
-        type: "string_type",
+        type: "list_type",
         loc: ["body", "order_set", "lab_test_ids"],
-        msg: "Input should be a valid string",
+        msg: "Input should be a valid list",
         input: ids,
       })
     } else {
@@ -354,7 +349,43 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
     const p = pd as Record<string, unknown>
     for (const field of ["first_name", "last_name", "dob", "gender", "phone_number", "email"]) {
       if (p[field] === undefined) errors.push(missingError(["body", "patient_details", field], p))
-      else if (typeof p[field] !== "string")
+      else if (field === "gender" && p[field] === null) {
+        errors.push({
+          type: "value_error",
+          loc: ["body", "patient_details", "gender"],
+          msg: "Value error, gender cannot be None.",
+          input: null,
+          ctx: { error: {} },
+        })
+      } else if (field === "phone_number" && p[field] === null) {
+        errors.push({
+          type: "value_error",
+          loc: ["body", "patient_details", "phone_number"],
+          msg: "Value error, Phone number cannot be None",
+          input: null,
+          ctx: { error: {} },
+        })
+      } else if (field === "dob" && typeof p[field] === "number") {
+        const asSeconds = Math.abs(p[field] as number) < 1e12
+        const normalized = new Date((p[field] as number) * (asSeconds ? 1000 : 1))
+          .toISOString()
+          .replace(/\.\d{3}Z$/, "+00:00")
+          .replace(/Z$/, "+00:00")
+        errors.push({
+          type: "date_from_datetime_inexact",
+          loc: ["body", "patient_details", "dob"],
+          msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
+          input: normalized,
+        })
+      } else if (field === "dob" && (p[field] === null || typeof p[field] === "object")) {
+        errors.push({
+          type: "value_error",
+          loc: ["body", "patient_details", "dob"],
+          msg: "Value error, date of birth is not specified.",
+          input: p[field],
+          ctx: { error: {} },
+        })
+      } else if (typeof p[field] !== "string")
         errors.push(stringTypeError(["body", "patient_details", field], p[field]))
       else if (
         (field === "first_name" || field === "last_name") &&
@@ -367,57 +398,12 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
         !isValidName(p[field] as string)
       )
         errors.push(nameError(field, p[field]))
-      else if (field === "email" && (p[field] as string) === "") {
-        errors.push({
-          type: "value_error",
-          loc: ["body", "patient_details", "email"],
-          msg: "value is not a valid email address: An email address must have an @-sign.",
-          input: p[field],
-          ctx: { reason: "An email address must have an @-sign." },
-        })
+      else if (field === "email") {
+        const emailError = userEmailError(p[field] as string)
+        if (emailError) errors.push(emailError)
       } else if (field === "dob") {
-        const dob = p[field] as string
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
-          if (new Date(`${dob}T00:00:00Z`).getTime() > Date.now()) {
-            errors.push({
-              type: "value_error",
-              loc: ["body", "patient_details", "dob"],
-              msg: "Value error, dob cannot be in the future",
-              input: `${dob}T00:00:00+00:00`,
-              ctx: { error: {} },
-            })
-          }
-          continue
-        }
-        if (/^\d{4}-\d{2}-\d{2}T/.test(dob)) {
-          if (!/^\d{4}-\d{2}-\d{2}T00:00:00/.test(dob)) {
-            errors.push({
-              type: "date_from_datetime_inexact",
-              loc: ["body", "patient_details", "dob"],
-              msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
-              input: pyIso(dob),
-            })
-          } else {
-            const dateOnly = dob.slice(0, 10)
-            if (new Date(`${dateOnly}T00:00:00Z`).getTime() > Date.now()) {
-              errors.push({
-                type: "value_error",
-                loc: ["body", "patient_details", "dob"],
-                msg: "Value error, dob cannot be in the future",
-                input: `${dateOnly}T00:00:00+00:00`,
-                ctx: { error: {} },
-              })
-            }
-          }
-        } else if (!isValidDate(dob)) {
-          errors.push({
-            type: "date_from_datetime_parsing",
-            loc: ["body", "patient_details", "dob"],
-            msg: "Input should be a valid date or datetime, invalid character in year",
-            input: dob,
-            ctx: { error: "invalid character in year" },
-          })
-        }
+        const dobError = orderDobError(p[field] as string)
+        if (dobError) errors.push(dobError)
       } else if (field === "phone_number" && !isValidPhone(p[field] as string)) {
         errors.push(phoneError(["body", "patient_details", "phone_number"], p[field]))
       }
@@ -451,6 +437,94 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
     }
   }
   return errors
+}
+
+/** Sandbox email validation for `patient_details.email` (only the missing-@ sign case is reachable here). */
+const userEmailError = (value: string) => {
+  if (!value.includes("@")) {
+    return {
+      type: "value_error",
+      loc: ["body", "patient_details", "email"],
+      msg: "value is not a valid email address: An email address must have an @-sign.",
+      input: value,
+      ctx: { reason: "An email address must have an @-sign." },
+    }
+  }
+  return undefined
+}
+
+/**
+ * Sandbox dob validation for create_order: many string formats are accepted
+ * (`1990-01-01`, `1990-01`, `1990/01/01`, `19900101`, ...); exact zero-time datetimes are
+ * accepted, non-zero times produce `date_from_datetime_inexact` with a normalized input,
+ * and unmatchable strings produce the "Could not match" value error.
+ */
+const orderDobError = (dob: string) => {
+  if (/^\d{4}-\d{2}-\d{2}T/.test(dob)) {
+    if (/^\d{4}-\d{2}-\d{2}T00:00:00/.test(dob)) {
+      const dateOnly = dob.slice(0, 10)
+      if (new Date(`${dateOnly}T00:00:00Z`).getTime() > Date.now()) {
+        return {
+          type: "value_error",
+          loc: ["body", "patient_details", "dob"],
+          msg: "Value error, dob cannot be in the future",
+          input: `${dateOnly}T00:00:00+00:00`,
+          ctx: { error: {} },
+        }
+      }
+      return undefined
+    }
+    return {
+      type: "date_from_datetime_inexact",
+      loc: ["body", "patient_details", "dob"],
+      msg: "Datetimes provided to dates should have zero time - e.g. be exact dates",
+      input: pyIso(dob),
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
+    const [year = "0", month = "0", day = "0"] = dob.split("-")
+    const monthNumber = Number(month)
+    const dayNumber = Number(day)
+    if (monthNumber < 1 || monthNumber > 12) {
+      return {
+        type: "value_error",
+        loc: ["body", "patient_details", "dob"],
+        msg: `Value error, month must be in 1..12, not ${monthNumber}`,
+        input: dob,
+        ctx: { error: {} },
+      }
+    }
+    const daysInMonth = new Date(Date.UTC(Number(year), monthNumber, 0)).getUTCDate()
+    if (dayNumber < 1 || dayNumber > daysInMonth) {
+      return {
+        type: "value_error",
+        loc: ["body", "patient_details", "dob"],
+        msg: `Value error, day ${dayNumber} must be in range 1..${daysInMonth} for month ${monthNumber} in year ${year}`,
+        input: dob,
+        ctx: { error: {} },
+      }
+    }
+    if (new Date(`${dob}T00:00:00Z`).getTime() > Date.now()) {
+      return {
+        type: "value_error",
+        loc: ["body", "patient_details", "dob"],
+        msg: "Value error, dob cannot be in the future",
+        input: `${dob}T00:00:00+00:00`,
+        ctx: { error: {} },
+      }
+    }
+    return undefined
+  }
+  return {
+    type: "value_error",
+    loc: ["body", "patient_details", "dob"],
+    msg:
+      "Value error, Could not match input '" +
+      dob +
+      "' to any of the following formats: YYYY-MM-DD, YYYY-M-DD, YYYY-M-D, YYYY/MM/DD, YYYY/M/DD, YYYY/M/D, YYYY.MM.DD, YYYY.M.DD, YYYY.M.D, YYYYMMDD, YYYY-DDDD, YYYYDDDD, YYYY-MM, YYYY/MM, YYYY.MM, YYYY, W.",
+    input: dob,
+    ctx: { error: {} },
+  }
 }
 
 const aoeValidationError = (body: Record<string, unknown>): string | undefined => {
@@ -574,15 +648,7 @@ export const orderHandlers = (state: JunctionState) => ({
     return jsonRes(200, test)
   },
 
-  get_labs_v3_lab_tests_labs_get: async () => {
-    const labs = new Map<string, Record<string, unknown>>()
-    for (const test of LAB_TEST_CATALOG) {
-      const lab = test.lab as Record<string, unknown> | null
-      if (!lab || typeof lab.id !== "number") continue
-      labs.set(String(lab.id), lab)
-    }
-    return jsonRes(200, [...labs.values()])
-  },
+  get_labs_v3_lab_tests_labs_get: async () => jsonRes(200, TEAM_LABS),
 
   get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get: async (
     context: OperationContext,
@@ -626,18 +692,25 @@ export const orderHandlers = (state: JunctionState) => ({
     const body = trimStrings(rawBody) as Record<string, unknown>
     body.aoe_answers = rawBody.aoe_answers
     const patient = rawBody.patient_details
-    if (
-      typeof patient === "object" &&
-      patient !== null &&
-      !Array.isArray(patient) &&
-      Object.entries(patient).some(
-        ([key, value]) => ["first_name", "last_name"].includes(key) && typeof value !== "string",
-      )
-    ) {
-      return new Response("Internal Server Error", {
-        status: 500,
-        headers: { "content-type": "text/plain; charset=utf-8" },
+    if (typeof patient === "object" && patient !== null && !Array.isArray(patient)) {
+      const details = patient as Record<string, unknown>
+      const crashes = Object.entries(details).some(([key, value]) => {
+        if (
+          (key === "first_name" || key === "last_name") &&
+          (typeof value === "number" || typeof value === "boolean")
+        )
+          return true
+        if (key === "gender" && value !== null && typeof value !== "string") return true
+        if (key === "phone_number" && value !== null && typeof value !== "string") return true
+        if (key === "dob" && typeof value === "boolean") return true
+        return false
       })
+      if (crashes) {
+        return new Response("Internal Server Error", {
+          status: 500,
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        })
+      }
     }
     const errors = orderValidation(body)
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
@@ -666,6 +739,19 @@ export const orderHandlers = (state: JunctionState) => ({
       throw new HttpError(400, { detail: "Cannot set collection_method to TESTKIT" })
     const aoeError = aoeValidationError(body)
     if (aoeError) throw new HttpError(400, { detail: aoeError })
+    const rawOrderSet = body.order_set
+    if (rawOrderSet === undefined && body.lab_test_id === undefined) {
+      throw new HttpError(400, { detail: "Either lab_test_id or order_set must be set" })
+    }
+    if (
+      typeof rawOrderSet === "object" &&
+      rawOrderSet !== null &&
+      !Array.isArray(rawOrderSet) &&
+      (rawOrderSet as Record<string, unknown>).lab_test_ids === undefined &&
+      (rawOrderSet as Record<string, unknown>).add_on === undefined
+    ) {
+      throw new HttpError(400, { detail: "lab_test_ids or add_on must be set in order_set" })
+    }
     const details = body.patient_details as Record<string, unknown>
     const address = body.patient_address as Record<string, unknown>
     const labTestIds = (body.order_set as Record<string, unknown>).lab_test_ids as string[]
@@ -799,11 +885,10 @@ export const orderHandlers = (state: JunctionState) => ({
     const finalStatus = context.query.final_status
     if (!isUuid(id))
       throw new HttpError(422, { detail: [uuidError(id, undefined, ["path", "order_id"])] })
-    const order = state.orders.get(id)
-    if (!order) notFound("Order doesn't exist")
     if (
-      typeof finalStatus !== "string" ||
-      !FINAL_STATUSES.includes(finalStatus as (typeof FINAL_STATUSES)[number])
+      finalStatus !== undefined &&
+      (typeof finalStatus !== "string" ||
+        !FINAL_STATUSES.includes(finalStatus as (typeof FINAL_STATUSES)[number]))
     )
       throw new HttpError(422, { detail: [finalStatusError(String(finalStatus ?? ""))] })
     const delayRaw = context.query.delay
@@ -813,6 +898,29 @@ export const orderHandlers = (state: JunctionState) => ({
         throw new HttpError(422, { detail: "delay must be a non-negative integer" })
       delaySeconds = Number(delayRaw)
     }
+    const body = context.body
+    if (body.kind === "json") {
+      const value = body.value
+      if (typeof value !== "object" || Array.isArray(value)) {
+        throw new HttpError(422, {
+          detail: [
+            {
+              type: "model_attributes_type",
+              loc: ["body"],
+              msg: "Input should be a valid dictionary or object to extract fields from",
+              input: value,
+            },
+          ],
+        })
+      }
+    }
+    const order = state.orders.get(id)
+    if (!order) notFound("Order doesn't exist")
+    if (
+      typeof finalStatus !== "string" ||
+      !FINAL_STATUSES.includes(finalStatus as (typeof FINAL_STATUSES)[number])
+    )
+      throw new HttpError(422, { detail: [finalStatusError(String(finalStatus ?? ""))] })
     const flags = simulationFlagsOf(context)
     if (delaySeconds > 0) {
       state.queueSimulateTransition({

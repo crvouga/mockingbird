@@ -90,9 +90,15 @@ const authHeaders = { "x-vital-api-key": apiKey }
 
 const clearSandboxUsers = async () => {
   for (;;) {
-    const response = await fetch(`${baseUrl}/v2/user?offset=0&limit=500`, {
+    let response = await fetch(`${baseUrl}/v2/user?offset=0&limit=500`, {
       headers: authHeaders,
     })
+    for (let attempt = 0; response.status === 503 && attempt < 5; attempt += 1) {
+      await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * (attempt + 2))
+      response = await fetch(`${baseUrl}/v2/user?offset=0&limit=500`, {
+        headers: authHeaders,
+      })
+    }
     if (!response.ok) throw new Error(`failed to list sandbox users: ${response.status}`)
     const payload = (await response.json()) as { users?: unknown[] }
     const users = payload.users ?? []
@@ -101,13 +107,21 @@ const clearSandboxUsers = async () => {
       if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue
       const userId = (entry as Record<string, unknown>).user_id
       if (typeof userId !== "string") continue
-      const deletion = await fetch(`${baseUrl}/v2/user/${userId}`, {
+      let deletion = await fetch(`${baseUrl}/v2/user/${userId}`, {
         method: "DELETE",
         headers: authHeaders,
       })
+      for (let attempt = 0; deletion.status === 503 && attempt < 5; attempt += 1) {
+        await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * (attempt + 2))
+        deletion = await fetch(`${baseUrl}/v2/user/${userId}`, {
+          method: "DELETE",
+          headers: authHeaders,
+        })
+      }
       if (!deletion.ok && deletion.status !== 404) {
         throw new Error(`failed to clear sandbox user: ${deletion.status}`)
       }
+      await Bun.sleep(DEFAULT_MIN_INTERVAL_MS)
     }
   }
 }
@@ -122,12 +136,16 @@ const runSeed = async (seed: number | undefined) => {
       )
     }
     await clearSandboxUsers()
+    // Let the sandbox recover from the wipe before the first walk hits create_user.
+    await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * 4)
     await parity({
       provider: "junction",
       spec: document,
       env: Bun.env,
       numRuns: cliOptions.runs ?? DEFAULT_PROPERTY_RUNS,
       maxCommands: cliOptions.steps ?? DEFAULT_PARITY_STEPS,
+      // In-process mock can spike above a fast sandbox RTT (SQLite/event-loop jitter).
+      latencyToleranceMs: 500,
       // Tiered parity: only deterministic operations run in the differential walker.
       // Availability/booking/results/pdf/transactions are non-deterministic on the real
       // side (external provider state, signed URLs, async result processing) and are
@@ -183,8 +201,13 @@ const runSeed = async (seed: number | undefined) => {
                 headers: { ...authHeaders, "x-mockingbird-scope": scope.runId },
               }),
             )
+            await Bun.sleep(DEFAULT_MIN_INTERVAL_MS)
           }
         }
+        // Sweep orphans left when a prior walk's create succeeded on real but never
+        // entered the resource table (or a delete was lost), which otherwise pollutes
+        // get_teams_users totals on later walks.
+        await clearSandboxUsers()
       },
       ...(seed === undefined ? {} : { seed }),
     })
