@@ -1,12 +1,20 @@
+import type {
+  ExploreRng,
+  ExploreState,
+  LogicalCommand,
+  Scope,
+} from "@crvouga/mockingbird-commands"
+import type { FetchAPI } from "@crvouga/mockingbird-core"
+import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { type SeedCacheEntry, parity, seedParity } from "@crvouga/mockingbird-parity"
+import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { Scope } from "@crvouga/mockingbird-commands"
-import type { FetchAPI } from "@crvouga/mockingbird-core"
-import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
-import { parity, seedParity } from "@crvouga/mockingbird-parity"
-import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import { document, JunctionAPI } from "../src/index.js"
+import { prefetchGevitiQaObservations } from "../src/prefetch-qa.js"
+import { GEVITI_QA_ROUTING_ZIPS, GEVITI_QA_SCHEDULING_ZIPS } from "../src/qa-corpus.js"
+import { reshapeGevitiQaGeoCommand } from "../src/reshape-qa.js"
 import { PARITY_SEEDS } from "../src/seeds.js"
 
 /** Docs: https://docs.junction.com/api-details/junction-api — Geviti QA uses tryvital.io */
@@ -16,7 +24,8 @@ const LAST_FAILED_SEED_PATH = `${FAILURE_STATE_DIR}/last-failed-seed`
 const FAILURE_REGISTRY_PATH = join(import.meta.dir, "../../../../PARITY_FAILURE_SEED_REGISTRY.json")
 const TEST_KEY_PREFIXES = ["sk_us_", "sk_eu_"]
 const DEFAULT_MIN_INTERVAL_MS = 50
-const DEFAULT_WARMUP = 15
+const DEFAULT_WARMUP = 20
+const DEFAULT_COMPARE = 40
 
 type ParityMode = "seed" | "empty"
 
@@ -26,6 +35,8 @@ type ParityCLIOptions = {
   warmup?: number
   compare?: number
   mode: ParityMode
+  /** Skip Geviti ZIP corpus prefetch (faster smoke). */
+  skipPrefetch?: boolean
 }
 
 const parsePositiveInteger = (value: string, name: string): number => {
@@ -49,6 +60,10 @@ const parseCLIOptions = (args: readonly string[]): ParityCLIOptions => {
       if (value !== "seed" && value !== "empty")
         throw new Error(`--mode must be seed or empty, got ${value ?? ""}`)
       options.mode = value
+      continue
+    }
+    if (flag === "--skip-prefetch") {
+      options.skipPrefetch = true
       continue
     }
     if (
@@ -150,16 +165,28 @@ const clearSandboxUsers = async () => {
   }
 }
 
-/** Ops with parity.enabled=false that seedParity still exercises after observation seeding. */
+/**
+ * Ops with parity.enabled=false that seedParity still exercises after observation seeding /
+ * geo reshape. Expand until docs/qa-drop-in.md is fully monkey-green.
+ */
 const QA_FORCE_INCLUDE = [
+  "get_result_raw_v3_order__order_id__result_get",
+  "get_result_pdf_v3_order__order_id__result_pdf_get",
   "get_area_info_v3_order_area_info_get",
   "get_psc_info_v3_order_psc_info_get",
   "get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post",
-  "get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get",
+  "get_psc_appointment_availability_v3_order_psc_appointment_availability_post",
   "book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post",
-  "get_result_raw_v3_order__order_id__result_get",
+  "get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get",
+  "reschedule_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_reschedule_patch",
+  "cancel_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_cancel_patch",
+  "book_psc_appointment_v3_order__order_id__psc_appointment_book_post",
+  "get_psc_appointment_v3_order__order_id__psc_appointment_get",
+  "reschedule_psc_appointment_v3_order__order_id__psc_appointment_reschedule_patch",
+  "cancel_psc_appointment_v3_order__order_id__psc_appointment_cancel_patch",
 ] as const
 
+/** Full Geviti QA Junction surface — see docs/qa-drop-in.md. */
 const QA_WEIGHTED_OPS = [
   "create_user_v2_user_post",
   "get_teams_users_v2_user_get",
@@ -173,37 +200,29 @@ const QA_WEIGHTED_OPS = [
   "get_lab_test_for_team_v3_lab_tests__lab_test_id__get",
   "get_labs_v3_lab_tests_labs_get",
   "get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get",
-  "list_order_set_markers_v3_lab_tests_list_order_set_markers_post",
   "create_order_v3_order_post",
   "get_order_v3_order__order_id__get",
   "cancel_order_v3_order__order_id__cancel_post",
   "simulate_order_v3_order__order_id__test_post",
   "get_result_metadata_v3_order__order_id__result_metadata_get",
   "get_result_raw_v3_order__order_id__result_get",
+  "get_result_pdf_v3_order__order_id__result_pdf_get",
   "get_orders_v3_orders_get",
   "get_area_info_v3_order_area_info_get",
   "get_psc_info_v3_order_psc_info_get",
   "get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post",
-  "get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get",
+  "get_psc_appointment_availability_v3_order_psc_appointment_availability_post",
   "book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post",
+  "get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get",
+  "reschedule_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_reschedule_patch",
+  "cancel_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_cancel_patch",
+  "book_psc_appointment_v3_order__order_id__psc_appointment_book_post",
+  "get_psc_appointment_v3_order__order_id__psc_appointment_get",
+  "reschedule_psc_appointment_v3_order__order_id__psc_appointment_reschedule_patch",
+  "cancel_psc_appointment_v3_order__order_id__psc_appointment_cancel_patch",
   "get_phlebotomy_appointment_cancellation_reason_v3_order_phlebotomy_appointment_cancellation_reasons_get",
   "get_psc_appointment_cancellation_reason_v3_order_psc_appointment_cancellation_reasons_get",
 ] as const
-
-const QA_WEIGHTS: Record<string, number> = {
-  create_user_v2_user_post: 3,
-  create_order_v3_order_post: 4,
-  get_order_v3_order__order_id__get: 3,
-  get_area_info_v3_order_area_info_get: 4,
-  get_psc_info_v3_order_psc_info_get: 4,
-  simulate_order_v3_order__order_id__test_post: 3,
-  get_orders_v3_orders_get: 2,
-  delete_user_v2_user__user_id__delete: 2,
-  cancel_order_v3_order__order_id__cancel_post: 2,
-  get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post: 3,
-  book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post: 3,
-  get_result_raw_v3_order__order_id__result_get: 2,
-}
 
 const cleanup = async ({
   table,
@@ -230,6 +249,12 @@ const cleanup = async ({
   await clearSandboxUsers()
 }
 
+const reshapeCommand = (
+  command: LogicalCommand,
+  state: ExploreState,
+  rng: ExploreRng,
+): LogicalCommand => reshapeGevitiQaGeoCommand(command, state, rng)
+
 const runSeed = async (seed: number | undefined) => {
   try {
     if (webhookReceiverUrl) {
@@ -239,21 +264,40 @@ const runSeed = async (seed: number | undefined) => {
         "junction webhook parity: skipped; configure MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL with a deployed receiver URL, then register the webhook URL in the Junction sandbox dashboard using `bun run webhook:register`",
       )
     }
-    console.log(`junction parity mode=${cliOptions.mode} oracle=${baseUrl}`)
+    console.log(
+      `junction parity mode=${cliOptions.mode} explore=dynamic oracle=${baseUrl} zips=${GEVITI_QA_ROUTING_ZIPS.length}`,
+    )
     await clearSandboxUsers()
     await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * 4)
+
+    let sharedGeoCache: Map<string, SeedCacheEntry> | undefined
 
     const shared = {
       provider: "junction",
       spec: document,
       env: Bun.env,
       numRuns: cliOptions.runs ?? DEFAULT_PROPERTY_RUNS,
-      maxCommands: cliOptions.steps ?? DEFAULT_PARITY_STEPS,
+      maxCommands: cliOptions.steps ?? DEFAULT_COMPARE,
       latencyToleranceMs: 500,
       only: [...QA_WEIGHTED_OPS],
       forceInclude: [...QA_FORCE_INCLUDE],
-      weights: QA_WEIGHTS,
-      coverageBias: 5,
+      explore: "dynamic" as const,
+      reshapeCommand,
+      invalidProbability: 0,
+      missingProbability: 0,
+      deletedRefProbability: 0,
+      deletionTypes: {
+        delete_user_v2_user__user_id__delete: ["user"],
+        book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post: [
+          "booking_key",
+        ],
+        book_psc_appointment_v3_order__order_id__psc_appointment_book_post: ["booking_key"],
+        reschedule_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_reschedule_patch:
+          ["booking_key"],
+        reschedule_psc_appointment_v3_order__order_id__psc_appointment_reschedule_patch: [
+          "booking_key",
+        ],
+      },
       real: {
         baseUrl,
         allowedHosts: [new URL(baseUrl).host],
@@ -275,22 +319,80 @@ const runSeed = async (seed: number | undefined) => {
     }
 
     if (cliOptions.mode === "empty") {
-      await parity(shared)
+      const {
+        explore: _explore,
+        reshapeCommand: _reshape,
+        ...emptyShared
+      } = shared
+      await parity({
+        ...emptyShared,
+        weights: {
+          create_user_v2_user_post: 3,
+          create_order_v3_order_post: 4,
+          get_order_v3_order__order_id__get: 3,
+          simulate_order_v3_order__order_id__test_post: 3,
+        },
+        coverageBias: 5,
+        forceInclude: ["get_result_raw_v3_order__order_id__result_get"],
+        only: QA_WEIGHTED_OPS.filter(
+          (id) =>
+            !id.includes("area_info") &&
+            !id.includes("psc_info") &&
+            !id.includes("appointment") &&
+            !id.includes("result_pdf"),
+        ),
+      })
     } else {
       await seedParity({
         ...shared,
         warmupCommands: cliOptions.warmup ?? DEFAULT_WARMUP,
-        compareCommands: cliOptions.compare ?? cliOptions.steps ?? DEFAULT_PARITY_STEPS,
-        seedMock: async ({ mock, real, getCache }) => {
-          const api = mock as JunctionAPI
-          await api.seedFrom(
-            {
-              fetch: (request) => real.fetch(request),
-              baseUrl: real.baseUrl,
-              headers: await real.headers(),
+        compareCommands: cliOptions.compare ?? cliOptions.steps ?? DEFAULT_COMPARE,
+        prefetchObservations: cliOptions.skipPrefetch
+          ? undefined
+          : async ({ real, getCache }) => {
+              if (!sharedGeoCache) {
+                sharedGeoCache = new Map()
+                console.log(
+                  `junction parity: prefetching Geviti QA corpus (${GEVITI_QA_ROUTING_ZIPS.length} area zips, ${GEVITI_QA_SCHEDULING_ZIPS.length} scheduling)…`,
+                )
+                await prefetchGevitiQaObservations({
+                  real,
+                  getCache: sharedGeoCache,
+                  schedulingZips: GEVITI_QA_SCHEDULING_ZIPS,
+                  minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
+                  sleep: (ms) => Bun.sleep(ms),
+                })
+                console.log(
+                  `junction parity: sealed ${sharedGeoCache.size} observation cache entries`,
+                )
+              }
+              for (const [key, entry] of sharedGeoCache) getCache.set(key, entry)
             },
-            { getCache },
-          )
+        seedMock: async ({ mock, real, getCache, table }) => {
+          const api = mock as JunctionAPI
+          const source = {
+            fetch: (request: Request) => real.fetch(request),
+            baseUrl: real.baseUrl,
+            headers: await real.headers(),
+          }
+          await api.seedFrom(source, { getCache })
+          const labTestIds = table
+            .all()
+            .filter((resource) => resource.type === "lab_test")
+            .map((resource) => resource.ids.real ?? resource.ids.mock)
+            .filter((id): id is string => typeof id === "string" && id.length > 0)
+          await api.ensureLabTests(source, labTestIds)
+          const orderIds = table
+            .all()
+            .filter((resource) => resource.type === "order")
+            .map((resource) => resource.ids.real ?? resource.ids.mock)
+            .filter((id): id is string => typeof id === "string" && id.length > 0)
+          await api.ensureOrders(source, orderIds)
+          for (const resource of table.all()) {
+            if (resource.type !== "user" || resource.status !== "deleted") continue
+            const id = resource.ids.real ?? resource.ids.mock
+            if (id) api.markUserDeleted(id)
+          }
         },
       })
     }

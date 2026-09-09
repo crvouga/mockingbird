@@ -1,11 +1,18 @@
 import type { Exchange } from "@crvouga/mockingbird-canonicalize"
 import {
   commandArbitrary,
+  createExploreRng,
   describeCommand,
+  type DynamicWeightFn,
+  type ExploreState,
   isEligible,
   type LogicalCommand,
   type OperationPlan,
   planOperations,
+  pushHistory,
+  resourceCountsFrom,
+  resourceTypesOf,
+  sampleGuidedCommand,
   type Scope,
 } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
@@ -40,6 +47,32 @@ export type SeedParityOptions = ParityOptions & {
   warmupCommands?: number
   /** Compare command budget M. Default: resolved `maxCommands` (same as empty-start parity). */
   compareCommands?: number
+  /**
+   * Walk generation strategy.
+   * - `dynamic` (default): re-weight operations each step from history, resources, coverage, phase.
+   * - `static`: classic `fc.commands` with fixed relative weights (legacy).
+   */
+  explore?: "dynamic" | "static"
+  /** Override default Junction-oriented dynamic weight function (dynamic explore only). */
+  weightFn?: DynamicWeightFn
+  /**
+   * Rewrite sampled commands during dynamic explore (e.g. pin zip_code to sealed corpus).
+   */
+  reshapeCommand?: (
+    command: LogicalCommand,
+    state: ExploreState,
+    rng: ReturnType<typeof createExploreRng>,
+  ) => LogicalCommand
+  /**
+   * After warmup, before `seedMock` — e.g. prefetch Geviti routing ZIPs into the observation cache
+   * so area/psc can be force-included safely during compare.
+   */
+  prefetchObservations?: (args: {
+    real: Target
+    table: ResourceTable
+    getCache: Map<string, SeedCacheEntry>
+    history: readonly string[]
+  }) => Promise<void>
   /** Called after warmup with the mock instance + observations from warmup GETs/POSTs. */
   seedMock: (args: {
     mock: FetchAPI
@@ -75,27 +108,7 @@ class WarmupStep implements fc.AsyncCommand<WalkModel, WalkReal> {
     return isEligible(this.command, (type) => model.table.count(type))
   }
   async run(_model: WalkModel, context: WalkReal) {
-    const outcome = await executeWarmupCommand(context, this.command)
-    if (
-      shouldRecordObservation(
-        outcome.request.method,
-        this.command.operationId,
-        outcome.request.path,
-      )
-    ) {
-      const method = outcome.request.method.toUpperCase()
-      const body =
-        method === "POST" || method === "PUT" || method === "PATCH"
-          ? requestBodyForCacheKey(outcome.request)
-          : undefined
-      context.getCache.set(observationCacheKey(outcome.request, body), {
-        status: outcome.exchange.status,
-        headers: outcome.exchange.headers,
-        body: exchangeBodyForCache(outcome.exchange),
-      })
-    }
-    applyDeletionTypes(context, this.command)
-    recordHistory(context, this.command)
+    await runWarmup(context, this.command)
   }
   toString() {
     return describeCommand(this.command)
@@ -108,9 +121,7 @@ class CompareStep implements fc.AsyncCommand<WalkModel, WalkReal> {
     return isEligible(this.command, (type) => model.table.count(type))
   }
   async run(_model: WalkModel, context: WalkReal) {
-    await executeCommand(context, this.command)
-    applyDeletionTypes(context, this.command)
-    recordHistory(context, this.command)
+    await runCompare(context, this.command)
   }
   toString() {
     return describeCommand(this.command)
@@ -207,6 +218,103 @@ const recordHistory = (context: ExecutionContext, command: LogicalCommand) => {
   }
 }
 
+const runWarmup = async (context: WalkReal, command: LogicalCommand) => {
+  const outcome = await executeWarmupCommand(context, command)
+  if (
+    shouldRecordObservation(outcome.request.method, command.operationId, outcome.request.path)
+  ) {
+    const method = outcome.request.method.toUpperCase()
+    const body =
+      method === "POST" || method === "PUT" || method === "PATCH"
+        ? requestBodyForCacheKey(outcome.request)
+        : undefined
+    context.getCache.set(observationCacheKey(outcome.request, body), {
+      status: outcome.exchange.status,
+      headers: outcome.exchange.headers,
+      body: exchangeBodyForCache(outcome.exchange),
+    })
+  }
+  applyDeletionTypes(context, command)
+  recordHistory(context, command)
+}
+
+const runCompare = async (context: WalkReal, command: LogicalCommand) => {
+  await executeCommand(context, command)
+  applyDeletionTypes(context, command)
+  recordHistory(context, command)
+}
+
+const exploreStateOf = (
+  context: WalkReal,
+  plans: readonly OperationPlan[],
+  phase: ExploreState["phase"],
+  step: number,
+  maxSteps: number,
+  opHistory: readonly string[],
+): ExploreState => {
+  const types = resourceTypesOf(plans)
+  return {
+    coverage: { ...(context.coverage ?? {}) },
+    history: opHistory,
+    resourceCounts: resourceCountsFrom((type) => context.table.count(type), types),
+    phase,
+    step,
+    maxSteps,
+    observationCacheSize: context.getCache.size,
+  }
+}
+
+const runDynamicPhase = async (args: {
+  context: WalkReal
+  plans: readonly OperationPlan[]
+  document: SeedParityOptions["spec"]
+  steps: number
+  phase: ExploreState["phase"]
+  rng: ReturnType<typeof createExploreRng>
+  weightFn?: DynamicWeightFn
+  reshapeCommand?: SeedParityOptions["reshapeCommand"]
+  invalidProbability?: number
+  missingProbability?: number
+  coverageBias?: number
+  run: (command: LogicalCommand) => Promise<void>
+}) => {
+  const opHistory: string[] = []
+  for (let step = 0; step < args.steps; step += 1) {
+    const state = exploreStateOf(
+      args.context,
+      args.plans,
+      args.phase,
+      step,
+      args.steps,
+      opHistory,
+    )
+    const command = sampleGuidedCommand(
+      state,
+      {
+        document: args.document,
+        plans: args.plans,
+        ...(args.weightFn === undefined ? {} : { weightFn: args.weightFn }),
+        ...(args.reshapeCommand === undefined
+          ? {}
+          : { reshapeCommand: args.reshapeCommand }),
+        ...(args.invalidProbability === undefined
+          ? {}
+          : { invalidProbability: args.invalidProbability }),
+        ...(args.missingProbability === undefined
+          ? {}
+          : { missingProbability: args.missingProbability }),
+        ...(args.coverageBias === undefined ? {} : { coverageBias: args.coverageBias }),
+        ...(args.context.coverage === undefined ? {} : { coverage: args.context.coverage }),
+      },
+      args.rng,
+    )
+    if (!command) break
+    if (!isEligible(command, (type) => args.context.table.count(type))) continue
+    await args.run(command)
+    pushHistory(opHistory, command.operationId)
+  }
+}
+
 /**
  * Seed-then-walk differential: warmup N commands on the real oracle only, seed the mock from
  * observations + oracle state, then compare M lockstep commands. Throws the shrunk
@@ -220,6 +328,7 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
     options.maxCommands ?? integerEnv(env, "MOCKINGBIRD_MAX_COMMANDS") ?? DEFAULT_PARITY_STEPS
   const warmupN = options.warmupCommands ?? 15
   const compareCommands = options.compareCommands ?? maxCommands
+  const explore = options.explore ?? "dynamic"
   const trace = env.MOCKINGBIRD_TRACE === "1" || env.MOCKINGBIRD_TRACE === "true"
   const log = options.log ?? ((line: string) => console.log(line))
   const now = options.now ?? (() => Date.now())
@@ -252,7 +361,9 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
   const mockBaseUrl = options.mock.baseUrl ?? `https://mock.${options.provider}.local`
 
   log(`${options.provider} seed parity`)
-  log(`  seed ${seed}  runs ${numRuns}  warmup ${warmupN}  compare ${compareCommands}`)
+  log(
+    `  seed ${seed}  runs ${numRuns}  warmup ${warmupN}  compare ${compareCommands}  explore ${explore}`,
+  )
   log("")
 
   const exercised: Record<string, number> = {}
@@ -269,164 +380,298 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
     ...(options.invalidProbability === undefined
       ? {}
       : { invalidProbability: options.invalidProbability }),
+    ...(options.missingProbability === undefined
+      ? {}
+      : { missingProbability: options.missingProbability }),
     ...(options.weights === undefined ? {} : { weights: options.weights }),
     ...(options.coverageBias === undefined ? {} : { coverageBias: options.coverageBias }),
     coverage,
   }
 
-  const warmupCommandsArb = fc.commands(
-    [commandArbitrary(commandOptions).map((command) => new WarmupStep(command))],
-    { maxCommands: warmupN, size: "max" },
-  )
-  const compareCommandsArb = fc.commands(
-    [commandArbitrary(commandOptions).map((command) => new CompareStep(command))],
-    { maxCommands: compareCommands, size: "max" },
-  )
+  const finishWalk = async (args: {
+    walkNumber: number
+    context: WalkReal
+    mock: FetchAPI
+    scope: Scope
+    table: ResourceTable
+    walkError: unknown
+    ok: boolean
+    firstCommand: LogicalCommand
+  }) => {
+    walks++
+    operations += args.context.history.length
+    for (const entry of args.context.history) {
+      const operationId = entry.split(" ")[0] ?? entry
+      exercised[operationId] = (exercised[operationId] ?? 0) + 1
+    }
+    lastWalkEnd = now()
 
-  const property = fc.asyncProperty(
-    warmupCommandsArb,
-    compareCommandsArb,
-    async (warmupSteps, compareSteps) => {
-      const walkNumber = walks + 1
-      const gap = lastWalkEnd + (clockSkewSeconds + 1) * 1000 - now()
-      if (lastWalkEnd > 0 && gap > 0) await sleep(gap)
-      const table = new ResourceTable()
-      const scope: Scope = { runId, walkStartUnix: Math.floor(now() / 1000) - clockSkewSeconds }
-      const mock = await options.mock.create()
-      const getCache = new Map<string, SeedCacheEntry>()
-      const realTarget: Target = {
-        baseUrl: options.real.baseUrl,
-        fetch: realFetch,
-        headers: realHeaders,
-      }
-      const context: WalkReal = {
-        provider: options.provider,
-        document: options.spec,
-        plans: planById,
-        table,
-        scope,
-        real: realTarget,
-        mock: {
-          baseUrl: mockBaseUrl,
-          fetch: (request) => mock.fetch(request),
-          headers: options.mock.headers ?? (() => ({})),
-        },
-        redact,
-        history: [],
-        coverage,
-        deletedRefProbability,
-        deletionTypes: options.deletionTypes ?? {},
-        validateMock: options.validateMock ?? true,
-        latencyToleranceMs: options.latencyToleranceMs ?? 0,
-        step: (line) => log(`  [${String(walkNumber).padStart(width, " ")}/${numRuns}] ${line}`),
-        trace: trace ? log : undefined,
-        getCache,
-      }
-
-      let walkError: unknown
-      let ok = false
-
-      try {
-        await fc.asyncModelRun(() => ({ model: { table }, real: context }), warmupSteps)
-        await options.seedMock({
-          mock,
-          real: realTarget,
-          table,
-          getCache,
-          history: context.history,
-        })
-        await fc.asyncModelRun(() => ({ model: { table }, real: context }), compareSteps)
-        ok = true
-      } catch (error) {
-        walkError = error
-      }
-
-      walks++
-      operations += context.history.length
-      for (const entry of context.history) {
-        const operationId = entry.split(" ")[0] ?? entry
-        exercised[operationId] = (exercised[operationId] ?? 0) + 1
-      }
-      lastWalkEnd = now()
-
-      let webhookFailure: ParityError | undefined
-      let webhookEvents: WalkWebhookEvents | undefined
-      const firstCommand =
-        unwrapCommand([...warmupSteps][0]) ??
-        unwrapCommand([...compareSteps][0]) ??
-        ({} as LogicalCommand)
-      if (options.webhooks) {
-        const realEvents = await options.webhooks.collectReal(scope)
-        const mockEvents = await options.webhooks.collectMock(mock, scope)
-        webhookEvents = { real: realEvents, mock: mockEvents }
-        log(
-          `  [${String(walkNumber).padStart(width, " ")}/${numRuns}] webhook events real=${realEvents.length} mock=${mockEvents.length} real_types=${webhookEventNames(realEvents).join(",") || "none"} mock_types=${webhookEventNames(mockEvents).join(",") || "none"}`,
-        )
-        if (webhookPayload(realEvents) !== webhookPayload(mockEvents)) {
-          const firstDifference =
-            realEvents.length !== mockEvents.length
-              ? `event count real=${realEvents.length} mock=${mockEvents.length}`
-              : `event payload/order differs at index ${realEvents.findIndex((event, index) => JSON.stringify(event) !== JSON.stringify(mockEvents[index]))}`
-          webhookFailure = new ParityError(
-            {
-              provider: options.provider,
-              operationId: "webhooks",
-              method: "WALK",
-              path: "",
-              command: firstCommand,
-              history: [...context.history],
-              kind: "webhook-mismatch",
-              realEvents,
-              mockEvents,
-              firstDifference,
-            },
-            context.redact,
-          )
-        }
-      }
-
-      if (options.cleanup) {
-        await options.cleanup({
-          table,
-          scope,
-          ...(webhookEvents === undefined ? {} : { webhookEvents }),
-          real: {
-            baseUrl: options.real.baseUrl,
-            fetch: async (request) => {
-              const headers = new Headers(request.headers)
-              const extra: Record<string, string> = await realHeaders()
-              for (const [name, value] of Object.entries(extra)) headers.set(name, value)
-              return realFetch(new Request(request, { headers }))
-            },
+    let webhookFailure: ParityError | undefined
+    let webhookEvents: WalkWebhookEvents | undefined
+    if (options.webhooks) {
+      const realEvents = await options.webhooks.collectReal(args.scope)
+      const mockEvents = await options.webhooks.collectMock(args.mock, args.scope)
+      webhookEvents = { real: realEvents, mock: mockEvents }
+      log(
+        `  [${String(args.walkNumber).padStart(width, " ")}/${numRuns}] webhook events real=${realEvents.length} mock=${mockEvents.length} real_types=${webhookEventNames(realEvents).join(",") || "none"} mock_types=${webhookEventNames(mockEvents).join(",") || "none"}`,
+      )
+      if (webhookPayload(realEvents) !== webhookPayload(mockEvents)) {
+        const firstDifference =
+          realEvents.length !== mockEvents.length
+            ? `event count real=${realEvents.length} mock=${mockEvents.length}`
+            : `event payload/order differs at index ${realEvents.findIndex((event, index) => JSON.stringify(event) !== JSON.stringify(mockEvents[index]))}`
+        webhookFailure = new ParityError(
+          {
+            provider: options.provider,
+            operationId: "webhooks",
+            method: "WALK",
+            path: "",
+            command: args.firstCommand,
+            history: [...args.context.history],
+            kind: "webhook-mismatch",
+            realEvents,
+            mockEvents,
+            firstDifference,
           },
-        })
-      }
-
-      if (webhookFailure) throw webhookFailure
-      if (walkError !== undefined) throw walkError
-      if (ok) {
-        done++
-        const ops = context.history.length
-        const webhookSummary = options.webhooks
-          ? `; webhook parity ✓ (${webhookEvents?.real.length ?? 0} events)`
-          : ""
-        log(
-          `  [${String(done).padStart(width, " ")}/${numRuns}] ✓ warmup+compare ${ops} op${ops === 1 ? "" : "s"}${webhookSummary}`,
+          args.context.redact,
         )
       }
-    },
-  )
+    }
+
+    if (options.cleanup) {
+      await options.cleanup({
+        table: args.table,
+        scope: args.scope,
+        ...(webhookEvents === undefined ? {} : { webhookEvents }),
+        real: {
+          baseUrl: options.real.baseUrl,
+          fetch: async (request) => {
+            const headers = new Headers(request.headers)
+            const extra: Record<string, string> = await realHeaders()
+            for (const [name, value] of Object.entries(extra)) headers.set(name, value)
+            return realFetch(new Request(request, { headers }))
+          },
+        },
+      })
+    }
+
+    if (webhookFailure) throw webhookFailure
+    if (args.walkError !== undefined) throw args.walkError
+    if (args.ok) {
+      done++
+      const ops = args.context.history.length
+      const webhookSummary = options.webhooks
+        ? `; webhook parity ✓ (${webhookEvents?.real.length ?? 0} events)`
+        : ""
+      log(
+        `  [${String(done).padStart(width, " ")}/${numRuns}] ✓ warmup+compare ${ops} op${ops === 1 ? "" : "s"}${webhookSummary}`,
+      )
+    }
+  }
+
+  const createContext = async (walkNumber: number) => {
+    const table = new ResourceTable()
+    const scope: Scope = { runId, walkStartUnix: Math.floor(now() / 1000) - clockSkewSeconds }
+    const mock = await options.mock.create()
+    const getCache = new Map<string, SeedCacheEntry>()
+    const realTarget: Target = {
+      baseUrl: options.real.baseUrl,
+      fetch: realFetch,
+      headers: realHeaders,
+    }
+    const context: WalkReal = {
+      provider: options.provider,
+      document: options.spec,
+      plans: planById,
+      table,
+      scope,
+      real: realTarget,
+      mock: {
+        baseUrl: mockBaseUrl,
+        fetch: (request) => mock.fetch(request),
+        headers: options.mock.headers ?? (() => ({})),
+      },
+      redact,
+      history: [],
+      coverage,
+      deletedRefProbability,
+      deletionTypes: options.deletionTypes ?? {},
+      validateMock: options.validateMock ?? true,
+      latencyToleranceMs: options.latencyToleranceMs ?? 0,
+      step: (line) => log(`  [${String(walkNumber).padStart(width, " ")}/${numRuns}] ${line}`),
+      trace: trace ? log : undefined,
+      getCache,
+    }
+    return { table, scope, mock, getCache, realTarget, context }
+  }
+
+  const assertParams = {
+    seed,
+    numRuns,
+    verbose: fc.VerbosityLevel.Verbose,
+    endOnFailure: options.shrink === false,
+    ...(options.timeLimitMs === undefined
+      ? {}
+      : { interruptAfterTimeLimit: options.timeLimitMs, markInterruptAsFailure: false }),
+  }
 
   try {
-    await fc.assert(property, {
-      seed,
-      numRuns,
-      verbose: fc.VerbosityLevel.Verbose,
-      endOnFailure: options.shrink === false,
-      ...(options.timeLimitMs === undefined
-        ? {}
-        : { interruptAfterTimeLimit: options.timeLimitMs, markInterruptAsFailure: false }),
-    })
+    if (explore === "static") {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.commands(
+            [commandArbitrary(commandOptions).map((command) => new WarmupStep(command))],
+            { maxCommands: warmupN, size: "max" },
+          ),
+          fc.commands(
+            [commandArbitrary(commandOptions).map((command) => new CompareStep(command))],
+            { maxCommands: compareCommands, size: "max" },
+          ),
+          async (warmupSteps, compareSteps) => {
+            const walkNumber = walks + 1
+            const gap = lastWalkEnd + (clockSkewSeconds + 1) * 1000 - now()
+            if (lastWalkEnd > 0 && gap > 0) await sleep(gap)
+            const { table, scope, mock, realTarget, context } = await createContext(walkNumber)
+
+            let walkError: unknown
+            let ok = false
+            try {
+              await fc.asyncModelRun(() => ({ model: { table }, real: context }), warmupSteps)
+              if (options.prefetchObservations) {
+                await options.prefetchObservations({
+                  real: realTarget,
+                  table,
+                  getCache: context.getCache,
+                  history: context.history,
+                })
+              }
+              await options.seedMock({
+                mock,
+                real: realTarget,
+                table,
+                getCache: context.getCache,
+                history: context.history,
+              })
+              await fc.asyncModelRun(() => ({ model: { table }, real: context }), compareSteps)
+              ok = true
+            } catch (error) {
+              walkError = error
+            }
+
+            await finishWalk({
+              walkNumber,
+              context,
+              mock,
+              scope,
+              table,
+              walkError,
+              ok,
+              firstCommand:
+                unwrapCommand([...warmupSteps][0]) ??
+                unwrapCommand([...compareSteps][0]) ??
+                ({ operationId: "unknown" } as LogicalCommand),
+            })
+          },
+        ),
+        assertParams,
+      )
+    } else {
+      await fc.assert(
+        fc.asyncProperty(fc.nat({ max: 0x7fffffff }), async (walkSalt) => {
+          const walkNumber = walks + 1
+          const gap = lastWalkEnd + (clockSkewSeconds + 1) * 1000 - now()
+          if (lastWalkEnd > 0 && gap > 0) await sleep(gap)
+          const { table, scope, mock, realTarget, context } = await createContext(walkNumber)
+          const rng = createExploreRng((seed ^ walkSalt ^ (walkNumber * 0x9e3779b9)) >>> 0)
+
+          let walkError: unknown
+          let ok = false
+          let firstCommand: LogicalCommand | undefined
+          try {
+            await runDynamicPhase({
+              context,
+              plans,
+              document: options.spec,
+              steps: warmupN,
+              phase: "warmup",
+              rng,
+              ...(options.weightFn === undefined ? {} : { weightFn: options.weightFn }),
+              ...(options.reshapeCommand === undefined
+                ? {}
+                : { reshapeCommand: options.reshapeCommand }),
+              ...(options.invalidProbability === undefined
+                ? {}
+                : { invalidProbability: options.invalidProbability }),
+              ...(options.missingProbability === undefined
+                ? {}
+                : { missingProbability: options.missingProbability }),
+              ...(options.coverageBias === undefined
+                ? {}
+                : { coverageBias: options.coverageBias }),
+              run: async (command) => {
+                firstCommand ??= command
+                await runWarmup(context, command)
+              },
+            })
+            if (options.prefetchObservations) {
+              await options.prefetchObservations({
+                real: realTarget,
+                table,
+                getCache: context.getCache,
+                history: context.history,
+              })
+            }
+            await options.seedMock({
+              mock,
+              real: realTarget,
+              table,
+              getCache: context.getCache,
+              history: context.history,
+            })
+            await runDynamicPhase({
+              context,
+              plans,
+              document: options.spec,
+              steps: compareCommands,
+              phase: "compare",
+              rng,
+              ...(options.weightFn === undefined ? {} : { weightFn: options.weightFn }),
+              ...(options.reshapeCommand === undefined
+                ? {}
+                : { reshapeCommand: options.reshapeCommand }),
+              ...(options.invalidProbability === undefined
+                ? {}
+                : { invalidProbability: options.invalidProbability }),
+              ...(options.missingProbability === undefined
+                ? {}
+                : { missingProbability: options.missingProbability }),
+              ...(options.coverageBias === undefined
+                ? {}
+                : { coverageBias: options.coverageBias }),
+              run: async (command) => {
+                firstCommand ??= command
+                await runCompare(context, command)
+              },
+            })
+            ok = true
+          } catch (error) {
+            walkError = error
+          }
+
+          await finishWalk({
+            walkNumber,
+            context,
+            mock,
+            scope,
+            table,
+            walkError,
+            ok,
+            firstCommand: firstCommand ?? ({ operationId: "unknown" } as LogicalCommand),
+          })
+        }),
+        assertParams,
+      )
+    }
   } catch (error) {
     const header = `✗ ${options.provider} seed parity FAILED (seed ${seed}, FC_SEED=${seed} to replay)`
     if (error instanceof Error && error.cause instanceof ParityError) {

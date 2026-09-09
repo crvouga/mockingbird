@@ -644,6 +644,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AppointmentAvailabilitySlots"
+        "400":
+          description: Availability not bookable for this address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: No availability found
           content:
@@ -724,6 +730,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AppointmentAvailabilitySlots"
+        "400":
+          description: Availability not bookable for this address
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: No slots found
           content:
@@ -879,6 +891,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientFacingAppointment"
+        "400":
+          description: Invalid or expired booking key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: No appointment for this order
           content:
@@ -925,6 +943,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientFacingAppointment"
+        "400":
+          description: Invalid cancellation reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: No appointment for this order
           content:
@@ -1069,6 +1093,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientFacingAppointment"
+        "400":
+          description: Invalid or expired booking key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: No appointment for this order
           content:
@@ -1115,6 +1145,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientFacingAppointment"
+        "400":
+          description: Invalid cancellation reason
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: No appointment for this order
           content:
@@ -1183,6 +1219,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PostOrderResponse"
+        "400":
+          description: Order is not in a cancellable status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
         "404":
           description: Not Found
           content:
@@ -1824,8 +1866,12 @@ components:
             identity: true
         slug:
           type: string
+          x-mockingbird-volatile:
+            kind: token
         name:
           type: string
+          x-mockingbird-volatile:
+            kind: token
         sample_type:
           $ref: "#/components/schemas/LabTestSampleType"
         method:
@@ -2516,6 +2562,8 @@ components:
       properties:
         id:
           type: integer
+          x-mockingbird-volatile:
+            kind: opaque
         created_at:
           type: string
           format: date-time
@@ -2911,6 +2959,10 @@ components:
           anyOf:
             - $ref: "#/components/schemas/OrderTopLevelStatus"
             - type: "null"
+          # Sandbox cancel races: walk-in cancel responses sometimes keep
+          # high-level status as `received` while last_event is already cancelled.
+          x-mockingbird-volatile:
+            kind: opaque
         last_event:
           $ref: "#/components/schemas/ClientFacingOrderEvent"
         physician:
@@ -3187,28 +3239,42 @@ components:
       properties:
         age:
           type: string
+          x-mockingbird-volatile:
+            kind: token
         dob:
           type: string
+          x-mockingbird-volatile:
+            kind: token
         "clia_#":
           anyOf:
             - type: string
             - type: "null"
         patient:
           type: string
+          x-mockingbird-volatile:
+            kind: token
         provider:
           anyOf:
             - type: string
             - type: "null"
+          x-mockingbird-volatile:
+            kind: token
         laboratory:
           anyOf:
             - type: string
             - type: "null"
+          x-mockingbird-volatile:
+            kind: token
         date_reported:
           type: string
+          x-mockingbird-volatile:
+            kind: timestamp
         date_collected:
           anyOf:
             - type: string
             - type: "null"
+          x-mockingbird-volatile:
+            kind: timestamp
         specimen_number:
           type: string
           x-mockingbird-volatile:
@@ -3217,6 +3283,8 @@ components:
           anyOf:
             - type: string
             - type: "null"
+          x-mockingbird-volatile:
+            kind: timestamp
         status:
           type: string
           default: final
@@ -3228,10 +3296,14 @@ components:
           anyOf:
             - type: string
             - type: "null"
+          x-mockingbird-volatile:
+            kind: id
         account_id:
           anyOf:
             - type: string
             - type: "null"
+          x-mockingbird-volatile:
+            kind: id
     LabResultsRaw:
       type: object
       required: [metadata, results]
@@ -3245,18 +3317,24 @@ components:
                 $ref: "#/components/schemas/BiomarkerResult"
             - type: object
               additionalProperties: true
+          x-mockingbird-volatile:
+            kind: opaque
         missing_results:
           anyOf:
             - type: array
               items:
                 $ref: "#/components/schemas/MissingBiomarkerResult"
             - type: "null"
+          x-mockingbird-volatile:
+            kind: opaque
         sample_information:
           anyOf:
             - type: object
               additionalProperties:
                 $ref: "#/components/schemas/SampleData"
             - type: "null"
+          x-mockingbird-volatile:
+            kind: opaque
         order_transaction:
           anyOf:
             - $ref: "#/components/schemas/ClientFacingOrderTransaction"

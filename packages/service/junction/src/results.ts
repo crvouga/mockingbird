@@ -124,22 +124,50 @@ const flagsOf = (order: OrderRecord): SimulationFlagsState => {
   }
 }
 
-const metadataOf = (order: OrderRecord, userClient: string) => ({
-  age: "41",
-  dob: "1983-06-23",
-  patient: userClient,
-  date_reported: order.last_event.created_at.slice(0, 10),
-  specimen_number: opaqueToken(`junction:specimen:${order.id}`, 24),
-  status: "final",
-  laboratory: "Mockingbird Central Lab",
-  provider: null,
-  interpretation: order.interpretation,
-  patient_id: null,
-  account_id: null,
-  date_collected: order.last_event.created_at.slice(0, 10),
-  date_received: order.last_event.created_at.slice(0, 10),
-  "clia_#": null,
-})
+const ageFromDob = (dob: string, nowIso: string) => {
+  const born = Date.parse(`${dob}T00:00:00.000Z`)
+  const now = Date.parse(nowIso)
+  if (!Number.isFinite(born) || !Number.isFinite(now) || now < born) return "0"
+  const years = Math.floor((now - born) / (365.25 * 24 * 60 * 60 * 1000))
+  return String(Math.max(0, years))
+}
+
+const metadataOf = (order: OrderRecord, _userClient: string) => {
+  const details = order.patient_details ?? {}
+  const first =
+    typeof details.first_name === "string" && details.first_name.length > 0
+      ? details.first_name
+      : "Patient"
+  const last =
+    typeof details.last_name === "string" && details.last_name.length > 0
+      ? details.last_name
+      : ""
+  const dob =
+    typeof details.dob === "string" && details.dob.length > 0 ? details.dob : "1990-01-01"
+  const labName =
+    order.lab_test.lab && typeof order.lab_test.lab.name === "string"
+      ? order.lab_test.lab.name
+      : "Labcorp"
+  const reportedAt = order.last_event.created_at
+  return {
+    age: ageFromDob(dob, reportedAt),
+    dob,
+    patient: `${first} ${last}`.trim(),
+    date_reported: reportedAt,
+    specimen_number: opaqueToken(`junction:specimen:${order.id}`, 24),
+    status: "final",
+    laboratory: labName,
+    provider: order.physician
+      ? `${order.physician.first_name} ${order.physician.last_name}`.trim()
+      : null,
+    interpretation: order.interpretation,
+    patient_id: order.user_id,
+    account_id: null,
+    date_collected: reportedAt,
+    date_received: reportedAt,
+    "clia_#": null,
+  }
+}
 
 /** Minimal single-page PDF with a deterministic title; valid enough for byte-shape checks. */
 const deterministicPdf = (title: string): Uint8Array => {
@@ -168,20 +196,18 @@ function orderNotFound(message: string): never {
   throw new HttpError(404, { detail: message })
 }
 
+function resultsNotAvailable(orderId: string): never {
+  throw new HttpError(404, {
+    detail: `Results are not available for order - ${orderId}. Did you receive a webhook for this order?`,
+  })
+}
+
 export const resultsHandlers = (state: JunctionState) => ({
   get_result_raw_v3_order__order_id__result_get: async (context: OperationContext) => {
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context, "Order not found")
     const user = state.users.get(order.user_id)
-    if (!resultsReady(order)) {
-      return jsonRes(200, {
-        metadata: metadataOf(order, user?.client_user_id ?? order.user_id),
-        results: [],
-        missing_results: null,
-        sample_information: null,
-        order_transaction: order.order_transaction,
-      })
-    }
+    if (!resultsReady(order)) resultsNotAvailable(order.id)
     const flags = flagsOf(order)
     const results = biomarkerLines(order, flags)
     const missing = flags.hasMissingResults
@@ -203,12 +229,12 @@ export const resultsHandlers = (state: JunctionState) => ({
       results,
       missing_results: missing,
       sample_information: {
-        [order.id]: {
+        [order.sample_id ?? opaqueToken(`junction:sample:${order.id}`, 16)]: {
           sample_id: order.sample_id ?? opaqueToken(`junction:sample:${order.id}`, 16),
-          control_number: null,
-          date_collected: order.last_event.created_at.slice(0, 10),
-          date_received: order.last_event.created_at.slice(0, 10),
-          date_reported: order.last_event.created_at.slice(0, 10),
+          control_number: order.sample_id,
+          date_collected: order.last_event.created_at,
+          date_received: order.last_event.created_at,
+          date_reported: order.last_event.created_at,
           performing_laboratories: null,
           clinical_information: null,
         },
@@ -222,6 +248,7 @@ export const resultsHandlers = (state: JunctionState) => ({
   ) => {
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context, "Order not found")
+    if (!resultsReady(order)) resultsNotAvailable(order.id)
     const user = state.users.get(order.user_id)
     return jsonRes(200, metadataOf(order, user?.client_user_id ?? order.user_id))
   },
@@ -229,7 +256,7 @@ export const resultsHandlers = (state: JunctionState) => ({
   get_result_pdf_v3_order__order_id__result_pdf_get: async (context: OperationContext) => {
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context, "Order not found")
-    if (!resultsReady(order)) orderNotFound("Results are not available yet")
+    if (!resultsReady(order)) resultsNotAvailable(order.id)
     const bytes = deterministicPdf(`Lab results ${order.id}`)
     return new Response(bytes as unknown as BodyInit, {
       status: 200,

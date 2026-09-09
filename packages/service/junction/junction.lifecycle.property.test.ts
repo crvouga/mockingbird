@@ -66,7 +66,7 @@ describe("Junction lifecycle", () => {
             },
           )
           expect(response.status).toBe(200)
-          expect(await response.text()).toBe("Success")
+          expect(await response.json()).toBe("Success")
         }
         const latest = (await (await request(api, `/v3/order/${order.order.id}`)).json()) as {
           status: string

@@ -546,35 +546,44 @@ describe("Junction scheduling state space", () => {
         const clock = makeNow()
         const api = new JunctionAPI({ now: clock.now })
         const userId = await createUser(api, `sched-delay-${delaySeconds}`)
-        const order = await createOrder(api, userId, LAB_AT_HOME)
+        const order = await createOrder(api, userId, LAB_WALK_IN)
         const orderId = order.id as string
+
+        const requisition = await request(
+          api,
+          `/v3/order/${orderId}/test?final_status=received.walk_in_test.ordered`,
+          { method: "POST" },
+        )
+        expect(requisition.status).toBe(200)
+        expect(await requisition.json()).toBe("Success")
 
         const queued = await request(
           api,
-          `/v3/order/${orderId}/test?final_status=completed.at_home_phlebotomy.completed&delay=${delaySeconds}`,
+          `/v3/order/${orderId}/test?final_status=completed.walk_in_test.completed&delay=${delaySeconds}`,
           { method: "POST" },
         )
         expect(queued.status).toBe(200)
-        expect(await queued.text()).toBe("Success")
+        expect(await queued.json()).toBe("Success")
 
         const before = (await (await request(api, `/v3/order/${orderId}`)).json()) as Json
         expect(before.status).toBe("received")
-        expect(before.interpretation).toBeNull()
+        expect((before.last_event as Json).status).toBe("received.walk_in_test.requisition_created")
 
         clock.advance((delaySeconds + 1) * 1000)
         const after = (await (await request(api, `/v3/order/${orderId}`)).json()) as Json
         expect(after.status).toBe("completed")
-        expect((after.last_event as Json).status).toBe("completed.at_home_phlebotomy.completed")
+        expect((after.last_event as Json).status).toBe("completed.walk_in_test.completed")
 
         const queuedAgain = await request(
           api,
-          `/v3/order/${orderId}/test?final_status=cancelled.at_home_phlebotomy.cancelled&delay=2`,
+          `/v3/order/${orderId}/test?final_status=cancelled.walk_in_test.cancelled&delay=2`,
           { method: "POST" },
         )
         expect(queuedAgain.status).toBe(200)
         clock.advance(3_000)
         const final = (await (await request(api, `/v3/order/${orderId}`)).json()) as Json
-        expect(final.status).toBe("cancelled")
+        // Sandbox treats post-completion cancel-via-/test as a no-op.
+        expect(final.status).toBe("completed")
       }),
       { numRuns: 8 },
     )
@@ -592,12 +601,18 @@ describe("Junction scheduling state space", () => {
           const clock = makeNow()
           const api = new JunctionAPI({ now: clock.now })
           const userId = await createUser(api, `sched-flags`)
-          const order = await createOrder(api, userId, LAB_AT_HOME)
+          const order = await createOrder(api, userId, LAB_WALK_IN)
           const orderId = order.id as string
+
+          await request(
+            api,
+            `/v3/order/${orderId}/test?final_status=received.walk_in_test.ordered`,
+            { method: "POST" },
+          )
 
           const simulated = await request(
             api,
-            `/v3/order/${orderId}/test?final_status=sample_with_lab.at_home_phlebotomy.partial_results`,
+            `/v3/order/${orderId}/test?final_status=sample_with_lab.walk_in_test.partial_results`,
             {
               method: "POST",
               body: JSON.stringify({
@@ -644,7 +659,7 @@ describe("Junction scheduling state space", () => {
     )
   })
 
-  test("results are empty until the order reaches a draw/sample status", async () => {
+  test("results 404 until the order reaches a draw/sample status", async () => {
     await fc.assert(
       fc.asyncProperty(fc.constantFrom("received", "collecting_sample"), async (stopStatus) => {
         const api = new JunctionAPI({ now: () => baseTime })
@@ -663,9 +678,21 @@ describe("Junction scheduling state space", () => {
         )
         expect(stepped.status).toBe(200)
 
-        const results = (await (await request(api, `/v3/order/${orderId}/result`)).json()) as Json
-        expect(results.results).toEqual([])
-        expect(results.missing_results).toBeNull()
+        if (stopStatus === "collecting_sample") {
+          await request(
+            api,
+            `/v3/order/${orderId}/test?final_status=${statusMap[stopStatus]}`,
+            { method: "POST" },
+          )
+        }
+
+        const results = await request(api, `/v3/order/${orderId}/result`)
+        expect(results.status).toBe(404)
+        const resultsBody = (await results.json()) as Json
+        expect(String(resultsBody.detail)).toContain("Results are not available")
+
+        const metadata = await request(api, `/v3/order/${orderId}/result/metadata`)
+        expect(metadata.status).toBe(404)
 
         const pdf = await request(api, `/v3/order/${orderId}/result/pdf`)
         expect(pdf.status).toBe(404)

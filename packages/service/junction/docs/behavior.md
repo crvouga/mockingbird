@@ -64,8 +64,24 @@ Cancellation and completion must update the order status, event history, last ev
 `POST /v3/order/{id}/test?final_status=<dotted-status>` drives transitions. It accepts
 `delay` (seconds) — the transition is queued and applied lazily on later reads once the
 clock passes `due_at` — and an optional `simulationFlags` body (`interpretation`,
-`result_types`, `has_missing_results`) that is projected onto the order and results. The
-real API responds `200` with the text body `Success`, and the mock matches.
+`result_types`, `has_missing_results`) that is projected onto the order and results when
+the call advances state. The real API responds `200` with the JSON body `"Success"`, and
+the mock matches.
+
+Observed sandbox semantics (api.sandbox.tryvital.io):
+
+- The **first** `/test` on a fresh order always creates
+  `received.{collection_method}.requisition_created` (method is taken from the order, not
+  the requested `final_status` prefix).
+- **`at_home_phlebotomy`**: further `/test` calls are no-ops (including `completed` /
+  `cancelled` / simulation flags) until the order advances by other means (e.g. booking).
+- **`walk_in_test`** after requisition:
+  - matching `appointment_*` / `requisition_created` → no-op
+  - matching `partial_results` → append `sample_with_lab.walk_in_test.partial_results`
+  - matching `ordered` / `completed` / `cancelled`, or any mismatched-method status →
+    jump through `partial_results` then `completed` (sets `interpretation` default
+    `normal` plus expected/worst result dates)
+  - `failed.*` → append the failed status
 
 ## Results
 

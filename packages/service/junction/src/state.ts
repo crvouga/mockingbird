@@ -223,8 +223,8 @@ export type OrderRecord = {
   interpretation: string | null
   has_missing_results: boolean | null
   result_types: string[] | null
-  expected_result_by_date: null
-  worst_case_result_by_date: null
+  expected_result_by_date: string | null
+  worst_case_result_by_date: string | null
   origin: string
   order_transaction: OrderTransactionEmbed
 }
@@ -329,6 +329,37 @@ export class JunctionState {
     return this.labTests.get(id)
   }
 
+  upsertLabTest(test: LabTestRecord, expectedResults?: readonly ExpectedResult[]): void {
+    if (this.labTests.get(test.id)) this.labTests.update(test.id, clone(test))
+    else this.labTests.insert(test.id, clone(test))
+    // Never clobber seeded panel expansions (e.g. Lipid → 6 LOINCs) when callers
+    // only pass the lab_test envelope from an order payload.
+    if (expectedResults === undefined && this.expectedResults.get(test.id)) return
+    const fromNested = (test.markers ?? []).flatMap((marker) => {
+      const nested = (marker as { expected_results?: unknown }).expected_results
+      if (!Array.isArray(nested) || nested.length === 0) return []
+      return nested.filter(
+        (entry): entry is ExpectedResult =>
+          typeof entry === "object" && entry !== null && !Array.isArray(entry),
+      )
+    })
+    const expected =
+      expectedResults ??
+      (fromNested.length > 0
+        ? fromNested
+        : (test.markers ?? []).map((marker) => ({
+            id: marker.id,
+            name: marker.name,
+            slug: marker.slug,
+            lab_id: marker.lab_id,
+            provider_id: marker.provider_id,
+            required: true,
+            loinc: null,
+          })))
+    if (this.expectedResults.get(test.id)) this.expectedResults.update(test.id, [...expected])
+    else this.expectedResults.insert(test.id, [...expected])
+  }
+
   listLabTests(): LabTestRecord[] {
     return this.labTests.list({ order: "oldest" }).map((entry) => entry.value)
   }
@@ -367,6 +398,77 @@ export class JunctionState {
 
   installGetCache(entries: Iterable<[string, GetCacheEntry]>): void {
     for (const [key, entry] of entries) this.putGetCache(key, entry)
+  }
+
+  /**
+   * Materialize booking_key records from a cached availability payload so subsequent
+   * book/reschedule calls succeed against observation-seeded mocks.
+   */
+  hydrateBookingKeysFromAvailability(
+    body: unknown,
+    nowMs: number,
+    zipCode = "00000",
+    modalityHint?: AppointmentModality,
+  ): void {
+    if (typeof body !== "object" || body === null || Array.isArray(body)) return
+    const root = body as Record<string, unknown>
+    const dayBuckets: unknown[] = []
+    if (Array.isArray(root.days)) dayBuckets.push(...root.days)
+    if (Array.isArray(root.slots)) dayBuckets.push(...root.slots)
+    const slotEntries: unknown[] = []
+    for (const day of dayBuckets) {
+      if (typeof day !== "object" || day === null || Array.isArray(day)) {
+        slotEntries.push(day)
+        continue
+      }
+      const daySlots = (day as Record<string, unknown>).slots
+      if (Array.isArray(daySlots)) slotEntries.push(...daySlots)
+      else if (typeof (day as Record<string, unknown>).booking_key === "string") {
+        slotEntries.push(day)
+      }
+    }
+    const zip = /^\d{5}/.test(zipCode) ? zipCode.slice(0, 5) : "00000"
+    for (const entry of slotEntries) {
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue
+      const slot = entry as Record<string, unknown>
+      const bookingKey = typeof slot.booking_key === "string" ? slot.booking_key : ""
+      if (bookingKey === "" || this.bookingKeys.get(bookingKey)) continue
+      const start = typeof slot.start === "string" ? slot.start : new Date(nowMs).toISOString()
+      const end =
+        typeof slot.end === "string" ? slot.end : new Date(nowMs + 45 * 60_000).toISOString()
+      const modality: AppointmentModality =
+        modalityHint ??
+        (typeof slot.site_code === "string" && slot.site_code.length > 0
+          ? "patient_service_center"
+          : "phlebotomy")
+      this.bookingKeys.insert(bookingKey, {
+        key: bookingKey,
+        start,
+        end,
+        expires_at: typeof slot.expires_at === "string" ? slot.expires_at : null,
+        price: typeof slot.price === "number" ? slot.price : 0,
+        is_priority: slot.is_priority === true,
+        num_appointments_available:
+          typeof slot.num_appointments_available === "number"
+            ? slot.num_appointments_available
+            : 1,
+        modality,
+        provider: modality === "patient_service_center" ? "quest" : "getlabs",
+        site_code: typeof slot.site_code === "string" ? slot.site_code : null,
+        zip_code: zip,
+        address: {
+          first_line: "1 Main St",
+          second_line: null,
+          city: "San Francisco",
+          state: "CA",
+          zip_code: zip,
+          unit: null,
+        },
+        location: { lng: -122.4, lat: 37.77 },
+        consumed_by_order_id: null,
+        created_at: new Date(nowMs).toISOString(),
+      })
+    }
   }
 
   cacheKeyForRequest(

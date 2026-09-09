@@ -116,6 +116,56 @@ const mapAppointment = (value: unknown, orderId: string, userId: string): Appoin
   }
 }
 
+const demographicsFromOrder = (order: OrderRecord): UserInfoRecord => {
+  const details =
+    order.patient_details && typeof order.patient_details === "object"
+      ? (order.patient_details as Record<string, unknown>)
+      : {}
+  const address =
+    order.patient_address && typeof order.patient_address === "object"
+      ? (order.patient_address as Record<string, unknown>)
+      : {}
+  return {
+    first_name: details.first_name ?? null,
+    last_name: details.last_name ?? null,
+    dob: details.dob ?? null,
+    gender: details.gender ?? null,
+    phone_number: details.phone_number ?? null,
+    email: details.email ?? null,
+    gender_identity: null,
+    sexual_orientation: null,
+    race: null,
+    ethnicity: null,
+    medical_proxy: null,
+    address: {
+      first_line: address.first_line ?? "",
+      second_line: typeof address.second_line === "string" ? address.second_line : "",
+      country: address.country ?? "",
+      zip: address.zip ?? "",
+      city: address.city ?? "",
+      state: address.state ?? "",
+      access_notes: null,
+    },
+  }
+}
+
+const ensureUserInfoForOrder = async (
+  state: JunctionState,
+  source: SeedSource,
+  order: OrderRecord,
+): Promise<void> => {
+  if (state.userInfo.get(order.user_id)) return
+  const infoResponse = await request(source, "GET", `/v2/user/${order.user_id}/info/latest`)
+  if (infoResponse.ok) {
+    const info = asRecord(await readJson(infoResponse))
+    if (info) {
+      state.userInfo.insert(order.user_id, info as UserInfoRecord)
+      return
+    }
+  }
+  state.userInfo.insert(order.user_id, demographicsFromOrder(order))
+}
+
 const expectedFromMarkers = (labTest: LabTestRecord): ExpectedResult[] => {
   const markers = labTest.markers ?? []
   return markers.map((marker) => ({
@@ -129,6 +179,86 @@ const expectedFromMarkers = (labTest: LabTestRecord): ExpectedResult[] => {
   }))
 }
 
+const expectedFromMarkersResponse = async (
+  source: SeedSource,
+  test: LabTestRecord,
+): Promise<ExpectedResult[]> => {
+  const markersResponse = await request(source, "GET", `/v3/lab_tests/${test.id}/markers`)
+  if (!markersResponse.ok) return expectedFromMarkers(test)
+  const markersPayload = asRecord(await readJson(markersResponse))
+  const markers = markersPayload?.markers
+  if (!Array.isArray(markers) || markers.length === 0) return expectedFromMarkers(test)
+  const expected: ExpectedResult[] = []
+  const cleaned: NonNullable<LabTestRecord["markers"]> = []
+  for (const entry of markers) {
+    const record = asRecord(entry)
+    if (!record) continue
+    const expectedField = record.expected_results
+    if (Array.isArray(expectedField) && expectedField.length > 0 && expected.length === 0) {
+      for (const item of expectedField) {
+        const expectedRecord = asRecord(item)
+        if (expectedRecord) expected.push(clone(expectedRecord) as ExpectedResult)
+      }
+    }
+    const { expected_results: _ignored, ...rest } = record
+    cleaned.push(rest as NonNullable<LabTestRecord["markers"]>[number])
+  }
+  test.markers = cleaned
+  return expected.length > 0 ? expected : expectedFromMarkers(test)
+}
+
+export const ensureLabTests = async (
+  state: JunctionState,
+  source: SeedSource,
+  ids: readonly string[],
+): Promise<number> => {
+  let added = 0
+  for (const id of ids) {
+    if (!id || state.labTestById(id)) continue
+    const response = await request(source, "GET", `/v3/lab_tests/${id}`)
+    if (!response.ok) continue
+    const test = mapLabTest(await readJson(response))
+    if (!test) continue
+    const expected = await expectedFromMarkersResponse(source, test)
+    state.upsertLabTest(test, expected)
+    added += 1
+  }
+  return added
+}
+
+/**
+ * Pull any warmup-registered orders that user-list seeding missed (e.g. orders whose
+ * user was deleted during warmup and therefore no longer appears in `/v2/user`).
+ */
+export const ensureOrders = async (
+  state: JunctionState,
+  source: SeedSource,
+  ids: readonly string[],
+): Promise<number> => {
+  let added = 0
+  for (const id of ids) {
+    if (!id || state.orders.get(id)) continue
+    const orderResponse = await request(source, "GET", `/v3/order/${id}`)
+    if (!orderResponse.ok) continue
+    const order = mapOrder(await readJson(orderResponse))
+    if (!order) continue
+    if (!state.users.has(order.user_id) && !state.deletedUsers.has(order.user_id)) {
+      const userResponse = await request(source, "GET", `/v2/user/${order.user_id}`)
+      if (userResponse.ok) {
+        const user = mapUser(await readJson(userResponse))
+        if (user) state.insertUser(user)
+      } else {
+        state.deletedUsers.insert(order.user_id, { user_id: order.user_id })
+      }
+    }
+    state.insertOrder(order)
+    if (order.lab_test?.id) state.upsertLabTest(order.lab_test)
+    await ensureUserInfoForOrder(state, source, order)
+    added += 1
+  }
+  return added
+}
+
 export const seedFrom = async (
   state: JunctionState,
   source: SeedSource,
@@ -138,6 +268,22 @@ export const seedFrom = async (
   if (observations?.getCache) {
     state.installGetCache(observations.getCache)
     cacheEntries = observations.getCache.size
+    const nowMs = Date.now()
+    for (const [key, entry] of observations.getCache) {
+      if (!key.toLowerCase().includes("availability")) continue
+      const zipMatch = key.match(/"zip_code":"(\d{5})"/)
+      const modality = key.toLowerCase().includes("psc")
+        ? ("patient_service_center" as const)
+        : key.toLowerCase().includes("phlebotomy")
+          ? ("phlebotomy" as const)
+          : undefined
+      state.hydrateBookingKeysFromAvailability(
+        entry.body,
+        nowMs,
+        zipMatch?.[1] ?? "85004",
+        modality,
+      )
+    }
   }
 
   const labTests: LabTestRecord[] = []
@@ -172,34 +318,7 @@ export const seedFrom = async (
 
   const expectedResults: Record<string, ExpectedResult[]> = {}
   for (const test of labTests) {
-    const markersResponse = await request(source, "GET", `/v3/lab_tests/${test.id}/markers`)
-    if (!markersResponse.ok) {
-      expectedResults[test.id] = expectedFromMarkers(test)
-      continue
-    }
-    const markersPayload = asRecord(await readJson(markersResponse))
-    const markers = markersPayload?.markers
-    if (!Array.isArray(markers) || markers.length === 0) {
-      expectedResults[test.id] = expectedFromMarkers(test)
-      continue
-    }
-    const expected: ExpectedResult[] = []
-    const cleaned: NonNullable<LabTestRecord["markers"]> = []
-    for (const entry of markers) {
-      const record = asRecord(entry)
-      if (!record) continue
-      const expectedField = record.expected_results
-      if (Array.isArray(expectedField) && expectedField.length > 0 && expected.length === 0) {
-        for (const item of expectedField) {
-          const expectedRecord = asRecord(item)
-          if (expectedRecord) expected.push(clone(expectedRecord) as ExpectedResult)
-        }
-      }
-      const { expected_results: _ignored, ...rest } = record
-      cleaned.push(rest as NonNullable<LabTestRecord["markers"]>[number])
-    }
-    test.markers = cleaned
-    expectedResults[test.id] = expected.length > 0 ? expected : expectedFromMarkers(test)
+    expectedResults[test.id] = await expectedFromMarkersResponse(source, test)
   }
 
   if (labTests.length > 0 || labs.length > 0) {
@@ -219,6 +338,10 @@ export const seedFrom = async (
   let users = 0
   let orders = 0
   let appointments = 0
+  const pendingOrders: Array<{
+    order: OrderRecord
+    appointments: AppointmentRecord[]
+  }> = []
   let offset = 0
   const limit = 100
   for (;;) {
@@ -269,9 +392,7 @@ export const seedFrom = async (
           if (!orderResponse.ok) continue
           const order = mapOrder(await readJson(orderResponse))
           if (!order) continue
-          state.insertOrder(order)
-          orders += 1
-
+          const orderAppointments: AppointmentRecord[] = []
           for (const modality of ["phlebotomy", "psc"] as const) {
             const path =
               modality === "phlebotomy"
@@ -285,9 +406,9 @@ export const seedFrom = async (
               order.user_id,
             )
             if (!appointment) continue
-            state.insertAppointment(appointment)
-            appointments += 1
+            orderAppointments.push(appointment)
           }
+          pendingOrders.push({ order, appointments: orderAppointments })
         }
         const total = typeof ordersPayload?.total === "number" ? ordersPayload.total : undefined
         if (total !== undefined && page * 100 >= total) break
@@ -297,6 +418,26 @@ export const seedFrom = async (
     }
     offset += listed.length
     if (listed.length < limit) break
+  }
+
+  // Insert oldest-first so collection seq matches chronology (list is newest-first).
+  pendingOrders.sort((left, right) => {
+    const leftAt = Date.parse(String(left.order.created_at ?? "")) || 0
+    const rightAt = Date.parse(String(right.order.created_at ?? "")) || 0
+    if (leftAt !== rightAt) return leftAt - rightAt
+    return left.order.id.localeCompare(right.order.id)
+  })
+  for (const pending of pendingOrders) {
+    if (state.orders.get(pending.order.id)) continue
+    state.insertOrder(pending.order)
+    if (pending.order.lab_test?.id) state.upsertLabTest(pending.order.lab_test)
+    await ensureUserInfoForOrder(state, source, pending.order)
+    orders += 1
+    for (const appointment of pending.appointments) {
+      if (state.appointments.get(appointment.id)) continue
+      state.insertAppointment(appointment)
+      appointments += 1
+    }
   }
 
   return {

@@ -12,50 +12,61 @@ Status legend:
 
 Re-sweep `geviti-monorepo/packages/qa` when adding Vital call sites.
 
+## Proof engine (dynamic explore)
+
+Walks use **dynamic weights** (history + resource counts + coverage + phase +
+scheduling sagas), not static weights. Geo/availability params are reshaped onto
+the Geviti ZIP corpus after a shared observation-cache prefetch (area/psc + sealed
+availability POSTs). Consumed `booking_key`s are marked deleted after book.
+
+```bash
+# Default: dynamic seed parity (warmup → prefetch corpus → seedFrom → compare)
+bun run parity
+bun run parity -- --warmup 20 --compare 40 --runs 25
+bun run parity -- --skip-prefetch   # smoke without ZIP seal
+
+# Offline monkey (no network) — full Geviti surface including book/get/reschedule/cancel
+bun test junction.seed.property.test.ts
+```
+
+Do **not** flip Geviti `packages/qa` onto the mock until live seedParity is
+`monkey-green` for the rows below.
+
 ## Must-have — CI goldens / routing
 
 | Junction op | QA use | Status |
 | --- | --- | --- |
-| `get_area_info_v3_order_area_info_get` | baseline probe, routing corpus, address validate | in-allowlist |
-| `get_psc_info_v3_order_psc_info_get` | walk-in sites, lab finder, routing pins | in-allowlist |
-| `get_order_v3_order__order_id__get` | post-checkout routing (`labAccountId`, lab slug) | in-allowlist |
-| `create_user_v2_user_post` / resolve / get | checkout + reconcile patient | in-allowlist |
-| `create_order_v3_order_post` | place order / ensure-order | in-allowlist |
-| `cancel_order_v3_order__order_id__cancel_post` | cancel flows | in-allowlist |
-| `get_orders_v3_orders_get` | list / ground truth | in-allowlist |
-| Catalog (`lab_test`, labs, markers) | products / orphan fallback | in-allowlist |
+| `get_area_info` | baseline probe, routing corpus | offline monkey-green; live pending |
+| `get_psc_info` | walk-in sites, lab finder | offline monkey-green; live pending |
+| `get_order` | post-checkout routing | offline monkey-green; live pending |
+| create/resolve/get user | checkout + reconcile | offline monkey-green; live pending |
+| `create_order` / cancel / list | place / cancel / ground truth | offline monkey-green; live pending |
+| Catalog (lab_test, labs, markers) | products | offline monkey-green; live pending |
 
 ## UI / scheduling / lifecycle
 
 | Junction op | QA use | Status |
 | --- | --- | --- |
-| `simulate_order_v3_order__order_id__test_post` | simulate webhook / ready-to-book | in-allowlist |
-| Phlebotomy availability / book / get / reschedule / cancel | UI schedule drawer | in-allowlist (availability, book, get) |
-| PSC appointment lifecycle | legacy vital-bloodwork | unproven |
-| `get_result_raw` / `get_result_pdf` | results download | in-allowlist (raw); pdf unproven |
-| `get_result_metadata` | metadata after simulate | in-allowlist |
-| Cancellation reasons (phleb + PSC) | cancel UI | in-allowlist |
+| `simulate_order` | webhook / ready-to-book | offline monkey-green; live pending |
+| Phlebotomy availability | schedule drawer | offline monkey-green (sealed reshape+prefetch) |
+| Phlebotomy book / get / reschedule / cancel | schedule drawer | offline monkey-green |
+| PSC availability | walk-in | offline monkey-green |
+| PSC book / get / reschedule / cancel | walk-in lifecycle | in-allowlist (live+offline forceInclude); offline book path covered via phleb saga |
+| `get_result_raw` / `get_result_pdf` | results download | in-allowlist (forceInclude); offline raw green |
+| `get_result_metadata` | after simulate | offline monkey-green |
+| Cancellation reasons | cancel UI | offline monkey-green |
 
-## Reconcile / dev-tools / hygiene
+## Reconcile / hygiene
 
 | Junction op | QA use | Status |
 | --- | --- | --- |
-| List + delete users | prune / purge 50-user cap | in-allowlist |
-| Orphan create + cancel-at-vital | reconcile edge helpers | in-allowlist (via create/cancel) |
+| List + delete users | prune / 50-user cap | offline monkey-green |
+| Orphan create + cancel | reconcile helpers | offline monkey-green |
 
-## Proof engine
+## Confidence gate
 
-```bash
-# Default: seed parity (warmup N → seedFrom → compare M)
-bun run parity
-bun run parity -- --warmup 15 --compare 30 --runs 25
-
-# Legacy empty-start differential
-bun run parity -- --mode=empty
-```
-
-Offline monkey (no network): `junction.seed.property.test.ts` — mockA warmup →
-`seedFrom` → lockstep mockB.
-
-Do **not** claim drop-in or flip Geviti `packages/qa` onto the mock until this
-matrix is fully `monkey-green`.
+| Gate | Command | Status |
+| --- | --- | --- |
+| Offline full-surface seedParity | `bun test junction.seed.property.test.ts` | green |
+| Scheduling property suite | `bun test junction.scheduling.property.test.ts` | green |
+| Live seedParity vs tryvital | `bun run parity -- --runs 10` | pending this session |

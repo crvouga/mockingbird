@@ -5,7 +5,7 @@
  * Slot data is generated deterministically (seeded by zip/site/date), so walks are
  * reproducible without any provider-side state.
  */
-import { HttpError, jsonRes, type OperationContext } from "@crvouga/mockingbird-service"
+import { HttpError, jsonRes, opaqueToken, type OperationContext } from "@crvouga/mockingbird-service"
 import type {
   AppointmentEventRecord,
   AppointmentModality,
@@ -31,9 +31,82 @@ const cachedResponse = (state: JunctionState, context: OperationContext) => {
   )
   const cached = state.getGetCache(key)
   if (!cached) return undefined
+  if (key.toLowerCase().includes("availability")) {
+    materializeAvailabilityBookingKeys(state, context, cached.body)
+  }
   const headers = new Headers(cached.headers)
   if (!headers.has("content-type")) headers.set("content-type", "application/json")
   return new Response(JSON.stringify(cached.body), { status: cached.status, headers })
+}
+
+/**
+ * Ensure booking_key records exist for a cached availability response.
+ * Prefer deterministic slot generation (rich address/provider), then fill any remaining
+ * oracle keys from the cached body using the request zip.
+ */
+const materializeAvailabilityBookingKeys = (
+  state: JunctionState,
+  context: OperationContext,
+  cachedBody: unknown,
+) => {
+  const requestBody =
+    context.body.kind === "json" &&
+    typeof context.body.value === "object" &&
+    context.body.value !== null &&
+    !Array.isArray(context.body.value)
+      ? (context.body.value as Record<string, unknown>)
+      : {}
+  const zip =
+    typeof requestBody.zip_code === "string" && /^\d{5}/.test(requestBody.zip_code)
+      ? requestBody.zip_code.slice(0, 5)
+      : "85004"
+  const startDate = startDateOf(context, context.now())
+  const path = context.url.pathname
+  const modalityHint = path.includes("psc")
+    ? ("patient_service_center" as const)
+    : path.includes("phlebotomy")
+      ? ("phlebotomy" as const)
+      : undefined
+  if (path.includes("phlebotomy")) {
+    // Pin getlabs — matches area_info providers and hydrate defaults so observation-seeded
+    // booking keys stay lockstep across mock↔mock and mock↔sandbox for Geviti geos.
+    generatePhlebotomySlots(state, zip, startDate, "getlabs", context.now())
+  } else if (path.includes("psc")) {
+    generatePscSlots(state, zip, startDate, null, context.now())
+  }
+  state.hydrateBookingKeysFromAvailability(cachedBody, context.now(), zip, modalityHint)
+  // Normalize address/provider/modality on oracle keys so book/reschedule match generated shape.
+  if (typeof cachedBody === "object" && cachedBody !== null && !Array.isArray(cachedBody)) {
+    const root = cachedBody as Record<string, unknown>
+    const dayBuckets: unknown[] = []
+    if (Array.isArray(root.days)) dayBuckets.push(...root.days)
+    if (Array.isArray(root.slots)) dayBuckets.push(...root.slots)
+    for (const day of dayBuckets) {
+      if (typeof day !== "object" || day === null || Array.isArray(day)) continue
+      const daySlots = (day as Record<string, unknown>).slots
+      const slots = Array.isArray(daySlots) ? daySlots : [day]
+      for (const entry of slots) {
+        if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue
+        const slot = entry as Record<string, unknown>
+        const bookingKey = typeof slot.booking_key === "string" ? slot.booking_key : ""
+        if (!bookingKey) continue
+        const record = state.bookingKeys.get(bookingKey)
+        if (!record) continue
+        if (modalityHint) record.modality = modalityHint
+        record.zip_code = zip
+        record.provider = record.modality === "patient_service_center" ? "quest" : "getlabs"
+        record.address = {
+          first_line: "1 Main St",
+          second_line: null,
+          city: "San Francisco",
+          state: "CA",
+          zip_code: zip,
+          unit: null,
+        }
+        state.bookingKeys.update(bookingKey, record)
+      }
+    }
+  }
 }
 
 const PHLEBOTOMY_PROVIDERS = ["getlabs", "phlebfinders"] as const
@@ -587,6 +660,7 @@ const generatePscSlots = (
         price: record.price,
         is_priority: record.is_priority,
         num_appointments_available: record.num_appointments_available,
+        site_code: record.site_code,
       })
     }
     if (slots.length > 0) days.push({ date, slots })
@@ -624,6 +698,100 @@ const requireOrder = (
   return fresh
 }
 
+const orderCollectionMethod = (order: Order): string => {
+  if (typeof order.lab_test.method === "string" && order.lab_test.method.length > 0) {
+    return order.lab_test.method
+  }
+  if (typeof order.details?.type === "string" && order.details.type.length > 0) {
+    return order.details.type
+  }
+  return ""
+}
+
+const requirePhlebotomyCapableOrder = (order: Order): void => {
+  if (orderCollectionMethod(order) !== "at_home_phlebotomy") {
+    notFound("This order doesn't have a phlebotomy order.")
+  }
+}
+
+const requirePscCapableOrder = (order: Order): void => {
+  const method = orderCollectionMethod(order)
+  if (method !== "walk_in_test" && method !== "on_site_collection") {
+    notFound("This order doesn't have a PSC order.")
+  }
+}
+
+const appendOrderStatusEvent = (
+  state: JunctionState,
+  order: Order,
+  status: string,
+  context: OperationContext,
+): void => {
+  const now = state.isoNow(context.now)
+  const eventId =
+    Number.parseInt(
+      opaqueToken(`junction:order-event:${order.id}:${order.events.length}`, 8),
+      16,
+    ) %
+      1_000_000_000 ||
+    order.events.length + 1
+  const event = {
+    id: eventId,
+    created_at: now,
+    status,
+    status_detail: null,
+  }
+  order.status = status.split(".")[0] ?? order.status
+  order.updated_at = now
+  order.events.push(event)
+  order.last_event = event
+  if (status.endsWith(".requisition_created")) {
+    if (order.sample_id === null) {
+      order.sample_id = opaqueToken(`junction:sample:${order.id}`, 12).toUpperCase()
+    }
+    if (order.requisition_form_url === null) {
+      order.requisition_form_url = `https://storage.googleapis.com/vital_labs_sandbox/mock/requisition_forms/${order.id}_${order.sample_id}.pdf`
+    }
+  }
+  const transactionOrder = order.order_transaction.orders.find((entry) => entry.id === order.id)
+  if (transactionOrder) {
+    transactionOrder.low_level_status = status.split(".").at(-1) ?? status
+    transactionOrder.low_level_status_created_at = new Date(context.now()).toISOString()
+    transactionOrder.updated_at = new Date(context.now()).toISOString()
+  }
+  if (status.startsWith("completed")) order.order_transaction.status = "completed"
+  if (status.startsWith("cancelled")) order.order_transaction.status = "cancelled"
+}
+
+const applySimulationFlags = (order: Order, flags: Record<string, unknown> | null): boolean => {
+  if (!flags) return false
+  let changed = false
+  if (typeof flags.interpretation === "string") {
+    order.interpretation = flags.interpretation
+    changed = true
+  }
+  if (typeof flags.has_missing_results === "boolean") {
+    order.has_missing_results = flags.has_missing_results
+    changed = true
+  }
+  if (Array.isArray(flags.result_types)) {
+    order.result_types = flags.result_types as string[]
+    changed = true
+  }
+  return changed
+}
+
+/**
+ * Mirror api.sandbox.tryvital.io `/v3/order/{id}/test` semantics (probed 2026-09):
+ * - First call on a fresh order always creates `received.{method}.requisition_created`.
+ * - `at_home_phlebotomy` (and other non-walk-in methods): further `/test` calls are no-ops.
+ * - `walk_in_test` after requisition:
+ *   - matching `appointment_*` / `requisition_created` → no-op
+ *   - matching `partial_results` → append partial only (default interpretation normal)
+ *   - matching `ordered` / `completed` / `cancelled`, or any mismatched-method status →
+ *     jump through partial then completed (+ result date fields)
+ *   - `failed.*` → append the failed status
+ */
 const applySimulateTransition = (
   state: JunctionState,
   order: Order,
@@ -631,29 +799,97 @@ const applySimulateTransition = (
   flags: Record<string, unknown> | null,
   context: OperationContext,
 ): void => {
-  const now = state.isoNow(context.now)
-  const event = {
-    id: order.events.length + 1,
-    created_at: now,
-    status: finalStatus,
-    status_detail: null,
+  const orderMethod =
+    typeof order.lab_test.method === "string" && order.lab_test.method.length > 0
+      ? order.lab_test.method
+      : typeof order.details?.type === "string" && order.details.type.length > 0
+        ? order.details.type
+        : "at_home_phlebotomy"
+  const hasRequisition = order.events.some((entry) =>
+    typeof entry.status === "string" ? entry.status.endsWith(".requisition_created") : false,
+  )
+  const hasPartial = order.events.some((entry) =>
+    typeof entry.status === "string" ? entry.status.endsWith(".partial_results") : false,
+  )
+  const hasCompleted = order.events.some((entry) =>
+    typeof entry.status === "string" ? entry.status.endsWith(".completed") : false,
+  )
+
+  const requestedParts = finalStatus.split(".")
+  const requestedMethod =
+    requestedParts.length >= 3 ? (requestedParts[1] ?? orderMethod) : orderMethod
+  const methodMismatch = requestedMethod !== orderMethod
+  const normalizedTarget = (() => {
+    if (requestedParts.length >= 3)
+      return `${requestedParts[0]}.${orderMethod}.${requestedParts.slice(2).join(".")}`
+    return finalStatus
+  })()
+  const targetTail = normalizedTarget.split(".").at(-1) ?? normalizedTarget
+
+  let statusesToApply: string[] = []
+  let applyFlags = false
+  let markCompleteDates = false
+
+  if (!hasRequisition) {
+    statusesToApply = [`received.${orderMethod}.requisition_created`]
+  } else if (orderMethod === "walk_in_test") {
+    if (hasCompleted) {
+      statusesToApply = []
+    } else if (normalizedTarget.startsWith("failed.")) {
+      statusesToApply = [normalizedTarget]
+    } else if (
+      !methodMismatch &&
+      (targetTail === "appointment_pending" ||
+        targetTail === "appointment_scheduled" ||
+        targetTail === "appointment_cancelled" ||
+        targetTail === "redraw_available" ||
+        targetTail === "requisition_created" ||
+        targetTail === "requisition_bypassed")
+    ) {
+      statusesToApply = []
+    } else if (!methodMismatch && targetTail === "partial_results") {
+      if (!hasPartial) statusesToApply = [`sample_with_lab.${orderMethod}.partial_results`]
+      applyFlags = true
+      if (!flags || typeof flags.interpretation !== "string") {
+        order.interpretation = order.interpretation ?? "normal"
+      }
+    } else {
+      // ordered / completed / cancelled / mismatched-method → complete jump
+      statusesToApply = []
+      if (!hasPartial) statusesToApply.push(`sample_with_lab.${orderMethod}.partial_results`)
+      statusesToApply.push(`completed.${orderMethod}.completed`)
+      applyFlags = true
+      markCompleteDates = true
+      if (!flags || typeof flags.interpretation !== "string") {
+        order.interpretation = order.interpretation ?? "normal"
+      }
+    }
   }
-  order.status = finalStatus.split(".")[0] ?? order.status
-  order.updated_at = now
-  order.events.push(event)
-  order.last_event = event
-  const transactionOrder = order.order_transaction.orders.find((entry) => entry.id === order.id)
-  if (transactionOrder) {
-    transactionOrder.low_level_status = finalStatus.split(".").at(-1) ?? finalStatus
-    transactionOrder.low_level_status_created_at = new Date(context.now()).toISOString()
-    transactionOrder.updated_at = new Date(context.now()).toISOString()
+
+  if (statusesToApply.length === 0 && !applyFlags && !markCompleteDates) return
+
+  for (const status of statusesToApply) {
+    appendOrderStatusEvent(state, order, status, context)
   }
-  if (finalStatus.startsWith("completed")) order.order_transaction.status = "completed"
-  if (finalStatus.startsWith("cancelled")) order.order_transaction.status = "cancelled"
-  if (flags && typeof flags.interpretation === "string") order.interpretation = flags.interpretation
-  if (typeof flags?.has_missing_results === "boolean")
-    order.has_missing_results = flags.has_missing_results
-  if (Array.isArray(flags?.result_types)) order.result_types = flags.result_types as string[]
+  if (applyFlags) applySimulationFlags(order, flags)
+  if (markCompleteDates) {
+    const now = new Date(context.now())
+    const commonDays =
+      typeof order.lab_test.common_tat_days === "number" && order.lab_test.common_tat_days > 0
+        ? order.lab_test.common_tat_days
+        : 3
+    const worstDays =
+      typeof order.lab_test.worst_case_tat_days === "number" &&
+      order.lab_test.worst_case_tat_days > 0
+        ? order.lab_test.worst_case_tat_days
+        : 5
+    const expected = new Date(now)
+    expected.setUTCDate(expected.getUTCDate() + commonDays)
+    const worst = new Date(now)
+    worst.setUTCDate(worst.getUTCDate() + worstDays)
+    order.expected_result_by_date = expected.toISOString().slice(0, 10)
+    order.worst_case_result_by_date = worst.toISOString().slice(0, 10)
+  }
   state.orders.update(order.id, order)
   state.publishOrderWebhook(order, "labtest.order.updated", context.now())
 }
@@ -901,13 +1137,11 @@ export const schedulingHandlers = (state: JunctionState) => ({
       })
     }
     const startDate = startDateOf(context, context.now())
-    const random = seededRandom(seedFor(["provider", zip, startDate]))
-    const provider = PHLEBOTOMY_PROVIDERS[Math.floor(random() * PHLEBOTOMY_PROVIDERS.length)]
     const { timezone, days } = generatePhlebotomySlots(
       state,
       zip,
       startDate,
-      provider ?? PHLEBOTOMY_PROVIDERS[0],
+      "getlabs",
       context.now(),
     )
     if (days.length === 0) notFound("No availability found")
@@ -987,6 +1221,11 @@ export const schedulingHandlers = (state: JunctionState) => ({
   ) => {
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context)
+    requirePhlebotomyCapableOrder(order)
+    const existing = appointmentOfOrder(state, order.id)
+    if (existing && existing.status !== "cancelled") {
+      throw new HttpError(400, { detail: "Appointment already booked for this order" })
+    }
     const body = jsonObject(context)
     const bookingKey = typeof body.booking_key === "string" ? body.booking_key : ""
     const record = bookingKey === "" ? undefined : state.bookingKeys.get(bookingKey)
@@ -996,10 +1235,6 @@ export const schedulingHandlers = (state: JunctionState) => ({
       (record.expires_at !== null && new Date(record.expires_at).getTime() <= context.now())
     ) {
       invalidBookingKey()
-    }
-    const existing = appointmentOfOrder(state, order.id)
-    if (existing && existing.status !== "cancelled") {
-      throw new HttpError(400, { detail: "Appointment already booked for this order" })
     }
     const nowIso = state.isoNow(context.now)
     const appointmentId = state.nextAppointmentId()
@@ -1043,6 +1278,16 @@ export const schedulingHandlers = (state: JunctionState) => ({
   ) => {
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context)
+    requirePscCapableOrder(order)
+    const idempotencyKey = context.request.headers.get("x-idempotency-key")
+    if (idempotencyKey !== null && idempotencyKey !== "") {
+      const replay = state.cancelIdempotency.get(`psc-book:${idempotencyKey}`)
+      if (replay) return jsonRes(200, replay.response)
+    }
+    const existing = appointmentOfOrder(state, order.id)
+    if (existing && existing.status !== "cancelled") {
+      throw new HttpError(400, { detail: "Appointment already booked for this order" })
+    }
     const body = jsonObject(context)
     const bookingKey = typeof body.booking_key === "string" ? body.booking_key : ""
     const siteCode = typeof body.site_code === "string" ? body.site_code : ""
@@ -1059,20 +1304,11 @@ export const schedulingHandlers = (state: JunctionState) => ({
     ) {
       invalidBookingKey()
     }
-    const idempotencyKey = context.request.headers.get("x-idempotency-key")
-    if (idempotencyKey !== null && idempotencyKey !== "") {
-      const replay = state.cancelIdempotency.get(`psc-book:${idempotencyKey}`)
-      if (replay) return jsonRes(200, replay.response)
-    }
     if (record.modality !== "patient_service_center") {
       throw new HttpError(400, { detail: "Booking key is not a patient service center slot" })
     }
     if (record.site_code !== null && record.site_code !== siteCode) {
       throw new HttpError(400, { detail: "Booking key does not match the requested site" })
-    }
-    const existing = appointmentOfOrder(state, order.id)
-    if (existing && existing.status !== "cancelled") {
-      throw new HttpError(400, { detail: "Appointment already booked for this order" })
     }
     const nowIso = state.isoNow(context.now)
     const appointmentId = state.nextAppointmentId()

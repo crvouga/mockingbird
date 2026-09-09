@@ -91,6 +91,8 @@ export type ParityOptions = {
   sleep?: (ms: number) => Promise<void>
   /** Chance a generated body is invalid. Default 0.15. */
   invalidProbability?: number
+  /** Chance a resource reference points at a well-formed but nonexistent id. Default 0.08. */
+  missingProbability?: number
   /** Shrink failing walks to a minimal reproduction (costs extra real requests). Default true. */
   shrink?: boolean
   /** Relative weight per operationId for command selection (unlisted default to 1). */

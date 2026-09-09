@@ -7,7 +7,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
-import { MOCK_TEAM_ID } from "./state.js"
+import { deterministicUuid, MOCK_TEAM_ID } from "./state.js"
 
 const RESULT_TYPES = ["numeric", "range", "comment", "coded_value"] as const
 const INTERPRETATIONS = ["normal", "abnormal", "critical", "unknown"] as const
@@ -572,6 +572,53 @@ const METHOD_DETAILS = (method: string, id: string, at: string) => {
 }
 
 const PHYSICIAN = { first_name: "Leo", last_name: "Damasco", npi: "1134326366" }
+
+/** Sandbox Labcorp rejects these patient states (`Lab Labcorp does not support state XX`). */
+const LAB_UNSUPPORTED_STATES: Readonly<Record<string, readonly string[]>> = {
+  labcorp: ["NY", "NJ", "RI"],
+}
+
+/** Low-level events that Junction allows transitioning to `cancelled.*.cancelled`. */
+const CANCELLABLE_ORDER_EVENTS = new Set([
+  "received.walk_in_test.ordered",
+  "received.walk_in_test.requisition_created",
+  "received.walk_in_test.requisition_bypassed",
+  "collecting_sample.walk_in_test.appointment_scheduled",
+  "collecting_sample.walk_in_test.appointment_cancelled",
+  "collecting_sample.walk_in_test.appointment_pending",
+  "received.at_home_phlebotomy.ordered",
+  "received.at_home_phlebotomy.requisition_created",
+  "received.at_home_phlebotomy.requisition_bypassed",
+  "collecting_sample.at_home_phlebotomy.appointment_pending",
+  "collecting_sample.at_home_phlebotomy.appointment_scheduled",
+  "collecting_sample.at_home_phlebotomy.appointment_cancelled",
+  "collecting_sample.at_home_phlebotomy.draw_completed",
+  "received.testkit.ordered",
+  "received.testkit.awaiting_registration",
+  "received.testkit.requisition_created",
+  "received.testkit.requisition_bypassed",
+  "received.testkit.testkit_registered",
+  "received.on_site_collection.ordered",
+  "received.on_site_collection.requisition_created",
+  "received.on_site_collection.requisition_bypassed",
+  "collecting_sample.on_site_collection.draw_completed",
+])
+
+const labStateSupportError = (
+  labTest: { lab?: Record<string, unknown> | null },
+  state: unknown,
+): string | undefined => {
+  if (typeof state !== "string" || state.length === 0) return undefined
+  const lab = labTest.lab
+  if (!lab || typeof lab !== "object") return undefined
+  const slug = typeof lab.slug === "string" ? lab.slug.toLowerCase() : ""
+  const name = typeof lab.name === "string" ? lab.name : "Lab"
+  const unsupported = LAB_UNSUPPORTED_STATES[slug]
+  if (!unsupported) return undefined
+  const normalized = state.trim().toUpperCase()
+  if (!unsupported.includes(normalized)) return undefined
+  return `Lab ${name} does not support state ${normalized}`
+}
 const FINAL_STATUSES = [
   "received.walk_in_test.ordered",
   "received.walk_in_test.requisition_created",
@@ -641,7 +688,10 @@ const finalStatusError = (value: string) => ({
 
 export const orderHandlers = (state: JunctionState) => ({
   get_paginated_lab_tests_for_team_v3_lab_test_get: async () =>
-    jsonRes(200, { data: state.listLabTests(), next_cursor: null }),
+    jsonRes(200, {
+      data: state.listLabTests().filter((test) => test.auto_generated !== true),
+      next_cursor: null,
+    }),
 
   get_lab_test_for_team_v3_lab_tests__lab_test_id__get: async (context: OperationContext) => {
     const id = context.params.lab_test_id ?? ""
@@ -758,13 +808,24 @@ export const orderHandlers = (state: JunctionState) => ({
     const address = body.patient_address as Record<string, unknown>
     const labTestIds = (body.order_set as Record<string, unknown>).lab_test_ids as string[]
     const labTests = labTestIds.map((id) => state.labTestById(id))
-    if (labTests.some((test) => test === undefined))
-      throw new HttpError(422, {
-        detail: labTests.flatMap((test, index) =>
-          test === undefined ? [uuidError(labTestIds[index] ?? "", index)] : [],
-        ),
+    const resolved = labTests.filter(
+      (test): test is NonNullable<(typeof labTests)[number]> => test !== undefined,
+    )
+    if (resolved.length !== labTestIds.length || resolved.length === 0) {
+      throw new HttpError(400, {
+        detail: "No markers found for the supplied lab tests. Please check the lab test ids",
       })
-    const labTest = labTests[0] as NonNullable<(typeof labTests)[number]>
+    }
+    const markerCount = resolved.reduce((sum, test) => sum + (test.markers?.length ?? 0), 0)
+    if (markerCount === 0) {
+      throw new HttpError(400, {
+        detail: "No markers found for the supplied lab tests. Please check the lab test ids",
+      })
+    }
+    const labTest = resolved[0]
+
+    const stateError = labStateSupportError(labTest, address.state)
+    if (stateError) throw new HttpError(400, { detail: stateError })
 
     const nowIso = state.isoNow(context.now)
     const nowMicro = new Date(context.now()).toISOString()
@@ -785,11 +846,49 @@ export const orderHandlers = (state: JunctionState) => ({
       }
     }
     const eventStatus = `received.${method}.ordered`
+    const eventId =
+      Number.parseInt(opaqueToken(`junction:order-event:${orderId}`, 8), 16) % 1_000_000_000 || 1
     const event = {
-      id: 1,
+      id: eventId,
       created_at: nowIso,
       status: eventStatus,
       status_detail: null,
+    }
+    // Sandbox: same collection_method as the panel → embed the panel as-is.
+    // Different method → reuse one auto_generated lab_test per (markers, method).
+    const nativeMethod =
+      typeof labTest.method === "string" && labTest.method.length > 0
+        ? labTest.method
+        : method
+    let orderLabTest: typeof labTest
+    if (method === nativeMethod) {
+      orderLabTest = labTest
+    } else {
+      const markerFingerprint = (test: { markers?: Array<{ id: number }> | null }) =>
+        (test.markers ?? [])
+          .map((marker) => marker.id)
+          .sort((a, b) => a - b)
+          .join(",")
+      const sourceFingerprint = markerFingerprint(labTest)
+      const existingAuto = state
+        .listLabTests()
+        .find(
+          (test) =>
+            test.auto_generated === true &&
+            test.method === method &&
+            markerFingerprint(test) === sourceFingerprint,
+        )
+      const orderLabTestKey = `${labTest.id}:${method}`
+      const orderLabTestName =
+        existingAuto?.name ?? opaqueToken(`junction:order-lab-name:${orderLabTestKey}`, 16)
+      orderLabTest = existingAuto ?? {
+        ...labTest,
+        id: deterministicUuid(`junction:order-lab-test:${orderLabTestKey}`),
+        method,
+        auto_generated: true,
+        name: orderLabTestName,
+        slug: `afd62b39-${orderLabTestName}`,
+      }
     }
     const order: OrderRecord = {
       id: orderId,
@@ -797,7 +896,7 @@ export const orderHandlers = (state: JunctionState) => ({
       team_id: MOCK_TEAM_ID,
       patient_details: patientDetails(details as Record<string, unknown>),
       patient_address: patientAddress(address as Record<string, unknown>),
-      lab_test: labTest,
+      lab_test: orderLabTest,
       details: METHOD_DETAILS(method, state.testkitIdFor(orderId), nowIso),
       sample_id: null,
       notes: null,
@@ -841,7 +940,43 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     state.orders.insert(orderId, order)
     state.orderByTransaction.insert(transactionId, { order_id: orderId })
-    const response = { order, status: "SUCCESS", message: "Order submitted" }
+    state.upsertLabTest(
+      orderLabTest,
+      orderLabTest.id === labTest.id
+        ? undefined
+        : state.expectedResultsFor(labTest.id),
+    )
+    const demographics = {
+      first_name: details.first_name ?? null,
+      last_name: details.last_name ?? null,
+      dob: details.dob ?? null,
+      gender: details.gender ?? null,
+      phone_number: details.phone_number ?? null,
+      email: details.email ?? null,
+      gender_identity: null,
+      sexual_orientation: null,
+      race: null,
+      ethnicity: null,
+      medical_proxy: null,
+      address: {
+        first_line: address.first_line ?? "",
+        second_line: typeof address.second_line === "string" ? address.second_line : "",
+        country: address.country ?? "",
+        zip: address.zip ?? "",
+        city: address.city ?? "",
+        state: address.state ?? "",
+        access_notes: null,
+      },
+    }
+    if (state.userInfo.get(userId)) state.userInfo.update(userId, demographics)
+    else state.userInfo.insert(userId, demographics)
+    const responseOrder = { ...order } as Record<string, unknown>
+    if (responseOrder.result_types === null) delete responseOrder.result_types
+    const response = {
+      order: responseOrder,
+      status: "success",
+      message: "Order created successfully",
+    }
     if (typeof idempotencyKey === "string" && idempotencyKey.length > 0)
       state.orderIdempotency.insert(idempotencyKey, {
         order_id: orderId,
@@ -856,29 +991,69 @@ export const orderHandlers = (state: JunctionState) => ({
     const id = context.params.order_id ?? ""
     const order = state.orders.get(id)
     if (!order) notFound("Order doesn't exist")
-    if (order.status !== "cancelled") {
-      const now = state.isoNow(context.now)
-      order.status = "cancelled"
-      order.updated_at = now
-      const event = {
-        id: order.events.length + 1,
-        created_at: now,
-        status: "cancelled.testkit.cancelled",
-        status_detail: null,
-      }
-      order.events.push(event)
-      order.last_event = event
-      order.order_transaction.status = "cancelled"
-      const transactionOrder = order.order_transaction.orders[0]
-      if (transactionOrder) {
-        transactionOrder.low_level_status = "cancelled"
-        transactionOrder.updated_at = new Date(context.now()).toISOString()
-      }
-      state.orders.update(id, order)
-      state.publishOrderWebhook(order, "labtest.order.updated", context.now())
+    const alreadyCancelled =
+      order.status === "cancelled" ||
+      order.order_transaction.status === "cancelled" ||
+      (typeof order.last_event?.status === "string" &&
+        order.last_event.status.startsWith("cancelled."))
+    if (alreadyCancelled) {
+      const responseOrder = { ...order } as Record<string, unknown>
+      if (responseOrder.result_types === null) delete responseOrder.result_types
+      return jsonRes(200, {
+        order: responseOrder,
+        status: "success",
+        message: "order already cancelled",
+      })
+    }
+    const lowLevel =
+      typeof order.last_event?.status === "string"
+        ? order.last_event.status
+        : typeof order.events[order.events.length - 1]?.status === "string"
+          ? order.events[order.events.length - 1]!.status
+          : ""
+    if (!CANCELLABLE_ORDER_EVENTS.has(lowLevel)) {
+      throw new HttpError(400, {
+        detail:
+          "This order is not in a Cancellable Status. Refer to the documentation to check the order lifecycle (https://docs.tryvital.io/lab/workflow/lab-test-lifecycle).",
+      })
+    }
+    const now = state.isoNow(context.now)
+    const method =
+      typeof order.lab_test.method === "string" && order.lab_test.method.length > 0
+        ? order.lab_test.method
+        : typeof order.details?.type === "string" && order.details.type.length > 0
+          ? order.details.type
+          : "at_home_phlebotomy"
+    order.status = "cancelled"
+    order.updated_at = now
+    const event = {
+      id: order.events.length + 1,
+      created_at: now,
+      status: `cancelled.${method}.cancelled`,
+      status_detail: null,
+    }
+    order.events.push(event)
+    order.last_event = event
+    order.order_transaction.status = "cancelled"
+    const transactionOrder = order.order_transaction.orders[0]
+    if (transactionOrder) {
+      transactionOrder.low_level_status = "cancelled"
+      transactionOrder.updated_at = new Date(context.now()).toISOString()
+    }
+    state.orders.update(id, order)
+    state.publishOrderWebhook(order, "labtest.order.updated", context.now())
+    // Junction auto-cancels mobile phlebotomy appointments on order cancel, but
+    // leaves walk-in PSC appointments alone (patient may already be en route).
+    if (method === "at_home_phlebotomy") {
       cascadeCancelAppointments(state, id, context.now())
     }
-    const response = { order, status: "SUCCESS", message: "Order cancelled" }
+    const responseOrder = { ...order } as Record<string, unknown>
+    if (responseOrder.result_types === null) delete responseOrder.result_types
+    const response = {
+      order: responseOrder,
+      status: "success",
+      message: "order cancelled",
+    }
     return jsonRes(200, response)
   },
 
@@ -931,16 +1106,10 @@ export const orderHandlers = (state: JunctionState) => ({
         final_status: finalStatus,
         flags,
       })
-      return new Response("Success", {
-        status: 200,
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      })
+      return jsonRes(200, "Success")
     }
     applySimulateTransition(state, order, finalStatus, flags, context)
-    return new Response("Success", {
-      status: 200,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-    })
+    return jsonRes(200, "Success")
   },
 
   get_order_v3_order__order_id__get: async (context: OperationContext) => {
@@ -952,7 +1121,9 @@ export const orderHandlers = (state: JunctionState) => ({
     })
     const fresh = state.orders.get(id)
     if (!fresh) notFound("This order doesn't exist")
-    return jsonRes(200, fresh)
+    const body = { ...fresh } as Record<string, unknown>
+    if (body.result_types === null) delete body.result_types
+    return jsonRes(200, body)
   },
 
   get_orders_v3_orders_get: async (context: OperationContext) => {
@@ -967,9 +1138,21 @@ export const orderHandlers = (state: JunctionState) => ({
       notFound("User does not exist on this team")
     let all = state.orders.list({ order: "oldest" })
     if (userId !== undefined) all = all.filter((entry) => entry.value.user_id === userId)
+    all = [...all].sort((left, right) => {
+      const leftAt = Date.parse(String(left.value.created_at ?? "")) || 0
+      const rightAt = Date.parse(String(right.value.created_at ?? "")) || 0
+      if (rightAt !== leftAt) return rightAt - leftAt
+      // Deterministic, seed-independent tie-break (seq is insert-order and
+      // flips after seedFrom copies newest-first API pages).
+      return right.id.localeCompare(left.id)
+    })
     const pageItems = all.slice((page - 1) * size, page * size)
     return jsonRes(200, {
-      orders: pageItems.map((entry) => entry.value),
+      orders: pageItems.map((entry) => {
+        const order = { ...entry.value } as Record<string, unknown>
+        if (order.result_types === null) delete order.result_types
+        return order
+      }),
       total: all.length,
       page,
       size,
