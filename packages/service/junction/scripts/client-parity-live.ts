@@ -1,6 +1,6 @@
 import type { VitalClient } from "@tryvital/vital-node"
 import { JunctionAPI } from "../src/index.js"
-import { normalize, runSchedulingScenario, withMockFetch } from "./client-parity.js"
+import { normalize, runSchedulingScenario, shapeOf, withMockFetch } from "./client-parity.js"
 
 const apiKey = process.env.JUNCTION_API_KEY
 const sandboxUrl = process.env.JUNCTION_SANDBOX_URL
@@ -13,6 +13,25 @@ const diff = (label: string, mockValue: unknown, sandboxValue: unknown): boolean
     process.stdout.write(`DIFF ${label}\n`)
     process.stdout.write(`  mock:    ${JSON.stringify(normalize(mockValue))?.slice(0, 400)}\n`)
     process.stdout.write(`  sandbox: ${JSON.stringify(normalize(sandboxValue))?.slice(0, 400)}\n`)
+  }
+  return same
+}
+
+/** Shape-only comparison for provider-owned geo surfaces (per-zip data differs by design). */
+const diffShape = (label: string, mockValue: unknown, sandboxValue: unknown): boolean => {
+  const mockShape = JSON.stringify(shapeOf(mockValue), (_key, value) =>
+    typeof value === "number" ? `num:${value}` : value,
+  )
+  const sandboxShape = JSON.stringify(shapeOf(sandboxValue), (_key, value) =>
+    typeof value === "number" ? `num:${value}` : value,
+  )
+  const same = mockShape === sandboxShape
+  if (same) {
+    process.stdout.write(`shape ${label}\n`)
+  } else {
+    process.stdout.write(`SHAPE-DIFF ${label}\n`)
+    process.stdout.write(`  mock:    ${mockShape?.slice(0, 400)}\n`)
+    process.stdout.write(`  sandbox: ${sandboxShape?.slice(0, 400)}\n`)
   }
   return same
 }
@@ -41,6 +60,10 @@ const runLiveScenario = async (sandboxClient: VitalClient, clientUserId: string)
     const sandboxValue = sandboxResult[key]
     if (key === "appointment" && sandboxValue === undefined) {
       process.stdout.write(`skip appointment (sandbox has no appointment yet)\n`)
+      continue
+    }
+    if (key === "areaInfo" || key === "pscInfo") {
+      if (!diffShape(label, mockValue, sandboxValue)) ok = false
       continue
     }
     if (!diff(label, mockValue, sandboxValue)) ok = false

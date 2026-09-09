@@ -401,6 +401,26 @@ paths:
           x-mockingbird-resource-ref:
             type: lab_test
             missing: "00000000-0000-4000-8000-000000000000"
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          default: 1
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      - name: provider_id
+        in: query
+        required: false
+        schema:
+          type: string
     get:
       operationId: get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get
       x-mockingbird:
@@ -501,15 +521,19 @@ paths:
       x-mockingbird:
         supported: true
         parity:
-          enabled: true
+          enabled: false
           safe: true
+          reason: >-
+            central_labs presence, within_radius counts and getlabs market coverage are
+            provider-owned geo data that a mock cannot replicate per-zip; covered by the
+            client-parity scenario shape checks instead
       parameters:
         - name: zip_code
           in: query
           required: true
           schema:
             type: string
-            minLength: 5
+            pattern: "^\\d{5}(?:-?\\d{4})?$"
         - name: radius
           in: query
           required: false
@@ -540,15 +564,19 @@ paths:
       x-mockingbird:
         supported: true
         parity:
-          enabled: true
+          enabled: false
           safe: true
+          reason: >-
+            patient_service_centers are real site inventories per zip (thousands of sites,
+            result-capped at 30) that a fixture mock cannot replicate per-zip; covered by
+            the client-parity scenario shape checks instead
       parameters:
         - name: zip_code
           in: query
           required: true
           schema:
             type: string
-            minLength: 5
+            pattern: "^\\d{5}$"
         - name: lab_id
           in: query
           required: true
@@ -1908,7 +1936,20 @@ components:
           type: boolean
         loinc:
           type: ["object", "null"]
-          additionalProperties: true
+          required: [id, name, slug, code]
+          properties:
+            id:
+              type: integer
+              x-mockingbird-volatile:
+                kind: id
+            name:
+              type: string
+            slug:
+              type: string
+            code:
+              type: string
+            unit:
+              type: ["string", "null"]
     ClientFacingMarkerComplete:
       type: object
       required: [id, name, slug, expected_results]

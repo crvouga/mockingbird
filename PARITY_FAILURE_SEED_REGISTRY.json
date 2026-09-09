@@ -42,6 +42,12 @@
       "seed": 2061032686,
       "status": "fixed",
       "failure": "simulate order validation mismatch for missing order and invalid patient data"
+    },
+    {
+      "provider": "junction",
+      "seed": 10416389,
+      "status": "open",
+      "failure": "patch_user_v2_user__user_id__patch 422 detail mismatch: real API reports all-or-nothing required-field errors ordered first_name,last_name,email,phone_number,gender with 'missing' type for object/null inputs; mock reports per-field string_type errors in different order"
     }
   ]
 }

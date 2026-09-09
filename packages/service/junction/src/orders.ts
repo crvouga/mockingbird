@@ -1,3 +1,4 @@
+import type { FormValue } from "@crvouga/mockingbird-http-codec"
 import {
   HttpError,
   jsonRes,
@@ -6,7 +7,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
-import { LAB_TEST_CATALOG, labTestById, MOCK_TEAM_ID } from "./state.js"
+import { expectedResultsFor, LAB_TEST_CATALOG, labTestById, MOCK_TEAM_ID } from "./state.js"
 
 const RESULT_TYPES = ["numeric", "range", "comment", "coded_value"] as const
 const INTERPRETATIONS = ["normal", "abnormal", "critical", "unknown"] as const
@@ -69,6 +70,74 @@ const queryInt = (context: OperationContext, name: string, fallback: number): nu
   if (typeof raw !== "string" || !/^-?\d+$/.test(raw))
     throw new HttpError(422, { detail: `${name} must be an integer` })
   return Number(raw)
+}
+
+const MARKERS_DEFAULT_SIZE = 50
+const MARKERS_MAX_SIZE = 100
+
+const markersBoundsError = (name: string, value: string, bound: "ge" | "le", limit: number) => ({
+  type: bound === "ge" ? "greater_than_equal" : "less_than_equal",
+  loc: ["query", name],
+  msg: `Input should be ${bound === "ge" ? "greater than or equal to" : "less than or equal to"} ${limit}`,
+  input: value,
+  ctx: bound === "ge" ? { ge: limit } : { le: limit },
+})
+
+const parseMarkersInt = (raw: FormValue | undefined, name: string, fallback: number): number => {
+  if (raw === undefined) return fallback
+  if (typeof raw !== "string" || !/^-?\d+$/.test(raw)) {
+    throw new HttpError(422, {
+      detail: [
+        {
+          type: "int_parsing",
+          loc: ["query", name],
+          msg: "Input should be a valid integer, unable to parse string as an integer",
+          input: raw,
+        },
+      ],
+    })
+  }
+  return Number(raw)
+}
+
+/**
+ * Pagination mirrors the sandbox markers endpoints: `total` counts the returned page,
+ * `pages` is ceil(overall/size) over the whole marker list, and page/size accept
+ * 1..100 with 422s outside those bounds.
+ */
+const paginateMarkers = (
+  query: OperationContext["query"],
+  markers: readonly Record<string, unknown>[],
+) => {
+  const page = parseMarkersInt(query.page, "page", 1)
+  const size = parseMarkersInt(query.size, "size", MARKERS_DEFAULT_SIZE)
+  if (page < 1) {
+    throw new HttpError(422, {
+      detail: [markersBoundsError("page", String(page), "ge", 1)],
+    })
+  }
+  if (size < 1 || size > MARKERS_MAX_SIZE) {
+    throw new HttpError(422, {
+      detail: [
+        markersBoundsError(
+          "size",
+          String(size),
+          size < 1 ? "ge" : "le",
+          size < 1 ? 1 : MARKERS_MAX_SIZE,
+        ),
+      ],
+    })
+  }
+  const start = (page - 1) * size
+  const pageMarkers = markers.slice(start, start + size)
+  const pages = Math.ceil(markers.length / size)
+  return {
+    markers: pageMarkers,
+    total: pageMarkers.length,
+    page,
+    size,
+    pages,
+  }
 }
 
 const jsonObject = (context: OperationContext): Record<string, unknown> => {
@@ -521,20 +590,12 @@ export const orderHandlers = (state: JunctionState) => ({
     const id = context.params.lab_test_id ?? ""
     const test = labTestById(id)
     if (!test) notFound("Lab test does not exist")
+    const expected = expectedResultsFor(id)
     const markers = (test.markers ?? []).map((marker) => ({
       ...marker,
-      expected_results: [
-        {
-          id: marker.id,
-          name: marker.name,
-          slug: marker.slug,
-          provider_id: marker.provider_id,
-          lab_id: marker.lab_id ?? null,
-          required: false,
-        },
-      ],
+      expected_results: expected,
     }))
-    return jsonRes(200, { markers, total: markers.length, page: 1, size: markers.length, pages: 1 })
+    return jsonRes(200, paginateMarkers(context.query, markers))
   },
 
   list_order_set_markers_v3_lab_tests_list_order_set_markers_post: async (
@@ -555,18 +616,9 @@ export const orderHandlers = (state: JunctionState) => ({
       .filter((marker) => providerId === null || marker.provider_id === providerId)
       .map((marker) => ({
         ...marker,
-        expected_results: [
-          {
-            id: marker.id,
-            name: marker.name,
-            slug: marker.slug,
-            provider_id: marker.provider_id,
-            lab_id: marker.lab_id ?? null,
-            required: false,
-          },
-        ],
+        expected_results: expectedResultsFor(order.lab_test.id),
       }))
-    return jsonRes(200, { markers, total: markers.length, page: 1, size: markers.length, pages: 1 })
+    return jsonRes(200, paginateMarkers(context.query, markers))
   },
 
   create_order_v3_order_post: async (context: OperationContext) => {

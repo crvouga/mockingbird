@@ -167,6 +167,35 @@ const runSchedulingScenario = async (
   }
 }
 
+/**
+ * Shape projection for provider-owned geo surfaces (area info, PSC info): every lab slug
+ * is a lab_id + billing/capability profile, and center/site payloads carry the fixed
+ * metadata contract. Exact per-zip values differ by design between mock and sandbox.
+ */
+const shapeOf = (value: unknown, depth = 0): unknown => {
+  if (depth > 3) return "…"
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return {
+      arrayLength: value.length,
+      item: first === undefined ? null : shapeOf(first, depth + 1),
+    }
+  }
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([key, entry]) => [key, shapeOf(entry, depth + 1)]),
+    )
+  }
+  if (typeof value === "number") return `number(${Number.isInteger(value) ? "int" : "float"})`
+  if (typeof value === "boolean") return "boolean"
+  if (typeof value === "string") {
+    return /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/.test(value) ? "day-hours" : "string"
+  }
+  return value
+}
+
 const main = async () => {
   const mock = new JunctionAPI({ now: () => 1_700_000_000_000 })
   const mockResult = await withMockFetch(mock, (client) =>
@@ -177,4 +206,4 @@ const main = async () => {
 
 if (import.meta.main) await main()
 
-export { normalize, runSchedulingScenario, withMockFetch }
+export { normalize, runSchedulingScenario, shapeOf, withMockFetch }

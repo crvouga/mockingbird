@@ -2,8 +2,8 @@ import { Collection, IdSequence, opaqueToken } from "@crvouga/mockingbird-servic
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { LabTestRecord } from "./catalog.js"
 
-export type { CatalogMarker, LabTestRecord } from "./catalog.js"
-export { LAB_TEST_CATALOG, labTestById } from "./catalog.js"
+export type { CatalogMarker, ExpectedResult, LabTestRecord } from "./catalog.js"
+export { expectedResultsFor, LAB_TEST_CATALOG, labTestById } from "./catalog.js"
 
 export type UserInfoRecord = Record<string, unknown>
 

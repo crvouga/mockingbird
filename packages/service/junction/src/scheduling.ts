@@ -17,8 +17,6 @@ import type {
 const PHLEBOTOMY_PROVIDERS = ["getlabs", "phlebfinders"] as const
 type PhlebotomyProviderName = (typeof PHLEBOTOMY_PROVIDERS)[number]
 
-const SERVICE_TYPES: string[] = ["appointment-ready", "appointment-request"]
-
 const zipTimezone = (zip: string): string => {
   const prefix = Number(zip.slice(0, 3))
   if (!Number.isFinite(prefix) || prefix === 0) return "America/New_York"
@@ -67,28 +65,99 @@ const CANCELLED_ORDER_EVENT: Record<AppointmentModality, string> = {
 }
 
 export const CANCELLATION_REASONS = [
-  { id: "cancellation_reason_1", name: "Patient Request", is_refundable: true },
   {
-    id: "cancellation_reason_2",
-    name: "Patient Request (Refund Not Applicable)",
-    is_refundable: false,
+    id: "5c0257ef-6fea-4a22-b20a-3ddab573d5c9",
+    name: "Did not fast for appointment",
+    is_refundable: true,
   },
-  { id: "cancellation_reason_3", name: "Provider Cancellation", is_refundable: true },
-  { id: "cancellation_reason_4", name: "Other", is_refundable: true },
+  { id: "448c519c-64b4-4497-ae73-622fa93371b3", name: "Do not trust company", is_refundable: true },
+  {
+    id: "d378e152-12d1-433e-9dd1-e0410f9331dc",
+    name: "Getlabs cannot deliver to my preferred lab",
+    is_refundable: true,
+  },
+  { id: "7be75f90-303d-4656-8eed-9bd3e20cb2cc", name: "Getlabs - late", is_refundable: true },
+  {
+    id: "ae3ec4dc-387c-42ac-835a-bf88fc4e411b",
+    name: "Getlabs -Phleb Out Sick",
+    is_refundable: true,
+  },
+  {
+    id: "e2396e00-dd49-4f38-a395-51d6304c3312",
+    name: "Getlabs rescheduled time does not work for patient",
+    is_refundable: true,
+  },
+  { id: "5330c863-ac80-4316-901b-d305d0df74d5", name: "No longer interested", is_refundable: true },
+  { id: "2b9f23fd-163e-4483-bb10-90c74a67e0dc", name: "Other", is_refundable: true },
+  {
+    id: "98f861dd-fe61-4817-a9d6-1b99b19cd0fb",
+    name: "Provider asked me to cancel",
+    is_refundable: true,
+  },
+  {
+    id: "7dfd7da5-ed6e-40bb-a7e4-c8003f0c10a9",
+    name: "Scheduled for wrong patient",
+    is_refundable: true,
+  },
+  {
+    id: "796da8c8-e654-4347-8ded-1026410c1976",
+    name: "Scheduled time no longer works",
+    is_refundable: true,
+  },
+  {
+    id: "ba02af35-a34f-4a7a-abe5-5f766e8f6cd1",
+    name: "Unable to get lab order from provider",
+    is_refundable: true,
+  },
+  {
+    id: "0c9425db-f11e-49c5-b976-3c0d1d4a4ea8",
+    name: "Wanted to book in-person appointment",
+    is_refundable: true,
+  },
+  {
+    id: "2599a0ea-0b4a-42fe-8df6-d8f7c68182e7",
+    name: "Went to lab for appointment",
+    is_refundable: true,
+  },
 ] as const
 
-const PHLEBOTOMY_AREA_PROVIDERS: Array<{
-  name: PhlebotomyProviderName
-  service_types: string[]
-}> = [
-  { name: "getlabs", service_types: SERVICE_TYPES },
-  { name: "phlebfinders", service_types: SERVICE_TYPES },
-]
+/** PSC offers a single cancellation reason in the sandbox. */
+export const PSC_CANCELLATION_REASONS = [
+  { id: "226a6520-667c-495f-8500-c20722d231d0", name: "Other", is_refundable: true },
+] as const
+
+/** The phlebotomy reason named "Other" requires explanatory notes. */
+export const OTHER_CANCELLATION_REASON_ID = "2b9f23fd-163e-4483-bb10-90c74a67e0dc"
 
 const PSC_LABS = [
-  { lab_id: 6, slug: "labcorp", supported_bill_types: ["client_bill", "patient_bill"] },
-  { lab_id: 3, slug: "ussl", supported_bill_types: ["client_bill"] },
+  {
+    lab_id: 25,
+    slug: "sonora_quest",
+    supported_bill_types: ["client_bill"],
+    capabilities: ["appointment_scheduling_via_junction"],
+  },
+  {
+    lab_id: 6,
+    slug: "labcorp",
+    supported_bill_types: ["client_bill", "commercial_insurance", "patient_bill"],
+    capabilities: [],
+  },
+  {
+    lab_id: 13,
+    slug: "bioreference",
+    supported_bill_types: ["patient_bill_passthrough"],
+    capabilities: [],
+  },
+  {
+    lab_id: 4,
+    slug: "quest",
+    supported_bill_types: ["client_bill", "commercial_insurance", "patient_bill"],
+    capabilities: ["appointment_scheduling_via_junction"],
+  },
 ] as const
+
+/** Lab 3 (USSL) exists in the catalog but is excluded from PSC info in the sandbox. */
+export const UNSUPPORTED_PSC_LAB_ID = 3
 
 type PscSite = {
   site_code: string
@@ -162,12 +231,119 @@ const PSC_SITES: PscSite[] = [
 
 const isServicedZip = (zip: string): boolean => /^\d{5}$/.test(zip) && Number(zip.slice(0, 3)) > 0
 
-const pscSitesForZip = (zip: string): PscSite[] => {
-  if (!isServicedZip(zip)) return []
+const AREA_LAB_BILLS: Readonly<Record<string, readonly string[]>> = {
+  sonora_quest: ["client_bill"],
+  labcorp: ["client_bill", "commercial_insurance", "patient_bill"],
+  bioreference: ["patient_bill_passthrough"],
+  quest: ["client_bill", "commercial_insurance", "patient_bill"],
+}
+
+const AREA_LABS: ReadonlyArray<{
+  slug: string
+  lab_id: number
+  appointment_with_vital: boolean
+  capabilities: readonly string[]
+}> = [
+  { slug: "sonora_quest", lab_id: 25, appointment_with_vital: true, capabilities: [] },
+  { slug: "labcorp", lab_id: 6, appointment_with_vital: false, capabilities: [] },
+  { slug: "bioreference", lab_id: 13, appointment_with_vital: false, capabilities: [] },
+  {
+    slug: "quest",
+    lab_id: 4,
+    appointment_with_vital: true,
+    capabilities: ["appointment_scheduling_via_junction"],
+  },
+]
+
+/** Zips where getlabs phlebotomy is offered (mirrors sandbox coverage). */
+const PHLEBOTOMY_SERVED_PREFIXES: readonly number[] = [900, 303, 917, 891]
+
+const phlebotomyServed = (zip: string): boolean => {
   const prefix = Number(zip.slice(0, 3))
-  if (prefix >= 900) return PSC_SITES
-  if (prefix >= 100 && prefix <= 499) return PSC_SITES.filter((site) => site.zip_code !== "92128")
-  return PSC_SITES
+  return PHLEBOTOMY_SERVED_PREFIXES.includes(prefix)
+}
+
+/**
+ * Deterministic PSC inventory model: the true number of sites within the radius is a
+ * seeded function of zip + lab scaled by radius (the sandbox derives it from real geo
+ * data); `psc/info` returns the nearest sites capped at 30. Unserviced zip prefixes
+ * (000, 96x territories with no national-lab coverage) have no inventory.
+ */
+const UNSERVICED_PSC_PREFIXES: readonly number[] = [0]
+
+const withinRadiusFor = (zip: string, labSlug: string, radius: number): number => {
+  if (UNSERVICED_PSC_PREFIXES.includes(Number(zip.slice(0, 3)))) return 0
+  const seed = seedFor(["psc-count", zip, labSlug])
+  const fraction = seededRandom(seed)()
+  return Math.round(fraction * radius * 1.6)
+}
+
+const PSC_SITE_NAMES = ["Downtown", "Midtown", "Harbor", "Central", "University", "Parkside"]
+const PSC_SITE_HOURS: Readonly<Record<string, string>> = {
+  monday: "08:00-17:00",
+  tuesday: "08:00-17:00",
+  wednesday: "08:00-17:00",
+  thursday: "08:00-17:00",
+  friday: "08:00-14:00",
+}
+
+const pscSiteFor = (zip: string, labSlug: string, index: number, radius: number) => {
+  const random = seededRandom(seedFor(["psc-site", zip, labSlug, index]))
+  const prefix = Number(zip.slice(0, 3))
+  const state = prefix >= 900 ? "CA" : prefix >= 600 ? "CO" : prefix >= 300 ? "GA" : "NY"
+  const city = PSC_SITE_NAMES[index % PSC_SITE_NAMES.length]
+  const siteCodeSeed = seededRandom(seedFor(["psc-code", labSlug, index]))
+  const siteCode =
+    labSlug === "quest" || labSlug === "sonora_quest"
+      ? Array.from({ length: 3 }, () =>
+          String.fromCharCode(65 + Math.floor(siteCodeSeed() * 26)),
+        ).join("")
+      : String(10_000 + Math.floor(siteCodeSeed() * 89_999))
+  return {
+    name: `${labSlug.replace("_", " ")} - ${city}`,
+    state,
+    city,
+    zip_code: zip,
+    first_line: `${100 + Math.floor(random() * 800)} Main St`,
+    phone_number: `+1${200 + Math.floor(random() * 700)}555${String(1000 + Math.floor(random() * 8999))}`,
+    hours: PSC_SITE_HOURS,
+    distance: Math.round((0.5 + random() * radius) * 10) / 10,
+    site_code: siteCode,
+    location: {
+      lng: -122.4 + (random() - 0.5) * 0.2,
+      lat: 37.77 + (random() - 0.5) * 0.2,
+    },
+  }
+}
+
+/**
+ * Deterministic area model: `within_radius` mirrors the PSC inventory count per lab, the
+ * phlebotomy section mirrors getlabs market coverage, and central_labs always lists the
+ * four national labs with their billing/capability profiles.
+ */
+const areaInfoFor = (zip: string, radius: number) => {
+  const served = phlebotomyServed(zip)
+  const centralLabs: Record<string, unknown> = {}
+  for (const lab of AREA_LABS) {
+    centralLabs[lab.slug] = {
+      patient_service_centers: {
+        appointment_with_vital: lab.appointment_with_vital,
+        within_radius: withinRadiusFor(zip, lab.slug, radius),
+        radius: String(radius),
+        capabilities: [...lab.capabilities],
+      },
+      supported_bill_types: [...(AREA_LAB_BILLS[lab.slug] ?? [])],
+      lab_id: lab.lab_id,
+    }
+  }
+  return {
+    zip_code: zip,
+    phlebotomy: {
+      is_served: served,
+      providers: served ? [{ name: "getlabs", service_types: ["appointment-ready"] }] : [],
+    },
+    central_labs: centralLabs,
+  }
 }
 
 const jsonObject = (context: OperationContext): Record<string, unknown> => {
@@ -208,33 +384,21 @@ const uuidError = (value: string, loc: string[]) => {
 }
 
 const ALLOWED_RADII = [10, 20, 25, 50, 100] as const
+const DEFAULT_RADIUS = 25
 
 const radiusOf = (context: OperationContext): number => {
   const raw = context.query.radius
-  if (raw === undefined) return 100
-  if (typeof raw !== "string" || !/^\d+$/.test(raw)) {
-    throw new HttpError(422, {
-      detail: [
-        {
-          type: "integer_parsing",
-          loc: ["query", "radius"],
-          msg: "Input should be a valid integer",
-          input: raw,
-          ctx: { error: {} },
-        },
-      ],
-    })
-  }
-  const value = Number(raw)
+  if (raw === undefined) return DEFAULT_RADIUS
+  const value = typeof raw === "string" && /^\d+$/.test(raw) ? Number(raw) : Number.NaN
   if (!ALLOWED_RADII.includes(value as (typeof ALLOWED_RADII)[number])) {
     throw new HttpError(422, {
       detail: [
         {
           type: "enum",
           loc: ["query", "radius"],
-          msg: "Input should be 10, 20, 25, 50 or 100",
-          input: value,
-          ctx: { expected: "10, 20, 25, 50 or 100" },
+          msg: "Input should be '10', '20', '25', '50' or '100'",
+          input: raw,
+          ctx: { expected: "'10', '20', '25', '50' or '100'" },
         },
       ],
     })
@@ -420,9 +584,10 @@ const generatePscSlots = (
   siteCodes: string[] | null,
   nowMs: number,
 ): { timezone: string; days: Array<Record<string, unknown>> } => {
-  const sites = pscSitesForZip(zip).filter(
-    (site) => siteCodes === null || siteCodes.includes(site.site_code),
-  )
+  const siteCount = Math.max(withinRadiusFor(zip, "quest", 25), 1)
+  const sites = Array.from({ length: Math.min(siteCount, 30) }, (_, index) =>
+    pscSiteFor(zip, "quest", index, 25),
+  ).filter((site) => siteCodes === null || siteCodes.includes(site.site_code))
   const random = seededRandom(seedFor(["psc", zip, startDate, (siteCodes ?? []).sort().join("|")]))
   const timezone = zipTimezone(zip)
   const days: Array<Record<string, unknown>> = []
@@ -613,53 +778,26 @@ export const schedulingHandlers = (state: JunctionState) => ({
     async () => jsonRes(200, CANCELLATION_REASONS),
 
   get_psc_appointment_cancellation_reason_v3_order_psc_appointment_cancellation_reasons_get:
-    async () => jsonRes(200, CANCELLATION_REASONS),
+    async () => jsonRes(200, PSC_CANCELLATION_REASONS),
 
   get_area_info_v3_order_area_info_get: async (context: OperationContext) => {
-    const zip = zipCodeOf(context, true) ?? ""
-    radiusOf(context)
-    if (!/^\d{5}$/.test(zip)) {
+    const rawZip = zipCodeOf(context, true) ?? ""
+    const radius = radiusOf(context)
+    if (!/^\d{5}(?:-?\d{4})?$/.test(rawZip)) {
       throw new HttpError(422, {
         detail: [
           {
             type: "string_pattern_mismatch",
             loc: ["query", "zip_code"],
-            msg: "String should match pattern '^\\d{5}$'",
-            input: zip,
-            ctx: { pattern: "^\\d{5}$" },
+            msg: "String should match pattern '^\\d{5}(?:-?\\d{4})?$'",
+            input: rawZip,
+            ctx: { pattern: "^\\d{5}(?:-?\\d{4})?$" },
           },
         ],
       })
     }
-    const served = isServicedZip(zip)
-    const centralLabs: Record<string, unknown> = {}
-    if (served) {
-      for (const lab of PSC_LABS) {
-        centralLabs[lab.slug] = {
-          patient_service_centers: {
-            appointment_with_vital: true,
-            within_radius: 25,
-            radius: "25",
-            capabilities: ["appointment_scheduling_via_junction", "stat"],
-          },
-          supported_bill_types: lab.supported_bill_types,
-          lab_id: lab.lab_id,
-        }
-      }
-    }
-    return jsonRes(200, {
-      zip_code: zip,
-      phlebotomy: {
-        is_served: served,
-        providers: served
-          ? PHLEBOTOMY_AREA_PROVIDERS.map((provider) => ({
-              name: provider.name,
-              service_types: provider.service_types,
-            }))
-          : [],
-      },
-      central_labs: centralLabs,
-    })
+    const zip = rawZip.slice(0, 5)
+    return jsonRes(200, areaInfoFor(zip, radius))
   },
 
   get_psc_info_v3_order_psc_info_get: async (context: OperationContext) => {
@@ -681,11 +819,24 @@ export const schedulingHandlers = (state: JunctionState) => ({
       throw new HttpError(422, {
         detail: [
           {
-            type: "integer_parsing",
+            type: "int_parsing",
             loc: ["query", "lab_id"],
-            msg: "Input should be a valid integer",
+            msg: "Input should be a valid integer, unable to parse string as an integer",
             input: labIdRaw,
             ctx: { error: {} },
+          },
+        ],
+      })
+    }
+    if (!/^\d{5}$/.test(zip)) {
+      throw new HttpError(422, {
+        detail: [
+          {
+            type: "string_pattern_mismatch",
+            loc: ["query", "zip_code"],
+            msg: "String should match pattern '^\\d{5}$'",
+            input: zip,
+            ctx: { pattern: "^\\d{5}$" },
           },
         ],
       })
@@ -708,7 +859,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
         detail: [
           {
             type: "enum",
-            loc: ["query", "capabilities"],
+            loc: ["query", "capabilities", 0],
             msg: "Input should be 'stat', 'appointment_scheduling_via_junction' or 'appointment_scheduling_with_lab'",
             input: capabilityList,
             ctx: {
@@ -719,33 +870,38 @@ export const schedulingHandlers = (state: JunctionState) => ({
         ],
       })
     }
-    const sites = pscSitesForZip(zip).filter((site) => site.zip_code === zip || radius >= 50)
     const lab = PSC_LABS.find((entry) => entry.lab_id === labId)
-    if (!lab) {
-      return jsonRes(200, {
-        lab_id: labId,
-        slug: "unknown_lab",
-        patient_service_centers: [],
-      })
+    if (labId === UNSUPPORTED_PSC_LAB_ID) {
+      throw new HttpError(404, { detail: "Lab not supported for PSC info." })
     }
-    const centers = sites.map((site) => ({
-      metadata: {
-        name: site.name,
-        state: site.state,
-        city: site.city,
-        zip_code: site.zip_code,
-        first_line: site.first_line,
-        second_line: null,
-        phone_number: site.phone_number,
-        fax_number: null,
-        hours: site.hours,
-      },
-      distance: site.distance,
-      site_code: site.site_code,
-      supported_bill_types: [...lab.supported_bill_types],
-      location: site.location,
-      capabilities: ["appointment_scheduling_via_junction", "stat"],
-    }))
+    if (!lab) {
+      throw new HttpError(404, { detail: "Lab not found." })
+    }
+    // The sandbox returns the nearest sites within the radius, capped at 30 entries; the
+    // mock synthesizes a deterministic inventory of the same contract.
+    const within = withinRadiusFor(zip, lab.slug, radius)
+    const centerCount = Math.min(within, 30)
+    const centers = Array.from({ length: centerCount }, (_, index) => {
+      const site = pscSiteFor(zip, lab.slug, index, radius)
+      return {
+        metadata: {
+          name: site.name,
+          state: site.state,
+          city: site.city,
+          zip_code: site.zip_code,
+          first_line: site.first_line,
+          second_line: null,
+          phone_number: site.phone_number,
+          fax_number: null,
+          hours: site.hours,
+        },
+        distance: site.distance,
+        site_code: site.site_code,
+        supported_bill_types: [...lab.supported_bill_types],
+        location: site.location,
+        capabilities: [...lab.capabilities],
+      }
+    })
     return jsonRes(200, {
       lab_id: labId,
       slug: lab.slug,
@@ -1091,7 +1247,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
     if (!reason) {
       throw new HttpError(400, { detail: "Invalid cancellation reason id" })
     }
-    if (reasonId === "cancellation_reason_4" && typeof body.notes !== "string") {
+    if (reasonId === OTHER_CANCELLATION_REASON_ID && typeof body.notes !== "string") {
       throw new HttpError(400, { detail: "notes is required for reason 'Other'" })
     }
     if (appointment.status === "cancelled") return jsonRes(200, renderAppointment(appointment))
@@ -1109,7 +1265,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
     const reasonId = typeof body.cancellationReasonId === "string" ? body.cancellationReasonId : ""
     const appointment = appointmentOfOrder(state, order.id)
     if (appointment?.type !== "patient_service_center") notFound("No appointment for this order")
-    const reason = CANCELLATION_REASONS.find((entry) => entry.id === reasonId)
+    const reason = PSC_CANCELLATION_REASONS.find((entry) => entry.id === reasonId)
     if (!reason) {
       throw new HttpError(400, { detail: "Invalid cancellation reason id" })
     }

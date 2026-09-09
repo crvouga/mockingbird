@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fc from "fast-check"
 import { JunctionAPI } from "./src/index.js"
+import { OTHER_CANCELLATION_REASON_ID } from "./src/scheduling.js"
 
 const auth = { "x-vital-api-key": "sk_us_mockingbird" }
 const host = "https://junction.test"
@@ -65,6 +66,13 @@ const createOrder = async (api: Api, userId: string, labId: string): Promise<Jso
 
 type Slot = { booking_key: string; start: string }
 
+/** Every phlebotomy cancellation reason is refundable; "Other" requires notes. */
+const cancellationReasonId = async (api: Api, index: number): Promise<string> => {
+  const response = await request(api, "/v3/order/phlebotomy/appointment/cancellation-reasons")
+  const reasons = (await response.json()) as Array<{ id: string; name: string }>
+  return reasons[index]?.id ?? OTHER_CANCELLATION_REASON_ID
+}
+
 const phlebotomyAvailability = async (
   api: Api,
   zip: string,
@@ -115,7 +123,7 @@ describe("Junction scheduling state space", () => {
           zip: fc.constantFrom("92101", "94105", "10001", "12345"),
           reschedule: fc.boolean(),
           cancelThenRebook: fc.boolean(),
-          reasonIndex: fc.integer({ min: 0, max: 3 }),
+          reasonIndex: fc.integer({ min: 0, max: 13 }),
         }),
         async ({ zip, reschedule, cancelThenRebook, reasonIndex }) => {
           const clock = makeNow()
@@ -173,14 +181,15 @@ describe("Junction scheduling state space", () => {
           }
 
           if (cancelThenRebook) {
+            const reasonId = await cancellationReasonId(api, reasonIndex)
             const cancelled = await request(
               api,
               `/v3/order/${orderId}/phlebotomy/appointment/cancel`,
               {
                 method: "PATCH",
                 body: JSON.stringify({
-                  cancellation_reason_id: `cancellation_reason_${reasonIndex + 1}`,
-                  notes: reasonIndex === 3 ? "unavoidable" : null,
+                  cancellation_reason_id: reasonId,
+                  notes: reasonId === OTHER_CANCELLATION_REASON_ID ? "unavoidable" : null,
                 }),
                 headers: { "content-type": "application/json" },
               },
@@ -277,9 +286,16 @@ describe("Junction scheduling state space", () => {
         const userId = await createUser(api, `sched-psc-${mode}`)
         const order = await createOrder(api, userId, LAB_WALK_IN)
         const orderId = order.id as string
+        const info = await request(api, "/v3/order/psc/info?zip_code=94105&lab_id=4")
+        expect(info.status).toBe(200)
+        const infoBody = (await info.json()) as {
+          patient_service_centers: Array<{ site_code: string }>
+        }
+        const siteCode = infoBody.patient_service_centers[0]?.site_code
+        expect(siteCode).toBeTruthy()
         const availability = await pscAvailability(
           api,
-          "lab=quest&zip_code=94105&site_codes=%5B%22L10257%22%5D",
+          `lab=quest&zip_code=94105&site_codes=${encodeURIComponent(JSON.stringify([siteCode]))}`,
         )
         expect(availability.status).toBe(200)
         expect(availability.slots.length).toBeGreaterThan(0)
@@ -294,21 +310,27 @@ describe("Junction scheduling state space", () => {
           expect(missingSite.status).toBe(400)
           const booked = await request(api, `/v3/order/${orderId}/psc/appointment/book`, {
             method: "POST",
-            body: JSON.stringify({ booking_key: key, site_code: "L10257" }),
+            body: JSON.stringify({ booking_key: key, site_code: siteCode }),
             headers: { "content-type": "application/json", "x-idempotency-key": "psc-key-1" },
           })
           expect(booked.status).toBe(200)
           const replay = await request(api, `/v3/order/${orderId}/psc/appointment/book`, {
             method: "POST",
-            body: JSON.stringify({ booking_key: key, site_code: "L10257" }),
+            body: JSON.stringify({ booking_key: key, site_code: siteCode }),
             headers: { "content-type": "application/json", "x-idempotency-key": "psc-key-1" },
           })
           expect(replay.status).toBe(200)
           expect(await replay.json()).toEqual(await booked.json())
         } else if (mode === 1) {
+          const otherSite = infoBody.patient_service_centers.find(
+            (center) => center.site_code !== siteCode,
+          )?.site_code
           const mismatch = await request(api, `/v3/order/${orderId}/psc/appointment/book`, {
             method: "POST",
-            body: JSON.stringify({ booking_key: key, site_code: "Q10170" }),
+            body: JSON.stringify({
+              booking_key: key,
+              site_code: otherSite ?? `${siteCode}X`,
+            }),
             headers: { "content-type": "application/json" },
           })
           expect(mismatch.status).toBe(400)
@@ -345,7 +367,9 @@ describe("Junction scheduling state space", () => {
             `/v3/order/${orderId}/phlebotomy/appointment/cancel`,
             {
               method: "PATCH",
-              body: JSON.stringify({ cancellation_reason_id: "cancellation_reason_1" }),
+              body: JSON.stringify({
+                cancellation_reason_id: "5c0257ef-6fea-4a22-b20a-3ddab573d5c9",
+              }),
               headers: { "content-type": "application/json" },
             },
           )
@@ -362,7 +386,9 @@ describe("Junction scheduling state space", () => {
         expect(booked.status).toBe(200)
         const cancelled = await request(api, `/v3/order/${orderId}/phlebotomy/appointment/cancel`, {
           method: "PATCH",
-          body: JSON.stringify({ cancellation_reason_id: "cancellation_reason_2" }),
+          body: JSON.stringify({
+            cancellation_reason_id: "448c519c-64b4-4497-ae73-622fa93371b3",
+          }),
           headers: { "content-type": "application/json" },
         })
         expect(cancelled.status).toBe(200)
@@ -371,7 +397,9 @@ describe("Junction scheduling state space", () => {
           `/v3/order/${orderId}/phlebotomy/appointment/cancel`,
           {
             method: "PATCH",
-            body: JSON.stringify({ cancellation_reason_id: "cancellation_reason_2" }),
+            body: JSON.stringify({
+              cancellation_reason_id: "448c519c-64b4-4497-ae73-622fa93371b3",
+            }),
             headers: { "content-type": "application/json" },
           },
         )
@@ -434,8 +462,8 @@ describe("Junction scheduling state space", () => {
     await fc.assert(
       fc.asyncProperty(
         fc.record({
-          zip: fc.constantFrom("92101", "94105", "10001", "00000"),
-          labId: fc.constantFrom("3", "6", "99"),
+          zip: fc.constantFrom("90001", "30301", "94105", "00000"),
+          labId: fc.constantFrom("6", "3", "99"),
         }),
         async ({ zip, labId }) => {
           const api = new JunctionAPI({ now: () => baseTime })
@@ -443,15 +471,45 @@ describe("Junction scheduling state space", () => {
           expect(area.status).toBe(200)
           const areaBody = (await area.json()) as Json
           expect(areaBody.zip_code).toBe(zip)
-          const unserviceable = zip === "00000"
+          const unserviceable = zip === "00000" || zip === "94105"
           const phlebotomy = areaBody.phlebotomy as Json
           expect(phlebotomy.is_served).toBe(!unserviceable)
+          if (!unserviceable) {
+            expect(phlebotomy.providers).toEqual([
+              { name: "getlabs", service_types: ["appointment-ready"] },
+            ])
+          }
+
+          const centralLabs = areaBody.central_labs as Json
+          for (const lab of ["sonora_quest", "labcorp", "bioreference", "quest"]) {
+            const entry = centralLabs[lab] as Json | undefined
+            expect(entry).toBeDefined()
+            const details = (entry?.patient_service_centers ?? {}) as Json
+            expect(details.radius).toBe("25")
+          }
 
           const psc = await request(api, `/v3/order/psc/info?zip_code=${zip}&lab_id=${labId}`)
-          expect(psc.status).toBe(200)
           const pscBody = (await psc.json()) as Json
-          const centers = pscBody.patient_service_centers as unknown[]
-          if (unserviceable) expect(centers).toHaveLength(0)
+          if (labId === "3") {
+            expect(psc.status).toBe(404)
+            expect(pscBody.detail).toBe("Lab not supported for PSC info.")
+            return
+          }
+          if (labId === "99") {
+            expect(psc.status).toBe(404)
+            expect(pscBody.detail).toBe("Lab not found.")
+            return
+          }
+          expect(psc.status).toBe(200)
+          const centers = pscBody.patient_service_centers as Array<Record<string, unknown>>
+          if (zip === "00000") expect(centers).toHaveLength(0)
+          else {
+            expect(centers.length).toBeGreaterThan(0)
+            for (const center of centers) {
+              expect(typeof center.site_code).toBe("string")
+              expect((center.site_code as string).length).toBeGreaterThan(0)
+            }
+          }
         },
       ),
       { numRuns: 20 },

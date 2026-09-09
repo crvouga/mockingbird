@@ -4,7 +4,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 
 - operations in spec: **38**
 - supported by the mock: **38**
-- parity enabled: **23**
+- parity enabled: **21**
 
 | operationId | route | mock | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -22,8 +22,8 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get` | `GET /v3/lab_tests/{lab_test_id}/markers` | ✅ supported | ✅ |  |
 | `list_order_set_markers_v3_lab_tests_list_order_set_markers_post` | `POST /v3/lab_tests/list_order_set_markers` | ✅ supported | ✅ |  |
 | `create_order_v3_order_post` | `POST /v3/order` | ✅ supported | ✅ |  |
-| `get_area_info_v3_order_area_info_get` | `GET /v3/order/area/info` | ✅ supported | ✅ |  |
-| `get_psc_info_v3_order_psc_info_get` | `GET /v3/order/psc/info` | ✅ supported | ✅ |  |
+| `get_area_info_v3_order_area_info_get` | `GET /v3/order/area/info` | ✅ supported | ❌ disabled | central_labs presence, within_radius counts and getlabs market coverage are provider-owned geo data that a mock cannot replicate per-zip; covered by the client-parity scenario shape checks instead |
+| `get_psc_info_v3_order_psc_info_get` | `GET /v3/order/psc/info` | ✅ supported | ❌ disabled | patient_service_centers are real site inventories per zip (thousands of sites, result-capped at 30) that a fixture mock cannot replicate per-zip; covered by the client-parity scenario shape checks instead |
 | `get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post` | `POST /v3/order/phlebotomy/appointment/availability` | ✅ supported | ❌ disabled | availability slots are provider-side data whose values shift between sandbox calls; covered by the mock-internal scheduling property suite instead |
 | `get_phlebotomy_appointment_cancellation_reason_v3_order_phlebotomy_appointment_cancellation_reasons_get` | `GET /v3/order/phlebotomy/appointment/cancellation-reasons` | ✅ supported | ✅ |  |
 | `get_psc_appointment_availability_v3_order_psc_appointment_availability_post` | `POST /v3/order/psc/appointment/availability` | ✅ supported | ❌ disabled | availability slots are provider-side data whose values shift between sandbox calls; covered by the mock-internal scheduling property suite instead |
