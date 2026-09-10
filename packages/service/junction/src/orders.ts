@@ -806,23 +806,37 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     const details = body.patient_details as Record<string, unknown>
     const address = body.patient_address as Record<string, unknown>
-    const labTestIds = (body.order_set as Record<string, unknown>).lab_test_ids as string[]
-    const labTests = labTestIds.map((id) => state.labTestById(id))
-    const resolved = labTests.filter(
-      (test): test is NonNullable<(typeof labTests)[number]> => test !== undefined,
+    const labTestIds = Array.isArray(
+      (body.order_set as Record<string, unknown>).lab_test_ids,
     )
-    if (resolved.length !== labTestIds.length || resolved.length === 0) {
+      ? ((body.order_set as Record<string, unknown>).lab_test_ids as unknown[])
+      : []
+    // Vital: empty lab_test_ids → "No markers found…"; unknown id → "Test does not exist";
+    // known panels with markers:null (e.g. Female General Wellness) still create successfully.
+    if (labTestIds.length === 0) {
       throw new HttpError(400, {
         detail: "No markers found for the supplied lab tests. Please check the lab test ids",
       })
     }
-    const markerCount = resolved.reduce((sum, test) => sum + (test.markers?.length ?? 0), 0)
-    if (markerCount === 0) {
+    const resolved = labTestIds.map((id) =>
+      typeof id === "string" ? state.labTestById(id) : undefined,
+    )
+    if (resolved.some((test) => test === undefined)) {
+      throw new HttpError(400, { detail: "Test does not exist" })
+    }
+    const labTests = resolved as NonNullable<(typeof resolved)[number]>[]
+    const methods = new Set(
+      labTests.map((test) =>
+        typeof test.method === "string" && test.method.length > 0 ? test.method : "",
+      ),
+    )
+    if (methods.size > 1) {
       throw new HttpError(400, {
-        detail: "No markers found for the supplied lab tests. Please check the lab test ids",
+        detail: "Cannot order with lab tests with multiple collection methods",
       })
     }
-    const labTest = resolved[0]
+    const labTest = labTests[0]
+    if (!labTest) throw new HttpError(400, { detail: "Test does not exist" })
 
     const stateError = labStateSupportError(labTest, address.state)
     if (stateError) throw new HttpError(400, { detail: stateError })
@@ -833,6 +847,18 @@ export const orderHandlers = (state: JunctionState) => ({
     const transactionId = state.transactionIdFor(orderId)
     const method =
       typeof body.collection_method === "string" ? body.collection_method : labTest.method
+    // Sandbox: same collection_method as the panel → embed the panel as-is (even when
+    // markers are null). Different method requires markers to synthesize auto_generated.
+    const nativeMethod =
+      typeof labTest.method === "string" && labTest.method.length > 0
+        ? labTest.method
+        : method
+    const markerCount = labTests.reduce((sum, test) => sum + (test.markers?.length ?? 0), 0)
+    if (method !== nativeMethod && markerCount === 0) {
+      throw new HttpError(400, {
+        detail: "No markers found for the supplied lab tests. Please check the lab test ids",
+      })
+    }
     const idempotencyKey = body.idempotency_key
     const requestFingerprint = JSON.stringify(body)
     if (typeof idempotencyKey === "string" && idempotencyKey.length > 0) {
@@ -854,12 +880,6 @@ export const orderHandlers = (state: JunctionState) => ({
       status: eventStatus,
       status_detail: null,
     }
-    // Sandbox: same collection_method as the panel → embed the panel as-is.
-    // Different method → reuse one auto_generated lab_test per (markers, method).
-    const nativeMethod =
-      typeof labTest.method === "string" && labTest.method.length > 0
-        ? labTest.method
-        : method
     let orderLabTest: typeof labTest
     if (method === nativeMethod) {
       orderLabTest = labTest
@@ -991,11 +1011,9 @@ export const orderHandlers = (state: JunctionState) => ({
     const id = context.params.order_id ?? ""
     const order = state.orders.get(id)
     if (!order) notFound("Order doesn't exist")
-    const alreadyCancelled =
-      order.status === "cancelled" ||
-      order.order_transaction.status === "cancelled" ||
-      (typeof order.last_event?.status === "string" &&
-        order.last_event.status.startsWith("cancelled."))
+    const alreadyCancelled = order.events.some(
+      (entry) => typeof entry.status === "string" && entry.status.startsWith("cancelled."),
+    )
     if (alreadyCancelled) {
       const responseOrder = { ...order } as Record<string, unknown>
       if (responseOrder.result_types === null) delete responseOrder.result_types
@@ -1005,12 +1023,8 @@ export const orderHandlers = (state: JunctionState) => ({
         message: "order already cancelled",
       })
     }
-    const lowLevel =
-      typeof order.last_event?.status === "string"
-        ? order.last_event.status
-        : typeof order.events[order.events.length - 1]?.status === "string"
-          ? order.events[order.events.length - 1]!.status
-          : ""
+    const lastEvent = order.last_event ?? order.events[order.events.length - 1]
+    const lowLevel = typeof lastEvent?.status === "string" ? lastEvent.status : ""
     if (!CANCELLABLE_ORDER_EVENTS.has(lowLevel)) {
       throw new HttpError(400, {
         detail:
@@ -1138,13 +1152,14 @@ export const orderHandlers = (state: JunctionState) => ({
       notFound("User does not exist on this team")
     let all = state.orders.list({ order: "oldest" })
     if (userId !== undefined) all = all.filter((entry) => entry.value.user_id === userId)
+    // Sandbox lists by updated_at desc (not created_at) — wrong order breaks
+    // seedParity identity pairing on list pages, which then poisons get_order.
     all = [...all].sort((left, right) => {
-      const leftAt = Date.parse(String(left.value.created_at ?? "")) || 0
-      const rightAt = Date.parse(String(right.value.created_at ?? "")) || 0
+      const leftAt = Date.parse(String(left.value.updated_at ?? left.value.created_at ?? "")) || 0
+      const rightAt = Date.parse(String(right.value.updated_at ?? right.value.created_at ?? "")) || 0
       if (rightAt !== leftAt) return rightAt - leftAt
-      // Deterministic, seed-independent tie-break (seq is insert-order and
-      // flips after seedFrom copies newest-first API pages).
-      return right.id.localeCompare(left.id)
+      // Frozen clocks make updated_at ties common; seq matches sandbox insertion order.
+      return right.seq - left.seq
     })
     const pageItems = all.slice((page - 1) * size, page * size)
     return jsonRes(200, {

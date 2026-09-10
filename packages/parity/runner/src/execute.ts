@@ -47,6 +47,13 @@ export type ExecutionContext = {
   validateMock: boolean
   /** Milliseconds of mock-side latency tolerated before a latency failure. */
   latencyToleranceMs: number
+  /**
+   * Cache keys already sealed by earlier warmup availability POSTs. The oracle rotates
+   * booking_key on every availability response, so only the first serve's keys are paired
+   * into the resource table and cached; repeated serves of the same request must not
+   * re-pair keys that will never exist in the seeded mock.
+   */
+  warmupSealedKeys?: Set<string>
   step?: ((line: string) => void) | undefined
   trace?: ((line: string) => void) | undefined
 }
@@ -63,6 +70,11 @@ export type StepOutcome = {
 export type WarmupOutcome = StepOutcome & {
   request: ConcreteRequest
   exchange: Exchange
+  /**
+   * True when this serve hit an already-sealed rotating availability cache key — its
+   * response carried freshly rotated booking keys that were deliberately not paired.
+   */
+  resealed: boolean
 }
 
 /**
@@ -199,6 +211,7 @@ export const executeCommand = async (
       mockSchema &&
       mockResponse.body.kind !== "json" &&
       mockResponse.body.kind !== "form" &&
+      mockResponse.body.kind !== "bytes" &&
       mediaTypeOf(mockResponse.headers["content-type"]) !== "text/plain"
     ) {
       problems.push(`expected a structured body, got ${mockResponse.body.kind}`)
@@ -306,8 +319,22 @@ export const executeWarmupCommand = async (
   const declared = responseForStatus(plan.operation.responses, exchange.status)
   const schema = responseSchema(declared, exchange.headers["content-type"])
 
+  // The oracle rotates booking_key on every availability response. Only the first
+  // warmup serve of a given request may pair identities into the resource table and
+  // seal the observation cache — later serves mint keys that will never exist in the
+  // seeded mock, so pairing/caching them would poison book/reschedule commands that
+  // pick the later-generation keys as refs.
+  const isRotatingAvailabilityPost =
+    request.method.toUpperCase() === "POST" &&
+    /availability/i.test(`${command.operationId} ${request.path}`)
+  const sealKey = isRotatingAvailabilityPost
+    ? observationCacheKey(request, requestBodyForCacheKey(request))
+    : undefined
+  const alreadySealed = sealKey !== undefined && (context.warmupSealedKeys?.has(sealKey) ?? false)
+  if (sealKey !== undefined && !alreadySealed) context.warmupSealedKeys?.add(sealKey)
+
   let discovered = 0
-  if (exchange.body.kind === "json") {
+  if (exchange.body.kind === "json" && !alreadySealed) {
     discovered = discoverIdentities(
       context.document,
       schema,
@@ -318,7 +345,7 @@ export const executeWarmupCommand = async (
   }
 
   context.trace?.(
-    `${context.provider} warmup ${request.method.toUpperCase()} ${context.redact(request.path)} -> ${exchange.status} (+${discovered})`,
+    `${context.provider} warmup ${request.method.toUpperCase()} ${context.redact(request.path)} -> ${exchange.status} (+${discovered}${alreadySealed ? ", re-sealed" : ""})`,
   )
   return {
     operationId: command.operationId,
@@ -328,5 +355,6 @@ export const executeWarmupCommand = async (
     mockMs: 0,
     request,
     exchange,
+    resealed: alreadySealed,
   }
 }

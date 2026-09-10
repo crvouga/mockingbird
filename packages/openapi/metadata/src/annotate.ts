@@ -49,7 +49,8 @@ export const annotateValue = (
     const meta = schemaMetadata(resolved)
     if (meta.resource && typeof current === "string")
       out.push({ kind: "identity", path: at, type: meta.resource.type })
-    else if (meta.volatile && current !== null && current !== undefined) {
+    else if (meta.volatile && current !== undefined) {
+      // Include null: nullable volatiles (sample_id) must collapse null vs string.
       out.push({ kind: "volatile", path: at, volatile: meta.volatile.kind })
     }
     if (resolved.allOf) for (const branch of resolved.allOf) go(branch, current, at, depth + 1)

@@ -33,7 +33,12 @@ import { userHandlers } from "./users.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 export type { SeedObservations, SeedReport, SeedSource } from "./seed-from.js"
-export { GEVITI_QA_PSC_LAB_IDS, GEVITI_QA_ROUTING_ZIPS, GEVITI_QA_SCHEDULING_ZIPS } from "./qa-corpus.js"
+export {
+  GEVITI_QA_PHLEBOTOMY_ZIPS,
+  GEVITI_QA_PSC_LAB_IDS,
+  GEVITI_QA_ROUTING_ZIPS,
+  GEVITI_QA_SCHEDULING_ZIPS,
+} from "./qa-corpus.js"
 export { prefetchGevitiQaObservations } from "./prefetch-qa.js"
 export {
   GEVITI_QA_AVAILABILITY_ADDRESS,

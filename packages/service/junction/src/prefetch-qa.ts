@@ -1,9 +1,12 @@
 import type { SeedCacheEntry } from "@crvouga/mockingbird-parity"
-import { GEVITI_QA_PSC_LAB_IDS, GEVITI_QA_ROUTING_ZIPS } from "./qa-corpus.js"
 import {
-  GEVITI_QA_AVAILABILITY_ADDRESS,
-  GEVITI_QA_AVAILABILITY_START_DATE,
-} from "./reshape-qa.js"
+  availabilityAddressForZip,
+  GEVITI_QA_PHLEBOTOMY_ZIPS,
+  GEVITI_QA_PSC_LAB_IDS,
+  GEVITI_QA_ROUTING_ZIPS,
+  GEVITI_QA_SCHEDULING_ZIPS,
+} from "./qa-corpus.js"
+import { GEVITI_QA_AVAILABILITY_START_DATE } from "./reshape-qa.js"
 import { observationCacheKey } from "./state.js"
 
 type PrefetchTarget = {
@@ -43,21 +46,17 @@ const recordResponse = async (
   response.headers.forEach((value, name) => {
     headerRecord[name.toLowerCase()] = value
   })
-  getCache.set(observationCacheKey(url, method, body), {
+  const cacheKey = observationCacheKey(url, method, body)
+  // Seal-once: a walk-local warmup seal for this request is authoritative — prefetch
+  // must not clobber it, because the oracle rotates booking_key per serve and only the
+  // sealed observation's keys were paired into the walk's resource table.
+  if (getCache.has(cacheKey)) return
+  getCache.set(cacheKey, {
     status: response.status,
     headers: headerRecord,
     body: parsed,
   })
 }
-
-const availabilityBody = (zip: string) => ({
-  first_line: GEVITI_QA_AVAILABILITY_ADDRESS.first_line,
-  second_line: GEVITI_QA_AVAILABILITY_ADDRESS.second_line,
-  city: GEVITI_QA_AVAILABILITY_ADDRESS.city,
-  state: GEVITI_QA_AVAILABILITY_ADDRESS.state,
-  zip_code: zip,
-  unit: GEVITI_QA_AVAILABILITY_ADDRESS.unit,
-})
 
 /**
  * Seal Geviti routing ZIPs + availability POSTs into the seed observation cache.
@@ -67,8 +66,10 @@ export const prefetchGevitiQaObservations = async (args: {
   real: PrefetchTarget
   getCache: Map<string, SeedCacheEntry>
   zips?: readonly string[]
-  /** ZIPs that also get availability POST seals. Defaults to `zips`. */
+  /** ZIPs that also get PSC availability POST seals. Defaults to scheduling corpus. */
   schedulingZips?: readonly string[]
+  /** ZIPs for phlebotomy availability (narrow served set). Defaults to PHLEBOTOMY_ZIPS. */
+  phlebotomyZips?: readonly string[]
   labIds?: readonly number[]
   /** Also prefetch phlebotomy + PSC availability. Default true. */
   includeAvailability?: boolean
@@ -76,7 +77,8 @@ export const prefetchGevitiQaObservations = async (args: {
   minIntervalMs?: number
 }) => {
   const zips = args.zips ?? GEVITI_QA_ROUTING_ZIPS
-  const schedulingZips = args.schedulingZips ?? zips
+  const schedulingZips = args.schedulingZips ?? GEVITI_QA_SCHEDULING_ZIPS
+  const phlebotomyZips = args.phlebotomyZips ?? GEVITI_QA_PHLEBOTOMY_ZIPS
   const labIds = args.labIds ?? GEVITI_QA_PSC_LAB_IDS
   const includeAvailability = args.includeAvailability !== false
   const sleep = args.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)))
@@ -97,8 +99,8 @@ export const prefetchGevitiQaObservations = async (args: {
   }
 
   if (!includeAvailability) return
-  for (const zip of schedulingZips) {
-    const body = availabilityBody(zip)
+  for (const zip of phlebotomyZips) {
+    const body = availabilityAddressForZip(zip)
     await recordResponse(
       args.real,
       "POST",
@@ -107,6 +109,9 @@ export const prefetchGevitiQaObservations = async (args: {
       body,
     )
     await sleep(gap)
+  }
+  for (const zip of schedulingZips) {
+    const body = availabilityAddressForZip(zip)
     await recordResponse(
       args.real,
       "POST",

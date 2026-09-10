@@ -1,7 +1,9 @@
 import type { ExploreRng, ExploreState, LogicalCommand } from "@crvouga/mockingbird-commands"
 import {
+  availabilityAddressForZip,
   GEVITI_QA_ORDER_ADDRESSES,
   GEVITI_QA_PATIENT,
+  GEVITI_QA_PHLEBOTOMY_ZIPS,
   GEVITI_QA_PSC_LAB_IDS,
   GEVITI_QA_ROUTING_ZIPS,
   GEVITI_QA_SCHEDULING_ZIPS,
@@ -14,9 +16,9 @@ const AVAIL_PHLEB =
   "get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post"
 const AVAIL_PSC = "get_psc_appointment_availability_v3_order_psc_appointment_availability_post"
 
-/** Stable address fields so availability observation-cache keys match prefetch. */
+/** Stable address fields so availability observation-cache keys match prefetch (85004). */
 export const GEVITI_QA_AVAILABILITY_ADDRESS = {
-  first_line: "1 Main St",
+  first_line: "1 N Central Ave",
   second_line: null as string | null,
   city: "Phoenix",
   state: "AZ",
@@ -32,14 +34,7 @@ const pickZip = (rng: ExploreRng, zips: readonly string[]) =>
 const pickLabId = (rng: ExploreRng, labs: readonly number[]) =>
   labs[rng.nextInt(Math.max(0, labs.length - 1))] ?? labs[0] ?? 4
 
-const availabilityBody = (zip: string) => ({
-  first_line: GEVITI_QA_AVAILABILITY_ADDRESS.first_line,
-  second_line: GEVITI_QA_AVAILABILITY_ADDRESS.second_line,
-  city: GEVITI_QA_AVAILABILITY_ADDRESS.city,
-  state: GEVITI_QA_AVAILABILITY_ADDRESS.state,
-  zip_code: zip,
-  unit: GEVITI_QA_AVAILABILITY_ADDRESS.unit,
-})
+const availabilityBody = (zip: string) => availabilityAddressForZip(zip)
 
 /**
  * Pin geo / availability params onto the Geviti QA ZIP + lab corpus so observation-cache
@@ -52,11 +47,13 @@ export const reshapeGevitiQaGeoCommand = (
   options?: {
     zips?: readonly string[]
     schedulingZips?: readonly string[]
+    phlebotomyZips?: readonly string[]
     labIds?: readonly number[]
   },
 ): LogicalCommand => {
   const zips = options?.zips ?? GEVITI_QA_ROUTING_ZIPS
   const schedulingZips = options?.schedulingZips ?? GEVITI_QA_SCHEDULING_ZIPS
+  const phlebotomyZips = options?.phlebotomyZips ?? GEVITI_QA_PHLEBOTOMY_ZIPS
   const labIds = options?.labIds ?? GEVITI_QA_PSC_LAB_IDS
   const id = command.operationId
 
@@ -89,7 +86,11 @@ export const reshapeGevitiQaGeoCommand = (
         (raw.lab_test_id as Record<string, unknown>).$mockingbird === "ref")
         ? raw.lab_test_id
         : undefined)
+    // Geviti QA and Vital default collection_method to the panel's native method.
+    // Random mismatches force sandbox auto_generated lab_tests whose UUIDs Vital
+    // allocates opaquely; keep a low rate so we still exercise that path after seed.
     const methods = ["at_home_phlebotomy", "walk_in_test"] as const
+    const forceMismatch = rng.next() < 0.12
     const body: Record<string, unknown> = {
       user_id: raw.user_id,
       patient_details: { ...GEVITI_QA_PATIENT },
@@ -103,16 +104,38 @@ export const reshapeGevitiQaGeoCommand = (
         phone_number: GEVITI_QA_PATIENT.phone_number,
       },
       order_set: labTestId === undefined ? { lab_test_ids: [] } : { lab_test_ids: [labTestId] },
-      collection_method: methods[rng.nextInt(methods.length - 1)] ?? "at_home_phlebotomy",
       clinical_notes: null,
       passthrough: null,
       aoe_answers: null,
       lab_account_id: null,
     }
+    if (forceMismatch) {
+      body.collection_method = methods[rng.nextInt(methods.length - 1)] ?? "at_home_phlebotomy"
+    }
     return {
       ...command,
       body,
       mediaType: command.mediaType ?? "application/json",
+      invalid: undefined,
+    }
+  }
+  if (id === "get_teams_users_v2_user_get") {
+    // Team user lists are newest-first with same-second ties; across seed + lockstep
+    // creates the 2nd+ slots are still racy. Geviti QA only needs membership/total —
+    // pin limit=1 so we compare the newest user + totals without slot races.
+    const raw =
+      typeof command.parameters === "object" && command.parameters !== null
+        ? (command.parameters as Record<string, unknown>)
+        : {}
+    const offsetRaw = raw.offset
+    const offset =
+      typeof offsetRaw === "string" && /^-?\d+$/.test(offsetRaw) ? Number(offsetRaw) : 0
+    return {
+      ...command,
+      parameters: {
+        offset: String(Math.max(0, offset)),
+        limit: "1",
+      },
       invalid: undefined,
     }
   }
@@ -132,7 +155,7 @@ export const reshapeGevitiQaGeoCommand = (
     }
   }
   if (id === AVAIL_PHLEB) {
-    const zip = pickZip(rng, schedulingZips)
+    const zip = pickZip(rng, phlebotomyZips)
     return {
       ...command,
       parameters: {

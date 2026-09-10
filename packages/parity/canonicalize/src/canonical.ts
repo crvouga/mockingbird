@@ -22,7 +22,7 @@ export type CanonicalBody =
   | { kind: "json"; value: unknown }
   | { kind: "form"; value: unknown }
   | { kind: "text"; value: string }
-  | { kind: "bytes"; byteLength: number }
+  | { kind: "bytes" }
   | { kind: "invalid"; mediaType: string; text: string }
 
 export type CanonicalExchange = {
@@ -42,7 +42,8 @@ export type CanonicalizeOptions = {
 }
 
 export const volatileToken = (kind: string, value: unknown) =>
-  `volatile:${kind}:${jsonTypeOf(value)}`
+  // `opaque` collapses null vs present (sandbox races like sample_id assignment).
+  kind === "opaque" ? `volatile:${kind}` : `volatile:${kind}:${jsonTypeOf(value)}`
 export const unknownToken = (type: string, id: string) => `unknown:${type}:${id}`
 
 const setAt = (root: unknown, path: JsonPath, value: unknown): unknown => {
@@ -139,7 +140,8 @@ const canonicalizeBody = (body: DecodedBody, options: CanonicalizeOptions): Cano
     case "text":
       return { kind: "text", value: replaceKnownIds(body.value, options.table, options.side) }
     case "bytes":
-      return { kind: "bytes", byteLength: body.value.byteLength }
+      // Provider-rendered PDFs differ in length; presence of bytes is enough.
+      return { kind: "bytes" }
     case "invalid":
       return {
         kind: "invalid",

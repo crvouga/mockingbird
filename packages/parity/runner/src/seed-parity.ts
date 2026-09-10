@@ -228,11 +228,17 @@ const runWarmup = async (context: WalkReal, command: LogicalCommand) => {
       method === "POST" || method === "PUT" || method === "PATCH"
         ? requestBodyForCacheKey(outcome.request)
         : undefined
-    context.getCache.set(observationCacheKey(outcome.request, body), {
-      status: outcome.exchange.status,
-      headers: outcome.exchange.headers,
-      body: exchangeBodyForCache(outcome.exchange),
-    })
+    const cacheKey = observationCacheKey(outcome.request, body)
+    // Rotating availability POSTs re-sealed by executeWarmupCommand carry freshly
+    // rotated booking keys that were deliberately not paired — never overwrite the
+    // first serve's seal. Stable GETs keep last-serve-wins.
+    if (!outcome.resealed) {
+      context.getCache.set(cacheKey, {
+        status: outcome.exchange.status,
+        headers: outcome.exchange.headers,
+        body: exchangeBodyForCache(outcome.exchange),
+      })
+    }
   }
   applyDeletionTypes(context, command)
   recordHistory(context, command)
@@ -498,6 +504,7 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
       deletionTypes: options.deletionTypes ?? {},
       validateMock: options.validateMock ?? true,
       latencyToleranceMs: options.latencyToleranceMs ?? 0,
+      warmupSealedKeys: new Set<string>(),
       step: (line) => log(`  [${String(walkNumber).padStart(width, " ")}/${numRuns}] ${line}`),
       trace: trace ? log : undefined,
       getCache,

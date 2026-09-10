@@ -15,6 +15,42 @@ export const GEVITI_QA_SCHEDULING_ZIPS = [
 ] as const
 
 /**
+ * Phlebotomy availability is only served for a narrow Vital sandbox set.
+ * Probed: 85004 works; broader scheduling zips often 400. Keep prefetch/reshape sealed.
+ */
+export const GEVITI_QA_PHLEBOTOMY_ZIPS = ["85004"] as const
+
+/** City/state/first_line seals so availability cache keys match Vital + prefetch. */
+export const GEVITI_QA_ZIP_ADDRESSES: Readonly<
+  Record<string, { first_line: string; city: string; state: string }>
+> = {
+  "85004": { first_line: "1 N Central Ave", city: "Phoenix", state: "AZ" },
+  "85234": { first_line: "1 Main St", city: "Gilbert", state: "AZ" },
+  "11050": { first_line: "1 Main St", city: "Port Washington", state: "NY" },
+  "10006": { first_line: "1 Main St", city: "New York", state: "NY" },
+  "90012": { first_line: "200 N Spring St", city: "Los Angeles", state: "CA" },
+  "96101": { first_line: "1 Main St", city: "Alturas", state: "CA" },
+  "92101": { first_line: "1 Main St", city: "San Diego", state: "CA" },
+  "60601": { first_line: "121 N LaSalle St", city: "Chicago", state: "IL" },
+  "33130": { first_line: "3500 Pan American Dr", city: "Miami", state: "FL" },
+  "98104": { first_line: "1 Main St", city: "Seattle", state: "WA" },
+  "75034": { first_line: "1 Main St", city: "Frisco", state: "TX" },
+  "07030": { first_line: "1 Main St", city: "Hoboken", state: "NJ" },
+}
+
+export const availabilityAddressForZip = (zip: string) => {
+  const known = GEVITI_QA_ZIP_ADDRESSES[zip]
+  return {
+    first_line: known?.first_line ?? "1 Main St",
+    second_line: null as string | null,
+    city: known?.city ?? "Phoenix",
+    state: known?.state ?? "AZ",
+    zip_code: zip,
+    unit: null as string | null,
+  }
+}
+
+/**
  * Curated ZIPs mirrored from Geviti QA `ROUTING_ZIP_CORPUS` + fixture pins
  * (`packages/qa/src/world/gen/addresses.ts`, `@geviti/app/test-addresses`).
  * Prefetched into the observation cache so area/psc parity is sealed for those geos.

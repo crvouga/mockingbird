@@ -48,6 +48,7 @@
     "format": "biome format --write .",
     "prepare": "husky",
     "release:preflight": "bun scripts/release-preflight.ts",
+    "gh": "open https://github.com/crvouga/mockingbird",
     "release:publish": "bun scripts/publish-released.ts",
     "npm:seed": "bun scripts/seed-npm.ts",
     "secrets:doctor": "bun scripts/secrets/doctor.ts",

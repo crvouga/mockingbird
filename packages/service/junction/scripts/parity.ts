@@ -13,7 +13,11 @@ import { homedir } from "node:os"
 import { join } from "node:path"
 import { document, JunctionAPI } from "../src/index.js"
 import { prefetchGevitiQaObservations } from "../src/prefetch-qa.js"
-import { GEVITI_QA_ROUTING_ZIPS, GEVITI_QA_SCHEDULING_ZIPS } from "../src/qa-corpus.js"
+import {
+  GEVITI_QA_PHLEBOTOMY_ZIPS,
+  GEVITI_QA_ROUTING_ZIPS,
+  GEVITI_QA_SCHEDULING_ZIPS,
+} from "../src/qa-corpus.js"
 import { reshapeGevitiQaGeoCommand } from "../src/reshape-qa.js"
 import { PARITY_SEEDS } from "../src/seeds.js"
 
@@ -255,6 +259,38 @@ const reshapeCommand = (
   rng: ExploreRng,
 ): LogicalCommand => reshapeGevitiQaGeoCommand(command, state, rng)
 
+/**
+ * The Vital sandbox intermittently answers 500/502/503/504 with a text body (documented
+ * flake — `clearSandboxUsers` already retries 503). Retry the same way on the parity real
+ * side so a transient sandbox blip doesn't fail a walk: up to 5 attempts with linear
+ * backoff. GETs are always safe to retry. POST /v3/order/{id}/test is also safe: it is an
+ * idempotent simulation driver (repeated /test calls are no-ops once requisitioned, probed
+ * 2026-09), so a re-applied transition cannot double-mutate. Other mutations are not
+ * retried — a retried POST/PATCH could double-execute.
+ */
+const SANDBOX_RETRY_STATUSES = new Set([500, 502, 503, 504])
+const SIMULATE_TEST_PATH = /^\/v3\/order\/[^/]+\/test$/
+const retryable = (request: Request): boolean => {
+  if (request.method === "GET") return true
+  if (request.method !== "POST") return false
+  return SIMULATE_TEST_PATH.test(new URL(request.url).pathname)
+}
+const retrySandbox5xx = async (request: Request): Promise<Response> => {
+  let response = await fetch(request.clone())
+  for (
+    let attempt = 0;
+    retryable(request) && SANDBOX_RETRY_STATUSES.has(response.status) && attempt < 5;
+    attempt += 1
+  ) {
+    console.warn(
+      `junction parity: sandbox ${response.status} on ${request.method} ${new URL(request.url).pathname}, retry ${attempt + 1}/5`,
+    )
+    await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * (attempt + 2))
+    response = await fetch(request.clone())
+  }
+  return response
+}
+
 const runSeed = async (seed: number | undefined) => {
   try {
     if (webhookReceiverUrl) {
@@ -301,6 +337,7 @@ const runSeed = async (seed: number | undefined) => {
       real: {
         baseUrl,
         allowedHosts: [new URL(baseUrl).host],
+        fetch: (request: Request) => retrySandbox5xx(request),
         headers: () => ({
           ...authHeaders,
           "x-mockingbird-scope": Bun.env.MOCKINGBIRD_SCOPE ?? "junction-parity",
@@ -347,18 +384,20 @@ const runSeed = async (seed: number | undefined) => {
         ...shared,
         warmupCommands: cliOptions.warmup ?? DEFAULT_WARMUP,
         compareCommands: cliOptions.compare ?? cliOptions.steps ?? DEFAULT_COMPARE,
-        prefetchObservations: cliOptions.skipPrefetch
-          ? undefined
-          : async ({ real, getCache }) => {
+        ...(cliOptions.skipPrefetch
+          ? {}
+          : {
+              prefetchObservations: async ({ real, getCache }) => {
               if (!sharedGeoCache) {
                 sharedGeoCache = new Map()
                 console.log(
-                  `junction parity: prefetching Geviti QA corpus (${GEVITI_QA_ROUTING_ZIPS.length} area zips, ${GEVITI_QA_SCHEDULING_ZIPS.length} scheduling)…`,
+                  `junction parity: prefetching Geviti QA corpus (${GEVITI_QA_ROUTING_ZIPS.length} area zips, ${GEVITI_QA_PHLEBOTOMY_ZIPS.length} phlebotomy, ${GEVITI_QA_SCHEDULING_ZIPS.length} psc scheduling)…`,
                 )
                 await prefetchGevitiQaObservations({
                   real,
                   getCache: sharedGeoCache,
                   schedulingZips: GEVITI_QA_SCHEDULING_ZIPS,
+                  phlebotomyZips: GEVITI_QA_PHLEBOTOMY_ZIPS,
                   minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
                   sleep: (ms) => Bun.sleep(ms),
                 })
@@ -366,8 +405,15 @@ const runSeed = async (seed: number | undefined) => {
                   `junction parity: sealed ${sharedGeoCache.size} observation cache entries`,
                 )
               }
-              for (const [key, entry] of sharedGeoCache) getCache.set(key, entry)
+              // Seal-once: fill missing keys only. Walk-local warmup observations are
+              // authoritative — their booking keys are the ones paired into the walk's
+              // resource table, and the oracle rotates booking_key per serve, so a
+              // prefetch copy of the same request must never clobber them.
+              for (const [key, entry] of sharedGeoCache) {
+                if (!getCache.has(key)) getCache.set(key, entry)
+              }
             },
+            }),
         seedMock: async ({ mock, real, getCache, table }) => {
           const api = mock as JunctionAPI
           const source = {

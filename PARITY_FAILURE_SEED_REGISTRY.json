@@ -39,6 +39,12 @@
     },
     {
       "provider": "junction",
+      "seed": 2058813869,
+      "status": "open",
+      "failure": "simulate_order real=500 'Internal Server Error' vs mock=200 'Success' after booked at-home phlebotomy order + unrelated cancels; sandbox 500 persisted through all 5 retries, reproduced on FC_SEED replay"
+    },
+    {
+      "provider": "junction",
       "seed": 2061032686,
       "status": "fixed",
       "failure": "patch_user_info dob 'wBfcCgbpD': real 'input is too short', mock 'invalid character in year'"

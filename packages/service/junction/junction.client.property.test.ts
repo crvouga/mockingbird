@@ -126,6 +126,15 @@ describe("Junction client-facing lifecycle", () => {
     const transactionId = (
       (order as Record<string, unknown>).order_transaction as Record<string, unknown>
     ).id as string
+    // Sandbox: first /test creates the requisition; the second jumps to completed.
+    const requisition = await request(
+      api,
+      `/v3/order/${orderId}/test?final_status=completed.testkit.completed`,
+      {
+        method: "POST",
+      },
+    )
+    expect(requisition.status).toBe(200)
     const simulated = await request(
       api,
       `/v3/order/${orderId}/test?final_status=completed.testkit.completed`,
@@ -138,7 +147,8 @@ describe("Junction client-facing lifecycle", () => {
     const transaction = await json(await request(api, `/v3/order_transaction/${transactionId}`))
     expect(transaction.status).toBe("completed")
     const attempts = api.webhookDeliveryAttempts()
-    expect(attempts).toHaveLength(16)
+    // 3 events (order.created + requisition update + completed update) × 8 attempts each.
+    expect(attempts).toHaveLength(24)
     expect(attempts[0]?.acknowledged).toBe(true)
     expect(attempts[1]?.timeout_ms).toBe(1200)
     expect(new Date(attempts[1]?.scheduled_at ?? 0).getTime()).toBeGreaterThanOrEqual(now())

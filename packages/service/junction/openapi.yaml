@@ -2649,6 +2649,11 @@ components:
           anyOf:
             - $ref: "#/components/schemas/ClientFacingShipment"
             - type: "null"
+          # Sandbox assigns shipment asynchronously after testkit order creation
+          # while the mock models it as null until parity catches the race —
+          # treat null vs object as equivalent (same class as sample_id).
+          x-mockingbird-volatile:
+            kind: opaque
         created_at:
           type: string
           format: date-time
@@ -2931,8 +2936,10 @@ components:
           anyOf:
             - type: string
             - type: "null"
+          # Sandbox may assign sample_id after requisition while the mock still
+          # has null until /test — treat null vs string as equivalent.
           x-mockingbird-volatile:
-            kind: id
+            kind: opaque
         notes:
           anyOf:
             - type: string

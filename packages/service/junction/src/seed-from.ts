@@ -1,4 +1,5 @@
 import type {
+  AppointmentModality,
   AppointmentRecord,
   ExpectedResult,
   GetCacheEntry,
@@ -8,6 +9,7 @@ import type {
   UserInfoRecord,
   UserRecord,
 } from "./state.js"
+import { addressFromAvailabilityRequest } from "./scheduling.js"
 
 export type SeedSource = {
   fetch: (request: Request) => Promise<Response>
@@ -29,6 +31,57 @@ export type SeedReport = {
 }
 
 const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+
+/**
+ * Parse the availability POST body embedded in an observation cache key
+ * (`"<METHOD> <path>?<query> <JSON body>"`).
+ */
+const parseAvailabilityRequestBody = (cacheKey: string): Record<string, unknown> | undefined => {
+  const jsonStart = cacheKey.indexOf(" {")
+  if (jsonStart === -1) return undefined
+  try {
+    const parsed: unknown = JSON.parse(cacheKey.slice(jsonStart + 1))
+    if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
+/**
+ * Vital echoes the availability request address on book/reschedule. Re-stamp every
+ * booking-key record hydrated from one availability observation so its address matches
+ * the availability request — the oracle's behavior for both modalities.
+ */
+const alignBookingKeyAddresses = (
+  state: JunctionState,
+  body: unknown,
+  requestBody: Record<string, unknown>,
+  zip: string,
+  modalityHint?: AppointmentModality,
+): void => {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return
+  const root = body as Record<string, unknown>
+  const dayBuckets: unknown[] = []
+  if (Array.isArray(root.days)) dayBuckets.push(...root.days)
+  if (Array.isArray(root.slots)) dayBuckets.push(...root.slots)
+  for (const day of dayBuckets) {
+    const slots = Array.isArray((day as Record<string, unknown>)?.slots)
+      ? ((day as Record<string, unknown>).slots as unknown[])
+      : [day]
+    for (const slot of slots) {
+      if (typeof slot !== "object" || slot === null || Array.isArray(slot)) continue
+      const bookingKey = (slot as Record<string, unknown>).booking_key
+      if (typeof bookingKey !== "string" || bookingKey === "") continue
+      const record = state.bookingKeys.get(bookingKey)
+      if (!record || (modalityHint !== undefined && record.modality !== modalityHint)) continue
+      record.address = addressFromAvailabilityRequest(requestBody, zip)
+      state.bookingKeys.update(bookingKey, record)
+    }
+  }
+}
 
 const request = async (
   source: SeedSource,
@@ -214,14 +267,15 @@ export const ensureLabTests = async (
 ): Promise<number> => {
   let added = 0
   for (const id of ids) {
-    if (!id || state.labTestById(id)) continue
+    if (!id) continue
     const response = await request(source, "GET", `/v3/lab_tests/${id}`)
     if (!response.ok) continue
     const test = mapLabTest(await readJson(response))
     if (!test) continue
     const expected = await expectedFromMarkersResponse(source, test)
+    const existed = Boolean(state.labTestById(id))
     state.upsertLabTest(test, expected)
-    added += 1
+    if (!existed) added += 1
   }
   return added
 }
@@ -237,7 +291,7 @@ export const ensureOrders = async (
 ): Promise<number> => {
   let added = 0
   for (const id of ids) {
-    if (!id || state.orders.get(id)) continue
+    if (!id) continue
     const orderResponse = await request(source, "GET", `/v3/order/${id}`)
     if (!orderResponse.ok) continue
     const order = mapOrder(await readJson(orderResponse))
@@ -251,10 +305,12 @@ export const ensureOrders = async (
         state.deletedUsers.insert(order.user_id, { user_id: order.user_id })
       }
     }
-    state.insertOrder(order)
+    const existed = Boolean(state.orders.get(id))
+    if (existed) state.orders.update(id, order)
+    else state.insertOrder(order)
     if (order.lab_test?.id) state.upsertLabTest(order.lab_test)
     await ensureUserInfoForOrder(state, source, order)
-    added += 1
+    if (!existed) added += 1
   }
   return added
 }
@@ -277,12 +333,14 @@ export const seedFrom = async (
         : key.toLowerCase().includes("phlebotomy")
           ? ("phlebotomy" as const)
           : undefined
-      state.hydrateBookingKeysFromAvailability(
-        entry.body,
-        nowMs,
-        zipMatch?.[1] ?? "85004",
-        modality,
-      )
+      const zip = zipMatch?.[1] ?? "85004"
+      state.hydrateBookingKeysFromAvailability(entry.body, nowMs, zip, modality)
+      // Vital echoes the availability request address on book/reschedule. Align the
+      // freshly hydrated oracle-key records with the request address embedded in the
+      // observation cache key so book/reschedule render the same address as the
+      // oracle instead of the hydrate placeholder.
+      const requestBody = parseAvailabilityRequestBody(key)
+      if (requestBody) alignBookingKeyAddresses(state, entry.body, requestBody, zip, modality)
     }
   }
 
@@ -341,6 +399,8 @@ export const seedFrom = async (
   const pendingOrders: Array<{
     order: OrderRecord
     appointments: AppointmentRecord[]
+    /** Position in the oracle's newest-first team-wide list — the oracle's own tie order. */
+    listPosition?: number
   }> = []
   let offset = 0
   const limit = 100
@@ -420,15 +480,75 @@ export const seedFrom = async (
     if (listed.length < limit) break
   }
 
-  // Insert oldest-first so collection seq matches chronology (list is newest-first).
+  // Team-wide order pass: /v2/user can be empty while orphan orders remain
+  // (users deleted, orders retained). List payloads are full ClientFacingOrder
+  // objects, so we can seed without per-id GETs.
+  {
+    let page = 1
+    for (;;) {
+      const ordersResponse = await request(source, "GET", `/v3/orders?page=${page}&size=100`)
+      if (!ordersResponse.ok) break
+      const ordersPayload = asRecord(await readJson(ordersResponse))
+      const orderEntries = Array.isArray(ordersPayload?.orders)
+        ? ordersPayload.orders
+        : Array.isArray(ordersPayload?.data)
+          ? ordersPayload.data
+          : []
+      if (orderEntries.length === 0) break
+      let listPosition = (page - 1) * 100
+      for (const orderEntry of orderEntries) {
+        const order = mapOrder(orderEntry)
+        if (!order) continue
+        // Do not resurrect users that are absent from /v2/user — orphan orders
+        // keep their user_id but the team user list must match sandbox membership.
+        if (!state.users.has(order.user_id) && !state.deletedUsers.has(order.user_id)) {
+          state.deletedUsers.insert(order.user_id, { user_id: order.user_id })
+        }
+        listPosition += 1
+        const existing = pendingOrders.find((pending) => pending.order.id === order.id)
+        if (existing) {
+          // Team-wide list order is the oracle's own tie order — restamp even for
+          // orders first discovered through the per-user pass.
+          existing.listPosition = listPosition
+          continue
+        }
+        pendingOrders.push({ order, appointments: [], listPosition })
+      }
+      const total = typeof ordersPayload?.total === "number" ? ordersPayload.total : undefined
+      if (total !== undefined && page * 100 >= total) break
+      if (orderEntries.length < 100) break
+      page += 1
+    }
+  }
+
+  // Insert oldest-first so collection seq matches the oracle's list order: primary key
+  // is updated_at asc, ties follow the oracle's newest-first list position (reversed),
+  // because the sandbox orders same-instant rows by creation order there too.
   pendingOrders.sort((left, right) => {
-    const leftAt = Date.parse(String(left.order.created_at ?? "")) || 0
-    const rightAt = Date.parse(String(right.order.created_at ?? "")) || 0
+    const leftAt = Date.parse(String(left.order.updated_at ?? left.order.created_at ?? "")) || 0
+    const rightAt = Date.parse(String(right.order.updated_at ?? right.order.created_at ?? "")) || 0
     if (leftAt !== rightAt) return leftAt - rightAt
+    if (left.listPosition !== undefined && right.listPosition !== undefined) {
+      return right.listPosition - left.listPosition
+    }
+    // Orders discovered only via per-user detail fetches keep id order as a stable fallback.
     return left.order.id.localeCompare(right.order.id)
   })
   for (const pending of pendingOrders) {
-    if (state.orders.get(pending.order.id)) continue
+    const labTest = pending.order.lab_test
+    if (labTest?.id && (labTest.markers?.length ?? 0) === 0) {
+      const expected = await expectedFromMarkersResponse(source, labTest)
+      pending.order.lab_test = labTest
+      if (state.orders.get(pending.order.id)) {
+        state.orders.update(pending.order.id, pending.order)
+      }
+      state.upsertLabTest(labTest, expected)
+    }
+    if (state.orders.get(pending.order.id)) {
+      state.orders.update(pending.order.id, pending.order)
+      if (pending.order.lab_test?.id) state.upsertLabTest(pending.order.lab_test)
+      continue
+    }
     state.insertOrder(pending.order)
     if (pending.order.lab_test?.id) state.upsertLabTest(pending.order.lab_test)
     await ensureUserInfoForOrder(state, source, pending.order)
@@ -439,6 +559,16 @@ export const seedFrom = async (
       appointments += 1
     }
   }
+
+  // Refresh panels that still lack markers so create_order matches Vital.
+  await ensureLabTests(
+    state,
+    source,
+    state
+      .listLabTests()
+      .filter((test) => (test.markers?.length ?? 0) === 0)
+      .map((test) => test.id),
+  )
 
   return {
     users,

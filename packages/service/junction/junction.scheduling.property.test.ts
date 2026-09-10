@@ -64,6 +64,19 @@ const createOrder = async (api: Api, userId: string, labId: string): Promise<Jso
   return ((await response.json()) as Json).order as Json
 }
 
+/** Sandbox booking requires a requisition event before phlebotomy/PSC book. */
+const createBookableOrder = async (api: Api, userId: string, labId: string): Promise<Json> => {
+  const order = await createOrder(api, userId, labId)
+  const method = labId === LAB_WALK_IN ? "walk_in_test" : "at_home_phlebotomy"
+  const requisition = await request(
+    api,
+    `/v3/order/${order.id}/test?final_status=received.${method}.requisition_created`,
+    { method: "POST" },
+  )
+  expect(requisition.status).toBe(200)
+  return order
+}
+
 type Slot = { booking_key: string; start: string }
 
 /** Every phlebotomy cancellation reason is refundable; "Other" requires notes. */
@@ -129,7 +142,7 @@ describe("Junction scheduling state space", () => {
           const clock = makeNow()
           const api = new JunctionAPI({ now: clock.now, webhook: { seed: 11 } })
           const userId = await createUser(api, `sched-phlebo-${zip}`)
-          const order = await createOrder(api, userId, LAB_AT_HOME)
+          const order = await createBookableOrder(api, userId, LAB_AT_HOME)
           const orderId = order.id as string
 
           const availability = await phlebotomyAvailability(api, zip)
@@ -147,7 +160,8 @@ describe("Junction scheduling state space", () => {
           expect(appointment.order_id).toBe(orderId)
           expect(appointment.user_id).toBe(userId)
           expect(appointment.type).toBe("phlebotomy")
-          expect(appointment.status).toBe("confirmed")
+          // Vital quirk: top-level status + events[0].status are pending, event_status is scheduled.
+          expect(appointment.status).toBe("pending")
           expect(appointment.event_status).toBe("scheduled")
 
           const fetched = await request(api, `/v3/order/${orderId}/phlebotomy/appointment`)
@@ -240,7 +254,7 @@ describe("Junction scheduling state space", () => {
         const clock = makeNow()
         const api = new JunctionAPI({ now: clock.now })
         const userId = await createUser(api, `sched-key-${mode}`)
-        const order = await createOrder(api, userId, LAB_AT_HOME)
+        const order = await createBookableOrder(api, userId, LAB_AT_HOME)
         const orderId = order.id as string
         const availability = await phlebotomyAvailability(api, "92101")
         const key = availability.slots[0]?.booking_key ?? ""
@@ -284,7 +298,7 @@ describe("Junction scheduling state space", () => {
       fc.asyncProperty(fc.integer({ min: 0, max: 2 }), async (mode) => {
         const api = new JunctionAPI({ now: () => baseTime })
         const userId = await createUser(api, `sched-psc-${mode}`)
-        const order = await createOrder(api, userId, LAB_WALK_IN)
+        const order = await createBookableOrder(api, userId, LAB_WALK_IN)
         const orderId = order.id as string
         const info = await request(api, "/v3/order/psc/info?zip_code=94105&lab_id=4")
         expect(info.status).toBe(200)
@@ -356,7 +370,7 @@ describe("Junction scheduling state space", () => {
       fc.asyncProperty(fc.boolean(), async (cancelFirst) => {
         const api = new JunctionAPI({ now: () => baseTime })
         const userId = await createUser(api, `sched-miss-${cancelFirst}`)
-        const order = await createOrder(api, userId, LAB_AT_HOME)
+        const order = await createBookableOrder(api, userId, LAB_AT_HOME)
         const orderId = order.id as string
 
         if (!cancelFirst) {
@@ -424,7 +438,7 @@ describe("Junction scheduling state space", () => {
       fc.asyncProperty(fc.boolean(), async (withAppointment) => {
         const api = new JunctionAPI({ now: () => baseTime, webhook: { seed: 3 } })
         const userId = await createUser(api, `sched-cascade-${withAppointment}`)
-        const order = await createOrder(api, userId, LAB_AT_HOME)
+        const order = await createBookableOrder(api, userId, LAB_AT_HOME)
         const orderId = order.id as string
 
         if (withAppointment) {

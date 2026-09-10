@@ -56,6 +56,16 @@ describe("Junction lifecycle", () => {
         expect(
           new Set(payloads.map((payload) => (payload as { order: { id: string } }).order.id)).size,
         ).toBe(1)
+        // Sandbox: the first /test on a fresh order always creates the requisition;
+        // subsequent calls with a (even mismatched-method) completion target jump to completed.
+        const requisition = await request(
+          api,
+          `/v3/order/${order.order.id}/test?final_status=completed.testkit.completed`,
+          {
+            method: "POST",
+          },
+        )
+        expect(requisition.status).toBe(200)
         for (const complete of schedule) {
           if (!complete) continue
           const response = await request(
@@ -75,7 +85,8 @@ describe("Junction lifecycle", () => {
         }
         if (schedule.some(Boolean)) {
           expect(latest.status).toBe("completed")
-          expect(latest.last_event.status).toBe("completed.testkit.completed")
+          // Method segment follows the order's native collection method, not the request.
+          expect(latest.last_event.status).toBe("completed.walk_in_test.completed")
           expect(latest.order_transaction.status).toBe("completed")
         }
       }),

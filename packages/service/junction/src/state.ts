@@ -330,12 +330,40 @@ export class JunctionState {
   }
 
   upsertLabTest(test: LabTestRecord, expectedResults?: readonly ExpectedResult[]): void {
-    if (this.labTests.get(test.id)) this.labTests.update(test.id, clone(test))
-    else this.labTests.insert(test.id, clone(test))
+    const existing = this.labTests.get(test.id)
+    let next = clone(test)
+    if (existing) {
+      const incomingMarkers = next.markers?.length ?? 0
+      const existingMarkers = existing.markers?.length ?? 0
+      // Order embeds are often thinner than catalog GETs — keep richer marker/method
+      // data so create_order method matching stays aligned with Vital.
+      if (incomingMarkers === 0 && existingMarkers > 0) {
+        next = { ...next, markers: existing.markers }
+      }
+      if (
+        (typeof next.method !== "string" || next.method.length === 0) &&
+        typeof existing.method === "string" &&
+        existing.method.length > 0
+      ) {
+        next = { ...next, method: existing.method }
+      }
+      if (existing.auto_generated !== true && next.auto_generated === true) {
+        next = {
+          ...next,
+          auto_generated: false,
+          method: existing.method,
+          name: existing.name,
+          slug: existing.slug,
+        }
+      }
+      this.labTests.update(test.id, next)
+    } else {
+      this.labTests.insert(test.id, next)
+    }
     // Never clobber seeded panel expansions (e.g. Lipid → 6 LOINCs) when callers
     // only pass the lab_test envelope from an order payload.
     if (expectedResults === undefined && this.expectedResults.get(test.id)) return
-    const fromNested = (test.markers ?? []).flatMap((marker) => {
+    const fromNested = (next.markers ?? []).flatMap((marker) => {
       const nested = (marker as { expected_results?: unknown }).expected_results
       if (!Array.isArray(nested) || nested.length === 0) return []
       return nested.filter(
@@ -347,7 +375,7 @@ export class JunctionState {
       expectedResults ??
       (fromNested.length > 0
         ? fromNested
-        : (test.markers ?? []).map((marker) => ({
+        : (next.markers ?? []).map((marker) => ({
             id: marker.id,
             name: marker.name,
             slug: marker.slug,
@@ -428,6 +456,26 @@ export class JunctionState {
       }
     }
     const zip = /^\d{5}/.test(zipCode) ? zipCode.slice(0, 5) : "00000"
+    const zipPrefix = Number(zip.slice(0, 3))
+    const cityState =
+      zipPrefix >= 850 && zipPrefix <= 865
+        ? { city: "Phoenix", state: "AZ" }
+        : zipPrefix >= 900
+          ? { city: "Los Angeles", state: "CA" }
+          : zipPrefix >= 800
+            ? { city: "Denver", state: "CO" }
+            : zipPrefix >= 600
+              ? { city: "Chicago", state: "IL" }
+              : zipPrefix >= 300 && zipPrefix < 400
+                ? { city: "Atlanta", state: "GA" }
+                : { city: "New York", state: "NY" }
+    const location =
+      zip === "85004"
+        ? { lat: 33.6242904, lng: -111.9283407 }
+        : {
+            lat: 30 + (zipPrefix % 20) * 0.4,
+            lng: -120 + (zipPrefix % 30) * 0.5,
+          }
     for (const entry of slotEntries) {
       if (typeof entry !== "object" || entry === null || Array.isArray(entry)) continue
       const slot = entry as Record<string, unknown>
@@ -458,13 +506,14 @@ export class JunctionState {
         zip_code: zip,
         address: {
           first_line: "1 Main St",
-          second_line: null,
-          city: "San Francisco",
-          state: "CA",
+          second_line: "",
+          city: cityState.city,
+          state: cityState.state,
           zip_code: zip,
           unit: null,
+          access_notes: null,
         },
-        location: { lng: -122.4, lat: 37.77 },
+        location,
         consumed_by_order_id: null,
         created_at: new Date(nowMs).toISOString(),
       })

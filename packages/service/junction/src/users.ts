@@ -37,7 +37,14 @@ const render = (user: UserRecord, rawEnd = false) => ({
 })
 
 const listUsers = (state: JunctionState, offset: number, limit: number) => {
-  const all = state.users.list({ order: "newest" })
+  // Sandbox lists by created_on desc; same-second ties follow creation order
+  // (collection newest), not UUID lexicographic order.
+  const all = [...state.users.list({ order: "newest" })].sort((left, right) => {
+    const leftAt = Date.parse(String(left.value.created_on ?? "")) || 0
+    const rightAt = Date.parse(String(right.value.created_on ?? "")) || 0
+    if (rightAt !== leftAt) return rightAt - leftAt
+    return 0
+  })
   const users = all.slice(offset, offset + limit).map((entry) => render(entry.value, true))
   return {
     users,
@@ -220,6 +227,17 @@ const dobValidationError = (value: unknown) => {
     }
     const iso = value.match(/^(\d{4})([-/])(\d{2}|[^-])\2(\d{2}|[^-]*)(.*)$/)
     if (iso === null) {
+      // Pydantic/speedate: once four year digits are consumed, a non-`-` next
+      // character is reported as a separator error (not an invalid year char).
+      if (/^\d{4}/.test(value)) {
+        return {
+          type: "date_from_datetime_parsing",
+          loc: ["body", "dob"],
+          msg: "Input should be a valid date or datetime, invalid date separator, expected `-`",
+          input: value,
+          ctx: { error: "invalid date separator, expected `-`" },
+        }
+      }
       return {
         type: "date_from_datetime_parsing",
         loc: ["body", "dob"],

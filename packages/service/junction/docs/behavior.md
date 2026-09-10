@@ -23,7 +23,8 @@ PSC site codes), so identical inputs return identical slots on independent mock 
 3. Book with a `booking_key` from the availability response. PSC booking additionally
    requires `site_code` and honors `x-idempotency-key` replays.
 4. Booking moves the order to the modality-specific `appointment_scheduled` event, sets the
-   appointment to `status: confirmed` / `event_status: scheduled`, and emits
+   appointment to `event_status: scheduled` (top-level `status` stays `pending` in the
+   sandbox; phlebotomy `events[0].status` is also `pending`), and emits
    `labtest.appointment.updated` plus a `labtest.order.updated` webhook.
 5. Reschedule consumes a new unclaimed booking key for the same modality; cancelled
    appointments refuse reschedule. Cancel requires a valid cancellation reason id

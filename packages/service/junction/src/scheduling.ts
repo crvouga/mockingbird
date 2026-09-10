@@ -33,6 +33,7 @@ const cachedResponse = (state: JunctionState, context: OperationContext) => {
   if (!cached) return undefined
   if (key.toLowerCase().includes("availability")) {
     materializeAvailabilityBookingKeys(state, context, cached.body)
+    rotateAvailabilityBookingKeys(state, cached.body, context.now())
   }
   const headers = new Headers(cached.headers)
   if (!headers.has("content-type")) headers.set("content-type", "application/json")
@@ -60,20 +61,12 @@ const materializeAvailabilityBookingKeys = (
     typeof requestBody.zip_code === "string" && /^\d{5}/.test(requestBody.zip_code)
       ? requestBody.zip_code.slice(0, 5)
       : "85004"
-  const startDate = startDateOf(context, context.now())
   const path = context.url.pathname
   const modalityHint = path.includes("psc")
     ? ("patient_service_center" as const)
     : path.includes("phlebotomy")
       ? ("phlebotomy" as const)
       : undefined
-  if (path.includes("phlebotomy")) {
-    // Pin getlabs — matches area_info providers and hydrate defaults so observation-seeded
-    // booking keys stay lockstep across mock↔mock and mock↔sandbox for Geviti geos.
-    generatePhlebotomySlots(state, zip, startDate, "getlabs", context.now())
-  } else if (path.includes("psc")) {
-    generatePscSlots(state, zip, startDate, null, context.now())
-  }
   state.hydrateBookingKeysFromAvailability(cachedBody, context.now(), zip, modalityHint)
   // Normalize address/provider/modality on oracle keys so book/reschedule match generated shape.
   if (typeof cachedBody === "object" && cachedBody !== null && !Array.isArray(cachedBody)) {
@@ -95,16 +88,111 @@ const materializeAvailabilityBookingKeys = (
         if (modalityHint) record.modality = modalityHint
         record.zip_code = zip
         record.provider = record.modality === "patient_service_center" ? "quest" : "getlabs"
-        record.address = {
-          first_line: "1 Main St",
-          second_line: null,
-          city: "San Francisco",
-          state: "CA",
-          zip_code: zip,
-          unit: null,
-        }
+        record.address = addressFromAvailabilityRequest(requestBody, zip)
+        record.location = zipLocation(zip)
         state.bookingKeys.update(bookingKey, record)
       }
+    }
+  }
+}
+
+/**
+ * Vital mints fresh booking_key values on every availability response while the slot
+ * skeleton stays stable, and previously issued keys remain bookable. Mirror that: each
+ * serve registers a new record per slot position (deriving slot facts from the current
+ * record for that position) and rewrites the served body, leaving stale keys bookable
+ * until consumed/expired.
+ */
+const rotateAvailabilityBookingKeys = (
+  state: JunctionState,
+  cachedBody: unknown,
+  nowMs: number,
+): void => {
+  if (typeof cachedBody !== "object" || cachedBody === null || Array.isArray(cachedBody)) return
+  const root = cachedBody as Record<string, unknown>
+  const dayBuckets: unknown[] = []
+  if (Array.isArray(root.days)) dayBuckets.push(...root.days)
+  if (Array.isArray(root.slots)) dayBuckets.push(...root.slots)
+  for (const day of dayBuckets) {
+    if (typeof day !== "object" || day === null || Array.isArray(day)) continue
+    const daySlots = (day as Record<string, unknown>).slots
+    const slots = Array.isArray(daySlots) ? daySlots : [day]
+    for (let index = 0; index < slots.length; index += 1) {
+      const slot = slots[index]
+      if (typeof slot !== "object" || slot === null || Array.isArray(slot)) continue
+      const entry = slot as Record<string, unknown>
+      const sealedKey = typeof entry.booking_key === "string" ? entry.booking_key : ""
+      if (!sealedKey) continue
+      const sealed = state.bookingKeys.get(sealedKey)
+      if (!sealed) continue
+      const freshKey = bookingKeyRotationFor(state, sealedKey, nowMs, index)
+      const record: BookingKeyRecord = {
+        ...sealed,
+        key: freshKey,
+        consumed_by_order_id: null,
+        created_at: new Date(nowMs).toISOString(),
+      }
+      state.bookingKeys.insert(freshKey, record)
+      entry.booking_key = freshKey
+    }
+  }
+}
+
+/**
+ * Derive a fresh, unused booking key for a rotated slot. Mixing the sealed key, clock,
+ * slot index, and an attempt counter keeps re-serves unique even under frozen test
+ * clocks where consecutive serves share the same millisecond.
+ */
+const bookingKeyRotationFor = (
+  state: JunctionState,
+  sealedKey: string,
+  nowMs: number,
+  index: number,
+): string => {
+  for (let attempt = 0; attempt < 64; attempt += 1) {
+    const candidate = state.bookingKeyFor(`rotation:${sealedKey}:${nowMs}:${index}:${attempt}`)
+    if (!state.bookingKeys.has(candidate)) return candidate
+  }
+  return state.bookingKeyFor(
+    `rotation:${sealedKey}:${nowMs}:${index}:fallback:${state.bookingKeys.list().length}`,
+  )
+}
+
+type DayBucket = Record<string, unknown>
+
+/**
+ * Rotation for the generated (cache-miss) availability paths: newly created slot
+ * records are replaced with fresh records on every serve so repeated reads mint
+ * fresh keys like the oracle, and the served body carries only the fresh keys.
+ * When `override` is given (phlebotomy — Vital echoes the availability request
+ * address on book), the fresh record's address/location/zip are re-aligned.
+ */
+const rotateGeneratedAvailabilityKeys = (
+  state: JunctionState,
+  days: Array<Record<string, unknown>>,
+  nowMs: number,
+  override?: { address: Record<string, unknown>; location: { lng: number; lat: number }; zip: string },
+): void => {
+  for (const day of days) {
+    const slots = Array.isArray(day.slots) ? day.slots : []
+    for (let index = 0; index < slots.length; index += 1) {
+      const slot = slots[index]
+      if (typeof slot !== "object" || slot === null || Array.isArray(slot)) continue
+      const entry = slot as Record<string, unknown>
+      const currentKey = typeof entry.booking_key === "string" ? entry.booking_key : ""
+      if (!currentKey) continue
+      const current = state.bookingKeys.get(currentKey)
+      if (!current) continue
+      const freshKey = bookingKeyRotationFor(state, currentKey, nowMs, index)
+      const record: BookingKeyRecord = {
+        ...current,
+        key: freshKey,
+        ...(override ?? {}),
+        consumed_by_order_id: null,
+        created_at: new Date(nowMs).toISOString(),
+      }
+      state.bookingKeys.insert(freshKey, record)
+      entry.booking_key = freshKey
     }
   }
 }
@@ -117,8 +205,70 @@ const zipTimezone = (zip: string): string => {
   if (!Number.isFinite(prefix) || prefix === 0) return "America/New_York"
   if (prefix < 500) return "America/New_York"
   if (prefix < 800) return "America/Chicago"
+  // Arizona does not observe DST — Vital uses America/Phoenix for 850–865.
+  if (prefix >= 850 && prefix <= 865) return "America/Phoenix"
   if (prefix < 900) return "America/Denver"
   return "America/Los_Angeles"
+}
+
+/** Known Vital sandbox centroids for booking location parity. */
+const ZIP_LOCATION: Readonly<Record<string, { lat: number; lng: number }>> = {
+  "85004": { lat: 33.6242904, lng: -111.9283407 },
+}
+
+const zipLocation = (zip: string): { lat: number; lng: number } => {
+  const known = ZIP_LOCATION[zip.slice(0, 5)]
+  if (known) return { ...known }
+  // Deterministic fallback centroid so unknown zips stay stable across runs.
+  const prefix = Number(zip.slice(0, 3)) || 0
+  return {
+    lat: 30 + (prefix % 20) * 0.4,
+    lng: -120 + (prefix % 30) * 0.5,
+  }
+}
+
+const cityStateForZip = (zip: string): { city: string; state: string } => {
+  const tz = zipTimezone(zip)
+  if (tz === "America/Phoenix") return { city: "Phoenix", state: "AZ" }
+  if (tz === "America/Los_Angeles") return { city: "Los Angeles", state: "CA" }
+  if (tz === "America/Denver") return { city: "Denver", state: "CO" }
+  if (tz === "America/Chicago") return { city: "Chicago", state: "IL" }
+  return { city: "New York", state: "NY" }
+}
+
+export const addressFromAvailabilityRequest = (
+  requestBody: Record<string, unknown>,
+  zip: string,
+): Record<string, unknown> => {
+  const { city, state } = cityStateForZip(zip)
+  const firstLine =
+    typeof requestBody.first_line === "string" && requestBody.first_line.length > 0
+      ? requestBody.first_line
+      : "1 Main St"
+  const secondLine =
+    typeof requestBody.second_line === "string"
+      ? requestBody.second_line
+      : requestBody.second_line === null
+        ? ""
+        : ""
+  return {
+    first_line: firstLine,
+    second_line: secondLine,
+    city:
+      typeof requestBody.city === "string" && requestBody.city.length > 0
+        ? requestBody.city
+        : city,
+    state:
+      typeof requestBody.state === "string" && requestBody.state.length > 0
+        ? requestBody.state
+        : state,
+    zip_code:
+      typeof requestBody.zip_code === "string" && /^\d{5}/.test(requestBody.zip_code)
+        ? requestBody.zip_code.slice(0, 5)
+        : zip,
+    unit: typeof requestBody.unit === "string" ? requestBody.unit : null,
+    access_notes: null,
+  }
 }
 
 const seededRandom = (seed: number): (() => number) => {
@@ -279,7 +429,7 @@ const AREA_LABS: ReadonlyArray<{
 ]
 
 /** Zips where getlabs phlebotomy is offered (mirrors sandbox coverage). */
-const PHLEBOTOMY_SERVED_PREFIXES: readonly number[] = [900, 303, 917, 891]
+const PHLEBOTOMY_SERVED_PREFIXES: readonly number[] = [850, 900, 303, 917, 891]
 
 const phlebotomyServed = (zip: string): boolean => {
   const prefix = Number(zip.slice(0, 3))
@@ -516,14 +666,18 @@ type SlotSeed = {
   location: { lng: number; lat: number }
 }
 
-const phlebotomyAddress = (zip: string): Record<string, unknown> => ({
-  first_line: "1 Main St",
-  second_line: null,
-  city: "San Francisco",
-  state: "CA",
-  zip_code: zip,
-  unit: null,
-})
+const phlebotomyAddress = (zip: string): Record<string, unknown> => {
+  const { city, state } = cityStateForZip(zip)
+  return {
+    first_line: "1 Main St",
+    second_line: "",
+    city,
+    state,
+    zip_code: zip,
+    unit: null,
+    access_notes: null,
+  }
+}
 
 const persistSlot = (state: JunctionState, seed: SlotSeed, nowMs: number): BookingKeyRecord => {
   const record: BookingKeyRecord = {
@@ -582,7 +736,7 @@ const generatePhlebotomySlots = (
         siteCode: null,
         zipCode: zip,
         address: phlebotomyAddress(zip),
-        location: { lng: -122.4, lat: 37.77 },
+        location: zipLocation(zip),
       }
       const record = persistSlot(state, seed, nowMs)
       slots.push({
@@ -649,7 +803,7 @@ const generatePscSlots = (
               unit: null,
             }
           : phlebotomyAddress(zip),
-        location: site?.location ?? { lng: -122.4, lat: 37.77 },
+        location: site?.location ?? zipLocation(zip),
       }
       const record = persistSlot(state, seed, nowMs)
       slots.push({
@@ -717,8 +871,25 @@ const requirePhlebotomyCapableOrder = (order: Order): void => {
 const requirePscCapableOrder = (order: Order): void => {
   const method = orderCollectionMethod(order)
   if (method !== "walk_in_test" && method !== "on_site_collection") {
-    notFound("This order doesn't have a PSC order.")
+    notFound("This order is not a walk-in phlebotomy order.")
   }
+}
+
+const requireOrderHasRequisition = (order: Order): void => {
+  const hasRequisition = order.events.some(
+    (entry) =>
+      typeof entry.status === "string" && entry.status.endsWith(".requisition_created"),
+  )
+  if (hasRequisition) return
+  const lowLevel =
+    typeof order.last_event?.status === "string"
+      ? (order.last_event.status.split(".").at(-1) ?? order.last_event.status)
+      : typeof order.status === "string" && order.status.length > 0
+        ? order.status
+        : "ordered"
+  throw new HttpError(400, {
+    detail: `This order does not have a requisition, it's still in state ${lowLevel}.`,
+  })
 }
 
 const appendOrderStatusEvent = (
@@ -805,6 +976,11 @@ const applySimulateTransition = (
       : typeof order.details?.type === "string" && order.details.type.length > 0
         ? order.details.type
         : "at_home_phlebotomy"
+  const hasCancelled = order.events.some((entry) =>
+    typeof entry.status === "string" ? entry.status.startsWith("cancelled.") : false,
+  )
+  if (hasCancelled) return
+
   const hasRequisition = order.events.some((entry) =>
     typeof entry.status === "string" ? entry.status.endsWith(".requisition_created") : false,
   )
@@ -1145,6 +1321,12 @@ export const schedulingHandlers = (state: JunctionState) => ({
       context.now(),
     )
     if (days.length === 0) notFound("No availability found")
+    // Align booking-key address/location with the availability request (Vital echoes it on book).
+    rotateGeneratedAvailabilityKeys(state, days, context.now(), {
+      address: addressFromAvailabilityRequest(body, zip),
+      location: zipLocation(zip),
+      zip,
+    })
     return jsonRes(200, { timezone, slots: days })
   },
 
@@ -1193,6 +1375,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
       context.now(),
     )
     if (days.length === 0) notFound("No slots found")
+    rotateGeneratedAvailabilityKeys(state, days, context.now())
     return jsonRes(200, { timezone, slots: days })
   },
 
@@ -1222,6 +1405,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context)
     requirePhlebotomyCapableOrder(order)
+    requireOrderHasRequisition(order)
     const existing = appointmentOfOrder(state, order.id)
     if (existing && existing.status !== "cancelled") {
       throw new HttpError(400, { detail: "Appointment already booked for this order" })
@@ -1246,7 +1430,8 @@ export const schedulingHandlers = (state: JunctionState) => ({
       external_id: `getlabs-${state.appointmentProviderIdFor(orderId)}`,
       type: "phlebotomy",
       provider: record.provider as AppointmentRecord["provider"],
-      status: "confirmed",
+      // Vital quirk: top-level status + events[0].status are pending, but event_status is scheduled.
+      status: "pending",
       event_status: "scheduled",
       start_at: record.start,
       end_at: record.end,
@@ -1263,7 +1448,8 @@ export const schedulingHandlers = (state: JunctionState) => ({
       created_at: nowIso,
       updated_at: nowIso,
     }
-    appendAppointmentEvent(appointment, "scheduled", nowIso)
+    appendAppointmentEvent(appointment, "pending", nowIso)
+    appointment.event_status = "scheduled"
     state.appointments.insert(appointmentId, appointment)
     state.appointmentsByOrder.insert(order.id, { appointment_id: appointmentId })
     record.consumed_by_order_id = order.id
@@ -1279,6 +1465,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context)
     requirePscCapableOrder(order)
+    requireOrderHasRequisition(order)
     const idempotencyKey = context.request.headers.get("x-idempotency-key")
     if (idempotencyKey !== null && idempotencyKey !== "") {
       const replay = state.cancelIdempotency.get(`psc-book:${idempotencyKey}`)
