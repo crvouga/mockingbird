@@ -120,6 +120,29 @@ jobs:
         env:
           FC_NUM_RUNS: "50"
 
+  # Single required status check for branch protection / rulesets.
+  # Keeps merge gating stable if individual job names change.
+  required:
+    name: Required
+    if: always() && github.event_name == 'pull_request'
+    needs: [commitlint, quality, test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: All required checks passed
+        run: |
+          results=(
+            "${{ needs.commitlint.result }}"
+            "${{ needs.quality.result }}"
+            "${{ needs.test.result }}"
+          )
+          for result in "${results[@]}"; do
+            if [ "$result" != "success" ]; then
+              echo "Required CI job failed (result=$result)"
+              exit 1
+            fi
+          done
+          echo "All required CI jobs passed"
+
   # Maintainer secrets: Trusted Publishing (OIDC) — docs/SECRETS.md — bun run secrets:doctor
   release:
     name: Release
