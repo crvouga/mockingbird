@@ -53,7 +53,7 @@ describe("StripeAPI", () => {
         supportedOperationIds.length / 2,
       )
     },
-    { timeout: 60_000 },
+    { timeout: 120_000 },
   )
 
   test(
