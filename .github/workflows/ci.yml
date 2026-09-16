@@ -118,7 +118,7 @@ jobs:
       - name: Property tests
         run: bun run test
         env:
-          FC_NUM_RUNS: "20"
+          FC_NUM_RUNS: "50"
 
   # Maintainer secrets: Trusted Publishing (OIDC) — docs/SECRETS.md — bun run secrets:doctor
   release:
