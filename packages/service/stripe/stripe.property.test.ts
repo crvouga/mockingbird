@@ -43,7 +43,6 @@ describe("StripeAPI", () => {
         },
         numRuns: params.numRuns ?? 40,
         maxCommands: 25,
-        latencyToleranceMs: 100,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
