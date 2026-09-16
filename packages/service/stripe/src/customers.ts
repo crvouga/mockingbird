@@ -42,7 +42,7 @@ const renderCustomer = (customer: CustomerRecord) => ({
   invoice_prefix: customer.invoice_prefix,
   invoice_settings: {
     custom_fields: customer.invoice_settings.custom_fields,
-    default_payment_method: null,
+    default_payment_method: customer.invoice_settings.default_payment_method,
     footer: customer.invoice_settings.footer,
     rendering_options: null,
   },
@@ -91,13 +91,20 @@ const apply = (current: CustomerRecord, params: Params): CustomerRecord => {
       params.tax_exempt === "" ? "none" : (params.tax_exempt as CustomerRecord["tax_exempt"])
   }
   if (params.invoice_settings !== undefined) {
-    const settings = params.invoice_settings as { custom_fields?: unknown; footer?: string }
+    const settings = params.invoice_settings as {
+      custom_fields?: unknown
+      default_payment_method?: unknown
+      footer?: string
+    }
     if (settings.custom_fields !== undefined) {
       next.invoice_settings.custom_fields =
         settings.custom_fields === ""
           ? []
           : (settings.custom_fields as CustomerRecord["invoice_settings"]["custom_fields"])
     }
+    if (settings.default_payment_method !== undefined)
+      next.invoice_settings.default_payment_method =
+        settings.default_payment_method === "" ? null : String(settings.default_payment_method)
     if (settings.footer !== undefined)
       next.invoice_settings.footer = settings.footer === "" ? null : settings.footer
   }
@@ -123,7 +130,7 @@ export const customerHandlers = (state: StripeState) => ({
       description: null,
       email: null,
       invoice_prefix: opaqueToken(`invoice-prefix:${id}`, 8).toUpperCase(),
-      invoice_settings: { custom_fields: null, footer: null },
+      invoice_settings: { custom_fields: null, default_payment_method: null, footer: null },
       metadata: {},
       name: null,
       phone: null,

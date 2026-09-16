@@ -23,6 +23,7 @@ export type CustomerRecord = {
   invoice_prefix: string
   invoice_settings: {
     custom_fields: CustomField[] | null
+    default_payment_method: string | null
     footer: string | null
   }
   metadata: Record<string, string>

@@ -9,6 +9,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
+import { StripeCompatibility } from "./compat.js"
 import { customerHandlers } from "./customers.js"
 import { StripeError, stripeErrorBody } from "./errors.js"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
@@ -23,6 +24,22 @@ export const STRIPE_NAMESPACE = "stripe"
 
 const MISSING_API_KEY =
   "You did not provide an API key. You need to provide your API key in the Authorization header, using Bearer auth (e.g. 'Authorization: Bearer YOUR_SECRET_KEY'). See https://stripe.com/docs/api#authentication for details, or we can help at https://support.stripe.com/."
+const INVALID_API_KEY = "Invalid API Key provided: This key is not valid."
+const INVALID_IDEMPOTENCY_KEY = "Idempotency Key must be a non-empty string."
+
+type CachedResponse = {
+  fingerprint: string
+  status: number
+  headers: [string, string][]
+  body: ArrayBuffer
+}
+
+const responseWithHeaders = (response: Response, requestId: string) => {
+  const headers = new Headers(response.headers)
+  headers.set("request-id", requestId)
+  headers.set("stripe-version", "2026-08-26.dahlia")
+  return new Response(response.body, { status: response.status, headers })
+}
 
 const unrecognizedUrl = (request: Request) => {
   const url = new URL(request.url)
@@ -38,10 +55,14 @@ export class StripeAPI implements FetchAPI {
   readonly app: Hono
   readonly sqlite: SqliteClient
   private readonly service: Service
+  private readonly state: StripeState
+  private readonly compatibility: StripeCompatibility
+  private readonly idempotency = new Map<string, CachedResponse>()
 
   constructor(options: APIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
     const state = new StripeState(sqlite, STRIPE_NAMESPACE)
+    this.state = state
     const handlers = defineOperations<SupportedOperationId>({
       ...customerHandlers(state),
       ...productHandlers(state),
@@ -60,21 +81,86 @@ export class StripeAPI implements FetchAPI {
         if (error instanceof StripeError) return errorResponse(error.init)
         throw error
       },
-      before: (context) =>
-        context.request.headers.has("authorization")
-          ? undefined
-          : errorResponse({ status: 401, message: MISSING_API_KEY }),
+      before: (context) => {
+        const authorization = context.request.headers.get("authorization")
+        if (!authorization) return errorResponse({ status: 401, message: MISSING_API_KEY })
+        const match = /^Bearer\s+(\S+)$/.exec(authorization)
+        const key = match?.[1]
+        if (!key || !/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(key))
+          return errorResponse({ status: 401, message: INVALID_API_KEY, code: "invalid_api_key" })
+        return undefined
+      },
     })
     this.app = this.service.app
     this.sqlite = this.service.sqlite
+    this.compatibility = new StripeCompatibility(this.sqlite, STRIPE_NAMESPACE)
+    this.app.all("*", (context) => {
+      const authorization = context.req.header("authorization")
+      if (!authorization) return errorResponse({ status: 401, message: MISSING_API_KEY })
+      const match = /^Bearer\s+(\S+)$/.exec(authorization)
+      const key = match?.[1]
+      if (!key || !/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(key))
+        return errorResponse({ status: 401, message: INVALID_API_KEY, code: "invalid_api_key" })
+      return this.compatibility.fetch(context.req.raw, options.now?.() ?? Date.now())
+    })
   }
 
-  fetch(request: Request): Promise<Response> {
-    return this.service.fetch(request)
+  async fetch(request: Request): Promise<Response> {
+    const idempotencyKey = request.method === "POST" ? request.headers.get("idempotency-key") : null
+    if (idempotencyKey !== null && (idempotencyKey.length === 0 || idempotencyKey.length > 255)) {
+      const response = await jsonResponse(
+        400,
+        stripeErrorBody(
+          { status: 400, message: INVALID_IDEMPOTENCY_KEY },
+          await this.state.requestLogUrl(),
+        ),
+      )
+      return responseWithHeaders(response, await this.state.ids.next("req_"))
+    }
+    const body =
+      request.method === "POST" ? await request.clone().arrayBuffer() : new ArrayBuffer(0)
+    const fingerprint = `${request.method} ${new URL(request.url).pathname}?${new URL(request.url).search} ${new TextDecoder().decode(body)}`
+    const cacheKey =
+      idempotencyKey === null ? null : `${request.headers.get("authorization")}\n${idempotencyKey}`
+    if (cacheKey !== null) {
+      const cached = this.idempotency.get(cacheKey)
+      if (cached) {
+        if (cached.fingerprint !== fingerprint) {
+          const response = await jsonResponse(
+            400,
+            stripeErrorBody(
+              {
+                status: 400,
+                message:
+                  "Keys for idempotent requests must have the same parameters as the original request.",
+              },
+              await this.state.requestLogUrl(),
+            ),
+          )
+          return responseWithHeaders(response, await this.state.ids.next("req_"))
+        }
+        return new Response(cached.body.slice(0), {
+          status: cached.status,
+          headers: cached.headers,
+        })
+      }
+    }
+    const response = await this.service.fetch(request)
+    const requestId = await this.state.ids.next("req_")
+    const decorated = responseWithHeaders(response, requestId)
+    if (cacheKey !== null && decorated.status < 500) {
+      this.idempotency.set(cacheKey, {
+        fingerprint,
+        status: decorated.status,
+        headers: [...decorated.headers.entries()],
+        body: await decorated.clone().arrayBuffer(),
+      })
+    }
+    return decorated
   }
 
-  /** Forget every customer, product and price. */
-  reset(): Promise<void> {
-    return this.service.reset()
+  async reset(): Promise<void> {
+    this.idempotency.clear()
+    await this.service.reset()
   }
 }

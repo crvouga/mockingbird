@@ -151,6 +151,99 @@ describe("StripeAPI", () => {
     { timeout: 30_000 },
   )
 
+  test("validates test-mode authentication and replays idempotent requests", async () => {
+    const stripe = new StripeAPI({ now })
+    const missing = await stripe.fetch(new Request(`https://${MOCK_HOST}/v1/customers`))
+    expect(missing.status).toBe(401)
+    const invalid = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        headers: { authorization: "Bearer sk_live_secret" },
+      }),
+    )
+    expect(invalid.status).toBe(401)
+
+    const headers = {
+      ...AUTH,
+      "content-type": "application/x-www-form-urlencoded",
+      "idempotency-key": "customer-create-1",
+    }
+    const first = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers,
+        body: new URLSearchParams({ name: "Ada" }),
+      }),
+    )
+    const second = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers,
+        body: new URLSearchParams({ name: "Ada" }),
+      }),
+    )
+    expect(second.status).toBe(200)
+    expect(await second.text()).toBe(await first.text())
+
+    const conflict = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers,
+        body: new URLSearchParams({ name: "Grace" }),
+      }),
+    )
+    expect(conflict.status).toBe(400)
+  })
+
+  test("supports geviti billing client flows without network state", async () => {
+    const stripe = new StripeAPI({ now })
+    const form = (body: Record<string, string>) => ({
+      headers: { ...AUTH, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body),
+    })
+    const customerResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers: form({}).headers,
+        body: form({ email: "test@example.com" }).body,
+      }),
+    )
+    const customer = (await customerResponse.json()) as { id: string }
+    const paymentMethodResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/payment_methods/pm_card_visa/attach`, {
+        method: "POST",
+        headers: form({ customer: customer.id }).headers,
+        body: form({ customer: customer.id }).body,
+      }),
+    )
+    expect(paymentMethodResponse.status).toBe(200)
+    const intentResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/payment_intents`, {
+        method: "POST",
+        headers: form({
+          amount: "1000",
+          currency: "usd",
+          customer: customer.id,
+          payment_method: "pm_card_visa",
+        }).headers,
+        body: form({
+          amount: "1000",
+          currency: "usd",
+          customer: customer.id,
+          payment_method: "pm_card_visa",
+        }).body,
+      }),
+    )
+    expect(((await intentResponse.json()) as { status: string }).status).toBe("succeeded")
+    const subscriptionResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/subscriptions`, {
+        method: "POST",
+        headers: form({ customer: customer.id, "items[0][price]": "price_test" }).headers,
+        body: form({ customer: customer.id, "items[0][price]": "price_test" }).body,
+      }),
+    )
+    expect(((await subscriptionResponse.json()) as { status: string }).status).toBe("active")
+  })
+
   test("state is isolated per namespace and reset clears only Stripe", async () => {
     await fc.assert(
       fc.asyncProperty(fc.stringMatching(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,19}$/), async (name) => {
