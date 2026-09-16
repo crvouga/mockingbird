@@ -35,7 +35,7 @@ describe("JunctionAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
-        numRuns: params.numRuns ?? 100,
+        numRuns: Math.max(params.numRuns ?? 100, 100),
         maxCommands: 30,
         coverageBias: 10,
         latencyToleranceMs: 100,
