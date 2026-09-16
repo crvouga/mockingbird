@@ -2,8 +2,8 @@ import type { Exchange } from "@crvouga/mockingbird-canonicalize"
 import {
   commandArbitrary,
   createExploreRng,
-  describeCommand,
   type DynamicWeightFn,
+  describeCommand,
   type ExploreState,
   isEligible,
   type LogicalCommand,
@@ -12,8 +12,8 @@ import {
   pushHistory,
   resourceCountsFrom,
   resourceTypesOf,
-  sampleGuidedCommand,
   type Scope,
+  sampleGuidedCommand,
 } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { collectPlaceholders, pickRef, ResourceTable } from "@crvouga/mockingbird-model"
@@ -34,7 +34,7 @@ import {
   type ParityReport,
   type WalkWebhookEvents,
 } from "./parity.js"
-import { ParityError, type Redactor } from "./report.js"
+import { ParityError } from "./report.js"
 
 export type SeedCacheEntry = {
   status: number
@@ -190,9 +190,7 @@ const webhookEventNames = (events: readonly unknown[]) =>
 const shouldRecordObservation = (method: string, operationId: string, path: string) => {
   if (method.toUpperCase() === "GET") return true
   const haystack = `${operationId} ${path}`.toLowerCase()
-  return (
-    haystack.includes("area") || haystack.includes("psc") || haystack.includes("availability")
-  )
+  return haystack.includes("area") || haystack.includes("psc") || haystack.includes("availability")
 }
 
 const exchangeBodyForCache = (exchange: Exchange): unknown => {
@@ -220,9 +218,7 @@ const recordHistory = (context: ExecutionContext, command: LogicalCommand) => {
 
 const runWarmup = async (context: WalkReal, command: LogicalCommand) => {
   const outcome = await executeWarmupCommand(context, command)
-  if (
-    shouldRecordObservation(outcome.request.method, command.operationId, outcome.request.path)
-  ) {
+  if (shouldRecordObservation(outcome.request.method, command.operationId, outcome.request.path)) {
     const method = outcome.request.method.toUpperCase()
     const body =
       method === "POST" || method === "PUT" || method === "PATCH"
@@ -286,23 +282,14 @@ const runDynamicPhase = async (args: {
 }) => {
   const opHistory: string[] = []
   for (let step = 0; step < args.steps; step += 1) {
-    const state = exploreStateOf(
-      args.context,
-      args.plans,
-      args.phase,
-      step,
-      args.steps,
-      opHistory,
-    )
+    const state = exploreStateOf(args.context, args.plans, args.phase, step, args.steps, opHistory)
     const command = sampleGuidedCommand(
       state,
       {
         document: args.document,
         plans: args.plans,
         ...(args.weightFn === undefined ? {} : { weightFn: args.weightFn }),
-        ...(args.reshapeCommand === undefined
-          ? {}
-          : { reshapeCommand: args.reshapeCommand }),
+        ...(args.reshapeCommand === undefined ? {} : { reshapeCommand: args.reshapeCommand }),
         ...(args.invalidProbability === undefined
           ? {}
           : { invalidProbability: args.invalidProbability }),
@@ -612,9 +599,7 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
               ...(options.missingProbability === undefined
                 ? {}
                 : { missingProbability: options.missingProbability }),
-              ...(options.coverageBias === undefined
-                ? {}
-                : { coverageBias: options.coverageBias }),
+              ...(options.coverageBias === undefined ? {} : { coverageBias: options.coverageBias }),
               run: async (command) => {
                 firstCommand ??= command
                 await runWarmup(context, command)
@@ -652,9 +637,7 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
               ...(options.missingProbability === undefined
                 ? {}
                 : { missingProbability: options.missingProbability }),
-              ...(options.coverageBias === undefined
-                ? {}
-                : { coverageBias: options.coverageBias }),
+              ...(options.coverageBias === undefined ? {} : { coverageBias: options.coverageBias }),
               run: async (command) => {
                 firstCommand ??= command
                 await runCompare(context, command)

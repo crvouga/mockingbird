@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import {
   createExploreRng,
   defaultDynamicWeight,
-  JUNCTION_CONTINUATIONS,
   type ExploreState,
+  JUNCTION_CONTINUATIONS,
   type OperationPlan,
   pickWeightedIndex,
   pushHistory,
@@ -56,9 +56,7 @@ describe("explore weighting", () => {
     expect(
       defaultDynamicWeight({ ...state, plan: producer, plans: [producer, consumer] }),
     ).toBeGreaterThan(0)
-    expect(
-      defaultDynamicWeight({ ...state, plan: consumer, plans: [producer, consumer] }),
-    ).toBe(0)
+    expect(defaultDynamicWeight({ ...state, plan: consumer, plans: [producer, consumer] })).toBe(0)
   })
 
   test("continuation boosts follow create_order", () => {
@@ -83,9 +81,10 @@ describe("explore weighting", () => {
       plans: [simulate, listUsers],
     })
     expect(simW).toBeGreaterThan(listW)
-    expect(JUNCTION_CONTINUATIONS.create_order_v3_order_post?.simulate_order_v3_order__order_id__test_post).toBe(
-      10,
-    )
+    expect(
+      JUNCTION_CONTINUATIONS.create_order_v3_order_post
+        ?.simulate_order_v3_order__order_id__test_post,
+    ).toBe(10)
   })
 
   test("geo ops gated without observation cache in compare", () => {
