@@ -693,11 +693,9 @@ describe("Junction scheduling state space", () => {
         expect(stepped.status).toBe(200)
 
         if (stopStatus === "collecting_sample") {
-          await request(
-            api,
-            `/v3/order/${orderId}/test?final_status=${statusMap[stopStatus]}`,
-            { method: "POST" },
-          )
+          await request(api, `/v3/order/${orderId}/test?final_status=${statusMap[stopStatus]}`, {
+            method: "POST",
+          })
         }
 
         const results = await request(api, `/v3/order/${orderId}/result`)

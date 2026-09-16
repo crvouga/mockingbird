@@ -3,8 +3,8 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import {
   EXPECTED_RESULTS,
   type ExpectedResult,
-  type LabTestRecord,
   LAB_TEST_CATALOG,
+  type LabTestRecord,
   TEAM_LABS,
 } from "./catalog.js"
 
@@ -18,15 +18,14 @@ export type GetCacheEntry = {
 }
 
 const sortedQueryString = (params: URLSearchParams): string => {
-  const entries = [...params.entries()].sort(([left], [right]) => left.localeCompare(right))
+  const entries = [...params.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+    const keyOrder = leftKey.localeCompare(rightKey)
+    return keyOrder === 0 ? leftValue.localeCompare(rightValue) : keyOrder
+  })
   return new URLSearchParams(entries).toString()
 }
 
-export const observationCacheKey = (
-  url: URL | string,
-  method = "GET",
-  body?: unknown,
-): string => {
+export const observationCacheKey = (url: URL | string, method = "GET", body?: unknown): string => {
   const parsed = typeof url === "string" ? new URL(url, "https://observation.local") : url
   const query = sortedQueryString(parsed.searchParams)
   const pathAndQuery = `${parsed.pathname}${query ? `?${query}` : ""}`
@@ -497,9 +496,7 @@ export class JunctionState {
         price: typeof slot.price === "number" ? slot.price : 0,
         is_priority: slot.is_priority === true,
         num_appointments_available:
-          typeof slot.num_appointments_available === "number"
-            ? slot.num_appointments_available
-            : 1,
+          typeof slot.num_appointments_available === "number" ? slot.num_appointments_available : 1,
         modality,
         provider: modality === "patient_service_center" ? "quest" : "getlabs",
         site_code: typeof slot.site_code === "string" ? slot.site_code : null,

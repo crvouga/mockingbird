@@ -5,7 +5,12 @@
  * Slot data is generated deterministically (seeded by zip/site/date), so walks are
  * reproducible without any provider-side state.
  */
-import { HttpError, jsonRes, opaqueToken, type OperationContext } from "@crvouga/mockingbird-service"
+import {
+  HttpError,
+  jsonRes,
+  type OperationContext,
+  opaqueToken,
+} from "@crvouga/mockingbird-service"
 import type {
   AppointmentEventRecord,
   AppointmentModality,
@@ -16,7 +21,8 @@ import type {
 
 const cachedResponse = (state: JunctionState, context: OperationContext) => {
   const body =
-    context.request.method.toUpperCase() === "GET" || context.request.method.toUpperCase() === "HEAD"
+    context.request.method.toUpperCase() === "GET" ||
+    context.request.method.toUpperCase() === "HEAD"
       ? undefined
       : context.body.kind === "json"
         ? context.body.value
@@ -158,8 +164,6 @@ const bookingKeyRotationFor = (
   )
 }
 
-type DayBucket = Record<string, unknown>
-
 /**
  * Rotation for the generated (cache-miss) availability paths: newly created slot
  * records are replaced with fresh records on every serve so repeated reads mint
@@ -171,7 +175,11 @@ const rotateGeneratedAvailabilityKeys = (
   state: JunctionState,
   days: Array<Record<string, unknown>>,
   nowMs: number,
-  override?: { address: Record<string, unknown>; location: { lng: number; lat: number }; zip: string },
+  override?: {
+    address: Record<string, unknown>
+    location: { lng: number; lat: number }
+    zip: string
+  },
 ): void => {
   for (const day of days) {
     const slots = Array.isArray(day.slots) ? day.slots : []
@@ -255,9 +263,7 @@ export const addressFromAvailabilityRequest = (
     first_line: firstLine,
     second_line: secondLine,
     city:
-      typeof requestBody.city === "string" && requestBody.city.length > 0
-        ? requestBody.city
-        : city,
+      typeof requestBody.city === "string" && requestBody.city.length > 0 ? requestBody.city : city,
     state:
       typeof requestBody.state === "string" && requestBody.state.length > 0
         ? requestBody.state
@@ -877,8 +883,7 @@ const requirePscCapableOrder = (order: Order): void => {
 
 const requireOrderHasRequisition = (order: Order): void => {
   const hasRequisition = order.events.some(
-    (entry) =>
-      typeof entry.status === "string" && entry.status.endsWith(".requisition_created"),
+    (entry) => typeof entry.status === "string" && entry.status.endsWith(".requisition_created"),
   )
   if (hasRequisition) return
   const lowLevel =
@@ -900,12 +905,8 @@ const appendOrderStatusEvent = (
 ): void => {
   const now = state.isoNow(context.now)
   const eventId =
-    Number.parseInt(
-      opaqueToken(`junction:order-event:${order.id}:${order.events.length}`, 8),
-      16,
-    ) %
-      1_000_000_000 ||
-    order.events.length + 1
+    Number.parseInt(opaqueToken(`junction:order-event:${order.id}:${order.events.length}`, 8), 16) %
+      1_000_000_000 || order.events.length + 1
   const event = {
     id: eventId,
     created_at: now,

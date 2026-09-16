@@ -139,11 +139,8 @@ const metadataOf = (order: OrderRecord, _userClient: string) => {
       ? details.first_name
       : "Patient"
   const last =
-    typeof details.last_name === "string" && details.last_name.length > 0
-      ? details.last_name
-      : ""
-  const dob =
-    typeof details.dob === "string" && details.dob.length > 0 ? details.dob : "1990-01-01"
+    typeof details.last_name === "string" && details.last_name.length > 0 ? details.last_name : ""
+  const dob = typeof details.dob === "string" && details.dob.length > 0 ? details.dob : "1990-01-01"
   const labName =
     order.lab_test.lab && typeof order.lab_test.lab.name === "string"
       ? order.lab_test.lab.name
@@ -190,10 +187,6 @@ const deterministicPdf = (title: string): Uint8Array => {
   for (const offset of offsets) body += `${String(offset).padStart(10, "0")} 00000 n \n`
   body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF\n`
   return new TextEncoder().encode(body)
-}
-
-function orderNotFound(message: string): never {
-  throw new HttpError(404, { detail: message })
 }
 
 function resultsNotAvailable(orderId: string): never {

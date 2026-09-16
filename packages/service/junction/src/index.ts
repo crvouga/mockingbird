@@ -15,11 +15,11 @@ import { orderHandlers } from "./orders.js"
 import { resultsHandlers } from "./results.js"
 import { schedulingHandlers } from "./scheduling.js"
 import {
+  ensureLabTests as ensureLabTestsFrom,
+  ensureOrders as ensureOrdersFrom,
   type SeedObservations,
   type SeedReport,
   type SeedSource,
-  ensureLabTests as ensureLabTestsFrom,
-  ensureOrders as ensureOrdersFrom,
   seedFrom as seedStateFrom,
 } from "./seed-from.js"
 import {
@@ -32,19 +32,19 @@ import { userHandlers } from "./users.js"
 
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
-export type { SeedObservations, SeedReport, SeedSource } from "./seed-from.js"
+export { prefetchGevitiQaObservations } from "./prefetch-qa.js"
 export {
   GEVITI_QA_PHLEBOTOMY_ZIPS,
   GEVITI_QA_PSC_LAB_IDS,
   GEVITI_QA_ROUTING_ZIPS,
   GEVITI_QA_SCHEDULING_ZIPS,
 } from "./qa-corpus.js"
-export { prefetchGevitiQaObservations } from "./prefetch-qa.js"
 export {
   GEVITI_QA_AVAILABILITY_ADDRESS,
   GEVITI_QA_AVAILABILITY_START_DATE,
   reshapeGevitiQaGeoCommand,
 } from "./reshape-qa.js"
+export type { SeedObservations, SeedReport, SeedSource } from "./seed-from.js"
 export type {
   GetCacheEntry,
   JunctionWebhookEvent,
@@ -139,6 +139,9 @@ export class JunctionAPI implements FetchAPI {
 
 /** Collapse `.`/`..` path segments the way the real server does before routing. */
 const normalizePath = (request: Request): Request => {
+  if (!request.url.includes("/./") && !request.url.includes("/../") && !/%2f/i.test(request.url)) {
+    return request
+  }
   const url = new URL(request.url)
   const pathname = url.pathname.replace(/%2f/gi, "/")
   const segments = pathname.split("/")

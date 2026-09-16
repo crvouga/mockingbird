@@ -36,9 +36,9 @@
     "layer": "service"
   },
   "scripts": {
-    "generate": "mockingbird-codegen",
-    "generate:check": "mockingbird-codegen --check",
-    "openapi:check": "mockingbird-codegen --validate",
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
@@ -58,15 +58,15 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-commands": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
     "hono": "4.11.9"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260908.1",
-    "@crvouga/mockingbird-commands": "workspace:*",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-openbao": "workspace:*",
-    "@crvouga/mockingbird-parity": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
     "@crvouga/sqlite-mem": "1.15.0",
     "@tryvital/vital-node": "3.1.511",

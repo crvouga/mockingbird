@@ -806,9 +806,7 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     const details = body.patient_details as Record<string, unknown>
     const address = body.patient_address as Record<string, unknown>
-    const labTestIds = Array.isArray(
-      (body.order_set as Record<string, unknown>).lab_test_ids,
-    )
+    const labTestIds = Array.isArray((body.order_set as Record<string, unknown>).lab_test_ids)
       ? ((body.order_set as Record<string, unknown>).lab_test_ids as unknown[])
       : []
     // Vital: empty lab_test_ids → "No markers found…"; unknown id → "Test does not exist";
@@ -850,9 +848,7 @@ export const orderHandlers = (state: JunctionState) => ({
     // Sandbox: same collection_method as the panel → embed the panel as-is (even when
     // markers are null). Different method requires markers to synthesize auto_generated.
     const nativeMethod =
-      typeof labTest.method === "string" && labTest.method.length > 0
-        ? labTest.method
-        : method
+      typeof labTest.method === "string" && labTest.method.length > 0 ? labTest.method : method
     const markerCount = labTests.reduce((sum, test) => sum + (test.markers?.length ?? 0), 0)
     if (method !== nativeMethod && markerCount === 0) {
       throw new HttpError(400, {
@@ -962,9 +958,7 @@ export const orderHandlers = (state: JunctionState) => ({
     state.orderByTransaction.insert(transactionId, { order_id: orderId })
     state.upsertLabTest(
       orderLabTest,
-      orderLabTest.id === labTest.id
-        ? undefined
-        : state.expectedResultsFor(labTest.id),
+      orderLabTest.id === labTest.id ? undefined : state.expectedResultsFor(labTest.id),
     )
     const demographics = {
       first_name: details.first_name ?? null,
@@ -1156,7 +1150,8 @@ export const orderHandlers = (state: JunctionState) => ({
     // seedParity identity pairing on list pages, which then poisons get_order.
     all = [...all].sort((left, right) => {
       const leftAt = Date.parse(String(left.value.updated_at ?? left.value.created_at ?? "")) || 0
-      const rightAt = Date.parse(String(right.value.updated_at ?? right.value.created_at ?? "")) || 0
+      const rightAt =
+        Date.parse(String(right.value.updated_at ?? right.value.created_at ?? "")) || 0
       if (rightAt !== leftAt) return rightAt - leftAt
       // Frozen clocks make updated_at ties common; seq matches sandbox insertion order.
       return right.seq - left.seq

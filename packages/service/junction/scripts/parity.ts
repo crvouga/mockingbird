@@ -1,16 +1,11 @@
-import type {
-  ExploreRng,
-  ExploreState,
-  LogicalCommand,
-  Scope,
-} from "@crvouga/mockingbird-commands"
-import type { FetchAPI } from "@crvouga/mockingbird-core"
-import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
-import { type SeedCacheEntry, parity, seedParity } from "@crvouga/mockingbird-parity"
-import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import type { ExploreRng, ExploreState, LogicalCommand, Scope } from "@crvouga/mockingbird-commands"
+import type { FetchAPI } from "@crvouga/mockingbird-core"
+import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { parity, type SeedCacheEntry, seedParity } from "@crvouga/mockingbird-parity"
+import { DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import { document, JunctionAPI } from "../src/index.js"
 import { prefetchGevitiQaObservations } from "../src/prefetch-qa.js"
 import {
@@ -70,12 +65,7 @@ const parseCLIOptions = (args: readonly string[]): ParityCLIOptions => {
       options.skipPrefetch = true
       continue
     }
-    if (
-      flag !== "--runs" &&
-      flag !== "--steps" &&
-      flag !== "--warmup" &&
-      flag !== "--compare"
-    ) {
+    if (flag !== "--runs" && flag !== "--steps" && flag !== "--warmup" && flag !== "--compare") {
       throw new Error(`unknown parity option ${flag}`)
     }
     const value = inline ?? args[index + 1]
@@ -356,11 +346,7 @@ const runSeed = async (seed: number | undefined) => {
     }
 
     if (cliOptions.mode === "empty") {
-      const {
-        explore: _explore,
-        reshapeCommand: _reshape,
-        ...emptyShared
-      } = shared
+      const { explore: _explore, reshapeCommand: _reshape, ...emptyShared } = shared
       await parity({
         ...emptyShared,
         weights: {
@@ -388,31 +374,31 @@ const runSeed = async (seed: number | undefined) => {
           ? {}
           : {
               prefetchObservations: async ({ real, getCache }) => {
-              if (!sharedGeoCache) {
-                sharedGeoCache = new Map()
-                console.log(
-                  `junction parity: prefetching Geviti QA corpus (${GEVITI_QA_ROUTING_ZIPS.length} area zips, ${GEVITI_QA_PHLEBOTOMY_ZIPS.length} phlebotomy, ${GEVITI_QA_SCHEDULING_ZIPS.length} psc scheduling)…`,
-                )
-                await prefetchGevitiQaObservations({
-                  real,
-                  getCache: sharedGeoCache,
-                  schedulingZips: GEVITI_QA_SCHEDULING_ZIPS,
-                  phlebotomyZips: GEVITI_QA_PHLEBOTOMY_ZIPS,
-                  minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
-                  sleep: (ms) => Bun.sleep(ms),
-                })
-                console.log(
-                  `junction parity: sealed ${sharedGeoCache.size} observation cache entries`,
-                )
-              }
-              // Seal-once: fill missing keys only. Walk-local warmup observations are
-              // authoritative — their booking keys are the ones paired into the walk's
-              // resource table, and the oracle rotates booking_key per serve, so a
-              // prefetch copy of the same request must never clobber them.
-              for (const [key, entry] of sharedGeoCache) {
-                if (!getCache.has(key)) getCache.set(key, entry)
-              }
-            },
+                if (!sharedGeoCache) {
+                  sharedGeoCache = new Map()
+                  console.log(
+                    `junction parity: prefetching Geviti QA corpus (${GEVITI_QA_ROUTING_ZIPS.length} area zips, ${GEVITI_QA_PHLEBOTOMY_ZIPS.length} phlebotomy, ${GEVITI_QA_SCHEDULING_ZIPS.length} psc scheduling)…`,
+                  )
+                  await prefetchGevitiQaObservations({
+                    real,
+                    getCache: sharedGeoCache,
+                    schedulingZips: GEVITI_QA_SCHEDULING_ZIPS,
+                    phlebotomyZips: GEVITI_QA_PHLEBOTOMY_ZIPS,
+                    minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
+                    sleep: (ms) => Bun.sleep(ms),
+                  })
+                  console.log(
+                    `junction parity: sealed ${sharedGeoCache.size} observation cache entries`,
+                  )
+                }
+                // Seal-once: fill missing keys only. Walk-local warmup observations are
+                // authoritative — their booking keys are the ones paired into the walk's
+                // resource table, and the oracle rotates booking_key per serve, so a
+                // prefetch copy of the same request must never clobber them.
+                for (const [key, entry] of sharedGeoCache) {
+                  if (!getCache.has(key)) getCache.set(key, entry)
+                }
+              },
             }),
         seedMock: async ({ mock, real, getCache, table }) => {
           const api = mock as JunctionAPI

@@ -200,8 +200,11 @@ export const reshapeGevitiQaGeoCommand = (
       invalid: undefined,
     }
   }
-  if (id === "cancel_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_cancel_patch") {
-    const reason = CANCELLATION_REASONS.find((entry) => entry.name !== "Other") ?? CANCELLATION_REASONS[0]
+  if (
+    id === "cancel_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_cancel_patch"
+  ) {
+    const reason =
+      CANCELLATION_REASONS.find((entry) => entry.name !== "Other") ?? CANCELLATION_REASONS[0]
     return {
       ...command,
       body: {
