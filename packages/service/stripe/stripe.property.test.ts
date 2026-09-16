@@ -47,6 +47,7 @@ describe("StripeAPI", () => {
         env: process.env,
         sleep: async () => {},
         log: () => {},
+        latencyToleranceMs: 25,
       })
       expect(report.walks).toBeGreaterThan(0)
       expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
@@ -86,6 +87,7 @@ describe("StripeAPI", () => {
         env: process.env,
         sleep: async () => {},
         log: () => {},
+        latencyToleranceMs: 25,
       })
       expect(report.walks).toBeGreaterThan(0)
     },
