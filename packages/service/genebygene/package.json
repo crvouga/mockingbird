@@ -35,9 +35,9 @@
     "layer": "service"
   },
   "scripts": {
-    "generate": "mockingbird-codegen",
-    "generate:check": "mockingbird-codegen --check",
-    "openapi:check": "mockingbird-codegen --validate",
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
