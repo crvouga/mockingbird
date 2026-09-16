@@ -342,6 +342,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LabTestResourcesResponse"
+  /v3/lab_test/lab_account:
+    get:
+      operationId: get_lab_accounts_v3_lab_test_lab_account_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: "Team lab-account inventory is a Geviti compatibility endpoint."
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  additionalProperties: true
   /v3/lab_tests/{lab_test_id}:
     parameters:
       - name: lab_test_id

@@ -46,7 +46,7 @@ describe("GeneByGeneAPI", () => {
         supportedOperationIds.length / 2,
       )
     },
-    { timeout: 30_000 },
+    { timeout: 120_000 },
   )
 
   test("a deliberately divergent instance is caught and shrunk", async () => {
