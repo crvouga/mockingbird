@@ -37,7 +37,7 @@ describe("JunctionAPI", () => {
         },
         numRuns: Math.max(params.numRuns ?? 100, 100),
         maxCommands: 30,
-        coverageBias: 10,
+        coverageBias: 25,
         latencyToleranceMs: 100,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,

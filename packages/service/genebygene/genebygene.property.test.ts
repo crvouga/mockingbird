@@ -36,6 +36,7 @@ describe("GeneByGeneAPI", () => {
         },
         numRuns: params.numRuns ?? 20,
         maxCommands: 15,
+        latencyToleranceMs: 100,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
