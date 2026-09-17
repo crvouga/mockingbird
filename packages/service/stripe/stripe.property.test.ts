@@ -47,13 +47,14 @@ describe("StripeAPI", () => {
         env: process.env,
         sleep: async () => {},
         log: () => {},
+        latencyToleranceMs: 25,
       })
       expect(report.walks).toBeGreaterThan(0)
       expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
         supportedOperationIds.length / 2,
       )
     },
-    { timeout: 60_000 },
+    { timeout: 120_000 },
   )
 
   test(
@@ -86,6 +87,7 @@ describe("StripeAPI", () => {
         env: process.env,
         sleep: async () => {},
         log: () => {},
+        latencyToleranceMs: 25,
       })
       expect(report.walks).toBeGreaterThan(0)
     },

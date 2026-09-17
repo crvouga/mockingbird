@@ -702,6 +702,16 @@ export const orderHandlers = (state: JunctionState) => ({
 
   get_labs_v3_lab_tests_labs_get: async () => jsonRes(200, state.listLabs()),
 
+  get_lab_accounts_v3_lab_test_lab_account_get: async () =>
+    jsonRes(
+      200,
+      state.listLabs().map((lab) => ({
+        ...lab,
+        lab_account_id: String(lab.id ?? lab.slug ?? ""),
+        is_active: true,
+      })),
+    ),
+
   get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get: async (
     context: OperationContext,
   ) => {

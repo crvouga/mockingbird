@@ -44,6 +44,7 @@
     "lint": "biome check .",
     "test": "bun test",
     "parity": "bun scripts/parity.ts",
+    "mock:server": "bun scripts/server.ts",
     "client-parity": "bun scripts/client-parity.ts",
     "client-parity:live": "JUNCTION_LIVE_PARITY=1 bun scripts/client-parity-live.ts",
     "webhook:dev": "wrangler dev --config webhook-receiver/wrangler.jsonc",
