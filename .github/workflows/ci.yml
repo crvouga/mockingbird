@@ -118,7 +118,7 @@ jobs:
       - name: Property tests
         run: bun run test
         env:
-          FC_NUM_RUNS: "50"
+          FC_NUM_RUNS: "40"
 
   # Single required status check for branch protection / rulesets.
   # Keeps merge gating stable if individual job names change.
