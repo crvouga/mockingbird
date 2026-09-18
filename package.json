@@ -38,6 +38,7 @@
     "check:full": "bun scripts/ci-local.ts",
     "pack:check": "turbo run pack:check",
     "portability": "turbo run portability",
+    "pr:ready": "bun scripts/pr-ready.ts",
     "parity": "turbo run parity --filter=@crvouga/mockingbird-service-junction --concurrency=1",
     "parity:stripe": "turbo run parity --filter=@crvouga/mockingbird-service-stripe",
     "parity:junction": "turbo run parity --filter=@crvouga/mockingbird-service-junction",

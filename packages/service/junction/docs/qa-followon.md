@@ -1,6 +1,6 @@
 # QA follow-on: point a QA suite at Mockingbird Junction
 
-**Blocked until** [`qa-drop-in.md`](./qa-drop-in.md) is fully `monkey-green`.
+**Blocked until** [`drop-in.md`](./drop-in.md) is fully green.
 
 These are the steps a consumer performs in its own repository. Nothing here is a dependency of this
 project: the mock is complete on its own side; this is the checklist for wiring a client to it.

@@ -9,6 +9,7 @@
       "!**/node_modules",
       "!**/src/generated",
       "!**/openapi.yaml",
+      "!**/corpus",
       "!bun.lock"
     ]
   },

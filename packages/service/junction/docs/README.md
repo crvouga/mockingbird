@@ -19,7 +19,8 @@ This directory is the local contract notebook for the Junction Lab Testing API i
 
 - [Behavior](./behavior.md) — concepts, lifecycle rules, status semantics, and integration guidance
 - [Support matrix](./support-matrix.md) — modeled, synthetic, and intentionally unsupported behavior
-- [QA coverage](./qa-coverage.md) — the Junction surface this mock models and its proof status
+- [drop-in readiness](./drop-in.md) — sealed corpus workflow, SDK-level proof, operation coverage
+- [Consumer follow-on](./qa-followon.md) — checklist for pointing a client suite at the mock
 
 ## Scope
 

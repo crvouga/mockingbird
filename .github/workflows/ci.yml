@@ -120,12 +120,34 @@ jobs:
         env:
           FC_NUM_RUNS: "40"
 
-  # Single required status check for branch protection / rulesets.
-  # Keeps merge gating stable if individual job names change.
+  # Trunk policy: `main` is the only long-lived branch, so every PR must target it and
+  # must come from a short-lived head branch. Fail-closed: a PR whose head predates this
+  # job never reports this context, so it stays blocked until it is synced with main.
+  policy:
+    name: PR Policy
+    if: always() && github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only PRs targeting main are allowed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+        run: |
+          if [ "$BASE_REF" != "main" ]; then
+            echo "::error::PR base is '$BASE_REF'; pull requests may only target 'main' (the trunk)."
+            exit 1
+          fi
+          if [ "$HEAD_REF" = "main" ]; then
+            echo "::error::PR head is 'main'; the head branch must be short-lived."
+            exit 1
+          fi
+          echo "trunk policy satisfied: base=$BASE_REF head=$HEAD_REF"
+
+  # Single required status check for branch protection / rulesets. Also asserts the trunk PR policy.
   required:
     name: Required
     if: always() && github.event_name == 'pull_request'
-    needs: [commitlint, quality, test]
+    needs: [commitlint, quality, test, policy]
     runs-on: ubuntu-latest
     steps:
       - name: All required checks passed
@@ -134,6 +156,7 @@ jobs:
             "${{ needs.commitlint.result }}"
             "${{ needs.quality.result }}"
             "${{ needs.test.result }}"
+            "${{ needs.policy.result }}"
           )
           for result in "${results[@]}"; do
             if [ "$result" != "success" ]; then

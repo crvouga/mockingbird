@@ -44,6 +44,11 @@ const cachedResponse = (state: JunctionState, context: OperationContext) => {
     rotateAvailabilityBookingKeys(state, cached.body, context.now())
   }
   const headers = new Headers(cached.headers)
+  // The recorded body is served uncompressed, so drop transfer/encoding headers captured
+  // from the sandbox response or a client would try to decompress plain JSON.
+  headers.delete("content-encoding")
+  headers.delete("content-length")
+  headers.delete("transfer-encoding")
   if (!headers.has("content-type")) headers.set("content-type", "application/json")
   return new Response(JSON.stringify(cached.body), { status: cached.status, headers })
 }

@@ -205,6 +205,8 @@ export type OrderRecord = {
   notes: null
   clinical_notes: string | null
   passthrough: string | null
+  /** Echoed from the request's opaque provider account id; absent when the order had none. */
+  lab_account_id?: string
   created_at: string
   updated_at: string
   events: OrderEventRecord[]
@@ -265,6 +267,7 @@ export class JunctionState {
 
   readonly labTests: Collection<LabTestRecord>
   readonly labs: Collection<Record<string, unknown>>
+  readonly labAccounts: Collection<Record<string, unknown>>
   readonly expectedResults: Collection<ExpectedResult[]>
   readonly getCache: Collection<GetCacheEntry>
 
@@ -298,6 +301,7 @@ export class JunctionState {
     this.webhookDeliveryAttempts = new Collection(sqlite, namespace, "webhook_delivery_attempts")
     this.labTests = new Collection(sqlite, namespace, "lab_tests")
     this.labs = new Collection(sqlite, namespace, "labs")
+    this.labAccounts = new Collection(sqlite, namespace, "lab_accounts")
     this.expectedResults = new Collection(sqlite, namespace, "expected_results")
     this.getCache = new Collection(sqlite, namespace, "get_cache")
     this.ids = new IdSequence(sqlite, namespace, "junction")
@@ -322,6 +326,13 @@ export class JunctionState {
     if (lab.id !== undefined && lab.id !== null) return String(lab.id)
     if (typeof lab.slug === "string" && lab.slug.length > 0) return lab.slug
     return opaqueToken(`junction:lab:${JSON.stringify(lab)}`, 16)
+  }
+
+  labAccountKeyOf(account: Record<string, unknown>): string {
+    if (typeof account.lab_account_id === "string" && account.lab_account_id.length > 0) {
+      return account.lab_account_id
+    }
+    return this.labKeyOf(account)
   }
 
   labTestById(id: string): LabTestRecord | undefined {
@@ -395,6 +406,10 @@ export class JunctionState {
     return this.labs.list({ order: "oldest" }).map((entry) => entry.value)
   }
 
+  listLabAccounts(): Record<string, unknown>[] {
+    return this.labAccounts.list({ order: "oldest" }).map((entry) => entry.value)
+  }
+
   expectedResultsFor(labTestId: string): ExpectedResult[] {
     return this.expectedResults.get(labTestId) ?? []
   }
@@ -412,6 +427,11 @@ export class JunctionState {
     for (const [labTestId, results] of Object.entries(input.expectedResults)) {
       this.expectedResults.insert(labTestId, clone([...results]))
     }
+  }
+
+  replaceLabAccounts(entries: readonly Record<string, unknown>[]): void {
+    this.clearCollection(this.labAccounts)
+    for (const entry of entries) this.labAccounts.insert(this.labAccountKeyOf(entry), clone(entry))
   }
 
   putGetCache(key: string, entry: GetCacheEntry): void {

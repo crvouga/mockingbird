@@ -93,7 +93,7 @@ export type SchedulingScenarioResult = {
 }
 
 /**
- * DEPRECATED AS PROOF — use `bun run parity` (seedParity) and docs/qa-drop-in.md instead.
+ * DEPRECATED AS PROOF — use `bun run parity` (seedParity) and docs/drop-in.md instead.
  * Kept as a manual SDK probe only.
  *
  * Full lab-testing + scheduling scenario executed through the Vital SDK client:

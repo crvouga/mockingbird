@@ -234,6 +234,7 @@
       },
       "devDependencies": {
         "@cloudflare/workers-types": "^5.20260908.1",
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
         "@crvouga/mockingbird-openapi-codegen": "workspace:*",
         "@crvouga/mockingbird-openapi-metadata": "workspace:*",
         "@crvouga/mockingbird-openbao": "workspace:*",
