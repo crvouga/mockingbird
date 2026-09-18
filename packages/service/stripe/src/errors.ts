@@ -1,10 +1,18 @@
 import { HttpError } from "@crvouga/mockingbird-service"
 
+export type StripeErrorType =
+  | "invalid_request_error"
+  | "card_error"
+  | "api_error"
+  | "authentication_error"
+
 export type StripeErrorInit = {
   status: number
   message: string
   code?: string
   param?: string
+  type?: StripeErrorType
+  decline_code?: string
 }
 
 /** Codes that Stripe documents; these carry a `doc_url`. */
@@ -17,10 +25,11 @@ export const stripeErrorBody = (init: StripeErrorInit, requestLogUrl: string) =>
     error.code = init.code
     error.doc_url = docUrl(init.code)
   }
+  if (init.decline_code !== undefined) error.decline_code = init.decline_code
   error.message = init.message
   if (init.param !== undefined) error.param = init.param
   error.request_log_url = requestLogUrl
-  error.type = "invalid_request_error"
+  error.type = init.type ?? "invalid_request_error"
   return { error }
 }
 
@@ -37,6 +46,17 @@ export const invalidRequest = (message: string, param?: string, code?: string) =
     message,
     ...(param === undefined ? {} : { param }),
     ...(code === undefined ? {} : { code }),
+  })
+
+/** Declines answer 402 with `type: "card_error"`, exactly like a real declined charge. */
+export const cardError = (message: string, code: string, declineCode: string, param?: string) =>
+  new StripeError({
+    status: 402,
+    message,
+    code,
+    decline_code: declineCode,
+    type: "card_error",
+    ...(param === undefined ? {} : { param }),
   })
 
 export const resourceMissing = (kind: string, id: string, param: string, status = 404) =>

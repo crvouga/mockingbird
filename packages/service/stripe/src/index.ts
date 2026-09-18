@@ -5,27 +5,61 @@ import {
   createService,
   defineOperations,
   jsonResponse,
+  type OperationHandler,
   type Service,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
-import { StripeCompatibility } from "./compat.js"
+import { chargeHandlers } from "./charges.js"
+import { checkoutSessionHandlers } from "./checkout-sessions.js"
+import { STRIPE_NAMESPACE } from "./constants.js"
+import { couponHandlers } from "./coupons.js"
 import { customerHandlers } from "./customers.js"
+import { disputeHandlers } from "./disputes.js"
 import { StripeError, stripeErrorBody } from "./errors.js"
+import { eventHandlers } from "./events.js"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
+import type { Services, StripeWebhookEvent, WebhookPublisher } from "./internal.js"
+import { invoiceItemHandlers } from "./invoice-items.js"
+import { invoiceHandlers } from "./invoices.js"
+import { paymentIntentHandlers } from "./payment-intents.js"
+import { paymentMethodHandlers } from "./payment-methods.js"
 import { priceHandlers } from "./prices.js"
 import { productHandlers } from "./products.js"
+import { promotionCodeHandlers } from "./promotion-codes.js"
+import { refundHandlers } from "./refunds.js"
+import { setupIntentHandlers } from "./setup-intents.js"
 import { StripeState } from "./state.js"
+import { subscriptionScheduleHandlers } from "./subscription-schedules.js"
+import { subscriptionHandlers } from "./subscriptions.js"
+import { STRIPE_API_VERSION } from "./version.js"
 
+export { accountOf, accountOfKey } from "./account.js"
+export { STRIPE_NAMESPACE } from "./constants.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
-
-export const STRIPE_NAMESPACE = "stripe"
+export type { StripeWebhookEvent, WebhookPublisher } from "./internal.js"
+export {
+  QA_AMOUNTS,
+  QA_COUPON_CODES,
+  QA_CUSTOMER,
+  QA_METADATA,
+  QA_SEARCH_QUERIES,
+  QA_SURFACE_OPS,
+  QA_TEST_CARD_TOKENS,
+  QA_TEST_PAYMENT_METHODS,
+} from "./qa-corpus.js"
+export { reshapeQaCommand } from "./reshape-qa.js"
 
 const MISSING_API_KEY =
   "You did not provide an API key. You need to provide your API key in the Authorization header, using Bearer auth (e.g. 'Authorization: Bearer YOUR_SECRET_KEY'). See https://stripe.com/docs/api#authentication for details, or we can help at https://support.stripe.com/."
 const INVALID_API_KEY = "Invalid API Key provided: This key is not valid."
 const INVALID_IDEMPOTENCY_KEY = "Idempotency Key must be a non-empty string."
+
+export type StripeAPIOptions = APIOptions & {
+  /** Called with every event the mock records, so a server can deliver it. */
+  onWebhook?: WebhookPublisher
+}
 
 type CachedResponse = {
   fingerprint: string
@@ -37,7 +71,7 @@ type CachedResponse = {
 const responseWithHeaders = (response: Response, requestId: string) => {
   const headers = new Headers(response.headers)
   headers.set("request-id", requestId)
-  headers.set("stripe-version", "2026-08-26.dahlia")
+  headers.set("stripe-version", STRIPE_API_VERSION)
   return new Response(response.body, { status: response.status, headers })
 }
 
@@ -46,9 +80,12 @@ const unrecognizedUrl = (request: Request) => {
   return `Unrecognized request URL (${request.method}: ${url.pathname}). If you are trying to list objects, remove the trailing slash. If you are trying to retrieve an object, make sure you passed a valid (non-empty) identifier in your code. Please see https://stripe.com/docs or we can help at https://support.stripe.com/.`
 }
 
+const isTestKey = (key: string | undefined): key is string =>
+  key !== undefined && /^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(key)
+
 /**
- * Stateful mock of the Stripe API. State lives in SQLite under the `stripe`
- * namespace. Pass `sqlite` to share a client across services; omit it to get a
+ * Stateful mock of the Stripe API. State lives in SQLite, partitioned per test API key so two keys
+ * behave like two accounts. Pass `sqlite` to share a client across services; omit it to get a
  * fresh `@crvouga/sqlite-mem` database.
  */
 export class StripeAPI implements FetchAPI {
@@ -56,23 +93,37 @@ export class StripeAPI implements FetchAPI {
   readonly sqlite: SqliteClient
   private readonly service: Service
   private readonly state: StripeState
-  private readonly compatibility: StripeCompatibility
   private readonly idempotency = new Map<string, CachedResponse>()
 
-  constructor(options: APIOptions = {}) {
+  constructor(options: StripeAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
     const state = new StripeState(sqlite, STRIPE_NAMESPACE)
     this.state = state
-    const handlers = defineOperations<SupportedOperationId>({
-      ...customerHandlers(state),
-      ...productHandlers(state),
-      ...priceHandlers(state),
-    })
+    const services: Services = { state, publish: options.onWebhook }
+    const handlers = {
+      ...customerHandlers(services),
+      ...paymentMethodHandlers(services),
+      ...paymentIntentHandlers(services),
+      ...setupIntentHandlers(services),
+      ...chargeHandlers(services),
+      ...refundHandlers(services),
+      ...disputeHandlers(services),
+      ...checkoutSessionHandlers(services),
+      ...invoiceHandlers(services),
+      ...invoiceItemHandlers(services),
+      ...subscriptionHandlers(services),
+      ...subscriptionScheduleHandlers(services),
+      ...couponHandlers(services),
+      ...promotionCodeHandlers(services),
+      ...productHandlers(services),
+      ...priceHandlers(services),
+      ...eventHandlers(services),
+    } as Record<SupportedOperationId, OperationHandler>
     const errorResponse = async (init: ConstructorParameters<typeof StripeError>[0]) =>
       jsonResponse(init.status, stripeErrorBody(init, await state.requestLogUrl()))
     this.service = createService({
       document,
-      handlers,
+      handlers: defineOperations<SupportedOperationId>(handlers),
       sqlite,
       namespace: STRIPE_NAMESPACE,
       now: options.now,
@@ -86,23 +137,13 @@ export class StripeAPI implements FetchAPI {
         if (!authorization) return errorResponse({ status: 401, message: MISSING_API_KEY })
         const match = /^Bearer\s+(\S+)$/.exec(authorization)
         const key = match?.[1]
-        if (!key || !/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(key))
+        if (!isTestKey(key))
           return errorResponse({ status: 401, message: INVALID_API_KEY, code: "invalid_api_key" })
         return undefined
       },
     })
     this.app = this.service.app
     this.sqlite = this.service.sqlite
-    this.compatibility = new StripeCompatibility(this.sqlite, STRIPE_NAMESPACE)
-    this.app.all("*", (context) => {
-      const authorization = context.req.header("authorization")
-      if (!authorization) return errorResponse({ status: 401, message: MISSING_API_KEY })
-      const match = /^Bearer\s+(\S+)$/.exec(authorization)
-      const key = match?.[1]
-      if (!key || !/^(?:sk|rk)_test_[A-Za-z0-9]+$/.test(key))
-        return errorResponse({ status: 401, message: INVALID_API_KEY, code: "invalid_api_key" })
-      return this.compatibility.fetch(context.req.raw, options.now?.() ?? Date.now())
-    })
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -119,7 +160,8 @@ export class StripeAPI implements FetchAPI {
     }
     const body =
       request.method === "POST" ? await request.clone().arrayBuffer() : new ArrayBuffer(0)
-    const fingerprint = `${request.method} ${new URL(request.url).pathname}?${new URL(request.url).search} ${new TextDecoder().decode(body)}`
+    const url = new URL(request.url)
+    const fingerprint = `${request.method} ${url.pathname}?${url.search} ${new TextDecoder().decode(body)}`
     const cacheKey =
       idempotencyKey === null ? null : `${request.headers.get("authorization")}\n${idempotencyKey}`
     if (cacheKey !== null) {
@@ -157,6 +199,36 @@ export class StripeAPI implements FetchAPI {
       })
     }
     return decorated
+  }
+
+  /**
+   * Adopt another instance's state, so a lockstep walk can start from the state a warmup phase
+   * produced elsewhere (see `seedParity`'s `seedMock`).
+   */
+  importStateFrom(source: StripeAPI): void {
+    this.state.importFrom(source.state)
+  }
+
+  /**
+   * Events this instance recorded, oldest first. `account` narrows to one API key's partition
+   * (`accountOfKey("sk_test_…")`); omit it for every partition the instance has seen.
+   */
+  webhookEvents(account?: string): StripeWebhookEvent[] {
+    return this.state.accounts(account).flatMap((scope) =>
+      scope.events.list({ order: "oldest" }).map((entry) => ({
+        type: entry.value.type,
+        account: entry.value.account,
+        body: entry.value.body,
+      })),
+    )
+  }
+
+  webhookDeliveryAttempts(account?: string) {
+    return this.state
+      .accounts(account)
+      .flatMap((scope) =>
+        scope.webhookDeliveryAttempts.list({ order: "oldest" }).map((entry) => entry.value),
+      )
   }
 
   async reset(): Promise<void> {

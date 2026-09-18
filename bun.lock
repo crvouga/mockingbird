@@ -268,6 +268,7 @@
       "name": "@crvouga/mockingbird-service-stripe",
       "version": "0.1.0",
       "dependencies": {
+        "@crvouga/mockingbird-commands": "workspace:*",
         "@crvouga/mockingbird-core": "workspace:*",
         "@crvouga/mockingbird-http-codec": "workspace:*",
         "@crvouga/mockingbird-openapi": "workspace:*",
@@ -276,6 +277,7 @@
         "hono": "4.11.9",
       },
       "devDependencies": {
+        "@crvouga/mockingbird-adapter-bun": "workspace:*",
         "@crvouga/mockingbird-openapi-codegen": "workspace:*",
         "@crvouga/mockingbird-openapi-metadata": "workspace:*",
         "@crvouga/mockingbird-openbao": "workspace:*",
@@ -283,6 +285,7 @@
         "@crvouga/mockingbird-testing": "workspace:*",
         "@crvouga/sqlite-mem": "1.15.0",
         "fast-check": "4.9.0",
+        "stripe": "16.12.0",
         "yaml": "2.9.0",
       },
     },
@@ -1011,6 +1014,8 @@
     "strip-ansi": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A=="],
 
     "strip-ansi-cjs": ["strip-ansi@6.0.1", "", { "dependencies": { "ansi-regex": "^5.0.1" } }, "sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A=="],
+
+    "stripe": ["stripe@16.12.0", "", { "dependencies": { "@types/node": ">=8.1.0", "qs": "^6.11.0" } }, "sha512-H7eFVLDxeTNNSn4JTRfL2//LzCbDrMSZ+2q1c7CanVWgK2qIW5TwS+0V7N9KcKZZNpYh/uCqK0PyZh/2UsaAtQ=="],
 
     "supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 

@@ -4,6 +4,7 @@ Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user, la
 and scheduling surfaces.
 
 - Coverage: [SUPPORT.md](./SUPPORT.md), [docs/drop-in.md](./docs/drop-in.md) (drop-in readiness)
+- Consumer wiring checklist: [docs/qa-followon.md](./docs/qa-followon.md)
 
 Auth header: `x-vital-api-key`. Sandbox keys look like `sk_us_*` / `sk_eu_*`.
 

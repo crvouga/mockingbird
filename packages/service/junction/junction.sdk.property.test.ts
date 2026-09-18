@@ -162,23 +162,21 @@ describe("junction SDK drop-in", () => {
     )
   })
 
-  test("orders carry lab_account_id without a UUID constraint", async () => {
+  test("orders reject a lab_account_id the mock does not own", async () => {
     const user = await client.user.create({ clientUserId: "sdk-user-order" })
-    const withAccount = await client.labTests.createOrder({
-      ...orderRequest(user.userId),
-      labAccountId: "sdk-opaque-account",
-    })
-    expect(withAccount.order.labTest.lab?.slug).toBeTruthy()
-    expect(withAccount.order.labTest.method).toBeTruthy()
+    const rejected = await client.labTests
+      .createOrder({ ...orderRequest(user.userId), labAccountId: "sdk-opaque-account" })
+      .then(() => undefined)
+      .catch((error: unknown) => error)
+    expect(rejected).toBeInstanceOf(VitalError)
+    expect((rejected as VitalError).statusCode).toBe(400)
+    expect((rejected as VitalError).body).toMatchObject({ detail: "Lab account does not exist" })
 
-    const readBack = (await (
-      await fetch(`${base}/v3/order/${withAccount.order.id}`, {
-        headers: { "x-vital-api-key": apiKey },
-      })
-    ).json()) as { lab_account_id?: string | null }
-    expect(readBack.lab_account_id).toBe("sdk-opaque-account")
-
+    // No lab_account_id: the platform account serves the sealed-corpus lab and the order
+    // omits the field on read.
     const withoutAccount = await client.labTests.createOrder(orderRequest(user.userId))
+    expect(withoutAccount.order.labTest.lab?.slug).toBeTruthy()
+    expect(withoutAccount.order.labTest.method).toBeTruthy()
     const readNull = (await (
       await fetch(`${base}/v3/order/${withoutAccount.order.id}`, {
         headers: { "x-vital-api-key": apiKey },

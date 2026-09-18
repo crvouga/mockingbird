@@ -344,23 +344,42 @@ paths:
                 $ref: "#/components/schemas/LabTestResourcesResponse"
   /v3/lab_test/lab_account:
     get:
-      operationId: get_lab_accounts_v3_lab_test_lab_account_get
+      operationId: get_team_lab_accounts_v3_lab_test_lab_account_get
       x-mockingbird:
         supported: true
         parity:
           enabled: false
           safe: true
-          reason: "Team lab-account inventory is not exercised by the automated parity walks."
+          reason: "lab-account inventory is fixture-owned; the mock models the documented shape, filters and routing rules, not a live account inventory"
+      parameters:
+        - name: lab_account_id
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - type: string
+                format: uuid
+              - type: "null"
+        - name: status
+          in: query
+          required: false
+          schema:
+            anyOf:
+              - $ref: "#/components/schemas/LabAccountStatus"
+              - type: "null"
       responses:
         "200":
           description: Successful Response
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  type: object
-                  additionalProperties: true
+                $ref: "#/components/schemas/GetTeamLabAccountsResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /v3/lab_tests/{lab_test_id}:
     parameters:
       - name: lab_test_id
@@ -558,6 +577,15 @@ paths:
           required: false
           schema:
             $ref: "#/components/schemas/AllowedRadius"
+        - name: lab_account_id
+          in: query
+          required: false
+          description: Lab Account ID to use for availability checks
+          schema:
+            anyOf:
+              - type: string
+                format: uuid
+              - type: "null"
       responses:
         "200":
           description: Successful Response
@@ -1936,6 +1964,143 @@ components:
             $ref: "#/components/schemas/ClientFacingLabTest"
         next_cursor:
           type: ["string", "null"]
+    LabAccountStatus:
+      type: string
+      enum: [active, pending, suspended, ready_to_launch]
+    LabAccountDelegatedFlow:
+      type: string
+      enum: [order_delegated, result_delegated, fully_delegated, not_delegated]
+    USState:
+      type: string
+      enum:
+        - AL
+        - AK
+        - AZ
+        - AR
+        - CA
+        - CO
+        - CT
+        - DE
+        - FL
+        - GA
+        - HI
+        - ID
+        - IL
+        - IN
+        - IA
+        - KS
+        - KY
+        - LA
+        - ME
+        - MD
+        - MA
+        - MI
+        - MN
+        - MS
+        - MO
+        - MT
+        - NE
+        - NV
+        - NH
+        - NJ
+        - NM
+        - NY
+        - NC
+        - ND
+        - OH
+        - OK
+        - OR
+        - PA
+        - RI
+        - SC
+        - SD
+        - TN
+        - TX
+        - UT
+        - VT
+        - VA
+        - WA
+        - WV
+        - WI
+        - WY
+    Labs:
+      type: string
+      enum:
+        [
+          ayumetrix,
+          spiriplex,
+          ussl,
+          quest,
+          sonora_quest,
+          labcorp,
+          bioreference,
+          us_biotek,
+          manual,
+          sanocardio,
+          ihd,
+          nexus,
+          my_uti,
+          crl,
+          mtl,
+        ]
+    ClientFacingLabAccount:
+      type: object
+      required: [id, lab, status, delegated_flow, provider_account_id, allowed_billing, team_id_allowlist]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-resource:
+            type: lab_account
+            identity: true
+        lab:
+          $ref: "#/components/schemas/Labs"
+        org_id:
+          anyOf:
+            - type: string
+              format: uuid
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/LabAccountStatus"
+        delegated_flow:
+          $ref: "#/components/schemas/LabAccountDelegatedFlow"
+        provider_account_id:
+          type: string
+        account_name:
+          anyOf:
+            - type: string
+            - type: "null"
+        default_clinical_notes:
+          anyOf:
+            - type: string
+            - type: "null"
+        business_units:
+          anyOf:
+            - type: array
+              items:
+                type: string
+            - type: "null"
+        allowed_billing:
+          type: object
+          propertyNames:
+            $ref: "#/components/schemas/Billing"
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/USState"
+        team_id_allowlist:
+          type: array
+          items:
+            type: string
+            format: uuid
+    GetTeamLabAccountsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientFacingLabAccount"
     ClientFacingResult:
       type: object
       required: [name, slug, type]
@@ -3104,6 +3269,7 @@ components:
         lab_account_id:
           anyOf:
             - type: string
+              format: uuid
             - type: "null"
         idempotency_key:
           type: [string, "null"]

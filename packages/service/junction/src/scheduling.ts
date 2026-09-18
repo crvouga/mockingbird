@@ -11,6 +11,7 @@ import {
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
+import { type LabAccountRecord, labAccountById } from "./lab-accounts.js"
 import type {
   AppointmentEventRecord,
   AppointmentModality,
@@ -18,6 +19,7 @@ import type {
   BookingKeyRecord,
   JunctionState,
 } from "./state.js"
+import { MOCK_TEAM_ID } from "./state.js"
 
 const cachedResponse = (state: JunctionState, context: OperationContext) => {
   const body =
@@ -504,11 +506,16 @@ const pscSiteFor = (zip: string, labSlug: string, index: number, radius: number)
  * Deterministic area model: `within_radius` mirrors the PSC inventory count per lab, the
  * phlebotomy section mirrors getlabs market coverage, and central_labs always lists the
  * four national labs with their billing/capability profiles.
+ *
+ * With a lab account, the availability check is scoped to that account: `central_labs`
+ * contains only the account's lab (empty when the account's lab has no area profile) and
+ * `supported_bill_types` comes from the account's `allowed_billing` keys.
  */
-const areaInfoFor = (zip: string, radius: number) => {
+const areaInfoFor = (zip: string, radius: number, account: LabAccountRecord | null = null) => {
   const served = phlebotomyServed(zip)
   const centralLabs: Record<string, unknown> = {}
-  for (const lab of AREA_LABS) {
+  const labs = account === null ? AREA_LABS : AREA_LABS.filter((lab) => lab.slug === account.lab)
+  for (const lab of labs) {
     centralLabs[lab.slug] = {
       patient_service_centers: {
         appointment_with_vital: lab.appointment_with_vital,
@@ -516,7 +523,10 @@ const areaInfoFor = (zip: string, radius: number) => {
         radius: String(radius),
         capabilities: [...lab.capabilities],
       },
-      supported_bill_types: [...(AREA_LAB_BILLS[lab.slug] ?? [])],
+      supported_bill_types:
+        account === null
+          ? [...(AREA_LAB_BILLS[lab.slug] ?? [])]
+          : Object.keys(account.allowed_billing),
       lab_id: lab.lab_id,
     }
   }
@@ -609,6 +619,25 @@ const zipCodeOf = (context: OperationContext, required: boolean): string | undef
   }
   if (typeof raw !== "string") throw new HttpError(422, { detail: "zip_code must be a string" })
   return raw
+}
+
+/**
+ * Optional `lab_account_id` for an availability check: it must be a UUID, exist for this
+ * team, and be active — the same account rules Create Order applies.
+ */
+const labAccountOf = (context: OperationContext): LabAccountRecord | null => {
+  const raw = context.query.lab_account_id
+  if (raw === undefined) return null
+  if (typeof raw !== "string" || !isUuid(raw)) {
+    throw new HttpError(422, {
+      detail: [uuidError(typeof raw === "string" ? raw : String(raw), ["query", "lab_account_id"])],
+    })
+  }
+  const account = labAccountById(raw)
+  if (!account?.team_id_allowlist.includes(MOCK_TEAM_ID))
+    throw new HttpError(404, { detail: "Lab account does not exist" })
+  if (account.status !== "active") throw new HttpError(400, { detail: "Lab account is not active" })
+  return account
 }
 
 const startDateOf = (context: OperationContext, nowMs: number): string => {
@@ -1172,7 +1201,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
       })
     }
     const zip = rawZip.slice(0, 5)
-    return jsonRes(200, areaInfoFor(zip, radius))
+    return jsonRes(200, areaInfoFor(zip, radius, labAccountOf(context)))
   },
 
   get_psc_info_v3_order_psc_info_get: async (context: OperationContext) => {

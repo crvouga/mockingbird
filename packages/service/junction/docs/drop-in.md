@@ -93,7 +93,7 @@ honest status; "parity" is whether the automated differential walks exercise it.
 | `patch_user_info_v2_user__user_id__info_patch` | modeled | ✅ |
 | `get_latest_user_info_user_v2_user__user_id__info_latest_get` | modeled | ✅ |
 | `get_paginated_lab_tests_for_team_v3_lab_test_get` | corpus (else synthetic) | ✅ |
-| `get_lab_accounts_v3_lab_test_lab_account_get` | corpus (else synthetic) | ❌ disabled |
+| `get_team_lab_accounts_v3_lab_test_lab_account_get` | modeled | ❌ disabled |
 | `get_lab_test_for_team_v3_lab_tests__lab_test_id__get` | corpus (else synthetic) | ✅ |
 | `get_labs_v3_lab_tests_labs_get` | corpus (else synthetic) | ✅ |
 | `get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get` | corpus (else synthetic) | ✅ |
@@ -139,8 +139,9 @@ bytes (result/requisition PDFs). Each is covered by a mock-internal property sui
 - Results are gated: empty until the order reaches `sample_with_lab`/`completed`.
 - The at-home provider (Getlabs) rejects duplicate patient bookings on the same day — the
   mock keeps one active appointment per order instead.
-- Order `lab_account_id` is an opaque provider-assigned string (not a UUID) and round-trips
-  verbatim on read; orders created without one omit the field from the response.
+- Order `lab_account_id`, when sent, must name an active account linked to the team for the
+  ordered lab; an unknown value is rejected with `400`. The requested value is echoed
+  verbatim on read, and orders created without one omit the field from the response.
 
 ## Confidence gate
 

@@ -5,6 +5,14 @@ import {
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
+import {
+  effectiveBilling,
+  LAB_ACCOUNT_STATUSES,
+  type LabAccountStatus,
+  renderLabAccount,
+  selectLabAccount,
+  TEAM_LAB_ACCOUNTS,
+} from "./lab-accounts.js"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
 import { deterministicUuid, MOCK_TEAM_ID } from "./state.js"
@@ -260,6 +268,40 @@ const uuidError = (value: string, index?: number, loc?: string[]) => {
     input: value,
     ctx: { error },
   }
+}
+
+/** `GET /v3/lab_test/lab_account` query filters: Pydantic-shaped 422s, then exact match. */
+const labAccountIdFilter = (context: OperationContext): string | null => {
+  const raw = context.query.lab_account_id
+  if (raw === undefined) return null
+  if (typeof raw === "string" && isUuid(raw)) return raw
+  throw new HttpError(422, {
+    detail: [
+      uuidError(typeof raw === "string" ? raw : String(raw), undefined, [
+        "query",
+        "lab_account_id",
+      ]),
+    ],
+  })
+}
+
+const labAccountStatusFilter = (context: OperationContext): LabAccountStatus | null => {
+  const raw = context.query.status
+  if (raw === undefined) return null
+  if (typeof raw === "string" && LAB_ACCOUNT_STATUSES.includes(raw as LabAccountStatus)) {
+    return raw as LabAccountStatus
+  }
+  throw new HttpError(422, {
+    detail: [
+      {
+        type: "enum",
+        loc: ["query", "status"],
+        msg: "Input should be 'active', 'pending', 'suspended' or 'ready_to_launch'",
+        input: raw,
+        ctx: { expected: "'active', 'pending', 'suspended' or 'ready_to_launch'" },
+      },
+    ],
+  })
 }
 
 const isValidPhone = (value: string): boolean => {
@@ -707,17 +749,14 @@ export const orderHandlers = (state: JunctionState) => ({
 
   get_labs_v3_lab_tests_labs_get: async () => jsonRes(200, state.listLabs()),
 
-  get_lab_accounts_v3_lab_test_lab_account_get: async () => {
-    const installed = state.listLabAccounts()
-    if (installed.length > 0) return jsonRes(200, installed)
-    return jsonRes(
-      200,
-      state.listLabs().map((lab) => ({
-        ...lab,
-        lab_account_id: String(lab.id ?? lab.slug ?? ""),
-        is_active: true,
-      })),
-    )
+  get_team_lab_accounts_v3_lab_test_lab_account_get: async (context: OperationContext) => {
+    const requestedId = labAccountIdFilter(context)
+    const status = labAccountStatusFilter(context)
+    const data = TEAM_LAB_ACCOUNTS.filter((entry) => entry.team_id_allowlist.includes(MOCK_TEAM_ID))
+      .filter((entry) => requestedId === null || entry.id === requestedId)
+      .filter((entry) => status === null || entry.status === status)
+      .map(renderLabAccount)
+    return jsonRes(200, { data })
   },
 
   get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get: async (
@@ -857,6 +896,36 @@ export const orderHandlers = (state: JunctionState) => ({
     const stateError = labStateSupportError(labTest, address.state)
     if (stateError) throw new HttpError(400, { detail: stateError })
 
+    // Lab-account routing: the account must be active, linked to the team and associated
+    // with the ordered lab; with no explicit id, linked accounts decide the branch.
+    const labSlug = typeof labTest.lab?.slug === "string" ? labTest.lab.slug.toLowerCase() : ""
+    const labAccount = selectLabAccount(
+      labSlug,
+      typeof body.lab_account_id === "string" ? body.lab_account_id : null,
+      MOCK_TEAM_ID,
+    )
+    const billingType =
+      typeof body.billing_type === "string" && body.billing_type !== ""
+        ? body.billing_type
+        : "client_bill"
+    const allowedStates = effectiveBilling(labAccount)[billingType]
+    if (!allowedStates)
+      throw new HttpError(400, {
+        detail: `Billing type ${billingType} is not supported by the lab account used for this order`,
+      })
+    const patientState = String(address.state ?? "")
+      .trim()
+      .toUpperCase()
+    if (patientState !== "" && !allowedStates.includes(patientState))
+      throw new HttpError(400, {
+        detail: `Billing type ${billingType} is not available in state ${patientState} for the lab account used for this order`,
+      })
+    const icdCodes = Array.isArray(body.icd_codes) ? ([...body.icd_codes] as string[]) : null
+    if (billingType === "commercial_insurance" && (icdCodes === null || icdCodes.length === 0))
+      throw new HttpError(400, {
+        detail: "Commercial insurance orders require at least one ICD code in icd_codes",
+      })
+
     const nowIso = state.isoNow(context.now)
     const nowMicro = new Date(context.now()).toISOString()
     const orderId = state.nextOrderId()
@@ -947,10 +1016,10 @@ export const orderHandlers = (state: JunctionState) => ({
       requisition_form_url: null,
       shipping_details: null,
       has_abn: false,
-      billing_type: "client_bill",
+      billing_type: billingType,
       priority: false,
       activate_by: null,
-      icd_codes: null,
+      icd_codes: icdCodes,
       interpretation: null,
       has_missing_results: null,
       result_types: null,

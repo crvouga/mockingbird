@@ -220,7 +220,7 @@ export type OrderRecord = {
   billing_type: string
   priority: boolean
   activate_by: null
-  icd_codes: null
+  icd_codes: string[] | null
   interpretation: string | null
   has_missing_results: boolean | null
   result_types: string[] | null

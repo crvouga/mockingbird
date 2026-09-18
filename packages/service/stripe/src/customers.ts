@@ -1,13 +1,28 @@
-import { jsonResponse, type OperationContext, opaqueToken } from "@crvouga/mockingbird-service"
-import { resourceMissing } from "./errors.js"
+import { jsonResponse, type OperationHandler, opaqueToken } from "@crvouga/mockingbird-service"
+import { parameterMissing, resourceMissing } from "./errors.js"
+import { applyExpand, type ExpandResolvers } from "./expand.js"
 import { mergeMetadata, optionalString, strippedString, validateEmail } from "./fields.js"
+import {
+  applyBalanceTransaction,
+  type RequestScope,
+  requestScope,
+  requireLiveCustomer,
+  type Services,
+} from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams } from "./params.js"
+import {
+  renderCustomer,
+  renderCustomerBalanceTransaction,
+  renderDeletedCustomer,
+  renderPaymentMethod,
+} from "./render.js"
+import { searchRecords } from "./search.js"
 import {
   type Address,
   type CustomerEntry,
   type CustomerRecord,
-  type StripeState,
+  type Metadata,
   seconds,
 } from "./state.js"
 
@@ -25,39 +40,6 @@ const toAddress = (raw: unknown): Address => {
   }
   return out
 }
-
-const renderCustomer = (customer: CustomerRecord) => ({
-  id: customer.id,
-  object: "customer",
-  address: customer.address,
-  balance: customer.balance,
-  created: customer.created,
-  currency: customer.currency,
-  customer_account: null,
-  default_source: null,
-  delinquent: false,
-  description: customer.description,
-  discount: null,
-  email: customer.email,
-  invoice_prefix: customer.invoice_prefix,
-  invoice_settings: {
-    custom_fields: customer.invoice_settings.custom_fields,
-    default_payment_method: customer.invoice_settings.default_payment_method,
-    footer: customer.invoice_settings.footer,
-    rendering_options: null,
-  },
-  livemode: false,
-  metadata: customer.metadata,
-  name: customer.name,
-  next_invoice_sequence: 1,
-  phone: customer.phone,
-  preferred_locales: customer.preferred_locales,
-  shipping: customer.shipping,
-  tax_exempt: customer.tax_exempt,
-  test_clock: null,
-})
-
-const renderDeleted = (id: string) => ({ id, object: "customer", deleted: true })
 
 const apply = (current: CustomerRecord, params: Params): CustomerRecord => {
   const next: CustomerRecord = { ...current, invoice_settings: { ...current.invoice_settings } }
@@ -111,79 +93,164 @@ const apply = (current: CustomerRecord, params: Params): CustomerRecord => {
   return next
 }
 
-const live = async (state: StripeState, id: string, missingStatus: number) => {
-  const entry = await state.customers.get(id)
-  if (!entry || entry.kind === "deleted") throw resourceMissing("customer", id, "id", missingStatus)
-  return entry.customer
+/** Expansion table covering both the bare and the list-envelope spelling of the path. */
+const expanders = (scope: RequestScope): ExpandResolvers => {
+  const defaultPaymentMethod = (id: string): Record<string, unknown> | undefined => {
+    const method = scope.account.paymentMethods.get(id)
+    return method ? renderPaymentMethod(method) : undefined
+  }
+  return {
+    "invoice_settings.default_payment_method": defaultPaymentMethod,
+    "data.invoice_settings.default_payment_method": defaultPaymentMethod,
+  }
 }
 
-export const customerHandlers = (state: StripeState) => ({
-  PostCustomers: async (context: OperationContext) => {
-    const params = bodyParams(context)
-    const id = await state.ids.next("cus_")
-    const base: CustomerRecord = {
-      id,
-      address: null,
-      balance: 0,
-      created: seconds(context.now),
-      currency: null,
-      description: null,
-      email: null,
-      invoice_prefix: opaqueToken(`invoice-prefix:${id}`, 8).toUpperCase(),
-      invoice_settings: { custom_fields: null, default_payment_method: null, footer: null },
-      metadata: {},
-      name: null,
-      phone: null,
-      preferred_locales: [],
-      shipping: null,
-      tax_exempt: "none",
-    }
-    const customer = apply(base, params)
-    await state.customers.insert(id, { kind: "live", customer })
-    return jsonResponse(200, renderCustomer(customer))
-  },
+export const customerHandlers = (services: Services): Record<string, OperationHandler> => {
+  const render = (scope: RequestScope, customer: CustomerRecord, params: Params) =>
+    applyExpand(renderCustomer(customer), params.expand, expanders(scope))
 
-  GetCustomers: async (context: OperationContext) => {
-    const params = queryParams(context)
-    const email = params.email
-    const page = await paginate<CustomerEntry>(state.customers, params, {
-      url: "/v1/customers",
-      kind: "customer",
-      exists: (entry) => entry.kind === "live",
-      where: (entry) =>
-        entry.kind === "live" &&
-        matchesCreated(entry.customer.created, params.created) &&
-        (email === undefined || email === "" || entry.customer.email === email),
-      render: (entry) => (entry.kind === "live" ? renderCustomer(entry.customer) : undefined),
-    })
-    return jsonResponse(200, page)
-  },
+  return {
+    PostCustomers: async (context) => {
+      const scope = requestScope(services, context)
+      const params = bodyParams(context)
+      const id = scope.ids.next("cus_")
+      const base: CustomerRecord = {
+        id,
+        address: null,
+        balance: 0,
+        created: seconds(scope.now),
+        currency: null,
+        description: null,
+        email: null,
+        invoice_prefix: opaqueToken(`invoice-prefix:${id}`, 8).toUpperCase(),
+        invoice_settings: {
+          custom_fields: null,
+          default_payment_method: null,
+          footer: null,
+          rendering_options: null,
+        },
+        metadata: {},
+        name: null,
+        phone: null,
+        preferred_locales: [],
+        shipping: null,
+        tax_exempt: "none",
+      }
+      const customer = apply(base, params)
+      scope.account.customers.insert(id, { kind: "live", customer })
+      scope.emit("customer.created", renderCustomer(customer))
+      return jsonResponse(200, render(scope, customer, params))
+    },
 
-  GetCustomersCustomer: async (context: OperationContext) => {
-    queryParams(context)
-    const id = context.params.customer ?? ""
-    const entry = await state.customers.get(id)
-    if (!entry) throw resourceMissing("customer", id, "id")
-    return jsonResponse(
-      200,
-      entry.kind === "deleted" ? renderDeleted(id) : renderCustomer(entry.customer),
-    )
-  },
+    GetCustomers: async (context) => {
+      const scope = requestScope(services, context)
+      const params = queryParams(context)
+      const email = params.email
+      const page = await paginate<CustomerEntry>(scope.account.customers, params, {
+        url: "/v1/customers",
+        kind: "customer",
+        exists: (entry) => entry.kind === "live",
+        where: (entry) =>
+          entry.kind === "live" &&
+          matchesCreated(entry.customer.created, params.created) &&
+          (email === undefined || email === "" || entry.customer.email === email),
+        render: (entry) => (entry.kind === "live" ? renderCustomer(entry.customer) : undefined),
+      })
+      return jsonResponse(200, applyExpand(page, params.expand, expanders(scope)))
+    },
 
-  PostCustomersCustomer: async (context: OperationContext) => {
-    const params = bodyParams(context)
-    const id = context.params.customer ?? ""
-    const entry = await state.customers.get(id)
-    const current = await live(state, id, entry?.kind === "deleted" ? 400 : 404)
-    const customer = apply(current, params)
-    await state.customers.update(id, { kind: "live", customer })
-    return jsonResponse(200, renderCustomer(customer))
-  },
+    GetCustomersSearch: async (context) => {
+      const scope = requestScope(services, context)
+      const params = queryParams(context)
+      const records = scope.account.customers
+        .list({ order: "newest" })
+        .map((entry) => entry.value)
+        .flatMap((entry) => (entry.kind === "live" ? [entry.customer] : []))
+      return jsonResponse(
+        200,
+        searchRecords(records, params, {
+          url: "/v1/customers/search",
+          render: renderCustomer,
+        }),
+      )
+    },
 
-  DeleteCustomersCustomer: async (context: OperationContext) => {
-    const id = context.params.customer ?? ""
-    await live(state, id, 404)
-    await state.customers.update(id, { kind: "deleted", id })
-    return jsonResponse(200, renderDeleted(id))
-  },
-})
+    GetCustomersCustomer: async (context) => {
+      const scope = requestScope(services, context)
+      const params = queryParams(context)
+      const id = context.params.customer ?? ""
+      const entry = scope.account.customers.get(id)
+      if (!entry) throw resourceMissing("customer", id, "id")
+      return jsonResponse(
+        200,
+        entry.kind === "deleted"
+          ? renderDeletedCustomer(id)
+          : render(scope, entry.customer, params),
+      )
+    },
+
+    PostCustomersCustomer: async (context) => {
+      const scope = requestScope(services, context)
+      const params = bodyParams(context)
+      const id = context.params.customer ?? ""
+      const entry = scope.account.customers.get(id)
+      if (!entry || entry.kind === "deleted")
+        throw resourceMissing("customer", id, "id", entry?.kind === "deleted" ? 400 : 404)
+      const customer = apply(entry.customer, params)
+      scope.account.customers.update(id, { kind: "live", customer })
+      scope.emit("customer.updated", renderCustomer(customer))
+      return jsonResponse(200, render(scope, customer, params))
+    },
+
+    DeleteCustomersCustomer: async (context) => {
+      const scope = requestScope(services, context)
+      const id = context.params.customer ?? ""
+      const entry = scope.account.customers.get(id)
+      if (!entry || entry.kind === "deleted") throw resourceMissing("customer", id, "id")
+      scope.account.customers.update(id, { kind: "deleted", id })
+      scope.emit("customer.deleted", renderDeletedCustomer(id))
+      return jsonResponse(200, renderDeletedCustomer(id))
+    },
+
+    GetCustomersCustomerBalanceTransactions: async (context) => {
+      const scope = requestScope(services, context)
+      const params = queryParams(context)
+      const id = context.params.customer ?? ""
+      requireLiveCustomer(scope, id, "customer")
+      const page = await paginate(scope.account.balanceTransactions, params, {
+        url: `/v1/customers/${id}/balance_transactions`,
+        kind: "customer_balance_transaction",
+        where: (record) => record.customer === id && matchesCreated(record.created, params.created),
+        render: renderCustomerBalanceTransaction,
+      })
+      return jsonResponse(200, page)
+    },
+
+    PostCustomersCustomerBalanceTransactions: async (context) => {
+      const scope = requestScope(services, context)
+      const params = bodyParams(context)
+      const id = context.params.customer ?? ""
+      const customer = requireLiveCustomer(scope, id, "customer")
+      const amount = typeof params.amount === "number" ? params.amount : undefined
+      if (amount === undefined) throw parameterMissing("amount")
+      const currency =
+        typeof params.currency === "string" && params.currency !== ""
+          ? params.currency
+          : (customer.currency ?? ACCOUNT_CURRENCY)
+      const description = typeof params.description === "string" ? params.description : null
+      const metadata = (params.metadata as Metadata | undefined) ?? {}
+      const { id: transactionId } = applyBalanceTransaction(scope, {
+        customer,
+        amount,
+        currency,
+        description,
+        metadata,
+        type: "adjustment",
+      })
+      const transaction = scope.account.balanceTransactions.get(transactionId)
+      if (!transaction)
+        throw resourceMissing("customer_balance_transaction", transactionId, "transaction")
+      return jsonResponse(200, renderCustomerBalanceTransaction(transaction))
+    },
+  }
+}

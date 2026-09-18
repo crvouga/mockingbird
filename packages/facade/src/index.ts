@@ -39,7 +39,14 @@ export {
   createMedplumAPI,
   MedplumAPI,
 } from "@crvouga/mockingbird-service-medplum"
-export { document as stripeDocument, StripeAPI } from "@crvouga/mockingbird-service-stripe"
+export {
+  document as stripeDocument,
+  QA_SURFACE_OPS,
+  QA_TEST_CARD_TOKENS,
+  QA_TEST_PAYMENT_METHODS,
+  reshapeQaCommand,
+  StripeAPI,
+} from "@crvouga/mockingbird-service-stripe"
 export type { SqliteClient, SqliteStatement, SqliteValue } from "@crvouga/mockingbird-sqlite"
 export {
   createDefaultSqlite,
