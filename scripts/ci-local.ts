@@ -131,6 +131,9 @@ console.log("Mirrors .github/workflows/ci.yml — skipped: release/publish (main
 if (process.platform !== "linux") {
   notes.push(`CI runs on ubuntu-latest; this host is ${process.platform}.`)
 }
+notes.push(
+  "PR Policy (base = main) is enforced by GitHub Actions only; this local replica cannot reproduce it.",
+)
 
 job("install")
 await runStep("Install (frozen lockfile)", ["bun", "install", "--frozen-lockfile"])

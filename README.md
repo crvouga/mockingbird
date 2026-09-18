@@ -133,13 +133,28 @@ bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
 
 Keep the committed hook file in `.husky/commit-msg` — the generated `.husky/_` shims are gitignored and are produced by the `prepare` script (`husky`) on install.
 
+### Trunk & PR workflow
+
+`main` is the only long-lived branch. Every change lands through a PR that targets `main`, and
+only merge commits are allowed (squash and rebase are disabled). Head branches are deleted on
+merge, and every CI job — Commitlint, Quality, Test, PR Policy, and the aggregate Required gate —
+is a required status check with no bypass actors. PRs use the minimal template in
+`.github/pull_request_template.md`. The gate is codified in `scripts/pr-ready.ts`:
+
+```bash
+bun run pr:ready repo                            # verify merge settings / auto-delete / auto-merge
+bun run pr:ready repo --apply
+bun run pr:ready ruleset                         # verify the `Protect main` ruleset
+bun run pr:ready ruleset --apply
+```
+
 ### Package publishing
 
 Public packages use `publishConfig.access = "public"` and `publishConfig.provenance = true` (npm Trusted Publishing / OIDC). `bun run pack:check` is the pre-publish gate that confirms each package actually packs, resolves types for an ESM-only consumer, and ships `dist`.
 
 ## Releasing
 
-Publishes use **npm Trusted Publishing (OIDC)** on push to `main` (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The release job builds, runs `pack:check` + `portability`, then `release:preflight` and `release:publish` — so nothing ships that isn't verified. Conventional Commits are enforced on PRs (and by the Husky hook). Maintainer secrets and Vault paths: [docs/SECRETS.md](docs/SECRETS.md).
+Publishes use **npm Trusted Publishing (OIDC)** on push to `main` (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The release job builds, runs `pack:check` + `portability`, then `release:preflight` and `release:publish` — so nothing ships that isn't verified. Conventional Commits are enforced on PRs (and by the Husky hook). Maintainer secrets and Vault paths: [docs/SECRETS.md](docs/SECRETS.md). `main` is the trunk, so it only ever receives merge commits from green PRs.
 
 ```bash
 bun run secrets:doctor
