@@ -330,6 +330,8 @@ describe("Junction order lab-account routing", () => {
         if (testCase.status === 200) {
           const { order } = (await response.json()) as { order: Record<string, unknown> }
           expect(order.billing_type).toBe("client_bill")
+          // A requested account id round-trips; an implicitly routed order omits the field.
+          expect(order.lab_account_id).toBe(testCase.id ?? undefined)
         } else {
           expect(await errorDetail(response)).toBe(testCase.detail)
         }
