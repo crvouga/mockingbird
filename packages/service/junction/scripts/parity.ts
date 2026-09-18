@@ -6,17 +6,17 @@ import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
 import { parity, type SeedCacheEntry, seedParity } from "@crvouga/mockingbird-parity"
 import { DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
-import { document, JunctionAPI } from "../src/index.js"
-import { prefetchGevitiQaObservations } from "../src/prefetch-qa.js"
 import {
-  GEVITI_QA_PHLEBOTOMY_ZIPS,
-  GEVITI_QA_ROUTING_ZIPS,
-  GEVITI_QA_SCHEDULING_ZIPS,
-} from "../src/qa-corpus.js"
-import { reshapeGevitiQaGeoCommand } from "../src/reshape-qa.js"
+  COVERAGE_ZIPS,
+  PHLEBOTOMY_AVAILABILITY_ZIPS,
+  PSC_AVAILABILITY_ZIPS,
+} from "../src/coverage-corpus.js"
+import { document, JunctionAPI } from "../src/index.js"
+import { prefetchCoverageObservations } from "../src/prefetch.js"
+import { reshapeCoverageGeoCommand } from "../src/reshape.js"
 import { PARITY_SEEDS } from "../src/seeds.js"
 
-/** Docs: https://docs.junction.com/api-details/junction-api — Geviti QA uses tryvital.io */
+/** Docs: https://docs.junction.com/api-details/junction-api */
 const DEFAULT_JUNCTION_HOST = "api.sandbox.tryvital.io"
 const FAILURE_STATE_DIR = ".parity-artifacts/junction"
 const LAST_FAILED_SEED_PATH = `${FAILURE_STATE_DIR}/last-failed-seed`
@@ -34,7 +34,7 @@ type ParityCLIOptions = {
   warmup?: number
   compare?: number
   mode: ParityMode
-  /** Skip Geviti ZIP corpus prefetch (faster smoke). */
+  /** Skip coverage-corpus ZIP prefetch (faster smoke). */
   skipPrefetch?: boolean
 }
 
@@ -161,9 +161,9 @@ const clearSandboxUsers = async () => {
 
 /**
  * Ops with parity.enabled=false that seedParity still exercises after observation seeding /
- * geo reshape. Expand until docs/qa-drop-in.md is fully monkey-green.
+ * geo reshape. Expand until docs/drop-in.md is fully green.
  */
-const QA_FORCE_INCLUDE = [
+const FORCE_INCLUDE_OPS = [
   "get_result_raw_v3_order__order_id__result_get",
   "get_result_pdf_v3_order__order_id__result_pdf_get",
   "get_area_info_v3_order_area_info_get",
@@ -180,8 +180,8 @@ const QA_FORCE_INCLUDE = [
   "cancel_psc_appointment_v3_order__order_id__psc_appointment_cancel_patch",
 ] as const
 
-/** Full Geviti QA Junction surface — see docs/qa-drop-in.md. */
-const QA_WEIGHTED_OPS = [
+/** Full lab-testing surface — see docs/drop-in.md. */
+const PARITY_OPS = [
   "create_user_v2_user_post",
   "get_teams_users_v2_user_get",
   "get_user_v2_user__user_id__get",
@@ -247,7 +247,7 @@ const reshapeCommand = (
   command: LogicalCommand,
   state: ExploreState,
   rng: ExploreRng,
-): LogicalCommand => reshapeGevitiQaGeoCommand(command, state, rng)
+): LogicalCommand => reshapeCoverageGeoCommand(command, state, rng)
 
 /**
  * The Vital sandbox intermittently answers 500/502/503/504 with a text body (documented
@@ -291,7 +291,7 @@ const runSeed = async (seed: number | undefined) => {
       )
     }
     console.log(
-      `junction parity mode=${cliOptions.mode} explore=dynamic oracle=${baseUrl} zips=${GEVITI_QA_ROUTING_ZIPS.length}`,
+      `junction parity mode=${cliOptions.mode} explore=dynamic oracle=${baseUrl} zips=${COVERAGE_ZIPS.length}`,
     )
     await clearSandboxUsers()
     await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * 4)
@@ -305,8 +305,8 @@ const runSeed = async (seed: number | undefined) => {
       numRuns: cliOptions.runs ?? DEFAULT_PROPERTY_RUNS,
       maxCommands: cliOptions.steps ?? DEFAULT_COMPARE,
       latencyToleranceMs: 500,
-      only: [...QA_WEIGHTED_OPS],
-      forceInclude: [...QA_FORCE_INCLUDE],
+      only: [...PARITY_OPS],
+      forceInclude: [...FORCE_INCLUDE_OPS],
       explore: "dynamic" as const,
       reshapeCommand,
       invalidProbability: 0,
@@ -357,7 +357,7 @@ const runSeed = async (seed: number | undefined) => {
         },
         coverageBias: 5,
         forceInclude: ["get_result_raw_v3_order__order_id__result_get"],
-        only: QA_WEIGHTED_OPS.filter(
+        only: PARITY_OPS.filter(
           (id) =>
             !id.includes("area_info") &&
             !id.includes("psc_info") &&
@@ -377,13 +377,13 @@ const runSeed = async (seed: number | undefined) => {
                 if (!sharedGeoCache) {
                   sharedGeoCache = new Map()
                   console.log(
-                    `junction parity: prefetching Geviti QA corpus (${GEVITI_QA_ROUTING_ZIPS.length} area zips, ${GEVITI_QA_PHLEBOTOMY_ZIPS.length} phlebotomy, ${GEVITI_QA_SCHEDULING_ZIPS.length} psc scheduling)…`,
+                    `junction parity: prefetching the coverage corpus (${COVERAGE_ZIPS.length} area zips, ${PHLEBOTOMY_AVAILABILITY_ZIPS.length} phlebotomy, ${PSC_AVAILABILITY_ZIPS.length} psc scheduling)…`,
                   )
-                  await prefetchGevitiQaObservations({
+                  await prefetchCoverageObservations({
                     real,
                     getCache: sharedGeoCache,
-                    schedulingZips: GEVITI_QA_SCHEDULING_ZIPS,
-                    phlebotomyZips: GEVITI_QA_PHLEBOTOMY_ZIPS,
+                    schedulingZips: PSC_AVAILABILITY_ZIPS,
+                    phlebotomyZips: PHLEBOTOMY_AVAILABILITY_ZIPS,
                     minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
                     sleep: (ms) => Bun.sleep(ms),
                   })

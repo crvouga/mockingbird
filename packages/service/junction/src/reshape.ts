@@ -1,13 +1,13 @@
 import type { ExploreRng, ExploreState, LogicalCommand } from "@crvouga/mockingbird-commands"
 import {
   availabilityAddressForZip,
-  GEVITI_QA_ORDER_ADDRESSES,
-  GEVITI_QA_PATIENT,
-  GEVITI_QA_PHLEBOTOMY_ZIPS,
-  GEVITI_QA_PSC_LAB_IDS,
-  GEVITI_QA_ROUTING_ZIPS,
-  GEVITI_QA_SCHEDULING_ZIPS,
-} from "./qa-corpus.js"
+  COVERAGE_ORDER_ADDRESSES,
+  COVERAGE_PATIENT,
+  COVERAGE_ZIPS,
+  PHLEBOTOMY_AVAILABILITY_ZIPS,
+  PSC_AVAILABILITY_ZIPS,
+  PSC_LAB_IDS,
+} from "./coverage-corpus.js"
 import { CANCELLATION_REASONS, PSC_CANCELLATION_REASONS } from "./scheduling.js"
 
 const GEO_AREA = "get_area_info_v3_order_area_info_get"
@@ -17,7 +17,7 @@ const AVAIL_PHLEB =
 const AVAIL_PSC = "get_psc_appointment_availability_v3_order_psc_appointment_availability_post"
 
 /** Stable address fields so availability observation-cache keys match prefetch (85004). */
-export const GEVITI_QA_AVAILABILITY_ADDRESS = {
+export const AVAILABILITY_ADDRESS = {
   first_line: "1 N Central Ave",
   second_line: null as string | null,
   city: "Phoenix",
@@ -26,7 +26,7 @@ export const GEVITI_QA_AVAILABILITY_ADDRESS = {
 } as const
 
 /** Far-future start date so slots are always generated relative to frozen test clocks. */
-export const GEVITI_QA_AVAILABILITY_START_DATE = "2099-06-15"
+export const AVAILABILITY_START_DATE = "2099-06-15"
 
 const pickZip = (rng: ExploreRng, zips: readonly string[]) =>
   zips[rng.nextInt(Math.max(0, zips.length - 1))] ?? zips[0] ?? "85004"
@@ -37,10 +37,10 @@ const pickLabId = (rng: ExploreRng, labs: readonly number[]) =>
 const availabilityBody = (zip: string) => availabilityAddressForZip(zip)
 
 /**
- * Pin geo / availability params onto the Geviti QA ZIP + lab corpus so observation-cache
- * hits stay sealed during seedParity compare walks.
+ * Pin geo / availability params onto the coverage corpus so observation-cache hits stay
+ * sealed during seedParity compare walks.
  */
-export const reshapeGevitiQaGeoCommand = (
+export const reshapeCoverageGeoCommand = (
   command: LogicalCommand,
   _state: ExploreState,
   rng: ExploreRng,
@@ -51,16 +51,16 @@ export const reshapeGevitiQaGeoCommand = (
     labIds?: readonly number[]
   },
 ): LogicalCommand => {
-  const zips = options?.zips ?? GEVITI_QA_ROUTING_ZIPS
-  const schedulingZips = options?.schedulingZips ?? GEVITI_QA_SCHEDULING_ZIPS
-  const phlebotomyZips = options?.phlebotomyZips ?? GEVITI_QA_PHLEBOTOMY_ZIPS
-  const labIds = options?.labIds ?? GEVITI_QA_PSC_LAB_IDS
+  const zips = options?.zips ?? COVERAGE_ZIPS
+  const schedulingZips = options?.schedulingZips ?? PSC_AVAILABILITY_ZIPS
+  const phlebotomyZips = options?.phlebotomyZips ?? PHLEBOTOMY_AVAILABILITY_ZIPS
+  const labIds = options?.labIds ?? PSC_LAB_IDS
   const id = command.operationId
 
   if (id === "create_order_v3_order_post") {
     const address =
-      GEVITI_QA_ORDER_ADDRESSES[rng.nextInt(GEVITI_QA_ORDER_ADDRESSES.length - 1)] ??
-      GEVITI_QA_ORDER_ADDRESSES[0]
+      COVERAGE_ORDER_ADDRESSES[rng.nextInt(COVERAGE_ORDER_ADDRESSES.length - 1)] ??
+      COVERAGE_ORDER_ADDRESSES[0]
     const raw =
       typeof command.body === "object" && command.body !== null && !Array.isArray(command.body)
         ? (command.body as Record<string, unknown>)
@@ -86,14 +86,14 @@ export const reshapeGevitiQaGeoCommand = (
         (raw.lab_test_id as Record<string, unknown>).$mockingbird === "ref")
         ? raw.lab_test_id
         : undefined)
-    // Geviti QA and Vital default collection_method to the panel's native method.
+    // Junction and the mock default collection_method to the panel's native method.
     // Random mismatches force sandbox auto_generated lab_tests whose UUIDs Vital
     // allocates opaquely; keep a low rate so we still exercise that path after seed.
     const methods = ["at_home_phlebotomy", "walk_in_test"] as const
     const forceMismatch = rng.next() < 0.12
     const body: Record<string, unknown> = {
       user_id: raw.user_id,
-      patient_details: { ...GEVITI_QA_PATIENT },
+      patient_details: { ...COVERAGE_PATIENT },
       patient_address: {
         receiver_name: "Ada Lovelace",
         first_line: address?.first_line,
@@ -101,7 +101,7 @@ export const reshapeGevitiQaGeoCommand = (
         state: address?.state,
         zip: address?.zip,
         country: address?.country,
-        phone_number: GEVITI_QA_PATIENT.phone_number,
+        phone_number: COVERAGE_PATIENT.phone_number,
       },
       order_set: labTestId === undefined ? { lab_test_ids: [] } : { lab_test_ids: [labTestId] },
       clinical_notes: null,
@@ -121,7 +121,7 @@ export const reshapeGevitiQaGeoCommand = (
   }
   if (id === "get_teams_users_v2_user_get") {
     // Team user lists are newest-first with same-second ties; across seed + lockstep
-    // creates the 2nd+ slots are still racy. Geviti QA only needs membership/total —
+    // creates the 2nd+ slots are still racy. Parity only needs membership/total —
     // pin limit=1 so we compare the newest user + totals without slot races.
     const raw =
       typeof command.parameters === "object" && command.parameters !== null
@@ -159,7 +159,7 @@ export const reshapeGevitiQaGeoCommand = (
     return {
       ...command,
       parameters: {
-        start_date: GEVITI_QA_AVAILABILITY_START_DATE,
+        start_date: AVAILABILITY_START_DATE,
       },
       body: availabilityBody(zip),
       mediaType: command.mediaType ?? "application/json",
@@ -172,7 +172,7 @@ export const reshapeGevitiQaGeoCommand = (
       ...command,
       parameters: {
         lab: "quest",
-        start_date: GEVITI_QA_AVAILABILITY_START_DATE,
+        start_date: AVAILABILITY_START_DATE,
       },
       body: availabilityBody(zip),
       mediaType: command.mediaType ?? "application/json",

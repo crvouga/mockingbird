@@ -350,7 +350,7 @@ paths:
         parity:
           enabled: false
           safe: true
-          reason: "Team lab-account inventory is a Geviti compatibility endpoint."
+          reason: "Team lab-account inventory is not exercised by the automated parity walks."
       responses:
         "200":
           description: Successful Response

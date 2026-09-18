@@ -303,8 +303,13 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
   else if (typeof userId !== "string") errors.push(stringTypeError(["body", "user_id"], userId))
   else if (!isUuid(userId)) errors.push(uuidError(userId))
   const labAccountId = body.lab_account_id
-  if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
-    errors.push(uuidError(labAccountId))
+  if (typeof labAccountId === "string" && labAccountId.trim().length === 0) {
+    errors.push({
+      type: "string_too_short",
+      loc: ["body", "lab_account_id"],
+      msg: "String should have at least 1 character",
+      input: labAccountId,
+    })
   }
   const os = body.order_set
   const osWrongType =
@@ -702,15 +707,18 @@ export const orderHandlers = (state: JunctionState) => ({
 
   get_labs_v3_lab_tests_labs_get: async () => jsonRes(200, state.listLabs()),
 
-  get_lab_accounts_v3_lab_test_lab_account_get: async () =>
-    jsonRes(
+  get_lab_accounts_v3_lab_test_lab_account_get: async () => {
+    const installed = state.listLabAccounts()
+    if (installed.length > 0) return jsonRes(200, installed)
+    return jsonRes(
       200,
       state.listLabs().map((lab) => ({
         ...lab,
         lab_account_id: String(lab.id ?? lab.slug ?? ""),
         is_active: true,
       })),
-    ),
+    )
+  },
 
   get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get: async (
     context: OperationContext,
@@ -928,6 +936,7 @@ export const orderHandlers = (state: JunctionState) => ({
       notes: null,
       clinical_notes: typeof body.clinical_notes === "string" ? body.clinical_notes : null,
       passthrough: typeof body.passthrough === "string" ? body.passthrough : null,
+      ...(typeof body.lab_account_id === "string" ? { lab_account_id: body.lab_account_id } : {}),
       created_at: nowIso,
       updated_at: nowIso,
       events: [event],
