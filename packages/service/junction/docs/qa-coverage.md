@@ -1,24 +1,26 @@
-# geviti → Junction coverage catalog
+# Junction coverage catalog
 
-Every Junction (Vital) API interaction found in the
-[geviti-monorepo](https://github.com/gogeviti/geviti-monorepo) lab-provider layer, and where
-this mock covers it. Generated from a full-repo sweep of `@tryvital/vital-node` SDK usage,
-direct `fetch` calls, webhook handlers, and dev-tools clients (September 2026).
+Every Junction (Vital) API surface this mock models, and how far its proof goes. Compiled from a
+sweep of `@tryvital/vital-node` SDK usage, direct `fetch` calls, webhook handlers and dev-tools
+clients in the consumer applications this mock is built to stand in for (September 2026).
 
-## geviti call sites
+This catalog describes the mock's own contract. It never names or links the consuming projects:
+those are reference points for what had to be modelled, not dependencies of this repository.
 
-| geviti location | What it does |
+## Consumer call patterns
+
+| Pattern | What it does |
 | --- | --- |
-| `apps/backend/src/modules/lab-provider/lab-providers/junction/services/junction-appointment.service.ts` | Phlebotomy availability, book, get, reschedule via Vital SDK |
-| `apps/backend/src/modules/lab-provider/lab-providers/junction/services/*` | Order creation, status reads, results, webhook intake |
-| `apps/backend/src/modules/global-services/services/vital-services/vital.service.ts` | Legacy PSC availability/booking/cancel + cancellation reasons (direct fetch) |
-| `apps/backend/src/modules/global-services/services/vital-services/vital-psc-appointment.ts` | PSC request/response Zod schemas |
-| `apps/backend/src/modules/dev-tools/lib/vital-dev-tools-client.ts` | Order simulate (`/v3/order/{id}/test`) with `final_status`, `delay`, `simulationFlags` |
-| Junction webhook handlers | `labtest.order.created`, `labtest.order.updated`, `labtest.appointment.updated` |
+| Vital SDK service layer | Phlebotomy availability, book, get, reschedule |
+| Vital SDK order layer | Order creation, status reads, results, webhook intake |
+| Legacy PSC service (direct `fetch`) | PSC availability/booking/cancel + cancellation reasons |
+| PSC request/response schemas | Zod validation of PSC payloads |
+| Dev-tools client | Order simulate (`/v3/order/{id}/test`) with `final_status`, `delay`, `simulationFlags` |
+| Webhook handlers | `labtest.order.created`, `labtest.order.updated`, `labtest.appointment.updated` |
 
 ## Coverage matrix
 
-| Operation | Endpoint | geviti usage | Mock | Differential parity | Scenario parity |
+| Operation | Endpoint | Consumer usage | Mock | Differential parity | Scenario parity |
 | --- | --- | --- | --- | --- | --- |
 | Create user | `POST /v2/user` | SDK | modeled | yes | yes |
 | List users | `GET /v2/user` | SDK | modeled | yes | — |
@@ -30,6 +32,7 @@ direct `fetch` calls, webhook handlers, and dev-tools clients (September 2026).
 | Latest user info | `GET /v2/user/{id}/info/latest` | SDK | modeled | yes | yes |
 | Lab test catalog | `GET /v3/lab_test`, `GET /v3/lab_tests/{id}` | SDK | synthetic | yes | yes |
 | Labs list | `GET /v3/lab_tests/labs` | SDK | synthetic | yes | yes |
+| Team lab accounts | `GET /v3/lab_test/lab_account` | SDK | modeled | no (fixture-owned inventory) | — |
 | Markers for lab test | `GET /v3/lab_tests/{id}/markers` | SDK | synthetic | yes | yes |
 | Order-set markers | `POST /v3/lab_tests/list_order_set_markers` | SDK | synthetic | yes | — |
 | Create order | `POST /v3/order` | SDK | modeled | yes | yes |
@@ -60,15 +63,21 @@ direct `fetch` calls, webhook handlers, and dev-tools clients (September 2026).
 | Webhook: order created/updated | callback | handlers | modeled | event names + shapes | yes |
 | Webhook: appointment updated | callback | handlers | modeled | event names + shapes | yes |
 
+`GET /v3/order/area/info` accepts an optional `lab_account_id`: with it, `central_labs` is
+scoped to that account's lab and `supported_bill_types` comes from the account's
+`allowed_billing`; without it the response is unchanged. Account scoping is covered by
+`junction.lab-account.property.test.ts`.
+
 ## Tiered parity strategy
 
 1. **Seed differential walker** (`bun run parity`, default `--mode=seed`): warmup N on the
-   tryvital sandbox → `JunctionAPI.seedFrom` → lockstep M. Geviti-weighted allowlist in
-   `scripts/parity.ts`. Living QA proof matrix: [qa-drop-in.md](./qa-drop-in.md).
+   tryvital sandbox → `JunctionAPI.seedFrom` → lockstep M, weighted onto the QA surface by the
+   allowlist in `scripts/parity.ts`. Living proof matrix: [qa-drop-in.md](./qa-drop-in.md).
 2. **Empty-start walker** (`bun run parity -- --mode=empty`): classic fresh-mock differential
    for regression on deterministic ops.
 3. **State-space suites**: `junction.scheduling.property.test.ts`,
-   `junction.property.test.ts`, and `junction.seed.property.test.ts` (mock↔mock seed round-trip).
+   `junction.property.test.ts`, `junction.lab-account.property.test.ts`, and
+   `junction.seed.property.test.ts` (mock↔mock seed round-trip).
 4. **Deprecated as proof**: `scripts/client-parity*.ts` example scenarios — do not treat as
    drop-in evidence.
 
@@ -82,3 +91,5 @@ direct `fetch` calls, webhook handlers, and dev-tools clients (September 2026).
 - Results are gated: empty until the order reaches `sample_with_lab`/`completed`.
 - Getlabs rejects duplicate patient bookings on the same day — the mock keeps one active
   appointment per order instead.
+
+Re-sweep the consumer's QA suite whenever a new Vital call site appears.

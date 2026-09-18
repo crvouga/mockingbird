@@ -7,16 +7,12 @@ import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
 import { parity, type SeedCacheEntry, seedParity } from "@crvouga/mockingbird-parity"
 import { DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import { document, JunctionAPI } from "../src/index.js"
-import { prefetchGevitiQaObservations } from "../src/prefetch-qa.js"
-import {
-  GEVITI_QA_PHLEBOTOMY_ZIPS,
-  GEVITI_QA_ROUTING_ZIPS,
-  GEVITI_QA_SCHEDULING_ZIPS,
-} from "../src/qa-corpus.js"
-import { reshapeGevitiQaGeoCommand } from "../src/reshape-qa.js"
+import { prefetchQaObservations } from "../src/prefetch-qa.js"
+import { QA_PHLEBOTOMY_ZIPS, QA_ROUTING_ZIPS, QA_SCHEDULING_ZIPS } from "../src/qa-corpus.js"
+import { reshapeQaGeoCommand } from "../src/reshape-qa.js"
 import { PARITY_SEEDS } from "../src/seeds.js"
 
-/** Docs: https://docs.junction.com/api-details/junction-api — Geviti QA uses tryvital.io */
+/** Docs: https://docs.junction.com/api-details/junction-api — the QA suites use tryvital.io */
 const DEFAULT_JUNCTION_HOST = "api.sandbox.tryvital.io"
 const FAILURE_STATE_DIR = ".parity-artifacts/junction"
 const LAST_FAILED_SEED_PATH = `${FAILURE_STATE_DIR}/last-failed-seed`
@@ -34,7 +30,7 @@ type ParityCLIOptions = {
   warmup?: number
   compare?: number
   mode: ParityMode
-  /** Skip Geviti ZIP corpus prefetch (faster smoke). */
+  /** Skip the QA ZIP corpus prefetch (faster smoke). */
   skipPrefetch?: boolean
 }
 
@@ -180,7 +176,7 @@ const QA_FORCE_INCLUDE = [
   "cancel_psc_appointment_v3_order__order_id__psc_appointment_cancel_patch",
 ] as const
 
-/** Full Geviti QA Junction surface — see docs/qa-drop-in.md. */
+/** Full QA Junction surface — see docs/qa-drop-in.md. */
 const QA_WEIGHTED_OPS = [
   "create_user_v2_user_post",
   "get_teams_users_v2_user_get",
@@ -247,7 +243,7 @@ const reshapeCommand = (
   command: LogicalCommand,
   state: ExploreState,
   rng: ExploreRng,
-): LogicalCommand => reshapeGevitiQaGeoCommand(command, state, rng)
+): LogicalCommand => reshapeQaGeoCommand(command, state, rng)
 
 /**
  * The Vital sandbox intermittently answers 500/502/503/504 with a text body (documented
@@ -291,7 +287,7 @@ const runSeed = async (seed: number | undefined) => {
       )
     }
     console.log(
-      `junction parity mode=${cliOptions.mode} explore=dynamic oracle=${baseUrl} zips=${GEVITI_QA_ROUTING_ZIPS.length}`,
+      `junction parity mode=${cliOptions.mode} explore=dynamic oracle=${baseUrl} zips=${QA_ROUTING_ZIPS.length}`,
     )
     await clearSandboxUsers()
     await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * 4)
@@ -377,13 +373,13 @@ const runSeed = async (seed: number | undefined) => {
                 if (!sharedGeoCache) {
                   sharedGeoCache = new Map()
                   console.log(
-                    `junction parity: prefetching Geviti QA corpus (${GEVITI_QA_ROUTING_ZIPS.length} area zips, ${GEVITI_QA_PHLEBOTOMY_ZIPS.length} phlebotomy, ${GEVITI_QA_SCHEDULING_ZIPS.length} psc scheduling)…`,
+                    `junction parity: prefetching QA corpus (${QA_ROUTING_ZIPS.length} area zips, ${QA_PHLEBOTOMY_ZIPS.length} phlebotomy, ${QA_SCHEDULING_ZIPS.length} psc scheduling)…`,
                   )
-                  await prefetchGevitiQaObservations({
+                  await prefetchQaObservations({
                     real,
                     getCache: sharedGeoCache,
-                    schedulingZips: GEVITI_QA_SCHEDULING_ZIPS,
-                    phlebotomyZips: GEVITI_QA_PHLEBOTOMY_ZIPS,
+                    schedulingZips: QA_SCHEDULING_ZIPS,
+                    phlebotomyZips: QA_PHLEBOTOMY_ZIPS,
                     minIntervalMs: DEFAULT_MIN_INTERVAL_MS,
                     sleep: (ms) => Bun.sleep(ms),
                   })

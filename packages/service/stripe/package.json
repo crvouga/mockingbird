@@ -43,8 +43,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
+    "mock:server": "bun scripts/server.ts",
+    "client-parity": "bun scripts/client-parity.ts",
     "parity": "bun scripts/parity.ts",
-    "portability": "bun ../../../scripts/portability.ts",
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
@@ -53,14 +54,17 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-commands": "workspace:*",
     "hono": "4.11.9"
   },
   "devDependencies": {
     "fast-check": "4.9.0",
     "@crvouga/mockingbird-testing": "workspace:*",
+    "@crvouga/mockingbird-adapter-bun": "workspace:*",
     "@crvouga/sqlite-mem": "1.15.0",
     "@crvouga/mockingbird-parity": "workspace:*",
     "@crvouga/mockingbird-openbao": "workspace:*",
+    "stripe": "16.12.0",
     "yaml": "2.9.0",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*"

@@ -32,17 +32,17 @@ import { userHandlers } from "./users.js"
 
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
-export { prefetchGevitiQaObservations } from "./prefetch-qa.js"
+export { prefetchQaObservations } from "./prefetch-qa.js"
 export {
-  GEVITI_QA_PHLEBOTOMY_ZIPS,
-  GEVITI_QA_PSC_LAB_IDS,
-  GEVITI_QA_ROUTING_ZIPS,
-  GEVITI_QA_SCHEDULING_ZIPS,
+  QA_PHLEBOTOMY_ZIPS,
+  QA_PSC_LAB_IDS,
+  QA_ROUTING_ZIPS,
+  QA_SCHEDULING_ZIPS,
 } from "./qa-corpus.js"
 export {
-  GEVITI_QA_AVAILABILITY_ADDRESS,
-  GEVITI_QA_AVAILABILITY_START_DATE,
-  reshapeGevitiQaGeoCommand,
+  QA_AVAILABILITY_ADDRESS,
+  QA_AVAILABILITY_START_DATE,
+  reshapeQaGeoCommand,
 } from "./reshape-qa.js"
 export type { SeedObservations, SeedReport, SeedSource } from "./seed-from.js"
 export type {

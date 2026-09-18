@@ -1,12 +1,12 @@
 import type { SeedCacheEntry } from "@crvouga/mockingbird-parity"
 import {
   availabilityAddressForZip,
-  GEVITI_QA_PHLEBOTOMY_ZIPS,
-  GEVITI_QA_PSC_LAB_IDS,
-  GEVITI_QA_ROUTING_ZIPS,
-  GEVITI_QA_SCHEDULING_ZIPS,
+  QA_PHLEBOTOMY_ZIPS,
+  QA_PSC_LAB_IDS,
+  QA_ROUTING_ZIPS,
+  QA_SCHEDULING_ZIPS,
 } from "./qa-corpus.js"
-import { GEVITI_QA_AVAILABILITY_START_DATE } from "./reshape-qa.js"
+import { QA_AVAILABILITY_START_DATE } from "./reshape-qa.js"
 import { observationCacheKey } from "./state.js"
 
 type PrefetchTarget = {
@@ -59,10 +59,10 @@ const recordResponse = async (
 }
 
 /**
- * Seal Geviti routing ZIPs + availability POSTs into the seed observation cache.
+ * Seal QA routing ZIPs + availability POSTs into the seed observation cache.
  * Call after warmup, before `seedFrom`, so compare walks can forceInclude geo/scheduling reads.
  */
-export const prefetchGevitiQaObservations = async (args: {
+export const prefetchQaObservations = async (args: {
   real: PrefetchTarget
   getCache: Map<string, SeedCacheEntry>
   zips?: readonly string[]
@@ -76,10 +76,10 @@ export const prefetchGevitiQaObservations = async (args: {
   sleep?: (ms: number) => Promise<void>
   minIntervalMs?: number
 }) => {
-  const zips = args.zips ?? GEVITI_QA_ROUTING_ZIPS
-  const schedulingZips = args.schedulingZips ?? GEVITI_QA_SCHEDULING_ZIPS
-  const phlebotomyZips = args.phlebotomyZips ?? GEVITI_QA_PHLEBOTOMY_ZIPS
-  const labIds = args.labIds ?? GEVITI_QA_PSC_LAB_IDS
+  const zips = args.zips ?? QA_ROUTING_ZIPS
+  const schedulingZips = args.schedulingZips ?? QA_SCHEDULING_ZIPS
+  const phlebotomyZips = args.phlebotomyZips ?? QA_PHLEBOTOMY_ZIPS
+  const labIds = args.labIds ?? QA_PSC_LAB_IDS
   const includeAvailability = args.includeAvailability !== false
   const sleep = args.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)))
   const gap = args.minIntervalMs ?? 50
@@ -104,7 +104,7 @@ export const prefetchGevitiQaObservations = async (args: {
     await recordResponse(
       args.real,
       "POST",
-      `/v3/order/phlebotomy/appointment/availability?start_date=${GEVITI_QA_AVAILABILITY_START_DATE}`,
+      `/v3/order/phlebotomy/appointment/availability?start_date=${QA_AVAILABILITY_START_DATE}`,
       args.getCache,
       body,
     )
@@ -115,7 +115,7 @@ export const prefetchGevitiQaObservations = async (args: {
     await recordResponse(
       args.real,
       "POST",
-      `/v3/order/psc/appointment/availability?lab=quest&start_date=${GEVITI_QA_AVAILABILITY_START_DATE}`,
+      `/v3/order/psc/appointment/availability?lab=quest&start_date=${QA_AVAILABILITY_START_DATE}`,
       args.getCache,
       body,
     )

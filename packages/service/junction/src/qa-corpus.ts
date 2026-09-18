@@ -1,5 +1,5 @@
 /** High-signal ZIPs for availability prefetch (full routing corpus still used for area/psc). */
-export const GEVITI_QA_SCHEDULING_ZIPS = [
+export const QA_SCHEDULING_ZIPS = [
   "85004",
   "85234",
   "11050",
@@ -18,10 +18,10 @@ export const GEVITI_QA_SCHEDULING_ZIPS = [
  * Phlebotomy availability is only served for a narrow Vital sandbox set.
  * Probed: 85004 works; broader scheduling zips often 400. Keep prefetch/reshape sealed.
  */
-export const GEVITI_QA_PHLEBOTOMY_ZIPS = ["85004"] as const
+export const QA_PHLEBOTOMY_ZIPS = ["85004"] as const
 
 /** City/state/first_line seals so availability cache keys match Vital + prefetch. */
-export const GEVITI_QA_ZIP_ADDRESSES: Readonly<
+export const QA_ZIP_ADDRESSES: Readonly<
   Record<string, { first_line: string; city: string; state: string }>
 > = {
   "85004": { first_line: "1 N Central Ave", city: "Phoenix", state: "AZ" },
@@ -39,7 +39,7 @@ export const GEVITI_QA_ZIP_ADDRESSES: Readonly<
 }
 
 export const availabilityAddressForZip = (zip: string) => {
-  const known = GEVITI_QA_ZIP_ADDRESSES[zip]
+  const known = QA_ZIP_ADDRESSES[zip]
   return {
     first_line: known?.first_line ?? "1 Main St",
     second_line: null as string | null,
@@ -51,11 +51,11 @@ export const availabilityAddressForZip = (zip: string) => {
 }
 
 /**
- * Curated ZIPs mirrored from Geviti QA `ROUTING_ZIP_CORPUS` + fixture pins
- * (`packages/qa/src/world/gen/addresses.ts`, `@geviti/app/test-addresses`).
+ * Curated routing ZIPs mirrored from the QA suite's corpus and fixture pins
+ * (deterministic per ZIP, so availability cache keys match between runs).
  * Prefetched into the observation cache so area/psc parity is sealed for those geos.
  */
-export const GEVITI_QA_ROUTING_ZIPS = [
+export const QA_ROUTING_ZIPS = [
   "02108",
   "02903",
   "03101",
@@ -115,11 +115,11 @@ export const GEVITI_QA_ROUTING_ZIPS = [
   "99501",
 ] as const
 
-/** Lab ids exercised by Geviti walk-in / PSC flows (quest, labcorp, bioreference, sonora). */
-export const GEVITI_QA_PSC_LAB_IDS = [4, 6, 13, 25] as const
+/** Lab ids exercised by walk-in / PSC flows (quest, labcorp, bioreference, sonora). */
+export const QA_PSC_LAB_IDS = [4, 6, 13, 25] as const
 
-/** Sealed patient + address shapes matching Geviti QA checkout (avoids junk 422 divergence). */
-export const GEVITI_QA_ORDER_ADDRESSES = [
+/** Sealed patient + address shapes matching QA checkout (avoids junk 422 divergence). */
+export const QA_ORDER_ADDRESSES = [
   {
     first_line: "1 N Central Ave",
     city: "Phoenix",
@@ -164,7 +164,7 @@ export const GEVITI_QA_ORDER_ADDRESSES = [
   },
 ] as const
 
-export const GEVITI_QA_PATIENT = {
+export const QA_PATIENT = {
   first_name: "Ada",
   last_name: "Lovelace",
   dob: "1990-01-01",

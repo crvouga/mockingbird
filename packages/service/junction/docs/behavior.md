@@ -41,6 +41,17 @@ one active appointment per order, mirroring real provider duplicate-booking prot
 1. Create or resolve the patient user.
 2. Select a collection method supported by the lab test.
 3. Confirm lab account, billing type, physician workflow, and patient information.
+   `lab_account_id` is optional. When present it must be a UUID for an account that is
+   active, linked to the team, and associated with the ordered lab; otherwise the order is
+   rejected (`400`, except a malformed UUID which is a `422` query/body error). When
+   omitted, the accounts linked to the team for the selected lab decide the branch:
+   none linked → the Junction platform account (rejected when the lab has none); exactly
+   one active → that account; more than one active → `400` asking for `lab_account_id`;
+   linked but none active → `400` with no platform fallback.
+   `billing_type` defaults to `client_bill` and must be a key of the used account's
+   `allowed_billing`, with the patient's state listed for that type. `commercial_insurance`
+   additionally requires a non-empty `icd_codes`. The order echoes the requested
+   `billing_type` and `icd_codes`.
 4. Create the order with an idempotency key.
 5. Persist both `order.id` and `order_transaction.id`.
 6. Treat `labtest.order.updated` as a notification and re-read the order before deciding what to do.

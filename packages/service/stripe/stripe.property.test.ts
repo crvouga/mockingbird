@@ -3,7 +3,7 @@ import { ParityError, parity } from "@crvouga/mockingbird-parity"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import { Database } from "@crvouga/sqlite-mem"
 import fc from "fast-check"
-import { document, StripeAPI, supportedOperationIds } from "./src/index.js"
+import { document, StripeAPI } from "./src/index.js"
 
 const params = fcParameters(process.env)
 
@@ -28,10 +28,7 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: async (request) => {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            return reference.fetch(request)
-          },
+          fetch: (request) => reference.fetch(request),
         },
         mock: {
           create: () => new StripeAPI({ now }),
@@ -41,6 +38,7 @@ describe("StripeAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
+        includeUnsafe: true,
         numRuns: params.numRuns ?? 40,
         maxCommands: 25,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
@@ -50,9 +48,9 @@ describe("StripeAPI", () => {
         latencyToleranceMs: 25,
       })
       expect(report.walks).toBeGreaterThan(0)
-      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
-        supportedOperationIds.length / 2,
-      )
+      // Full-surface coverage is asserted by stripe.qa.seed.property.test.ts; this suite proves
+      // two independent instances agree (and conform) on ordinary walks.
+      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(0)
     },
     { timeout: 120_000 },
   )
@@ -196,7 +194,7 @@ describe("StripeAPI", () => {
     expect(conflict.status).toBe(400)
   })
 
-  test("supports geviti billing client flows without network state", async () => {
+  test("supports billing client flows without network state", async () => {
     const stripe = new StripeAPI({ now })
     const form = (body: Record<string, string>) => ({
       headers: { ...AUTH, "content-type": "application/x-www-form-urlencoded" },
@@ -223,12 +221,14 @@ describe("StripeAPI", () => {
         method: "POST",
         headers: form({
           amount: "1000",
+          confirm: "true",
           currency: "usd",
           customer: customer.id,
           payment_method: "pm_card_visa",
         }).headers,
         body: form({
           amount: "1000",
+          confirm: "true",
           currency: "usd",
           customer: customer.id,
           payment_method: "pm_card_visa",
@@ -236,11 +236,33 @@ describe("StripeAPI", () => {
       }),
     )
     expect(((await intentResponse.json()) as { status: string }).status).toBe("succeeded")
+    const productResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/products`, {
+        method: "POST",
+        headers: form({ name: "Membership" }).headers,
+        body: form({ name: "Membership" }).body,
+      }),
+    )
+    const product = (await productResponse.json()) as { id: string }
+    const priceForm = {
+      currency: "usd",
+      product: product.id,
+      "recurring[interval]": "month",
+      unit_amount: "17999",
+    }
+    const priceResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/prices`, {
+        method: "POST",
+        headers: form(priceForm).headers,
+        body: form(priceForm).body,
+      }),
+    )
+    const price = (await priceResponse.json()) as { id: string }
     const subscriptionResponse = await stripe.fetch(
       new Request(`https://${MOCK_HOST}/v1/subscriptions`, {
         method: "POST",
-        headers: form({ customer: customer.id, "items[0][price]": "price_test" }).headers,
-        body: form({ customer: customer.id, "items[0][price]": "price_test" }).body,
+        headers: form({ customer: customer.id, "items[0][price]": price.id }).headers,
+        body: form({ customer: customer.id, "items[0][price]": price.id }).body,
       }),
     )
     expect(((await subscriptionResponse.json()) as { status: string }).status).toBe("active")

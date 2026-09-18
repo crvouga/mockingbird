@@ -64,7 +64,7 @@ export type SeedParityOptions = ParityOptions & {
     rng: ReturnType<typeof createExploreRng>,
   ) => LogicalCommand
   /**
-   * After warmup, before `seedMock` — e.g. prefetch Geviti routing ZIPs into the observation cache
+   * After warmup, before `seedMock` — e.g. prefetch the QA ZIP corpus into the observation cache
    * so area/psc can be force-included safely during compare.
    */
   prefetchObservations?: (args: {

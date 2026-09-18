@@ -59,6 +59,24 @@ const MISSING = {
   customer: "cus_mockingbird_missing",
   product: "prod_mockingbird_missing",
   price: "price_mockingbird_missing",
+  payment_method: "pm_mockingbird_missing",
+  payment_intent: "pi_mockingbird_missing",
+  setup_intent: "seti_mockingbird_missing",
+  charge: "ch_mockingbird_missing",
+  refund: "re_mockingbird_missing",
+  dispute: "dp_mockingbird_missing",
+  invoice: "in_mockingbird_missing",
+  invoiceitem: "ii_mockingbird_missing",
+  subscription: "sub_mockingbird_missing",
+  subscription_item: "si_mockingbird_missing",
+  schedule: "sub_sched_mockingbird_missing",
+  coupon: "coupon_mockingbird_missing",
+  promotion_code: "promo_mockingbird_missing",
+  event: "evt_mockingbird_missing",
+  session: "cs_mockingbird_missing",
+  transaction: "cbtxn_mockingbird_missing",
+  intent: "pi_mockingbird_missing",
+  test_clock: "clock_mockingbird_missing",
 } as const
 
 /** The generator only needs a handful of currencies; the mock still knows Stripe's full list. */
@@ -69,7 +87,6 @@ const LOCALE_ITEM: Schema = {
   enum: ["en", "en-US", "en-GB", "fr", "fr-CA", "de", "es", "ja", "pt-BR"],
 }
 
-const idOnly = (extra: Json = {}): Schema => ({ maxLength: 5000, type: "string", ...extra })
 const nullableIdOnly = (extra: Json = {}): Schema => ({
   maxLength: 5000,
   type: ["string", "null"],
@@ -77,6 +94,12 @@ const nullableIdOnly = (extra: Json = {}): Schema => ({
 })
 
 // --- schema shaping ---------------------------------------------------------------------------
+
+/** Id-or-expanded-object field for properties the pinned spec no longer publishes. */
+const expandableId = (extra: Json = {}): Schema => ({
+  type: ["string", "object", "null"],
+  ...extra,
+})
 
 /** Property-level edits applied to a component schema. `null` deletes the property. */
 type Shape = Record<string, Schema | null>
@@ -109,18 +132,10 @@ const RESPONSE_SHAPES: Record<string, Shape> = {
     type: { type: "string", enum: ["good", "service"] },
     created: volatile("timestamp"),
     updated: volatile("timestamp"),
-    default_price: nullableIdOnly(identity("price")),
+    default_price: expandableId(identity("price")),
     tax_code: nullableIdOnly(),
   },
   deleted_product: { id: identity("product") },
-  price: {
-    id: identity("price"),
-    created: volatile("timestamp"),
-    product: idOnly(identity("product")),
-    // Only present when expanded or when the pricing model uses them.
-    currency_options: null,
-    tiers: null,
-  },
   invoice_setting_customer_setting: { default_payment_method: nullableIdOnly() },
   recurring: { trial_period_days: { type: ["integer", "null"] } },
   api_errors: {
@@ -130,8 +145,320 @@ const RESPONSE_SHAPES: Record<string, Shape> = {
     setup_intent: null,
     source: null,
   },
+  deleted_invoice: { id: identity("invoice") },
+  deleted_coupon: { id: identity("coupon") },
+  deleted_discount: { id: identity("discount") },
+  deleted_subscription_item: { id: identity("subscription_item") },
+  customer_balance_transaction: {
+    id: identity("transaction"),
+    created: volatile("timestamp"),
+    customer: expandableId(identity("customer")),
+  },
+  payment_method: {
+    id: identity("payment_method"),
+    created: volatile("timestamp"),
+    customer: expandableId(identity("customer")),
+  },
+  payment_intent: {
+    id: identity("payment_intent"),
+    created: volatile("timestamp"),
+    client_secret: volatile("token"),
+    latest_charge: expandableId(identity("charge")),
+    customer: expandableId(identity("customer")),
+    invoice: expandableId(identity("invoice")),
+    payment_method: expandableId(identity("payment_method")),
+    application: null,
+    application_fee_amount: null,
+    automatic_payment_methods: null,
+    review: null,
+    setup_future_usage: { type: ["string", "null"] },
+    shipping: null,
+    statement_descriptor: { type: ["string", "null"] },
+    statement_descriptor_suffix: { type: ["string", "null"] },
+    transfer_data: null,
+    transfer_group: { type: ["string", "null"] },
+  },
+  setup_intent: {
+    id: identity("setup_intent"),
+    created: volatile("timestamp"),
+    client_secret: volatile("token"),
+    customer: expandableId(identity("customer")),
+    payment_method: expandableId(identity("payment_method")),
+    // Only present when expanded; the mock inlines the intent instead.
+    latest_attempt: null,
+    mandate: null,
+    single_use_mandate: null,
+    application: null,
+    attach_to_self: null,
+    flow_directions: null,
+    on_behalf_of: { type: ["string", "null"] },
+  },
+  charge: {
+    id: identity("charge"),
+    created: volatile("timestamp"),
+    customer: expandableId(identity("customer")),
+    invoice: expandableId(identity("invoice")),
+    payment_intent: expandableId(identity("payment_intent")),
+    payment_method: expandableId(identity("payment_method")),
+    balance_transaction: null,
+    billing_details: {
+      type: "object",
+      properties: {
+        address: { type: ["object", "null"] },
+        email: { type: ["string", "null"] },
+        name: { type: ["string", "null"] },
+        phone: { type: ["string", "null"] },
+      },
+    },
+    captured: { type: "boolean" },
+    application: null,
+    application_fee: null,
+    application_fee_amount: null,
+    fraud_details: null,
+    on_behalf_of: { type: ["string", "null"] },
+    outcome: null,
+    radar_options: null,
+    receipt_email: { type: ["string", "null"] },
+    receipt_number: { type: ["string", "null"] },
+    refunds: null,
+    review: null,
+    shipping: null,
+    source_transfer: null,
+    statement_descriptor: { type: ["string", "null"] },
+    transfer_data: null,
+    transfer_group: { type: ["string", "null"] },
+  },
+  refund: {
+    id: identity("refund"),
+    created: volatile("timestamp"),
+    charge: expandableId(identity("charge")),
+    payment_intent: expandableId(identity("payment_intent")),
+    balance_transaction: null,
+    destination_details: null,
+    failure_balance_transaction: null,
+    instructions_email: { type: ["string", "null"] },
+    next_action: null,
+    receipt_number: { type: ["string", "null"] },
+    source_transfer_reversal: null,
+    transfer_reversal: null,
+  },
+  dispute: {
+    id: identity("dispute"),
+    created: volatile("timestamp"),
+    charge: expandableId(identity("charge")),
+    payment_intent: expandableId(identity("payment_intent")),
+    // Evidence, eligibility and balance-ledger surfaces the mock never models.
+    balance_transactions: null,
+    enhanced_eligibility_types: null,
+    evidence: null,
+    evidence_details: null,
+    is_charge_refundable: null,
+    payment_method_details: null,
+  },
+  "checkout.session": {
+    id: identity("session"),
+    created: volatile("timestamp"),
+    expires_at: volatile("timestamp"),
+    url: volatile("url"),
+    customer: expandableId(identity("customer")),
+    payment_intent: expandableId(identity("payment_intent")),
+    setup_intent: expandableId(identity("setup_intent")),
+    subscription: expandableId(identity("subscription")),
+    // Tax, custom-text and shipping plumbing the mock never models.
+    automatic_tax: null,
+    custom_fields: null,
+    custom_text: null,
+    shipping_options: null,
+    after_expiration: null,
+    consent: null,
+    consent_collection: null,
+    currency_conversion: null,
+    discounts: null,
+    invoice: null,
+    invoice_creation: null,
+    locale: null,
+    optional_items: null,
+    origin_context: null,
+    payment_link: null,
+    permissions: null,
+    presentment_details: null,
+    saved_payment_method_options: null,
+    shipping_cost: null,
+    submit_type: null,
+    wallet_options: null,
+  },
+  line_item: {
+    id: identity("invoice_item"),
+    discounts: { type: "array", items: {} },
+    discount_amounts: { type: "array", items: {} },
+    metadata: { type: "object" },
+  },
+  item: {
+    id: identity("checkout_item"),
+    discounts: { type: "array", items: {} },
+    taxes: { type: "array", items: {} },
+  },
+  invoiceitem: {
+    id: identity("invoiceitem"),
+    customer: expandableId(identity("customer")),
+    invoice: expandableId(identity("invoice")),
+    quantity_decimal: null,
+    date: volatile("timestamp"),
+    period: { type: "object" },
+    discountable: { type: "boolean" },
+    proration: { type: "boolean" },
+  },
+  invoice: {
+    id: identity("invoice"),
+    created: volatile("timestamp"),
+    number: volatile("opaque"),
+    hosted_invoice_url: volatile("url"),
+    invoice_pdf: volatile("url"),
+    charge: expandableId(identity("charge")),
+    payment_intent: expandableId(identity("payment_intent")),
+    subscription: expandableId(identity("subscription")),
+    customer: expandableId(identity("customer")),
+    default_payment_method: expandableId(identity("payment_method")),
+    // Amounts and tax plumbing the mock never models.
+    amount_overpaid: null,
+    amount_paid_off_stripe: null,
+    amount_shipping: null,
+    automatic_tax: null,
+    default_tax_rates: null,
+    issuer: null,
+    payment_settings: null,
+    post_payment_credit_notes_amount: null,
+    pre_payment_credit_notes_amount: null,
+    starting_balance: null,
+    total_discount_amounts: null,
+    total_pretax_credit_amounts: null,
+    status_transitions: {
+      type: "object",
+      properties: {
+        finalized_at: { type: ["integer", "null"] },
+        marked_uncollectible_at: { type: ["integer", "null"] },
+        paid_at: { type: ["integer", "null"] },
+        voided_at: { type: ["integer", "null"] },
+      },
+    },
+    lines: { type: "object" },
+    discounts: { type: "array", items: {} },
+  },
+  subscription: {
+    id: identity("subscription"),
+    created: volatile("timestamp"),
+    customer: expandableId(identity("customer")),
+    latest_invoice: expandableId(identity("invoice")),
+    default_payment_method: expandableId(identity("payment_method")),
+    schedule: expandableId(identity("schedule")),
+    pending_setup_intent: null,
+    application: null,
+    automatic_tax: null,
+    billing_mode: null,
+    billing_schedules: null,
+    managed_payments: null,
+    invoice_settings: null,
+    default_tax_rates: null,
+    discounts: { type: "array", items: {} },
+    items: { type: "object" },
+    // Period bounds live on subscription items in the pinned version; the mock returns them on
+    // the subscription too because the e2e clients read them there.
+    current_period_start: { type: "integer" },
+    current_period_end: { type: "integer" },
+  },
+  subscription_item: {
+    id: identity("subscription_item"),
+    created: volatile("timestamp"),
+    subscription: expandableId(identity("subscription")),
+    current_period_start: volatile("timestamp"),
+    current_period_end: volatile("timestamp"),
+    discounts: { type: "array", items: {} },
+  },
+  price: {
+    id: identity("price"),
+    created: volatile("timestamp"),
+    product: expandableId(identity("product")),
+    // Only present when expanded or when the pricing model uses them.
+    currency_options: null,
+    tiers: null,
+  },
+  subscription_schedule: {
+    id: identity("schedule"),
+    created: volatile("timestamp"),
+    customer: expandableId(identity("customer")),
+    subscription: expandableId(identity("subscription")),
+    released_subscription: expandableId(identity("subscription")),
+    billing_mode: null,
+    default_settings: null,
+    phases: { type: "array", items: {} },
+  },
+  coupon: {
+    id: identity("coupon"),
+    created: volatile("timestamp"),
+    applies_to: {
+      type: "object",
+      properties: { products: { type: "array", items: identity("product") } },
+    },
+    times_redeemed: { type: "integer" },
+    valid: { type: "boolean" },
+  },
+  promotion_code: {
+    id: identity("promotion_code"),
+    created: volatile("timestamp"),
+    expires_at: volatile("timestamp"),
+    customer: expandableId(identity("customer")),
+    // The pinned version replaced `coupon` with `promotion`; the mock returns `coupon`, which is
+    // what the e2e clients read.
+    promotion: null,
+    restrictions: {
+      type: "object",
+      properties: {
+        first_time_transaction: { type: "boolean" },
+        minimum_amount: { type: ["integer", "null"] },
+        minimum_amount_currency: { type: ["string", "null"] },
+      },
+    },
+    times_redeemed: { type: "integer" },
+  },
+  discount: {
+    id: identity("discount"),
+    coupon: expandableId(identity("coupon")),
+    promotion_code: expandableId(identity("promotion_code")),
+    customer: expandableId(identity("customer")),
+    subscription: expandableId(identity("subscription")),
+    start: volatile("timestamp"),
+    source: {
+      type: "object",
+      properties: {
+        coupon: identity("coupon"),
+        promotion_code: identity("promotion_code"),
+        type: { type: "string" },
+      },
+    },
+  },
+  event: {
+    id: identity("event"),
+    created: volatile("timestamp"),
+    request: {
+      type: ["object", "null"],
+      properties: {
+        id: volatile("token"),
+        idempotency_key: { type: ["string", "null"] },
+      },
+    },
+  },
+  notification_event_data: { object: {} },
+  "test_helpers.test_clock": {
+    id: identity("test_clock"),
+    created: volatile("timestamp"),
+    frozen_time: volatile("timestamp"),
+    deletes_after: volatile("timestamp"),
+  },
+  webhook_endpoint: {
+    id: identity("webhook_endpoint"),
+    secret: volatile("token"),
+  },
 }
-
 /** Request-body property edits keyed by operationId. */
 const IMAGES: Schema = { type: "array", maxItems: 8, items: { type: "string", maxLength: 2048 } }
 const MARKETING_FEATURES: Schema = {
@@ -153,7 +480,6 @@ const BODY_SHAPES: Record<string, Shape> = {
     "preferred_locales[]": LOCALE_ITEM,
     business_name: unsupported("not returned by the pinned API version"),
     cash_balance: unsupported("cash balance settings are not modelled"),
-    expand: unsupported("the mock never expands"),
     individual_name: unsupported("not returned by the pinned API version"),
     invoice_prefix: unsupported("invoice prefix allocation is not modelled"),
     next_invoice_sequence: unsupported("invoicing is not modelled"),
@@ -177,7 +503,6 @@ const BODY_SHAPES: Record<string, Shape> = {
     default_bank_account: unsupported("payment sources are not modelled"),
     default_card: unsupported("payment sources are not modelled"),
     default_source: unsupported("payment sources are not modelled"),
-    expand: unsupported("the mock never expands"),
     individual_name: unsupported("not returned by the pinned API version"),
     invoice_prefix: unsupported("invoice prefix allocation is not modelled"),
     next_invoice_sequence: unsupported("invoicing is not modelled"),
@@ -192,7 +517,6 @@ const BODY_SHAPES: Record<string, Shape> = {
     images: IMAGES,
     marketing_features: MARKETING_FEATURES,
     default_price_data: unsupported("inline price creation is not modelled"),
-    expand: unsupported("the mock never expands"),
     id: unsupported("caller-chosen ids are not modelled"),
     tax_code: unsupported("tax codes are not modelled"),
   },
@@ -200,7 +524,6 @@ const BODY_SHAPES: Record<string, Shape> = {
     images: unsettable(IMAGES),
     marketing_features: unsettable(MARKETING_FEATURES),
     default_price: unsupported("default price assignment is not modelled"),
-    expand: unsupported("the mock never expands"),
     tax_code: unsupported("tax codes are not modelled"),
   },
   PostPrices: {
@@ -209,7 +532,6 @@ const BODY_SHAPES: Record<string, Shape> = {
     billing_scheme: unsupported("tiered billing is not modelled"),
     currency_options: unsupported("multi-currency prices are not modelled"),
     custom_unit_amount: unsupported("customer-chosen amounts are not modelled"),
-    expand: unsupported("the mock never expands"),
     product: ref("product", MISSING.product),
     product_data: unsupported("inline product creation is not modelled"),
     tiers: unsupported("tiered billing is not modelled"),
@@ -220,8 +542,401 @@ const BODY_SHAPES: Record<string, Shape> = {
   },
   PostPricesPrice: {
     currency_options: unsupported("multi-currency prices are not modelled"),
-    expand: unsupported("the mock never expands"),
     transfer_lookup_key: unsupported("lookup key transfer is not modelled"),
+  },
+  // --- money movement: parameters the mock accepts but does not model are refused up front -----
+  PostCustomersCustomerBalanceTransactions: {
+    amount: { type: "integer" },
+    currency: CURRENCY,
+    description: { type: "string", maxLength: 350 },
+    metadata: { type: "object" },
+    expand: unsupported("customer balance transactions are never expanded"),
+  },
+  PostPaymentMethods: {
+    type: { type: "string", enum: ["card"] },
+    billing_details: { type: "object" },
+    metadata: { type: "object" },
+    card: { type: "object" },
+    allow_redisplay: unsupported("redisplay policy is not modelled"),
+    customer: unsupported("payment methods are attached after creation"),
+    payment_method: unsupported("cloning an existing payment method is not modelled"),
+  },
+  PostPaymentMethodsPaymentMethod: {
+    billing_details: { type: "object" },
+    metadata: { type: "object" },
+    card: { type: "object" },
+    allow_redisplay: unsupported("redisplay policy is not modelled"),
+  },
+  PostPaymentMethodsPaymentMethodAttach: {
+    customer: ref("customer", MISSING.customer),
+  },
+  PostPaymentMethodsPaymentMethodDetach: {},
+  PostPaymentIntents: {
+    amount: { type: "integer", minimum: 1 },
+    currency: CURRENCY,
+    customer: ref("customer", MISSING.customer),
+    payment_method: { type: "string" },
+    description: { type: "string", maxLength: 1000 },
+    metadata: { type: "object" },
+    capture_method: { type: "string", enum: ["automatic", "manual"] },
+    confirm: { type: "boolean" },
+    off_session: { type: "boolean" },
+    setup_future_usage: { type: "string", enum: ["on_session", "off_session"] },
+    payment_method_types: {
+      type: "array",
+      maxItems: 4,
+      items: { type: "string", enum: ["card", "link"] },
+    },
+    application_fee_amount: unsupported("Connect application fees are not modelled"),
+    automatic_payment_methods: unsupported("the payment method type list is explicit in the mock"),
+    mandate: unsupported("mandates are not modelled"),
+    mandate_data: unsupported("mandates are not modelled"),
+    on_behalf_of: unsupported("Connect is not modelled"),
+    payment_details: unsupported("payment details are not modelled"),
+    payment_method_data: unsupported("raw payment method data is not modelled"),
+    payment_method_options: unsupported("payment method options are not modelled"),
+    radar_options: unsupported("Radar is not modelled"),
+    receipt_email: { type: "string", maxLength: 5000 },
+    shipping: unsupported("shipping details are not modelled"),
+    statement_descriptor: unsupported("statement descriptors are not modelled"),
+    statement_descriptor_suffix: unsupported("statement descriptors are not modelled"),
+    transfer_data: unsupported("Connect is not modelled"),
+    transfer_group: unsupported("Connect is not modelled"),
+    use_stripe_sdk: unsupported("Stripe.js handshakes are not modelled"),
+  },
+  PostPaymentIntentsIntent: {
+    amount: { type: "integer", minimum: 1 },
+    customer: ref("customer", MISSING.customer),
+    description: { type: "string", maxLength: 1000 },
+    metadata: { type: "object" },
+    payment_method: { type: "string" },
+    receipt_email: { type: "string", maxLength: 5000 },
+    setup_future_usage: { type: "string", enum: ["on_session", "off_session"] },
+    payment_method_data: unsupported("raw payment method data is not modelled"),
+    payment_method_options: unsupported("payment method options are not modelled"),
+    statement_descriptor: unsupported("statement descriptors are not modelled"),
+    statement_descriptor_suffix: unsupported("statement descriptors are not modelled"),
+    transfer_data: unsupported("Connect is not modelled"),
+  },
+  PostPaymentIntentsIntentConfirm: {
+    payment_method: { type: "string" },
+    return_url: { type: "string", maxLength: 5000 },
+    off_session: { type: "boolean" },
+    setup_future_usage: { type: "string", enum: ["on_session", "off_session"] },
+    capture_method: { type: "string", enum: ["automatic", "manual"] },
+    client_secret: unsupported("the mock does not verify client secrets"),
+    mandate: unsupported("mandates are not modelled"),
+    mandate_data: unsupported("mandates are not modelled"),
+    payment_method_data: unsupported("raw payment method data is not modelled"),
+    payment_method_options: unsupported("payment method options are not modelled"),
+    payment_method_types: unsupported("the payment method type list is fixed at creation"),
+    radar_options: unsupported("Radar is not modelled"),
+    shipping: unsupported("shipping details are not modelled"),
+    use_stripe_sdk: unsupported("Stripe.js handshakes are not modelled"),
+  },
+  PostPaymentIntentsIntentCancel: {
+    cancellation_reason: {
+      type: "string",
+      enum: ["abandoned", "duplicate", "fraudulent", "requested_by_customer"],
+    },
+  },
+  PostPaymentIntentsIntentCapture: {
+    amount_to_capture: { type: "integer", minimum: 1 },
+    application_fee_amount: unsupported("Connect application fees are not modelled"),
+    statement_descriptor: unsupported("statement descriptors are not modelled"),
+    statement_descriptor_suffix: unsupported("statement descriptors are not modelled"),
+    transfer_data: unsupported("Connect is not modelled"),
+  },
+  PostSetupIntents: {
+    customer: ref("customer", MISSING.customer),
+    description: { type: "string", maxLength: 1000 },
+    metadata: { type: "object" },
+    payment_method: { type: "string" },
+    usage: { type: "string", enum: ["off_session", "on_session"] },
+    attach_to_self: unsupported("Connect is not modelled"),
+    automatic_payment_methods: unsupported("the payment method type list is explicit"),
+    flow_directions: unsupported("Connect is not modelled"),
+    mandate_data: unsupported("mandates are not modelled"),
+    on_behalf_of: unsupported("Connect is not modelled"),
+    payment_method_data: unsupported("raw payment method data is not modelled"),
+    payment_method_options: unsupported("payment method options are not modelled"),
+    payment_method_types: unsupported("the payment method type list is explicit"),
+  },
+  PostSetupIntentsIntent: {
+    customer: ref("customer", MISSING.customer),
+    description: { type: "string", maxLength: 1000 },
+    metadata: { type: "object" },
+    payment_method: { type: "string" },
+    attach_to_self: unsupported("Connect is not modelled"),
+    flow_directions: unsupported("Connect is not modelled"),
+    payment_method_data: unsupported("raw payment method data is not modelled"),
+    payment_method_options: unsupported("payment method options are not modelled"),
+  },
+  PostSetupIntentsIntentConfirm: {
+    payment_method: { type: "string" },
+    return_url: { type: "string", maxLength: 5000 },
+    client_secret: unsupported("the mock does not verify client secrets"),
+    mandate_data: unsupported("mandates are not modelled"),
+    payment_method_data: unsupported("raw payment method data is not modelled"),
+    payment_method_options: unsupported("payment method options are not modelled"),
+    use_stripe_sdk: unsupported("Stripe.js handshakes are not modelled"),
+  },
+  PostSetupIntentsIntentCancel: {
+    cancellation_reason: {
+      type: "string",
+      enum: ["abandoned", "duplicate", "requested_by_customer"],
+    },
+  },
+  PostRefunds: {
+    amount: { type: "integer", minimum: 1 },
+    charge: ref("charge", MISSING.charge),
+    payment_intent: ref("payment_intent", MISSING.payment_intent),
+    reason: {
+      type: "string",
+      enum: ["duplicate", "fraudulent", "requested_by_customer"],
+    },
+    metadata: { type: "object" },
+    instructions_email: unsupported("customer instructions are not modelled"),
+    refund_application_fee: unsupported("Connect is not modelled"),
+    reverse_transfer: unsupported("Connect is not modelled"),
+  },
+  PostRefundsRefund: { metadata: { type: "object" } },
+  PostCheckoutSessions: {
+    mode: { type: "string", enum: ["payment", "setup", "subscription"] },
+    customer: ref("customer", MISSING.customer),
+    customer_creation: { type: "string", enum: ["always", "if_required"] },
+    expires_at: { type: "integer" },
+    success_url: { type: "string", maxLength: 5000 },
+    cancel_url: { type: "string", maxLength: 5000 },
+    metadata: { type: "object" },
+    automatic_tax: unsupported("tax is not modelled"),
+    consent_collection: unsupported("consent collection is not modelled"),
+    custom_fields: unsupported("custom fields are not modelled"),
+    custom_text: unsupported("custom text is not modelled"),
+    discounts: unsupported("checkout discounts are not modelled"),
+    invoice_creation: unsupported("checkout invoice creation is not modelled"),
+    locale: LOCALE_ITEM,
+    payment_method_collection: unsupported("payment method collection is not modelled"),
+    payment_method_configuration: unsupported("payment method configuration is not modelled"),
+    payment_method_options: unsupported("payment method options are not modelled"),
+    payment_method_types: unsupported("the payment method type list is explicit"),
+    redirect_on_completion: unsupported("redirect behaviour is not modelled"),
+    saved_payment_method_options: unsupported("saved payment method policy is not modelled"),
+    setup_intent_data: unsupported("setup intent data is not modelled"),
+    shipping_address_collection: unsupported("shipping is not modelled"),
+    shipping_options: unsupported("shipping is not modelled"),
+    submit_type: unsupported("submit types are not modelled"),
+    tax_id_collection: unsupported("tax ids are not modelled"),
+    ui_mode: unsupported("embedded checkout is not modelled"),
+  },
+  PostCheckoutSessionsSessionExpire: {},
+  PostInvoices: {
+    customer: ref("customer", MISSING.customer),
+    collection_method: { type: "string", enum: ["charge_automatically", "send_invoice"] },
+    subscription: ref("subscription", MISSING.subscription),
+    description: { type: "string", maxLength: 1500 },
+    metadata: { type: "object" },
+    auto_advance: { type: "boolean" },
+    account_tax_ids: unsupported("tax ids are not modelled"),
+    automatic_tax: unsupported("tax is not modelled"),
+    days_until_due: unsupported("send-invoice terms are not modelled"),
+    default_payment_method: { type: "string" },
+    default_source: unsupported("payment sources are not modelled"),
+    default_tax_rates: unsupported("tax rates are not modelled"),
+    discounts: unsupported("invoice discounts are not modelled"),
+    due_date: unsupported("send-invoice terms are not modelled"),
+    effective_at: unsupported("invoice scheduling is not modelled"),
+    footer: unsupported("invoice footers are not modelled"),
+    from_invoice: unsupported("invoice cloning is not modelled"),
+    issuer: unsupported("invoice issuers are not modelled"),
+    number: unsupported("invoice numbering is not modelled"),
+    on_behalf_of: unsupported("Connect is not modelled"),
+    payment_settings: unsupported("invoice payment settings are not modelled"),
+    pending_invoice_items_behavior: unsupported("pending items are not modelled"),
+    rendering: unsupported("invoice rendering is not modelled"),
+    shipping_cost: unsupported("shipping is not modelled"),
+    shipping_details: unsupported("shipping is not modelled"),
+    statement_descriptor: unsupported("statement descriptors are not modelled"),
+    transfer_data: unsupported("Connect is not modelled"),
+  },
+  PostInvoicesInvoice: {
+    description: { type: "string", maxLength: 1500 },
+    metadata: { type: "object" },
+    auto_advance: { type: "boolean" },
+    collection_method: { type: "string", enum: ["charge_automatically", "send_invoice"] },
+    default_payment_method: { type: "string" },
+    due_date: { type: "integer" },
+    account_tax_ids: unsupported("tax ids are not modelled"),
+    automatic_tax: unsupported("tax is not modelled"),
+    days_until_due: unsupported("send-invoice terms are not modelled"),
+    default_source: unsupported("payment sources are not modelled"),
+    default_tax_rates: unsupported("tax rates are not modelled"),
+    discounts: unsupported("invoice discounts are not modelled"),
+    effective_at: unsupported("invoice scheduling is not modelled"),
+    footer: unsupported("invoice footers are not modelled"),
+    issuer: unsupported("invoice issuers are not modelled"),
+    on_behalf_of: unsupported("Connect is not modelled"),
+    payment_settings: unsupported("invoice payment settings are not modelled"),
+    rendering: unsupported("invoice rendering is not modelled"),
+    shipping_cost: unsupported("shipping is not modelled"),
+    shipping_details: unsupported("shipping is not modelled"),
+    statement_descriptor: unsupported("statement descriptors are not modelled"),
+    transfer_data: unsupported("Connect is not modelled"),
+  },
+  DeleteInvoicesInvoice: {},
+  PostInvoicesInvoiceFinalize: {
+    auto_advance: { type: "boolean" },
+    expand: unsupported("the mock never expands this operation's response"),
+  },
+  PostInvoicesInvoicePay: {
+    payment_method: { type: "string" },
+    forgive: unsupported("write-offs are not modelled"),
+    mandate: unsupported("mandates are not modelled"),
+    off_session: unsupported("off-session policy is not modelled"),
+    paid_out_of_band: unsupported("out-of-band payments are not modelled"),
+    source: unsupported("payment sources are not modelled"),
+  },
+  PostInvoiceitems: {
+    amount: { type: "integer" },
+    currency: CURRENCY,
+    customer: ref("customer", MISSING.customer),
+    invoice: ref("invoice", MISSING.invoice),
+    description: { type: "string", maxLength: 1500 },
+    metadata: { type: "object" },
+    quantity: { type: "integer" },
+    discountable: { type: "boolean" },
+    discounts: unsupported("line discounts are not modelled"),
+    period: unsupported("custom line periods are not modelled"),
+    pricing: unsupported("line pricing is not modelled"),
+    tax_behavior: unsupported("tax is not modelled"),
+    tax_code: unsupported("tax codes are not modelled"),
+    tax_rates: unsupported("tax rates are not modelled"),
+    unit_amount_decimal: unsupported("decimal unit amounts are not modelled for invoice items"),
+  },
+  PostInvoiceitemsInvoiceitem: {
+    amount: { type: "integer" },
+    description: { type: "string", maxLength: 1500 },
+    metadata: { type: "object" },
+    quantity: { type: "integer" },
+    discountable: { type: "boolean" },
+    discounts: unsupported("line discounts are not modelled"),
+    period: unsupported("custom line periods are not modelled"),
+    pricing: unsupported("line pricing is not modelled"),
+    tax_behavior: unsupported("tax is not modelled"),
+    tax_code: unsupported("tax codes are not modelled"),
+    tax_rates: unsupported("tax rates are not modelled"),
+    unit_amount_decimal: unsupported("decimal unit amounts are not modelled for invoice items"),
+  },
+  DeleteInvoiceitemsInvoiceitem: {},
+  PostSubscriptions: {
+    customer: ref("customer", MISSING.customer),
+    default_payment_method: { type: "string" },
+    description: { type: "string", maxLength: 5000 },
+    metadata: { type: "object" },
+    payment_behavior: {
+      type: "string",
+      enum: [
+        "allow_incomplete",
+        "default_incomplete",
+        "error_if_incomplete",
+        "pending_if_incomplete",
+      ],
+    },
+    proration_behavior: { type: "string", enum: ["always_invoice", "create_prorations", "none"] },
+    backdate_start_date: { type: "integer" },
+    billing_cycle_anchor: { type: "integer" },
+    trial_end: { type: "integer" },
+    trial_period_days: { type: "integer", minimum: 1 },
+    application_fee_percent: unsupported("Connect is not modelled"),
+    automatic_tax: unsupported("tax is not modelled"),
+    billing_thresholds: unsupported("billing thresholds are not modelled"),
+    cancel_at: unsupported("scheduled cancellation is not modelled"),
+    cancel_at_period_end: { type: "boolean" },
+    collection_method: unsupported("only charge_automatically is modelled"),
+    currency: unsupported("the currency comes from the price"),
+    days_until_due: unsupported("send-invoice terms are not modelled"),
+    default_source: unsupported("payment sources are not modelled"),
+    default_tax_rates: unsupported("tax rates are not modelled"),
+    discounts: unsupported("subscription discounts are not modelled"),
+    items: { type: "array", maxItems: 4, items: { type: "object" } },
+    on_behalf_of: unsupported("Connect is not modelled"),
+    payment_settings: unsupported("subscription payment settings are not modelled"),
+    pending_invoice_item_interval: unsupported("pending items are not modelled"),
+    transfer_data: unsupported("Connect is not modelled"),
+    trial_settings: unsupported("trial settings are not modelled"),
+  },
+  PostSubscriptionsSubscriptionExposedId: {
+    default_payment_method: { type: "string" },
+    description: { type: "string", maxLength: 5000 },
+    metadata: { type: "object" },
+    cancel_at_period_end: { type: "boolean" },
+    proration_behavior: { type: "string", enum: ["always_invoice", "create_prorations", "none"] },
+    cancel_at: unsupported("scheduled cancellation is not modelled"),
+    collection_method: unsupported("only charge_automatically is modelled"),
+    days_until_due: unsupported("send-invoice terms are not modelled"),
+    discounts: unsupported("subscription discounts are not modelled"),
+    items: { type: "array", maxItems: 4, items: { type: "object" } },
+    payment_settings: unsupported("subscription payment settings are not modelled"),
+    pending_invoice_item_interval: unsupported("pending items are not modelled"),
+    transfer_data: unsupported("Connect is not modelled"),
+    trial_end: { type: "integer" },
+    trial_settings: unsupported("trial settings are not modelled"),
+  },
+  DeleteSubscriptionsSubscriptionExposedId: {
+    cancellation_details: unsupported("cancellation details are not modelled"),
+    invoice_now: unsupported("immediate invoicing is not modelled"),
+    prorate: unsupported("proration is not modelled"),
+  },
+  PostSubscriptionSchedules: {
+    customer: ref("customer", MISSING.customer),
+    end_behavior: { type: "string", enum: ["cancel", "none", "release", "renew"] },
+    metadata: { type: "object" },
+    start_date: unsupported("schedule start dates are not modelled"),
+    phases: { type: "array", maxItems: 3, items: { type: "object" } },
+    expand: unsupported("the mock never expands this operation's response"),
+  },
+  PostSubscriptionSchedulesSchedule: {
+    end_behavior: { type: "string", enum: ["cancel", "none", "release", "renew"] },
+    metadata: { type: "object" },
+    phases: { type: "array", maxItems: 3, items: { type: "object" } },
+    default_settings: unsupported("schedule default settings are not modelled"),
+    proration_behavior: unsupported("proration is not modelled"),
+  },
+  PostSubscriptionSchedulesScheduleCancel: {},
+  PostSubscriptionSchedulesScheduleRelease: {},
+  PostCoupons: {
+    amount_off: { type: "integer", minimum: 1 },
+    currency: CURRENCY,
+    duration: { type: "string", enum: ["forever", "once", "repeating"] },
+    duration_in_months: { type: "integer", minimum: 1 },
+    max_redemptions: { type: "integer", minimum: 1 },
+    name: { type: "string", maxLength: 40 },
+    metadata: { type: "object" },
+    percent_off: { type: "number" },
+    redeem_by: { type: "integer" },
+    applies_to: { type: "object" },
+    currency_options: unsupported("multi-currency coupons are not modelled"),
+    id: unsupported("caller-chosen ids are not modelled"),
+  },
+  PostCouponsCoupon: {
+    metadata: { type: "object" },
+    name: { type: "string", maxLength: 40 },
+    applies_to: { type: "object" },
+    currency_options: unsupported("multi-currency coupons are not modelled"),
+  },
+  PostPromotionCodes: {
+    code: { type: "string", maxLength: 5000 },
+    customer: ref("customer", MISSING.customer),
+    expires_at: { type: "integer" },
+    metadata: { type: "object" },
+    active: { type: "boolean" },
+    restrictions: { type: "object" },
+    expand: unsupported("the mock never expands this operation's response"),
+  },
+  PostPromotionCodesPromotionCode: {
+    active: { type: "boolean" },
+    metadata: { type: "object" },
+    restrictions: { type: "object" },
   },
 }
 
@@ -231,18 +946,16 @@ const QUERY_SHAPES: Record<string, Shape> = {
     "created.gte": scope("walk-start-unix"),
     ending_before: ref("customer", MISSING.customer),
     starting_after: ref("customer", MISSING.customer),
-    expand: unsupported("the mock never expands"),
     test_clock: unsupported("test clocks are not modelled"),
   },
-  GetCustomersCustomer: { expand: unsupported("the mock never expands") },
+  GetCustomersCustomer: {},
   GetProducts: {
     "created.gte": scope("walk-start-unix"),
     ending_before: ref("product", MISSING.product),
     starting_after: ref("product", MISSING.product),
     "ids[]": ref("product", MISSING.product),
-    expand: unsupported("the mock never expands"),
   },
-  GetProductsId: { expand: unsupported("the mock never expands") },
+  GetProductsId: {},
   GetPrices: {
     currency: CURRENCY,
     lookup_keys: { type: "array", maxItems: 10, items: { type: "string", maxLength: 5000 } },
@@ -250,26 +963,367 @@ const QUERY_SHAPES: Record<string, Shape> = {
     ending_before: ref("price", MISSING.price),
     starting_after: ref("price", MISSING.price),
     product: ref("product", MISSING.product),
-    expand: unsupported("the mock never expands"),
     "recurring.meter": unsupported("billing meters are not modelled"),
   },
-  GetPricesPrice: { expand: unsupported("the mock never expands") },
+  GetPricesPrice: {},
+  GetCustomersSearch: {},
+  GetPaymentMethods: {
+    customer: ref("customer", MISSING.customer),
+    starting_after: ref("payment_method", MISSING.payment_method),
+    ending_before: ref("payment_method", MISSING.payment_method),
+  },
+  GetPaymentMethodsPaymentMethod: {},
+  GetPaymentIntents: {
+    customer: ref("customer", MISSING.customer),
+    starting_after: ref("payment_intent", MISSING.payment_intent),
+    ending_before: ref("payment_intent", MISSING.payment_intent),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetPaymentIntentsSearch: {},
+  GetPaymentIntentsIntent: {},
+  GetSetupIntents: {
+    customer: ref("customer", MISSING.customer),
+    starting_after: ref("setup_intent", MISSING.setup_intent),
+    ending_before: ref("setup_intent", MISSING.setup_intent),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetSetupIntentsIntent: {},
+  GetCharges: {
+    customer: ref("customer", MISSING.customer),
+    payment_intent: ref("payment_intent", MISSING.payment_intent),
+    starting_after: ref("charge", MISSING.charge),
+    ending_before: ref("charge", MISSING.charge),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetChargesCharge: {},
+  GetRefunds: {
+    charge: ref("charge", MISSING.charge),
+    payment_intent: ref("payment_intent", MISSING.payment_intent),
+    starting_after: ref("refund", MISSING.refund),
+    ending_before: ref("refund", MISSING.refund),
+  },
+  GetRefundsRefund: {},
+  GetDisputes: {
+    charge: ref("charge", MISSING.charge),
+    payment_intent: ref("payment_intent", MISSING.payment_intent),
+    starting_after: ref("dispute", MISSING.dispute),
+    ending_before: ref("dispute", MISSING.dispute),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetDisputesDispute: {},
+  GetCheckoutSessions: {
+    customer: ref("customer", MISSING.customer),
+    payment_intent: ref("payment_intent", MISSING.payment_intent),
+    subscription: ref("subscription", MISSING.subscription),
+    starting_after: ref("session", MISSING.session),
+    ending_before: ref("session", MISSING.session),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetCheckoutSessionsSession: {},
+  GetCheckoutSessionsSessionLineItems: {
+    starting_after: unsupported("line item cursors are not modelled"),
+    ending_before: unsupported("line item cursors are not modelled"),
+  },
+  GetInvoices: {
+    customer: ref("customer", MISSING.customer),
+    subscription: ref("subscription", MISSING.subscription),
+    starting_after: ref("invoice", MISSING.invoice),
+    ending_before: ref("invoice", MISSING.invoice),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetInvoicesInvoice: {},
+  GetInvoicesInvoiceLines: {
+    starting_after: unsupported("line item cursors are not modelled"),
+    ending_before: unsupported("line item cursors are not modelled"),
+  },
+  GetInvoiceitems: {
+    customer: ref("customer", MISSING.customer),
+    invoice: ref("invoice", MISSING.invoice),
+    starting_after: ref("invoiceitem", MISSING.invoiceitem),
+    ending_before: ref("invoiceitem", MISSING.invoiceitem),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetInvoiceitemsInvoiceitem: {},
+  GetSubscriptions: {
+    customer: ref("customer", MISSING.customer),
+    starting_after: ref("subscription", MISSING.subscription),
+    ending_before: ref("subscription", MISSING.subscription),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetSubscriptionsSubscriptionExposedId: {},
+  GetSubscriptionItems: {
+    subscription: ref("subscription", MISSING.subscription),
+    starting_after: ref("subscription_item", MISSING.subscription_item),
+    ending_before: ref("subscription_item", MISSING.subscription_item),
+  },
+  GetSubscriptionItemsItem: {},
+  GetSubscriptionSchedules: {
+    customer: ref("customer", MISSING.customer),
+    starting_after: ref("schedule", MISSING.schedule),
+    ending_before: ref("schedule", MISSING.schedule),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetSubscriptionSchedulesSchedule: {},
+  GetCoupons: {
+    starting_after: ref("coupon", MISSING.coupon),
+    ending_before: ref("coupon", MISSING.coupon),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetCouponsCoupon: {},
+  GetPromotionCodes: {
+    customer: ref("customer", MISSING.customer),
+    coupon: ref("coupon", MISSING.coupon),
+    starting_after: ref("promotion_code", MISSING.promotion_code),
+    ending_before: ref("promotion_code", MISSING.promotion_code),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetPromotionCodesPromotionCode: {},
+  GetProductsSearch: {},
+  GetEvents: {
+    starting_after: ref("event", MISSING.event),
+    ending_before: ref("event", MISSING.event),
+    "created.gte": scope("walk-start-unix"),
+  },
+  GetEventsId: {},
 }
 
+/**
+ * Body parameters the pinned upstream spec no longer publishes but the SDK version the suites pin still
+ * sends. They are added to the form schema without joining `required`, so the request is accepted
+ * (and either modelled or explicitly unsupported) instead of failing as an unknown parameter.
+ */
+const EXTRA_BODY_PARAMS: Record<string, Shape> = {
+  PostInvoiceitems: { price: ref("price", MISSING.price) },
+  PostInvoiceitemsInvoiceitem: { price: ref("price", MISSING.price) },
+  PostCouponsCoupon: { applies_to: { type: "object" } },
+  PostPromotionCodes: { coupon: ref("coupon", MISSING.coupon) },
+  PostSubscriptions: { pause_collection: unsupported("collection pausing is not modelled") },
+  PostSubscriptionsSubscriptionExposedId: {
+    pause_collection: unsupported("collection pausing is not modelled"),
+  },
+}
+
+const applyExtraBodyParams = (schema: Schema, shape: Shape) => {
+  const properties = isObject(schema.properties) ? (schema.properties as Json) : {}
+  schema.properties = properties
+  for (const [key, edit] of Object.entries(shape)) {
+    if (edit === null) {
+      delete properties[key]
+      continue
+    }
+    properties[key] = { ...(isObject(properties[key]) ? (properties[key] as Json) : {}), ...edit }
+  }
+}
+
+/**
+ * Path-parameter resource refs. A parameter name can mean different resources on different routes
+ * (`{intent}` is a payment intent on `/v1/payment_intents/...` and a setup intent on
+ * `/v1/setup_intents/...`), so prefix groups are checked before the bare-name fallback.
+ */
 const PATH_REFS: Record<string, Json> = {
   customer: ref("customer", MISSING.customer),
-  id: ref("product", MISSING.product),
   price: ref("price", MISSING.price),
+  payment_method: ref("payment_method", MISSING.payment_method),
+  charge: ref("charge", MISSING.charge),
+  refund: ref("refund", MISSING.refund),
+  dispute: ref("dispute", MISSING.dispute),
+  invoice: ref("invoice", MISSING.invoice),
+  invoiceitem: ref("invoiceitem", MISSING.invoiceitem),
+  subscription_exposed_id: ref("subscription", MISSING.subscription),
+  schedule: ref("schedule", MISSING.schedule),
+  coupon: ref("coupon", MISSING.coupon),
+  promotion_code: ref("promotion_code", MISSING.promotion_code),
+  session: ref("session", MISSING.session),
+  webhook_endpoint: ref("webhook_endpoint", MISSING.webhook_endpoint),
 }
 
-const OPERATIONS: Record<string, { safe: boolean }> = {
+const PATH_REF_GROUPS: readonly { prefix: string; refs: Record<string, Json> }[] = [
+  {
+    prefix: "/v1/payment_intents",
+    refs: { intent: ref("payment_intent", MISSING.payment_intent) },
+  },
+  {
+    prefix: "/v1/setup_intents",
+    refs: { intent: ref("setup_intent", MISSING.setup_intent) },
+  },
+  {
+    prefix: "/v1/subscription_items",
+    refs: { item: ref("subscription_item", MISSING.subscription_item) },
+  },
+  { prefix: "/v1/events", refs: { id: ref("event", MISSING.event) } },
+  {
+    prefix: "/v1/balance_transactions",
+    refs: { id: ref("transaction", MISSING.transaction) },
+  },
+  { prefix: "/v1/products", refs: { id: ref("product", MISSING.product) } },
+  {
+    prefix: "/v1/test_helpers/test_clocks",
+    refs: { test_clock: ref("test_clock", MISSING.test_clock) },
+  },
+]
+
+const pathRefFor = (path: string, name: string): Json | undefined => {
+  const group = PATH_REF_GROUPS.find((candidate) => path.startsWith(candidate.prefix))
+  return group?.refs[name] ?? PATH_REFS[name]
+}
+
+export type OperationConfig = {
+  /** `false` for anything that must not run against a real account (money movement, deletes). */
+  safe: boolean
+  /** `false` skips the differential runner entirely; requires a reason. */
+  parity?: boolean
+  /** `false` declares a documented gap: the mock answers a Stripe-shaped error. Requires a reason. */
+  supported?: boolean
+  reason?: string
+}
+
+const OPERATIONS: Record<string, OperationConfig> = {
+  // customers
   PostCustomers: { safe: true },
   GetCustomers: { safe: true },
+  GetCustomersSearch: { safe: true },
   GetCustomersCustomer: { safe: true },
   PostCustomersCustomer: { safe: true },
   DeleteCustomersCustomer: { safe: true },
+  GetCustomersCustomerBalanceTransactions: { safe: true },
+  PostCustomersCustomerBalanceTransactions: { safe: false },
+  // payment methods
+  GetPaymentMethods: { safe: true },
+  PostPaymentMethods: { safe: false },
+  GetPaymentMethodsPaymentMethod: { safe: true },
+  PostPaymentMethodsPaymentMethod: { safe: false },
+  PostPaymentMethodsPaymentMethodAttach: { safe: false },
+  PostPaymentMethodsPaymentMethodDetach: { safe: false },
+  // payment intents
+  GetPaymentIntents: { safe: true },
+  PostPaymentIntents: { safe: false },
+  GetPaymentIntentsSearch: { safe: true },
+  GetPaymentIntentsIntent: { safe: true },
+  PostPaymentIntentsIntent: { safe: false },
+  PostPaymentIntentsIntentConfirm: { safe: false },
+  PostPaymentIntentsIntentCancel: { safe: false },
+  PostPaymentIntentsIntentCapture: { safe: false },
+  // setup intents
+  GetSetupIntents: { safe: true },
+  PostSetupIntents: { safe: false },
+  GetSetupIntentsIntent: { safe: true },
+  PostSetupIntentsIntent: { safe: false },
+  PostSetupIntentsIntentConfirm: { safe: false },
+  PostSetupIntentsIntentCancel: { safe: false },
+  // charges, refunds, disputes
+  GetCharges: { safe: true },
+  PostCharges: {
+    safe: false,
+    supported: false,
+    reason: "charges are always created through PaymentIntents",
+  },
+  GetChargesCharge: { safe: true },
+  PostChargesCharge: {
+    safe: false,
+    supported: false,
+    reason: "charges are only read in the e2e path",
+  },
+  GetRefunds: { safe: true },
+  PostRefunds: { safe: false },
+  GetRefundsRefund: { safe: true },
+  PostRefundsRefund: { safe: false },
+  GetDisputes: { safe: true },
+  GetDisputesDispute: { safe: true },
+  PostDisputesDispute: {
+    safe: false,
+    supported: false,
+    reason: "the mock never creates or mutates disputes",
+  },
+  GetBalanceTransactions: {
+    safe: true,
+    supported: false,
+    reason: "the ledger is exposed through customer balance transactions",
+  },
+  GetBalanceTransactionsId: {
+    safe: true,
+    supported: false,
+    reason: "the ledger is exposed through customer balance transactions",
+  },
+  // checkout
+  GetCheckoutSessions: { safe: true },
+  PostCheckoutSessions: { safe: false },
+  GetCheckoutSessionsSession: { safe: true },
+  PostCheckoutSessionsSession: {
+    safe: false,
+    supported: false,
+    reason: "sessions complete through their payment intent, never by update",
+  },
+  PostCheckoutSessionsSessionExpire: { safe: false },
+  GetCheckoutSessionsSessionLineItems: { safe: true },
+  // invoices
+  GetInvoices: { safe: true },
+  PostInvoices: { safe: false },
+  GetInvoicesInvoice: { safe: true },
+  PostInvoicesInvoice: { safe: false },
+  DeleteInvoicesInvoice: { safe: false },
+  PostInvoicesInvoiceFinalize: { safe: false },
+  PostInvoicesInvoicePay: { safe: false },
+  GetInvoicesInvoiceLines: { safe: true },
+  GetInvoicesUpcoming: {
+    safe: false,
+    parity: false,
+    reason:
+      "route is absent from the pinned upstream spec (2026-08-26.dahlia previews invoices instead); the e2e SDK still calls it",
+  },
+  // invoice items
+  GetInvoiceitems: { safe: true },
+  PostInvoiceitems: { safe: false },
+  GetInvoiceitemsInvoiceitem: { safe: true },
+  PostInvoiceitemsInvoiceitem: { safe: false },
+  DeleteInvoiceitemsInvoiceitem: { safe: false },
+  // subscriptions
+  GetSubscriptions: { safe: true },
+  PostSubscriptions: { safe: false },
+  GetSubscriptionsSubscriptionExposedId: { safe: true },
+  PostSubscriptionsSubscriptionExposedId: { safe: false },
+  DeleteSubscriptionsSubscriptionExposedId: { safe: false },
+  GetSubscriptionItems: { safe: true },
+  PostSubscriptionItems: {
+    safe: false,
+    supported: false,
+    reason: "item mutations go through the subscription in the e2e path",
+  },
+  GetSubscriptionItemsItem: { safe: true },
+  PostSubscriptionItemsItem: {
+    safe: false,
+    supported: false,
+    reason: "item mutations go through the subscription in the e2e path",
+  },
+  DeleteSubscriptionItemsItem: {
+    safe: false,
+    supported: false,
+    reason: "item mutations go through the subscription in the e2e path",
+  },
+  // subscription schedules
+  GetSubscriptionSchedules: { safe: true },
+  PostSubscriptionSchedules: { safe: false },
+  GetSubscriptionSchedulesSchedule: { safe: true },
+  PostSubscriptionSchedulesSchedule: { safe: false },
+  PostSubscriptionSchedulesScheduleCancel: { safe: false },
+  PostSubscriptionSchedulesScheduleRelease: { safe: false },
+  // coupons and promotion codes
+  GetCoupons: { safe: true },
+  PostCoupons: { safe: false },
+  GetCouponsCoupon: { safe: true },
+  PostCouponsCoupon: { safe: false },
+  DeleteCouponsCoupon: {
+    safe: false,
+    supported: false,
+    reason: "the e2e path never deletes a coupon",
+  },
+  GetPromotionCodes: { safe: true },
+  PostPromotionCodes: { safe: false },
+  GetPromotionCodesPromotionCode: { safe: true },
+  PostPromotionCodesPromotionCode: { safe: false },
+  // products and prices
   PostProducts: { safe: true },
   GetProducts: { safe: true },
+  GetProductsSearch: { safe: true },
   GetProductsId: { safe: true },
   PostProductsId: { safe: true },
   DeleteProductsId: { safe: true },
@@ -277,6 +1331,206 @@ const OPERATIONS: Record<string, { safe: boolean }> = {
   GetPrices: { safe: true },
   GetPricesPrice: { safe: true },
   PostPricesPrice: { safe: true },
+  // events
+  GetEvents: { safe: true },
+  GetEventsId: { safe: true },
+  // documented gaps
+  PostTestHelpersTestClocks: {
+    safe: false,
+    supported: false,
+    reason: "test clocks are not modelled; customers carry no test clock",
+  },
+  GetTestHelpersTestClocks: {
+    safe: true,
+    supported: false,
+    reason: "test clocks are not modelled; customers carry no test clock",
+  },
+  GetTestHelpersTestClocksTestClock: {
+    safe: true,
+    supported: false,
+    reason: "test clocks are not modelled; customers carry no test clock",
+  },
+  PostTestHelpersTestClocksTestClockAdvance: {
+    safe: false,
+    supported: false,
+    reason: "test clocks are not modelled; customers carry no test clock",
+  },
+  DeleteTestHelpersTestClocksTestClock: {
+    safe: false,
+    supported: false,
+    reason: "test clocks are not modelled; customers carry no test clock",
+  },
+  GetWebhookEndpoints: {
+    safe: true,
+    supported: false,
+    reason: "webhook targets come from server configuration, not the API",
+  },
+  PostWebhookEndpoints: {
+    safe: false,
+    supported: false,
+    reason: "webhook targets come from server configuration, not the API",
+  },
+  GetWebhookEndpointsWebhookEndpoint: {
+    safe: true,
+    supported: false,
+    reason: "webhook targets come from server configuration, not the API",
+  },
+  PostWebhookEndpointsWebhookEndpoint: {
+    safe: false,
+    supported: false,
+    reason: "webhook targets come from server configuration, not the API",
+  },
+  DeleteWebhookEndpointsWebhookEndpoint: {
+    safe: false,
+    supported: false,
+    reason: "webhook targets come from server configuration, not the API",
+  },
+}
+
+/**
+ * Expansion paths the mock actually resolves, per operation. Operations without an entry (or with
+ * an empty list) declare `expand` unsupported, so the command generator never asks for an
+ * expansion the mock would silently ignore.
+ */
+const EXPAND_PATHS: Record<string, readonly string[]> = {
+  PostCustomers: ["invoice_settings.default_payment_method"],
+  GetCustomers: ["data.invoice_settings.default_payment_method"],
+  GetCustomersCustomer: ["invoice_settings.default_payment_method"],
+  PostCustomersCustomer: ["invoice_settings.default_payment_method"],
+  GetPaymentMethods: ["data.customer"],
+  GetPaymentMethodsPaymentMethod: ["customer"],
+  PostPaymentMethodsPaymentMethod: ["customer"],
+  GetPaymentIntents: ["data.latest_charge", "data.payment_method", "data.invoice", "data.customer"],
+  PostPaymentIntents: ["latest_charge", "payment_method", "invoice"],
+  GetPaymentIntentsSearch: ["data.latest_charge", "data.payment_method", "data.invoice"],
+  GetPaymentIntentsIntent: [
+    "latest_charge",
+    "payment_method",
+    "invoice",
+    "invoice.discounts.coupon",
+    "invoice.subscription",
+    "customer",
+  ],
+  PostPaymentIntentsIntent: ["latest_charge", "payment_method", "invoice"],
+  PostPaymentIntentsIntentConfirm: ["latest_charge", "payment_method", "invoice"],
+  PostPaymentIntentsIntentCancel: ["latest_charge", "payment_method", "invoice"],
+  PostPaymentIntentsIntentCapture: ["latest_charge", "payment_method", "invoice"],
+  GetSetupIntents: ["data.payment_method", "data.customer"],
+  PostSetupIntents: ["payment_method", "customer"],
+  GetSetupIntentsIntent: ["payment_method", "customer"],
+  PostSetupIntentsIntent: ["payment_method", "customer"],
+  PostSetupIntentsIntentConfirm: ["payment_method", "customer"],
+  PostSetupIntentsIntentCancel: ["payment_method", "customer"],
+  GetCharges: [
+    "data.invoice",
+    "data.invoice.discounts.coupon",
+    "data.payment_intent",
+    "data.payment_intent.invoice",
+    "data.customer",
+  ],
+  GetChargesCharge: [
+    "invoice",
+    "invoice.discounts.coupon",
+    "payment_intent",
+    "payment_intent.invoice",
+    "customer",
+    "payment_method",
+  ],
+  GetRefunds: ["data.charge", "data.payment_intent"],
+  PostRefunds: ["charge", "payment_intent"],
+  GetRefundsRefund: ["charge", "payment_intent"],
+  PostRefundsRefund: ["charge", "payment_intent"],
+  GetCheckoutSessions: [
+    "data.payment_intent",
+    "data.subscription",
+    "data.setup_intent",
+    "data.customer",
+  ],
+  PostCheckoutSessions: ["payment_intent", "subscription", "setup_intent", "customer"],
+  GetCheckoutSessionsSession: ["payment_intent", "subscription", "setup_intent", "customer"],
+  PostCheckoutSessionsSessionExpire: ["payment_intent", "subscription", "setup_intent", "customer"],
+  GetInvoices: [
+    "data.charge",
+    "data.subscription",
+    "data.payment_intent",
+    "data.discounts.coupon",
+    "data.customer",
+  ],
+  PostInvoices: ["charge", "subscription", "payment_intent", "discounts.coupon", "customer"],
+  GetInvoicesInvoice: [
+    "charge",
+    "subscription",
+    "payment_intent",
+    "discount.coupon",
+    "discount.promotion_code",
+    "discounts.coupon",
+    "discounts.promotion_code",
+    "customer",
+    "default_payment_method",
+  ],
+  PostInvoicesInvoice: ["charge", "subscription", "payment_intent", "discounts.coupon"],
+  PostInvoicesInvoiceFinalize: ["charge", "subscription", "payment_intent"],
+  PostInvoicesInvoicePay: ["charge", "subscription", "payment_intent"],
+  PostGetInvoicesUpcoming: [],
+  GetInvoiceitems: ["data.customer", "data.price"],
+  PostInvoiceitems: ["customer", "invoice", "price"],
+  GetInvoiceitemsInvoiceitem: ["customer", "invoice", "price"],
+  PostInvoiceitemsInvoiceitem: ["customer", "invoice", "price"],
+  GetSubscriptions: [
+    "data.discounts.coupon",
+    "data.latest_invoice",
+    "data.default_payment_method",
+    "data.customer",
+  ],
+  PostSubscriptions: [
+    "discounts",
+    "discounts.coupon",
+    "latest_invoice",
+    "latest_invoice.payment_intent",
+    "default_payment_method",
+    "customer",
+    "schedule",
+  ],
+  GetSubscriptionsSubscriptionExposedId: [
+    "discounts",
+    "discounts.coupon",
+    "discounts.promotion_code",
+    "items.data.discounts",
+    "items.data.price",
+    "latest_invoice",
+    "default_payment_method",
+    "customer",
+    "schedule",
+  ],
+  PostSubscriptionsSubscriptionExposedId: [
+    "discounts",
+    "discounts.coupon",
+    "latest_invoice",
+    "default_payment_method",
+    "customer",
+    "schedule",
+  ],
+  DeleteSubscriptionsSubscriptionExposedId: ["latest_invoice", "customer"],
+  GetSubscriptionSchedules: ["data.subscription", "data.customer"],
+  PostSubscriptionSchedules: ["subscription", "customer"],
+  GetSubscriptionSchedulesSchedule: ["subscription", "customer"],
+  PostSubscriptionSchedulesSchedule: ["subscription", "customer"],
+  GetCoupons: ["data.applies_to"],
+  PostCoupons: ["applies_to"],
+  GetCouponsCoupon: ["applies_to"],
+  PostCouponsCoupon: ["applies_to"],
+  GetPromotionCodes: ["data.coupon", "data.coupon.applies_to", "data.customer"],
+  PostPromotionCodes: ["coupon", "coupon.applies_to", "customer"],
+  GetPromotionCodesPromotionCode: ["coupon", "coupon.applies_to", "customer"],
+  PostPromotionCodesPromotionCode: ["coupon", "coupon.applies_to", "customer"],
+  PostProducts: [],
+  GetProducts: ["data.default_price"],
+  GetProductsId: ["default_price"],
+  PostProductsId: ["default_price"],
+  PostPrices: ["product", "product_data"],
+  GetPrices: ["data.product"],
+  GetPricesPrice: ["product"],
+  PostPricesPrice: ["product"],
 }
 
 // --- transforms --------------------------------------------------------------------------------
@@ -390,6 +1644,63 @@ const applyShape = (schema: Schema, shape: Shape, label: string) => {
   }
 }
 
+/**
+ * Open object schemas the vendored doc leaves as bare `{type: "object"}`.
+ *
+ * Form validation treats an object as closed unless it declares `additionalProperties`, so a bare
+ * object rejects every nested key (`metadata[k]=v`, `items[0][price]=…`, `phases[0][items]`) with
+ * `parameter_unknown`. Stripe accepts those keys, so the vendored contract declares the objects
+ * open: `metadata` keeps its documented string→string typing, anything else accepts free-form
+ * values instead of refusing the request.
+ */
+const openBareObjects = (value: unknown): unknown => {
+  if (Array.isArray(value)) return value.map(openBareObjects)
+  if (!isObject(value)) return value
+  for (const [key, inner] of Object.entries(value)) value[key] = openBareObjects(inner)
+  const isBareObject =
+    value.type === "object" &&
+    value.properties === undefined &&
+    value.additionalProperties === undefined &&
+    value.$ref === undefined &&
+    value.anyOf === undefined &&
+    value.oneOf === undefined &&
+    value.allOf === undefined
+  if (isBareObject) value.additionalProperties = true
+  return value
+}
+
+const metadataSchema = (): Schema => ({
+  anyOf: [
+    {
+      additionalProperties: { maxLength: 500, type: "string" },
+      maxProperties: 50,
+      type: "object",
+    },
+    { enum: [""], type: "string" },
+  ],
+})
+
+/** Type every `metadata` field (top level and inside `*_data` objects) as string→string. */
+const shapeMetadata = (operation: Json) => {
+  const parameters = Array.isArray(operation.parameters) ? (operation.parameters as Json[]) : []
+  for (const parameter of parameters) {
+    if (parameter.name === "metadata" && isObject(parameter.schema))
+      parameter.schema = metadataSchema()
+  }
+  const body = isObject(operation.requestBody) ? operation.requestBody : undefined
+  const content = body && isObject(body.content) ? (body.content as Json) : undefined
+  const form = content?.["application/x-www-form-urlencoded"]
+  const schema = isObject(form) && isObject(form.schema) ? form.schema : undefined
+  const properties = schema && isObject(schema.properties) ? schema.properties : undefined
+  if (properties === undefined) return
+  if (isObject(properties.metadata)) properties.metadata = metadataSchema()
+  for (const [key, value] of Object.entries(properties)) {
+    if (!key.endsWith("_data") || !isObject(value)) continue
+    const nested = isObject(value.properties) ? value.properties : undefined
+    if (nested !== undefined && isObject(nested.metadata)) nested.metadata = metadataSchema()
+  }
+}
+
 const collectRefs = (value: unknown, out: Set<string>) => {
   if (Array.isArray(value)) for (const v of value) collectRefs(v, out)
   else if (isObject(value)) {
@@ -400,7 +1711,144 @@ const collectRefs = (value: unknown, out: Set<string>) => {
     for (const v of Object.values(value)) collectRefs(v, out)
   }
 }
+/**
+ * Narrow (or reject) the `expand` parameter for every operation, in whichever place it appears:
+ * a query parameter on reads, a form-body property on writes. Operations without declared paths
+ * get the unsupported stamp so the generator never asks for an expansion the mock ignores.
+ */
+const shapeExpand = (operation: Json, operationId: string) => {
+  const paths = EXPAND_PATHS[operationId]
+  const apply = (holder: Json | undefined) => {
+    if (!holder) return
+    if (!paths || paths.length === 0) {
+      Object.assign(holder, unsupported("the mock never expands this operation's response"))
+      return
+    }
+    holder.items = { type: "string", enum: [...paths] }
+    holder.maxItems = paths.length
+  }
+  const parameters = Array.isArray(operation.parameters) ? (operation.parameters as Json[]) : []
+  for (const parameter of parameters) {
+    if (parameter.name === "expand" && isObject(parameter.schema)) apply(parameter.schema)
+  }
+  const body = isObject(operation.requestBody) ? operation.requestBody : undefined
+  const content = body && isObject(body.content) ? (body.content as Json) : undefined
+  const form = content?.["application/x-www-form-urlencoded"]
+  const schema = isObject(form) && isObject(form.schema) ? form.schema : undefined
+  const properties = schema && isObject(schema.properties) ? schema.properties : undefined
+  const expand = properties && isObject(properties.expand) ? properties.expand : undefined
+  apply(expand)
+}
 
+/** Operation-level Mockingbird metadata driven by the allowlist entry. */
+const stampOperation = (operation: Json, config: OperationConfig, label: string) => {
+  const supported = config.supported ?? true
+  const parity = config.parity ?? supported
+  if ((!supported || !parity) && config.reason === undefined)
+    throw new Error(`${label}: unsupported/parity-disabled operations need a reason`)
+  operation["x-mockingbird"] = {
+    supported,
+    ...(config.reason === undefined ? {} : { reason: config.reason }),
+    parity: {
+      enabled: parity,
+      safe: config.safe,
+      ...(config.reason === undefined ? {} : { reason: config.reason }),
+    },
+  }
+}
+
+/**
+ * Give every operation its error responses and mark the parity header.
+ *
+ * Stripe's published spec declares only the success response (errors ride a `default`), but the
+ * mock answers real Stripe-shaped 400/402/404 bodies, so the contract has to declare those
+ * statuses or every rejected request fails mock-conformance validation.
+ */
+const parityHeaders = (operation: Json) => {
+  const responses = (operation.responses as Record<string, Json>) ?? {}
+  operation.responses = responses
+  for (const status of ["400", "402", "404"]) {
+    if (responses[status] !== undefined) continue
+    responses[status] = { content: { "application/json": { schema: { type: "object" } } } }
+  }
+  for (const response of Object.values(responses)) {
+    response.headers = {
+      "content-type": {
+        schema: { type: "string", enum: ["application/json"] },
+        "x-mockingbird-parity-header": true,
+      },
+    }
+  }
+}
+
+/**
+ * Routes the e2e clients call that the pinned upstream spec no longer publishes. `GET
+ * /v1/invoices/upcoming` disappeared in favour of `POST /v1/invoices/create_preview`, but
+ * stripe-node at the version the suites pin still issues the GET, so the mock declares it by hand and
+ * disables differential parity for it (the real side would answer for a different API version).
+ */
+const SYNTHETIC_OPERATIONS: readonly { path: string; method: string; operation: Json }[] = [
+  {
+    path: "/v1/invoices/upcoming",
+    method: "get",
+    operation: {
+      operationId: "GetInvoicesUpcoming",
+      parameters: [
+        {
+          name: "customer",
+          in: "query",
+          schema: { type: "string", ...ref("customer", MISSING.customer) },
+        },
+        {
+          name: "subscription",
+          in: "query",
+          schema: { type: "string", ...ref("subscription", MISSING.subscription) },
+        },
+        {
+          name: "schedule",
+          in: "query",
+          schema: { type: "string", ...unsupported("renewal scheduling is not modelled") },
+        },
+        {
+          name: "discounts[]",
+          in: "query",
+          schema: {
+            type: "array",
+            maxItems: 10,
+            items: { type: "string", ...unsupported("preview discounts are not modelled") },
+          },
+        },
+        {
+          name: "invoice_items[]",
+          in: "query",
+          schema: {
+            type: "array",
+            maxItems: 10,
+            items: { type: "string", ...unsupported("preview invoice items are not modelled") },
+          },
+        },
+        {
+          name: "subscription_details",
+          in: "query",
+          schema: {
+            type: "string",
+            ...unsupported("preview subscription details are not modelled"),
+          },
+        },
+        {
+          name: "customer_details",
+          in: "query",
+          schema: { type: "string", ...unsupported("preview customer details are not modelled") },
+        },
+      ],
+      responses: {
+        "200": {
+          content: { "application/json": { schema: { $ref: "#/components/schemas/invoice" } } },
+        },
+      },
+    },
+  },
+]
 const main = async () => {
   const upstream = await fetchUpstream()
   const info = upstream.info as Json
@@ -424,7 +1872,7 @@ const main = async () => {
       for (const parameter of parameters) {
         const name = String(parameter.name)
         if (parameter.in === "path") {
-          const pathRef = PATH_REFS[name]
+          const pathRef = pathRefFor(path, name)
           if (!pathRef)
             throw new Error(
               `${operation.operationId}: no resource ref for path parameter {${name}}`,
@@ -470,30 +1918,48 @@ const main = async () => {
         )
           throw new Error(`${operation.operationId}: query parameter ${name} not found`)
       }
+
+      shapeMetadata(cleaned)
       cleaned.parameters = kept
 
       const bodyShape = BODY_SHAPES[operation.operationId]
-      if (bodyShape) {
+      const extraBody = EXTRA_BODY_PARAMS[operation.operationId]
+      if (bodyShape || extraBody) {
         const body = cleaned.requestBody as Json
         const content = body.content as Record<string, Json>
         const form = content["application/x-www-form-urlencoded"]
         if (!form) throw new Error(`${operation.operationId}: no form body`)
-        applyShape(form.schema as Schema, bodyShape, operation.operationId)
+        const formSchema = form.schema as Schema
+        if (bodyShape) applyShape(formSchema, bodyShape, operation.operationId)
+        if (extraBody) applyExtraBodyParams(formSchema, extraBody)
       }
 
-      // Parity headers: content type is part of the contract.
-      for (const response of Object.values(cleaned.responses as Record<string, Json>)) {
-        response.headers = {
-          "content-type": {
-            schema: { type: "string", enum: ["application/json"] },
-            "x-mockingbird-parity-header": true,
-          },
-        }
-      }
+      shapeExpand(cleaned, operation.operationId)
 
-      cleaned["x-mockingbird"] = { supported: true, parity: { enabled: true, safe: config.safe } }
+      parityHeaders(cleaned)
+
+      stampOperation(cleaned, config, operation.operationId)
       pathItem[method] = cleaned
     }
+  }
+
+  for (const synthetic of SYNTHETIC_OPERATIONS) {
+    const config = OPERATIONS[synthetic.operation.operationId]
+    if (!config) throw new Error(`${synthetic.operation.operationId}: missing allowlist entry`)
+    const operation = clean(synthetic.operation) as Json
+    const parameters = Array.isArray(operation.parameters) ? (operation.parameters as Json[]) : []
+    for (const parameter of parameters) {
+      if (parameter.in !== "path") continue
+      const name = String(parameter.name)
+      const pathRef = PATH_REFS[`${synthetic.path}#${name}`] ?? PATH_REFS[name]
+      if (!pathRef) throw new Error(`${synthetic.operation.operationId}: no ref for {${name}}`)
+      parameter.schema = { ...(parameter.schema as Json), ...pathRef }
+    }
+    parityHeaders(operation)
+    stampOperation(operation, config, synthetic.operation.operationId)
+    const pathItem = paths[synthetic.path] ?? {}
+    paths[synthetic.path] = pathItem
+    pathItem[synthetic.method] = operation
   }
   const missingOps = Object.keys(OPERATIONS).filter(
     (id) =>
@@ -520,6 +1986,9 @@ const main = async () => {
   }
   for (const name of Object.keys(RESPONSE_SHAPES))
     if (!schemas[name]) throw new Error(`shape for unused component schema ${name}`)
+
+  openBareObjects(paths)
+  openBareObjects(schemas)
 
   const document = {
     openapi: "3.1.0",

@@ -86,7 +86,7 @@ export type PlanOptions = {
   only?: readonly string[]
   /**
    * Include these supported operation ids even when `parity.enabled` is false.
-   * Used by seedParity so Geviti QA surfaces can be exercised after observation seeding.
+   * Used by seedParity so the QA surface can be exercised after observation seeding.
    */
   forceInclude?: readonly string[]
 }

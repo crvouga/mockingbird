@@ -194,6 +194,26 @@ const querySchema = (context: OperationContext): SchemaObject => {
   return { type: "object", properties }
 }
 
+/**
+ * Stripe metadata is a string→string map. The vendored contract models that, but the form codec
+ * tolerates nested values inside open objects, so anything a handler would store as metadata is
+ * reduced to its string entries here: a non-string value is refused the way Stripe refuses it.
+ */
+const stringMetadata = (params: Params): Params => {
+  const metadata = params.metadata
+  if (metadata === null || typeof metadata !== "object" || Array.isArray(metadata)) return params
+  const kept: Record<string, string> = {}
+  for (const [key, value] of Object.entries(metadata as Record<string, unknown>)) {
+    if (typeof value !== "string")
+      throw invalidRequest(
+        `Invalid metadata value for key '${key}': metadata values must be strings.`,
+        "metadata",
+      )
+    kept[key] = value
+  }
+  return { ...params, metadata: kept }
+}
+
 /** Body parameters for POST operations. Stripe treats a missing/empty body as no parameters. */
 export const bodyParams = (context: OperationContext, options: ParamOptions = {}): Params => {
   const body = context.body
@@ -205,11 +225,11 @@ export const bodyParams = (context: OperationContext, options: ParamOptions = {}
     raw.preferred_locales === ""
   )
     delete raw.preferred_locales
-  return parseParams(formBodySchema(context), raw, options)
+  return stringMetadata(parseParams(formBodySchema(context), raw, options))
 }
 
 export const queryParams = (context: OperationContext, options: ParamOptions = {}): Params =>
-  parseParams(querySchema(context), context.query, options)
+  stringMetadata(parseParams(querySchema(context), context.query, options))
 
 /** Stripe reads `""` as "unset" for optional scalars. */
 export const unsetToNull = <T>(value: T | "" | undefined): T | null | undefined =>
