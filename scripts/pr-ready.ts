@@ -21,10 +21,12 @@ import { join } from "node:path"
 // engine usable against any checkout (e.g. a throwaway sandbox repo).
 const root = process.cwd()
 
-const BASE_DEFAULT = "main"
-const RULESET_NAME = "Require CI on main"
-const REQUIRED_CHECK_CONTEXTS = ["Commitlint", "Quality", "Test"]
+const TRUNK_BRANCH = "main"
+const RULESET_NAME = "Protect main"
+const LEGACY_RULESET_NAMES = ["Require CI on main"]
+const REQUIRED_CHECK_CONTEXTS = ["Commitlint", "Quality", "Test", "PR Policy", "Required"]
 const ACTIONS_INTEGRATION_ID = 15368
+const ALLOWED_MERGE_METHODS = ["merge"]
 
 const EXIT = { ok: 0, fail: 1, usage: 2, conflicts: 3, pending: 4 } as const
 
@@ -40,9 +42,11 @@ commands:
   checks    poll PR checks to terminal  (--interval, --timeout, --once)
   logs      print a failing run log     (<check|run-url>, --name, --tail)
   ruleset   verify/apply merge gate     (--apply)
+  repo      verify/apply repo settings  (--apply)
+  merge     land the PR                 (--auto)
 
 common flags:
-  --base <branch>   base branch (default: origin/HEAD, else ${BASE_DEFAULT})`
+  --base <branch>   trunk branch (${TRUNK_BRANCH}); any other value is rejected`
 
 // ---------------------------------------------------------------------------
 // process + arg helpers
@@ -120,7 +124,13 @@ async function baseBranch(): Promise<string> {
     const branch = matched?.[1]
     if (branch) return branch
   }
-  return BASE_DEFAULT
+  return TRUNK_BRANCH
+}
+
+function requireTrunk(base: string): void {
+  if (base !== TRUNK_BRANCH) {
+    die(EXIT.usage, { error: `base must be ${TRUNK_BRANCH} (trunk); got ${base}`, usage: USAGE })
+  }
 }
 
 async function currentBranch(): Promise<string> {
@@ -192,19 +202,25 @@ async function worktreeStatus(): Promise<Worktree> {
 
 type RequiredStatusCheck = { context: string; integration_id?: number }
 
-type RulesetRule = {
-  type: string
-  parameters?: {
-    strict_required_status_checks_policy?: boolean
-    do_not_enforce_on_create?: boolean
-    required_status_checks?: RequiredStatusCheck[]
-  }
+type RulesetRuleParameters = {
+  strict_required_status_checks_policy?: boolean
+  do_not_enforce_on_create?: boolean
+  required_status_checks?: RequiredStatusCheck[]
+  allowed_merge_methods?: string[]
+  dismiss_stale_reviews_on_push?: boolean
+  require_code_owner_review?: boolean
+  require_last_push_approval?: boolean
+  required_approving_review_count?: number
+  required_review_thread_resolution?: boolean
 }
+
+type RulesetRule = { type: string; parameters?: RulesetRuleParameters }
 
 type RulesetDetail = {
   id: number
   name: string
   enforcement?: string
+  bypass_actors?: unknown[]
   conditions?: { ref_name?: { include?: string[]; exclude?: string[] } }
   rules?: RulesetRule[]
 }
@@ -243,6 +259,100 @@ type RulesetVerification = {
   drift: string[]
 }
 
+type CanonicalRule = { type: string; parameters?: RulesetRuleParameters }
+
+type CanonicalRuleset = {
+  name: string
+  target: string
+  enforcement: string
+  bypass_actors: unknown[]
+  conditions: { ref_name: { include: string[]; exclude: string[] } }
+  rules: CanonicalRule[]
+}
+
+// Single source of truth for the trunk merge gate; `verify` and `--apply` both consume it,
+// so verification can never drift from what is applied.
+function canonicalRuleset(base: string): CanonicalRuleset {
+  return {
+    name: RULESET_NAME,
+    target: "branch",
+    enforcement: "active",
+    bypass_actors: [],
+    conditions: { ref_name: { include: [`refs/heads/${base}`], exclude: [] } },
+    rules: [
+      {
+        type: "pull_request",
+        parameters: {
+          allowed_merge_methods: ALLOWED_MERGE_METHODS,
+          dismiss_stale_reviews_on_push: true,
+          require_code_owner_review: false,
+          require_last_push_approval: false,
+          required_approving_review_count: 0,
+          required_review_thread_resolution: true,
+        },
+      },
+      {
+        type: "required_status_checks",
+        parameters: {
+          strict_required_status_checks_policy: true,
+          do_not_enforce_on_create: false,
+          required_status_checks: REQUIRED_CHECK_CONTEXTS.map((context) => ({
+            context,
+            integration_id: ACTIONS_INTEGRATION_ID,
+          })),
+        },
+      },
+      { type: "deletion" },
+      { type: "non_fast_forward" },
+    ],
+  }
+}
+
+// Compares only the fields we model — the API returns extra fields per rule, so blanket
+// JSON equality would report permanent false drift.
+function ruleDrift(found: RulesetRule, want: CanonicalRule): string[] {
+  const drift: string[] = []
+  const live = found.parameters ?? {}
+  const expected = want.parameters ?? {}
+  if (want.type === "required_status_checks") {
+    const contexts = (live.required_status_checks ?? []).map((c) => c.context).sort()
+    const wanted = (expected.required_status_checks ?? []).map((c) => c.context).sort()
+    if (JSON.stringify(contexts) !== JSON.stringify(wanted)) {
+      drift.push(`contexts=[${contexts.join(",")}]`)
+    }
+    if (live.strict_required_status_checks_policy !== true) {
+      drift.push("strict_required_status_checks_policy=false")
+    }
+    if (live.do_not_enforce_on_create !== false) {
+      drift.push("do_not_enforce_on_create=true")
+    }
+  }
+  if (want.type === "pull_request") {
+    const allowed = [...(live.allowed_merge_methods ?? [])].sort()
+    const wanted = [...(expected.allowed_merge_methods ?? [])].sort()
+    if (JSON.stringify(allowed) !== JSON.stringify(wanted)) {
+      drift.push(`allowed_merge_methods=[${allowed.join(",")}]`)
+    }
+    const booleanFields = [
+      "dismiss_stale_reviews_on_push",
+      "require_code_owner_review",
+      "require_last_push_approval",
+      "required_review_thread_resolution",
+    ] as const
+    for (const field of booleanFields) {
+      if (live[field] !== expected[field]) {
+        drift.push(`${field}=${live[field] ?? "missing"}`)
+      }
+    }
+    if (live.required_approving_review_count !== expected.required_approving_review_count) {
+      drift.push(
+        `required_approving_review_count=${live.required_approving_review_count ?? "missing"}`,
+      )
+    }
+  }
+  return drift
+}
+
 async function verifyRuleset(slug: string, base: string, existingId: number | null) {
   if (existingId === null) {
     return {
@@ -264,23 +374,37 @@ async function verifyRuleset(slug: string, base: string, existingId: number | nu
     } satisfies RulesetVerification
   }
   const detail = JSON.parse(detailRes.stdout) as RulesetDetail
+  const want = canonicalRuleset(base)
   const drift: string[] = []
   if (detail.enforcement !== "active") drift.push(`enforcement=${detail.enforcement ?? "missing"}`)
+  const bypass = (detail.bypass_actors ?? []).length
+  if (bypass > 0) drift.push(`bypass_actors=${bypass}`)
   const include = detail.conditions?.ref_name?.include ?? []
-  if (!include.includes(`refs/heads/${base}`)) drift.push(`include=[${include.join(",")}]`)
-  const rule = detail.rules?.find((entry) => entry.type === "required_status_checks")
-  const contexts = (rule?.parameters?.required_status_checks ?? []).map((c) => c.context).sort()
-  const expected = [...REQUIRED_CHECK_CONTEXTS].sort()
-  if (JSON.stringify(contexts) !== JSON.stringify(expected)) {
-    drift.push(`contexts=[${contexts.join(",")}]`)
+  if (JSON.stringify([...include].sort()) !== JSON.stringify([`refs/heads/${base}`])) {
+    drift.push(`include=[${include.join(",")}]`)
   }
-  const strict = rule?.parameters?.strict_required_status_checks_policy === true
-  if (!strict) drift.push("strict_required_status_checks_policy=false")
+  const liveRules = detail.rules ?? []
+  for (const wantRule of want.rules) {
+    const found = liveRules.find((entry) => entry.type === wantRule.type)
+    if (!found) {
+      drift.push(`missing rule ${wantRule.type}`)
+      continue
+    }
+    drift.push(...ruleDrift(found, wantRule).map((entry) => `${wantRule.type}: ${entry}`))
+  }
+  const wantedTypes = want.rules.map((entry) => entry.type)
+  for (const rule of liveRules) {
+    if (!wantedTypes.includes(rule.type)) drift.push(`unexpected rule ${rule.type}`)
+  }
+  const requiredRule = liveRules.find((entry) => entry.type === "required_status_checks")
+  const contexts = (requiredRule?.parameters?.required_status_checks ?? [])
+    .map((c) => c.context)
+    .sort()
   return {
     ok: drift.length === 0,
     rulesetId: existingId,
     requiredContexts: contexts,
-    strict,
+    strict: requiredRule?.parameters?.strict_required_status_checks_policy === true,
     drift,
   } satisfies RulesetVerification
 }
@@ -290,6 +414,47 @@ async function findRulesetId(slug: string): Promise<number | null> {
   if (listed.code !== 0) return null
   const summaries = JSON.parse(listed.stdout) as RulesetSummary[]
   return summaries.find((entry) => entry.name === RULESET_NAME)?.id ?? null
+}
+
+async function removeLegacyRulesets(slug: string): Promise<string[]> {
+  const listed = await gh(["api", `repos/${slug}/rulesets`])
+  if (listed.code !== 0) return []
+  const summaries = JSON.parse(listed.stdout) as RulesetSummary[]
+  const removed: string[] = []
+  for (const summary of summaries) {
+    if (!LEGACY_RULESET_NAMES.includes(summary.name)) continue
+    const res = await gh(["api", "--method", "DELETE", `repos/${slug}/rulesets/${summary.id}`])
+    if (res.code === 0) removed.push(summary.name)
+  }
+  return removed
+}
+
+// ---------------------------------------------------------------------------
+// repo settings
+// ---------------------------------------------------------------------------
+
+const REPO_SETTINGS = {
+  default_branch: TRUNK_BRANCH,
+  allow_merge_commit: true,
+  allow_squash_merge: false,
+  allow_rebase_merge: false,
+  allow_auto_merge: true,
+  allow_update_branch: true,
+  delete_branch_on_merge: true,
+}
+
+async function repoDrift(
+  slug: string,
+): Promise<{ drift: string[]; settings: Record<string, unknown> }> {
+  const res = await gh(["api", `repos/${slug}`])
+  if (res.code !== 0) throw new Error(res.stderr || "failed to read repo settings")
+  const settings = JSON.parse(res.stdout) as Record<string, unknown>
+  const drift: string[] = []
+  for (const [key, want] of Object.entries(REPO_SETTINGS)) {
+    const got = settings[key]
+    if (got !== want) drift.push(`${key}=${String(got)} (want ${String(want)})`)
+  }
+  return { drift, settings }
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +611,8 @@ async function cmdStatus(): Promise<void> {
     ok: true,
     branch,
     base,
+    trunk: TRUNK_BRANCH,
+    trunkOk: base === TRUNK_BRANCH,
     worktree,
     upstream,
     remoteBranchExists: await remoteBranchExists(branch),
@@ -584,6 +751,7 @@ async function cmdPublish(): Promise<void> {
 
 async function cmdSync(): Promise<void> {
   const base = await baseBranch()
+  requireTrunk(base)
   const merging = await mergeInProgress()
 
   if (flag("--continue")) {
@@ -658,6 +826,7 @@ async function cmdPr(): Promise<void> {
   if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
   const branch = await currentBranch()
   const base = await baseBranch()
+  requireTrunk(base)
 
   const existing = await readPr(branch)
   if (existing) {
@@ -816,30 +985,12 @@ async function cmdRuleset(): Promise<void> {
   const existingId = await findRulesetId(slug)
 
   if (flag("--apply")) {
-    const desired = {
-      name: RULESET_NAME,
-      target: "branch",
-      enforcement: "active",
-      conditions: { ref_name: { include: [`refs/heads/${base}`], exclude: [] } },
-      rules: [
-        {
-          type: "required_status_checks",
-          parameters: {
-            strict_required_status_checks_policy: true,
-            do_not_enforce_on_create: false,
-            required_status_checks: REQUIRED_CHECK_CONTEXTS.map((context) => ({
-              context,
-              integration_id: ACTIONS_INTEGRATION_ID,
-            })),
-          },
-        },
-      ],
-    }
+    const removedLegacyRulesets = await removeLegacyRulesets(slug)
     const path =
       existingId === null ? `repos/${slug}/rulesets` : `repos/${slug}/rulesets/${existingId}`
     const method = existingId === null ? "POST" : "PUT"
     const applied = await run(["gh", "api", "--method", method, path, "--input", "-"], {
-      stdin: JSON.stringify(desired),
+      stdin: JSON.stringify(canonicalRuleset(base)),
     })
     if (applied.code !== 0) {
       die(EXIT.fail, {
@@ -850,13 +1001,62 @@ async function cmdRuleset(): Promise<void> {
     }
     const nextId = await findRulesetId(slug)
     const verification = await verifyRuleset(slug, base, nextId)
-    emit({ ...verification, applied: true })
+    emit({ ...verification, applied: true, removedLegacyRulesets })
     process.exit(verification.ok ? EXIT.ok : EXIT.fail)
   }
 
   const verification = await verifyRuleset(slug, base, existingId)
   emit(verification)
   process.exit(verification.ok ? EXIT.ok : EXIT.fail)
+}
+
+async function cmdRepo(): Promise<void> {
+  if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
+  const slug = await repoSlug()
+  const apply = flag("--apply")
+  if (apply) {
+    const written = await run(["gh", "api", "--method", "PATCH", `repos/${slug}`, "--input", "-"], {
+      stdin: JSON.stringify(REPO_SETTINGS),
+    })
+    if (written.code !== 0) {
+      die(EXIT.fail, {
+        step: "repo-apply",
+        output: written.stderr || written.stdout,
+        hint: "repo settings writes require admin",
+      })
+    }
+  }
+  const { drift, settings: state } = await repoDrift(slug)
+  const settings: Record<string, unknown> = {}
+  for (const key of Object.keys(REPO_SETTINGS)) settings[key] = state[key]
+  emit({ ok: drift.length === 0, slug, settings, drift, applied: apply })
+  process.exit(drift.length === 0 ? EXIT.ok : EXIT.fail)
+}
+
+async function cmdMerge(): Promise<void> {
+  if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
+  const branch = await currentBranch()
+  const existing = await readPr(branch)
+  if (!existing) die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+
+  const auto = flag("--auto")
+  const args = ["pr", "merge", branch, "--merge"]
+  if (auto) args.push("--auto")
+  const merged = await gh(args)
+  if (merged.code !== 0) {
+    die(EXIT.fail, { step: "merge", output: merged.stderr || merged.stdout })
+  }
+
+  const pr = await readPr(branch)
+  emit({
+    ok: true,
+    method: "merge",
+    auto,
+    number: pr?.number ?? existing.number,
+    url: pr?.url ?? existing.url,
+    state: pr?.state ?? existing.state,
+    mergeStateStatus: pr?.mergeStateStatus ?? null,
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -885,6 +1085,10 @@ async function main(): Promise<void> {
       return cmdLogs()
     case "ruleset":
       return cmdRuleset()
+    case "repo":
+      return cmdRepo()
+    case "merge":
+      return cmdMerge()
     default:
       die(EXIT.usage, { error: `unknown command: ${command}`, usage: USAGE })
   }
