@@ -10,8 +10,8 @@ conflict resolution, PR title/body, and CI root-cause fixes.
 
 Run it as `bun run pr:ready <command>` (or `bun scripts/pr-ready.ts <command>`). Every command except
 `logs` prints exactly one JSON object on stdout — parse that; never scrape raw `git`/`gh` text.
-`$ARGUMENTS` is an optional base branch; when present, pass it as `--base <value>` to every call
-(omit it and the script resolves the base from `origin/HEAD`, defaulting to `main`).
+The base is always `main` (the trunk). Pass `--base main` or omit it — the script rejects any other
+base with a usage error, and `pr` always opens the PR against `main`.
 
 Stop and report to the user if `gh auth status` fails, if a command returns a usage error (exit 2)
 you cannot resolve, or if a CI failure is not fixable in-repo (missing secret/OIDC/infrastructure,
@@ -26,20 +26,25 @@ bun run pr:ready status
 Require `ok: true`; if not, stop and report the raw output. Require `gh auth status` to succeed — no
 PR, checks, or ruleset work is possible without it. Note `base` and `branch` from the status.
 
-## 2. Merge gate (required checks configured)
+## 2. Merge gate (repo settings + required checks)
 
 ```
+bun run pr:ready repo
 bun run pr:ready ruleset
 ```
 
-If `ok: false`, apply the canonical ruleset and re-verify:
+If either reports `ok: false`, apply the canonical settings and re-verify:
 
 ```
+bun run pr:ready repo --apply
 bun run pr:ready ruleset --apply
+bun run pr:ready repo
+bun run pr:ready ruleset
 ```
 
-If it still fails (typically a permissions error — ruleset writes need repo admin), report the `drift`
-and continue with the rest of the flow; do not stop.
+If a write fails from a permissions error (`repo settings writes require admin` /
+`ruleset writes require repo admin`), report the `drift` and continue with the rest of the flow; do
+not stop.
 
 ## 3. Commit and publish
 
@@ -127,7 +132,16 @@ bun run pr:ready checks
   read the full log and reproduce locally before the next push. If a failure is clearly not fixable
   in-repo, stop and report the check name, link, and log excerpt.
 
-## 7. Completion
+## 7. Land it
+
+```
+bun run pr:ready merge --auto
+```
+
+Auto-merge merges immediately when every required check is already green (and arms the merge
+otherwise). Then verify completion:
+
+## 8. Completion
 
 ```
 bun run pr:ready status
@@ -146,3 +160,5 @@ report success on a partial, queued, or filtered run.
 - Keep each fix minimal and focused on the failing check's root cause.
 - Use the script's JSON instead of raw `git`/`gh` output.
 - Do not paste full diffs or full CI logs into chat — quote only the failing lines.
+- Never target a base other than `main`.
+- Only merge commits land on `main` — never squash or rebase.
