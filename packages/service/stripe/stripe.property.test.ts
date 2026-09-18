@@ -196,7 +196,7 @@ describe("StripeAPI", () => {
     expect(conflict.status).toBe(400)
   })
 
-  test("supports geviti billing client flows without network state", async () => {
+  test("supports billing client flows without network state", async () => {
     const stripe = new StripeAPI({ now })
     const form = (body: Record<string, string>) => ({
       headers: { ...AUTH, "content-type": "application/x-www-form-urlencoded" },

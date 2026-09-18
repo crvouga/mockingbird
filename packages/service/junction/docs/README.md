@@ -19,7 +19,7 @@ This directory is the local contract notebook for the Junction Lab Testing API i
 
 - [Behavior](./behavior.md) — concepts, lifecycle rules, status semantics, and integration guidance
 - [Support matrix](./support-matrix.md) — modeled, synthetic, and intentionally unsupported behavior
-- [geviti coverage](./geviti-coverage.md) — catalog of geviti-monorepo Junction call sites and mock coverage
+- [drop-in readiness](./drop-in.md) — sealed corpus workflow, SDK-level proof, operation coverage
 
 ## Scope
 

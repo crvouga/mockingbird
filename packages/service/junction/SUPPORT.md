@@ -17,7 +17,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `patch_user_info_v2_user__user_id__info_patch` | `PATCH /v2/user/{user_id}/info` | ✅ supported | ✅ |  |
 | `get_latest_user_info_user_v2_user__user_id__info_latest_get` | `GET /v2/user/{user_id}/info/latest` | ✅ supported | ✅ |  |
 | `get_paginated_lab_tests_for_team_v3_lab_test_get` | `GET /v3/lab_test` | ✅ supported | ✅ |  |
-| `get_lab_accounts_v3_lab_test_lab_account_get` | `GET /v3/lab_test/lab_account` | ✅ supported | ❌ disabled | Team lab-account inventory is a Geviti compatibility endpoint. |
+| `get_lab_accounts_v3_lab_test_lab_account_get` | `GET /v3/lab_test/lab_account` | ✅ supported | ❌ disabled | Team lab-account inventory is not exercised by the automated parity walks. |
 | `get_lab_test_for_team_v3_lab_tests__lab_test_id__get` | `GET /v3/lab_tests/{lab_test_id}` | ✅ supported | ✅ |  |
 | `get_labs_v3_lab_tests_labs_get` | `GET /v3/lab_tests/labs` | ✅ supported | ✅ |  |
 | `get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get` | `GET /v3/lab_tests/{lab_test_id}/markers` | ✅ supported | ✅ |  |

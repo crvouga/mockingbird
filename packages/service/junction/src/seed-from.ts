@@ -139,7 +139,7 @@ const mapUser = (value: unknown): UserRecord | undefined => {
   }
 }
 
-const mapLabTest = (value: unknown): LabTestRecord | undefined => {
+export const mapLabTest = (value: unknown): LabTestRecord | undefined => {
   const record = asRecord(value)
   if (!record) return undefined
   const id = asString(record.id)
@@ -236,7 +236,7 @@ const expectedFromMarkers = (labTest: LabTestRecord): ExpectedResult[] => {
   }))
 }
 
-const expectedFromMarkersResponse = async (
+export const expectedFromMarkersResponse = async (
   source: SeedSource,
   test: LabTestRecord,
 ): Promise<ExpectedResult[]> => {

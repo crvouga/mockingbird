@@ -3,9 +3,7 @@
 Stateful mock of the [Junction (Vital) API](https://docs.junction.com/) user, lab-testing,
 and scheduling surfaces.
 
-- Coverage: [SUPPORT.md](./SUPPORT.md), [docs/geviti-coverage.md](./docs/geviti-coverage.md),
-  [docs/qa-drop-in.md](./docs/qa-drop-in.md) (Geviti QA proof matrix)
-- Follow-on Geviti wiring: [docs/geviti-followon.md](./docs/geviti-followon.md)
+- Coverage: [SUPPORT.md](./SUPPORT.md), [docs/drop-in.md](./docs/drop-in.md) (drop-in readiness)
 
 Auth header: `x-vital-api-key`. Sandbox keys look like `sk_us_*` / `sk_eu_*`.
 
@@ -49,5 +47,5 @@ Offline monkey (no network): `bun test junction.seed.property.test.ts`.
 Scheduling state-space (booking keys, cascades, delayed simulate): `bun test`.
 
 Example SDK scenarios (`client-parity*.ts`) are **deprecated as proof** — keep only as
-manual probes. Drop-in for Geviti QA is claimed only when [docs/qa-drop-in.md](./docs/qa-drop-in.md)
-is fully `monkey-green`.
+manual probes. Drop-in readiness is claimed only when [docs/drop-in.md](./docs/drop-in.md) is
+fully green.

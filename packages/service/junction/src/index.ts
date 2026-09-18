@@ -14,6 +14,7 @@ import { document, type SupportedOperationId } from "./generated/openapi.js"
 import { orderHandlers } from "./orders.js"
 import { resultsHandlers } from "./results.js"
 import { schedulingHandlers } from "./scheduling.js"
+import type { SealedCorpus } from "./sealed-corpus.js"
 import {
   ensureLabTests as ensureLabTestsFrom,
   ensureOrders as ensureOrdersFrom,
@@ -30,20 +31,25 @@ import {
 } from "./state.js"
 import { userHandlers } from "./users.js"
 
+export {
+  COVERAGE_ZIPS,
+  PHLEBOTOMY_AVAILABILITY_ZIPS,
+  PSC_AVAILABILITY_ZIPS,
+  PSC_LAB_IDS,
+} from "./coverage-corpus.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
-export { prefetchGevitiQaObservations } from "./prefetch-qa.js"
+export { prefetchCoverageObservations } from "./prefetch.js"
 export {
-  GEVITI_QA_PHLEBOTOMY_ZIPS,
-  GEVITI_QA_PSC_LAB_IDS,
-  GEVITI_QA_ROUTING_ZIPS,
-  GEVITI_QA_SCHEDULING_ZIPS,
-} from "./qa-corpus.js"
+  AVAILABILITY_ADDRESS,
+  AVAILABILITY_START_DATE,
+  reshapeCoverageGeoCommand,
+} from "./reshape.js"
 export {
-  GEVITI_QA_AVAILABILITY_ADDRESS,
-  GEVITI_QA_AVAILABILITY_START_DATE,
-  reshapeGevitiQaGeoCommand,
-} from "./reshape-qa.js"
+  parseSealedCorpus,
+  SEALED_CORPUS_VERSION,
+  type SealedCorpus,
+} from "./sealed-corpus.js"
 export type { SeedObservations, SeedReport, SeedSource } from "./seed-from.js"
 export type {
   GetCacheEntry,
@@ -71,6 +77,7 @@ export class JunctionAPI implements FetchAPI {
   readonly sqlite: SqliteClient
   private readonly service: Service
   private readonly state: JunctionState
+  private corpus: SealedCorpus | undefined
 
   constructor(options: JunctionAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
@@ -108,7 +115,24 @@ export class JunctionAPI implements FetchAPI {
 
   async reset(): Promise<void> {
     await this.service.reset()
+    if (this.corpus) {
+      this.installCorpus(this.corpus)
+      return
+    }
     this.state.seedDefaultCatalog()
+  }
+
+  /**
+   * Install a sealed sandbox recording: seed the observation cache and replace the catalog,
+   * labs, and lab accounts with the recording's exact values. Re-applied on `reset()`.
+   */
+  installCorpus(corpus: SealedCorpus): void {
+    this.state.installGetCache(Object.entries(corpus.observations))
+    if (corpus.catalog.labTests.length > 0) {
+      this.state.replaceCatalog(corpus.catalog)
+    }
+    this.state.replaceLabAccounts(corpus.labAccounts)
+    this.corpus = corpus
   }
 
   seedFrom(source: SeedSource, observations?: SeedObservations): Promise<SeedReport> {
