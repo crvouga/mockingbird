@@ -2,6 +2,8 @@
 
 [npm](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) · [GitHub](https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite)
 
+> Formerly [`@crvouga/sqlite-mem`](https://www.npmjs.com/package/@crvouga/sqlite-mem) ([archived repo](https://github.com/crvouga/sqlite-mem)). Migrate by replacing the package name; the API is unchanged.
+
 Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQLite3 SQL dialect parity** (same statements → same results).
 
 - Runs in modern browsers and Node.js / Bun
@@ -27,7 +29,6 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix, [docs/DROP-IN-CONTRACT.
 | [docs/GAP-ANALYSIS.md](docs/GAP-ANALYSIS.md) | Phase 0 gap analysis vs full drop-in catalog |
 | [docs/GAP-CATALOG.md](docs/GAP-CATALOG.md) | Current unproven / thin / intentional inventory |
 | [DIVERGENCES.md](DIVERGENCES.md) | Auto-generated intentional divergences |
-| [docs/SECRETS.md](docs/SECRETS.md) | npm / CI publish setup |
 | [benchmarks/PERFORMANCE.md](benchmarks/PERFORMANCE.md) | Performance notes |
 
 ## Install
@@ -286,7 +287,7 @@ See [COMPATIBILITY.md](./COMPATIBILITY.md).
 
 ## Releasing
 
-This package is versioned and published with the Mockingbird monorepo. See the repository root README and docs/SECRETS.md.
+Released automatically from the [Mockingbird monorepo](https://github.com/crvouga/mockingbird) — see the root README → Releasing.
 
 ## License
 

@@ -13,7 +13,7 @@ Reference SQLite compile options:
   Full list: `bun run inventory`
 
 sqlite-mem version:
-  0.0.0-development (package.json; publish via semantic-release)
+  0.0.0-development (package.json; released from the monorepo via `<name>@<version>` tags)
 
 Scope:
   Scope 3 — every oracle-exposed SQL builtin/module is in-scope except
