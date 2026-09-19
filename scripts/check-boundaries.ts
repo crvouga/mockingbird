@@ -8,7 +8,9 @@
  *   3. a workspace package never depends on itself,
  *   4. every module import in a package's code is declared in its package.json
  *      (dependencies + peerDependencies for shipped src; plus devDependencies
- *      for tests / scripts / benchmarks).
+ *      for tests / scripts / benchmarks),
+ *   5. a published package never needs a private one at runtime (npm consumers
+ *      could not install it).
  *
  *   bun run check:boundaries
  */
@@ -29,6 +31,7 @@ type Pkg = {
   layer: string
   runtime: string
   private: boolean
+  public: boolean
   dependencies: Set<string>
   devDependencies: Set<string>
   peerDependencies: Set<string>
@@ -66,6 +69,7 @@ for (const dir of packageDirs) {
   const pkg = JSON.parse(await Bun.file(join(dir, "package.json")).text()) as {
     name?: string
     private?: boolean
+    publishConfig?: { access?: string }
     dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
     peerDependencies?: Record<string, string>
@@ -78,6 +82,7 @@ for (const dir of packageDirs) {
     layer: pkg.mockingbird?.layer ?? "unknown",
     runtime: pkg.mockingbird?.runtime ?? "portable",
     private: pkg.private === true,
+    public: pkg.private !== true && pkg.publishConfig?.access === "public",
     dependencies: new Set(Object.keys(pkg.dependencies ?? {})),
     devDependencies: new Set(Object.keys(pkg.devDependencies ?? {})),
     peerDependencies: new Set(Object.keys(pkg.peerDependencies ?? {})),
@@ -94,6 +99,19 @@ for (const pkg of packages.values()) {
       fail(`${pkg.name} depends on itself`)
     } else if (!packages.has(depName)) {
       fail(`${pkg.name} → ${depName}: internal dependency is not a workspace package`)
+    }
+  }
+}
+
+// 5. published packages only depend on published packages at runtime.
+for (const pkg of packages.values()) {
+  if (!pkg.public) continue
+  for (const depName of [...pkg.dependencies, ...pkg.peerDependencies]) {
+    const dep = packages.get(depName)
+    if (dep && !dep.public) {
+      fail(
+        `${pkg.name} → ${depName}: a published package cannot depend on an unpublished one at runtime (move it to devDependencies or publish it)`,
+      )
     }
   }
 }

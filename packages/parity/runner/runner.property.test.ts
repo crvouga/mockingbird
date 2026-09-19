@@ -363,7 +363,9 @@ describe("parity runner", () => {
       ),
       { ...params, numRuns: 12 },
     )
-  }, 60_000)
+    // Worst case: a fault that never surfaces runs all 40 walks x 20 commands against the
+    // real side's 10ms delay (~8s), for each of the 12 outer runs (~100s).
+  }, 180_000)
 
   test("the same seed reproduces the same shrunk failure", async () => {
     await fc.assert(

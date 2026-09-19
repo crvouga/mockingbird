@@ -6,6 +6,19 @@ Each mock speaks the provider's real surface (`fetch(Request) → Response`), ke
 
 Pass an optional `sqlite` client that matches Mockingbird's owned `SqliteClient` port, or omit it to get a fresh [`@crvouga/mockingbird-service-sqlite`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) database. Migrations run on boot.
 
+## Using Mockingbird in your project
+
+Everything is on npm as `@crvouga/mockingbird-*` (ESM, TypeScript types included). Start with the
+umbrella package's README — it doubles as the **integration guide for coding agents**:
+[`packages/facade/README.md`](packages/facade/README.md). Agents can also read
+[`llms.txt`](llms.txt), a generated index of every published package's docs, and every package
+ships its README inside the npm tarball (`node_modules/<package>/README.md`).
+
+```bash
+npm install -D @crvouga/mockingbird
+npx mockingbird init --providers stripe
+```
+
 ## Requirements
 
 - **Node.js ≥ 22** or **Bun ≥ 1.2** (ESM only).
@@ -127,11 +140,14 @@ bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
 | Format | `bun run check:format` | [Biome](https://biomejs.dev) formatting |
 | Lint | `bun run lint` | Biome lint (types, style, complexity) |
 | Typecheck | `bun run typecheck` | `tsc` for every package |
-| Boundaries | `bun run check:boundaries` | Intra-workspace dep graph: internal deps resolve, no cycles, no self-deps, every module import is declared in `package.json` |
+| Boundaries | `bun run check:boundaries` | Intra-workspace dep graph: internal deps resolve, no cycles, no self-deps, every module import is declared in `package.json`, and no published package depends on an unpublished one at runtime |
 | Package integrity | `bun run pack:check` | `dist` + `exports` + `files`, tarball contents, [publint](https://publint.dev), [arethetypeswrong](https://arethetypeswrong.github.io) (ESM-only consumer resolution) |
 | Portability | `bun run portability` | Built `dist` matches the package's `mockingbird.runtime` (portable / node / bun) — no Node/Bun-only API usage where it isn't allowed |
 | Generate & OpenAPI | `bun run generate` / `bun run openapi:check` | Regenerate and verify provider contracts |
 | Test | `bun run test` | Contract, integration, unit, fuzz, and property suites (`FC_NUM_RUNS=40` in CI) |
+| Consumer docs | `bun run pack:check` | Every public package ships a README with `## Install`, `## Usage` (a TypeScript example) and `## API` listing every runtime export |
+| Consumer smoke | `bun run release:smoke` | Packs every public package like the release, `npm install`s the tarballs into a clean project, imports every entry point under Node, typechecks them plus every README TypeScript example and the `mockingbird init` scaffold, and runs each CLI |
+| llms.txt | `bun run check:llms` | [`llms.txt`](llms.txt) lists every public package (`bun run llms:sync` regenerates) |
 | Agent commands | `bun run check:agents` | Every `.agents/commands/*.md` is symlinked into each agent harness (`bun run agents:sync` repairs) |
 
 ### Git hooks (Husky)
@@ -176,7 +192,7 @@ Releases are fully automated on every green push to `main` ([`scripts/release/`]
 
 - **Which packages:** every public package whose directory has a releasable Conventional Commit since its last `<name>@<version>` git tag, every package that has never been released, and every package that depends at runtime on one of those (workspace deps are pinned exactly).
 - **Which version:** `feat!` / `BREAKING CHANGE` → major, `feat` → minor, `fix` / `perf` / `revert` / `refactor` / `build` / `docs` → patch, dependency-only → patch. `test` / `ci` / `chore` / `style` never release a package on their own. First releases start at `0.1.0`.
-- **How:** build → `pack:check` → `portability` → `bun pm pack` → `npm publish --provenance` via npm Trusted Publishing (OIDC) → push the `<name>@<version>` tag → GitHub Release with that package's notes.
+- **How:** build → `pack:check` → `portability` → consumer smoke → `bun pm pack` → `npm publish --provenance` via npm Trusted Publishing (OIDC) → push the `<name>@<version>` tag → GitHub Release with that package's notes.
 
 Versions live in tags, so `package.json` keeps `0.0.0-development` and nothing is committed back to `main` (same model as semantic-release). Every step is idempotent — re-running a failed release job finishes it.
 

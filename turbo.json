@@ -103,6 +103,15 @@
     "//#check:agents": {
       "cache": false
     },
+    "//#check:llms": {
+      "inputs": [
+        "llms.txt",
+        "scripts/llms-txt.ts",
+        "scripts/release/lib.ts",
+        "packages/**/package.json",
+        "!packages/**/node_modules/**"
+      ]
+    },
     "//#check:format": {
       "inputs": ["biome.json", "scripts/**", "docs/**", "*.json", "*.md", ".github/**"]
     }
