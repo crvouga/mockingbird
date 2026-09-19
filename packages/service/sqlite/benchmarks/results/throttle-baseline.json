@@ -1,0 +1,10 @@
+{
+  "recordedAt": "2026-08-17",
+  "platform": "Chromium Moto G4 profile",
+  "cpuThrottle": 4,
+  "tolerance": 3,
+  "metrics": {
+    "pkLookup20P95Ms": 0.47,
+    "preparedExecute1000P95Ms": 9.4
+  }
+}

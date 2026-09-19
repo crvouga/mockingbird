@@ -1,0 +1,192 @@
+import { runCatalog } from "./run.ts";
+
+runCatalog("JOI", [
+  {
+    id: "JOI-inner-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a'),(2,'b')",
+      "INSERT INTO b VALUES (1,'A'),(3,'C')",
+    ],
+    sql: "SELECT a.id, x, y FROM a INNER JOIN b ON a.id=b.id ORDER BY a.id",
+  },
+  {
+    id: "JOI-inner-02",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a')",
+      "INSERT INTO b VALUES (1,'A')",
+    ],
+    sql: "SELECT * FROM a INNER JOIN b USING (id)",
+  },
+  {
+    id: "JOI-comma-01",
+    kind: "parity",
+    setup: ["CREATE TABLE a(id INT)", "CREATE TABLE b(id INT)", "INSERT INTO a VALUES (1)", "INSERT INTO b VALUES (2)"],
+    sql: "SELECT a.id, b.id FROM a, b",
+  },
+  {
+    id: "JOI-cross-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT)",
+      "CREATE TABLE b(id INT)",
+      "INSERT INTO a VALUES (1)",
+      "INSERT INTO b VALUES (2),(3)",
+    ],
+    sql: "SELECT a.id, b.id FROM a CROSS JOIN b ORDER BY b.id",
+  },
+  {
+    id: "JOI-left-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a'),(2,'b')",
+      "INSERT INTO b VALUES (1,'A')",
+    ],
+    sql: "SELECT a.id, x, y FROM a LEFT JOIN b ON a.id=b.id ORDER BY a.id",
+  },
+  {
+    id: "JOI-left-02",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT)",
+      "CREATE TABLE b(id INT, y INT)",
+      "INSERT INTO a VALUES (1),(2)",
+      "INSERT INTO b VALUES (1,9),(2,0)",
+    ],
+    sql: "SELECT a.id FROM a LEFT JOIN b ON a.id=b.id WHERE b.y=9",
+  },
+  {
+    id: "JOI-left-03",
+    kind: "parity",
+    setup: ["CREATE TABLE a(id INT)", "INSERT INTO a VALUES (1),(2)"],
+    sql: "SELECT a.id FROM a LEFT JOIN b ON a.id=b.id ORDER BY a.id",
+  },
+  {
+    id: "JOI-right-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a')",
+      "INSERT INTO b VALUES (1,'A'),(2,'B')",
+    ],
+    sql: "SELECT a.id, x, b.id, y FROM a RIGHT JOIN b ON a.id=b.id ORDER BY b.id",
+  },
+  {
+    id: "JOI-full-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a'),(2,'b')",
+      "INSERT INTO b VALUES (1,'A'),(3,'C')",
+    ],
+    sql: "SELECT a.id, x, b.id, y FROM a FULL JOIN b ON a.id=b.id ORDER BY coalesce(a.id,b.id)",
+  },
+  {
+    id: "JOI-natural-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a')",
+      "INSERT INTO b VALUES (1,'A')",
+    ],
+    sql: "SELECT * FROM a NATURAL JOIN b",
+  },
+  {
+    id: "JOI-natural-02",
+    kind: "parity",
+    setup: ["CREATE TABLE a(x INT)", "CREATE TABLE b(y INT)", "INSERT INTO a VALUES (1)", "INSERT INTO b VALUES (2)"],
+    sql: "SELECT * FROM a NATURAL JOIN b",
+  },
+  {
+    id: "JOI-natural-03",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a'),(2,'b')",
+      "INSERT INTO b VALUES (1,'A')",
+    ],
+    sql: "SELECT * FROM a NATURAL LEFT JOIN b ORDER BY a.id",
+  },
+  {
+    id: "JOI-using-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a')",
+      "INSERT INTO b VALUES (1,'A')",
+    ],
+    sql: "SELECT * FROM a JOIN b USING (id)",
+  },
+  {
+    id: "JOI-using-02",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT, x TEXT)",
+      "CREATE TABLE b(id INT, y TEXT)",
+      "INSERT INTO a VALUES (1,'a')",
+      "INSERT INTO b VALUES (1,'A')",
+    ],
+    sql: "SELECT a.id, b.id FROM a JOIN b USING (id)",
+  },
+  {
+    id: "JOI-paren-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT)",
+      "CREATE TABLE b(id INT)",
+      "CREATE TABLE c(id INT)",
+      "INSERT INTO a VALUES (1)",
+      "INSERT INTO b VALUES (1)",
+      "INSERT INTO c VALUES (1)",
+    ],
+    sql: "SELECT count(*) FROM (a JOIN b ON a.id=b.id) JOIN c ON c.id=a.id",
+  },
+  {
+    id: "JOI-self-01",
+    kind: "parity",
+    setup: ["CREATE TABLE t(id INT, p INT)", "INSERT INTO t VALUES (1,NULL),(2,1)"],
+    sql: "SELECT c.id, p.id FROM t AS c LEFT JOIN t AS p ON c.p=p.id ORDER BY c.id",
+  },
+  {
+    id: "JOI-mix-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(id INT)",
+      "CREATE TABLE b(id INT)",
+      "CREATE TABLE c(id INT)",
+      "INSERT INTO a VALUES (1)",
+      "INSERT INTO b VALUES (1)",
+      "INSERT INTO c VALUES (2)",
+    ],
+    sql: "SELECT a.id, b.id, c.id FROM a JOIN b ON a.id=b.id LEFT JOIN c ON c.id=a.id",
+  },
+  {
+    id: "JOI-rowid-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE a(x TEXT)",
+      "CREATE TABLE b(x TEXT)",
+      "INSERT INTO a VALUES ('a')",
+      "INSERT INTO b VALUES ('b')",
+    ],
+    sql: "SELECT a.x FROM a, b",
+  },
+  {
+    id: "JOI-later-01",
+    kind: "parity",
+    setup: ["CREATE TABLE a(id INT)", "CREATE TABLE b(id INT)", "INSERT INTO a VALUES (1)", "INSERT INTO b VALUES (1)"],
+    sql: "SELECT a.id FROM a JOIN b ON a.id=b.id",
+  },
+]);
