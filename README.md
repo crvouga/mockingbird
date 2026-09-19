@@ -112,7 +112,9 @@ Exception: [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) se
 
 ## Development & quality gates
 
-Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + quality + tests) without the network-only release job.
+Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + check) without the network-only release job.
+
+CI is one turbo graph: the `Check` job runs `bun run check` with `node_modules` and turbo's cache persisted in the GitHub Actions cache, so a PR only rebuilds and retests the packages it changed, and the release job replays build/pack results from that cache instead of rebuilding.
 
 ```bash
 bun install            # workspaces + generates dist
@@ -129,7 +131,8 @@ bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
 | Package integrity | `bun run pack:check` | `dist` + `exports` + `files`, tarball contents, [publint](https://publint.dev), [arethetypeswrong](https://arethetypeswrong.github.io) (ESM-only consumer resolution) |
 | Portability | `bun run portability` | Built `dist` matches the package's `mockingbird.runtime` (portable / node / bun) — no Node/Bun-only API usage where it isn't allowed |
 | Generate & OpenAPI | `bun run generate` / `bun run openapi:check` | Regenerate and verify provider contracts |
-| Test | `bun run test` | Contract, integration, unit, fuzz, and property suites (`FC_NUM_RUNS=20` in CI) |
+| Test | `bun run test` | Contract, integration, unit, fuzz, and property suites (`FC_NUM_RUNS=40` in CI) |
+| Agent commands | `bun run check:agents` | Every `.agents/commands/*.md` is symlinked into each agent harness (`bun run agents:sync` repairs) |
 
 ### Git hooks (Husky)
 
@@ -141,8 +144,8 @@ Keep the committed hook file in `.husky/commit-msg` — the generated `.husky/_`
 
 `main` is the only long-lived branch. Every change lands through a PR that targets `main`, and
 only merge commits are allowed (squash and rebase are disabled). Head branches are deleted on
-merge, and every CI job — Commitlint, Quality, Test, PR Policy, and the aggregate Required gate —
-is a required status check with no bypass actors. PRs use the minimal template in
+merge, and the aggregate `Required` job (Commitlint + Check + the trunk policy) is the required
+status check, with no bypass actors. PRs use the minimal template in
 `.github/pull_request_template.md`. The gate is codified in `scripts/pr-ready.ts`:
 
 ```bash
@@ -151,6 +154,17 @@ bun run pr:ready repo --apply
 bun run pr:ready ruleset                         # verify the `Protect main` ruleset
 bun run pr:ready ruleset --apply
 ```
+
+### Agent commands
+
+Agent commands are written once in [`.agents/commands/`](.agents/commands) and symlinked into every
+harness — `.claude/commands`, `.cursor/commands`, `.opencode/command`, `.windsurf/workflows`,
+`.github/prompts` (Copilot), and `.agents/skills/<name>/SKILL.md` (Codex / Agent Skills). Edit the
+canonical file; `bun run agents:sync` creates missing links and `bun run check:agents` (part of
+`bun run check`) fails CI on drift.
+
+`/pr-ready` takes the current branch all the way to a green PR: commit, push, merge `origin/main`,
+resolve conflicts, open the PR, and loop CI fixes until every check passes.
 
 ### Package publishing
 
