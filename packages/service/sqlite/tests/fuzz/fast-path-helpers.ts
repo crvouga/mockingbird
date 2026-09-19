@@ -1,11 +1,11 @@
-import { Database } from "../../src/index.ts";
+import { expect } from "bun:test";
 import { ExecutionEnv } from "../../src/executor/env.ts";
 import { executeStatement } from "../../src/executor/execute.ts";
 import type { ResultSet } from "../../src/executor/result.ts";
 import { defaultFunctionRegistry } from "../../src/functions/registry.ts";
+import { Database } from "../../src/index.ts";
 import { parseUnits } from "../../src/parser/index.ts";
 import { deepCompareResults } from "../harness/normalize.ts";
-import { expect } from "bun:test";
 
 function envFor(
   db: Database,

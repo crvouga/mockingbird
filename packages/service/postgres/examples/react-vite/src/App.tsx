@@ -76,7 +76,7 @@ export function App() {
   return (
     <div className="page">
       <header className="hero">
-        <p className="eyebrow">@crvouga/postgres-mem</p>
+        <p className="eyebrow">@crvouga/mockingbird-service-postgres</p>
         <h1>SQL playground</h1>
         <p className="lede">
           Pure TypeScript PostgreSQL in the browser. Synchronous API, no WASM, no workers, no filesystem. The whole

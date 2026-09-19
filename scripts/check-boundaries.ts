@@ -35,7 +35,13 @@ type Pkg = {
 }
 
 const INTERNAL = /^@crvouga\/mockingbird(?:[-/].*)?$/
-const BUILTIN = /^(node|bun|deno|stream\/web|assert):/
+const BUILTIN = /^(?:(?:node|bun|deno):|bun$|stream\/web$|assert$)/
+const VALID_SPECIFIER = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(?:\/[^\s"']+)*$/i
+
+function packageRoot(specifier: string): string {
+  const parts = specifier.split("/")
+  return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
+}
 
 const packages = new Map<string, Pkg>()
 
@@ -268,6 +274,7 @@ for (const entry of glob.scanSync({ cwd: root })) {
   if (
     entry.includes("node_modules") ||
     entry.includes("/dist/") ||
+    entry.includes("/examples/") ||
     entry.includes("/src/generated/")
   )
     continue
@@ -282,14 +289,16 @@ for (const file of files) {
   const text = await Bun.file(file).text()
 
   for (const specifier of findModuleSpecifiers(text)) {
+    if (!VALID_SPECIFIER.test(specifier)) continue
     if (specifier === owner.name) {
       fail(`${rel} self-imports ${owner.name}`)
       continue
     }
     if (specifier.startsWith(".") || BUILTIN.test(specifier)) continue
 
-    const isInternal = INTERNAL.test(specifier) || packages.has(specifier)
-    if (isInternal && !packages.has(specifier)) {
+    const dependency = packageRoot(specifier)
+    const isInternal = INTERNAL.test(dependency) || packages.has(dependency)
+    if (isInternal && !packages.has(dependency)) {
       fail(`${rel} imports "${specifier}" which is not a workspace package`)
       continue
     }
@@ -298,7 +307,7 @@ for (const file of files) {
       ? new Set([...owner.dependencies, ...owner.peerDependencies])
       : new Set([...owner.dependencies, ...owner.devDependencies, ...owner.peerDependencies])
 
-    if (!allowed.has(specifier)) {
+    if (!allowed.has(dependency) && dependency !== owner.name) {
       fail(
         `${rel} imports "${specifier}" but it is not in ${owner.name} ${inSrc ? "dependencies/peerDependencies" : "dependencies, devDependencies, or peerDependencies"}`,
       )

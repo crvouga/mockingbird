@@ -17,13 +17,13 @@ export { runBoundDmlSequence, runSequence } from "./engine.ts";
 export { formatReproAdvice, minimizeToSql } from "./minimize.ts";
 export {
   DEFAULT_SCHEMA,
-  SIMPLE_SCHEMA,
+  type DmlOp,
   dmlOpArb,
+  type MixedOp,
   mixedOpArb,
+  type SchemaKind,
+  SIMPLE_SCHEMA,
   schemaFor,
   schemaKindArb,
-  type DmlOp,
-  type MixedOp,
-  type SchemaKind,
 } from "./ops.ts";
 export { writeCorpusRepro, writeDstReproArtifact } from "./repro.ts";

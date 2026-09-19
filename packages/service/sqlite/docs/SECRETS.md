@@ -1,6 +1,6 @@
 # Secrets runbook (maintainers)
 
-`@crvouga/sqlite-mem` publishes with **npm Trusted Publishing (OIDC)** — not Automation tokens.
+`@crvouga/mockingbird-service-sqlite` publishes with **npm Trusted Publishing (OIDC)** — not Automation tokens.
 npm itself warns against granular tokens for CI/CD; use Trusted Publishing instead.
 
 Optional Vault entries are only for **local** dry-runs (GitHub PAT). CI never calls Vault.
@@ -26,7 +26,7 @@ bun run secrets:check
 
 ## One-time: seed the package, then Trusted Publishing
 
-npm cannot attach a Trusted Publisher until `@crvouga/sqlite-mem` exists on the registry.
+npm cannot attach a Trusted Publisher until `@crvouga/mockingbird-service-sqlite` exists on the registry.
 The unscoped name `sqlite-mem` is blocked by npm (too similar to `sqlite-vec`).
 
 1. Log in as yourself (interactive — **not** a granular Automation token):
@@ -40,13 +40,13 @@ The unscoped name `sqlite-mem` is blocked by npm (too similar to `sqlite-vec`).
    ([account settings](https://www.npmjs.com/settings/~/account) or `npm profile enable-2fa auth-and-writes`),
    then complete the **browser** challenge (or pass a 6-digit authenticator code with `--otp=123456`).
 
-   This publishes **`@crvouga/sqlite-mem@0.1.0`** without provenance. Later CI releases keep provenance via OIDC.
+   This publishes **`@crvouga/mockingbird-service-sqlite@0.1.0`** without provenance. Later CI releases keep provenance via OIDC.
 
 2. Open **Trusted Publisher** (package Access settings — not “Granular Access Token”):
-   https://www.npmjs.com/package/@crvouga/sqlite-mem/access
+   https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite/access
 3. Add **GitHub Actions** publisher:
    - Organization/user: `crvouga`
-   - Repository: `sqlite-mem`
+   - Repository: `mockingbird`
    - Workflow filename: `ci.yml`
    - Environment: leave empty unless the release job uses one
 4. Confirm the release job already has `permissions.id-token: write` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)

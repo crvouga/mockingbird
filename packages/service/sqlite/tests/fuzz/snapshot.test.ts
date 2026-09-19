@@ -3,8 +3,8 @@ import * as fc from "fast-check";
 import { Database, Snapshot } from "../../src/index.ts";
 import { InMemoryAdapter } from "../adapters/in-memory.ts";
 import { fuzzAssertConfig, intArb, textArb } from "./config.ts";
-import { initialSimState, mixedOpArb, schemaFor, schemaKindArb } from "./dst/ops.ts";
 import { runSequence } from "./dst/engine.ts";
+import { initialSimState, mixedOpArb, schemaFor, schemaKindArb } from "./dst/ops.ts";
 import { compareOrReport, withDatabases } from "./helpers.ts";
 import {
   assertProbeResultsEqual,

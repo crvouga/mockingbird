@@ -1,5 +1,5 @@
-import type { Int8Mode } from "../runtime/options.ts";
 import { pgError } from "../errors/error.ts";
+import type { Int8Mode } from "../runtime/options.ts";
 import { UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
 import { type Datum, datumText, type OutputCtx, type TypedValue, type TypeId, tv, UNKNOWN } from "../types/value.ts";
 

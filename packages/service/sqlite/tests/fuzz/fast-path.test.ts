@@ -2,8 +2,8 @@ import { describe, test } from "bun:test";
 import * as fc from "fast-check";
 import { Database } from "../../src/index.ts";
 import { fuzzAssertConfig, intArb, textArb } from "./config.ts";
-import { compareOrReport, sqlLiteral, withDatabases } from "./helpers.ts";
 import { expectFastFullInsertParity, expectFastFullSelectParity } from "./fast-path-helpers.ts";
+import { compareOrReport, sqlLiteral, withDatabases } from "./helpers.ts";
 
 const rowArb = fc.record({
   id: fc.integer({ min: 1, max: 40 }),

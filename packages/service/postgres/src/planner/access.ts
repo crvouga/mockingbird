@@ -1,13 +1,13 @@
 import type { Expr, FromItem } from "../ast/nodes.ts";
+import { type UniqueSpec, uniqueKeyOf, uniqueSpecsFor } from "../constraints/enforce.ts";
 import { type ExecEnv, RowScope } from "../executor/relation.ts";
-import { evalExpr } from "../expressions/eval.ts";
 import { makeEvalScope } from "../executor/select.ts";
+import { evalExpr } from "../expressions/eval.ts";
 import { indexStoreFor } from "../indexes/maintain.ts";
 import type { TableData } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import { datumCompare, datumKey } from "../types/compare.ts";
-import { type Datum, tv, type TypeId } from "../types/value.ts";
-import { type UniqueSpec, uniqueKeyOf, uniqueSpecsFor } from "../constraints/enforce.ts";
+import { type Datum, type TypeId, tv } from "../types/value.ts";
 
 function isRowIndependentExpr(expr: Expr): boolean {
   return expr.type !== "colref";

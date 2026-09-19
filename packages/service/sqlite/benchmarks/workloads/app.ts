@@ -1,5 +1,5 @@
-import type { BenchSpec } from "../harness/types.ts";
 import { nowMs } from "../harness/stats.ts";
+import type { BenchSpec } from "../harness/types.ts";
 import { fillAppSchema, fillUsers } from "./populate.ts";
 import { spec } from "./tiers.ts";
 

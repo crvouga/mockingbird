@@ -1,6 +1,6 @@
-# postgres-mem
+# @crvouga/mockingbird-service-postgres
 
-[npm](https://www.npmjs.com/package/@crvouga/postgres-mem) · [GitHub](https://github.com/crvouga/postgres-mem)
+[npm](https://www.npmjs.com/package/@crvouga/mockingbird-service-postgres) · [GitHub](https://github.com/crvouga/mockingbird/tree/main/packages/service/postgres)
 
 Pure TypeScript, completely in-memory PostgreSQL implementation aiming for **PostgreSQL 18 SQL dialect parity** (same statements → same results).
 
@@ -33,17 +33,17 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix, [docs/DROP-IN-CONTRACT.
 ## Install
 
 ```bash
-bun add @crvouga/postgres-mem
+bun add @crvouga/mockingbird-service-postgres
 # or
-npm install @crvouga/postgres-mem
+npm install @crvouga/mockingbird-service-postgres
 ```
 
-Requires Node.js ≥ 20 or Bun ≥ 1.1. The published package is **ESM only** (`import` from `@crvouga/postgres-mem`).
+Requires Node.js ≥ 20 or Bun ≥ 1.1. The published package is **ESM only** (`import` from `@crvouga/mockingbird-service-postgres`).
 
 ## Usage
 
 ```ts
-import { Database, Snapshot } from "@crvouga/postgres-mem";
+import { Database, Snapshot } from "@crvouga/mockingbird-service-postgres";
 
 const db = new Database();
 
@@ -82,7 +82,7 @@ From the repo root after that install: `bun run example`.
 ## API
 
 ```ts
-import { Database, Snapshot, PostgresError } from "@crvouga/postgres-mem";
+import { Database, Snapshot, PostgresError } from "@crvouga/mockingbird-service-postgres";
 
 interface DatabaseOptions {
   seed?: number | bigint;                 // default 1 — ignored when random is "os"
@@ -145,7 +145,7 @@ class PostgresError extends Error {
 }
 ```
 
-Stick to `Database`, `Snapshot`, `Statement`, and `PostgresError` for application code. Advanced internals (`parse`, `tokenize`, `executeStatement`, snapshot codec pieces, `Prng`, …) are available only from `@crvouga/postgres-mem/unstable` and are **exempt from semver**.
+Stick to `Database`, `Snapshot`, `Statement`, and `PostgresError` for application code. Advanced internals (`parse`, `tokenize`, `executeStatement`, snapshot codec pieces, `Prng`, …) are available only from `@crvouga/mockingbird-service-postgres/unstable` and are **exempt from semver**.
 
 ### Method semantics
 
@@ -230,16 +230,16 @@ POSTGRES_MEM_FUZZ_SEED=12345 POSTGRES_MEM_FUZZ_PATH='0:1' bun test tests/fuzz  #
 
 ## Stability policy
 
-The exports of the main entry (`@crvouga/postgres-mem`) are **frozen**:
+The exports of the main entry (`@crvouga/mockingbird-service-postgres`) are **frozen**:
 
 - **Never** outside a major: removals, renames, signature changes, or changes to documented behavior of the stable surface.
 - **Allowed in minors:** additions (new methods, new optional `DatabaseOptions` fields, new `ErrorCategory` values). Consumers that `switch` on `category` must include a default case — new categories may appear without a major bump.
-- **`@crvouga/postgres-mem/unstable`** is exempt from semver and may change or disappear in any release.
+- **`@crvouga/mockingbird-service-postgres/unstable`** is exempt from semver and may change or disappear in any release.
 - **Snapshots:** newer library → can restore older blobs; older library → cannot restore newer format versions; byte-identical snapshot guarantee holds only within one library version.
 
 ## Compatibility notes for integrators
 
-Goal: **SQL dialect** behavioral parity vs PostgreSQL **18.3** for the `@crvouga/postgres-mem` sync API. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md). Contract: [docs/DROP-IN-CONTRACT.md](docs/DROP-IN-CONTRACT.md).
+Goal: **SQL dialect** behavioral parity vs PostgreSQL **18.3** for the `@crvouga/mockingbird-service-postgres` sync API. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md). Contract: [docs/DROP-IN-CONTRACT.md](docs/DROP-IN-CONTRACT.md).
 
 This is **not** a drop-in replacement for `pg`, `postgres.js`, or PGlite's client API. There is no wire protocol, no async client, no connection pooling, no `pg_dump` codec, and no multi-session concurrency.
 
@@ -271,7 +271,7 @@ This is **not** a drop-in replacement for `pg`, `postgres.js`, or PGlite's clien
 8. **`int8` comes back as `bigint` by default** (`{ int8: "number" | "string" }` opts in). `numeric`/dates/json come back as **text** — parse them explicitly if you need JS numbers/objects.
 9. **A failed statement does not abort the transaction** — real PostgreSQL rejects everything after an error inside `BEGIN` until `ROLLBACK`; postgres-mem keeps executing (documented divergence).
 10. **Unquoted identifiers fold to lowercase** (PostgreSQL rule — not uppercase like the SQL standard).
-11. **Do not import `@crvouga/postgres-mem/unstable` in application code** unless you accept breakage in any release.
+11. **Do not import `@crvouga/mockingbird-service-postgres/unstable` in application code** unless you accept breakage in any release.
 
 Working examples beyond this README: `examples/react-vite`, `tests/contract/api/`, and `tests/contract/parameters/`.
 
@@ -298,53 +298,7 @@ See [COMPATIBILITY.md](./COMPATIBILITY.md).
 
 ## Releasing
 
-Publishing is fully automated. You never bump `version` or run `npm publish` by hand.
-
-### How a release happens
-
-1. Push or merge to `main`. Prefer [Conventional Commits](https://www.conventionalcommits.org/) so the bump is `feat` → minor / `fix` → patch / `BREAKING` → major; any other subject still publishes a patch.
-2. CI runs commitlint, format/lint/typecheck, build, package verification, tests, browser smoke, and benchmarks.
-3. If every gate is green, [semantic-release](https://semantic-release.gitbook.io/) analyzes commits since the last git tag, bumps semver, publishes to npm, and creates a GitHub Release.
-
-| Commit | Version bump |
-| --- | --- |
-| `fix: …` / `perf: …` | patch (`1.0.1` → `1.0.2`) |
-| `feat: …` | minor (`1.0.1` → `1.1.0`) |
-| `feat!: …` or `BREAKING CHANGE:` footer | major (`1.1.0` → `2.0.0`) |
-| any other message on `main` (including Cursor-style subjects) | patch |
-
-PR titles must also follow Conventional Commits (enforced in CI). Prefer squash merges with a conventional title.
-
-Local checks:
-
-```bash
-bun run check:full             # commitlint + quality + tests + browser + benchmarks
-# dry-run needs a GitHub token for API calls; CI publish uses Trusted Publishing (no NPM_TOKEN)
-bun run release:dry-run
-```
-
-`package.json` version is `0.0.0-development` on purpose — **git tags** (`v0.1.0`, …) are the source of truth.
-
-### One-time setup (maintainers)
-
-Do this once so CI can publish. Full checklist: **[docs/SECRETS.md](./docs/SECRETS.md)**.
-
-1. **Create the package on npm (once), then Trusted Publishing.** If https://www.npmjs.com/package/@crvouga/postgres-mem 404s:
-
-   ```bash
-   npm login --auth-type=web
-   bun run npm:seed -- --yes
-   ```
-
-   npm does not email a publish code — complete 2FA in the browser or authenticator app.
-
-   Then on [package Access](https://www.npmjs.com/package/@crvouga/postgres-mem/access) → Trusted Publisher → GitHub Actions (`crvouga/postgres-mem`, workflow `ci.yml`). Do **not** create an Automation / granular access token for CI.
-2. Confirm GitHub Actions is enabled and can create releases (default `GITHUB_TOKEN` is enough with this workflow’s permissions). No `NPM_TOKEN` repo secret.
-3. Ensure the baseline tag exists and is pushed: `v0.1.0` (semver continues from there; the next `feat` publishes `0.2.0`).
-
-Validate the checklist anytime with `bun run secrets:doctor`.
-
-After that, every green push to `main` updates npm automatically (`feat`/`fix`/`BREAKING` pick the bump; anything else is a patch).
+This package is versioned and published with the Mockingbird monorepo. See the repository root README and docs/SECRETS.md.
 
 ## License
 

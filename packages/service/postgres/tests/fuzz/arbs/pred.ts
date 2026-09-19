@@ -1,6 +1,6 @@
 import * as fc from "fast-check";
 import { intArb } from "../config.ts";
-import { intOrNullArb, intVal, textOrNullArb, textVal, type SqlExpr, renderSqlExpr, sqlExprArb } from "./expr.ts";
+import { intOrNullArb, intVal, renderSqlExpr, type SqlExpr, sqlExprArb, textOrNullArb, textVal } from "./expr.ts";
 
 export type SqlPred =
   | { kind: "cmp"; col: "a" | "b"; op: string; value: number | null; text?: never }

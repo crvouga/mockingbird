@@ -1,6 +1,6 @@
-import initSqlJs from "sql.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import initSqlJs from "sql.js";
 import type { BenchEngine, BenchStatement, NamedFactory } from "../harness/types.ts";
 
 type SqlJsDatabase = {

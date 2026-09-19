@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ParityError, parity } from "@crvouga/mockingbird-parity"
+import { Database } from "@crvouga/mockingbird-service-sqlite"
 import { fcParameters } from "@crvouga/mockingbird-testing"
-import { Database } from "@crvouga/sqlite-mem"
 import fc from "fast-check"
 import { document, JunctionAPI, type JunctionWebhookEvent } from "./src/index.js"
 

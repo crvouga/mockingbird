@@ -29,7 +29,7 @@ if (inActions && !npmToken && !oidcReady) {
     "semantic-release needs Trusted Publishing (OIDC) for https://registry.npmjs.org",
     "",
     "Configure npm Trusted Publishing (do not create an Automation token):",
-    "  1. https://www.npmjs.com/package/@crvouga/postgres-mem → Settings → Trusted Publisher",
+    "  1. https://www.npmjs.com/package/@crvouga/mockingbird-service-postgres → Settings → Trusted Publisher",
     "  2. Add GitHub Actions publisher:",
     "       Organization/user: crvouga",
     "       Repository: postgres-mem",
@@ -45,7 +45,7 @@ if (inActions && !npmToken && !oidcReady) {
 
 if (inActions && !npmToken && oidcReady) {
   console.log(
-    "release-preflight: NPM_TOKEN unset; using GitHub OIDC (npm Trusted Publishing must be configured for @crvouga/postgres-mem).",
+    "release-preflight: NPM_TOKEN unset; using GitHub OIDC (npm Trusted Publishing must be configured for @crvouga/mockingbird-service-postgres).",
   );
 }
 

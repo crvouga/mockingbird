@@ -6,12 +6,12 @@
  * Pass `{ random: "os" }` / `{ now: "system" }` for PostgreSQL-like entropy and wall clock.
  * Zero WASM, native bindings, or filesystem.
  *
- * Advanced / internal helpers live under `@crvouga/postgres-mem/unstable` and are
+ * Advanced / internal helpers live under `@crvouga/mockingbird-service-postgres/unstable` and are
  * exempt from semver.
  *
  * @example
  * ```ts
- * import { Database } from "@crvouga/postgres-mem";
+ * import { Database } from "@crvouga/mockingbird-service-postgres";
  *
  * const db = new Database();
  * db.exec("CREATE TABLE t (id serial PRIMARY KEY, name text)");

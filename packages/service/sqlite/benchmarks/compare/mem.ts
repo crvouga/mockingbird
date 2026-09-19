@@ -1,6 +1,5 @@
 import { Database, Snapshot } from "../../src/index.ts";
-import type { NamedFactory } from "../harness/types.ts";
-import type { BenchEngine, BenchStatement } from "../harness/types.ts";
+import type { BenchEngine, BenchStatement, NamedFactory } from "../harness/types.ts";
 
 function wrapStatement(stmt: ReturnType<Database["prepare"]>): BenchStatement {
   return {

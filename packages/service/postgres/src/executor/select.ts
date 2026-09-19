@@ -1,3 +1,4 @@
+import { bindValueToTyped, datumToJs } from "../api/bind.ts";
 import type {
   ColumnRef,
   CommonTableExpr,
@@ -16,19 +17,18 @@ import type {
   WithClause,
 } from "../ast/nodes.ts";
 import { pgError } from "../errors/error.ts";
-import { conjunctions, joinKeyFromRow, rowsMatchEqKeys, tryIndexedFromItem } from "../planner/access.ts";
-import { bindValueToTyped, datumToJs } from "../api/bind.ts";
 import type { EvalScope } from "../expressions/eval.ts";
-import { evalAsPredicate, evalExpr, checkBoolExprType } from "../expressions/eval.ts";
+import { checkBoolExprType, evalAsPredicate, evalExpr } from "../expressions/eval.ts";
 import { createAggregate, isAggregateName, isOrderedSetAggregate, unifyAggType } from "../functions/aggregates.ts";
 import { getSrfFunctions, isSrfName } from "../functions/srf.ts";
+import { conjunctions, joinKeyFromRow, rowsMatchEqKeys, tryIndexedFromItem } from "../planner/access.ts";
 import { catalogRelation } from "../schema/catalog.ts";
 import type { FunctionData } from "../storage/database-state.ts";
 import { canImplicitCast, castTo, unifyTypes } from "../types/cast.ts";
-import { resolveTypeName } from "../types/resolve.ts";
-import { callPlpgsqlScalar, callPlpgsqlSet } from "./plpgsql.ts";
 import { datumCompare, datumKey } from "../types/compare.ts";
+import { resolveTypeName } from "../types/resolve.ts";
 import { type Datum, type TypedValue, type TypeId, tv, UNKNOWN } from "../types/value.ts";
+import { callPlpgsqlScalar, callPlpgsqlSet } from "./plpgsql.ts";
 import {
   childEnv,
   type ExecEnv,

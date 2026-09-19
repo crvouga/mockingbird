@@ -269,10 +269,10 @@ export function printPopulate(entry: SecretEntry): void {
   }
 }
 
-export const NPM_PACKAGE = "@crvouga/sqlite-mem";
+export const NPM_PACKAGE = "@crvouga/mockingbird-service-sqlite";
 export const NPM_SEED_VERSION = "0.1.0";
-export const NPM_PACKAGE_URL = "https://www.npmjs.com/package/@crvouga/sqlite-mem";
-export const NPM_TRUSTED_PUBLISHER_URL = "https://www.npmjs.com/package/@crvouga/sqlite-mem/access";
+export const NPM_PACKAGE_URL = "https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite";
+export const NPM_TRUSTED_PUBLISHER_URL = "https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite/access";
 
 export async function npmViewVersion(name: string): Promise<{ version?: string; missing: boolean; error?: string }> {
   const result = await run(["npm", "view", name, "version", "--registry", "https://registry.npmjs.org"]);

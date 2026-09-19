@@ -10,16 +10,16 @@ import type {
 } from "../ast/nodes.ts";
 import { checkTableConstraints } from "../constraints/check.ts";
 import { SqliteError } from "../errors/index.ts";
-import { isExpectedFastPathMiss } from "../runtime/catch.ts";
 import { exprEquals } from "../expressions/equals.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { indexKeyValues } from "../indexes/keys.ts";
 import { tryIndexedTableRows } from "../planner/access.ts";
-import { normalizeForCollation } from "../types/collation.ts";
+import { isExpectedFastPathMiss } from "../runtime/catch.ts";
 import { splitQualifiedName, type ViewInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import { cloneRow, normalizeColumnName } from "../storage/row.ts";
 import { makeColumnInfo, Table } from "../storage/table.ts";
+import { normalizeForCollation } from "../types/collation.ts";
 import { applyStrictValue } from "../types/strict.ts";
 import { applyAffinity, asSqlReal, compareSql, isTruthySql, type SqlValue } from "../types/value.ts";
 import type { Fts5Row, Fts5VirtualTable } from "../vtable/fts5.ts";

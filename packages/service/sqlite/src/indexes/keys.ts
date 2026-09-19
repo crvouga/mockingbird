@@ -1,15 +1,14 @@
 import type { IndexedColumn } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
+import type { Cell, ExecutionEnv } from "../executor/env.ts";
 import type { EvalContext } from "../expressions/context.ts";
 import { evalExpr } from "../expressions/eval.ts";
-import type { Cell, ExecutionEnv } from "../executor/env.ts";
 import { defaultFunctionRegistry } from "../functions/registry.ts";
 import type { IndexInfo } from "../storage/database-state.ts";
 import { normalizeColumnName, type Row } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
-import { applyAffinity, type SqlValue } from "../types/value.ts";
-import { isTruthySql } from "../types/value.ts";
+import { applyAffinity, isTruthySql, type SqlValue } from "../types/value.ts";
 
 /** Heap cells for evaluating index expressions / partial `WHERE` via `ExecutionEnv`. */
 export function heapRowCells(table: Table, row: Row, env?: ExecutionEnv): Cell[] {

@@ -1,5 +1,5 @@
 // biome-ignore-all lint/suspicious/noArrayIndexKey: SQL result grids are positional
-import type { QueryValue, ResultSet } from "@crvouga/sqlite-mem";
+import type { QueryValue, ResultSet } from "@crvouga/mockingbird-service-sqlite";
 
 function formatValue(value: QueryValue | undefined): { text: string; kind: "null" | "blob" | "value" } {
   if (value === null || value === undefined) return { text: "NULL", kind: "null" };

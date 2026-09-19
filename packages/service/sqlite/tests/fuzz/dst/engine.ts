@@ -9,16 +9,16 @@ import {
 import { assertProbeResultsEqual, captureProbeResults, probesForState } from "../snapshot-helpers.ts";
 import {
   DEFAULT_SCHEMA,
+  type DmlOp,
+  initialSimState,
+  type MixedOp,
   OUTCOME_KINDS,
   QUERY_KINDS,
   READ_ONLY_QUERY_KINDS,
-  SIMPLE_SCHEMA,
-  type DmlOp,
-  type MixedOp,
-  type SchemaKind,
-  type SimState,
-  initialSimState,
   resolveOp,
+  type SchemaKind,
+  SIMPLE_SCHEMA,
+  type SimState,
   schemaFor,
 } from "./ops.ts";
 

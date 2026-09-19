@@ -37,7 +37,7 @@ interface AdoptedDatabase {
  *
  * @example
  * ```ts
- * import { Database } from "@crvouga/sqlite-mem";
+ * import { Database } from "@crvouga/mockingbird-service-sqlite";
  *
  * const db = new Database();
  * db.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)");

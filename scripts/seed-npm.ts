@@ -8,8 +8,8 @@
  *   bun run npm:seed -- --yes
  */
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
-import { join } from "node:path"
 import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { $ } from "bun"
 import {
   hasFlag,

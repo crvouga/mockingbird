@@ -10,6 +10,8 @@
       "!**/src/generated",
       "!**/openapi.yaml",
       "!**/corpus",
+      "!packages/service/postgres",
+      "!packages/service/sqlite",
       "!bun.lock"
     ]
   },

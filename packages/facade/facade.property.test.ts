@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import fc from "fast-check"
-import { fromFetchHandler, toFetchHandler } from "./src/index.js"
+import { fromFetchHandler, PostgresDatabase, SqliteDatabase, toFetchHandler } from "./src/index.js"
 
 type Echo = { method: string; url: string; echoed: string }
 
@@ -38,4 +38,17 @@ test("facade toFetchHandler ∘ fromFetchHandler preserves responses", async () 
       },
     ),
   )
+})
+
+test("facade database aliases expose both in-memory engines", () => {
+  const postgres = new PostgresDatabase()
+  const sqlite = new SqliteDatabase()
+
+  postgres.exec("CREATE TABLE values_table (value integer)")
+  postgres.prepare("INSERT INTO values_table (value) VALUES ($1)").run(42)
+  sqlite.exec("CREATE TABLE values_table (value integer)")
+  sqlite.prepare("INSERT INTO values_table (value) VALUES (?)").run(42)
+
+  expect(postgres.query("SELECT value FROM values_table")).toEqual([{ value: 42 }])
+  expect(sqlite.query("SELECT value FROM values_table")).toEqual([{ value: 42 }])
 })

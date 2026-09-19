@@ -21,7 +21,9 @@ type Commit = { hash: string; subject: string; body: string }
 
 async function commitsSince(ref: string | null): Promise<Commit[]> {
   const range = ref ? `${ref}..HEAD` : "--root"
-  const result = await $`git log ${range} --format='%H|||%s|||%b---'`.cwd(root).quiet()
+  const result = await $`git log --first-parent ${range} --format='%H|||%s|||%b---'`
+    .cwd(root)
+    .quiet()
   if (result.exitCode !== 0) return []
   const raw = result.text().trim()
   if (!raw) return []

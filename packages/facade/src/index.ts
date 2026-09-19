@@ -39,6 +39,37 @@ export {
   createMedplumAPI,
   MedplumAPI,
 } from "@crvouga/mockingbird-service-medplum"
+export type {
+  BindValue as PostgresBindValue,
+  DatabaseOptions as PostgresDatabaseOptions,
+  ErrorCategory as PostgresErrorCategory,
+  JsValue as PostgresJsValue,
+  QueryRow as PostgresQueryRow,
+  RegisterFunctionOptions as PostgresRegisterFunctionOptions,
+  ResultSet as PostgresResultSet,
+  RunResult as PostgresRunResult,
+} from "@crvouga/mockingbird-service-postgres"
+export {
+  Database as PostgresDatabase,
+  PostgresError,
+  Snapshot as PostgresSnapshot,
+  Statement as PostgresStatement,
+} from "@crvouga/mockingbird-service-postgres"
+export type {
+  BindValue as SqliteBindValue,
+  DatabaseOptions as SqliteDatabaseOptions,
+  ErrorCategory as SqliteErrorCategory,
+  QueryRow as SqliteQueryRow,
+  QueryValue as SqliteQueryValue,
+  ResultSet as SqliteDatabaseResultSet,
+  RunResult as SqliteDatabaseRunResult,
+} from "@crvouga/mockingbird-service-sqlite"
+export {
+  Database as SqliteDatabase,
+  Snapshot as SqliteSnapshot,
+  SqliteError,
+  Statement as SqliteDatabaseStatement,
+} from "@crvouga/mockingbird-service-sqlite"
 export {
   document as stripeDocument,
   QA_SURFACE_OPS,

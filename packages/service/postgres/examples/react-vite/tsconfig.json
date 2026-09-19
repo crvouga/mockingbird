@@ -16,7 +16,7 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@crvouga/postgres-mem": ["../../src/index.ts"]
+      "@crvouga/mockingbird-service-postgres": ["../../src/index.ts"]
     }
   },
   "include": ["src", "scripts"]

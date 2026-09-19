@@ -6,6 +6,7 @@
  * when invoked via the compat gate (this script still prints the report).
  */
 import { Database as BunDatabase } from "bun:sqlite";
+import { PRAGMA_TVF_NAMES } from "../src/executor/pragma-engine.ts";
 import { aggregateFunctions } from "../src/functions/aggregate.ts";
 import { dateTimeFunctions } from "../src/functions/datetime.ts";
 import { ftsAuxFunctions, rtreeAuxFunctions } from "../src/functions/extensions.ts";
@@ -13,7 +14,6 @@ import { jsonAggregateFunctions, jsonScalarFunctions } from "../src/functions/js
 import { mathFunctions } from "../src/functions/math.ts";
 import { getScalarFunctions } from "../src/functions/scalar.ts";
 import { listTableValuedFunctions } from "../src/functions/table-valued.ts";
-import { PRAGMA_TVF_NAMES } from "../src/executor/pragma-engine.ts";
 import { windowFunctions } from "../src/functions/window.ts";
 
 const OPERATOR_FUNCS = ["->", "->>", "like", "glob", "match", "regexp"] as const;

@@ -1,4 +1,4 @@
-import { PostgresError, type ResultSet } from "@crvouga/postgres-mem";
+import { PostgresError, type ResultSet } from "@crvouga/mockingbird-service-postgres";
 import { getDb } from "./db.ts";
 
 export type SqlErrorInfo = {

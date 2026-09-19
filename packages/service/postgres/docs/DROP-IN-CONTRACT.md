@@ -1,4 +1,4 @@
-# Drop-in contract — `@crvouga/postgres-mem`
+# Drop-in contract — `@crvouga/mockingbird-service-postgres`
 
 **Status:** definition (2026-08-21). Until this document exists and tests map to it, “drop-in replacement” is unfalsifiable.
 
@@ -8,7 +8,7 @@
 
 ## 0. Claim under test (falsifiable)
 
-> For every SQL statement (or sequence) in the **in-scope dialect surface**, executing it against `@crvouga/postgres-mem` and against a **pinned PostgreSQL oracle** yields observationally equal results under the equivalence relation in §2 — except for divergences listed in §4, each of which has a pinning test.
+> For every SQL statement (or sequence) in the **in-scope dialect surface**, executing it against `@crvouga/mockingbird-service-postgres` and against a **pinned PostgreSQL oracle** yields observationally equal results under the equivalence relation in §2 — except for divergences listed in §4, each of which has a pinning test.
 
 This is **not** the claim “any app can replace `pg` / `postgres.js` / PGlite by swapping the import.” That broader claim is **false today** for the reasons in §1 and [GAP-ANALYSIS.md](GAP-ANALYSIS.md).
 
@@ -24,7 +24,7 @@ Each consumer surface has a different API. “Drop-in” must name the surface.
 
 | Surface | Typical entry | postgres-mem today | Drop-in status |
 | --- | --- | --- | --- |
-| **postgres-mem native** | `import { Database } from "@crvouga/postgres-mem"` — `exec` / `query` / `prepare` → `run`/`all`/`get`/`result`, `transaction`, `copyFrom`, `snapshot`/`restore`, `changes` | **This is the supported API** | Claim target for SQL dialect parity only |
+| **postgres-mem native** | `import { Database } from "@crvouga/mockingbird-service-postgres"` — `exec` / `query` / `prepare` → `run`/`all`/`get`/`result`, `transaction`, `copyFrom`, `snapshot`/`restore`, `changes` | **This is the supported API** | Claim target for SQL dialect parity only |
 | **`pg` (node-postgres)** | Async `Client`/`Pool`, `client.query(text, values)` → `{ rows, rowCount, fields }`, events, cursors | Sync API, no Pool/Client shape, no events | **Non-drop-in** without an adapter |
 | **`postgres.js`** | Tagged-template `` sql`SELECT …` ``, async, pipelining | No adapter | **Non-drop-in** |
 | **PGlite** | Async `db.query` / `db.exec`, `.dumpDataDir()`, extensions, live queries | Used as the differential oracle, not as an API model | **Non-drop-in** API-wise; **dialect** is the claim |
@@ -32,7 +32,7 @@ Each consumer surface has a different API. “Drop-in” must name the surface.
 | **ORMs** | Prisma, Drizzle, Kysely, TypeORM, knex | No official drivers; catalog introspection queries largely work (`pg_catalog` / `information_schema`) but upstream suites unproven | **Unproven** as drop-in drivers |
 | **`pg_dump` / restore** | SQL text or custom-format archives | Plain-SQL subset executes (in-scope statements); custom format is not parsed | **Partial** (plain SQL only) |
 
-Package exports today: `"."` and `"./unstable"` only — **no** `@crvouga/postgres-mem/pg`, `/pglite`, etc.
+Package exports today: `"."` and `"./unstable"` only — **no** `@crvouga/mockingbird-service-postgres/pg`, `/pglite`, etc.
 
 ---
 

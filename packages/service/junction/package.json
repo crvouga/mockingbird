@@ -72,7 +72,7 @@
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-openbao": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/sqlite-mem": "1.15.0",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@tryvital/vital-node": "3.1.511",
     "fast-check": "4.9.0",
     "wrangler": "^4.129.1"

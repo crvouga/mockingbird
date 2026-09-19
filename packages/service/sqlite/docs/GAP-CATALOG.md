@@ -1,6 +1,6 @@
 # Gap Catalog — drop-in proof inventory
 
-**Status:** Phase 0 (2026-08-20). Authoritative inventory of what is *differentially proven* vs *claimed* vs *intentionally different* for `@crvouga/sqlite-mem` as a client-side drop-in for SQLite **3.51.0** (`bun:sqlite`; Linux/Windows may report **3.53.0**).
+**Status:** Phase 0 (2026-08-20). Authoritative inventory of what is *differentially proven* vs *claimed* vs *intentionally different* for `@crvouga/mockingbird-service-sqlite` as a client-side drop-in for SQLite **3.51.0** (`bun:sqlite`; Linux/Windows may report **3.53.0**).
 
 This file supersedes [`docs/PARITY-GAPS.md`](PARITY-GAPS.md) as the **current** unproven-inventory. PARITY-GAPS remains historical (many of its “LIKELY DIVERGENCE” P0 items were closed in the 2026-08-19 hardening pass — see [Closed since PARITY-GAPS](#closed-since-parity-gaps)).
 

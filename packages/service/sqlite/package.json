@@ -1,6 +1,6 @@
 {
-  "name": "@crvouga/sqlite-mem",
-  "version": "0.0.0-development",
+  "name": "@crvouga/mockingbird-service-sqlite",
+  "version": "0.1.0",
   "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
   "type": "module",
   "license": "MIT",
@@ -31,18 +31,18 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga/sqlite-mem.git"
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/sqlite"
   },
-  "homepage": "https://github.com/crvouga/sqlite-mem#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite#readme",
   "bugs": {
-    "url": "https://github.com/crvouga/sqlite-mem/issues"
+    "url": "https://github.com/crvouga/mockingbird/issues"
   },
   "publishConfig": {
     "access": "public",
     "provenance": true
   },
   "scripts": {
-    "prepare": "husky",
     "build": "bun run scripts/build.ts",
     "test": "bun test tests/contract tests/fuzz tests/harness",
     "test:contract": "bun test tests/contract",
@@ -78,43 +78,27 @@
     "requirements": "bun run scripts/sqlite-requirements.ts",
     "typecheck": "tsc --noEmit",
     "typecheck:package": "tsc --noEmit -p tsconfig.package.json",
-    "format": "biome format --write .",
-    "format:check": "biome format .",
-    "lint": "biome lint --error-on-warnings .",
-    "lint:fix": "biome lint --write --error-on-warnings .",
+    "format": "biome format --config-path=biome.json --write .",
+    "format:check": "biome format --config-path=biome.json .",
+    "lint": "biome lint --config-path=biome.json --error-on-warnings .",
+    "lint:fix": "biome lint --config-path=biome.json --write --error-on-warnings .",
     "clean": "rm -rf dist",
     "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:sqlite-compat",
-    "check:full": "bun run scripts/ci-local.ts",
-    "commitlint": "commitlint --edit",
+    "check:full": "bun run check && bun run build && bun run pack:check && bun run portability",
     "verify-package": "bun run scripts/verify-package.ts",
-    "release:preflight": "bun run scripts/release-preflight.ts",
-    "release": "semantic-release",
-    "release:dry-run": "semantic-release --dry-run",
-    "secrets:doctor": "bun run scripts/secrets/doctor.ts",
-    "secrets:check": "bun run scripts/secrets/check-vault.ts && bun run scripts/secrets/check-github.ts",
-    "secrets:sync": "bun run scripts/secrets/sync-github.ts",
-    "npm:seed": "bun run scripts/seed-npm.ts",
-    "gh": "open https://github.com/crvouga/sqlite-mem/actions",
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "portability": "bun ../../../scripts/portability.ts",
     "example:react-vite": "cd examples/react-vite && bun install && bun run dev",
     "fc": "clear && bun format && bun check:full"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@biomejs/biome": "^2.5.8",
-    "@commitlint/cli": "^21.2.2",
-    "@commitlint/config-conventional": "^21.2.2",
-    "@semantic-release/commit-analyzer": "^13.0.1",
-    "@semantic-release/github": "^12.0.9",
-    "@semantic-release/npm": "^13.1.5",
-    "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/bun": "latest",
     "alasql": "^4.17.3",
-    "conventional-changelog-conventionalcommits": "^10.3.0",
     "esbuild": "^0.28.2",
     "fast-check": "^4.1.1",
-    "husky": "^9.1.7",
     "publint": "^0.3.23",
-    "semantic-release": "^25.0.9",
     "sql.js": "^1.14.2",
     "typescript": "^5.8.3",
     "wa-sqlite": "^1.0.0"
@@ -124,10 +108,15 @@
     "node": ">=20"
   },
   "keywords": [
+    "mockingbird",
     "sqlite",
     "typescript",
     "in-memory",
     "database",
     "sql"
-  ]
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "service"
+  }
 }

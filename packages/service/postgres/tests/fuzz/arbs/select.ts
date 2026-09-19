@@ -1,5 +1,5 @@
 import * as fc from "fast-check";
-import { type SqlPred, renderSqlPred, sqlPredArb } from "./pred.ts";
+import { renderSqlPred, type SqlPred, sqlPredArb } from "./pred.ts";
 
 export type SelectShape = {
   distinct: boolean;

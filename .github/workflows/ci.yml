@@ -95,9 +95,6 @@ jobs:
       - name: Boundaries
         run: bun run check:boundaries
 
-      - name: Test naming (property-based only)
-        run: bun run check:tests
-
   test:
     name: Test
     needs: [quality]

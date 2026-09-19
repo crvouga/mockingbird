@@ -168,6 +168,6 @@ Treat any marketing phrase implying “no known bugs” or unqualified “drop-i
 
 ## Recommended claim (applied in README)
 
-> **Verified:** PostgreSQL 18 **SQL dialect** behavioral parity against PGlite 18.3 for the `@crvouga/postgres-mem` sync API, via differential contracts (`bun run test:postgres-compat`).
+> **Verified:** PostgreSQL 18 **SQL dialect** behavioral parity against PGlite 18.3 for the `@crvouga/mockingbird-service-postgres` sync API, via differential contracts (`bun run test:postgres-compat`).
 >
 > **Not a drop-in for:** `pg` / `postgres.js` / PGlite client APIs, the wire protocol, PL/pgSQL, extensions, multi-session concurrency, or `pg_dump` interchange.

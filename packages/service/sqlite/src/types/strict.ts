@@ -1,5 +1,5 @@
 import { SqliteError } from "../errors/index.ts";
-import { asSqlReal, coerceToNumber, isSqlReal, storageClassOf, type SqlValue, utf8Decode } from "./value.ts";
+import { asSqlReal, coerceToNumber, isSqlReal, type SqlValue, storageClassOf, utf8Decode } from "./value.ts";
 
 const STRICT_TYPES = new Set(["INT", "INTEGER", "REAL", "TEXT", "BLOB", "ANY"]);
 

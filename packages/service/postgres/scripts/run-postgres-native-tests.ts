@@ -5,11 +5,12 @@
  *
  * Usage: `bun run test:postgres-native`
  */
-import { createServer } from "node:net";
+
+import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
 import EmbeddedPostgres from "embedded-postgres";
 import pg from "pg";
 import { SUPPORTED_ORACLE_VERSIONS } from "../tests/harness/oracle-versions.ts";

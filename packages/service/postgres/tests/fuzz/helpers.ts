@@ -1,5 +1,5 @@
 import { InMemoryAdapter } from "../adapters/in-memory.ts";
-import { deepCompareResults, type CompareOptions } from "../harness/normalize.ts";
+import { type CompareOptions, deepCompareResults } from "../harness/normalize.ts";
 import { createOracleAdapter } from "../harness/oracle.ts";
 import { dumpLogicalState } from "../harness/state-dump.ts";
 import type { ContractDb, QueryResult, SqlValue } from "../harness/types.ts";

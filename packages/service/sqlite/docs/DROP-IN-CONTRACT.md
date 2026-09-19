@@ -1,4 +1,4 @@
-# Drop-in contract — `@crvouga/sqlite-mem`
+# Drop-in contract — `@crvouga/mockingbird-service-sqlite`
 
 **Status:** Phase 0 definition (2026-08-20). Until this document exists and tests map to it, “drop-in replacement” is unfalsifiable.
 
@@ -8,7 +8,7 @@
 
 ## 0. Claim under test (falsifiable)
 
-> For every SQL statement (or sequence) in the **in-scope dialect surface**, executing it against `@crvouga/sqlite-mem` and against a **pinned SQLite oracle** yields observationally equal results under the equivalence relation in §2 — except for divergences listed in §4, each of which has a pinning test.
+> For every SQL statement (or sequence) in the **in-scope dialect surface**, executing it against `@crvouga/mockingbird-service-sqlite` and against a **pinned SQLite oracle** yields observationally equal results under the equivalence relation in §2 — except for divergences listed in §4, each of which has a pinning test.
 
 This is **not** the claim “any browser app can replace `sql.js` / `sqlite-wasm` by swapping the import.” That broader claim is **false today** for the reasons in §1 and [GAP-ANALYSIS.md](GAP-ANALYSIS.md) §Verdict.
 
@@ -24,7 +24,7 @@ Each consumer surface has a different API. “Drop-in” must name the surface.
 
 | Surface | Typical entry | sqlite-mem today | Drop-in status |
 | --- | --- | --- | --- |
-| **sqlite-mem native** | `import { Database } from "@crvouga/sqlite-mem"` — `exec` / `query` / `prepare` → `run`/`all`/`get`/`result`, `transaction`, `snapshot`/`restore`, `changes` / `lastInsertRowid` | **This is the supported API** | Claim target for SQL dialect parity only |
+| **sqlite-mem native** | `import { Database } from "@crvouga/mockingbird-service-sqlite"` — `exec` / `query` / `prepare` → `run`/`all`/`get`/`result`, `transaction`, `snapshot`/`restore`, `changes` / `lastInsertRowid` | **This is the supported API** | Claim target for SQL dialect parity only |
 | **`sql.js`** | `new SQL.Database(bytes)`, `db.run` / `db.exec` → `[{columns,values}]`, `stmt.bind`/`step`/`get`/`getAsObject`/`getColumnNames`/`reset`/`free`, `db.each`, `db.export()`, `db.create_function` | No adapter export; no `step`/`export`/UDF; snapshot ≠ `.sqlite` | **Non-drop-in** without adapters + file codec + UDF |
 | **`wa-sqlite` / `@sqlite.org/sqlite-wasm`** | OO1 `DB`/`Stmt`, `oo1.OpfsDb`, `sqlite3_*` bindings | No C API, no OPFS, no WASM | **Non-drop-in** |
 | **`better-sqlite3`** | `Database`, `prepare`, `iterate`, `pluck`/`raw`/`expand`, `safeIntegers`, sticky `bind`, `pragma()`, hooks, `serialize`/`backup` | Subset of method names; extras absent (pinned `js-api-surface`) | **Partial** SQL-only; **not** API drop-in |
@@ -33,7 +33,7 @@ Each consumer surface has a different API. “Drop-in” must name the surface.
 | **ORMs** | Kysely, Drizzle, TypeORM, Sequelize, Knex | No official drivers; integration tests are **style** SQL (pragma TVFs, CRUD), not upstream suites | **Unproven** as drop-in drivers |
 | **Sync engines** | ElectricSQL / PowerSync / CR-SQLite patterns | Need `.sqlite` bytes, ATTACH, often hooks/triggers + file round-trip | **Non-starter** while §35/§37 gaps hold |
 
-Package exports today: `"."` and `"./unstable"` only — **no** `@crvouga/sqlite-mem/sql.js`, `/better-sqlite3`, etc.
+Package exports today: `"."` and `"./unstable"` only — **no** `@crvouga/mockingbird-service-sqlite/sql.js`, `/better-sqlite3`, etc.
 
 ---
 

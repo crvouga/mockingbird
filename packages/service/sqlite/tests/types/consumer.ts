@@ -2,7 +2,7 @@
  * Compile-only checks that the published `dist` types are complete and strict.
  * Run after `bun run build` via `bun run typecheck:package`.
  */
-import { Database, Snapshot, SqliteError, Statement } from "../../dist/index.js";
+
 import type {
   BindValue,
   DatabaseOptions,
@@ -12,16 +12,17 @@ import type {
   ResultSet,
   RunResult,
 } from "../../dist/index.js";
+import { Database, Snapshot, SqliteError, Statement } from "../../dist/index.js";
+import type { ParsedStatement, Token } from "../../dist/unstable.js";
 import {
   DEFAULT_DATABASE_SEED,
   DEFAULT_NOW,
-  parse,
   Prng,
+  parse,
   SqlJsonText,
   SqlReal,
   tokenize,
 } from "../../dist/unstable.js";
-import type { ParsedStatement, Token } from "../../dist/unstable.js";
 
 const options: DatabaseOptions = {
   seed: 1,

@@ -1,7 +1,7 @@
 import type { ReindexStmt, Statement } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
-import { assertUnreachable } from "../runtime/assert.ts";
 import { heapRowCells, rebuildIndexFromTable } from "../indexes/keys.ts";
+import { assertUnreachable } from "../runtime/assert.ts";
 import type { DatabaseState, IndexInfo } from "../storage/database-state.ts";
 import { executeAttach, executeDetach } from "./attach.ts";
 import {

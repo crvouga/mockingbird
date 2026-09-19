@@ -1,8 +1,8 @@
 /** Generated matrix: explicit casts of edge values to every scalar cast target. */
 import { describe, test } from "bun:test";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
-import { createOracleAdapter } from "../../harness/oracle.ts";
 import { deepCompareResults } from "../../harness/normalize.ts";
+import { createOracleAdapter } from "../../harness/oracle.ts";
 import type { ContractDb } from "../../harness/types.ts";
 import { CAST_TARGETS, CLASS_REPS, FLOAT_EDGES, INTEGER_EDGES, NUMERIC_EDGES, TEXT_EDGES } from "./values.ts";
 

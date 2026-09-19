@@ -223,7 +223,7 @@ Do not erase this when rewriting claims — narrow the claim to match:
 
 ## Recommended claim rewrite (for Phase 3 README — not applied yet)
 
-> **Verified:** SQLite **SQL dialect** behavioral parity against `bun:sqlite` 3.51.x/3.53.0 for the `@crvouga/sqlite-mem` sync API, via differential contracts (`bun run test:sqlite-compat`).
+> **Verified:** SQLite **SQL dialect** behavioral parity against `bun:sqlite` 3.51.x/3.53.0 for the `@crvouga/mockingbird-service-sqlite` sync API, via differential contracts (`bun run test:sqlite-compat`).
 >
 > **Not a drop-in for:** `sql.js` / `sqlite-wasm` APIs, on-disk `.sqlite` interchange, user-defined functions, lazy statement stepping, or ATTACH of filesystem databases.
 >

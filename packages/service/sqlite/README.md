@@ -1,6 +1,6 @@
-# sqlite-mem
+# @crvouga/mockingbird-service-sqlite
 
-[npm](https://www.npmjs.com/package/@crvouga/sqlite-mem) · [GitHub](https://github.com/crvouga/sqlite-mem)
+[npm](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) · [GitHub](https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite)
 
 Pure TypeScript, completely in-memory SQLite implementation aiming for **full SQLite3 SQL dialect parity** (same statements → same results).
 
@@ -33,17 +33,17 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for the matrix, [docs/DROP-IN-CONTRACT.
 ## Install
 
 ```bash
-bun add @crvouga/sqlite-mem
+bun add @crvouga/mockingbird-service-sqlite
 # or
-npm install @crvouga/sqlite-mem
+npm install @crvouga/mockingbird-service-sqlite
 ```
 
-Requires Node.js ≥ 20 or Bun ≥ 1.1. The published package is **ESM only** (`import` from `@crvouga/sqlite-mem`).
+Requires Node.js ≥ 20 or Bun ≥ 1.1. The published package is **ESM only** (`import` from `@crvouga/mockingbird-service-sqlite`).
 
 ## Usage
 
 ```ts
-import { Database, Snapshot } from "@crvouga/sqlite-mem";
+import { Database, Snapshot } from "@crvouga/mockingbird-service-sqlite";
 
 const db = new Database();
 
@@ -82,7 +82,7 @@ From the repo root after that install: `bun run example`.
 ## API
 
 ```ts
-import { Database, Snapshot, SqliteError } from "@crvouga/sqlite-mem";
+import { Database, Snapshot, SqliteError } from "@crvouga/mockingbird-service-sqlite";
 
 interface DatabaseOptions {
   seed?: number | bigint;                 // default 1 — ignored when random is "os"
@@ -136,7 +136,7 @@ class SqliteError extends Error {
 }
 ```
 
-Stick to `Database`, `Snapshot`, `Statement`, and `SqliteError` for application code. Advanced internals (`parse`, `tokenize`, `evalExpr`, snapshot codec pieces, `SqlValue` utilities, `Prng`, …) are available only from `@crvouga/sqlite-mem/unstable` and are **exempt from semver**.
+Stick to `Database`, `Snapshot`, `Statement`, and `SqliteError` for application code. Advanced internals (`parse`, `tokenize`, `evalExpr`, snapshot codec pieces, `SqlValue` utilities, `Prng`, …) are available only from `@crvouga/mockingbird-service-sqlite/unstable` and are **exempt from semver**.
 
 ### Method semantics
 
@@ -221,16 +221,16 @@ SQLITE_MEM_FUZZ_SEED=12345 SQLITE_MEM_FUZZ_PATH='0:1' bun test tests/fuzz  # exa
 
 ## Stability policy
 
-The exports of the main entry (`@crvouga/sqlite-mem`) are **frozen**:
+The exports of the main entry (`@crvouga/mockingbird-service-sqlite`) are **frozen**:
 
 - **Never** outside a major: removals, renames, signature changes, or changes to documented behavior of the stable surface.
 - **Allowed in minors:** additions (new methods, new optional `DatabaseOptions` fields, new `ErrorCategory` values). Consumers that `switch` on `category` must include a default case — new categories may appear without a major bump.
-- **`@crvouga/sqlite-mem/unstable`** is exempt from semver and may change or disappear in any release.
+- **`@crvouga/mockingbird-service-sqlite/unstable`** is exempt from semver and may change or disappear in any release.
 - **Snapshots:** newer library → can restore older blobs; older library → cannot restore newer format versions; byte-identical snapshot guarantee holds only within one library version.
 
 ## Compatibility notes for integrators
 
-Goal: **SQL dialect** behavioral parity vs SQLite **3.51.0** / **3.53.0** for the `@crvouga/sqlite-mem` sync API. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md). Contract: [docs/DROP-IN-CONTRACT.md](docs/DROP-IN-CONTRACT.md).
+Goal: **SQL dialect** behavioral parity vs SQLite **3.51.0** / **3.53.0** for the `@crvouga/mockingbird-service-sqlite` sync API. Full matrix: [COMPATIBILITY.md](COMPATIBILITY.md). Contract: [docs/DROP-IN-CONTRACT.md](docs/DROP-IN-CONTRACT.md).
 
 This is **not** a drop-in replacement for `sql.js`, `@sqlite.org/sqlite-wasm`, or better-sqlite3’s full Node API. There is no `.sqlite` file codec, no `create_function` / custom collations, no `stmt.step()` / `iterate()`, and `ATTACH 'file'` opens an empty in-memory schema.
 
@@ -260,7 +260,7 @@ This is **not** a drop-in replacement for `sql.js`, `@sqlite.org/sqlite-wasm`, o
 8. **No better-sqlite3 extras** — no `iterate`, `pluck`/`raw`, `safeIntegers` option, `pragma()` helper, `loadExtension`, or SQLite-file `serialize()`.
 9. **Do not bind `Date` objects** — store unixepoch integers or ISO text. Do not bind `DataView` / non-`Uint8Array` typed arrays.
 10. **Do not use `Number.isInteger` for SQL REAL vs INTEGER** — use SQL `typeof()`.
-11. **Do not import `@crvouga/sqlite-mem/unstable` in application code** unless you accept breakage in any release.
+11. **Do not import `@crvouga/mockingbird-service-sqlite/unstable` in application code** unless you accept breakage in any release.
 
 Working examples beyond this README: `examples/react-vite`, `tests/contract/api/`, and `tests/contract/parameters/`.
 
@@ -286,63 +286,7 @@ See [COMPATIBILITY.md](./COMPATIBILITY.md).
 
 ## Releasing
 
-Publishing is fully automated. You never bump `version` or run `npm publish` by hand.
-
-### How a release happens
-
-1. Push or merge to `main`. Prefer [Conventional Commits](https://www.conventionalcommits.org/) so the bump is `feat` → minor / `fix` → patch / `BREAKING` → major; any other subject still publishes a patch.
-2. CI runs commitlint, format/lint/typecheck, build, package verification, tests, browser smoke, and benchmarks.
-3. If every gate is green, [semantic-release](https://semantic-release.gitbook.io/) analyzes commits since the last git tag, bumps semver, publishes to npm, and creates a GitHub Release.
-
-| Commit | Version bump |
-| --- | --- |
-| `fix: …` / `perf: …` | patch (`1.9.0` → `1.9.1`) |
-| `feat: …` | minor (`1.9.0` → `1.10.0`) |
-| `feat!: …` or `BREAKING CHANGE:` footer | major (`1.10.0` → `2.0.0`) |
-| any other message on `main` (including Cursor-style subjects) | patch |
-
-Examples:
-
-```text
-feat: add window function support
-fix: handle NULL in UNIQUE constraints
-feat!: rename snapshot() return type
-
-Refactor AdoptedDatabase interface   # still publishes a patch
-```
-
-PR titles must also follow Conventional Commits (enforced in CI). Prefer squash merges with a conventional title.
-
-Local checks:
-
-```bash
-bun run check:full             # commitlint + quality + tests + browser + benchmarks
-# dry-run needs a GitHub token for API calls; CI publish uses Trusted Publishing (no NPM_TOKEN)
-bun run release:dry-run
-```
-
-`package.json` version is `0.0.0-development` on purpose — **git tags** (`v0.1.0`, …) are the source of truth.
-
-### One-time setup (maintainers)
-
-Do this once so CI can publish. Full checklist: **[docs/SECRETS.md](./docs/SECRETS.md)**.
-
-1. **Create the package on npm (once), then Trusted Publishing.** If https://www.npmjs.com/package/@crvouga/sqlite-mem 404s:
-
-   ```bash
-   npm login --auth-type=web
-   bun run npm:seed -- --yes
-   ```
-
-   npm does not email a publish code — complete 2FA in the browser or authenticator app.
-
-   Then on [package Access](https://www.npmjs.com/package/@crvouga/sqlite-mem/access) → Trusted Publisher → GitHub Actions (`crvouga/sqlite-mem`, workflow `ci.yml`). Do **not** create an Automation / granular access token for CI.
-2. Confirm GitHub Actions is enabled and can create releases (default `GITHUB_TOKEN` is enough with this workflow’s permissions). No `NPM_TOKEN` repo secret.
-3. Ensure the baseline tag exists and is pushed: `v0.1.0` (semver continues from there; the next `feat` publishes `0.2.0`).
-
-Validate the checklist anytime with `bun run secrets:doctor`.
-
-After that, every green push to `main` updates npm automatically (`feat`/`fix`/`BREAKING` pick the bump; anything else is a patch).
+This package is versioned and published with the Mockingbird monorepo. See the repository root README and docs/SECRETS.md.
 
 ## License
 

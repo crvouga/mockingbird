@@ -1,6 +1,7 @@
 import { SqliteError } from "../errors/index.ts";
-import { assertBlobLength } from "../runtime/assert.ts";
 import { globMatch, likeMatch } from "../expressions/like.ts";
+import { assertBlobLength } from "../runtime/assert.ts";
+import { sqliteAtoF } from "../types/sqlite-atof.ts";
 import {
   affinityFromTypeName,
   asSqlReal,
@@ -15,7 +16,6 @@ import {
   utf8Decode,
   utf8Encode,
 } from "../types/value.ts";
-import { sqliteAtoF } from "../types/sqlite-atof.ts";
 import type { FunctionContext, ScalarFunction } from "./registry.ts";
 
 /** Match bun:sqlite / SQLite 3.51.0 for drop-in parity. */

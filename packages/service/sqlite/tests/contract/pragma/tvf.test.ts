@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { Database } from "../../../src/index.ts";
 import { PRAGMA_TVF_NAMES } from "../../../src/executor/pragma-engine.ts";
+import { Database } from "../../../src/index.ts";
 import { expectParity, matrixBoth } from "../../harness/index.ts";
 import { parity } from "../helpers.ts";
 

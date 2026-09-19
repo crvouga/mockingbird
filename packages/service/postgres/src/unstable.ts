@@ -1,6 +1,6 @@
 /**
  * @packageDocumentation
- * Unstable internals of `@crvouga/postgres-mem`. Everything exported here is
+ * Unstable internals of `@crvouga/mockingbird-service-postgres`. Everything exported here is
  * exempt from semver — pin an exact version if you import from this module.
  *
  * @module

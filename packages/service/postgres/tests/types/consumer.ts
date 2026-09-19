@@ -2,7 +2,7 @@
  * Compile-only checks that the published `dist` types are complete and strict.
  * Run after `bun run build` via `bun run typecheck:package`.
  */
-import { Database, PostgresError, Snapshot } from "../../dist/index.js";
+
 import type {
   BindValue,
   DatabaseOptions,
@@ -13,8 +13,9 @@ import type {
   RunResult,
   Statement,
 } from "../../dist/index.js";
-import { DEFAULT_NOW, DatabaseState, Prng, parse, tokenize } from "../../dist/unstable.js";
+import { Database, PostgresError, Snapshot } from "../../dist/index.js";
 import type { TypedValue } from "../../dist/unstable.js";
+import { DatabaseState, DEFAULT_NOW, Prng, parse, tokenize } from "../../dist/unstable.js";
 
 const options: DatabaseOptions = {
   seed: 1,

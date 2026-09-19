@@ -1,4 +1,4 @@
-import { DEFAULT_SCHEMA, type MixedOp, initialSimState, resolveOp } from "./ops.ts";
+import { DEFAULT_SCHEMA, initialSimState, type MixedOp, resolveOp } from "./ops.ts";
 
 /**
  * Drop trailing / no-op ops and emit a linear SQL script that approximates the sequence.

@@ -17,7 +17,7 @@ import { type Context, Hono } from "hono"
 
 /** Options every provider constructor accepts. */
 export type APIOptions = {
-  /** Sync SQLite client. Defaults to `@crvouga/sqlite-mem`. */
+  /** Sync SQLite client. Defaults to `@crvouga/mockingbird-service-sqlite`. */
   sqlite?: SqliteClient
   /** Clock used for `created`-style fields. Default `Date.now`. */
   now?: () => number

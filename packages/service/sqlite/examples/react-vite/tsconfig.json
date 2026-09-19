@@ -16,7 +16,7 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@crvouga/sqlite-mem": ["../../src/index.ts"]
+      "@crvouga/mockingbird-service-sqlite": ["../../src/index.ts"]
     }
   },
   "include": ["src"]

@@ -18,7 +18,7 @@ describe("public API exports", () => {
   });
 
   test("deep package subpaths are not exported", async () => {
-    await expect(import("@crvouga/sqlite-mem/dist/api/database.js")).rejects.toBeDefined();
+    await expect(import("@crvouga/mockingbird-service-sqlite/dist/api/database.js")).rejects.toBeDefined();
   });
 });
 

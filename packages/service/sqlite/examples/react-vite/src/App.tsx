@@ -1,5 +1,5 @@
 import { type KeyboardEvent, useCallback, useState } from "react";
-import { getDb, hasSavedSnapshot, resetDatabase, restoreSnapshot, saveSnapshot, savedSnapshotBytes } from "./db.ts";
+import { getDb, hasSavedSnapshot, resetDatabase, restoreSnapshot, savedSnapshotBytes, saveSnapshot } from "./db.ts";
 import { ResultTable } from "./ResultTable.tsx";
 import { DEFAULT_SQL, runSql, SAMPLES, type SqlOutcome } from "./sql.ts";
 
@@ -68,7 +68,7 @@ export function App() {
   return (
     <div className="page">
       <header className="hero">
-        <p className="eyebrow">@crvouga/sqlite-mem</p>
+        <p className="eyebrow">@crvouga/mockingbird-service-sqlite</p>
         <h1>SQL playground</h1>
         <p className="lede">
           Pure TypeScript SQLite in the browser. Synchronous API, no WASM, no workers, no filesystem. The whole database

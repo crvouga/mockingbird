@@ -2,9 +2,9 @@
  * @packageDocumentation
  * Unstable internals for advanced tooling and the sqlite-mem test suite.
  *
- * **Exempt from semver.** Anything exported from `@crvouga/sqlite-mem/unstable`
+ * **Exempt from semver.** Anything exported from `@crvouga/mockingbird-service-sqlite/unstable`
  * may change or be removed in any release (including patch). Prefer the stable
- * entry `@crvouga/sqlite-mem` for application code.
+ * entry `@crvouga/mockingbird-service-sqlite` for application code.
  *
  * @module
  */

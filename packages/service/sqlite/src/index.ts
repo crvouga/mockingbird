@@ -6,12 +6,12 @@
  * Pass `{ random: "os" }` / `{ now: "system" }` for SQLite-like entropy and wall clock.
  * Zero WASM, native bindings, or filesystem.
  *
- * Advanced / internal helpers live under `@crvouga/sqlite-mem/unstable` and are
+ * Advanced / internal helpers live under `@crvouga/mockingbird-service-sqlite/unstable` and are
  * exempt from semver.
  *
  * @example
  * ```ts
- * import { Database } from "@crvouga/sqlite-mem";
+ * import { Database } from "@crvouga/mockingbird-service-sqlite";
  *
  * const db = new Database();
  * db.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
@@ -21,7 +21,7 @@
  *
  * @module
  */
-export { Database, Snapshot, type DatabaseOptions } from "./api/database.ts";
+export { Database, type DatabaseOptions, Snapshot } from "./api/database.ts";
 export { type RunResult, Statement } from "./api/statement.ts";
 export { type ErrorCategory, SqliteError } from "./errors/index.ts";
 export type { ResultSet } from "./executor/result.ts";

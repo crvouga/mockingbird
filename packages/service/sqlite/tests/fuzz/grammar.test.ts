@@ -1,12 +1,11 @@
 import { describe, test } from "bun:test";
 import * as fc from "fast-check";
-import { grammarProductionArb } from "./arbs/select.ts";
-import { createTableDdl, insertRowSql, rowSeedArb, tableSchemaArb } from "./arbs/schema.ts";
-import { renderSqlPred, sqlPredArb } from "./arbs/pred.ts";
-import { renderSqlExpr, sqlExprArb } from "./arbs/expr.ts";
-import { buildSelectSql, selectShapeArb } from "./arbs/select.ts";
-import { fuzzAssertConfig } from "./config.ts";
 import type { ContractDb } from "../harness/types.ts";
+import { renderSqlExpr, sqlExprArb } from "./arbs/expr.ts";
+import { renderSqlPred, sqlPredArb } from "./arbs/pred.ts";
+import { createTableDdl, insertRowSql, rowSeedArb, tableSchemaArb } from "./arbs/schema.ts";
+import { buildSelectSql, grammarProductionArb, selectShapeArb } from "./arbs/select.ts";
+import { fuzzAssertConfig } from "./config.ts";
 import { compareOrReport, compareOutcomeOrReport, compareWriteOrReport, sqlLiteral, withDatabases } from "./helpers.ts";
 
 describe("grammar-weighted differential fuzz", () => {

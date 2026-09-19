@@ -49,7 +49,7 @@ function isAdopted(value: object): value is AdoptedDatabase {
  *
  * @example
  * ```ts
- * import { Database } from "@crvouga/postgres-mem";
+ * import { Database } from "@crvouga/mockingbird-service-postgres";
  *
  * const db = new Database();
  * db.exec("CREATE TABLE users (id serial PRIMARY KEY, name text NOT NULL)");

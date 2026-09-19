@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@crvouga/sqlite-mem-example-react",
+      "name": "@crvouga/mockingbird-service-sqlite-example-react",
       "dependencies": {
         "react": "^19.2.0",
         "react-dom": "^19.2.0",

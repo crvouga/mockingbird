@@ -3,8 +3,8 @@ import * as fc from "fast-check";
 import { Database, Snapshot, SqliteError } from "../../src/index.ts";
 import { dumpLogicalState } from "../harness/state-dump.ts";
 import { fuzzAssertConfig, intArb, textArb } from "./config.ts";
-import { compareStateOrReport, withDatabases } from "./helpers.ts";
 import { mixedOpArb, runSequence } from "./dst/index.ts";
+import { compareStateOrReport, withDatabases } from "./helpers.ts";
 
 const TOKEN_SALAD = fc
   .array(

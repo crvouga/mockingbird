@@ -2,8 +2,8 @@ import { describe, test } from "bun:test";
 import * as fc from "fast-check";
 import { renderSqlExpr, sqlExprArb } from "./arbs/expr.ts";
 import { renderSqlPred, sqlTablePredArb } from "./arbs/pred.ts";
-import { buildSelectSql, grammarProductionArb, selectShapeArb } from "./arbs/select.ts";
 import { createTableDdl, insertRowSql, rowSeedArb, tableSchemaArb } from "./arbs/schema.ts";
+import { buildSelectSql, grammarProductionArb, selectShapeArb } from "./arbs/select.ts";
 import { fuzzAssertConfig } from "./config.ts";
 import { compareOrReport, compareOutcomeOrReport, withDatabases } from "./helpers.ts";
 

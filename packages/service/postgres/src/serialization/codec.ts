@@ -36,15 +36,15 @@ import type { Numeric } from "../types/numeric.ts";
 import type { Datum, PgArray, PgRecord, TypeId } from "../types/value.ts";
 import {
   InternPool,
-  readBjv,
   Reader,
+  readBjv,
   readInternTable,
   readVarintU32,
   utf8Encode,
+  Writer,
   writeBjv,
   writeInternTable,
   writeVarintU32,
-  Writer,
 } from "./wire.ts";
 
 const MAGIC = utf8Encode("PGMM");

@@ -1,4 +1,4 @@
-import { type ResultSet, SqliteError } from "@crvouga/sqlite-mem";
+import { type ResultSet, SqliteError } from "@crvouga/mockingbird-service-sqlite";
 import { getDb } from "./db.ts";
 
 export type SqlErrorInfo = {

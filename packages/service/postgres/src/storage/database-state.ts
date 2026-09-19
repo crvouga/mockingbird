@@ -3,8 +3,8 @@ import { pgError } from "../errors/error.ts";
 import type { Clock } from "../runtime/clock.ts";
 import type { Prng } from "../runtime/prng.ts";
 import { PG_CATALOG_RELATIONS } from "../schema/catalog.ts";
-import type { ColumnarSlab } from "./columnar-slab.ts";
 import { type ColumnType, type Datum, TYPE_OIDS, type TypeId, typeDisplayName } from "../types/value.ts";
+import type { ColumnarSlab } from "./columnar-slab.ts";
 
 // --- table / relation metadata ---------------------------------------------
 

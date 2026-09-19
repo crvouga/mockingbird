@@ -1,6 +1,6 @@
 # sqlite-mem React playground
 
-Client-side SQL playground using [`@crvouga/sqlite-mem`](../..) in the browser. No WASM, workers, or filesystem.
+Client-side SQL playground using [`@crvouga/mockingbird-service-sqlite`](../..) in the browser. No WASM, workers, or filesystem.
 
 ## Run
 
@@ -16,7 +16,7 @@ From the repo root (after the install above):
 bun run example
 ```
 
-Vite aliases `@crvouga/sqlite-mem` to the library source, so you do not need to `bun run build` first.
+Vite aliases `@crvouga/mockingbird-service-sqlite` to the library source, so you do not need to `bun run build` first.
 
 ## What it shows
 

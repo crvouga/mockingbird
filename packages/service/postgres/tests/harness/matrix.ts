@@ -1,7 +1,7 @@
 import { describe, test } from "bun:test";
 import { InMemoryAdapter } from "../adapters/in-memory.ts";
-import type { ContractDb } from "./types.ts";
 import { createOracleAdapter } from "./oracle.ts";
+import type { ContractDb } from "./types.ts";
 
 export type Backend = "memory" | "postgres";
 

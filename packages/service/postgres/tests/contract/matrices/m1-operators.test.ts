@@ -1,8 +1,8 @@
 /** Generated matrix: every binary operator applied to every pair of type-class representatives. */
 import { describe, test } from "bun:test";
 import { InMemoryAdapter } from "../../adapters/in-memory.ts";
-import { createOracleAdapter } from "../../harness/oracle.ts";
 import { deepCompareResults } from "../../harness/normalize.ts";
+import { createOracleAdapter } from "../../harness/oracle.ts";
 import type { ContractDb } from "../../harness/types.ts";
 import { BINARY_OPS, CLASS_REPS } from "./values.ts";
 

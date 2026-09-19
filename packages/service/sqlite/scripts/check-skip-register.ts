@@ -2,7 +2,7 @@
  * Fail CI when tests use .skip / test.todo / describe.skip without a register entry.
  * Register: tests/meta/skips.json
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "..");

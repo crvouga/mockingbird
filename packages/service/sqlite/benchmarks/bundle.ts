@@ -1,5 +1,5 @@
-import { gzipSync } from "node:zlib";
 import path from "node:path";
+import { gzipSync } from "node:zlib";
 
 const root = path.resolve(import.meta.dir, "..");
 const file = Bun.file(path.join(root, "dist/index.js"));

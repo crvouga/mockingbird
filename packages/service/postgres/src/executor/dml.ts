@@ -18,9 +18,9 @@ import {
   uniqueSpecsFor,
 } from "../constraints/enforce.ts";
 import { pgError, unsupported } from "../errors/error.ts";
-import { indexInsertRow, indexUpdateRow, rebuildTableIndexes } from "../indexes/maintain.ts";
 import { applyDomainChecks } from "../expressions/eval.ts";
 import { sequenceNextval } from "../functions/misc-fns.ts";
+import { indexInsertRow, indexUpdateRow, rebuildTableIndexes } from "../indexes/maintain.ts";
 import type { ColumnMeta, TableData } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import { datumKey } from "../types/compare.ts";

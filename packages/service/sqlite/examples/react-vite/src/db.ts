@@ -1,4 +1,4 @@
-import { Database, Snapshot } from "@crvouga/sqlite-mem";
+import { Database, Snapshot } from "@crvouga/mockingbird-service-sqlite";
 
 export const STORAGE_KEY = "sqlite-mem-example-snapshot";
 
