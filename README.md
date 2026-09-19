@@ -113,6 +113,8 @@ Exception: [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) se
 
 ## Packages
 
+**Naming (hard rule):** every package is `@crvouga/mockingbird` (the umbrella) or `@crvouga/mockingbird-<kebab-case>`; the short names below drop that prefix. `bun run check:boundaries` fails CI on any other name.
+
 | Layer | Packages |
 | --- | --- |
 | Core | `core` (`FetchAPI`), `service` (Hono dispatch keyed by `operationId`) |
@@ -196,11 +198,12 @@ Releases are fully automated on every green push to `main` ([`scripts/release/`]
 
 Versions live in tags, so `package.json` keeps `0.0.0-development` and nothing is committed back to `main` (same model as semantic-release). Every step is idempotent — re-running a failed release job finishes it.
 
-OIDC cannot create a package that does not exist on npm yet. With the optional `NPM_TOKEN` Actions secret set, the release job creates new packages with it and attaches their Trusted Publisher automatically (`npm trust github`); without it, bootstrap once from `main` with `npm login && bun run build && bun run release:publish -- --local`. See [docs/SECRETS.md](docs/SECRETS.md).
+OIDC cannot create a package that does not exist on npm yet. With the optional `NPM_TOKEN` Actions secret set, the release job creates new packages with it and attaches their Trusted Publisher automatically (`npm trust github`); without it, seed them once with `bun run release:seed` (logs in to npm if needed, builds a clean `origin/main` in a temporary worktree, publishes every missing package, attaches Trusted Publishers, and pushes tags and GitHub Releases). See [docs/SECRETS.md](docs/SECRETS.md).
 
 ```bash
 bun run release:plan                   # what the next push to main would release
 bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
+bun run release:seed                   # create packages missing from npm with your npm login
 bun run secrets:doctor                 # npm / Trusted Publishing / NPM_TOKEN status
 ```
 

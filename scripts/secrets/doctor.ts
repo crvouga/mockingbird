@@ -49,7 +49,7 @@ for (const pkg of discoverPackages().filter((p) => p.isPublic)) {
       message: `${pkg.name} is not on npm yet — the next release creates it`,
       details: [
         "Needs the NPM_TOKEN Actions secret (then Trusted Publisher is attached automatically),",
-        "or a local bootstrap on main: npm login && bun run build && bun run release:publish -- --local",
+        "or seed locally: bun run release:seed",
       ],
     })
   } else {

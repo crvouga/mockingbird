@@ -114,7 +114,7 @@ async function publish(release: Release): Promise<boolean> {
       "Fix once, either way:",
       "  - add an npm granular access token (read+write, @crvouga scope) as the NPM_TOKEN",
       `    Actions secret on ${REPO}, then re-run this workflow; or`,
-      "  - locally on main: npm login && bun run build && bun run release:publish -- --local",
+      "  - locally, from any checkout: bun run release:seed",
     ])
     return false
   }
