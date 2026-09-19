@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-service
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 The generic runtime behind every Mockingbird provider mock: turns an OpenAPI document plus one handler
 per `operationId` into a Fetch-native `FetchAPI` (Hono routing), with SQLite-backed collections,
 deterministic ids, bracket-decoded queries/bodies and schema-driven form parsing. Use it to build a
@@ -133,4 +135,4 @@ Types:
 - `@crvouga/mockingbird-openapi`, `@crvouga/mockingbird-openapi-metadata`: document parsing and `x-mockingbird` metadata.
 - `@crvouga/mockingbird-adapter-node` / `@crvouga/mockingbird-adapter-bun`: serve the result over HTTP.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -14,10 +14,14 @@ import { document, type SupportedOperationId } from "./generated/openapi.js"
 import { geneByGeneHandlers } from "./handlers.js"
 import { GeneByGeneState } from "./state.js"
 
+export type { FetchAPI } from "@crvouga/mockingbird-core"
+export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 
 export const GENEBYGENE_NAMESPACE = "genebygene"
+
+export type GeneByGeneAPIOptions = APIOptions
 
 /**
  * Stateful mock of the GeneByGene Nucleus API (token + products + orders).
@@ -31,7 +35,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private readonly service: Service
   private readonly state: GeneByGeneState
 
-  constructor(options: APIOptions = {}) {
+  constructor(options: GeneByGeneAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
     this.state = new GeneByGeneState(sqlite, GENEBYGENE_NAMESPACE)
     const handlers = defineOperations<SupportedOperationId>({

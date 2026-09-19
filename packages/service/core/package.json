@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service",
   "version": "0.0.0-development",
+  "private": true,
   "description": "Generic service runtime: Fetch-native APIs, Hono dispatch keyed by OpenAPI operationId, SQLite-backed collections, request parsing and operation registries.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",

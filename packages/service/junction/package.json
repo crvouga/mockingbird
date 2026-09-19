@@ -39,7 +39,7 @@
     "generate": "bun ../../openapi/codegen/dist/cli.js",
     "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
@@ -56,13 +56,7 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
-    "@crvouga/mockingbird-core": "workspace:*",
-    "@crvouga/mockingbird-sqlite": "workspace:*",
-    "@crvouga/mockingbird-openapi": "workspace:*",
-    "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-http-codec": "workspace:*",
-    "@crvouga/mockingbird-commands": "workspace:*",
-    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "hono": "4.11.9"
   },
   "devDependencies": {
@@ -75,6 +69,13 @@
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@tryvital/vital-node": "3.1.511",
     "fast-check": "4.9.0",
-    "wrangler": "^4.129.1"
+    "wrangler": "^4.129.1",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-commands": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*"
   }
 }

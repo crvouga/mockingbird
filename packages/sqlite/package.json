@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-sqlite",
   "version": "0.0.0-development",
+  "private": true,
   "description": "Owned sync SqliteClient port for Mockingbird services. Defaults to @crvouga/mockingbird-service-sqlite; accepts any duck-typed SQLite client.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",

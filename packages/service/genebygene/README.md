@@ -21,8 +21,8 @@ npm install -D @crvouga/mockingbird-service-genebygene
 ```
 
 ESM only. Requires Node >= 22 or Bun >= 1.2. No native dependencies: state lives in an in-memory
-SQLite engine (`@crvouga/mockingbird-service-sqlite`, pure TypeScript). To serve it over HTTP also
-install `@crvouga/mockingbird-adapter-node` or `@crvouga/mockingbird-adapter-bun`.
+SQLite engine (pure TypeScript, bundled in). To serve it over HTTP use `Bun.serve` under Bun, or
+install `@hono/node-server` under Node.
 
 ## Usage
 
@@ -85,7 +85,7 @@ console.log(await orderResponse.json())
 import { GeneByGeneAPI } from "@crvouga/mockingbird-service-genebygene"
 
 const gbg = new GeneByGeneAPI()
-// Equivalent to serve(gbg, { port: 0, hostname: "127.0.0.1" }) from @crvouga/mockingbird-adapter-bun
+// port 0 = ephemeral
 const server = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: (request) => gbg.fetch(request) })
 const baseUrl = `http://127.0.0.1:${server.port}`
 
@@ -103,12 +103,14 @@ server.stop()
 ```
 
 Any Fetch-style server works, since `GeneByGeneAPI` only needs `fetch(request)`. On Node use
-`@crvouga/mockingbird-adapter-node`:
+`@hono/node-server` (`npm install -D @hono/node-server`), whose callback receives the bound port:
 
 ```js
-import { serve } from "@crvouga/mockingbird-adapter-node"
-const server = await serve(gbg, { port: 0, host: "127.0.0.1" })
-const { port } = server.address()
+import { serve } from "@hono/node-server"
+const server = serve(
+  { fetch: (request) => gbg.fetch(request), port: 0, hostname: "127.0.0.1" },
+  (info) => console.log(`http://127.0.0.1:${info.port}`),
+)
 // ... later: server.close()
 ```
 
@@ -143,7 +145,7 @@ test("catalog has the seed product", async () => {
 
 | Export | Description |
 | --- | --- |
-| `GeneByGeneAPI` | Class. `new GeneByGeneAPI(options?)`; implements `FetchAPI`. Members: `fetch(request)`, `reset()`, `app` (Hono app), `sqlite` (`SqliteClient`). |
+| `GeneByGeneAPI` | Class. `new GeneByGeneAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. Members: `fetch(request)`, `reset()`, `app` (Hono app), `sqlite` (`SqliteClient`). |
 | `GENEBYGENE_NAMESPACE` | `"genebygene"` — SQLite namespace holding the mock's state when sharing a `sqlite` client. |
 | `document` | The vendored GeneByGene OpenAPI document (Mockingbird subset) that drives routing. |
 | `operationIds` | Every `operationId` in `document`: `PostConnectToken`, `GetProducts`, `PostOrders`, `GetOrder`. |
@@ -152,7 +154,7 @@ test("catalog has the seed product", async () => {
 Options and types:
 
 ```text
-type APIOptions = {                // from @crvouga/mockingbird-service
+type GeneByGeneAPIOptions = {      // exported: constructor options
   sqlite?: SqliteClient            // share one client across services; default: fresh in-memory DB
   now?: () => number               // clock in ms for createdAt; default Date.now
 }
@@ -172,4 +174,4 @@ MOCKINGBIRD_GENEBYGENE_CLIENT_ID=... MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET=... bu
 Live parity exercises the token endpoint against staging auth and discovers product ids from the
 real catalog before creating orders (the live catalog differs from the mock's seed product).
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).

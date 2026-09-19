@@ -1,9 +1,11 @@
 # @crvouga/mockingbird-core
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 The one contract shared by every Mockingbird package: `FetchAPI`, anything that answers a Fetch
 `Request` with a `Response`. Every mock service implements it and every runtime adapter consumes it.
 You rarely install this directly. Most users want a provider mock such as
-`@crvouga/mockingbird-service-stripe`, or the `@crvouga/mockingbird` facade; depend on this package
+`@crvouga/mockingbird-service-stripe`; depend on this package
 only when you write your own `FetchAPI` or a function that accepts one.
 
 ## Install
@@ -64,4 +66,4 @@ their `this` binding.
 - `@crvouga/mockingbird-adapter-bun`: serve a `FetchAPI` with `Bun.serve`.
 - `@crvouga/mockingbird-service`: build a `FetchAPI` from an OpenAPI document.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

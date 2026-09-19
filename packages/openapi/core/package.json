@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-openapi",
   "version": "0.0.0-development",
+  "private": true,
   "description": "OpenAPI 3.1 loading, $ref resolution, operation discovery, schema traversal and instance validation for Mockingbird. No fast-check, no Hono, no providers.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",

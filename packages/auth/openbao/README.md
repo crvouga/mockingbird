@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-openbao
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Loads third-party sandbox credentials for live parity runs from the environment or from an [OpenBao](https://openbao.org/) / HashiCorp Vault KV v2 secret (token or JWT/OIDC login), plus helpers to scrub those secrets from logs. Use it in a live-parity script before calling `parity(...)` from [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity). You do not need it for self-parity tests, or if you already have credentials in env and handle redaction yourself.
 
 ## Install
@@ -43,9 +45,9 @@ console.log(leaks(redact(secretKey), credentials.secrets)) // false
 `loadCredentials(spec, { env, fetch?, readTokenFile? })`:
 
 1. If every field's env var is set (non-blank), use them (`source: "env"`).
-2. Otherwise read the KV v2 secret at `MOCKINGBIRD_OPENBAO_PATH_<PROVIDER>` (provider upper-cased, non-alphanumerics -> `_`), else `spec.defaultPath`, else `secret/data/secret`, from the server at `MOCKINGBIRD_OPENBAO_ADDR` / `BAO_ADDR` / `VAULT_ADDR`, else `DEFAULT_OPENBAO_ADDRESS`. Authentication, first match wins:
+2. Otherwise read the KV v2 secret at `MOCKINGBIRD_OPENBAO_PATH_<PROVIDER>` (provider upper-cased, non-alphanumerics -> `_`), else `spec.defaultPath`, else `DEFAULT_SECRET_PATH` (`secret/data/personal/prd`), from the server at `MOCKINGBIRD_OPENBAO_ADDR` / `BAO_ADDR` / `VAULT_ADDR`, else `DEFAULT_OPENBAO_ADDRESS`. Authentication, first match wins:
    - `MOCKINGBIRD_OPENBAO_TOKEN` / `BAO_TOKEN` / `VAULT_TOKEN`;
-   - `MOCKINGBIRD_OPENBAO_JWT` (e.g. a GitHub Actions OIDC token), exchanged at mount `MOCKINGBIRD_OPENBAO_JWT_MOUNT` (default `jwt`) for role `MOCKINGBIRD_OPENBAO_JWT_ROLE` (default `mockingbird-parity`); that token is revoked after the read;
+   - `MOCKINGBIRD_OPENBAO_JWT` (e.g. a GitHub Actions OIDC token), exchanged at mount `MOCKINGBIRD_OPENBAO_JWT_MOUNT` (default `jwt`) for role `MOCKINGBIRD_OPENBAO_JWT_ROLE` (default `github-actions`); that token is revoked after the read;
    - the string returned by `readTokenFile()`.
 
    Each secret field must exist (by field name, not env var name) and be non-empty.
@@ -67,7 +69,8 @@ Failures throw `CredentialError` or `OpenBaoError` with the provider, expected f
 | `CredentialError` | `class extends Error` | Missing credentials, missing secret field, or bad `MOCKINGBIRD_CREDENTIALS`. |
 | `DEFAULT_OPENBAO_ADDRESS` | `"https://vault.chrisvouga.dev"` | Fallback server address. |
 | `DEFAULT_JWT_MOUNT` | `"jwt"` | Fallback JWT auth mount. |
-| `DEFAULT_JWT_ROLE` | `"mockingbird-parity"` | Fallback JWT role. |
+| `DEFAULT_JWT_ROLE` | `"github-actions"` | Fallback JWT role (Vault's GitHub Actions OIDC role). |
+| `DEFAULT_SECRET_PATH` | `"secret/data/personal/prd"` | Fallback KV v2 API path (shared-infra `personal/prd`). |
 
 Exported types: `CredentialSpec<F>` (`{ provider; fields: Record<F, envVarName>; defaultPath? }`), `LoadCredentialsOptions` (`{ env; fetch?; readTokenFile? }`), `LoadedCredentials<F>`, `Env` (`Record<string, string | undefined>`), `FetchLike`, `OpenBaoClientOptions`.
 
@@ -75,4 +78,4 @@ Exported types: `CredentialSpec<F>` (`{ provider; fields: Record<F, envVarName>;
 
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — pass `createRedactor(credentials.secrets)` as its `redact` option.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

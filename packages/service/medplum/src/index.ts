@@ -7,6 +7,7 @@ import {
 } from "./config.js"
 import { type MedplumProcessOptions, MedplumServerProcess } from "./process.js"
 
+export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { MedplumServerConfig } from "./config.js"
 export { buildServerConfig, SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD } from "./config.js"
 export type { MedplumPaths } from "./paths.js"

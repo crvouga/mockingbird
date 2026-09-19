@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-openapi-arbitrary
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Turns OpenAPI / JSON Schema nodes into [fast-check](https://fast-check.dev/) arbitraries: boundary-weighted values that satisfy a schema, and values that violate exactly one of its constraints (with a description of the violation). Use it for property tests of request/response handling driven by a spec; you do not need it directly for parity testing — [`@crvouga/mockingbird-commands`](https://www.npmjs.com/package/@crvouga/mockingbird-commands) and [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) use it for you.
 
 ## Install
@@ -84,4 +86,4 @@ Gotcha: when `mutationSites` finds nothing to break (an unconstrained schema suc
 - [`@crvouga/mockingbird-openapi`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi) — schema resolution and `validateValue`.
 - [`@crvouga/mockingbird-commands`](https://www.npmjs.com/package/@crvouga/mockingbird-commands) — builds whole API commands from these arbitraries.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

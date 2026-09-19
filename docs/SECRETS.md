@@ -1,6 +1,6 @@
 # Secrets runbook (maintainers)
 
-`@crvouga/mockingbird` and the granular `@crvouga/mockingbird-*` packages are released
+The mock services (`@crvouga/mockingbird-service-*`, the only published packages) are released
 automatically on every green push to `main` (see the root README → Releasing) and publish with
 **npm Trusted Publishing (OIDC)**.
 
@@ -10,27 +10,50 @@ packages the release job needs one of:
 - **`NPM_TOKEN` Actions secret (recommended, fully automated).** A granular npm token with
   read+write on the `@crvouga` scope. The release job uses it only to create new packages
   (and as a fallback if an OIDC publish is rejected), then runs `npm trust github` so every later
-  release of that package goes through OIDC. It also deprecates the archived legacy packages.
+  release of that package goes through OIDC. It also deprecates every package no longer
+  published (the former helper packages and the archived legacy packages).
 - **Local seed.** From any checkout: `bun run release:seed` (`-- --dry-run` to preview). It runs
   `npm login` if needed, uses npm@11 when yours is too old for `npm trust`, builds `origin/main` in a
   temporary worktree and runs `release:publish --local` there. Publishes without provenance with your npm login, pushes the tags and GitHub Releases, attaches
-  the Trusted Publishers and deprecates the legacy packages.
+  the Trusted Publishers and deprecates every package no longer published — i.e. it reconciles
+  npm with `origin/main`.
 
-Live parity sandbox credentials live in the self-hosted Vault / OpenBao at
-`https://vault.chrisvouga.dev` under the flat KV v2 secret `secret/data/secret`
-(shown as `secret/secret` in the UI). CI publish never reads those keys; only
-`bun run parity*` does (via `@crvouga/mockingbird-openbao`).
+All credentials live in the shared self-hosted Vault / OpenBao at `https://vault.chrisvouga.dev`,
+KV v2 `secret/personal/<config>` (`dev` locally, `prd` for production and CI; same key names in
+both, one field per env var). This repo follows the shared-infra contract:
+https://raw.githubusercontent.com/crvouga/workspace/main/INTEGRATING.md
+
+- **Turborepo remote cache** (`TURBO_API`, `TURBO_TOKEN`, `TURBO_TEAM`, `TURBO_CACHE`) —
+  locally every root turbo script (`bun run build|test|check|…`) goes through
+  [`scripts/vault-run.ts`](../scripts/vault-run.ts), which wraps it in `vault run` using
+  [`.vault.yaml`](../.vault.yaml). In CI, [`.github/actions/setup`](../.github/actions/setup/action.yml)
+  loads them with Vault GitHub OIDC (role `github-actions`, policy `ci-read`) — no stored token.
+- **Live parity sandbox keys** (`MOCKINGBIRD_*`) — in `personal/prd`; `bun run parity*` runs under
+  `vault run --config prd`. CI publish never reads them.
+
+Local setup, once per machine (from a `crvouga/workspace` checkout; needs the `vault`/`bao` CLI + `jq`):
+
+```bash
+packages/vault-service/scripts/install-cli.sh   # ~/.local/bin/vault wrapper (adds `vault run`)
+bun run vault:login                             # userpass login as crvouga
+```
+
+Without the wrapper, turbo scripts still run, with only the local cache.
 
 Inventory:
 
-- [`.vault.yaml`](../.vault.yaml) — Vault address / mount / project / config
-- [`secrets.manifest.yaml`](../secrets.manifest.yaml) — optional secrets (incl. `NPM_TOKEN`) + OIDC checklist
+- [`.vault.yaml`](../.vault.yaml) — Vault address / mount / project / config (no secrets)
+- [`.env.example`](../.env.example) — every env var name this repo reads (no values)
+- [`secrets.manifest.yaml`](../secrets.manifest.yaml) — secrets (Turbo cache, `NPM_TOKEN`, parity keys) + OIDC checklist
 
 ## Quick commands
 
 ```bash
 # Log in to self-hosted Vault/OpenBao as crvouga; prompts for password
 bun run vault:login
+
+# Verify the remote cache: second run with unchanged inputs → "cache hit, replaying logs"
+bun run build && bun run build
 
 # Full report: which packages exist on npm, Trusted Publishing links, Actions secrets
 bun run secrets:doctor
@@ -57,18 +80,21 @@ Docs: https://docs.npmjs.com/trusted-publishers
 
 ## Parity credentials (Vault)
 
-| Provider | Vault path (KV v2 under `secret`) | Fields | Env overrides |
-| --- | --- | --- | --- |
-| Stripe | `secret/data/secret` | `MOCKINGBIRD_STRIPE_SECRET_KEY`, `MOCKINGBIRD_STRIPE_PUBLISHABLE_KEY` | `MOCKINGBIRD_STRIPE_SECRET_KEY` |
-| Junction | `secret/data/secret` | `MOCKINGBIRD_JUNCTION_API_KEY` | `MOCKINGBIRD_JUNCTION_API_KEY` |
-| GeneByGene | `secret/data/secret` | `client_id`, `client_secret` | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID`, `MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET` |
+Field name = env var name, in `secret/personal/prd` (API path `secret/data/personal/prd`):
 
-Default OpenBao address: `https://vault.chrisvouga.dev` (`MOCKINGBIRD_OPENBAO_ADDR` / `VAULT_ADDR`).
-Auth: `VAULT_TOKEN` / `BAO_TOKEN` / `~/.vault-token`, or JWT (`MOCKINGBIRD_OPENBAO_JWT`).
+| Provider | Fields / env vars |
+| --- | --- |
+| Stripe | `MOCKINGBIRD_STRIPE_SECRET_KEY`, `MOCKINGBIRD_STRIPE_PUBLISHABLE_KEY` |
+| Junction | `MOCKINGBIRD_JUNCTION_API_KEY` |
+| GeneByGene | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID`, `MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET` |
+
+`bun run parity*` injects them with `vault run --config prd`. Scripts run directly fall back to
+`@crvouga/mockingbird-openbao`, which reads `secret/data/personal/prd` (override per provider with
+`MOCKINGBIRD_OPENBAO_PATH_<PROVIDER>`) using `VAULT_TOKEN` / `BAO_TOKEN` / `~/.vault-token`, or a
+GitHub OIDC JWT (`MOCKINGBIRD_OPENBAO_JWT`, role `github-actions`).
 
 ```bash
-export VAULT_ADDR=https://vault.chrisvouga.dev
-vault login
+bun run vault:login
 bun run parity:stripe
 bun run parity:junction
 bun run parity:genebygene
@@ -80,6 +106,7 @@ bun run parity:genebygene
 | --- | --- | --- |
 | npm Trusted Publisher (OIDC) | each package on npm | **Yes** (CI publish; attached automatically) |
 | `GITHUB_TOKEN` | Built into GitHub Actions | Automatic |
-| `GH_PAT` | Optional Vault `personal/prd/github` | No (local only) |
-| Provider sandbox keys | Vault `secret/data/secret` | For live parity only |
+| `TURBO_*` (remote cache) | Vault `personal/{dev,prd}` → `vault run` locally, OIDC in CI | Yes (else no remote cache) |
+| `GH_PAT` | Optional Vault `personal/prd` | No (local only) |
+| Provider sandbox keys | Vault `personal/prd` | For live parity only |
 | `NPM_TOKEN` | Vault `personal/prd` → Actions secret | Only to create new packages (else `bun run release:seed`) |

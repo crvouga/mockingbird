@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-parity
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Differential property-based test runner. From an OpenAPI spec it generates random stateful API walks with [fast-check](https://fast-check.dev/), runs every command against a "real" side and a fresh mock, canonicalizes both responses (ids, timestamps and tokens), and fails with a shrunk, replayable reproduction on the first divergence. Use it to prove a mock behaves like the real API (**live parity**, needs sandbox credentials) or like an independent instance of itself while conforming to the spec (**self-parity**, runs in CI with no network). This is the entry point of the parity packages; you rarely need the lower-level ones directly.
 
 ## Install
@@ -218,4 +220,4 @@ Exported types: `ParityOptions`, `ParityReport`, `RealTarget`, `MockTarget`, `Wa
 - [`@crvouga/mockingbird-openbao`](https://www.npmjs.com/package/@crvouga/mockingbird-openbao) — load sandbox credentials and build `redact`.
 - Lower level: [`@crvouga/mockingbird-commands`](https://www.npmjs.com/package/@crvouga/mockingbird-commands), [`@crvouga/mockingbird-canonicalize`](https://www.npmjs.com/package/@crvouga/mockingbird-canonicalize), [`@crvouga/mockingbird-model`](https://www.npmjs.com/package/@crvouga/mockingbird-model), [`@crvouga/mockingbird-openapi`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi).
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-sqlite
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 The synchronous `SqliteClient` port every Mockingbird mock stores its state in, plus the default
 client and an idempotent migration runner. Use it to type the optional `sqlite` option you pass to a
 provider mock (to share one database, or to inspect state), or when building a custom service. You
@@ -79,4 +81,4 @@ Types:
 - `@crvouga/mockingbird-service-sqlite`: the default in-memory SQLite engine.
 - `@crvouga/mockingbird-service`: `bootSqlite`, `Collection` and `IdSequence` on top of this port.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

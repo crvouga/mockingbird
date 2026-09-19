@@ -413,4 +413,4 @@ and [`tests/contract/parameters/`](https://github.com/crvouga/mockingbird/tree/m
 Released automatically from the [Mockingbird monorepo](https://github.com/crvouga/mockingbird)
 (see the root README, Releasing). License: MIT ([LICENSE](./LICENSE)).
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).

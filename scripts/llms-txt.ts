@@ -1,6 +1,6 @@
 /**
  * Generates `llms.txt` (https://llmstxt.org): the index coding agents read to find every
- * published package's docs. Package lists and descriptions come from each package.json,
+ * published mock service's docs. Package lists and descriptions come from each package.json,
  * so a new public package shows up here without hand edits.
  *
  *   bun run llms:sync     rewrite llms.txt
@@ -13,28 +13,21 @@ import { discoverPackages, REPO, root } from "./release/lib.ts"
 const RAW = `https://raw.githubusercontent.com/${REPO}/main`
 const OUT = join(root, "llms.txt")
 
-type Manifest = { description?: string; mockingbird?: { layer?: string } }
+type Manifest = { description?: string }
 
-const GROUPS: Array<{ title: string; match: (name: string, layer: string) => boolean }> = [
-  { title: "Start here", match: (name) => name === "@crvouga/mockingbird" },
+const GROUPS: Array<{ title: string; match: (name: string) => boolean }> = [
   {
-    title: "Mock services",
-    match: (name, layer) => layer === "service" && name.startsWith("@crvouga/mockingbird-service-"),
+    title: "SQL databases",
+    match: (name) => /^@crvouga\/mockingbird-service-(?:postgres|sqlite)$/.test(name),
   },
-  { title: "Serving over HTTP", match: (_, layer) => layer === "adapter" },
-  {
-    title: "Building your own mock",
-    match: (_, layer) => ["core", "sqlite", "service", "http-codec"].includes(layer),
-  },
-  { title: "Differential / parity testing", match: () => true },
+  { title: "HTTP API mocks", match: () => true },
 ]
 
 const pkgs = discoverPackages().filter((p) => p.isPublic)
 const grouped = new Map<string, string[]>(GROUPS.map((g) => [g.title, []]))
 for (const pkg of pkgs) {
   const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8")) as Manifest
-  const layer = manifest.mockingbird?.layer ?? ""
-  const group = GROUPS.find((g) => g.match(pkg.name, layer))
+  const group = GROUPS.find((g) => g.match(pkg.name))
   if (!group) continue
   const description = (manifest.description ?? "").replace(/\s+/g, " ").trim()
   const lines = grouped.get(group.title) as string[]
@@ -49,9 +42,9 @@ for (const pkg of pkgs) {
 const body = [
   "# mockingbird",
   "",
-  "> Stateful, contract-checked mocks of third-party HTTP APIs (Stripe, Junction/Vital, GeneByGene, Medplum) and pure-TypeScript in-memory PostgreSQL/SQLite engines for test suites. Every HTTP mock is a Fetch handler (`mock.fetch(request) → Promise<Response>`) published to npm under `@crvouga/mockingbird-*`. ESM only; Node >= 22 or Bun >= 1.2.",
+  "> Stateful, contract-checked mocks of third-party HTTP APIs (Stripe, Junction/Vital, GeneByGene, Medplum) and pure-TypeScript in-memory PostgreSQL/SQLite engines for test suites. Every HTTP mock is a Fetch handler (`mock.fetch(request) → Promise<Response>`) published to npm as `@crvouga/mockingbird-service-<name>`. ESM only; Node >= 22 or Bun >= 1.2.",
   "",
-  "Install mocks as devDependencies. Prefer injecting `mock.fetch` in-process; serve over HTTP with an adapter only when a URL is required. Read the umbrella README first — it is the integration guide for coding agents — then the README of each provider package you use (also shipped in `node_modules/<package>/README.md`).",
+  "Install mocks as devDependencies; each package is self-contained. Prefer injecting `mock.fetch` in-process; serve it over HTTP (`Bun.serve`, `@hono/node-server`) only when a URL is required. Read the README of each package you use — it is the integration guide for coding agents (also shipped in `node_modules/<package>/README.md`).",
   "",
   ...GROUPS.flatMap((g) => {
     const lines = grouped.get(g.title) ?? []

@@ -42,7 +42,7 @@
     "generate": "bun ../../openapi/codegen/dist/cli.js",
     "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
@@ -50,9 +50,7 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
-    "@crvouga/mockingbird-core": "workspace:*",
-    "embedded-postgres": "16.14.0-beta.17",
-    "redis-memory-server": "0.17.1"
+    "embedded-postgres": "16.14.0-beta.17"
   },
   "devDependencies": {
     "@crvouga/mockingbird-openapi": "workspace:*",
@@ -62,6 +60,7 @@
     "@crvouga/mockingbird-testing": "workspace:*",
     "@types/bun": "1.4.0",
     "@types/node": "22.20.1",
-    "fast-check": "4.9.0"
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-core": "workspace:*"
   }
 }

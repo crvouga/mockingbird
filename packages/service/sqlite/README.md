@@ -118,8 +118,8 @@ test("each test starts from the seed", () => {
 
 ### As Mockingbird's storage
 
-Every Mockingbird HTTP mock accepts a `sqlite` option typed as the `SqliteClient` port from
-`@crvouga/mockingbird-sqlite` (`exec`, `prepare(sql).run/all/get`, `transaction`). This package's
+Every Mockingbird HTTP mock accepts a `sqlite` option typed as the `SqliteClient` port bundled
+with each mock package (`exec`, `prepare(sql).run/all/get`, `transaction`). This package's
 `Database` satisfies it and is what a mock creates when you omit the option. Pass your own to share
 one database between several mocks (each keeps its records under its own namespace, e.g.
 `"stripe"`, `"junction"`), to inspect what a mock stored, or to snapshot a warmed-up mock:
@@ -402,4 +402,4 @@ and [`tests/contract/parameters/`](https://github.com/crvouga/mockingbird/tree/m
 Released automatically from the [Mockingbird monorepo](https://github.com/crvouga/mockingbird)
 (see the root README, Releasing). License: MIT ([LICENSE](./LICENSE)).
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).

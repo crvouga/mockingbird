@@ -4,11 +4,11 @@ import { mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import EmbeddedPostgres from "embedded-postgres"
-import { RedisMemoryServer } from "redis-memory-server"
 import { buildServerConfig, type MedplumServerConfig } from "./config.js"
 import { ensureMedplumBuild } from "./ensure-medplum-build.js"
 import { type MedplumPaths, resolveMedplumPaths } from "./paths.js"
 import { findFreePort } from "./ports.js"
+import { RedisServerProcess } from "./redis.js"
 
 const HEALTHCHECK_PATH = "/healthcheck"
 const SERVER_START_TIMEOUT_MS = 5 * 60 * 1000
@@ -74,7 +74,7 @@ const pollHealthcheck = async (baseUrl: string, timeoutMs: number): Promise<void
 export class MedplumServerProcess {
   private readonly options: MedplumProcessOptions
   private postgres: EmbeddedPostgres | undefined
-  private redis: RedisMemoryServer | undefined
+  private redis: RedisServerProcess | undefined
   private child: ChildProcess | undefined
   private runDir: string | undefined
   private started = false
@@ -165,11 +165,9 @@ export class MedplumServerProcess {
 
     try {
       this.postgres = await startEmbeddedPostgres(dataDir, dbPort)
-      this.redis = new RedisMemoryServer({
-        instance: { port: redisPort, ip: "127.0.0.1" },
-      })
+      this.redis = new RedisServerProcess(redisPort)
       await this.redis.start()
-      const resolvedRedisPort = await this.redis.getPort()
+      const resolvedRedisPort = this.redis.getPort()
 
       const paths = await ensureMedplumBuild({
         version: this.options.version,
@@ -301,7 +299,7 @@ export class MedplumServerProcess {
       } catch {
         // process is exiting
       }
-      void this.redis?.stop()
+      this.redis?.kill()
     }
     const host = process as unknown as {
       on(event: string, listener: () => void): unknown

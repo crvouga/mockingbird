@@ -6,10 +6,15 @@
  * files. Each public package is tagged `<name>@<version>` at the commit it was
  * released from; package.json keeps the `0.0.0-development` placeholder.
  *
+ * Only mock services (`@crvouga/mockingbird-service-<name>`) are public. The helper
+ * packages they build on are private and inlined into each service's bundle
+ * (scripts/bundle-service.ts), so a service's sources are its own directory plus
+ * every private workspace package its `src` reaches.
+ *
  * A package is released when:
  *   - it has never been tagged (initial release), or
- *   - a releasable Conventional Commit touched its directory since its last tag, or
- *   - a workspace package it depends on at runtime is being released.
+ *   - a releasable Conventional Commit touched its sources since its last tag, or
+ *   - a public workspace package it depends on at runtime is being released.
  *
  * Bump: BREAKING / `type!` → major, feat → minor, fix/perf/revert/refactor/build/docs → patch,
  * dependency-only release → patch. test/ci/chore/style never release on their own.
@@ -41,6 +46,37 @@ export const LEGACY_PACKAGES = [
 export const legacyDeprecationMessage = (replacement: string): string =>
   `Moved to ${replacement} (https://github.com/${REPO}). This package is archived and no longer maintained.`
 
+/** Packages once published from this repo whose workspace directory has since been deleted. */
+export const REMOVED_PACKAGES = ["@crvouga/mockingbird"] as const
+
+export const RETIRED_DEPRECATION_MESSAGE = `No longer published: Mockingbird now ships only its mock services (@crvouga/mockingbird-service-*), which bundle this code. See https://github.com/${REPO}.`
+
+export type Retired = {
+  name: string
+  message: string
+  /** Deprecate only once this package is on npm, so the message never points at nothing. */
+  requires?: string
+}
+
+/**
+ * npm packages this repo no longer publishes: the archived legacy packages, deleted
+ * workspace packages, and every private workspace package (helpers are bundled into the
+ * services, never published).
+ * Releases deprecate the ones still live on npm; packages never published are skipped.
+ */
+export function retiredPackages(packages: WorkspacePackage[]): Retired[] {
+  return [
+    ...LEGACY_PACKAGES.map((l) => ({
+      name: l.name,
+      message: legacyDeprecationMessage(l.replacement),
+      requires: l.replacement,
+    })),
+    ...[...REMOVED_PACKAGES, ...packages.filter((p) => !p.isPublic).map((p) => p.name)].map(
+      (name) => ({ name, message: RETIRED_DEPRECATION_MESSAGE }),
+    ),
+  ]
+}
+
 // ── Workspace discovery ────────────────────────────────────────────
 
 type Manifest = {
@@ -61,13 +97,29 @@ export type WorkspacePackage = {
   isPublic: boolean
   /** Workspace packages this one needs at runtime (dependencies / peer / optional). */
   runtimeDeps: string[]
+  /** Directories whose changes release this package: its own plus the private packages it bundles. */
+  sourceDirs: string[]
+}
+
+const WORKSPACE_IMPORT = /\bfrom\s+["'](@crvouga\/mockingbird(?:-[a-z0-9-]+)?)(?:\/[^"']*)?["']/g
+
+/** Workspace packages imported by a package's shipped `src` (tests excluded). */
+function srcImports(dir: string): Set<string> {
+  const out = new Set<string>()
+  for (const rel of new Bun.Glob("src/**/*.ts").scanSync({ cwd: dir })) {
+    if (rel.endsWith(".test.ts")) continue
+    for (const m of readFileSync(join(dir, rel), "utf8").matchAll(WORKSPACE_IMPORT)) {
+      if (m[1]) out.add(m[1])
+    }
+  }
+  return out
 }
 
 export function discoverPackages(): WorkspacePackage[] {
   const rootManifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as {
     workspaces: string[]
   }
-  const found = new Map<string, WorkspacePackage & { deps: string[] }>()
+  const found = new Map<string, Omit<WorkspacePackage, "sourceDirs"> & { deps: string[] }>()
   for (const pattern of rootManifest.workspaces) {
     for (const rel of new Bun.Glob(`${pattern}/package.json`).scanSync({ cwd: root })) {
       const manifestPath = join(root, rel)
@@ -89,8 +141,27 @@ export function discoverPackages(): WorkspacePackage[] {
       })
     }
   }
+  const isPrivate = (name: string) => found.has(name) && !found.get(name)?.isPublic
+  /** Private workspace packages reached from `name`'s src, through their runtime deps. */
+  const bundled = (name: string): string[] => {
+    const seen = new Set<string>()
+    const pkg = found.get(name)
+    const queue = pkg ? [...srcImports(pkg.dir)].filter(isPrivate) : []
+    for (let next = queue.pop(); next; next = queue.pop()) {
+      if (seen.has(next)) continue
+      seen.add(next)
+      queue.push(...(found.get(next)?.deps ?? []).filter(isPrivate))
+    }
+    return [...seen].sort()
+  }
   return [...found.values()]
-    .map(({ deps, ...pkg }) => ({ ...pkg, runtimeDeps: deps.filter((d) => found.has(d)) }))
+    .map(({ deps, ...pkg }) => ({
+      ...pkg,
+      runtimeDeps: deps.filter((d) => found.has(d)),
+      sourceDirs: pkg.isPublic
+        ? [pkg.relDir, ...bundled(pkg.name).map((d) => found.get(d)?.relDir as string)]
+        : [pkg.relDir],
+    }))
     .sort((a, b) => a.name.localeCompare(b.name))
 }
 
@@ -132,11 +203,11 @@ export async function latestTaggedVersion(name: string): Promise<string | null> 
 
 export type Commit = { hash: string; subject: string; body: string }
 
-/** Non-merge commits since `tag` that touched `relDir` (PR commits are commitlint-enforced). */
-export async function commitsTouching(tag: string, relDir: string): Promise<Commit[]> {
+/** Non-merge commits since `tag` that touched any of `dirs` (PR commits are commitlint-enforced). */
+export async function commitsTouching(tag: string, dirs: string[]): Promise<Commit[]> {
   const sep = "\u001e"
   const result =
-    await $`git log --no-merges ${`--format=%H%x1f%s%x1f%b${sep}`} ${`${tag}..HEAD`} -- ${relDir}`
+    await $`git log --no-merges ${`--format=%H%x1f%s%x1f%b${sep}`} ${`${tag}..HEAD`} -- ${dirs}`
       .cwd(root)
       .quiet()
   return result
@@ -247,7 +318,7 @@ export async function computePlan(): Promise<Plan> {
       continue
     }
     versions.set(pkg.name, previous)
-    const commits = await commitsTouching(tagName(pkg.name, previous), pkg.relDir)
+    const commits = await commitsTouching(tagName(pkg.name, previous), pkg.sourceDirs)
     const bump = maxBump(commits.map((c) => parseCommit(c).bump))
     if (bump) {
       releases.set(pkg.name, {

@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-http-codec
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Content-type codecs used by Mockingbird's mock servers and differential runner: JSON, and
 Rails/PHP/Stripe-style bracket notation for `application/x-www-form-urlencoded` bodies and query
 strings (`address[city]=Paris`, `tags[]=x`, `items[0][name]=a`). Use it to encode requests for, or
@@ -76,4 +78,4 @@ and `__proto__` keys become plain own properties (no prototype pollution).
 
 - `@crvouga/mockingbird-service`: uses this codec to hand operation handlers decoded bodies and queries.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

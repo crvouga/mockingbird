@@ -12,7 +12,10 @@
  *   5. a published package never needs a private one at runtime (npm consumers
  *      could not install it),
  *   6. every workspace package is named `@crvouga/mockingbird` or
- *      `@crvouga/mockingbird-<kebab-case>` (hard rule: one npm naming convention).
+ *      `@crvouga/mockingbird-<kebab-case>` (hard rule: one npm naming convention),
+ *   7. only mock services (`@crvouga/mockingbird-service-<name>`) are published; a
+ *      service that imports private helper packages builds with
+ *      scripts/bundle-service.ts, which inlines them into its `dist`.
  *
  *   bun run check:boundaries
  */
@@ -37,10 +40,13 @@ type Pkg = {
   dependencies: Set<string>
   devDependencies: Set<string>
   peerDependencies: Set<string>
+  build: string | undefined
 }
 
 const INTERNAL = /^@crvouga\/mockingbird(?:[-/].*)?$/
 const PACKAGE_NAME = /^@crvouga\/mockingbird(?:-[a-z0-9]+)*$/
+const SERVICE_NAME = /^@crvouga\/mockingbird-service-[a-z0-9]+(?:-[a-z0-9]+)*$/
+const BUNDLE_BUILD = "bun ../../../scripts/bundle-service.ts"
 const BUILTIN = /^(?:(?:node|bun|deno):|bun$|stream\/web$|assert$)/
 const VALID_SPECIFIER = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(?:\/[^\s"']+)*$/i
 
@@ -77,6 +83,7 @@ for (const dir of packageDirs) {
     devDependencies?: Record<string, string>
     peerDependencies?: Record<string, string>
     mockingbird?: { layer?: string; runtime?: string }
+    scripts?: Record<string, string>
   }
   if (!pkg.name) continue
   packages.set(pkg.name, {
@@ -89,6 +96,7 @@ for (const dir of packageDirs) {
     dependencies: new Set(Object.keys(pkg.dependencies ?? {})),
     devDependencies: new Set(Object.keys(pkg.devDependencies ?? {})),
     peerDependencies: new Set(Object.keys(pkg.peerDependencies ?? {})),
+    build: pkg.scripts?.build,
   })
 }
 
@@ -102,6 +110,21 @@ for (const pkg of packages.values()) {
     )
   }
 }
+
+// 7. only mock services are published.
+for (const pkg of packages.values()) {
+  if (pkg.public && !SERVICE_NAME.test(pkg.name)) {
+    fail(
+      `${pkg.name}: only mock services (@crvouga/mockingbird-service-<name>) are published — mark it "private": true`,
+    )
+  }
+}
+
+/** Private workspace packages a published service inlines into its bundle. */
+const bundled = (pkg: Pkg): string[] =>
+  pkg.public && pkg.build === BUNDLE_BUILD
+    ? [...pkg.devDependencies].filter((d) => packages.get(d)?.private === true)
+    : []
 
 // 1. internal deps resolve; 3. no self-dependency.
 for (const pkg of packages.values()) {
@@ -334,7 +357,7 @@ for (const file of files) {
     }
 
     const allowed = inSrc
-      ? new Set([...owner.dependencies, ...owner.peerDependencies])
+      ? new Set([...owner.dependencies, ...owner.peerDependencies, ...bundled(owner)])
       : new Set([...owner.dependencies, ...owner.devDependencies, ...owner.peerDependencies])
 
     if (!allowed.has(dependency) && dependency !== owner.name) {

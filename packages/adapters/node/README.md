@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-adapter-node
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Serve any Mockingbird `FetchAPI` (a provider mock such as `StripeAPI`, or your own) as a real HTTP
 server over `node:http`. Use it when the code under test needs a URL (a subprocess, a browser, an
 SDK you cannot hand a `fetch`). If you can inject `fetch`, call the mock's `fetch` directly instead;
@@ -65,4 +67,4 @@ Behavior:
 - `@crvouga/mockingbird-core`: the `FetchAPI` contract.
 - `@crvouga/mockingbird-adapter-bun`: the same adapter for `Bun.serve`.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-core",
   "version": "0.0.0-development",
+  "private": true,
   "description": "Universal contracts shared by Mockingbird packages: the Fetch-native API interface.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",

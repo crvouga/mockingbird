@@ -2,7 +2,7 @@
 
 Stateful Medplum "mock" that runs the **real [Medplum](https://www.medplum.com/) server** rather
 than reimplementing its FHIR API. It self-hosts a pinned Medplum build as a child process on
-embedded Postgres and an in-memory Redis, and exposes it through the Mockingbird `FetchAPI`
+embedded Postgres and a throwaway `redis-server` process, and exposes it through a Fetch-style
 contract (`fetch(Request) -> Response`) plus explicit `start` / `reset` / `stop` lifecycle calls.
 
 Use it for integration tests that need genuine Medplum/FHIR behaviour (search, validation,
@@ -27,12 +27,12 @@ Requirements:
 - `git` and `npm` on `PATH` for the one-time clone and build
   (`git clone` -> `npm ci` -> `npm run build:fast`, following Medplum's
   [install-from-scratch](https://www.medplum.com/docs/self-hosting/install-from-scratch) flow).
-- `make` for the one-time `redis-server` compile done by `redis-memory-server` (the binary is cached
-  afterwards).
-- Postinstall scripts of `embedded-postgres` and `redis-memory-server` must run:
-  - **Bun**: list both under `trustedDependencies` in your root `package.json`.
-  - **pnpm**: approve them once with `pnpm approve-builds`, or set `REDISMS_DISABLE_POSTINSTALL=true`
-    to defer the Redis binary download to the first `start()`.
+- A `redis-server` binary on `PATH` (macOS: `brew install redis`, Debian/Ubuntu:
+  `apt-get install redis-server`). Set `MOCKINGBIRD_REDIS_SERVER` to point at it if it lives
+  elsewhere. It is spawned per run with persistence disabled; nothing is compiled or downloaded.
+- The postinstall script of `embedded-postgres` must run:
+  - **Bun**: list it under `trustedDependencies` in your root `package.json`.
+  - **pnpm**: approve it once with `pnpm approve-builds`.
 - Disk under `~/.cache/mockingbird/medplum-server/<version>` for the Medplum clone and build.
 
 ## Usage
@@ -42,7 +42,7 @@ Requirements:
 | Call | Behaviour |
 | --- | --- |
 | `await createMedplumAPI(options?)` | Construct a `MedplumAPI` and `await start()` it. |
-| `await medplum.start()` | Pick free ports; boot embedded Postgres (database `medplum`) and Redis; ensure the Medplum build exists in the cache (clone/build on first run); write a per-run `medplum.config.json` into a temp dir; spawn `packages/server/dist/index.js` with the current runtime (`process.execPath`); poll `GET /healthcheck` (up to 5 minutes). Idempotent and safe to call concurrently. |
+| `await medplum.start()` | Pick free ports; boot embedded Postgres (database `medplum`) and a `redis-server` child process; ensure the Medplum build exists in the cache (clone/build on first run); write a per-run `medplum.config.json` into a temp dir; spawn `packages/server/dist/index.js` with the current runtime (`process.execPath`); poll `GET /healthcheck` (up to 5 minutes). Idempotent and safe to call concurrently. |
 | `medplum.fetch(request)` | Proxy the request to the running server. Only the path and query of `request.url` are used, so any origin works. Redirects are returned, not followed. |
 | `await medplum.reset()` | Stop the server, drop and recreate the `medplum` database, restart and wait for healthy. The server re-runs migrations and seeding on boot, so state is pristine. Clears the cached access token. Throws if not started. |
 | `await medplum.stop()` | SIGTERM the server (SIGKILL after 10s), stop Redis and Postgres, delete the temp dir. No-op if not started. |
@@ -78,7 +78,7 @@ try {
   })
   const patient = (await created.json()) as { id: string }
 
-  // Through the FetchAPI contract (any origin; path and query are forwarded):
+  // Through fetch(request) (any origin; path and query are forwarded):
   const read = await medplum.fetch(
     new Request(`https://medplum.test/fhir/R4/Patient/${patient.id}`, { headers }),
   )
@@ -136,7 +136,7 @@ test("starts clean after reset", async () => {
 
 | Export | Description |
 | --- | --- |
-| `MedplumAPI` | Class. `new MedplumAPI(options?)`; implements `FetchAPI`. Does not start anything until `start()`. |
+| `MedplumAPI` | Class. `new MedplumAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. Does not start anything until `start()`. |
 | `createMedplumAPI` | `(options?) => Promise<MedplumAPI>` — construct and `start()`. |
 | `SUPER_ADMIN_EMAIL` | `"admin@example.com"` — seeded super admin email. |
 | `SUPER_ADMIN_PASSWORD` | `"medplum_admin"` — seeded super admin password. |
@@ -187,7 +187,7 @@ bun test
 MOCKINGBIRD_MEDPLUM_E2E=1 bun test   # first run pays the clone/build cost (several minutes, logged)
 ```
 
-In this repo, the root `package.json` already lists `embedded-postgres` and `redis-memory-server`
-under `trustedDependencies`.
+In this repo, the root `package.json` already lists `embedded-postgres` under
+`trustedDependencies`.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).

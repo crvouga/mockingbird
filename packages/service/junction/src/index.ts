@@ -31,6 +31,8 @@ import {
 } from "./state.js"
 import { userHandlers } from "./users.js"
 
+export type { FetchAPI } from "@crvouga/mockingbird-core"
+export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 export {
   COVERAGE_ZIPS,
   PHLEBOTOMY_AVAILABILITY_ZIPS,
