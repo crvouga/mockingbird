@@ -44,10 +44,10 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
-    "@crvouga/mockingbird-openapi": "^0.1.0",
+    "@crvouga/mockingbird-openapi": "workspace:*",
     "fast-check": "4.9.0"
   },
   "devDependencies": {
-    "@crvouga/mockingbird-testing": "^0.1.0"
+    "@crvouga/mockingbird-testing": "workspace:*"
   }
 }
