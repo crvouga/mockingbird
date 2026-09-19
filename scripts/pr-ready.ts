@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
  * Agentic PR-ready engine. Mechanical git/GitHub work for the /pr-ready command
- * (see .claude/commands/pr-ready.md); the agent only supplies judgment: commit
+ * (see .agents/commands/pr-ready.md); the agent only supplies judgment: commit
  * message, conflict resolution, PR title/body, and CI root-cause fixes.
  *
  *   bun scripts/pr-ready.ts <command> [flags]   # or: bun run pr:ready <command>
@@ -24,7 +24,7 @@ const root = process.cwd()
 const TRUNK_BRANCH = "main"
 const RULESET_NAME = "Protect main"
 const LEGACY_RULESET_NAMES = ["Require CI on main"]
-const REQUIRED_CHECK_CONTEXTS = ["Commitlint", "Quality", "Test", "PR Policy", "Required"]
+const REQUIRED_CHECK_CONTEXTS = ["Required"]
 const ACTIONS_INTEGRATION_ID = 15368
 const ALLOWED_MERGE_METHODS = ["merge"]
 

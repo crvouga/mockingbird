@@ -1,3 +1,8 @@
+---
+name: ci
+description: Run every check (format, lint, typecheck, build, test, pack, portability, boundaries) plus live parity, fix root causes, and loop until all green.
+---
+
 # Check Loop
 
 You are making the mockingbird repo fully green: **all checks** (lint, typecheck, build, tests,

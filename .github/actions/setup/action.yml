@@ -1,0 +1,39 @@
+name: Setup
+description: Bun + cached node_modules + restored turbo cache.
+
+inputs:
+  turbo-cache:
+    description: Restore (and on job end, save) the turbo local cache.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: "1.4.0"
+
+    # node_modules is keyed on the lockfile and manifests. A hit skips `bun install` entirely,
+    # including the slow postinstalls (embedded-postgres, redis-memory-server).
+    - id: deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          node_modules
+          packages/*/node_modules
+          packages/*/*/node_modules
+        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json') }}
+
+    - if: steps.deps.outputs.cache-hit != 'true'
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    # Turbo's local cache, saved per commit and restored from the newest prior one
+    # (PRs fall back to main's). scripts/ci/prune-turbo-cache.ts keeps it to the last run.
+    - if: inputs.turbo-cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: .turbo/cache
+        key: turbo-${{ runner.os }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-
