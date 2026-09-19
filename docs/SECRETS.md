@@ -11,8 +11,9 @@ packages the release job needs one of:
   read+write on the `@crvouga` scope. The release job uses it only to create new packages
   (and as a fallback if an OIDC publish is rejected), then runs `npm trust github` so every later
   release of that package goes through OIDC. It also deprecates the archived legacy packages.
-- **Local bootstrap.** On an up-to-date `main`: `npm login && bun run build && bun run release:publish -- --local`.
-  Publishes without provenance with your npm login, pushes the tags and GitHub Releases, attaches
+- **Local seed.** From any checkout: `bun run release:seed` (`-- --dry-run` to preview). It runs
+  `npm login` if needed, uses npm@11 when yours is too old for `npm trust`, builds `origin/main` in a
+  temporary worktree and runs `release:publish --local` there. Publishes without provenance with your npm login, pushes the tags and GitHub Releases, attaches
   the Trusted Publishers and deprecates the legacy packages.
 
 Live parity sandbox credentials live in the self-hosted Vault / OpenBao at
@@ -81,4 +82,4 @@ bun run parity:genebygene
 | `GITHUB_TOKEN` | Built into GitHub Actions | Automatic |
 | `GH_PAT` | Optional Vault `personal/prd/github` | No (local only) |
 | Provider sandbox keys | Vault `secret/data/secret` | For live parity only |
-| `NPM_TOKEN` | Vault `personal/prd` → Actions secret | Only to create new packages (else `release:publish -- --local`) |
+| `NPM_TOKEN` | Vault `personal/prd` → Actions secret | Only to create new packages (else `bun run release:seed`) |

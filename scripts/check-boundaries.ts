@@ -10,7 +10,9 @@
  *      (dependencies + peerDependencies for shipped src; plus devDependencies
  *      for tests / scripts / benchmarks),
  *   5. a published package never needs a private one at runtime (npm consumers
- *      could not install it).
+ *      could not install it),
+ *   6. every workspace package is named `@crvouga/mockingbird` or
+ *      `@crvouga/mockingbird-<kebab-case>` (hard rule: one npm naming convention).
  *
  *   bun run check:boundaries
  */
@@ -38,6 +40,7 @@ type Pkg = {
 }
 
 const INTERNAL = /^@crvouga\/mockingbird(?:[-/].*)?$/
+const PACKAGE_NAME = /^@crvouga\/mockingbird(?:-[a-z0-9]+)*$/
 const BUILTIN = /^(?:(?:node|bun|deno):|bun$|stream\/web$|assert$)/
 const VALID_SPECIFIER = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(?:\/[^\s"']+)*$/i
 
@@ -90,6 +93,15 @@ for (const dir of packageDirs) {
 }
 
 console.log(`boundaries: ${packages.size} workspace packages`)
+
+// 6. one naming convention for every package.
+for (const pkg of packages.values()) {
+  if (!PACKAGE_NAME.test(pkg.name)) {
+    fail(
+      `${relative(root, pkg.dir)}: package name "${pkg.name}" must be @crvouga/mockingbird or @crvouga/mockingbird-<kebab-case>`,
+    )
+  }
+}
 
 // 1. internal deps resolve; 3. no self-dependency.
 for (const pkg of packages.values()) {
