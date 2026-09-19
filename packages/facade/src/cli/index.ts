@@ -11,11 +11,12 @@ import { readFileSync } from "node:fs"
 import { type InitOptions, initProject, printInitResult } from "./init.js"
 import type { PackageManager } from "./project.js"
 
-const VERSION = "0.1.0"
+const VERSION = "0.0.0-development"
 
 function readVersion(): string {
   try {
-    const pkgPath = new URL("../package.json", import.meta.url).pathname
+    // dist/cli/index.js → package root; the release job stamps the real version there.
+    const pkgPath = new URL("../../package.json", import.meta.url).pathname
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as { version?: string }
     return pkg.version ?? VERSION
   } catch {

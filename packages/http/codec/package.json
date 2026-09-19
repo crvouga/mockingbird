@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-http-codec",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Content-type codecs shared by Mockingbird's mock servers and differential runner: JSON and bracket-notation form encoding.",
   "license": "MIT",
   "type": "module",

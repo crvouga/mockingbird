@@ -10,7 +10,7 @@ Reference PostgreSQL version:
   tests/harness/oracle-versions.ts and asserted by the gate.
 
 postgres-mem version:
-  0.0.0-development (package.json; publish via semantic-release)
+  0.0.0-development (package.json; released from the monorepo via `<name>@<version>` tags)
 
 Scope:
   Every oracle-exposed SQL construct is in-scope except NOT APPLICABLE

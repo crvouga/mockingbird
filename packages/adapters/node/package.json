@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-adapter-node",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Serve any Mockingbird FetchAPI over node:http.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-openapi-arbitrary",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "OpenAPI / JSON Schema to fast-check arbitraries: boundary-weighted valid values and single-violation invalid values.",
   "license": "MIT",
   "type": "module",

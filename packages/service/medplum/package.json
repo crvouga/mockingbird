@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-service-medplum",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Stateful Medplum mock that self-hosts the real Medplum server as a child process on embedded Postgres and Redis, exposed through the Mockingbird FetchAPI contract.",
   "license": "MIT",
   "type": "module",

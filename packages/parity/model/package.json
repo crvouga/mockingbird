@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-model",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Provider-neutral symbolic resource model for differential testing: handles, per-side id tables, placeholders and canonical tokens.",
   "license": "MIT",
   "type": "module",

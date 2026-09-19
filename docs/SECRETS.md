@@ -1,10 +1,19 @@
 # Secrets runbook (maintainers)
 
-`@crvouga/mockingbird` and the granular `@crvouga/mockingbird-*` packages publish with
-**npm Trusted Publishing (OIDC)** in GitHub Actions. New packages must be seeded locally
-before CI publishing, then configured with that package's npm Trusted Publisher.
+`@crvouga/mockingbird` and the granular `@crvouga/mockingbird-*` packages are released
+automatically on every green push to `main` (see the root README → Releasing) and publish with
+**npm Trusted Publishing (OIDC)**.
 
-Local seeding uses interactive npm authentication; CI does not receive or use an npm token.
+OIDC can only publish to packages that already exist on npm and trust this repo. For brand-new
+packages the release job needs one of:
+
+- **`NPM_TOKEN` Actions secret (recommended, fully automated).** A granular npm token with
+  read+write on the `@crvouga` scope. The release job uses it only to create new packages
+  (and as a fallback if an OIDC publish is rejected), then runs `npm trust github` so every later
+  release of that package goes through OIDC. It also deprecates the archived legacy packages.
+- **Local bootstrap.** On an up-to-date `main`: `npm login && bun run build && bun run release:publish -- --local`.
+  Publishes without provenance with your npm login, pushes the tags and GitHub Releases, attaches
+  the Trusted Publishers and deprecates the legacy packages.
 
 Live parity sandbox credentials live in the self-hosted Vault / OpenBao at
 `https://vault.chrisvouga.dev` under the flat KV v2 secret `secret/data/secret`
@@ -14,7 +23,7 @@ Live parity sandbox credentials live in the self-hosted Vault / OpenBao at
 Inventory:
 
 - [`.vault.yaml`](../.vault.yaml) — Vault address / mount / project / config
-- [`secrets.manifest.yaml`](../secrets.manifest.yaml) — optional local secrets + OIDC checklist
+- [`secrets.manifest.yaml`](../secrets.manifest.yaml) — optional secrets (incl. `NPM_TOKEN`) + OIDC checklist
 
 ## Quick commands
 
@@ -22,31 +31,28 @@ Inventory:
 # Log in to self-hosted Vault/OpenBao as crvouga; prompts for password
 bun run vault:login
 
-# Full report + Trusted Publishing setup links (never prints secret values)
+# Full report: which packages exist on npm, Trusted Publishing links, Actions secrets
 bun run secrets:doctor
 
-# If the umbrella package is not on npm yet (one-time; token loaded from Vault)
-bun run npm:seed -- --dry-run
-bun run npm:seed -- --yes
+# Push NPM_TOKEN from Vault (personal/prd) to the NPM_TOKEN Actions secret
+bun run secrets:sync
 
-# Validate optional Vault keys
-bun run secrets:check
+# What the next release would publish
+bun run release:plan
+bun run release:publish -- --dry-run
 ```
 
-## One-time: seed + Trusted Publishing
+## Trusted Publisher settings
 
-1. Log in interactively: `npm login --auth-type=web`
-2. `bun run build && bun run npm:seed -- --yes` — publishes `@crvouga/mockingbird@0.1.0` without provenance
-3. For **each** public package on npm, open Trusted Publisher and add:
-   - Organization/user: `crvouga`
-   - Repository: `mockingbird`
-   - Workflow filename: `ci.yml`
-4. Confirm the release job has `permissions.id-token: write` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+Set automatically by the release job when it has npm account credentials. Manual equivalent, per
+package at `https://www.npmjs.com/package/<name>/access`:
+
+- Organization/user: `crvouga`
+- Repository: `mockingbird`
+- Workflow filename: `ci.yml`
+- Environment: (empty)
 
 Docs: https://docs.npmjs.com/trusted-publishers
-
-After that, green pushes to `main` run `bun run release:publish`, which publishes every public
-workspace package whose version is not already on npm (idempotent).
 
 ## Parity credentials (Vault)
 
@@ -71,8 +77,8 @@ bun run parity:genebygene
 
 | Credential | Where | Required |
 | --- | --- | --- |
-| npm Trusted Publisher (OIDC) | each package on npm | **Yes** (CI publish) |
+| npm Trusted Publisher (OIDC) | each package on npm | **Yes** (CI publish; attached automatically) |
 | `GITHUB_TOKEN` | Built into GitHub Actions | Automatic |
 | `GH_PAT` | Optional Vault `personal/prd/github` | No (local only) |
 | Provider sandbox keys | Vault `secret/data/secret` | For live parity only |
-| `NPM_TOKEN` | — | **Not used**; seed new packages locally with `npm login --auth-type=web` |
+| `NPM_TOKEN` | Vault `personal/prd` → Actions secret | Only to create new packages (else `release:publish -- --local`) |

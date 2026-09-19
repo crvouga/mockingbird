@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-sqlite",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Owned sync SqliteClient port for Mockingbird services. Defaults to @crvouga/mockingbird-service-sqlite; accepts any duck-typed SQLite client.",
   "license": "MIT",
   "type": "module",

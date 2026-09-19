@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-openbao",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Load third-party sandbox credentials for parity runs from OpenBao (token, JWT/OIDC) or the environment, with redaction helpers.",
   "license": "MIT",
   "type": "module",

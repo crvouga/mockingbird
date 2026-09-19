@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-service-junction",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox.",
   "license": "MIT",
   "type": "module",

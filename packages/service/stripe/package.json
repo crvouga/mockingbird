@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-service-stripe",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Stateful mock of the Stripe API (customers, products, prices) driven by its OpenAPI contract and verified by differential property tests against Stripe test mode.",
   "license": "MIT",
   "type": "module",
