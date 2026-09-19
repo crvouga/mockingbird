@@ -287,33 +287,6 @@ export function printPopulate(entry: SecretEntry): void {
   }
 }
 
-export const NPM_PACKAGE = "@crvouga/mockingbird"
-export const NPM_SEED_VERSION = "0.1.0"
-export const NPM_PACKAGE_URL = "https://www.npmjs.com/package/@crvouga/mockingbird"
-export const NPM_TRUSTED_PUBLISHER_URL = "https://www.npmjs.com/package/@crvouga/mockingbird/access"
-
-export async function npmViewVersion(
-  name: string,
-): Promise<{ version?: string; missing: boolean; error?: string }> {
-  const result = await run([
-    "npm",
-    "view",
-    name,
-    "version",
-    "--registry",
-    "https://registry.npmjs.org",
-  ])
-  if (result.ok) {
-    const version = result.stdout.trim()
-    return { version, missing: false }
-  }
-  const text = `${result.stderr}\n${result.stdout}`
-  if (/\bE404\b/.test(text) || /404 Not Found/i.test(text) || /not in this registry/i.test(text)) {
-    return { missing: true }
-  }
-  return { missing: false, error: redactSecrets(text.trim() || `npm view exit ${result.exitCode}`) }
-}
-
 export function localEnvStatus(names: string[]): { set: string[]; unset: string[] } {
   const set: string[] = []
   const unset: string[] = []

@@ -19,7 +19,7 @@
     },
     "packages/adapters/bun": {
       "name": "@crvouga/mockingbird-adapter-bun",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-core": "workspace:*",
       },
@@ -30,7 +30,7 @@
     },
     "packages/adapters/node": {
       "name": "@crvouga/mockingbird-adapter-node",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-core": "workspace:*",
       },
@@ -42,7 +42,7 @@
     },
     "packages/auth/openbao": {
       "name": "@crvouga/mockingbird-openbao",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "devDependencies": {
         "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
@@ -50,14 +50,14 @@
     },
     "packages/core": {
       "name": "@crvouga/mockingbird-core",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "devDependencies": {
         "fast-check": "4.9.0",
       },
     },
     "packages/facade": {
       "name": "@crvouga/mockingbird",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "bin": {
         "mockingbird": "./dist/cli/index.js",
       },
@@ -81,7 +81,7 @@
     },
     "packages/http/codec": {
       "name": "@crvouga/mockingbird-http-codec",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "devDependencies": {
         "@crvouga/mockingbird-testing": "^0.1.0",
         "fast-check": "4.9.0",
@@ -89,7 +89,7 @@
     },
     "packages/openapi/arbitrary": {
       "name": "@crvouga/mockingbird-openapi-arbitrary",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-openapi": "^0.1.0",
         "fast-check": "4.9.0",
@@ -117,7 +117,7 @@
     },
     "packages/openapi/core": {
       "name": "@crvouga/mockingbird-openapi",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "devDependencies": {
         "@crvouga/mockingbird-testing": "^0.1.0",
         "fast-check": "4.9.0",
@@ -125,7 +125,7 @@
     },
     "packages/openapi/metadata": {
       "name": "@crvouga/mockingbird-openapi-metadata",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-openapi": "^0.1.0",
       },
@@ -136,7 +136,7 @@
     },
     "packages/parity/canonicalize": {
       "name": "@crvouga/mockingbird-canonicalize",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-http-codec": "workspace:*",
         "@crvouga/mockingbird-model": "workspace:*",
@@ -150,7 +150,7 @@
     },
     "packages/parity/commands": {
       "name": "@crvouga/mockingbird-commands",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-http-codec": "workspace:*",
         "@crvouga/mockingbird-model": "workspace:*",
@@ -165,7 +165,7 @@
     },
     "packages/parity/model": {
       "name": "@crvouga/mockingbird-model",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "devDependencies": {
         "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
@@ -173,7 +173,7 @@
     },
     "packages/parity/runner": {
       "name": "@crvouga/mockingbird-parity",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-canonicalize": "workspace:*",
         "@crvouga/mockingbird-commands": "workspace:*",
@@ -189,7 +189,7 @@
     },
     "packages/service/core": {
       "name": "@crvouga/mockingbird-service",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-core": "workspace:*",
         "@crvouga/mockingbird-http-codec": "workspace:*",
@@ -206,7 +206,7 @@
     },
     "packages/service/genebygene": {
       "name": "@crvouga/mockingbird-service-genebygene",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-core": "workspace:*",
         "@crvouga/mockingbird-http-codec": "workspace:*",
@@ -227,7 +227,7 @@
     },
     "packages/service/junction": {
       "name": "@crvouga/mockingbird-service-junction",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-commands": "workspace:*",
         "@crvouga/mockingbird-core": "workspace:*",
@@ -253,7 +253,7 @@
     },
     "packages/service/medplum": {
       "name": "@crvouga/mockingbird-service-medplum",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-core": "workspace:*",
         "embedded-postgres": "16.14.0-beta.17",
@@ -272,7 +272,7 @@
     },
     "packages/service/postgres": {
       "name": "@crvouga/mockingbird-service-postgres",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "devDependencies": {
         "@arethetypeswrong/cli": "^0.18.5",
         "@biomejs/biome": "^2.5.8",
@@ -289,7 +289,7 @@
     },
     "packages/service/sqlite": {
       "name": "@crvouga/mockingbird-service-sqlite",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "devDependencies": {
         "@arethetypeswrong/cli": "^0.18.5",
         "@biomejs/biome": "^2.5.8",
@@ -305,7 +305,7 @@
     },
     "packages/service/stripe": {
       "name": "@crvouga/mockingbird-service-stripe",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-commands": "workspace:*",
         "@crvouga/mockingbird-core": "workspace:*",
@@ -330,7 +330,7 @@
     },
     "packages/sqlite": {
       "name": "@crvouga/mockingbird-sqlite",
-      "version": "0.1.0",
+      "version": "0.0.0-development",
       "dependencies": {
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },

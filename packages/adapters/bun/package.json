@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-adapter-bun",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Serve any Mockingbird FetchAPI with Bun.serve.",
   "license": "MIT",
   "type": "module",

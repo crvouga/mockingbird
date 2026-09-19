@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-service",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Generic service runtime: Fetch-native APIs, Hono dispatch keyed by OpenAPI operationId, SQLite-backed collections, request parsing and operation registries.",
   "license": "MIT",
   "type": "module",

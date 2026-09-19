@@ -158,14 +158,23 @@ Public packages use `publishConfig.access = "public"` and `publishConfig.provena
 
 ## Releasing
 
-Publishes use **npm Trusted Publishing (OIDC)** on push to `main` (see [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). The release job builds, runs `pack:check` + `portability`, then `release:preflight` and `release:publish` — so nothing ships that isn't verified. Conventional Commits are enforced on PRs (and by the Husky hook). Maintainer secrets and Vault paths: [docs/SECRETS.md](docs/SECRETS.md). `main` is the trunk, so it only ever receives merge commits from green PRs.
+Releases are fully automated on every green push to `main` ([`scripts/release/`](scripts/release/lib.ts), job `Release` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). There is nothing to run by hand:
+
+- **Which packages:** every public package whose directory has a releasable Conventional Commit since its last `<name>@<version>` git tag, every package that has never been released, and every package that depends at runtime on one of those (workspace deps are pinned exactly).
+- **Which version:** `feat!` / `BREAKING CHANGE` → major, `feat` → minor, `fix` / `perf` / `revert` / `refactor` / `build` / `docs` → patch, dependency-only → patch. `test` / `ci` / `chore` / `style` never release a package on their own. First releases start at `0.1.0`.
+- **How:** build → `pack:check` → `portability` → `bun pm pack` → `npm publish --provenance` via npm Trusted Publishing (OIDC) → push the `<name>@<version>` tag → GitHub Release with that package's notes.
+
+Versions live in tags, so `package.json` keeps `0.0.0-development` and nothing is committed back to `main` (same model as semantic-release). Every step is idempotent — re-running a failed release job finishes it.
+
+OIDC cannot create a package that does not exist on npm yet. With the optional `NPM_TOKEN` Actions secret set, the release job creates new packages with it and attaches their Trusted Publisher automatically (`npm trust github`); without it, bootstrap once from `main` with `npm login && bun run build && bun run release:publish -- --local`. See [docs/SECRETS.md](docs/SECRETS.md).
 
 ```bash
-bun run secrets:doctor
-bun run npm:seed -- --yes          # one-time umbrella seed if missing on npm
-bun run release:preflight
-bun run release:publish -- --dry-run
+bun run release:plan                   # what the next push to main would release
+bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
+bun run secrets:doctor                 # npm / Trusted Publishing / NPM_TOKEN status
 ```
+
+`@crvouga/postgres-mem` and `@crvouga/sqlite-mem` are archived; they continue here as `@crvouga/mockingbird-service-postgres` and `@crvouga/mockingbird-service-sqlite`, and the release job deprecates the old npm packages once the replacements are published.
 
 Local replica of the whole CI (minus the main-only release job): `bun run check:full`.
 

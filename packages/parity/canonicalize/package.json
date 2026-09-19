@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-canonicalize",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Strict, provider-neutral canonicalisation of HTTP exchanges for differential comparison: symbolic id replacement, declared volatile fields, parity headers, structural diff.",
   "license": "MIT",
   "type": "module",

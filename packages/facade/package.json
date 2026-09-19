@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Realistic, stateful mock third-party HTTP APIs for your test process. Thin facade over the granular @crvouga/mockingbird-* packages.",
   "license": "MIT",
   "type": "module",

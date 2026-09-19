@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-service-genebygene",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Stateful mock of the GeneByGene Nucleus API (token, products, orders) verified by differential property tests against the GeneByGene staging sandbox.",
   "license": "MIT",
   "type": "module",

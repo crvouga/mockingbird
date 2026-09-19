@@ -1,6 +1,6 @@
 {
   "name": "@crvouga/mockingbird-parity",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Differential property-based test runner: executes generated API walks against a real sandbox API and a Mockingbird mock, comparing every canonicalised response.",
   "license": "MIT",
   "type": "module",

@@ -115,7 +115,7 @@ results.push({
   status: "pass",
   message: "GITHUB_TOKEN is built into Actions (no repo secret needed)",
   details: [
-    "Publish uses npm Trusted Publishing (OIDC) — do not set NPM_TOKEN",
+    "Publish uses npm Trusted Publishing (OIDC); NPM_TOKEN only creates new packages",
     "Release job already sets permissions.contents/issues/pull-requests/id-token",
     `Workflow: https://github.com/${manifest.repo}/blob/main/.github/workflows/ci.yml`,
   ],
