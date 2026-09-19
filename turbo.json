@@ -2,7 +2,14 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
   "globalDependencies": ["tsconfig.base.json", "biome.json"],
-  "globalEnv": ["CI", "NPM_TOKEN", "GITHUB_ACTIONS", "ACTIONS_ID_TOKEN_REQUEST_URL"],
+  "globalEnv": [
+    "CI",
+    "NPM_TOKEN",
+    "GITHUB_ACTIONS",
+    "ACTIONS_ID_TOKEN_REQUEST_URL",
+    "MOCKINGBIRD_NPM_VAULT_PATH",
+    "MOCKINGBIRD_NPM_VAULT_FIELD"
+  ],
   "globalPassThroughEnv": ["TURBO_TOKEN", "TURBO_TEAM", "TURBO_API"],
   "tasks": {
     "generate": {

@@ -1,7 +1,10 @@
 # Secrets runbook (maintainers)
 
-`@crvouga/mockingbird` (and the granular `@crvouga/mockingbird-*` packages) publish with
-**npm Trusted Publishing (OIDC)** — not Automation tokens.
+`@crvouga/mockingbird` and the granular `@crvouga/mockingbird-*` packages publish with
+**npm Trusted Publishing (OIDC)** in GitHub Actions. New packages must be seeded locally
+before CI publishing, then configured with that package's npm Trusted Publisher.
+
+Local seeding uses interactive npm authentication; CI does not receive or use an npm token.
 
 Live parity sandbox credentials live in the self-hosted Vault / OpenBao at
 `https://vault.chrisvouga.dev` under the flat KV v2 secret `secret/data/secret`
@@ -16,10 +19,13 @@ Inventory:
 ## Quick commands
 
 ```bash
+# Log in to self-hosted Vault/OpenBao as crvouga; prompts for password
+bun run vault:login
+
 # Full report + Trusted Publishing setup links (never prints secret values)
 bun run secrets:doctor
 
-# If the umbrella package is not on npm yet (one-time, uses `npm login` — not a token)
+# If the umbrella package is not on npm yet (one-time; token loaded from Vault)
 bun run npm:seed -- --dry-run
 bun run npm:seed -- --yes
 
@@ -69,4 +75,4 @@ bun run parity:genebygene
 | `GITHUB_TOKEN` | Built into GitHub Actions | Automatic |
 | `GH_PAT` | Optional Vault `personal/prd/github` | No (local only) |
 | Provider sandbox keys | Vault `secret/data/secret` | For live parity only |
-| `NPM_TOKEN` | — | **Not used** |
+| `NPM_TOKEN` | — | **Not used**; seed new packages locally with `npm login --auth-type=web` |
