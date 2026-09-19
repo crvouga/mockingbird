@@ -1,0 +1,20 @@
+-- Foreign keys: ON DELETE CASCADE chains through two levels, ON DELETE SET NULL orphans.
+CREATE TABLE parent (id int PRIMARY KEY, name text NOT NULL);
+CREATE TABLE child (id int PRIMARY KEY, parent_id int NOT NULL REFERENCES parent(id) ON DELETE CASCADE, note text NOT NULL);
+CREATE TABLE grandchild (id int PRIMARY KEY, child_id int NOT NULL REFERENCES child(id) ON DELETE CASCADE);
+CREATE TABLE orphanable (id int PRIMARY KEY, parent_id int REFERENCES parent(id) ON DELETE SET NULL);
+INSERT INTO parent VALUES (1, 'keep');
+INSERT INTO parent VALUES (2, 'drop');
+INSERT INTO child VALUES (10, 1, 'c-keep');
+INSERT INTO child VALUES (11, 2, 'c-drop-a');
+INSERT INTO child VALUES (12, 2, 'c-drop-b');
+INSERT INTO grandchild VALUES (100, 10);
+INSERT INTO grandchild VALUES (101, 11);
+INSERT INTO grandchild VALUES (102, 12);
+INSERT INTO orphanable VALUES (200, 1);
+INSERT INTO orphanable VALUES (201, 2);
+DELETE FROM parent WHERE id = 2;
+SELECT id, name FROM parent ORDER BY id;
+SELECT id, parent_id, note FROM child ORDER BY id;
+SELECT id, child_id FROM grandchild ORDER BY id;
+SELECT id, parent_id FROM orphanable ORDER BY id;

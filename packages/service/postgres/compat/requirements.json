@@ -1,0 +1,1105 @@
+{
+  "generatedAt": "2026-08-21T18:49:46.345Z",
+  "sourceUrl": "https://www.postgresql.org/docs/18/sql-commands.html",
+  "count": 183,
+  "requirements": [
+    {
+      "id": "sql-abort",
+      "text": "ABORT — abort the current transaction",
+      "source": "sql-abort.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alteraggregate",
+      "text": "ALTER AGGREGATE — change the definition of an aggregate function",
+      "source": "sql-alteraggregate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altercollation",
+      "text": "ALTER COLLATION — change the definition of a collation",
+      "source": "sql-altercollation.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterconversion",
+      "text": "ALTER CONVERSION — change the definition of a conversion",
+      "source": "sql-alterconversion.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterdatabase",
+      "text": "ALTER DATABASE — change a database",
+      "source": "sql-alterdatabase.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterdefaultprivileges",
+      "text": "ALTER DEFAULT PRIVILEGES — define default access privileges",
+      "source": "sql-alterdefaultprivileges.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterdomain",
+      "text": "ALTER DOMAIN — change the definition of a domain",
+      "source": "sql-alterdomain.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altereventtrigger",
+      "text": "ALTER EVENT TRIGGER — change the definition of an event trigger",
+      "source": "sql-altereventtrigger.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterextension",
+      "text": "ALTER EXTENSION — change the definition of an extension",
+      "source": "sql-alterextension.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterforeigndatawrapper",
+      "text": "ALTER FOREIGN DATA WRAPPER — change the definition of a foreign-data wrapper",
+      "source": "sql-alterforeigndatawrapper.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterforeigntable",
+      "text": "ALTER FOREIGN TABLE — change the definition of a foreign table",
+      "source": "sql-alterforeigntable.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterfunction",
+      "text": "ALTER FUNCTION — change the definition of a function",
+      "source": "sql-alterfunction.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altergroup",
+      "text": "ALTER GROUP — change role name or membership",
+      "source": "sql-altergroup.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterindex",
+      "text": "ALTER INDEX — change the definition of an index",
+      "source": "sql-alterindex.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterlanguage",
+      "text": "ALTER LANGUAGE — change the definition of a procedural language",
+      "source": "sql-alterlanguage.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterlargeobject",
+      "text": "ALTER LARGE OBJECT — change the definition of a large object",
+      "source": "sql-alterlargeobject.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altermaterializedview",
+      "text": "ALTER MATERIALIZED VIEW — change the definition of a materialized view",
+      "source": "sql-altermaterializedview.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alteroperator",
+      "text": "ALTER OPERATOR — change the definition of an operator",
+      "source": "sql-alteroperator.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alteropclass",
+      "text": "ALTER OPERATOR CLASS — change the definition of an operator class",
+      "source": "sql-alteropclass.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alteropfamily",
+      "text": "ALTER OPERATOR FAMILY — change the definition of an operator family",
+      "source": "sql-alteropfamily.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterpolicy",
+      "text": "ALTER POLICY — change the definition of a row-level security policy",
+      "source": "sql-alterpolicy.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterprocedure",
+      "text": "ALTER PROCEDURE — change the definition of a procedure",
+      "source": "sql-alterprocedure.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterpublication",
+      "text": "ALTER PUBLICATION — change the definition of a publication",
+      "source": "sql-alterpublication.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterrole",
+      "text": "ALTER ROLE — change a database role",
+      "source": "sql-alterrole.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterroutine",
+      "text": "ALTER ROUTINE — change the definition of a routine",
+      "source": "sql-alterroutine.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterrule",
+      "text": "ALTER RULE — change the definition of a rule",
+      "source": "sql-alterrule.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterschema",
+      "text": "ALTER SCHEMA — change the definition of a schema",
+      "source": "sql-alterschema.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altersequence",
+      "text": "ALTER SEQUENCE — change the definition of a sequence generator",
+      "source": "sql-altersequence.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alterserver",
+      "text": "ALTER SERVER — change the definition of a foreign server",
+      "source": "sql-alterserver.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterstatistics",
+      "text": "ALTER STATISTICS — change the definition of an extended statistics object",
+      "source": "sql-alterstatistics.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altersubscription",
+      "text": "ALTER SUBSCRIPTION — change the definition of a subscription",
+      "source": "sql-altersubscription.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-altersystem",
+      "text": "ALTER SYSTEM — change a server configuration parameter",
+      "source": "sql-altersystem.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-altertable",
+      "text": "ALTER TABLE — change the definition of a table",
+      "source": "sql-altertable.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altertablespace",
+      "text": "ALTER TABLESPACE — change the definition of a tablespace",
+      "source": "sql-altertablespace.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-altertsconfig",
+      "text": "ALTER TEXT SEARCH CONFIGURATION — change the definition of a text search configuration",
+      "source": "sql-altertsconfig.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altertsdictionary",
+      "text": "ALTER TEXT SEARCH DICTIONARY — change the definition of a text search dictionary",
+      "source": "sql-altertsdictionary.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altertsparser",
+      "text": "ALTER TEXT SEARCH PARSER — change the definition of a text search parser",
+      "source": "sql-altertsparser.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altertstemplate",
+      "text": "ALTER TEXT SEARCH TEMPLATE — change the definition of a text search template",
+      "source": "sql-altertstemplate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altertrigger",
+      "text": "ALTER TRIGGER — change the definition of a trigger",
+      "source": "sql-altertrigger.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-altertype",
+      "text": "ALTER TYPE — change the definition of a type",
+      "source": "sql-altertype.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-alteruser",
+      "text": "ALTER USER — change a database role",
+      "source": "sql-alteruser.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterusermapping",
+      "text": "ALTER USER MAPPING — change the definition of a user mapping",
+      "source": "sql-alterusermapping.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-alterview",
+      "text": "ALTER VIEW — change the definition of a view",
+      "source": "sql-alterview.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-analyze",
+      "text": "ANALYZE — collect statistics about a database",
+      "source": "sql-analyze.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-begin",
+      "text": "BEGIN — start a transaction block",
+      "source": "sql-begin.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-call",
+      "text": "CALL — invoke a procedure",
+      "source": "sql-call.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-checkpoint",
+      "text": "CHECKPOINT — force a write-ahead log checkpoint",
+      "source": "sql-checkpoint.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-close",
+      "text": "CLOSE — close a cursor",
+      "source": "sql-close.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-cluster",
+      "text": "CLUSTER — cluster a table according to an index",
+      "source": "sql-cluster.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-comment",
+      "text": "COMMENT — define or change the comment of an object",
+      "source": "sql-comment.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-commit",
+      "text": "COMMIT — commit the current transaction",
+      "source": "sql-commit.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-commit-prepared",
+      "text": "COMMIT PREPARED — commit a transaction that was earlier prepared for two-phase commit",
+      "source": "sql-commit-prepared.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-copy",
+      "text": "COPY — copy data between a file and a table",
+      "source": "sql-copy.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-create-access-method",
+      "text": "CREATE ACCESS METHOD — define a new access method",
+      "source": "sql-create-access-method.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createaggregate",
+      "text": "CREATE AGGREGATE — define a new aggregate function",
+      "source": "sql-createaggregate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createcast",
+      "text": "CREATE CAST — define a new cast",
+      "source": "sql-createcast.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createcollation",
+      "text": "CREATE COLLATION — define a new collation",
+      "source": "sql-createcollation.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createconversion",
+      "text": "CREATE CONVERSION — define a new encoding conversion",
+      "source": "sql-createconversion.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createdatabase",
+      "text": "CREATE DATABASE — create a new database",
+      "source": "sql-createdatabase.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createdomain",
+      "text": "CREATE DOMAIN — define a new domain",
+      "source": "sql-createdomain.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createeventtrigger",
+      "text": "CREATE EVENT TRIGGER — define a new event trigger",
+      "source": "sql-createeventtrigger.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createextension",
+      "text": "CREATE EXTENSION — install an extension",
+      "source": "sql-createextension.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createforeigndatawrapper",
+      "text": "CREATE FOREIGN DATA WRAPPER — define a new foreign-data wrapper",
+      "source": "sql-createforeigndatawrapper.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createforeigntable",
+      "text": "CREATE FOREIGN TABLE — define a new foreign table",
+      "source": "sql-createforeigntable.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createfunction",
+      "text": "CREATE FUNCTION — define a new function",
+      "source": "sql-createfunction.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-creategroup",
+      "text": "CREATE GROUP — define a new database role",
+      "source": "sql-creategroup.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createindex",
+      "text": "CREATE INDEX — define a new index",
+      "source": "sql-createindex.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createlanguage",
+      "text": "CREATE LANGUAGE — define a new procedural language",
+      "source": "sql-createlanguage.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-creatematerializedview",
+      "text": "CREATE MATERIALIZED VIEW — define a new materialized view",
+      "source": "sql-creatematerializedview.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createoperator",
+      "text": "CREATE OPERATOR — define a new operator",
+      "source": "sql-createoperator.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createopclass",
+      "text": "CREATE OPERATOR CLASS — define a new operator class",
+      "source": "sql-createopclass.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createopfamily",
+      "text": "CREATE OPERATOR FAMILY — define a new operator family",
+      "source": "sql-createopfamily.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createpolicy",
+      "text": "CREATE POLICY — define a new row-level security policy for a table",
+      "source": "sql-createpolicy.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createprocedure",
+      "text": "CREATE PROCEDURE — define a new procedure",
+      "source": "sql-createprocedure.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createpublication",
+      "text": "CREATE PUBLICATION — define a new publication",
+      "source": "sql-createpublication.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createrole",
+      "text": "CREATE ROLE — define a new database role",
+      "source": "sql-createrole.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createrule",
+      "text": "CREATE RULE — define a new rewrite rule",
+      "source": "sql-createrule.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createschema",
+      "text": "CREATE SCHEMA — define a new schema",
+      "source": "sql-createschema.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createsequence",
+      "text": "CREATE SEQUENCE — define a new sequence generator",
+      "source": "sql-createsequence.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createserver",
+      "text": "CREATE SERVER — define a new foreign server",
+      "source": "sql-createserver.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createstatistics",
+      "text": "CREATE STATISTICS — define extended statistics",
+      "source": "sql-createstatistics.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createsubscription",
+      "text": "CREATE SUBSCRIPTION — define a new subscription",
+      "source": "sql-createsubscription.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createtable",
+      "text": "CREATE TABLE — define a new table",
+      "source": "sql-createtable.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtableas",
+      "text": "CREATE TABLE AS — define a new table from the results of a query",
+      "source": "sql-createtableas.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtablespace",
+      "text": "CREATE TABLESPACE — define a new tablespace",
+      "source": "sql-createtablespace.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createtsconfig",
+      "text": "CREATE TEXT SEARCH CONFIGURATION — define a new text search configuration",
+      "source": "sql-createtsconfig.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtsdictionary",
+      "text": "CREATE TEXT SEARCH DICTIONARY — define a new text search dictionary",
+      "source": "sql-createtsdictionary.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtsparser",
+      "text": "CREATE TEXT SEARCH PARSER — define a new text search parser",
+      "source": "sql-createtsparser.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtstemplate",
+      "text": "CREATE TEXT SEARCH TEMPLATE — define a new text search template",
+      "source": "sql-createtstemplate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtransform",
+      "text": "CREATE TRANSFORM — define a new transform",
+      "source": "sql-createtransform.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtrigger",
+      "text": "CREATE TRIGGER — define a new trigger",
+      "source": "sql-createtrigger.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createtype",
+      "text": "CREATE TYPE — define a new data type",
+      "source": "sql-createtype.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-createuser",
+      "text": "CREATE USER — define a new database role",
+      "source": "sql-createuser.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createusermapping",
+      "text": "CREATE USER MAPPING — define a new mapping of a user to a foreign server",
+      "source": "sql-createusermapping.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-createview",
+      "text": "CREATE VIEW — define a new view",
+      "source": "sql-createview.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-deallocate",
+      "text": "DEALLOCATE — deallocate a prepared statement",
+      "source": "sql-deallocate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-declare",
+      "text": "DECLARE — define a cursor",
+      "source": "sql-declare.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-delete",
+      "text": "DELETE — delete rows of a table",
+      "source": "sql-delete.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-discard",
+      "text": "DISCARD — discard session state",
+      "source": "sql-discard.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-do",
+      "text": "DO — execute an anonymous code block",
+      "source": "sql-do.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-drop-access-method",
+      "text": "DROP ACCESS METHOD — remove an access method",
+      "source": "sql-drop-access-method.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropaggregate",
+      "text": "DROP AGGREGATE — remove an aggregate function",
+      "source": "sql-dropaggregate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropcast",
+      "text": "DROP CAST — remove a cast",
+      "source": "sql-dropcast.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropcollation",
+      "text": "DROP COLLATION — remove a collation",
+      "source": "sql-dropcollation.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropconversion",
+      "text": "DROP CONVERSION — remove a conversion",
+      "source": "sql-dropconversion.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropdatabase",
+      "text": "DROP DATABASE — remove a database",
+      "source": "sql-dropdatabase.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropdomain",
+      "text": "DROP DOMAIN — remove a domain",
+      "source": "sql-dropdomain.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropeventtrigger",
+      "text": "DROP EVENT TRIGGER — remove an event trigger",
+      "source": "sql-dropeventtrigger.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropextension",
+      "text": "DROP EXTENSION — remove an extension",
+      "source": "sql-dropextension.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropforeigndatawrapper",
+      "text": "DROP FOREIGN DATA WRAPPER — remove a foreign-data wrapper",
+      "source": "sql-dropforeigndatawrapper.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropforeigntable",
+      "text": "DROP FOREIGN TABLE — remove a foreign table",
+      "source": "sql-dropforeigntable.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropfunction",
+      "text": "DROP FUNCTION — remove a function",
+      "source": "sql-dropfunction.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropgroup",
+      "text": "DROP GROUP — remove a database role",
+      "source": "sql-dropgroup.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropindex",
+      "text": "DROP INDEX — remove an index",
+      "source": "sql-dropindex.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droplanguage",
+      "text": "DROP LANGUAGE — remove a procedural language",
+      "source": "sql-droplanguage.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropmaterializedview",
+      "text": "DROP MATERIALIZED VIEW — remove a materialized view",
+      "source": "sql-dropmaterializedview.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropoperator",
+      "text": "DROP OPERATOR — remove an operator",
+      "source": "sql-dropoperator.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropopclass",
+      "text": "DROP OPERATOR CLASS — remove an operator class",
+      "source": "sql-dropopclass.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropopfamily",
+      "text": "DROP OPERATOR FAMILY — remove an operator family",
+      "source": "sql-dropopfamily.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-drop-owned",
+      "text": "DROP OWNED — remove database objects owned by a database role",
+      "source": "sql-drop-owned.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-droppolicy",
+      "text": "DROP POLICY — remove a row-level security policy from a table",
+      "source": "sql-droppolicy.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropprocedure",
+      "text": "DROP PROCEDURE — remove a procedure",
+      "source": "sql-dropprocedure.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droppublication",
+      "text": "DROP PUBLICATION — remove a publication",
+      "source": "sql-droppublication.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-droprole",
+      "text": "DROP ROLE — remove a database role",
+      "source": "sql-droprole.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-droproutine",
+      "text": "DROP ROUTINE — remove a routine",
+      "source": "sql-droproutine.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droprule",
+      "text": "DROP RULE — remove a rewrite rule",
+      "source": "sql-droprule.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropschema",
+      "text": "DROP SCHEMA — remove a schema",
+      "source": "sql-dropschema.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropsequence",
+      "text": "DROP SEQUENCE — remove a sequence",
+      "source": "sql-dropsequence.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropserver",
+      "text": "DROP SERVER — remove a foreign server descriptor",
+      "source": "sql-dropserver.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropstatistics",
+      "text": "DROP STATISTICS — remove extended statistics",
+      "source": "sql-dropstatistics.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropsubscription",
+      "text": "DROP SUBSCRIPTION — remove a subscription",
+      "source": "sql-dropsubscription.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-droptable",
+      "text": "DROP TABLE — remove a table",
+      "source": "sql-droptable.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droptablespace",
+      "text": "DROP TABLESPACE — remove a tablespace",
+      "source": "sql-droptablespace.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-droptsconfig",
+      "text": "DROP TEXT SEARCH CONFIGURATION — remove a text search configuration",
+      "source": "sql-droptsconfig.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droptsdictionary",
+      "text": "DROP TEXT SEARCH DICTIONARY — remove a text search dictionary",
+      "source": "sql-droptsdictionary.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droptsparser",
+      "text": "DROP TEXT SEARCH PARSER — remove a text search parser",
+      "source": "sql-droptsparser.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droptstemplate",
+      "text": "DROP TEXT SEARCH TEMPLATE — remove a text search template",
+      "source": "sql-droptstemplate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droptransform",
+      "text": "DROP TRANSFORM — remove a transform",
+      "source": "sql-droptransform.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droptrigger",
+      "text": "DROP TRIGGER — remove a trigger",
+      "source": "sql-droptrigger.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-droptype",
+      "text": "DROP TYPE — remove a data type",
+      "source": "sql-droptype.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-dropuser",
+      "text": "DROP USER — remove a database role",
+      "source": "sql-dropuser.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropusermapping",
+      "text": "DROP USER MAPPING — remove a user mapping for a foreign server",
+      "source": "sql-dropusermapping.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-dropview",
+      "text": "DROP VIEW — remove a view",
+      "source": "sql-dropview.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-end",
+      "text": "END — commit the current transaction",
+      "source": "sql-end.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-execute",
+      "text": "EXECUTE — execute a prepared statement",
+      "source": "sql-execute.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-explain",
+      "text": "EXPLAIN — show the execution plan of a statement",
+      "source": "sql-explain.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-fetch",
+      "text": "FETCH — retrieve rows from a query using a cursor",
+      "source": "sql-fetch.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-grant",
+      "text": "GRANT — define access privileges",
+      "source": "sql-grant.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-importforeignschema",
+      "text": "IMPORT FOREIGN SCHEMA — import table definitions from a foreign server",
+      "source": "sql-importforeignschema.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-insert",
+      "text": "INSERT — create new rows in a table",
+      "source": "sql-insert.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-listen",
+      "text": "LISTEN — listen for a notification",
+      "source": "sql-listen.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-load",
+      "text": "LOAD — load a shared library file",
+      "source": "sql-load.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-lock",
+      "text": "LOCK — lock a table",
+      "source": "sql-lock.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-merge",
+      "text": "MERGE — conditionally insert, update, or delete rows of a table",
+      "source": "sql-merge.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-move",
+      "text": "MOVE — position a cursor",
+      "source": "sql-move.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-notify",
+      "text": "NOTIFY — generate a notification",
+      "source": "sql-notify.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-prepare",
+      "text": "PREPARE — prepare a statement for execution",
+      "source": "sql-prepare.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-prepare-transaction",
+      "text": "PREPARE TRANSACTION — prepare the current transaction for two-phase commit",
+      "source": "sql-prepare-transaction.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-reassign-owned",
+      "text": "REASSIGN OWNED — change the ownership of database objects owned by a database role",
+      "source": "sql-reassign-owned.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-refreshmaterializedview",
+      "text": "REFRESH MATERIALIZED VIEW — replace the contents of a materialized view",
+      "source": "sql-refreshmaterializedview.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-reindex",
+      "text": "REINDEX — rebuild indexes",
+      "source": "sql-reindex.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-release-savepoint",
+      "text": "RELEASE SAVEPOINT — release a previously defined savepoint",
+      "source": "sql-release-savepoint.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-reset",
+      "text": "RESET — restore the value of a run-time parameter to the default value",
+      "source": "sql-reset.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-revoke",
+      "text": "REVOKE — remove access privileges",
+      "source": "sql-revoke.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-rollback",
+      "text": "ROLLBACK — abort the current transaction",
+      "source": "sql-rollback.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-rollback-prepared",
+      "text": "ROLLBACK PREPARED — cancel a transaction that was earlier prepared for two-phase commit",
+      "source": "sql-rollback-prepared.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-rollback-to",
+      "text": "ROLLBACK TO SAVEPOINT — roll back to a savepoint",
+      "source": "sql-rollback-to.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-savepoint",
+      "text": "SAVEPOINT — define a new savepoint within the current transaction",
+      "source": "sql-savepoint.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-security-label",
+      "text": "SECURITY LABEL — define or change a security label applied to an object",
+      "source": "sql-security-label.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-select",
+      "text": "SELECT — retrieve rows from a table or view",
+      "source": "sql-select.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-selectinto",
+      "text": "SELECT INTO — define a new table from the results of a query",
+      "source": "sql-selectinto.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-set",
+      "text": "SET — change a run-time parameter",
+      "source": "sql-set.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-set-constraints",
+      "text": "SET CONSTRAINTS — set constraint check timing for the current transaction",
+      "source": "sql-set-constraints.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-set-role",
+      "text": "SET ROLE — set the current user identifier of the current session",
+      "source": "sql-set-role.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-set-session-authorization",
+      "text": "SET SESSION AUTHORIZATION — set the session user identifier and the current user identifier of the current session",
+      "source": "sql-set-session-authorization.html",
+      "classification": "NOT_APPLICABLE"
+    },
+    {
+      "id": "sql-set-transaction",
+      "text": "SET TRANSACTION — set the characteristics of the current transaction",
+      "source": "sql-set-transaction.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-show",
+      "text": "SHOW — show the value of a run-time parameter",
+      "source": "sql-show.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-start-transaction",
+      "text": "START TRANSACTION — start a transaction block",
+      "source": "sql-start-transaction.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-truncate",
+      "text": "TRUNCATE — empty a table or set of tables",
+      "source": "sql-truncate.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-unlisten",
+      "text": "UNLISTEN — stop listening for a notification",
+      "source": "sql-unlisten.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-update",
+      "text": "UPDATE — update rows of a table",
+      "source": "sql-update.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-vacuum",
+      "text": "VACUUM — garbage-collect and optionally analyze a database",
+      "source": "sql-vacuum.html",
+      "classification": "SQL_BEHAVIOR"
+    },
+    {
+      "id": "sql-values",
+      "text": "VALUES — compute a set of rows",
+      "source": "sql-values.html",
+      "classification": "SQL_BEHAVIOR"
+    }
+  ]
+}
