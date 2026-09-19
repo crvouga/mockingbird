@@ -85,9 +85,7 @@ ${returnFields}
 }
 
 /*
- * Usage example (bun:test):
- *
- * import { afterAll, beforeAll } from "bun:test"
+ * Usage example (Bun built-in test runner):
  *
  * const mocks = createMockProviders()
  * const originalFetch = global.fetch

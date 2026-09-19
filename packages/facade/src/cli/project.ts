@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
 export type PackageManager = "npm" | "bun" | "pnpm" | "yarn"
-export type TestFramework = "vitest" | "jest" | "bun:test" | "mocha" | "node:test" | null
+export type TestFramework = "vitest" | "jest" | "bun-test" | "mocha" | "node-test" | null
 export type ProjectType = "app" | "lib"
 
 export type ProjectInfo = {
@@ -52,7 +52,7 @@ export function detectTestFramework(pkg: Record<string, unknown> | null): TestFr
   if (deps.vitest) return "vitest"
   if (deps.jest) return "jest"
   if (deps.mocha) return "mocha"
-  if (pkg.engines && (pkg.engines as Record<string, string>).bun) return "bun:test"
+  if (pkg.engines && (pkg.engines as Record<string, string>).bun) return "bun-test"
   return null
 }
 
