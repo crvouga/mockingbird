@@ -141,11 +141,14 @@ const pack = await $`npm pack --dry-run --json --ignore-scripts`.cwd(pkgDir).qui
 if (pack.exitCode !== 0) {
   fail(`${name}: npm pack --dry-run failed — the package cannot be packed for npm`)
 } else {
-  let entries: Array<{ filename?: string; files?: Array<{ path: string }> }>
+  // npm <= 10 prints `[{ files }]`; npm >= 11 prints `{ "<name>": { files } }`.
+  type PackEntry = { filename?: string; files?: Array<{ path: string }> }
+  let entries: PackEntry[]
   try {
-    const raw = pack.stdout.toString().trim()
-    const jsonStart = raw.indexOf("[")
-    entries = JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
+    const parsed = JSON.parse(pack.stdout.toString().trim()) as
+      | PackEntry[]
+      | Record<string, PackEntry>
+    entries = Array.isArray(parsed) ? parsed : Object.values(parsed)
   } catch (err) {
     fail(
       `${name}: npm pack --dry-run returned invalid JSON (${err instanceof Error ? err.message : String(err)})`,
