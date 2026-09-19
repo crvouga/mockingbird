@@ -1,4 +1,10 @@
-# Local replica: bun run check
+# Local replica: bun run check:full
+#
+# One turbo graph (`bun run check`) does all the work; .github/actions/setup caches
+# node_modules and turbo's cache, so unchanged packages are never rebuilt or retested.
+# On main, Release publishes every changed package (versions from Conventional Commits).
+#
+# The workflow file name is part of each package's npm Trusted Publisher — keep it `ci.yml`.
 name: CI
 
 on:
@@ -19,6 +25,7 @@ env:
 jobs:
   commitlint:
     name: Commitlint
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -28,25 +35,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/setup
         with:
-          bun-version: "1.4.0"
+          turbo-cache: "false"
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Note push commitlint policy
-        if: github.event_name == 'push'
-        run: |
-          set +e
-          bunx commitlint --last --verbose
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            echo "::warning::HEAD is not Conventional Commits. Enforced on PRs."
-          fi
-
+      # Every PR commit lands on main (merge commits only), and each one drives the release bump.
       - name: Validate PR commits
-        if: github.event_name == 'pull_request'
         run: |
           git rev-list --first-parent --reverse \
             ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} |
@@ -55,7 +49,6 @@ jobs:
           done
 
       - name: Validate PR title
-        if: github.event_name == 'pull_request'
         uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -65,103 +58,44 @@ jobs:
             The PR title "{title}" looks empty after the type/scope prefix.
             Use a Conventional Commits title, e.g. "feat: add junction mock".
 
-  quality:
-    name: Quality
+  check:
+    name: Check
     runs-on: ubuntu-latest
+    env:
+      FC_NUM_RUNS: "40"
     steps:
       - uses: actions/checkout@v5
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
+      - uses: ./.github/actions/setup
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Check (format, lint, typecheck, build, test, pack, portability, boundaries)
+        run: bun run check -- --summarize --output-logs=errors-only
 
-      - name: Format check
-        run: bun run check:format
+      - name: Prune turbo cache to this run
+        if: success()
+        run: bun scripts/ci/prune-turbo-cache.ts
 
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Build
-        run: bun run build
-
-      - name: Package integrity (publint + arethetypeswrong)
-        run: bun run pack:check
-
-      - name: Portability
-        run: bun run portability
-
-      - name: Boundaries
-        run: bun run check:boundaries
-
-  test:
-    name: Test
-    needs: [quality]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Property tests
-        run: bun run test
-        env:
-          FC_NUM_RUNS: "40"
-
-  # Trunk policy: `main` is the only long-lived branch, so every PR must target it and
-  # must come from a short-lived head branch. Fail-closed: a PR whose head predates this
-  # job never reports this context, so it stays blocked until it is synced with main.
-  policy:
-    name: PR Policy
-    if: always() && github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Only PRs targeting main are allowed
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_REF: ${{ github.head_ref }}
-        run: |
-          if [ "$BASE_REF" != "main" ]; then
-            echo "::error::PR base is '$BASE_REF'; pull requests may only target 'main' (the trunk)."
-            exit 1
-          fi
-          if [ "$HEAD_REF" = "main" ]; then
-            echo "::error::PR head is 'main'; the head branch must be short-lived."
-            exit 1
-          fi
-          echo "trunk policy satisfied: base=$BASE_REF head=$HEAD_REF"
-
-  # Single required status check for branch protection / rulesets. Also asserts the trunk PR policy.
+  # Single required status check for the ruleset. Also enforces the trunk policy: PRs
+  # target `main` from a short-lived branch.
   required:
     name: Required
     if: always() && github.event_name == 'pull_request'
-    needs: [commitlint, quality, test, policy]
+    needs: [commitlint, check]
     runs-on: ubuntu-latest
     steps:
       - name: All required checks passed
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          RESULTS: ${{ needs.commitlint.result }} ${{ needs.check.result }}
         run: |
-          results=(
-            "${{ needs.commitlint.result }}"
-            "${{ needs.quality.result }}"
-            "${{ needs.test.result }}"
-            "${{ needs.policy.result }}"
-          )
-          for result in "${results[@]}"; do
+          if [ "$BASE_REF" != "main" ] || [ "$HEAD_REF" = "main" ]; then
+            echo "::error::PRs must target 'main' from a short-lived branch (base=$BASE_REF head=$HEAD_REF)."
+            exit 1
+          fi
+          for result in $RESULTS; do
             if [ "$result" != "success" ]; then
-              echo "Required CI job failed (result=$result)"
+              echo "::error::A required CI job did not succeed (result=$result)."
               exit 1
             fi
           done
@@ -170,11 +104,11 @@ jobs:
   # Automated per-package release — scripts/release/lib.ts has the rules; docs/SECRETS.md the setup.
   # Changed packages (Conventional Commits since their `<name>@<version>` tag, plus dependents)
   # are versioned, published via npm Trusted Publishing (OIDC), tagged, and given a GitHub Release.
-  # Nothing is committed to main: versions live in tags, like semantic-release.
+  # Nothing is committed to main: versions live in tags. Every step is idempotent — re-run to retry.
   release:
     name: Release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [commitlint, test]
+    needs: [check]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -184,47 +118,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
+      - uses: ./.github/actions/setup
 
       - uses: actions/setup-node@v5
         with:
-          node-version: lts/*
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
       # Trusted Publishing needs npm >= 11.5; `npm trust` needs >= 11.10.
       - name: Update npm
-        run: npm install -g npm@latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: npm install -g npm@11
 
       - name: Plan
         id: plan
         run: bun run release:plan -- --github-output
 
-      - name: Build
+      # Restored from Check's turbo cache for this commit — no rebuild.
+      - name: Build and verify packages
         if: steps.plan.outputs.has_changes == 'true'
-        run: bun run build
-
-      - name: Package integrity (publint + arethetypeswrong)
-        if: steps.plan.outputs.has_changes == 'true'
-        run: bun run pack:check
-
-      - name: Portability
-        if: steps.plan.outputs.has_changes == 'true'
-        run: bun run portability
-
-      - name: Configure git
-        if: steps.plan.outputs.has_changes == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+        run: bunx turbo run build pack:check portability --output-logs=errors-only
 
       - name: Publish, tag, and create GitHub Releases
         if: steps.plan.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: bun run release:publish
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          bun run release:publish

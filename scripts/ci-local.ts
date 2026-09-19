@@ -141,7 +141,7 @@ if (process.platform !== "linux") {
   notes.push(`CI runs on ubuntu-latest; this host is ${process.platform}.`)
 }
 notes.push(
-  "PR Policy (base = main) is enforced by GitHub Actions only; this local replica cannot reproduce it.",
+  "Trunk policy (PRs target main) is enforced by the Required job only; not reproducible locally.",
 )
 
 job("install")
@@ -149,17 +149,8 @@ await runStep("Install (frozen lockfile)", ["bun", "install", "--frozen-lockfile
 
 await commitlintJob()
 
-job("quality  (CI job)")
-await runStep("Format check", ["bun", "run", "check:format"])
-await runStep("Lint", ["bun", "run", "lint"])
-await runStep("Typecheck", ["bun", "run", "typecheck"])
-await runStep("Build", ["bun", "run", "build"])
-await runStep("Package integrity", ["bun", "run", "pack:check"])
-await runStep("Portability", ["bun", "run", "portability"])
-
-job("test  (CI job)")
-await runStep("Build", ["bun", "run", "build"])
-await runStep("Property tests", ["bun", "run", "test"], { env: { FC_NUM_RUNS: "20" } })
+job("check  (CI job)")
+await runStep("Check (turbo graph)", ["bun", "run", "check"], { env: { FC_NUM_RUNS: "40" } })
 
 const total = finished.reduce((sum, step) => sum + step.seconds, 0)
 console.log("")
