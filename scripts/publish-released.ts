@@ -1,24 +1,24 @@
 /**
  * Publish every public workspace package whose version is not yet on npm.
  *
- * Uses npm Trusted Publishing (OIDC) in CI — no NPM_TOKEN.
- * Skips versions that already exist (idempotent re-runs).
+ * Uses npm Trusted Publishing (OIDC) in CI. New packages must be seeded locally
+ * before CI publishing, then configured with an npm Trusted Publisher.
+ * Existing package versions are skipped (idempotent re-runs).
  *
  *   bun run release:publish
  *   bun run release:publish -- --dry-run
  */
+interface Pkg {
+  dir: string
+  name: string
+  version: string
+}
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { $ } from "bun"
 import { npmViewVersion, redactSecrets, root } from "./secrets/lib.ts"
 
 const dryRun = process.argv.includes("--dry-run")
-
-type Pkg = {
-  dir: string
-  name: string
-  version: string
-}
 
 const collectPackages = (): Pkg[] => {
   const out: Pkg[] = []
@@ -90,7 +90,16 @@ for (const pkg of packages) {
   }
   const result = await $`npm publish --access public --provenance`.cwd(pkg.dir).nothrow()
   if (result.exitCode !== 0) {
-    console.error(`FAIL ${pkg.name}: npm publish exited ${result.exitCode}`)
+    if (viewed.missing) {
+      console.error(`FAIL ${pkg.name}: package does not exist on npm yet`)
+      console.error("  Seed it locally before running CI:")
+      console.error("  bun run build && bun run npm:seed -- --yes")
+      console.error(
+        `  Then configure its Trusted Publisher: https://www.npmjs.com/package/${pkg.name}/access`,
+      )
+    } else {
+      console.error(`FAIL ${pkg.name}: npm publish --provenance exited ${result.exitCode}`)
+    }
     console.error(redactSecrets(result.stderr.toString() || result.stdout.toString()))
     failed++
     continue

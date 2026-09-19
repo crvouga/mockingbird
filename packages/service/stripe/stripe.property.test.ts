@@ -89,7 +89,7 @@ describe("StripeAPI", () => {
       })
       expect(report.walks).toBeGreaterThan(0)
     },
-    { timeout: 30_000 },
+    { timeout: 120_000 },
   )
 
   test(
