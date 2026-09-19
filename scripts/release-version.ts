@@ -20,10 +20,7 @@ const isBump = argv.includes("--bump")
 // ── Git helpers ────────────────────────────────────────────────────
 
 async function lastTag(): Promise<string | null> {
-  const result = await $`git describe --tags --abbrev=0 --match 'v*'`
-    .cwd(root)
-    .quiet()
-    .nothrow()
+  const result = await $`git describe --tags --abbrev=0 --match 'v*'`.cwd(root).quiet().nothrow()
   return result.exitCode === 0 ? result.text().trim() : null
 }
 
@@ -31,19 +28,21 @@ type Commit = { hash: string; subject: string; body: string }
 
 async function commitsSince(ref: string | null): Promise<Commit[]> {
   const range = ref ? `${ref}..HEAD` : "--root"
-  const result =
-    await $`git log ${range} --format='%H|||%s|||%b---'`.cwd(root).quiet()
+  const result = await $`git log ${range} --format='%H|||%s|||%b---'`.cwd(root).quiet()
   if (result.exitCode !== 0) return []
   const raw = result.text().trim()
   if (!raw) return []
-  return raw.split("---\n").filter(Boolean).map((block) => {
-    const [hash, subject, ...bodyLines] = block.split("|||")
-    return {
-      hash: (hash ?? "").trim(),
-      subject: (subject ?? "").trim(),
-      body: (bodyLines ?? []).join("\n").trim(),
-    }
-  })
+  return raw
+    .split("---\n")
+    .filter(Boolean)
+    .map((block) => {
+      const [hash, subject, ...bodyLines] = block.split("|||")
+      return {
+        hash: (hash ?? "").trim(),
+        subject: (subject ?? "").trim(),
+        body: (bodyLines ?? []).join("\n").trim(),
+      }
+    })
 }
 
 const Bump = { major: "major", minor: "minor", patch: "patch" } as const
@@ -174,10 +173,7 @@ if (isBump) {
     const raw = readFileSync(pkg.path, "utf8")
     const parsed = JSON.parse(raw) as Record<string, unknown>
     if (parsed.version !== currentVersion) continue
-    const updated = raw.replace(
-      `"version": "${currentVersion}"`,
-      `"version": "${next}"`,
-    )
+    const updated = raw.replace(`"version": "${currentVersion}"`, `"version": "${next}"`)
     writeFileSync(pkg.path, updated, "utf8")
     changed++
   }
@@ -187,13 +183,16 @@ if (isBump) {
   const rootRaw = readFileSync(rootPkgPath, "utf8")
   const rootParsed = JSON.parse(rootRaw) as Record<string, unknown>
   if (rootParsed.version === currentVersion) {
-    writeFileSync(rootPkgPath, rootRaw.replace(
-      `"version": "${currentVersion}"`,
-      `"version": "${next}"`,
-    ), "utf8")
+    writeFileSync(
+      rootPkgPath,
+      rootRaw.replace(`"version": "${currentVersion}"`, `"version": "${next}"`),
+      "utf8",
+    )
   }
 
-  console.log(`release-version: bumped ${changed} public packages from ${currentVersion} to ${next}`)
+  console.log(
+    `release-version: bumped ${changed} public packages from ${currentVersion} to ${next}`,
+  )
 
   // Git operations
   const changedFiles: string[] = [rootPkgPath, ...packages.map((p) => p.path)]

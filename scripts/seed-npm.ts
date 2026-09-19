@@ -62,7 +62,9 @@ const vaultPath = process.env.MOCKINGBIRD_NPM_VAULT_PATH?.trim() || "secret"
 const vaultField = process.env.MOCKINGBIRD_NPM_VAULT_FIELD?.trim() || "NPM_TOKEN"
 const token = await vaultFieldValue(cfg, vaultPath, vaultField)
 if (!token.value) {
-  console.error(`Could not load npm credentials from Vault: ${token.error ?? `missing ${vaultField}`}`)
+  console.error(
+    `Could not load npm credentials from Vault: ${token.error ?? `missing ${vaultField}`}`,
+  )
   console.error(`Expected: vault kv get -mount=${cfg.mount} -field=${vaultField} ${vaultPath}`)
   console.error("Log in first: bun run vault:login -- <username>")
   process.exit(1)
@@ -90,5 +92,7 @@ try {
   rmSync(npmrcDir, { recursive: true, force: true })
 }
 
-console.log("Seeded. Next: attach Trusted Publisher for workflow ci.yml on repo crvouga/mockingbird")
+console.log(
+  "Seeded. Next: attach Trusted Publisher for workflow ci.yml on repo crvouga/mockingbird",
+)
 console.log(NPM_TRUSTED_PUBLISHER_URL)

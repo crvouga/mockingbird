@@ -8,7 +8,8 @@
  *   mockingbird init [--providers stripe,junction] [--dir .] [--package-manager bun] [--dry-run] [--json]
  */
 import { readFileSync } from "node:fs"
-import { initProject, type InitOptions, printInitResult } from "./init.js"
+import { type InitOptions, initProject, printInitResult } from "./init.js"
+import type { PackageManager } from "./project.js"
 
 const VERSION = "0.1.0"
 
@@ -140,22 +141,19 @@ if (options.help) {
 switch (command) {
   case "init": {
     const packageManager = options.packageManager
-    const commonOptions = {
+    const opts: InitOptions = {
       providers: (options.providers as string[]) ?? [],
       dir: (options.dir as string) ?? process.cwd(),
       dryRun: Boolean(options.dryRun),
       json: Boolean(options.json),
     }
-    const opts: InitOptions =
-      typeof packageManager === "string"
-        ? { ...commonOptions, packageManager: packageManager as InitOptions["packageManager"] }
-        : commonOptions
-
-    // Validate package-manager
-    if (opts.packageManager && !["npm", "bun", "pnpm", "yarn"].includes(opts.packageManager)) {
-      console.error(`mockingbird init: unknown package manager "${opts.packageManager}"`)
-      console.error("  Valid: npm, bun, pnpm, yarn")
-      process.exit(1)
+    if (typeof packageManager === "string") {
+      if (!["npm", "bun", "pnpm", "yarn"].includes(packageManager)) {
+        console.error(`mockingbird init: unknown package manager "${packageManager}"`)
+        console.error("  Valid: npm, bun, pnpm, yarn")
+        process.exit(1)
+      }
+      opts.packageManager = packageManager as PackageManager
     }
 
     const result = await initProject(opts)

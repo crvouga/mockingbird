@@ -11,16 +11,13 @@ import { loadVaultConfig, vaultEnv } from "./secrets/lib.ts"
 const username = process.argv[2]?.trim() || "crvouga"
 
 const cfg = await loadVaultConfig()
-const proc = Bun.spawn(
-  ["vault", "login", "-method=userpass", `username=${username}`],
-  {
-    cwd: process.cwd(),
-    env: { ...process.env, ...vaultEnv(cfg) },
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
-  },
-)
+const proc = Bun.spawn(["vault", "login", "-method=userpass", `username=${username}`], {
+  cwd: process.cwd(),
+  env: { ...process.env, ...vaultEnv(cfg) },
+  stdin: "inherit",
+  stdout: "inherit",
+  stderr: "inherit",
+})
 
 const exitCode = await proc.exited
 if (exitCode !== 0) process.exit(exitCode)

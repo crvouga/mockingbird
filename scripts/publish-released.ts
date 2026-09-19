@@ -94,7 +94,9 @@ for (const pkg of packages) {
       console.error(`FAIL ${pkg.name}: package does not exist on npm yet`)
       console.error("  Seed it locally before running CI:")
       console.error("  bun run build && bun run npm:seed -- --yes")
-      console.error(`  Then configure its Trusted Publisher: https://www.npmjs.com/package/${pkg.name}/access`)
+      console.error(
+        `  Then configure its Trusted Publisher: https://www.npmjs.com/package/${pkg.name}/access`,
+      )
     } else {
       console.error(`FAIL ${pkg.name}: npm publish --provenance exited ${result.exitCode}`)
     }
@@ -104,7 +106,6 @@ for (const pkg of packages) {
   }
   published++
 }
-
 
 console.log(`release:publish: published=${published} skipped=${skipped} failed=${failed}`)
 if (failed > 0) process.exit(1)

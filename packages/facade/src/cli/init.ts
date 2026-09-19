@@ -6,14 +6,14 @@
  */
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import { join, relative } from "node:path"
-import { generateSetupContent } from "./templates/init.js"
 import {
-  type PackageManager,
-  KNOWN_PROVIDERS,
   detectPackageManager,
   installCommand,
+  KNOWN_PROVIDERS,
+  type PackageManager,
   readProjectInfo,
 } from "./project.js"
+import { generateSetupContent } from "./templates/init.js"
 
 export type InitOptions = {
   providers: string[]
@@ -56,10 +56,12 @@ export async function initProject(opts: InitOptions): Promise<InitResult> {
 
   if (invalidProviders.length > 0) {
     return {
-      actions: [{
-        type: "info",
-        description: `Unknown providers: ${invalidProviders.join(", ")}. Known: ${Object.keys(KNOWN_PROVIDERS).join(", ")}`,
-      }],
+      actions: [
+        {
+          type: "info",
+          description: `Unknown providers: ${invalidProviders.join(", ")}. Known: ${Object.keys(KNOWN_PROVIDERS).join(", ")}`,
+        },
+      ],
       files: [],
       installCommands: [],
       skipReason: `Unknown providers: ${invalidProviders.join(", ")}`,
@@ -69,10 +71,12 @@ export async function initProject(opts: InitOptions): Promise<InitResult> {
   // Check project has a package.json
   if (!project.pkg) {
     return {
-      actions: [{
-        type: "info",
-        description: `No package.json found at ${opts.dir}. Run mockingbird init in a Node/Bun project directory.`,
-      }],
+      actions: [
+        {
+          type: "info",
+          description: `No package.json found at ${opts.dir}. Run mockingbird init in a Node/Bun project directory.`,
+        },
+      ],
       files: [],
       installCommands: [],
       skipReason: "No package.json found",
@@ -106,7 +110,7 @@ export async function initProject(opts: InitOptions): Promise<InitResult> {
   actions.push({
     type: "create_file",
     description: `Create ${relPath} with boilerplate mock setup`,
-    details: `${content.substring(0, 200)}...`
+    details: `${content.substring(0, 200)}...`,
   })
 
   if (!opts.dryRun) {

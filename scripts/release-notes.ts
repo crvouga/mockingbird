@@ -13,8 +13,7 @@ const isJson = process.argv.includes("--json")
 // ── Git helpers ────────────────────────────────────────────────────
 
 async function lastTag(): Promise<string | null> {
-  const result =
-    await $`git describe --tags --abbrev=0 --match 'v*'`.cwd(root).quiet().nothrow()
+  const result = await $`git describe --tags --abbrev=0 --match 'v*'`.cwd(root).quiet().nothrow()
   return result.exitCode === 0 ? result.text().trim() : null
 }
 
@@ -22,18 +21,20 @@ type Commit = { hash: string; subject: string; body: string }
 
 async function commitsSince(ref: string | null): Promise<Commit[]> {
   const range = ref ? `${ref}..HEAD` : "--root"
-  const result =
-    await $`git log ${range} --format='%H|||%s|||%b---'`.cwd(root).quiet()
+  const result = await $`git log ${range} --format='%H|||%s|||%b---'`.cwd(root).quiet()
   if (result.exitCode !== 0) return []
   const raw = result.text().trim()
   if (!raw) return []
-  return raw.split("---\n").filter(Boolean).map((block) => {
-    const [hash, subject, ...bodyLines] = block.split("|||")
-    const h = (hash ?? "").trim()
-    // Strip the '---' sentinel from the last body line
-    const b = (bodyLines ?? []).join("\n").trim().replace(/---$/, "").trim()
-    return { hash: h, subject: (subject ?? "").trim(), body: b }
-  })
+  return raw
+    .split("---\n")
+    .filter(Boolean)
+    .map((block) => {
+      const [hash, subject, ...bodyLines] = block.split("|||")
+      const h = (hash ?? "").trim()
+      // Strip the '---' sentinel from the last body line
+      const b = (bodyLines ?? []).join("\n").trim().replace(/---$/, "").trim()
+      return { hash: h, subject: (subject ?? "").trim(), body: b }
+    })
 }
 
 // ── Categorisation ─────────────────────────────────────────────────
@@ -103,7 +104,9 @@ if (grouped.breaking.length > 0) {
   console.log("### ⚠️ BREAKING CHANGES\n")
   for (const c of grouped.breaking) {
     const short = c.hash.slice(0, shortHashLen)
-    console.log(`- ${stripType(c.subject)} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`)
+    console.log(
+      `- ${stripType(c.subject)} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`,
+    )
     if (c.body && /^BREAKING(\s+CHANGE)?:\s*(.+)$/m.test(c.body)) {
       const detail = c.body.replace(/^BREAKING(\s+CHANGE)?:\s*/, "").trim()
       if (detail) console.log(`  ${detail}`)
@@ -116,7 +119,9 @@ if (grouped.feat.length > 0) {
   console.log("### 🚀 Features\n")
   for (const c of grouped.feat) {
     const short = c.hash.slice(0, shortHashLen)
-    console.log(`- ${stripType(c.subject)} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`)
+    console.log(
+      `- ${stripType(c.subject)} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`,
+    )
   }
   console.log("")
 }
@@ -125,7 +130,9 @@ if (grouped.fix.length > 0) {
   console.log("### 🐛 Bug Fixes\n")
   for (const c of grouped.fix) {
     const short = c.hash.slice(0, shortHashLen)
-    console.log(`- ${stripType(c.subject)} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`)
+    console.log(
+      `- ${stripType(c.subject)} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`,
+    )
   }
   console.log("")
 }
@@ -134,7 +141,9 @@ if (grouped.other.length > 0) {
   console.log("### 📦 Other Changes\n")
   for (const c of grouped.other.slice(0, 10)) {
     const short = c.hash.slice(0, shortHashLen)
-    console.log(`- ${stripType(c.subject) || c.subject} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`)
+    console.log(
+      `- ${stripType(c.subject) || c.subject} ([${short}](https://github.com/crvouga/mockingbird/commit/${c.hash}))`,
+    )
   }
   if (grouped.other.length > 10) {
     console.log(`- _...and ${grouped.other.length - 10} more_`)
