@@ -151,6 +151,7 @@ await commitlintJob()
 
 job("check  (CI job)")
 await runStep("Check (turbo graph)", ["bun", "run", "check"], { env: { FC_NUM_RUNS: "40" } })
+await runStep("Consumer smoke", ["bun", "run", "release:smoke"])
 
 const total = finished.reduce((sum, step) => sum + step.seconds, 0)
 console.log("")

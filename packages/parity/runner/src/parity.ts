@@ -10,8 +10,8 @@ import {
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { collectPlaceholders, pickRef, ResourceTable } from "@crvouga/mockingbird-model"
 import type { OpenAPIDocument } from "@crvouga/mockingbird-openapi"
-import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
+import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "./defaults.js"
 import { type ExecutionContext, executeCommand, type FetchLike, type Target } from "./execute.js"
 import { ParityError, type Redactor } from "./report.js"
 
@@ -268,6 +268,9 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
         ...(options.invalidProbability === undefined
           ? {}
           : { invalidProbability: options.invalidProbability }),
+        ...(options.missingProbability === undefined
+          ? {}
+          : { missingProbability: options.missingProbability }),
         ...(options.weights === undefined ? {} : { weights: options.weights }),
         ...(options.coverageBias === undefined ? {} : { coverageBias: options.coverageBias }),
         coverage,

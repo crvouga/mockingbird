@@ -17,8 +17,8 @@ import {
 } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { collectPlaceholders, pickRef, ResourceTable } from "@crvouga/mockingbird-model"
-import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
+import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "./defaults.js"
 import {
   type ExecutionContext,
   executeCommand,

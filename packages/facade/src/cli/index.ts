@@ -158,7 +158,7 @@ switch (command) {
     }
 
     const result = await initProject(opts)
-    printInitResult(result, Boolean(options.json))
+    printInitResult(result, Boolean(options.json), Boolean(options.dryRun))
     break
   }
 

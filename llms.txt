@@ -1,0 +1,47 @@
+# mockingbird
+
+> Stateful, contract-checked mocks of third-party HTTP APIs (Stripe, Junction/Vital, GeneByGene, Medplum) and pure-TypeScript in-memory PostgreSQL/SQLite engines for test suites. Every HTTP mock is a Fetch handler (`mock.fetch(request) → Promise<Response>`) published to npm under `@crvouga/mockingbird-*`. ESM only; Node >= 22 or Bun >= 1.2.
+
+Install mocks as devDependencies. Prefer injecting `mock.fetch` in-process; serve over HTTP with an adapter only when a URL is required. Read the umbrella README first — it is the integration guide for coding agents — then the README of each provider package you use (also shipped in `node_modules/<package>/README.md`).
+
+## Start here
+
+- [@crvouga/mockingbird](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/facade/README.md): Realistic, stateful mock third-party HTTP APIs for your test process. Thin facade over the granular @crvouga/mockingbird-* packages.
+
+## Mock services
+
+- [@crvouga/mockingbird-service-genebygene](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/genebygene/README.md): Stateful mock of the GeneByGene Nucleus API (token, products, orders) verified by differential property tests against the GeneByGene staging sandbox.
+- [@crvouga/mockingbird-service-genebygene SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/genebygene/SUPPORT.md): coverage matrix
+- [@crvouga/mockingbird-service-junction](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/README.md): Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox.
+- [@crvouga/mockingbird-service-junction SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/SUPPORT.md): coverage matrix
+- [@crvouga/mockingbird-service-medplum](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/medplum/README.md): Stateful Medplum mock that self-hosts the real Medplum server as a child process on embedded Postgres and Redis, exposed through the Mockingbird FetchAPI contract.
+- [@crvouga/mockingbird-service-medplum SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/medplum/SUPPORT.md): coverage matrix
+- [@crvouga/mockingbird-service-postgres](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/postgres/README.md): Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies
+- [@crvouga/mockingbird-service-postgres COMPATIBILITY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/postgres/COMPATIBILITY.md): coverage matrix
+- [@crvouga/mockingbird-service-sqlite](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/sqlite/README.md): Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies
+- [@crvouga/mockingbird-service-sqlite COMPATIBILITY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/sqlite/COMPATIBILITY.md): coverage matrix
+- [@crvouga/mockingbird-service-stripe](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/stripe/README.md): Stateful mock of the Stripe API (customers, payments, subscriptions, invoices, checkout, webhooks) driven by its OpenAPI contract and verified by differential property tests against Stripe test mode.
+- [@crvouga/mockingbird-service-stripe SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/stripe/SUPPORT.md): coverage matrix
+
+## Serving over HTTP
+
+- [@crvouga/mockingbird-adapter-bun](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/adapters/bun/README.md): Serve any Mockingbird FetchAPI with Bun.serve.
+- [@crvouga/mockingbird-adapter-node](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/adapters/node/README.md): Serve any Mockingbird FetchAPI over node:http.
+
+## Building your own mock
+
+- [@crvouga/mockingbird-core](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/core/README.md): Universal contracts shared by Mockingbird packages: the Fetch-native API interface.
+- [@crvouga/mockingbird-http-codec](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/http/codec/README.md): Content-type codecs shared by Mockingbird's mock servers and differential runner: JSON and bracket-notation form encoding.
+- [@crvouga/mockingbird-service](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/core/README.md): Generic service runtime: Fetch-native APIs, Hono dispatch keyed by OpenAPI operationId, SQLite-backed collections, request parsing and operation registries.
+- [@crvouga/mockingbird-sqlite](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/sqlite/README.md): Owned sync SqliteClient port for Mockingbird services. Defaults to @crvouga/mockingbird-service-sqlite; accepts any duck-typed SQLite client.
+
+## Differential / parity testing
+
+- [@crvouga/mockingbird-canonicalize](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/parity/canonicalize/README.md): Strict, provider-neutral canonicalisation of HTTP exchanges for differential comparison: symbolic id replacement, declared volatile fields, parity headers, structural diff.
+- [@crvouga/mockingbird-commands](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/parity/commands/README.md): Stateful fast-check command generation for OpenAPI-driven random API walks: operation eligibility, symbolic resource references, shrink-friendly commands.
+- [@crvouga/mockingbird-model](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/parity/model/README.md): Provider-neutral symbolic resource model for differential testing: handles, per-side id tables, placeholders and canonical tokens.
+- [@crvouga/mockingbird-openapi](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/openapi/core/README.md): OpenAPI 3.1 loading, $ref resolution, operation discovery, schema traversal and instance validation for Mockingbird. No fast-check, no Hono, no providers.
+- [@crvouga/mockingbird-openapi-arbitrary](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/openapi/arbitrary/README.md): OpenAPI / JSON Schema to fast-check arbitraries: boundary-weighted valid values and single-violation invalid values.
+- [@crvouga/mockingbird-openapi-metadata](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/openapi/metadata/README.md): Mockingbird's x-mockingbird-* OpenAPI extensions: types, readers, semantic validation and schema-guided value annotation (identities, volatile fields).
+- [@crvouga/mockingbird-openbao](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/auth/openbao/README.md): Load third-party sandbox credentials for parity runs from OpenBao (token, JWT/OIDC) or the environment, with redaction helpers.
+- [@crvouga/mockingbird-parity](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/parity/runner/README.md): Differential property-based test runner: executes generated API walks against a real sandbox API and a Mockingbird mock, comparing every canonicalised response.

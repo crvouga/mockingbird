@@ -30,7 +30,11 @@ export const serve = async (api: FetchAPI, options: NodeServeOptions = {}) => {
     }
     const request = new Request(url, init)
     const response = await api.fetch(request)
-    res.writeHead(response.status, Object.fromEntries(response.headers.entries()))
+    // Headers#entries() joins repeated headers; Set-Cookie must stay one header per cookie.
+    const headers: Record<string, string | string[]> = Object.fromEntries(response.headers)
+    const cookies = response.headers.getSetCookie()
+    if (cookies.length > 0) headers["set-cookie"] = cookies
+    res.writeHead(response.status, headers)
     res.end(Buffer.from(await response.arrayBuffer()))
   })
   await new Promise<void>((resolve, reject) => {

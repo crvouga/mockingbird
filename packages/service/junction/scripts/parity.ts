@@ -4,8 +4,12 @@ import { join } from "node:path"
 import type { ExploreRng, ExploreState, LogicalCommand, Scope } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
-import { parity, type SeedCacheEntry, seedParity } from "@crvouga/mockingbird-parity"
-import { DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
+import {
+  DEFAULT_PROPERTY_RUNS,
+  parity,
+  type SeedCacheEntry,
+  seedParity,
+} from "@crvouga/mockingbird-parity"
 import {
   COVERAGE_ZIPS,
   PHLEBOTOMY_AVAILABILITY_ZIPS,

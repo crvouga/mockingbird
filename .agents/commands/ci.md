@@ -23,7 +23,11 @@ comment out, or loosen a check to make it pass.
    - test
    - portability
    - pack:check
-   - check:boundaries, check:tests, check:format
+   - check:boundaries, check:agents, check:llms, check:format
+   Then run `bun run release:smoke` (not part of the turbo graph): it packs every public package,
+   installs the tarballs into a clean npm project, and typechecks every README ```ts example and
+   the `mockingbird init` scaffold. A failing README example is a docs bug — fix the README (or
+   the API) rather than removing the example.
 3. **Run live parity.** `bun run check` does **not** cover parity (it needs sandbox
    credentials + network). Run it per provider, serialized:
    ```bash

@@ -36,7 +36,9 @@ describe("GeneByGeneAPI", () => {
         },
         numRuns: params.numRuns ?? 20,
         maxCommands: 15,
-        latencyToleranceMs: 100,
+        // In-process instances share a busy CI runner; scheduler stalls dominate here.
+        // Gross-regression guard only — live parity owns real latency comparisons.
+        latencyToleranceMs: 1_000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},

@@ -123,7 +123,8 @@ export async function initProject(opts: InitOptions): Promise<InitResult> {
   if (existsSync(readmePath)) {
     actions.push({
       type: "info",
-      description: "README.md found — add a Mockingbird section manually or re-run with --readme",
+      description:
+        "README.md found — document the mocks for your team (see node_modules/@crvouga/mockingbird/README.md)",
     })
   }
 
@@ -134,7 +135,7 @@ export async function initProject(opts: InitOptions): Promise<InitResult> {
   }
 }
 
-export function printInitResult(result: InitResult, json: boolean): void {
+export function printInitResult(result: InitResult, json: boolean, dryRun: boolean): void {
   if (json) {
     console.log(JSON.stringify(result, null, 2))
     return
@@ -145,7 +146,7 @@ export function printInitResult(result: InitResult, json: boolean): void {
     process.exit(1)
   }
 
-  console.log("mockingbird init — planned actions:\n")
+  console.log(`mockingbird init — ${dryRun ? "planned actions" : "done"}:\n`)
   for (const action of result.actions) {
     switch (action.type) {
       case "install":
@@ -165,18 +166,18 @@ export function printInitResult(result: InitResult, json: boolean): void {
   }
 
   if (result.files.length > 0) {
-    console.log("\nFiles to create:")
+    console.log(dryRun ? "\nFiles to create:" : "\nFiles created:")
     for (const f of result.files) {
       console.log(`  - ${f}`)
     }
   }
 
   if (result.installCommands.length > 0) {
-    console.log("\nInstall commands:")
+    console.log("\nInstall the packages (not run for you):")
     for (const cmd of result.installCommands) {
       console.log(`  ${cmd}`)
     }
   }
 
-  console.log("\nRun without --dry-run to apply.")
+  if (dryRun) console.log("\nRun without --dry-run to apply.")
 }

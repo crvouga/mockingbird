@@ -59,6 +59,8 @@ export class MedplumAPI implements FetchAPI {
     }
     if (request.method !== "GET" && request.method !== "HEAD") {
       init.body = request.body
+      // Node's fetch rejects a streamed body without `duplex: "half"`; Bun ignores it.
+      ;(init as RequestInit & { duplex: "half" }).duplex = "half"
     }
     return fetch(new Request(target, init))
   }

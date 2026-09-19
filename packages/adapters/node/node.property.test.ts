@@ -56,3 +56,22 @@ test("serve ∘ fetch round-trips requests over node:http", async () => {
     server.closeAllConnections()
   }
 })
+
+test("serve keeps every Set-Cookie header", async () => {
+  const server = await serve({
+    fetch: async () => {
+      const headers = new Headers()
+      headers.append("set-cookie", "a=1; Path=/")
+      headers.append("set-cookie", "b=2; Path=/")
+      return new Response("ok", { headers })
+    },
+  })
+  try {
+    const address = server.address()
+    const port = typeof address === "object" && address !== null ? address.port : 0
+    const response = await fetch(`http://localhost:${port}/`)
+    expect(response.headers.getSetCookie()).toEqual(["a=1; Path=/", "b=2; Path=/"])
+  } finally {
+    server.close()
+  }
+})

@@ -27,6 +27,12 @@
         "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
       },
+      "peerDependencies": {
+        "@types/bun": ">=1.2.0",
+      },
+      "optionalPeers": [
+        "@types/bun",
+      ],
     },
     "packages/adapters/node": {
       "name": "@crvouga/mockingbird-adapter-node",
@@ -83,7 +89,7 @@
       "name": "@crvouga/mockingbird-http-codec",
       "version": "0.0.0-development",
       "devDependencies": {
-        "@crvouga/mockingbird-testing": "^0.1.0",
+        "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
       },
     },
@@ -91,11 +97,11 @@
       "name": "@crvouga/mockingbird-openapi-arbitrary",
       "version": "0.0.0-development",
       "dependencies": {
-        "@crvouga/mockingbird-openapi": "^0.1.0",
+        "@crvouga/mockingbird-openapi": "workspace:*",
         "fast-check": "4.9.0",
       },
       "devDependencies": {
-        "@crvouga/mockingbird-testing": "^0.1.0",
+        "@crvouga/mockingbird-testing": "workspace:*",
       },
     },
     "packages/openapi/codegen": {
@@ -119,7 +125,7 @@
       "name": "@crvouga/mockingbird-openapi",
       "version": "0.0.0-development",
       "devDependencies": {
-        "@crvouga/mockingbird-testing": "^0.1.0",
+        "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
       },
     },
@@ -127,10 +133,10 @@
       "name": "@crvouga/mockingbird-openapi-metadata",
       "version": "0.0.0-development",
       "dependencies": {
-        "@crvouga/mockingbird-openapi": "^0.1.0",
+        "@crvouga/mockingbird-openapi": "workspace:*",
       },
       "devDependencies": {
-        "@crvouga/mockingbird-testing": "^0.1.0",
+        "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
       },
     },
@@ -183,8 +189,10 @@
         "@crvouga/mockingbird-openapi": "workspace:*",
         "@crvouga/mockingbird-openapi-arbitrary": "workspace:*",
         "@crvouga/mockingbird-openapi-metadata": "workspace:*",
-        "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-testing": "workspace:*",
       },
     },
     "packages/service/core": {
