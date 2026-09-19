@@ -1,0 +1,7 @@
+# HashiCorp Vault connection for maintainer secret tooling.
+# Used by: bun run secrets:doctor | secrets:check | secrets:sync
+# See docs/SECRETS.md
+addr: https://vault.chrisvouga.dev
+mount: secret
+project: personal
+config: prd

@@ -8,9 +8,9 @@
  * Commit ranges: `git describe --tags --abbrev=0 --match 'v*'` → HEAD.
  * No prior tag = all commits since root.
  */
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
-import { $ } from "bun"
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
+import { $ } from "bun"
 
 const root = join(import.meta.dir, "..")
 const argv = process.argv.slice(2)
@@ -28,7 +28,9 @@ type Commit = { hash: string; subject: string; body: string }
 
 async function commitsSince(ref: string | null): Promise<Commit[]> {
   const range = ref ? `${ref}..HEAD` : "--root"
-  const result = await $`git log ${range} --format='%H|||%s|||%b---'`.cwd(root).quiet()
+  const result = await $`git log --first-parent ${range} --format='%H|||%s|||%b---'`
+    .cwd(root)
+    .quiet()
   if (result.exitCode !== 0) return []
   const raw = result.text().trim()
   if (!raw) return []

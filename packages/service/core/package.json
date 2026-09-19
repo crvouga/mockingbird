@@ -52,6 +52,6 @@
   "devDependencies": {
     "fast-check": "4.9.0",
     "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/sqlite-mem": "1.15.0"
+    "@crvouga/mockingbird-service-sqlite": "workspace:*"
   }
 }

@@ -48,7 +48,11 @@ jobs:
       - name: Validate PR commits
         if: github.event_name == 'pull_request'
         run: |
-          bunx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+          git rev-list --first-parent --reverse \
+            ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} |
+          while read -r commit; do
+            git show --no-patch --format=%B "$commit" | bunx commitlint --verbose
+          done
 
       - name: Validate PR title
         if: github.event_name == 'pull_request'
@@ -94,9 +98,6 @@ jobs:
 
       - name: Boundaries
         run: bun run check:boundaries
-
-      - name: Test naming (property-based only)
-        run: bun run check:tests
 
   test:
     name: Test

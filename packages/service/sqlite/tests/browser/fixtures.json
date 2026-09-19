@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "oracleVersion": "3.51.0",
+  "cases": [
+    {
+      "id": "select-1",
+      "setup": [],
+      "sql": "SELECT 1 AS v",
+      "expect": {
+        "columns": ["v"],
+        "values": [[1]]
+      }
+    },
+    {
+      "id": "affinity",
+      "setup": ["CREATE TABLE t(i INTEGER, r REAL, t TEXT)", "INSERT INTO t VALUES ('42','42','42')"],
+      "sql": "SELECT typeof(i) ti, typeof(r) tr, typeof(t) tt FROM t",
+      "expect": {
+        "columns": ["ti", "tr", "tt"],
+        "values": [["integer", "real", "text"]]
+      }
+    },
+    {
+      "id": "join",
+      "setup": [
+        "CREATE TABLE a(id INT, n TEXT)",
+        "CREATE TABLE b(id INT, a_id INT)",
+        "INSERT INTO a VALUES (1,'x'),(2,'y')",
+        "INSERT INTO b VALUES (10,1),(20,2)"
+      ],
+      "sql": "SELECT a.n, b.id FROM a JOIN b ON a.id = b.a_id ORDER BY b.id",
+      "expect": {
+        "columns": ["n", "id"],
+        "values": [["x", 10], ["y", 20]]
+      }
+    },
+    {
+      "id": "null-3vl",
+      "setup": [],
+      "sql": "SELECT NULL = NULL AS eq, NULL IS NULL AS isn, 1 IN (1, NULL) AS inn",
+      "expect": {
+        "columns": ["eq", "isn", "inn"],
+        "values": [[null, 1, 1]]
+      }
+    },
+    {
+      "id": "bind",
+      "setup": ["CREATE TABLE t(x INT)", "INSERT INTO t VALUES (1),(2),(3)"],
+      "sql": "SELECT x FROM t WHERE x > ? ORDER BY x",
+      "params": [1],
+      "expect": {
+        "columns": ["x"],
+        "values": [[2], [3]]
+      }
+    },
+    {
+      "id": "master-sql",
+      "setup": ["CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT NOT NULL)"],
+      "sql": "SELECT sql FROM sqlite_master WHERE name='users'",
+      "expect": {
+        "columns": ["sql"],
+        "values": [["CREATE TABLE users(id INTEGER PRIMARY KEY, name TEXT NOT NULL)"]]
+      }
+    },
+    {
+      "id": "window",
+      "setup": ["CREATE TABLE t(x INT)", "INSERT INTO t VALUES (1),(2),(3)"],
+      "sql": "SELECT x, row_number() OVER (ORDER BY x) AS rn FROM t ORDER BY x",
+      "expect": {
+        "columns": ["x", "rn"],
+        "values": [[1, 1], [2, 2], [3, 3]]
+      }
+    },
+    {
+      "id": "json",
+      "setup": [],
+      "sql": "SELECT json_extract('{\"a\":1}', '$.a') AS a",
+      "expect": {
+        "columns": ["a"],
+        "values": [[1]]
+      }
+    },
+    {
+      "id": "not-in-null",
+      "setup": ["CREATE TABLE s(v INTEGER)", "INSERT INTO s VALUES (1),(NULL)"],
+      "sql": "SELECT 2 NOT IN (SELECT v FROM s) AS a",
+      "expect": {
+        "columns": ["a"],
+        "values": [[null]]
+      }
+    },
+    {
+      "id": "datetime-subsec",
+      "setup": [],
+      "sql": "SELECT datetime('2024-01-01 12:00:00.123','subsec') AS v",
+      "expect": {
+        "columns": ["v"],
+        "values": [["2024-01-01 12:00:00.123"]]
+      }
+    },
+    {
+      "id": "upsert-returning",
+      "setup": ["CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)", "INSERT INTO t VALUES (1,'a')"],
+      "sql": "INSERT INTO t VALUES (1,'b') ON CONFLICT(id) DO UPDATE SET v=excluded.v RETURNING id, v",
+      "expect": {
+        "columns": ["id", "v"],
+        "values": [[1, "b"]]
+      }
+    },
+    {
+      "id": "json-each-null",
+      "setup": [],
+      "sql": "SELECT count(*) AS n FROM json_each(NULL)",
+      "expect": {
+        "columns": ["n"],
+        "values": [[0]]
+      }
+    }
+  ]
+}

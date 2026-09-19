@@ -1,0 +1,131 @@
+{
+  "name": "@crvouga/mockingbird-service-postgres",
+  "version": "0.1.0",
+  "description": "Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": [
+    "./src/serialization/codec.ts",
+    "./src/schema/catalog-tables.ts",
+    "./src/executor/triggers-exec.ts"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./unstable": {
+      "types": "./dist/unstable.d.ts",
+      "import": "./dist/unstable.js",
+      "default": "./dist/unstable.js"
+    }
+  },
+  "files": [
+    "dist",
+    "AGENTS.md",
+    "COMPATIBILITY.md",
+    "COMPATIBILITY-AUDIT.md",
+    "README.md",
+    "LICENSE",
+    "compat"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/postgres"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/postgres#readme",
+  "bugs": {
+    "url": "https://github.com/crvouga/mockingbird/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test tests/contract tests/fuzz tests/harness",
+    "test:contract": "bun test tests/contract",
+    "test:fuzz": "bun test tests/fuzz",
+    "test:pbt": "bun test tests/fuzz",
+    "test:pbt:random": "bun run scripts/pbt-random.ts",
+    "test:fuzz:soak": "POSTGRES_MEM_STATEFUL_STEPS=${POSTGRES_MEM_STATEFUL_STEPS:-48} POSTGRES_MEM_WALK_STEPS=${POSTGRES_MEM_WALK_STEPS:-48} POSTGRES_MEM_FUZZ_RUNS=${POSTGRES_MEM_FUZZ_RUNS:-40} bun test tests/fuzz/stateful.test.ts tests/fuzz/random-walk.test.ts tests/fuzz/metamorphic tests/fuzz/robustness.test.ts tests/fuzz/corpus.test.ts",
+    "test:metamorphic": "bun test tests/fuzz/metamorphic",
+    "test:dst": "bun test tests/fuzz/stateful.test.ts tests/fuzz/random-walk.test.ts tests/fuzz/corpus.test.ts",
+    "test:walk": "bun test tests/fuzz/random-walk.test.ts",
+    "test:walk:soak": "bun run scripts/random-walk.ts",
+    "example": "bun run --cwd examples/react-vite dev",
+    "benchmark": "bun run benchmarks/run.ts --tier default --engine mem",
+    "benchmark:compare": "bun run benchmarks/run.ts --tier default --engine both",
+    "benchmark:ci": "bun run benchmarks/run.ts --tier ci --engine mem --out benchmarks/results/ci-latest.json && bun run benchmarks/compare-ci.ts && bun run benchmarks/check-budgets.ts",
+    "benchmark:memory": "bun run benchmarks/check-budgets.ts",
+    "benchmark:bundle": "bun run build && bun run benchmarks/bundle.ts",
+    "test:browser-sql": "bun run build && bun run scripts/browser-sql-smoke.ts",
+    "test:canaries": "bun run scripts/run-canaries.ts",
+    "test:postgres-compat": "bun run scripts/postgres-compat-gate.ts && bun run scripts/check-skip-register.ts && bun test tests/contract tests/fuzz tests/harness",
+    "divergences": "bun run scripts/generate-divergences.ts",
+    "fixtures:browser": "bun run scripts/generate-browser-fixtures.ts",
+    "inventory": "bun run scripts/postgres-inventory.ts",
+    "scenarios": "bun run scripts/postgres-scenarios.ts",
+    "requirements": "bun run scripts/postgres-requirements.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:package": "tsc --noEmit -p tsconfig.package.json",
+    "format": "biome format --config-path=biome.json --write .",
+    "format:check": "biome format --config-path=biome.json .",
+    "lint": "biome lint --config-path=biome.json --error-on-warnings .",
+    "lint:fix": "biome lint --config-path=biome.json --write --error-on-warnings .",
+    "clean": "rm -rf dist",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:postgres-compat",
+    "check:full": "bun run check && bun run build && bun run pack:check && bun run portability",
+    "verify-package": "bun run scripts/verify-package.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "portability": "bun ../../../scripts/portability.ts",
+    "example:react-vite": "cd examples/react-vite && bun install && bun run dev",
+    "fc": "clear && bun format && bun check:full",
+    "test:postgres-native": "bun run scripts/run-postgres-native-tests.ts"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@biomejs/biome": "^2.5.8",
+    "@electric-sql/pglite": "^0.5.5",
+    "@types/bun": "latest",
+    "@types/pg": "^8.23.1",
+    "embedded-postgres": "18.3.0-beta.17",
+    "esbuild": "^0.28.2",
+    "fast-check": "^4.1.1",
+    "pg": "^8.23.0",
+    "publint": "^0.3.23",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "bun": ">=1.1.0",
+    "node": ">=20"
+  },
+  "keywords": [
+    "mockingbird",
+    "postgres",
+    "postgresql",
+    "typescript",
+    "in-memory",
+    "database",
+    "sql"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "service"
+  },
+  "trustedDependencies": [
+    "@embedded-postgres/darwin-arm64",
+    "@embedded-postgres/darwin-x64",
+    "@embedded-postgres/linux-arm",
+    "@embedded-postgres/linux-arm64",
+    "@embedded-postgres/linux-ia32",
+    "@embedded-postgres/linux-ppc64",
+    "@embedded-postgres/linux-x64",
+    "@embedded-postgres/windows-x64"
+  ]
+}

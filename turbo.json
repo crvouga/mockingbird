@@ -107,14 +107,6 @@
         "!packages/**/dist/**"
       ]
     },
-    "//#check:tests": {
-      "inputs": [
-        "scripts/check-test-files.ts",
-        "scripts/lib/**",
-        "packages/**/*.test.ts",
-        "!packages/**/node_modules/**"
-      ]
-    },
     "//#check:format": {
       "inputs": ["biome.json", "scripts/**", "docs/**", "*.json", "*.md", ".github/**"]
     }

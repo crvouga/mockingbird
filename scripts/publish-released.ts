@@ -13,6 +13,7 @@ interface Pkg {
   name: string
   version: string
 }
+
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { $ } from "bun"

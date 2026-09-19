@@ -52,6 +52,8 @@
     "@crvouga/mockingbird-service-junction": "workspace:*",
     "@crvouga/mockingbird-service-genebygene": "workspace:*",
     "@crvouga/mockingbird-service-medplum": "workspace:*",
+    "@crvouga/mockingbird-service-postgres": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@crvouga/mockingbird-adapter-bun": "workspace:*"
   },

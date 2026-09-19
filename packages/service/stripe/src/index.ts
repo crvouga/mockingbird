@@ -86,7 +86,7 @@ const isTestKey = (key: string | undefined): key is string =>
 /**
  * Stateful mock of the Stripe API. State lives in SQLite, partitioned per test API key so two keys
  * behave like two accounts. Pass `sqlite` to share a client across services; omit it to get a
- * fresh `@crvouga/sqlite-mem` database.
+ * fresh `@crvouga/mockingbird-service-sqlite` database.
  */
 export class StripeAPI implements FetchAPI {
   readonly app: Hono

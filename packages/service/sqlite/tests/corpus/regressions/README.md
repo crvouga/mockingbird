@@ -1,0 +1,2 @@
+-- Minimized historical failures replayed forever (O3/O9).
+-- Add new files as `<id>.sql` with one statement per line.

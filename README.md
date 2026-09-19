@@ -1,10 +1,10 @@
 # mockingbird
 
-A catalog of **stateful mock servers** for popular third-party HTTP APIs.
+A catalog of **stateful test doubles** for third-party HTTP APIs and SQL databases.
 
 Each mock speaks the provider's real surface (`fetch(Request) → Response`), keeps state in **SQLite**, and is driven by a vendored OpenAPI contract. Drop one into a test process instead of hitting the network, or serve it over Node / Bun when you need a local origin.
 
-Pass an optional `sqlite` client that matches Mockingbird's owned `SqliteClient` port, or omit it to get a fresh [`@crvouga/sqlite-mem`](https://www.npmjs.com/package/@crvouga/sqlite-mem) database. Migrations run on boot.
+Pass an optional `sqlite` client that matches Mockingbird's owned `SqliteClient` port, or omit it to get a fresh [`@crvouga/mockingbird-service-sqlite`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) database. Migrations run on boot.
 
 ## Requirements
 
@@ -15,9 +15,10 @@ Install with `bun install` (uses [workspaces](https://bun.sh/docs/install/worksp
 
 ## Testing
 
-**Example-based tests are banned.** No hardcoded request/response pairs, no fixture walks, no `it("creates a customer")`. Every test in this repo is a `*.property.test.ts` suite.
-
-Validation is **property-based testing (PBT)** with [fast-check](https://fast-check.dev/): random stateful walks of API commands generated from the OpenAPI spec (valid bodies, single-constraint invalid bodies, missing ids). A property must hold for every walk. Failures shrink to a minimal reproduction.
+Validation combines differential contracts, focused unit and integration tests, fuzzing, and
+**property-based testing (PBT)** with [fast-check](https://fast-check.dev/). Stateful API walks are
+generated from OpenAPI specs, while the database engines compare SQL behavior with real SQLite and
+PostgreSQL oracles. Property failures shrink to a minimal reproduction.
 
 Two properties, same generator:
 
@@ -56,7 +57,9 @@ bun parity -- --runs 10 --steps 10
 MOCKINGBIRD_TRACE=1 bun run parity:stripe
 ```
 
-`bun test` is the property suite. `bun run parity` (and `parity:stripe` / `parity:junction` / `parity:genebygene`) is live differential against each provider's sandbox. Credentials load from env or the self-hosted Vault — see [docs/SECRETS.md](docs/SECRETS.md).
+`bun test` runs each package's appropriate test suite. `bun run parity` (and `parity:stripe` /
+`parity:junction` / `parity:genebygene`) is live differential against each provider's sandbox.
+Credentials load from env or the self-hosted Vault — see [docs/SECRETS.md](docs/SECRETS.md).
 
 ```
 OpenAPI spec
@@ -78,6 +81,8 @@ OpenAPI spec
 | [`@crvouga/mockingbird-service-junction`](packages/service/junction) | [Junction (Vital)](https://docs.junction.com/) | [API overview](https://docs.junction.com/api-details/junction-api) · [create user](https://docs.junction.com/api-reference/user/create-user) · [get user](https://docs.junction.com/api-reference/user/get-user) · [delete user](https://docs.junction.com/api-reference/user/delete-user) · [lab tests](https://docs.junction.com/api-reference/lab-tests) · [orders](https://docs.junction.com/api-reference/order-v3) · [SUPPORT.md](packages/service/junction/SUPPORT.md) · [QA coverage](packages/service/junction/docs/qa-coverage.md) · [package README](packages/service/junction/README.md) | Implemented (user CRUD + helpers, lab-testing) |
 | [`@crvouga/mockingbird-service-genebygene`](packages/service/genebygene) | [GeneByGene](https://api.genebygene.com/swagger/index.html) | [Developer guide (PDF)](https://api.genebygene.com/assets/GxG%20API%20Services%20Developer%20Guide%202022.pdf) · [Swagger UI](https://api.genebygene.com/swagger/index.html) · [SUPPORT.md](packages/service/genebygene/SUPPORT.md) · [package README](packages/service/genebygene/README.md) | Implemented (token, products, orders) |
 | [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) | [Medplum](https://www.medplum.com/docs/api) | [Self-hosting: install from scratch](https://www.medplum.com/docs/self-hosting/install-from-scratch) · [package README](packages/service/medplum/README.md) | Implemented (self-hosted real server: FHIR CRUD + auth, embedded Postgres/Redis) |
+| [`@crvouga/mockingbird-service-postgres`](packages/service/postgres) | PostgreSQL 18 SQL dialect | [Compatibility](packages/service/postgres/COMPATIBILITY.md) · [package README](packages/service/postgres/README.md) | Pure TypeScript, synchronous, in-memory engine with differential PostgreSQL parity suites |
+| [`@crvouga/mockingbird-service-sqlite`](packages/service/sqlite) | SQLite 3 SQL dialect | [Compatibility](packages/service/sqlite/COMPATIBILITY.md) · [package README](packages/service/sqlite/README.md) | Pure TypeScript, synchronous, in-memory engine and Mockingbird's default service storage |
 
 The umbrella package is [`@crvouga/mockingbird`](packages/facade). Granular `@crvouga/mockingbird-*` packages are the source of truth.
 
@@ -98,10 +103,10 @@ Exception: [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) se
 | Layer | Packages |
 | --- | --- |
 | Core | `core` (`FetchAPI`), `service` (Hono dispatch keyed by `operationId`) |
-| Storage | `sqlite` (`SqliteClient` port, migrate runner, default `@crvouga/sqlite-mem`) |
+| Storage | `sqlite` (`SqliteClient` port, migrate runner, default `@crvouga/mockingbird-service-sqlite`) |
 | Contract | `openapi`, `openapi-metadata`, `openapi-arbitrary`, `openapi-codegen` |
 | Parity | `commands`, `model`, `canonicalize`, `parity` (runner) |
-| Services | `service-stripe`, `service-junction`, `service-genebygene` |
+| Services | `service-stripe`, `service-junction`, `service-genebygene`, `service-medplum`, `service-postgres`, `service-sqlite` |
 | Adapters | `adapter-node`, `adapter-bun` |
 | Auth | `openbao` (sandbox credentials for live parity) |
 
@@ -121,11 +126,10 @@ bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
 | Lint | `bun run lint` | Biome lint (types, style, complexity) |
 | Typecheck | `bun run typecheck` | `tsc` for every package |
 | Boundaries | `bun run check:boundaries` | Intra-workspace dep graph: internal deps resolve, no cycles, no self-deps, every module import is declared in `package.json` |
-| Test naming | `bun run check:tests` | Every suite is `*.property.test.ts` (example-based tests are banned) |
 | Package integrity | `bun run pack:check` | `dist` + `exports` + `files`, tarball contents, [publint](https://publint.dev), [arethetypeswrong](https://arethetypeswrong.github.io) (ESM-only consumer resolution) |
 | Portability | `bun run portability` | Built `dist` matches the package's `mockingbird.runtime` (portable / node / bun) — no Node/Bun-only API usage where it isn't allowed |
 | Generate & OpenAPI | `bun run generate` / `bun run openapi:check` | Regenerate and verify provider contracts |
-| Test | `bun run test` | Property-based suites (`FC_NUM_RUNS=20` in CI) |
+| Test | `bun run test` | Contract, integration, unit, fuzz, and property suites (`FC_NUM_RUNS=20` in CI) |
 
 ### Git hooks (Husky)
 

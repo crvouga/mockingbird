@@ -1,0 +1,198 @@
+{
+  "generatedAt": "2026-08-17T19:17:22.132Z",
+  "referenceSqliteVersion": "3.51.0",
+  "referenceSqliteSourceId": "2025-06-12 13:14:41 f0ca7bba1c5e232e5d279fad6338121ab55af0c8c68c84cdfb18ba5114dcaapl",
+  "ftsCompileOptions": [
+    "ENABLE_FTS3",
+    "ENABLE_FTS3_PARENTHESIS",
+    "ENABLE_FTS3_TOKENIZER",
+    "ENABLE_FTS4",
+    "ENABLE_FTS5"
+  ],
+  "ftsModules": [
+    "fts3",
+    "fts3tokenize",
+    "fts4",
+    "fts4aux",
+    "fts5",
+    "fts5vocab"
+  ],
+  "tokenizers": {
+    "unicode61": {
+      "ok": true
+    },
+    "ascii": {
+      "ok": true
+    },
+    "porter": {
+      "ok": true
+    },
+    "trigram": {
+      "ok": true
+    },
+    "porter unicode61": {
+      "ok": true
+    },
+    "porter ascii": {
+      "ok": true
+    },
+    "unicode61 remove_diacritics 0": {
+      "ok": true
+    },
+    "unicode61 remove_diacritics 1": {
+      "ok": true
+    },
+    "unicode61 remove_diacritics 2": {
+      "ok": true
+    }
+  },
+  "createOptions": {
+    "default": {
+      "ok": true
+    },
+    "multi_column": {
+      "ok": true
+    },
+    "contentless": {
+      "ok": true
+    },
+    "contentless_delete": {
+      "ok": true
+    },
+    "external_content": {
+      "ok": true
+    },
+    "prefix": {
+      "ok": true
+    },
+    "columnsize_0": {
+      "ok": true
+    },
+    "detail_full": {
+      "ok": true
+    },
+    "detail_column": {
+      "ok": true
+    },
+    "detail_none": {
+      "ok": true
+    },
+    "tokendata": {
+      "ok": true
+    },
+    "locale": {
+      "ok": true
+    },
+    "unindexed": {
+      "ok": true
+    },
+    "trigram": {
+      "ok": true
+    }
+  },
+  "auxiliaryFunctions": [
+    {
+      "name": "bm25",
+      "type": "s",
+      "narg": -1
+    },
+    {
+      "name": "fts3_tokenizer",
+      "type": "s",
+      "narg": 1
+    },
+    {
+      "name": "fts3_tokenizer",
+      "type": "s",
+      "narg": 2
+    },
+    {
+      "name": "fts5",
+      "type": "s",
+      "narg": 1
+    },
+    {
+      "name": "fts5_get_locale",
+      "type": "s",
+      "narg": -1
+    },
+    {
+      "name": "fts5_insttoken",
+      "type": "s",
+      "narg": 1
+    },
+    {
+      "name": "fts5_locale",
+      "type": "s",
+      "narg": 2
+    },
+    {
+      "name": "fts5_source_id",
+      "type": "s",
+      "narg": 0
+    },
+    {
+      "name": "highlight",
+      "type": "s",
+      "narg": -1
+    },
+    {
+      "name": "match",
+      "type": "s",
+      "narg": 2
+    },
+    {
+      "name": "matchinfo",
+      "type": "s",
+      "narg": 1
+    },
+    {
+      "name": "matchinfo",
+      "type": "s",
+      "narg": 2
+    },
+    {
+      "name": "offsets",
+      "type": "s",
+      "narg": 1
+    },
+    {
+      "name": "optimize",
+      "type": "s",
+      "narg": 1
+    },
+    {
+      "name": "rank",
+      "type": "w",
+      "narg": 0
+    },
+    {
+      "name": "snippet",
+      "type": "s",
+      "narg": -1
+    }
+  ],
+  "specialCommands": {
+    "optimize": {
+      "ok": true
+    },
+    "rebuild": {
+      "ok": true
+    },
+    "integrity-check": {
+      "ok": true
+    },
+    "delete-all": {
+      "ok": false,
+      "error": "'delete-all' may only be used with a contentless or external content fts5 table"
+    },
+    "automerge=4": {
+      "ok": false,
+      "error": "SQL logic error"
+    },
+    "merge=2,2": {
+      "ok": false,
+      "error": "SQL logic error"
+    }
+  }
+}

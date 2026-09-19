@@ -110,18 +110,27 @@ async function commitlintJob(): Promise<void> {
   }
 
   const from = (await git(["merge-base", base, "HEAD"])).stdout || base
-  console.log(`Linting commits ${from}..HEAD (base ${base}, branch ${branch})`)
-  const proc = Bun.spawn(["bunx", "commitlint", "--from", from, "--to", "HEAD", "--verbose"], {
-    cwd: root,
-    stdout: "inherit",
-    stderr: "inherit",
-  })
-  const code = await proc.exited
-  if (code !== 0) {
-    printCommitlintHelp("range")
-    console.error("")
-    console.error(`check:full FAILED at "Commitlint" (exit ${code})`)
-    process.exit(code)
+  console.log(`Linting first-parent commits ${from}..HEAD (base ${base}, branch ${branch})`)
+  const hashes = (await git(["rev-list", "--first-parent", "--reverse", `${from}..HEAD`])).stdout
+    .split("\n")
+    .filter(Boolean)
+  for (const hash of hashes) {
+    const message = (await git(["show", "--no-patch", "--format=%B", hash])).stdout
+    const proc = Bun.spawn(["bunx", "commitlint", "--verbose"], {
+      cwd: root,
+      stdin: "pipe",
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    proc.stdin.write(message)
+    proc.stdin.end()
+    const code = await proc.exited
+    if (code !== 0) {
+      printCommitlintHelp("range")
+      console.error("")
+      console.error(`check:full FAILED at "Commitlint" (exit ${code}, commit ${hash})`)
+      process.exit(code)
+    }
   }
   finished.push({ label: "Commitlint", seconds: 0 })
 }

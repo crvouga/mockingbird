@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "oracle-platform-sqlite-version",
+      "scope": "oracle",
+      "predicate": "sqlite_version() is 3.51.0 (macOS system libsqlite) or 3.53.0 (Bun Linux/Windows amalgamation)",
+      "specifiedBehavior": "Harness bootstrap asserts sqlite_version() is in {3.51.0, 3.53.0}. Dialect tests are version-tagged when 3.51≠3.53.",
+      "pinnedBy": ["scripts/sqlite-compat-gate.ts", "tests/harness/oracle-version.test.ts"]
+    },
+    {
+      "id": "snapshot-sqlm",
+      "scope": "snapshot",
+      "predicate": "snapshot().encode() bytes are SQLM, not a .sqlite file",
+      "specifiedBehavior": "Custom codec; logical Dump after Snapshot.open matches pre-snapshot Dump.",
+      "pinnedBy": ["SNP-hdr-01", "SNP-rt-01"]
+    },
+    {
+      "id": "deterministic-random-now",
+      "scope": "runtime",
+      "predicate": "default random() and date('now') are seeded/fixed",
+      "specifiedBehavior": "PRNG seed default 1; clock 2000-01-01T00:00:00.000Z unless random:os / now:system.",
+      "pinnedBy": ["DAT-now-01", "DET-seed-01", "DET-negzero-01"]
+    },
+    {
+      "id": "negzero-canonicalization",
+      "scope": "types",
+      "predicate": "IEEE -0 becomes +0 on bind, affinity, and arithmetic",
+      "specifiedBehavior": "Object.is(result, -0) is false for bound and computed zeros.",
+      "pinnedBy": ["TYP-negzero-01", "TYP-negzero-02", "TYP-negzero-03", "DET-negzero-01"]
+    },
+    {
+      "id": "attach-empty-schema",
+      "scope": "attach",
+      "predicate": "ATTACH filename is ignored; attached schema is empty in-memory",
+      "specifiedBehavior": "ATTACH creates an empty schema; no file contents are loaded.",
+      "pinnedBy": ["ATT-att-01"]
+    },
+    {
+      "id": "explain-stub",
+      "scope": "explain",
+      "predicate": "EXPLAIN / EXPLAIN QUERY PLAN shapes are stubs",
+      "specifiedBehavior": "Plan text is not byte-identical to SQLite bytecode; results of the explained statement still match.",
+      "pinnedBy": ["PAR-explain-01"]
+    },
+    {
+      "id": "indexed-by-discarded",
+      "scope": "select",
+      "predicate": "INDEXED BY / NOT INDEXED is accepted and ignored",
+      "specifiedBehavior": "Query results match the unhinted plan; missing-index errors are not raised.",
+      "pinnedBy": ["tests/contract/indexes/indexed-by.test.ts"]
+    },
+    {
+      "id": "materialized-hint-ignored",
+      "scope": "cte",
+      "predicate": "MATERIALIZED / NOT MATERIALIZED do not change the execution strategy",
+      "specifiedBehavior": "Results still match the oracle; both hints take the materialized CTE path.",
+      "pinnedBy": ["CTE-mat-01"]
+    },
+    {
+      "id": "fts-shadow-counters",
+      "scope": "fts",
+      "predicate": "FTS shadow-table change counters may differ from bun:sqlite",
+      "specifiedBehavior": "MATCH results and rank order still match; db.changes after FTS maintenance may differ.",
+      "pinnedBy": ["FTS-chg-01"]
+    },
+    {
+      "id": "compile-options-function-list",
+      "scope": "pragma",
+      "predicate": "pragma_compile_options and function_list contents are sqlite-mem's",
+      "specifiedBehavior": "Names and flags describe this engine, not the oracle amalgamation.",
+      "pinnedBy": ["PRG-comp-01", "PRG-fn-01"]
+    },
+    {
+      "id": "js-api-surface",
+      "scope": "api",
+      "predicate": "better-sqlite3 extras are absent; duplicate column names collapse in row objects",
+      "specifiedBehavior": "bind/iterate/pluck/raw/pragma()/loadExtension/serialize/safeIntegers throw. stmt.result().values keeps positional duplicates.",
+      "pinnedBy": ["API-ret-03", "DML-ret-02", "SEL-dup-01"]
+    },
+    {
+      "id": "snapshot-exclusions",
+      "scope": "snapshot",
+      "predicate": "triggers, ATTACH, virtual tables, and user_version are not in SQLM",
+      "specifiedBehavior": "decode().open() outcome is pinned per omitted feature.",
+      "pinnedBy": ["SNP-omit-01", "SNP-omit-02", "SNP-omit-03", "SNP-omit-04", "TRG-snap-01", "ATT-snap-01", "FTS-snap-01"]
+    },
+    {
+      "id": "json-api-unwrap",
+      "scope": "json",
+      "predicate": "JSON subtype is unwrapped to JS string at the API",
+      "specifiedBehavior": "query() returns TEXT, not a JSON wrapper object.",
+      "pinnedBy": ["JSN-sub-03"]
+    },
+    {
+      "id": "nan-infinity-bind",
+      "scope": "bind",
+      "predicate": "JS NaN and Infinity binds are rejected",
+      "specifiedBehavior": "datatype_mismatch rather than storing NULL or Inf.",
+      "pinnedBy": ["TYP-nan-04", "TYP-nan-05"]
+    },
+    {
+      "id": "double-quote-string-fallback",
+      "scope": "lexer",
+      "predicate": "SQLite may treat unknown double-quoted identifiers as strings; sqlite-mem rejects them",
+      "specifiedBehavior": "prepare/query of SELECT \"not_a_column\" throws in sqlite-mem.",
+      "pinnedBy": ["TOK-07"]
+    },
+    {
+      "id": "lone-surrogate-bind",
+      "scope": "unicode",
+      "predicate": "JS lone surrogates in string binds are engine-defined",
+      "specifiedBehavior": "sqlite-mem stores the JS string as UTF-16-unpaired text; oracle may replace or error.",
+      "pinnedBy": ["UNI-surr-01"]
+    },
+    {
+      "id": "user-version-snapshot",
+      "scope": "pragma",
+      "predicate": "user_version is not encoded in SQLM",
+      "specifiedBehavior": "PRAGMA user_version after decode().open() is the default unless re-set.",
+      "pinnedBy": ["PRG-beh-05", "SNP-omit-04"]
+    },
+    {
+      "id": "pragma-setter-noop",
+      "scope": "pragma",
+      "predicate": "Some pragma setters are accepted but do not change engine state yet",
+      "specifiedBehavior": "defer_foreign_keys, recursive_triggers, and application_id getters remain 0 after SET.",
+      "pinnedBy": ["PRG-beh-02", "PRG-beh-03", "PRG-beh-07"]
+    },
+    {
+      "id": "generate-series-extension",
+      "scope": "tvf",
+      "predicate": "generate_series is a sqlite-mem extension",
+      "specifiedBehavior": "Present in sqlite-mem; not claimed vs bun:sqlite default inventory.",
+      "pinnedBy": ["FTS-series-01"]
+    },
+    {
+      "id": "datetime-localtime-utc",
+      "scope": "datetime",
+      "predicate": "localtime/utc modifiers do not apply host timezone conversion",
+      "specifiedBehavior": "Modifiers are accepted as no-ops; storage remains UTC-like fixed strings.",
+      "pinnedBy": ["tests/contract/date-time/modifiers.test.ts"]
+    }
+  ]
+}

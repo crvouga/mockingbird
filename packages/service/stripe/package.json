@@ -61,7 +61,7 @@
     "fast-check": "4.9.0",
     "@crvouga/mockingbird-testing": "workspace:*",
     "@crvouga/mockingbird-adapter-bun": "workspace:*",
-    "@crvouga/sqlite-mem": "1.15.0",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@crvouga/mockingbird-parity": "workspace:*",
     "@crvouga/mockingbird-openbao": "workspace:*",
     "stripe": "16.12.0",

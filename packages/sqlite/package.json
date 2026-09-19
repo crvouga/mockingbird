@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-sqlite",
   "version": "0.1.0",
-  "description": "Owned sync SqliteClient port for Mockingbird services. Defaults to @crvouga/sqlite-mem; accepts any duck-typed SQLite client.",
+  "description": "Owned sync SqliteClient port for Mockingbird services. Defaults to @crvouga/mockingbird-service-sqlite; accepts any duck-typed SQLite client.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -42,7 +42,7 @@
     "pack:check": "bun ../../scripts/pack-check.ts"
   },
   "dependencies": {
-    "@crvouga/sqlite-mem": "1.15.0"
+    "@crvouga/mockingbird-service-sqlite": "workspace:*"
   },
   "devDependencies": {
     "@crvouga/mockingbird-testing": "workspace:*",
