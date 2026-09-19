@@ -43,7 +43,7 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "devDependencies": {
-    "@crvouga/mockingbird-testing": "^0.1.0",
+    "@crvouga/mockingbird-testing": "workspace:*",
     "fast-check": "4.9.0"
   }
 }
