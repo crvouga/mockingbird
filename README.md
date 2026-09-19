@@ -8,15 +8,14 @@ Pass an optional `sqlite` client that matches Mockingbird's owned `SqliteClient`
 
 ## Using Mockingbird in your project
 
-Everything is on npm as `@crvouga/mockingbird-*` (ESM, TypeScript types included). Start with the
-umbrella package's README — it doubles as the **integration guide for coding agents**:
-[`packages/facade/README.md`](packages/facade/README.md). Agents can also read
-[`llms.txt`](llms.txt), a generated index of every published package's docs, and every package
-ships its README inside the npm tarball (`node_modules/<package>/README.md`).
+Only the mock services are on npm, one self-contained package each (ESM, TypeScript types
+included): `@crvouga/mockingbird-service-<name>` for every entry in the [Catalog](#catalog). The
+helper packages they are built from are private to this repo and bundled into each service. Every
+service's README doubles as the **integration guide for coding agents** and ships inside the npm
+tarball (`node_modules/<package>/README.md`); [`llms.txt`](llms.txt) is a generated index of them.
 
 ```bash
-npm install -D @crvouga/mockingbird
-npx mockingbird init --providers stripe
+npm install -D @crvouga/mockingbird-service-stripe
 ```
 
 ## Requirements
@@ -72,7 +71,7 @@ MOCKINGBIRD_TRACE=1 bun run parity:stripe
 
 `bun test` runs each package's appropriate test suite. `bun run parity` (and `parity:stripe` /
 `parity:junction` / `parity:genebygene`) is live differential against each provider's sandbox.
-Credentials load from env or the self-hosted Vault — see [docs/SECRETS.md](docs/SECRETS.md).
+Credentials load from env or the shared self-hosted Vault (`vault run --config prd`) — see [docs/SECRETS.md](docs/SECRETS.md).
 
 ```
 OpenAPI spec
@@ -97,8 +96,6 @@ OpenAPI spec
 | [`@crvouga/mockingbird-service-postgres`](packages/service/postgres) | PostgreSQL 18 SQL dialect | [Compatibility](packages/service/postgres/COMPATIBILITY.md) · [package README](packages/service/postgres/README.md) | Pure TypeScript, synchronous, in-memory engine with differential PostgreSQL parity suites |
 | [`@crvouga/mockingbird-service-sqlite`](packages/service/sqlite) | SQLite 3 SQL dialect | [Compatibility](packages/service/sqlite/COMPATIBILITY.md) · [package README](packages/service/sqlite/README.md) | Pure TypeScript, synchronous, in-memory engine and Mockingbird's default service storage |
 
-The umbrella package is [`@crvouga/mockingbird`](packages/facade). Granular `@crvouga/mockingbird-*` packages are the source of truth.
-
 State lives in SQLite under a per-service namespace. Several services can share one client; `reset()` only clears that service's records and sequences.
 
 Exception: [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) self-hosts the real Medplum server as a child process (one-time cached clone + build) with embedded Postgres and Redis on ephemeral ports — it does not use the SQLite layer.
@@ -107,29 +104,31 @@ Exception: [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) se
 
 | Command | Sandbox | Credential |
 | --- | --- | --- |
-| `bun run parity:stripe` | `https://api.stripe.com` (test mode) | `MOCKINGBIRD_STRIPE_SECRET_KEY` (`sk_test_*`) or Vault `secret/data/secret` |
-| `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `MOCKINGBIRD_JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) or Vault `secret/data/secret` |
-| `bun run parity:genebygene` | staging auth + API | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` or Vault `secret/data/secret` |
+| `bun run parity:stripe` | `https://api.stripe.com` (test mode) | `MOCKINGBIRD_STRIPE_SECRET_KEY` (`sk_test_*`) or Vault `secret/personal/prd` |
+| `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `MOCKINGBIRD_JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) or Vault `secret/personal/prd` |
+| `bun run parity:genebygene` | staging auth + API | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` or Vault `secret/personal/prd` |
 
 ## Packages
 
-**Naming (hard rule):** every package is `@crvouga/mockingbird` (the umbrella) or `@crvouga/mockingbird-<kebab-case>`; the short names below drop that prefix. `bun run check:boundaries` fails CI on any other name.
+**Naming (hard rule):** every package is `@crvouga/mockingbird-<kebab-case>`; the short names below drop that prefix. `bun run check:boundaries` fails CI on any other name.
 
-| Layer | Packages |
-| --- | --- |
-| Core | `core` (`FetchAPI`), `service` (Hono dispatch keyed by `operationId`) |
-| Storage | `sqlite` (`SqliteClient` port, migrate runner, default `@crvouga/mockingbird-service-sqlite`) |
-| Contract | `openapi`, `openapi-metadata`, `openapi-arbitrary`, `openapi-codegen` |
-| Parity | `commands`, `model`, `canonicalize`, `parity` (runner) |
-| Services | `service-stripe`, `service-junction`, `service-genebygene`, `service-medplum`, `service-postgres`, `service-sqlite` |
-| Adapters | `adapter-node`, `adapter-bun` |
-| Auth | `openbao` (sandbox credentials for live parity) |
+**Publishing (hard rule):** only mock services (`service-<name>`) are published. Every other package is `"private": true`; a service that uses them builds with [`scripts/bundle-service.ts`](scripts/bundle-service.ts), which inlines them (JavaScript and `.d.ts`) so the tarball needs nothing unpublished. `bun run check:boundaries` fails CI on a public non-service package.
+
+| Layer | Packages | Published |
+| --- | --- | --- |
+| Services | `service-stripe`, `service-junction`, `service-genebygene`, `service-medplum`, `service-postgres`, `service-sqlite` | yes |
+| Core | `core` (`FetchAPI`), `service` (Hono dispatch keyed by `operationId`) | bundled |
+| Storage | `sqlite` (`SqliteClient` port, migrate runner, default `@crvouga/mockingbird-service-sqlite`) | bundled |
+| Contract | `openapi`, `openapi-metadata`, `openapi-arbitrary`, `openapi-codegen` | bundled / build tool |
+| Parity | `commands`, `model`, `canonicalize`, `parity` (runner) | bundled / tests |
+| Adapters | `adapter-node`, `adapter-bun` | tests only |
+| Auth | `openbao` (sandbox credentials for live parity) | tests only |
 
 ## Development & quality gates
 
 Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + check) without the network-only release job.
 
-CI is one turbo graph: the `Check` job runs `bun run check` with `node_modules` and turbo's cache persisted in the GitHub Actions cache, so a PR only rebuilds and retests the packages it changed, and the release job replays build/pack results from that cache instead of rebuilding.
+CI is one turbo graph: the `Check` job runs `bun run check` with `node_modules` in the GitHub Actions cache and task outputs in the shared self-hosted **Turborepo remote cache** (`https://turborepo.chrisvouga.dev`), so a PR only rebuilds and retests the packages it changed, and the release job replays build/pack results instead of rebuilding. Local runs share the same cache: root turbo scripts run under `vault run` ([`scripts/vault-run.ts`](scripts/vault-run.ts)), which injects `TURBO_*` from Vault. CI gets them through Vault GitHub OIDC — no stored token. Setup: [docs/SECRETS.md](docs/SECRETS.md).
 
 ```bash
 bun install            # workspaces + generates dist
@@ -142,14 +141,14 @@ bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
 | Format | `bun run check:format` | [Biome](https://biomejs.dev) formatting |
 | Lint | `bun run lint` | Biome lint (types, style, complexity) |
 | Typecheck | `bun run typecheck` | `tsc` for every package |
-| Boundaries | `bun run check:boundaries` | Intra-workspace dep graph: internal deps resolve, no cycles, no self-deps, every module import is declared in `package.json`, and no published package depends on an unpublished one at runtime |
+| Boundaries | `bun run check:boundaries` | Intra-workspace dep graph: internal deps resolve, no cycles, no self-deps, every module import is declared in `package.json`, only mock services are published, and no published package depends on an unpublished one at runtime |
 | Package integrity | `bun run pack:check` | `dist` + `exports` + `files`, tarball contents, [publint](https://publint.dev), [arethetypeswrong](https://arethetypeswrong.github.io) (ESM-only consumer resolution) |
 | Portability | `bun run portability` | Built `dist` matches the package's `mockingbird.runtime` (portable / node / bun) — no Node/Bun-only API usage where it isn't allowed |
 | Generate & OpenAPI | `bun run generate` / `bun run openapi:check` | Regenerate and verify provider contracts |
 | Test | `bun run test` | Contract, integration, unit, fuzz, and property suites (`FC_NUM_RUNS=40` in CI) |
 | Consumer docs | `bun run pack:check` | Every public package ships a README with `## Install`, `## Usage` (a TypeScript example) and `## API` listing every runtime export |
-| Consumer smoke | `bun run release:smoke` | Packs every public package like the release, `npm install`s the tarballs into a clean project, imports every entry point under Node, typechecks them plus every README TypeScript example and the `mockingbird init` scaffold, and runs each CLI |
-| llms.txt | `bun run check:llms` | [`llms.txt`](llms.txt) lists every public package (`bun run llms:sync` regenerates) |
+| Consumer smoke | `bun run release:smoke` | Packs every public package like the release, `npm install`s the tarballs into a clean project, imports every entry point under Node, and typechecks them plus every README TypeScript example |
+| llms.txt | `bun run check:llms` | [`llms.txt`](llms.txt) lists every published mock service (`bun run llms:sync` regenerates) |
 | Agent commands | `bun run check:agents` | Every `.agents/commands/*.md` is symlinked into each agent harness (`bun run agents:sync` repairs) |
 
 ### Git hooks (Husky)
@@ -186,28 +185,28 @@ resolve conflicts, open the PR, and loop CI fixes until every check passes.
 
 ### Package publishing
 
-Public packages use `publishConfig.access = "public"` and `publishConfig.provenance = true` (npm Trusted Publishing / OIDC). `bun run pack:check` is the pre-publish gate that confirms each package actually packs, resolves types for an ESM-only consumer, and ships `dist`.
+Published services use `publishConfig.access = "public"` and `publishConfig.provenance = true` (npm Trusted Publishing / OIDC). `bun run pack:check` is the pre-publish gate that confirms each package actually packs, resolves types for an ESM-only consumer, and ships `dist`.
 
 ## Releasing
 
 Releases are fully automated on every green push to `main` ([`scripts/release/`](scripts/release/lib.ts), job `Release` in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)). There is nothing to run by hand:
 
-- **Which packages:** every public package whose directory has a releasable Conventional Commit since its last `<name>@<version>` git tag, every package that has never been released, and every package that depends at runtime on one of those (workspace deps are pinned exactly).
+- **Which packages:** every published service with a releasable Conventional Commit since its last `<name>@<version>` git tag — in its own directory or in any private helper it bundles — every service that has never been released, and every service that depends at runtime on one of those (workspace deps are pinned exactly).
 - **Which version:** `feat!` / `BREAKING CHANGE` → major, `feat` → minor, `fix` / `perf` / `revert` / `refactor` / `build` / `docs` → patch, dependency-only → patch. `test` / `ci` / `chore` / `style` never release a package on their own. First releases start at `0.1.0`.
 - **How:** build → `pack:check` → `portability` → consumer smoke → `bun pm pack` → `npm publish --provenance` via npm Trusted Publishing (OIDC) → push the `<name>@<version>` tag → GitHub Release with that package's notes.
 
 Versions live in tags, so `package.json` keeps `0.0.0-development` and nothing is committed back to `main` (same model as semantic-release). Every step is idempotent — re-running a failed release job finishes it.
 
-OIDC cannot create a package that does not exist on npm yet. With the optional `NPM_TOKEN` Actions secret set, the release job creates new packages with it and attaches their Trusted Publisher automatically (`npm trust github`); without it, seed them once with `bun run release:seed` (logs in to npm if needed, builds a clean `origin/main` in a temporary worktree, publishes every missing package, attaches Trusted Publishers, and pushes tags and GitHub Releases). See [docs/SECRETS.md](docs/SECRETS.md).
+OIDC cannot create a package that does not exist on npm yet. With the optional `NPM_TOKEN` Actions secret set, the release job creates new packages with it and attaches their Trusted Publisher automatically (`npm trust github`); without it, seed them once with `bun run release:seed`. The seed reconciles npm with `origin/main` (logs in to npm if needed, builds a clean `origin/main` in a temporary worktree, publishes every missing service, attaches Trusted Publishers, pushes tags and GitHub Releases, and deprecates every package no longer published). See [docs/SECRETS.md](docs/SECRETS.md).
 
 ```bash
 bun run release:plan                   # what the next push to main would release
 bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
-bun run release:seed                   # create packages missing from npm with your npm login
+bun run release:seed                   # reconcile npm with origin/main using your npm login
 bun run secrets:doctor                 # npm / Trusted Publishing / NPM_TOKEN status
 ```
 
-`@crvouga/postgres-mem` and `@crvouga/sqlite-mem` are archived; they continue here as `@crvouga/mockingbird-service-postgres` and `@crvouga/mockingbird-service-sqlite`, and the release job deprecates the old npm packages once the replacements are published.
+Every release (and the seed) deprecates npm packages this repo no longer publishes: the former helper packages (`@crvouga/mockingbird`, `-core`, `-service`, `-sqlite`, `-openapi*`, `-http-codec`, `-commands`, `-model`, `-canonicalize`, `-parity`, `-adapter-*`, `-openbao`), now bundled into the services, and the archived `@crvouga/postgres-mem` / `@crvouga/sqlite-mem`, which continue here as `@crvouga/mockingbird-service-postgres` / `-sqlite`. Deprecating needs account auth (`NPM_TOKEN` or the seed); OIDC alone only logs what it would deprecate.
 
 Local replica of the whole CI (minus the main-only release job): `bun run check:full`.
 

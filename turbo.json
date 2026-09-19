@@ -3,7 +3,6 @@
   "ui": "stream",
   "globalDependencies": ["tsconfig.base.json", "biome.json"],
   "globalEnv": ["CI", "GITHUB_ACTIONS"],
-  "globalPassThroughEnv": ["TURBO_TOKEN", "TURBO_TEAM", "TURBO_API"],
   "tasks": {
     "generate": {
       "dependsOn": ["^build"],

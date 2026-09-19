@@ -1,19 +1,26 @@
 /**
- * Seed npm: create every public package that is not on npm yet, from your own npm login.
+ * Seed npm: reconcile the npm registry with origin/main, from your own npm login.
  *
- * Trusted Publishing (OIDC) cannot create packages, so without an NPM_TOKEN Actions secret
- * brand-new packages must be published once by a maintainer. This wraps the whole bootstrap:
+ * Only mock services (`@crvouga/mockingbird-service-*`) are published; every other
+ * workspace package is private and bundled into the services. Reconciling means:
+ *   - publish every service that is not on npm yet (Trusted Publishing (OIDC) cannot
+ *     create packages, so without an NPM_TOKEN Actions secret a maintainer does it once),
+ *   - attach the GitHub Actions Trusted Publisher to every published service,
+ *   - deprecate every package this repo no longer publishes (private helpers still on
+ *     npm, and the archived @crvouga/postgres-mem / @crvouga/sqlite-mem).
  *
+ * Steps:
  *   1. make sure npm >= 11.10 is on PATH (`npm trust` needs it; a private copy is used if not)
  *   2. make sure you are logged in to npm (runs `npm login` if not)
  *   3. check out origin/main in a temporary worktree, install and build it
- *   4. `release:publish --local` there: publish, attach Trusted Publishers, tag, GitHub Releases
+ *   4. `release:publish --local` there: publish, trust, tag, GitHub Releases, deprecate
  *
  * After this, every later release is published by CI through OIDC.
- * Idempotent: packages and tags that already exist are skipped, so re-run it to finish.
+ * Idempotent: packages, trust, tags and deprecations that already exist are skipped,
+ * so re-run it to finish.
  *
- *   bun run release:seed               (publish)
- *   bun run release:seed -- --dry-run  (plan + pack only)
+ *   bun run release:seed               (reconcile)
+ *   bun run release:seed -- --dry-run  (plan + pack, print what would change)
  */
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -68,7 +75,7 @@ try {
   await run(["bun", "install", "--frozen-lockfile"], worktree, env)
   await run(["bun", "run", "build"], worktree, env)
 
-  // 4. Publish, trust, tag, release.
+  // 4. Publish, trust, tag, release, deprecate.
   await run(["bun", "scripts/release/publish.ts", dryRun ? "--dry-run" : "--local"], worktree, env)
 } catch (error) {
   console.error(`release:seed: ${error instanceof Error ? error.message : String(error)}`)

@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-openapi
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Dependency-free OpenAPI 3.0/3.1 toolkit used across Mockingbird: structural document validation, local `$ref` resolution, operation discovery, path templating, schema traversal, and JSON Schema instance validation. Use it directly when you need to inspect or validate an OpenAPI document or check a value against one of its schemas; if you only want parity testing, [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) uses it for you.
 
 ## Install
@@ -110,4 +112,4 @@ Exported types: `OpenAPIDocument`, `Operation` (`{ operationId, method, path, op
 - [`@crvouga/mockingbird-openapi-arbitrary`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-arbitrary) — fast-check arbitraries from schemas.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — differential parity runner.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

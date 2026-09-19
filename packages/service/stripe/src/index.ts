@@ -34,6 +34,8 @@ import { subscriptionScheduleHandlers } from "./subscription-schedules.js"
 import { subscriptionHandlers } from "./subscriptions.js"
 import { STRIPE_API_VERSION } from "./version.js"
 
+export type { FetchAPI } from "@crvouga/mockingbird-core"
+export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 export { accountOf, accountOfKey } from "./account.js"
 export { STRIPE_NAMESPACE } from "./constants.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"

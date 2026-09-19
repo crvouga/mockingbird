@@ -23,9 +23,8 @@ npm install -D @crvouga/mockingbird-service-junction
 ```
 
 ESM only. Requires Node >= 22 or Bun >= 1.2. No native dependencies: state lives in an in-memory
-SQLite engine (`@crvouga/mockingbird-service-sqlite`, pure TypeScript). To serve it over HTTP also
-install `@crvouga/mockingbird-adapter-node` (works under Node and Bun) or
-`@crvouga/mockingbird-adapter-bun`.
+SQLite engine (pure TypeScript, bundled in). To serve it over HTTP use `Bun.serve` under Bun, or
+install `@hono/node-server` under Node.
 
 ## Usage
 
@@ -99,21 +98,34 @@ delayed transition is applied on the next `GET /v3/order/{id}` whose `now` is pa
 ### Over HTTP
 
 ```ts
-import { serve } from "@crvouga/mockingbird-adapter-node"
 import { JunctionAPI } from "@crvouga/mockingbird-service-junction"
 
 const junction = new JunctionAPI()
-const server = await serve(junction, { port: 0, host: "127.0.0.1" }) // port 0 = ephemeral
-const address = server.address()
-if (address === null || typeof address === "string") throw new Error("not listening")
-const baseUrl = `http://127.0.0.1:${address.port}`
+const server = Bun.serve({
+  port: 0, // ephemeral
+  hostname: "127.0.0.1",
+  fetch: (request) => junction.fetch(request),
+})
+const baseUrl = `http://127.0.0.1:${server.port}`
 
 const response = await fetch(`${baseUrl}/v2/user`, {
   headers: { "x-vital-api-key": "sk_us_mockingbird" },
 })
 console.log(response.status) // 200
 
-server.close()
+server.stop()
+```
+
+On Node use any Fetch-style server, e.g. `@hono/node-server` (`npm install -D @hono/node-server`),
+whose callback receives the bound port:
+
+```js
+import { serve } from "@hono/node-server"
+const server = serve(
+  { fetch: (request) => junction.fetch(request), port: 0, hostname: "127.0.0.1" },
+  (info) => console.log(`http://127.0.0.1:${info.port}`),
+)
+// ... later: server.close()
 ```
 
 ### Pointing `@tryvital/vital-node` at it
@@ -217,7 +229,7 @@ it always comes from the deterministic generator.
 
 | Export | Description |
 | --- | --- |
-| `JunctionAPI` | Class. `new JunctionAPI(options?)`; implements `FetchAPI` (`fetch(request: Request): Promise<Response>`). |
+| `JunctionAPI` | Class. `new JunctionAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. |
 | `JUNCTION_NAMESPACE` | `"junction"` — SQLite namespace holding the mock's state when sharing a `sqlite` client. |
 | `document` | The vendored Junction OpenAPI document (Mockingbird subset) that drives routing. |
 | `operationIds` | Every `operationId` in `document`. |
@@ -316,4 +328,4 @@ Webhook parity needs a public receiver; see
 [docs/webhook-parity.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/docs/webhook-parity.md).
 The `client-parity*.ts` SDK scenarios are deprecated as proof and kept only as manual probes.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).

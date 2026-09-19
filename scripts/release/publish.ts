@@ -7,7 +7,10 @@
  *      NPM_TOKEN for brand-new packages, which then get their Trusted Publisher
  *      attached automatically (`npm trust github`)
  *   3. push the `<name>@<version>` tag and create its GitHub Release
- * Then deprecate the archived legacy packages (@crvouga/postgres-mem, @crvouga/sqlite-mem).
+ * Then reconcile npm with the workspace: attach the Trusted Publisher to every published
+ * service that lacks one, and deprecate every package this repo no longer
+ * publishes — the archived legacy packages (@crvouga/postgres-mem, @crvouga/sqlite-mem)
+ * and every private workspace package still on npm (only mock services are published).
  *
  * Every step is idempotent: versions already on npm, existing tags and existing
  * GitHub Releases are skipped, so a failed run is fixed by re-running it.
@@ -22,13 +25,12 @@ import { join } from "node:path"
 import { $ } from "bun"
 import {
   computePlan,
-  LEGACY_PACKAGES,
-  legacyDeprecationMessage,
   npmVersions,
   REPO,
   type Release,
   redact,
   releaseNotes,
+  retiredPackages,
   root,
   tagName,
   WORKFLOW_FILE,
@@ -185,27 +187,29 @@ async function tagAndRelease(release: Release): Promise<void> {
   await $`git push origin ${`refs/tags/${tag}`}`.cwd(root).quiet()
   const hasRelease = await $`gh release view ${tag} --repo ${REPO}`.quiet().nothrow()
   if (hasRelease.exitCode !== 0) {
-    const latest = release.pkg.name === "@crvouga/mockingbird" ? "true" : "false"
-    await $`gh release create ${tag} --repo ${REPO} --title ${tag} --notes ${notes} --verify-tag --latest=${latest}`.quiet()
+    await $`gh release create ${tag} --repo ${REPO} --title ${tag} --notes ${notes} --verify-tag --latest=false`.quiet()
   }
   console.log(`tagged ${tag}`)
 }
 
-async function deprecateLegacyPackages(): Promise<void> {
-  for (const legacy of LEGACY_PACKAGES) {
-    const replacement = await npmVersions(legacy.replacement)
-    if (!Array.isArray(replacement) || replacement.length === 0) continue
-    const current = await $`npm view ${legacy.name} deprecated`.quiet().nothrow()
+async function deprecateRetiredPackages(): Promise<void> {
+  for (const retired of retiredPackages(plan.packages)) {
+    const published = await npmVersions(retired.name)
+    if (!Array.isArray(published) || published.length === 0) continue
+    if (retired.requires) {
+      const replacement = await npmVersions(retired.requires)
+      if (!Array.isArray(replacement) || replacement.length === 0) continue
+    }
+    const current = await $`npm view ${retired.name} deprecated`.quiet().nothrow()
     if (current.exitCode !== 0 || current.stdout.toString().trim() !== "") continue
-    const message = legacyDeprecationMessage(legacy.replacement)
     if (dryRun || !hasAccountAuth) {
-      console.log(`${dryRun ? "would deprecate" : "needs NPM_TOKEN to deprecate"} ${legacy.name}`)
+      console.log(`${dryRun ? "would deprecate" : "needs NPM_TOKEN to deprecate"} ${retired.name}`)
       continue
     }
-    if ((await npm(["deprecate", legacy.name, message], true)) === 0) {
-      console.log(`deprecated ${legacy.name} → ${legacy.replacement}`)
+    if ((await npm(["deprecate", retired.name, retired.message], true)) === 0) {
+      console.log(`deprecated ${retired.name}`)
     } else {
-      console.warn(`::warning::npm deprecate ${legacy.name} failed`)
+      console.warn(`::warning::npm deprecate ${retired.name} failed`)
     }
   }
 }
@@ -221,7 +225,13 @@ try {
     await ensureTrustedPublisher(release.pkg.name)
     await tagAndRelease(release)
   }
-  await deprecateLegacyPackages()
+  // Reconcile: every published service is trusted for OIDC, everything else is deprecated.
+  for (const pkg of plan.packages) {
+    if (!pkg.isPublic || failed.has(pkg.name)) continue
+    const published = await npmVersions(pkg.name)
+    if (Array.isArray(published) && published.length > 0) await ensureTrustedPublisher(pkg.name)
+  }
+  await deprecateRetiredPackages()
 } finally {
   for (const [path, raw] of originals) writeFileSync(path, raw)
   rmSync(packDir, { recursive: true, force: true })

@@ -7,9 +7,10 @@
  *   1. imports every `exports` subpath under Node (ESM),
  *   2. typechecks an import of every subpath with `moduleResolution: nodenext`,
  *   3. typechecks every ```ts example in every shipped README.md (the docs agents copy from),
- *   4. runs every `bin` with `--help`, and typechecks what `mockingbird init` scaffolds.
+ *   4. runs every `bin` with `--help`.
  * Catches what per-package checks cannot: a published package depending on an unpublished
- * one, a runtime import missing from `dependencies`, files left out of the tarball.
+ * one, a runtime import missing from `dependencies`, a private helper left out of a
+ * service bundle, files left out of the tarball.
  *
  *   bun run build && bun run release:smoke
  */
@@ -133,14 +134,9 @@ try {
         types: ["node", "bun"],
         lib: ["ES2022", "DOM"],
       },
-      include: ["smoke.ts", "examples/*.ts", "tests/mocks/*.ts"],
+      include: ["smoke.ts", "examples/*.ts"],
     }),
   )
-
-  console.log("consumer-smoke: mockingbird init (every provider)")
-  await $`npx --no-install mockingbird init --providers stripe,junction,genebygene,medplum --dir . --package-manager npm`
-    .cwd(app)
-    .quiet()
 
   console.log(`consumer-smoke: node import of ${specifiers.length} entry points`)
   await $`node smoke.mjs`.cwd(app)
@@ -151,7 +147,7 @@ try {
   const ours = tsc.stdout
     .toString()
     .split("\n")
-    .filter((line) => /^(smoke\.ts|examples\/|tests\/mocks\/|node_modules\/@crvouga\/)/.test(line))
+    .filter((line) => /^(smoke\.ts|examples\/|node_modules\/@crvouga\/)/.test(line))
   if (ours.length > 0) {
     console.error(ours.join("\n"))
     throw new Error(

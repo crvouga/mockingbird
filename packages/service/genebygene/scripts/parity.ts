@@ -22,8 +22,8 @@ const credentials = await loadCredentials(
   {
     provider: "genebygene",
     fields: {
-      client_id: "MOCKINGBIRD_GENEBYGENE_CLIENT_ID",
-      client_secret: "MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET",
+      MOCKINGBIRD_GENEBYGENE_CLIENT_ID: "MOCKINGBIRD_GENEBYGENE_CLIENT_ID",
+      MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET: "MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET",
     },
   },
   { env: process.env, readTokenFile },
@@ -38,8 +38,8 @@ const tokenResponse = await fetch(tokenUrl, {
   headers: { "content-type": "application/x-www-form-urlencoded" },
   body: new URLSearchParams({
     grant_type: "client_credentials",
-    client_id: credentials.values.client_id,
-    client_secret: credentials.values.client_secret,
+    client_id: credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_ID,
+    client_secret: credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET,
   }),
 })
 if (!tokenResponse.ok) {
@@ -95,7 +95,11 @@ try {
       create: () => new GeneByGeneAPI(),
       headers: () => ({}),
     },
-    redact: createRedactor([...credentials.secrets, accessToken, credentials.values.client_secret]),
+    redact: createRedactor([
+      ...credentials.secrets,
+      accessToken,
+      credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET,
+    ]),
   })
 } catch (error) {
   console.error(`\n${error instanceof Error ? error.message : String(error)}`)

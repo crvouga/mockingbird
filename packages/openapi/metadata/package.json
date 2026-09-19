@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-openapi-metadata",
   "version": "0.0.0-development",
+  "private": true,
   "description": "Mockingbird's x-mockingbird-* OpenAPI extensions: types, readers, semantic validation and schema-guided value annotation (identities, volatile fields).",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",

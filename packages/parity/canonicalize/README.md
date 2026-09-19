@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-canonicalize
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Strict, provider-neutral canonicalization of HTTP exchanges for differential comparison. It rewrites resource ids to symbolic tokens (`resource:customer:1`), collapses fields the spec marks volatile (`volatile:timestamp:integer`), keeps only declared parity headers, and reports a strict structural diff. You only need this directly if you are building your own differential runner — [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) uses it for you.
 
 ## Install
@@ -83,4 +85,4 @@ Exported types: `Exchange` (`{ status; headers (lower-cased); body: DecodedBody 
 - [`@crvouga/mockingbird-openapi-metadata`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-metadata) — the `x-mockingbird-resource` / `x-mockingbird-volatile` annotations this reads.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — the runner.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

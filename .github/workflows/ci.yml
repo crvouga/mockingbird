@@ -1,7 +1,9 @@
 # Local replica: bun run check:full
 #
 # One turbo graph (`bun run check`) does all the work; .github/actions/setup caches
-# node_modules and turbo's cache, so unchanged packages are never rebuilt or retested.
+# node_modules and loads the shared Turborepo remote cache credentials from Vault (GitHub
+# OIDC, no stored token), so unchanged packages are never rebuilt or retested.
+# Shared infra contract: https://raw.githubusercontent.com/crvouga/workspace/main/INTEGRATING.md
 # On main, Release publishes every changed package (versions from Conventional Commits).
 #
 # The workflow file name is part of each package's npm Trusted Publisher — keep it `ci.yml`.
@@ -37,7 +39,7 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          turbo-cache: "false"
+          remote-cache: "false"
 
       # Every PR commit lands on main (merge commits only), and each one drives the release bump.
       - name: Validate PR commits
@@ -61,6 +63,9 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Vault OIDC → Turborepo remote cache
     env:
       FC_NUM_RUNS: "40"
     steps:
@@ -69,15 +74,11 @@ jobs:
       - uses: ./.github/actions/setup
 
       - name: Check (format, lint, typecheck, build, test, pack, portability, boundaries)
-        run: bun run check -- --summarize --output-logs=errors-only
+        run: bun run check -- --output-logs=errors-only
 
       # Pack every public package like the release does and install it into a clean npm project.
       - name: Consumer smoke (npm install + import + typecheck every published entry point)
         run: bun run release:smoke
-
-      - name: Prune turbo cache to this run
-        if: success()
-        run: bun scripts/ci/prune-turbo-cache.ts
 
   # Single required status check for the ruleset. Also enforces the trunk policy: PRs
   # target `main` from a short-lived branch.
@@ -137,7 +138,7 @@ jobs:
         id: plan
         run: bun run release:plan -- --github-output
 
-      # Restored from Check's turbo cache for this commit — no rebuild.
+      # Replayed from the remote cache Check filled for this commit — no rebuild.
       - name: Build and verify packages
         if: steps.plan.outputs.has_changes == 'true'
         run: bunx turbo run build pack:check portability --output-logs=errors-only

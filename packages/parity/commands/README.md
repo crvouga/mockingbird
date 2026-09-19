@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-commands
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Stateful [fast-check](https://fast-check.dev/) command generation for OpenAPI-driven random API walks. It plans which operations are eligible (from `x-mockingbird-*` annotations), generates shrink-friendly `LogicalCommand`s whose resource ids are symbolic placeholders, and turns a command into a concrete Fetch `Request` for either side of a comparison. You only need this directly if you are building your own walk executor — [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) uses it for you.
 
 ## Install
@@ -132,4 +134,4 @@ Exported types: `OperationPlan` (`{ operation, metadata, requires, produces, bod
 - [`@crvouga/mockingbird-openapi-arbitrary`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-arbitrary) — the value generators underneath.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — runs these commands against a real API and a mock.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

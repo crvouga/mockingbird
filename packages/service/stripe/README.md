@@ -25,8 +25,8 @@ npm install -D @crvouga/mockingbird-service-stripe
 ```
 
 ESM only. Requires Node >= 22 or Bun >= 1.2. No native dependencies: state lives in an in-memory
-SQLite engine (`@crvouga/mockingbird-service-sqlite`, pure TypeScript). To serve it over HTTP also
-install an adapter: `@crvouga/mockingbird-adapter-node` or `@crvouga/mockingbird-adapter-bun`.
+SQLite engine (pure TypeScript, bundled in). To serve it over HTTP use `Bun.serve` under Bun, or
+install `@hono/node-server` under Node.
 
 ## Usage
 
@@ -75,11 +75,14 @@ console.log(((await listed.json()) as { data: unknown[] }).data.length) // 1
 ### Over HTTP
 
 ```ts
-import { serve } from "@crvouga/mockingbird-adapter-bun"
 import { StripeAPI } from "@crvouga/mockingbird-service-stripe"
 
 const stripe = new StripeAPI()
-const server = serve(stripe, { port: 0, hostname: "127.0.0.1" }) // port 0 = ephemeral
+const server = Bun.serve({
+  port: 0, // ephemeral
+  hostname: "127.0.0.1",
+  fetch: (request) => stripe.fetch(request),
+})
 const baseUrl = `http://127.0.0.1:${server.port}`
 
 const response = await fetch(`${baseUrl}/v1/products?limit=3`, {
@@ -90,13 +93,15 @@ console.log(response.status) // 200
 server.stop()
 ```
 
-On Node use `@crvouga/mockingbird-adapter-node`, whose `serve` is async and returns a
-`node:http` server:
+On Node use any Fetch-style server, e.g. `@hono/node-server` (`npm install -D @hono/node-server`),
+whose callback receives the bound port:
 
 ```js
-import { serve } from "@crvouga/mockingbird-adapter-node"
-const server = await serve(stripe, { port: 0, host: "127.0.0.1" })
-const { port } = server.address()
+import { serve } from "@hono/node-server"
+const server = serve(
+  { fetch: (request) => stripe.fetch(request), port: 0, hostname: "127.0.0.1" },
+  (info) => console.log(`http://127.0.0.1:${info.port}`),
+)
 // ... later: server.close()
 ```
 
@@ -111,7 +116,7 @@ import Stripe from "stripe"
 const client = new Stripe("sk_test_mockingbird", {
   apiVersion: "2024-06-20",
   host: "127.0.0.1",
-  port: server.port, // from serve() above
+  port: server.port, // from Bun.serve() above
   protocol: "http",
 })
 await client.customers.create({ email: "qa@example.com" })
@@ -184,7 +189,7 @@ QA corpus used by the parity suites.
 
 | Export | Description |
 | --- | --- |
-| `StripeAPI` | Class. `new StripeAPI(options?)`; implements `FetchAPI` (`fetch(request: Request): Promise<Response>`). |
+| `StripeAPI` | Class. `new StripeAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. |
 | `accountOfKey` | `(key: string) => string` — the opaque `acct_...` partition id for an API key (use it to filter `webhookEvents`). |
 | `accountOf` | `(request: Request) => string` — the partition id for a request's bearer key. |
 | `STRIPE_NAMESPACE` | `"stripe"` — SQLite namespace holding every Stripe record when sharing a `sqlite` client. |
@@ -199,7 +204,7 @@ QA corpus used by the parity suites.
 | `QA_TEST_CARD_TOKENS` | Test card tokens the suites use (`tok_visa`, decline tokens, ...). |
 | `QA_SEARCH_QUERIES` | Search queries the suites issue against `/v1/customers/search`. |
 | `QA_COUPON_CODES` | Coupon / promotion codes used by the coupon flows. |
-| `reshapeQaCommand` | Parity-walk hook that pins sampled commands onto QA corpus values (for `@crvouga/mockingbird-parity`). |
+| `reshapeQaCommand` | Parity-walk hook that pins sampled commands onto QA corpus values (for the repo's parity runner). |
 
 `StripeAPI` members:
 
@@ -226,8 +231,9 @@ type WebhookPublisher = (event: StripeWebhookEvent) => void
 type OperationId / SupportedOperationId  // string unions of operationIds / supportedOperationIds
 ```
 
-`SqliteClient` is the port from `@crvouga/mockingbird-sqlite`; `Database` from
-`@crvouga/mockingbird-service-sqlite` satisfies it, as do better-sqlite3 and wrapped `bun:sqlite`.
+`SqliteClient` is the storage port bundled with this package (`exec`, `prepare(sql).run/all/get`,
+`transaction`); `Database` from `@crvouga/mockingbird-service-sqlite` satisfies it, as do
+better-sqlite3 and wrapped `bun:sqlite`.
 
 ## Development
 
@@ -251,4 +257,4 @@ PORT=12111 MOCKINGBIRD_STRIPE_WEBHOOK_TARGETS='[{"apiKey":"sk_test_mso","url":"h
 
 Live parity needs a real `sk_test_` key and mutates a shared test account.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).

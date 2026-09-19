@@ -1,5 +1,7 @@
 # @crvouga/mockingbird-openapi-metadata
 
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
 Types, readers and validation for Mockingbird's `x-mockingbird-*` OpenAPI extensions — the annotations that tell the parity runner which values are resource ids, which are nondeterministic, which operations are safe to call, and so on. Use it when you author a provider spec for [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) and want to lint it, or when building your own tooling on top of the annotations; the parity runner already reads them for you.
 
 ## Install
@@ -89,4 +91,4 @@ Exported types: `OperationExtension`, `OperationMetadata`, `SchemaMetadata`, `Re
 - [`@crvouga/mockingbird-canonicalize`](https://www.npmjs.com/package/@crvouga/mockingbird-canonicalize) — consumes these annotations to canonicalize responses.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — differential parity runner.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [`@crvouga/mockingbird`](https://github.com/crvouga/mockingbird/tree/main/packages/facade#readme).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).
