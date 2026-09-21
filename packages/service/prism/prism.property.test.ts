@@ -32,7 +32,7 @@ describe("PrismAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 60,
+        numRuns: Math.max(params.numRuns ?? 60, 60),
         maxCommands: 30,
         coverageBias: 4,
         latencyToleranceMs: 1_000,

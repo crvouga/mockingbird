@@ -32,7 +32,7 @@ describe("MakorCpgAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 150,
+        numRuns: Math.max(params.numRuns ?? 150, 150),
         maxCommands: 20,
         // Summary reads and review scripts need a user produced by an earlier summary generation.
         weights: {

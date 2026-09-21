@@ -32,7 +32,7 @@ describe("IntercomAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 150,
+        numRuns: Math.max(params.numRuns ?? 150, 150),
         maxCommands: 20,
         // Conversation operations need a contact, then a conversation, from earlier in the walk.
         weights: {

@@ -61,7 +61,7 @@ describe("TwilioAPI", () => {
         // (the rest are skipped as ineligible): draw them more often.
         weights: { FetchRecordingMedia: 8, FetchRecording: 8, DeleteRecording: 8 },
         coverageBias: 4,
-        numRuns: params.numRuns ?? 100,
+        numRuns: Math.max(params.numRuns ?? 100, 100),
         maxCommands: 20,
         latencyToleranceMs: 1_000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
