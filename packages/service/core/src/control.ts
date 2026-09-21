@@ -51,7 +51,11 @@ export type ControlContext = {
 export type ControlPlane = {
   /** The control-plane response for `request`, or `undefined` for a vendor request. */
   handle(request: Request): Promise<Response | undefined>
-  /** Namespace a vendor request targets. */
+  /**
+   * Namespace a vendor request targets, from {@link NAMESPACE_HEADER}. Only admin routes
+   * also accept `?namespace=`, so a vendor query parameter of that name can never
+   * silently reroute a request.
+   */
   namespaceOf(request: Request): string
 }
 
@@ -117,10 +121,10 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
   const snapshots = new Map<string, NamespaceSnapshot>()
   let snapshotCounter = 0
 
-  const namespaceOf = (request: Request, url = new URL(request.url)): string =>
-    url.searchParams.get("namespace") ??
-    request.headers.get(NAMESPACE_HEADER) ??
-    context.defaultNamespace
+  const headerNamespace = (request: Request): string =>
+    request.headers.get(NAMESPACE_HEADER) ?? context.defaultNamespace
+  const adminNamespace = (request: Request, url: URL): string =>
+    url.searchParams.get("namespace") ?? headerNamespace(request)
 
   const builtin: AdminRoutes = {
     "GET /": () =>
@@ -212,7 +216,7 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
   )
 
   return {
-    namespaceOf: (request) => namespaceOf(request),
+    namespaceOf: headerNamespace,
     async handle(request) {
       const url = new URL(request.url)
       if (url.pathname === HEALTH_PATH && request.method === "GET") {
@@ -245,7 +249,13 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
         } catch {
           return adminError(400, "request body is not valid JSON")
         }
-        return route.handler({ request, url, params, namespace: namespaceOf(request, url), body })
+        return route.handler({
+          request,
+          url,
+          params,
+          namespace: adminNamespace(request, url),
+          body,
+        })
       }
       return adminError(
         404,
