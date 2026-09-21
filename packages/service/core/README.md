@@ -106,7 +106,7 @@ the body is read.
 | `defineOperations` | `<Id>(handlers: Record<Id, OperationHandler>) => Record<Id, OperationHandler>` | Identity helper that type-checks a handler map against an id union. |
 | `verifyOperations` | `(document, handlers) => string[]` | Registry problems (missing, extra, unsupported-with-handler, duplicate ids); `[]` if consistent. |
 | `OperationRegistryError` | `class extends Error { problems: string[] }` | Thrown by `createService` when `verifyOperations` finds problems. |
-| `Collection` | `new Collection<T>(sqlite, namespace, name)` | JSON records by id: `get`, `has`, `insert` (upsert; moves to newest), `update` (keeps position; `undefined` if missing), `delete`, `list({ where?, order?: "newest" \| "oldest" })` (default newest first), `nextSequence`. |
+| `Collection` | `new Collection<T>(sqlite, namespace, name)` | JSON records by id: `get`, `has`, `insert` (upsert; moves to newest), `update` (keeps position; `undefined` if missing), `delete`, `list({ where?, order?: "newest" \| "oldest" })` (default newest first), `count()`, `nextSequence`. |
 | `IdSequence` | `new IdSequence(sqlite, namespace, salt = "mockingbird")` | `next(prefix, length = 14)` gives deterministic ids like `cus_` + 14 alphanumerics, stable for a given history. |
 | `opaqueToken` | `(input: string, length: number) => string` | Deterministic alphanumeric token derived from `input` (non-cryptographic). |
 | `jsonRes` | `(status, body, headers?) => Response` | JSON response with `content-type: application/json`. |
@@ -116,6 +116,10 @@ the body is read.
 | `codePointLength` | `(value: string) => number` | String length in Unicode code points (JSON Schema `maxLength` semantics). |
 | `parseForm` | `(document, schema, raw: FormValue \| undefined, path?) => ParsedForm` | Validate and coerce a bracket-decoded form value against an OpenAPI schema. |
 | `sortIssues` | `(issues: FormIssue[]) => FormIssue[]` | Stable sort: `unknown`, then `missing`, then value errors. |
+| `MOCKINGBIRD_HEADER` | `"x-mockingbird"` | Set by `createRuntime` on every response: `<service>@<version>; ns=<namespace>`. |
+| `PACKAGE_VERSION` / `UNRELEASED_VERSION` | `string` | The bundled service's version (stamped by `release:publish`); `"0.0.0-development"` from source. |
+| `createJournal` | `(size = 1000) => Journal` | Per-namespace ring buffer of request logs behind `GET /__admin/requests`. |
+| `annotateResponse` / `responseNotes` | `(response, { ids?, adopted? }) => Response` | Attach the ids a handler touched to a response for the journal and log, without changing what the client sees. |
 
 Types:
 

@@ -198,7 +198,7 @@ function resultsNotAvailable(orderId: string): never {
 export const resultsHandlers = (state: JunctionState) => ({
   get_result_raw_v3_order__order_id__result_get: async (context: OperationContext) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context, "Order not found")
+    const order = requireOrder(state, orderId, context)
     const user = state.users.get(order.user_id)
     if (!resultsReady(order)) resultsNotAvailable(order.id)
     const flags = flagsOf(order)
@@ -244,7 +244,7 @@ export const resultsHandlers = (state: JunctionState) => ({
     context: OperationContext,
   ) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context, "Order not found")
+    const order = requireOrder(state, orderId, context)
     if (!resultsReady(order)) resultsNotAvailable(order.id)
     const user = state.users.get(order.user_id)
     return jsonRes(200, metadataOf(order, user?.client_user_id ?? order.user_id))
@@ -252,7 +252,7 @@ export const resultsHandlers = (state: JunctionState) => ({
 
   get_result_pdf_v3_order__order_id__result_pdf_get: async (context: OperationContext) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context, "Order not found")
+    const order = requireOrder(state, orderId, context)
     if (!resultsReady(order)) resultsNotAvailable(order.id)
     const fixturePdf = state.resultFixtures.get(order.id)?.pdf_base64
     const bytes =
@@ -269,7 +269,7 @@ export const resultsHandlers = (state: JunctionState) => ({
     context: OperationContext,
   ) => {
     const orderId = context.params.order_id ?? ""
-    const order = requireOrder(state, orderId, context, "This order doesn't exist")
+    const order = requireOrder(state, orderId, context)
     const bytes = deterministicPdf(`Requisition ${order.id}`)
     return new Response(bytes as unknown as BodyInit, {
       status: 200,

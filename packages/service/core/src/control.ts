@@ -1,5 +1,6 @@
 import type { Clock } from "./clock.js"
 import type { FaultRegistry, FaultRule } from "./faults.js"
+import type { Journal } from "./journal.js"
 import type { Metrics } from "./metrics.js"
 import type { NamespaceSnapshot } from "./snapshot.js"
 
@@ -37,6 +38,7 @@ export type ControlContext = {
   clock: Clock
   faults: FaultRegistry
   metrics: Metrics
+  journal: Journal
   defaultNamespace: string
   namespaces(): string[]
   reset(namespace: string | "*"): Promise<void>
@@ -203,6 +205,36 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
       snapshots.delete(params.id as string)
         ? json(200, { status: "ok" })
         : adminError(404, `no snapshot ${params.id}`),
+
+    "GET /requests": ({ url, namespace }) => {
+      const status = url.searchParams.get("status")
+      const since = url.searchParams.get("since")
+      const limit = url.searchParams.get("limit")
+      const sinceMs =
+        since === null ? undefined : parseInstant(/^\d+$/.test(since) ? Number(since) : since)
+      if (since !== null && sinceMs === undefined) {
+        return adminError(400, "since: expected epoch ms or ISO-8601")
+      }
+      if (status !== null && !/^\d{3}$/.test(status))
+        return adminError(400, "status: expected an HTTP status")
+      if (limit !== null && !/^\d+$/.test(limit)) return adminError(400, "limit: expected a count")
+      const operationId = url.searchParams.get("operationId")
+      const everyNamespace = url.searchParams.get("all") === "1"
+      return json(200, {
+        size: context.journal.size,
+        requests: context.journal.list({
+          ...(everyNamespace ? {} : { namespace }),
+          ...(operationId !== null ? { operationId } : {}),
+          ...(status !== null ? { status: Number(status) } : {}),
+          ...(sinceMs !== undefined ? { since: sinceMs } : {}),
+          ...(limit !== null ? { limit: Number(limit) } : {}),
+        }),
+      })
+    },
+    "DELETE /requests": ({ url, namespace }) => {
+      context.journal.clear(url.searchParams.get("all") === "1" ? undefined : namespace)
+      return json(200, { status: "ok" })
+    },
 
     "GET /metrics": () => json(200, context.metrics.report()),
     "DELETE /metrics": () => {

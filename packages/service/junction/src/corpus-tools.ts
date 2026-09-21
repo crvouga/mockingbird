@@ -6,11 +6,7 @@ import type { ExpectedResult, GetCacheEntry, LabTestRecord } from "./state.js"
 
 export const DEFAULT_JUNCTION_BASE_URL = "https://api.sandbox.tryvital.io"
 
-/** Key prefixes of sandbox team keys. `corpus pull` and `verify` refuse any other key. */
-export const SANDBOX_KEY_PREFIXES = ["sk_us_", "sk_eu_"] as const
-
-export const isSandboxKey = (key: string): boolean =>
-  SANDBOX_KEY_PREFIXES.some((prefix) => key.startsWith(prefix))
+export { isSandboxKey, SANDBOX_KEY_PREFIXES } from "./limits.js"
 
 export type PullCorpusOptions = {
   apiKey: string
@@ -61,9 +57,42 @@ export const fingerprintCorpus = async (corpus: SealedCorpus): Promise<string> =
     observations: corpus.observations,
     catalog: corpus.catalog,
     labAccounts: corpus.labAccounts,
+    // Absent from version-1 corpora, whose fingerprints stay what they were.
+    ...(corpus.teamId !== undefined ? { teamId: corpus.teamId } : {}),
   })
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(content))
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * The calling team's id, read without writing anything: a listed user's `team_id`, else
+ * the one team every non-empty lab-account allowlist names. `undefined` when neither
+ * says (a team with no users and no linked accounts).
+ */
+export const readTeamId = async (
+  real: PrefetchTarget,
+  labAccounts: readonly Record<string, unknown>[],
+): Promise<string | undefined> => {
+  const headers = { ...(await real.headers()), accept: "application/json" }
+  const response = await real
+    .fetch(new Request(`${real.baseUrl}/v2/user?offset=0&limit=1`, { headers }))
+    .catch(() => undefined)
+  if (response?.ok) {
+    const body = asRecord(await response.json().catch(() => undefined))
+    const first = Array.isArray(body?.users) ? asRecord(body.users[0]) : undefined
+    if (typeof first?.team_id === "string" && UUID.test(first.team_id)) return first.team_id
+  }
+  const named = new Set<string>()
+  for (const account of labAccounts) {
+    const allowlist = account.team_id_allowlist
+    if (!Array.isArray(allowlist) || allowlist.length === 0) continue
+    const ids = allowlist.filter((id): id is string => typeof id === "string")
+    if (named.size === 0) for (const id of ids) named.add(id)
+    else for (const id of [...named]) if (!ids.includes(id)) named.delete(id)
+  }
+  return named.size === 1 ? [...named][0] : undefined
 }
 
 /** Record a sealed corpus from a real Junction team. Read-only: it only issues GETs. */
@@ -121,10 +150,12 @@ export const pullCorpus = async (options: PullCorpusOptions): Promise<SealedCorp
       a < b ? -1 : a > b ? 1 : 0,
     ),
   )
+  const teamId = (await readTeamId(real, labAccounts)) ?? options.base?.teamId
   const corpus: SealedCorpus = {
     version: SEALED_CORPUS_VERSION,
     recordedAt: new Date().toISOString(),
     source: baseUrl,
+    ...(teamId !== undefined ? { teamId } : {}),
     observations,
     catalog,
     labAccounts,
@@ -137,6 +168,8 @@ export type SetDiff = { added: string[]; removed: string[]; changed: string[] }
 
 export type CorpusDiff = {
   identical: boolean
+  /** Set when the recorded team differs (or one side recorded none). */
+  teamId?: { before: string | null; after: string | null }
   observations: SetDiff
   labTests: SetDiff
   labAccounts: SetDiff
@@ -186,8 +219,12 @@ export const diffCorpus = (before: SealedCorpus, after: SealedCorpus): CorpusDif
     removed: [...beforeZips].filter((zip) => !afterZips.has(zip)).sort(),
   }
   const empty = (d: SetDiff) => d.added.length + d.removed.length + d.changed.length === 0
+  const teamChanged = (before.teamId ?? null) !== (after.teamId ?? null)
   return {
-    identical: empty(observations) && empty(labTests) && empty(labAccounts),
+    identical: empty(observations) && empty(labTests) && empty(labAccounts) && !teamChanged,
+    ...(teamChanged
+      ? { teamId: { before: before.teamId ?? null, after: after.teamId ?? null } }
+      : {}),
     observations,
     labTests,
     labAccounts,

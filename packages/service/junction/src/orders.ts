@@ -5,16 +5,20 @@ import {
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
+import { requireUser } from "./fixtures.js"
 import {
   effectiveBilling,
+  isLinkedToTeam,
   LAB_ACCOUNT_STATUSES,
   type LabAccountStatus,
   renderLabAccount,
   selectLabAccount,
 } from "./lab-accounts.js"
+import { checkSimulateAllowed } from "./limits.js"
+import { orderMissing } from "./not-found.js"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
-import type { JunctionState, OrderRecord } from "./state.js"
-import { deterministicUuid, MOCK_TEAM_ID } from "./state.js"
+import type { JunctionState, LabTestRecord, OrderRecord } from "./state.js"
+import { deterministicUuid } from "./state.js"
 
 const RESULT_TYPES = ["numeric", "range", "comment", "coded_value"] as const
 const INTERPRETATIONS = ["normal", "abnormal", "critical", "unknown"] as const
@@ -301,6 +305,95 @@ const labAccountStatusFilter = (context: OperationContext): LabAccountStatus | n
       },
     ],
   })
+}
+
+const enumError = (name: string, value: string, allowed: readonly string[]) => {
+  const expected =
+    allowed.length === 1
+      ? `'${allowed[0]}'`
+      : `${allowed
+          .slice(0, -1)
+          .map((entry) => `'${entry}'`)
+          .join(", ")} or '${allowed.at(-1)}'`
+  return {
+    type: "enum",
+    loc: ["query", name],
+    msg: `Input should be ${expected}`,
+    input: value,
+    ctx: { expected },
+  }
+}
+
+/** A list query parameter: repeated (`?a=1&a=2`) or one JSON array, as the Vital SDK sends it. */
+const listParam = (params: URLSearchParams, name: string): string[] | null => {
+  const values = params.getAll(name)
+  if (values.length === 0) return null
+  if (values.length === 1 && values[0]?.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(values[0]) as unknown
+      if (Array.isArray(parsed)) return parsed.map(String)
+    } catch {}
+  }
+  return values
+}
+
+const LAB_TEST_FILTER_ENUMS: Readonly<Record<string, readonly string[]>> = {
+  generation_method: ["auto", "manual", "all"],
+  collection_method: ["testkit", "walk_in_test", "at_home_phlebotomy", "on_site_collection"],
+  status: ["active", "pending_approval", "inactive"],
+  order_key: ["price", "created_at", "updated_at"],
+  order_direction: ["asc", "desc"],
+}
+
+/** `GET /v3/lab_tests` filters. Records carry no timestamps, so date keys keep catalog order. */
+const filterLabTests = (tests: LabTestRecord[], params: URLSearchParams): LabTestRecord[] => {
+  const errors: unknown[] = []
+  const pick = (name: string): string | null => {
+    const value = params.get(name)
+    if (value === null) return null
+    const allowed = LAB_TEST_FILTER_ENUMS[name]
+    if (allowed && !allowed.includes(value)) errors.push(enumError(name, value, allowed))
+    return value
+  }
+  const generation = pick("generation_method") ?? "manual"
+  const collection = pick("collection_method")
+  const status = pick("status")
+  const orderKey = pick("order_key")
+  const direction = pick("order_direction") ?? "asc"
+  const labSlug = params.get("lab_slug")
+  const name = params.get("name")?.toLowerCase() ?? null
+  const markerIds = listParam(params, "marker_ids")
+  const providerIds = listParam(params, "provider_ids")
+  for (const id of markerIds ?? []) {
+    if (!/^-?\d+$/.test(id))
+      errors.push({
+        type: "int_parsing",
+        loc: ["query", "marker_ids", markerIds?.indexOf(id) ?? 0],
+        msg: "Input should be a valid integer, unable to parse string as an integer",
+        input: id,
+      })
+  }
+  if (errors.length > 0) throw new HttpError(422, { detail: errors })
+  const filtered = tests.filter((test) => {
+    if (generation === "manual" && test.auto_generated === true) return false
+    if (generation === "auto" && test.auto_generated !== true) return false
+    if (collection !== null && test.method !== collection) return false
+    if (status !== null && test.status !== status) return false
+    if (labSlug !== null && String(test.lab?.slug ?? "") !== labSlug) return false
+    if (name !== null && !test.name.toLowerCase().includes(name)) return false
+    const markers = test.markers ?? []
+    if (markerIds && !markerIds.every((id) => markers.some((m) => String(m.id) === id)))
+      return false
+    if (
+      providerIds &&
+      !providerIds.every((id) => markers.some((m) => String(m.provider_id ?? "") === id))
+    )
+      return false
+    return true
+  })
+  const ordered =
+    orderKey === "price" ? [...filtered].sort((a, b) => (a.price ?? 0) - (b.price ?? 0)) : filtered
+  return direction === "desc" ? [...ordered].reverse() : ordered
 }
 
 const isValidPhone = (value: string): boolean => {
@@ -739,6 +832,11 @@ export const orderHandlers = (state: JunctionState) => ({
       next_cursor: null,
     }),
 
+  // Deprecated upstream but still what team-catalog readers call: the same records as the
+  // paged `/v3/lab_test`, as a bare array, filtered the way the real endpoint documents.
+  get_lab_tests_for_team_v3_lab_tests_get: async (context: OperationContext) =>
+    jsonRes(200, filterLabTests(state.listLabTests(), context.url.searchParams)),
+
   get_lab_test_for_team_v3_lab_tests__lab_test_id__get: async (context: OperationContext) => {
     const id = context.params.lab_test_id ?? ""
     const test = state.labTestById(id)
@@ -753,7 +851,7 @@ export const orderHandlers = (state: JunctionState) => ({
     const status = labAccountStatusFilter(context)
     const data = state
       .listLabAccounts()
-      .filter((entry) => entry.team_id_allowlist.includes(MOCK_TEAM_ID))
+      .filter((entry) => isLinkedToTeam(entry, state.teamId))
       .filter((entry) => requestedId === null || entry.id === requestedId)
       .filter((entry) => status === null || entry.status === status)
       .map(renderLabAccount)
@@ -839,8 +937,7 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     const userId = body.user_id
     if (typeof userId !== "string") throw new HttpError(422, { detail: "user_id must be a string" })
-    if (!state.users.has(userId) && !state.deletedUsers.has(userId))
-      notFound("User does not exist on this team")
+    requireUser(state, userId, context)
     const phone = (body.patient_details as Record<string, unknown> | undefined)?.phone_number
     if (typeof phone === "string" && /^\+1\d{10}$/.test(phone) && phone.slice(2, 5) === "555") {
       throw new HttpError(400, { detail: "Phone number is not correct" })
@@ -903,7 +1000,7 @@ export const orderHandlers = (state: JunctionState) => ({
     const labAccount = selectLabAccount(
       labSlug,
       typeof body.lab_account_id === "string" ? body.lab_account_id : null,
-      MOCK_TEAM_ID,
+      state.teamId,
       state.listLabAccounts(),
     )
     const billingType =
@@ -928,10 +1025,7 @@ export const orderHandlers = (state: JunctionState) => ({
         detail: "Commercial insurance orders require at least one ICD code in icd_codes",
       })
 
-    const nowIso = state.isoNow(context.now)
-    const nowMicro = new Date(context.now()).toISOString()
     const orderId = state.nextOrderId()
-    const transactionId = state.transactionIdFor(orderId)
     const method =
       typeof body.collection_method === "string" ? body.collection_method : labTest.method
     // Sandbox: same collection_method as the panel → embed the panel as-is (even when
@@ -956,124 +1050,24 @@ export const orderHandlers = (state: JunctionState) => ({
         return jsonRes(200, replay.response)
       }
     }
-    const eventStatus = `received.${method}.ordered`
-    const eventId =
-      Number.parseInt(opaqueToken(`junction:order-event:${orderId}`, 8), 16) % 1_000_000_000 || 1
-    const event = {
-      id: eventId,
-      created_at: nowIso,
-      status: eventStatus,
-      status_detail: null,
-    }
-    let orderLabTest: typeof labTest
-    if (method === nativeMethod) {
-      orderLabTest = labTest
-    } else {
-      const markerFingerprint = (test: { markers?: Array<{ id: number }> | null }) =>
-        (test.markers ?? [])
-          .map((marker) => marker.id)
-          .sort((a, b) => a - b)
-          .join(",")
-      const sourceFingerprint = markerFingerprint(labTest)
-      const existingAuto = state
-        .listLabTests()
-        .find(
-          (test) =>
-            test.auto_generated === true &&
-            test.method === method &&
-            markerFingerprint(test) === sourceFingerprint,
-        )
-      const orderLabTestKey = `${labTest.id}:${method}`
-      const orderLabTestName =
-        existingAuto?.name ?? opaqueToken(`junction:order-lab-name:${orderLabTestKey}`, 16)
-      orderLabTest = existingAuto ?? {
-        ...labTest,
-        id: deterministicUuid(`junction:order-lab-test:${orderLabTestKey}`),
+    const order = buildOrderRecord(
+      state,
+      {
+        orderId,
+        userId,
+        labTest,
         method,
-        auto_generated: true,
-        name: orderLabTestName,
-        slug: `afd62b39-${orderLabTestName}`,
-      }
-    }
-    const order: OrderRecord = {
-      id: orderId,
-      user_id: userId,
-      team_id: MOCK_TEAM_ID,
-      patient_details: patientDetails(details as Record<string, unknown>),
-      patient_address: patientAddress(address as Record<string, unknown>),
-      lab_test: orderLabTest,
-      details: METHOD_DETAILS(method, state.testkitIdFor(orderId), nowIso),
-      sample_id: null,
-      notes: null,
-      clinical_notes: typeof body.clinical_notes === "string" ? body.clinical_notes : null,
-      passthrough: typeof body.passthrough === "string" ? body.passthrough : null,
-      ...(typeof body.lab_account_id === "string" ? { lab_account_id: body.lab_account_id } : {}),
-      created_at: nowIso,
-      updated_at: nowIso,
-      events: [event],
-      status: "received",
-      last_event: event,
-      physician: PHYSICIAN,
-      health_insurance_id: null,
-      requisition_form_url: null,
-      shipping_details: null,
-      has_abn: false,
-      billing_type: billingType,
-      priority: false,
-      activate_by: null,
-      icd_codes: icdCodes,
-      interpretation: null,
-      has_missing_results: null,
-      result_types: null,
-      expected_result_by_date: null,
-      worst_case_result_by_date: null,
-      origin: "initial",
-      order_transaction: {
-        id: transactionId,
-        status: "active",
-        orders: [
-          {
-            id: orderId,
-            low_level_status: "ordered",
-            low_level_status_created_at: nowMicro,
-            origin: "initial",
-            parent_id: null,
-            created_at: nowMicro,
-            updated_at: nowMicro,
-          },
-        ],
+        patientDetails: details,
+        patientAddress: address,
+        billingType,
+        icdCodes,
+        clinicalNotes: typeof body.clinical_notes === "string" ? body.clinical_notes : null,
+        passthrough: typeof body.passthrough === "string" ? body.passthrough : null,
+        ...(typeof body.lab_account_id === "string" ? { labAccountId: body.lab_account_id } : {}),
       },
-    }
-    state.orders.insert(orderId, order)
-    state.orderByTransaction.insert(transactionId, { order_id: orderId })
-    state.upsertLabTest(
-      orderLabTest,
-      orderLabTest.id === labTest.id ? undefined : state.expectedResultsFor(labTest.id),
+      context.now,
     )
-    const demographics = {
-      first_name: details.first_name ?? null,
-      last_name: details.last_name ?? null,
-      dob: details.dob ?? null,
-      gender: details.gender ?? null,
-      phone_number: details.phone_number ?? null,
-      email: details.email ?? null,
-      gender_identity: null,
-      sexual_orientation: null,
-      race: null,
-      ethnicity: null,
-      medical_proxy: null,
-      address: {
-        first_line: address.first_line ?? "",
-        second_line: typeof address.second_line === "string" ? address.second_line : "",
-        country: address.country ?? "",
-        zip: address.zip ?? "",
-        city: address.city ?? "",
-        state: address.state ?? "",
-        access_notes: null,
-      },
-    }
-    if (state.userInfo.get(userId)) state.userInfo.update(userId, demographics)
-    else state.userInfo.insert(userId, demographics)
+    persistOrderRecord(state, order, labTest, details, address)
     const responseOrder = { ...order } as Record<string, unknown>
     if (responseOrder.result_types === null) delete responseOrder.result_types
     const response = {
@@ -1093,8 +1087,7 @@ export const orderHandlers = (state: JunctionState) => ({
 
   cancel_order_v3_order__order_id__cancel_post: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
-    const order = state.orders.get(id)
-    if (!order) notFound("Order doesn't exist")
+    const order = state.orders.get(id) ?? orderMissing(state, context.operation.operationId, id)
     const alreadyCancelled = order.events.some(
       (entry) => typeof entry.status === "string" && entry.status.startsWith("cancelled."),
     )
@@ -1189,8 +1182,8 @@ export const orderHandlers = (state: JunctionState) => ({
         })
       }
     }
-    const order = state.orders.get(id)
-    if (!order) notFound("Order doesn't exist")
+    const order = state.orders.get(id) ?? orderMissing(state, context.operation.operationId, id)
+    checkSimulateAllowed(state.limits, context.request.headers.get("x-vital-api-key"))
     if (
       typeof finalStatus !== "string" ||
       !FINAL_STATUSES.includes(finalStatus as (typeof FINAL_STATUSES)[number])
@@ -1212,13 +1205,11 @@ export const orderHandlers = (state: JunctionState) => ({
 
   get_order_v3_order__order_id__get: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
-    const order = state.orders.get(id)
-    if (!order) notFound("This order doesn't exist")
+    if (!state.orders.has(id)) orderMissing(state, context.operation.operationId, id)
     state.applyDueSimulateTransitions(context.now(), (due, finalStatus, flags) => {
       applySimulateTransition(state, due, finalStatus, flags, context)
     })
-    const fresh = state.orders.get(id)
-    if (!fresh) notFound("This order doesn't exist")
+    const fresh = state.orders.get(id) ?? orderMissing(state, context.operation.operationId, id)
     const body = { ...fresh } as Record<string, unknown>
     if (body.result_types === null) delete body.result_types
     return jsonRes(200, body)
@@ -1232,8 +1223,7 @@ export const orderHandlers = (state: JunctionState) => ({
     const userId = context.query.user_id
     if (userId !== undefined && typeof userId !== "string")
       throw new HttpError(422, { detail: "user_id must be a string" })
-    if (userId !== undefined && !state.users.has(userId) && !state.deletedUsers.has(userId))
-      notFound("User does not exist on this team")
+    if (userId !== undefined) requireUser(state, userId, context)
     let all = state.orders.list({ order: "oldest" })
     if (userId !== undefined) all = all.filter((entry) => entry.value.user_id === userId)
     // Sandbox lists by updated_at desc (not created_at) — wrong order breaks
@@ -1268,7 +1258,7 @@ export const orderHandlers = (state: JunctionState) => ({
     if (!order) notFound("Order transaction not found")
     return jsonRes(200, {
       id,
-      team_id: MOCK_TEAM_ID,
+      team_id: state.teamId,
       status: order.order_transaction.status,
       orders: [orderSummary(order)],
     })
@@ -1306,6 +1296,172 @@ export const orderHandlers = (state: JunctionState) => ({
     })
   },
 })
+
+/** What an order is built from, once the request (or an admin fixture) has been validated. */
+export type OrderDraft = {
+  orderId: string
+  userId: string
+  /** The catalog lab test ordered; embedded as-is when `method` is its native method. */
+  labTest: LabTestRecord
+  method: string
+  patientDetails: Record<string, unknown>
+  patientAddress: Record<string, unknown>
+  billingType: string
+  icdCodes: string[] | null
+  clinicalNotes: string | null
+  passthrough: string | null
+  labAccountId?: string
+}
+
+/** The order record `create_order` stores, in its initial `received.<method>.ordered` state. */
+export const buildOrderRecord = (
+  state: JunctionState,
+  draft: OrderDraft,
+  now: () => number,
+): OrderRecord => {
+  const { orderId, userId, labTest, method, billingType, icdCodes } = draft
+  const details = draft.patientDetails
+  const nowIso = state.isoNow(now)
+  const nowMicro = new Date(now()).toISOString()
+  const transactionId = state.transactionIdFor(orderId)
+  const nativeMethod =
+    typeof labTest.method === "string" && labTest.method.length > 0 ? labTest.method : method
+  const eventStatus = `received.${method}.ordered`
+  const eventId =
+    Number.parseInt(opaqueToken(`junction:order-event:${orderId}`, 8), 16) % 1_000_000_000 || 1
+  const event = {
+    id: eventId,
+    created_at: nowIso,
+    status: eventStatus,
+    status_detail: null,
+  }
+  let orderLabTest: typeof labTest
+  if (method === nativeMethod) {
+    orderLabTest = labTest
+  } else {
+    const markerFingerprint = (test: { markers?: Array<{ id: number }> | null }) =>
+      (test.markers ?? [])
+        .map((marker) => marker.id)
+        .sort((a, b) => a - b)
+        .join(",")
+    const sourceFingerprint = markerFingerprint(labTest)
+    const existingAuto = state
+      .listLabTests()
+      .find(
+        (test) =>
+          test.auto_generated === true &&
+          test.method === method &&
+          markerFingerprint(test) === sourceFingerprint,
+      )
+    const orderLabTestKey = `${labTest.id}:${method}`
+    const orderLabTestName =
+      existingAuto?.name ?? opaqueToken(`junction:order-lab-name:${orderLabTestKey}`, 16)
+    orderLabTest = existingAuto ?? {
+      ...labTest,
+      id: deterministicUuid(`junction:order-lab-test:${orderLabTestKey}`),
+      method,
+      auto_generated: true,
+      name: orderLabTestName,
+      slug: `afd62b39-${orderLabTestName}`,
+    }
+  }
+  const order: OrderRecord = {
+    id: orderId,
+    user_id: userId,
+    team_id: state.teamId,
+    patient_details: patientDetails(details),
+    patient_address: patientAddress(draft.patientAddress),
+    lab_test: orderLabTest,
+    details: METHOD_DETAILS(method, state.testkitIdFor(orderId), nowIso),
+    sample_id: null,
+    notes: null,
+    clinical_notes: draft.clinicalNotes,
+    passthrough: draft.passthrough,
+    ...(draft.labAccountId !== undefined ? { lab_account_id: draft.labAccountId } : {}),
+    created_at: nowIso,
+    updated_at: nowIso,
+    events: [event],
+    status: "received",
+    last_event: event,
+    physician: PHYSICIAN,
+    health_insurance_id: null,
+    requisition_form_url: null,
+    shipping_details: null,
+    has_abn: false,
+    billing_type: billingType,
+    priority: false,
+    activate_by: null,
+    icd_codes: icdCodes,
+    interpretation: null,
+    has_missing_results: null,
+    result_types: null,
+    expected_result_by_date: null,
+    worst_case_result_by_date: null,
+    origin: "initial",
+    order_transaction: {
+      id: transactionId,
+      status: "active",
+      orders: [
+        {
+          id: orderId,
+          low_level_status: "ordered",
+          low_level_status_created_at: nowMicro,
+          origin: "initial",
+          parent_id: null,
+          created_at: nowMicro,
+          updated_at: nowMicro,
+        },
+      ],
+    },
+  }
+  return order
+}
+
+/**
+ * Store an order built by {@link buildOrderRecord}: the order, its transaction binding,
+ * the lab test it embeds, and the patient's demographics — everything `create_order`
+ * writes, so an order inserted any other way reads back the same.
+ */
+export const persistOrderRecord = (
+  state: JunctionState,
+  order: OrderRecord,
+  labTest: LabTestRecord,
+  details: Record<string, unknown>,
+  address: Record<string, unknown>,
+): void => {
+  const userId = order.user_id
+  const orderLabTest = order.lab_test
+  state.orders.insert(order.id, order)
+  state.orderByTransaction.insert(order.order_transaction.id, { order_id: order.id })
+  state.upsertLabTest(
+    orderLabTest,
+    orderLabTest.id === labTest.id ? undefined : state.expectedResultsFor(labTest.id),
+  )
+  const demographics = {
+    first_name: details.first_name ?? null,
+    last_name: details.last_name ?? null,
+    dob: details.dob ?? null,
+    gender: details.gender ?? null,
+    phone_number: details.phone_number ?? null,
+    email: details.email ?? null,
+    gender_identity: null,
+    sexual_orientation: null,
+    race: null,
+    ethnicity: null,
+    medical_proxy: null,
+    address: {
+      first_line: address.first_line ?? "",
+      second_line: typeof address.second_line === "string" ? address.second_line : "",
+      country: address.country ?? "",
+      zip: address.zip ?? "",
+      city: address.city ?? "",
+      state: address.state ?? "",
+      access_notes: null,
+    },
+  }
+  if (state.userInfo.get(userId)) state.userInfo.update(userId, demographics)
+  else state.userInfo.insert(userId, demographics)
+}
 
 const orderSummary = (order: OrderRecord) => {
   const transactionOrder = order.order_transaction.orders.find((entry) => entry.id === order.id)

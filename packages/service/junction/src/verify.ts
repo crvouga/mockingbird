@@ -1,4 +1,5 @@
 import { canonicalJson, DEFAULT_JUNCTION_BASE_URL } from "./corpus-tools.js"
+import { ORDER_NOT_FOUND } from "./not-found.js"
 import type { SealedCorpus } from "./sealed-corpus.js"
 
 /**
@@ -11,8 +12,12 @@ import type { SealedCorpus } from "./sealed-corpus.js"
  *   optionally orders) run against both sides, comparing status codes, response
  *   shapes, and — for the documented error bodies — exact bytes.
  *
+ * The scenario also replays every order-scoped operation against a random unknown order
+ * (each 404 body compared exactly) and, with `orders` and a corpus holding an account whose
+ * `team_id_allowlist` is empty, orders through that account with and without its id.
+ *
  * Only a sandbox team should be used: the scenario creates, and always deletes, one
- * user (and, with `orders`, places and cancels one order).
+ * user (and, with `orders`, places and cancels its orders).
  */
 export type VerifyOptions = {
   realKey: string
@@ -92,7 +97,112 @@ export const firstDifference = (a: unknown, b: unknown, path = "$"): string | un
   return path
 }
 
-type Context = { clientUserId: string; userId?: string; orderId?: string }
+type Context = {
+  clientUserId: string
+  userId?: string
+  orderId?: string
+  /** Orders placed by the lab-account probes, cancelled with the rest. */
+  extraOrders: string[]
+}
+
+/** How to reach each order-scoped operation for an unknown order, past its validation. */
+const orderScopedCalls = (
+  orderId: string,
+): Record<string, { method: string; path: string; body?: unknown }> => {
+  const base = `/v3/order/${orderId}`
+  const key = { booking_key: "00000000-0000-4000-8000-00000000b00c" }
+  const reason = { cancellation_reason_id: "00000000-0000-4000-8000-00000000c0de" }
+  return {
+    get_order_v3_order__order_id__get: { method: "GET", path: base },
+    cancel_order_v3_order__order_id__cancel_post: { method: "POST", path: `${base}/cancel` },
+    simulate_order_v3_order__order_id__test_post: {
+      method: "POST",
+      path: `${base}/test?final_status=completed.at_home_phlebotomy.completed`,
+      body: {},
+    },
+    get_order_requisition_pdf_v3_order__order_id__requisition_pdf_get: {
+      method: "GET",
+      path: `${base}/requisition/pdf`,
+    },
+    get_result_raw_v3_order__order_id__result_get: { method: "GET", path: `${base}/result` },
+    get_result_metadata_v3_order__order_id__result_metadata_get: {
+      method: "GET",
+      path: `${base}/result/metadata`,
+    },
+    get_result_pdf_v3_order__order_id__result_pdf_get: {
+      method: "GET",
+      path: `${base}/result/pdf`,
+    },
+    get_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_get: {
+      method: "GET",
+      path: `${base}/phlebotomy/appointment`,
+    },
+    book_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_book_post: {
+      method: "POST",
+      path: `${base}/phlebotomy/appointment/book`,
+      body: key,
+    },
+    reschedule_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_reschedule_patch: {
+      method: "PATCH",
+      path: `${base}/phlebotomy/appointment/reschedule`,
+      body: key,
+    },
+    cancel_phlebotomy_appointment_v3_order__order_id__phlebotomy_appointment_cancel_patch: {
+      method: "PATCH",
+      path: `${base}/phlebotomy/appointment/cancel`,
+      body: reason,
+    },
+    get_psc_appointment_v3_order__order_id__psc_appointment_get: {
+      method: "GET",
+      path: `${base}/psc/appointment`,
+    },
+    book_psc_appointment_v3_order__order_id__psc_appointment_book_post: {
+      method: "POST",
+      path: `${base}/psc/appointment/book`,
+      body: key,
+    },
+    reschedule_psc_appointment_v3_order__order_id__psc_appointment_reschedule_patch: {
+      method: "PATCH",
+      path: `${base}/psc/appointment/reschedule`,
+      body: key,
+    },
+    cancel_psc_appointment_v3_order__order_id__psc_appointment_cancel_patch: {
+      method: "PATCH",
+      path: `${base}/psc/appointment/cancel`,
+      body: reason,
+    },
+  }
+}
+
+const orderBody = (
+  userId: string | undefined,
+  labTestId: string,
+  extra: Record<string, unknown> = {},
+) => ({
+  user_id: userId,
+  patient_details: {
+    first_name: "Mockingbird",
+    last_name: "Verify",
+    dob: "1990-01-01",
+    gender: "female",
+    phone_number: "+14155551234",
+    email: "verify@example.com",
+  },
+  patient_address: {
+    first_line: "1 Main St",
+    city: "San Diego",
+    state: "CA",
+    zip: "92101",
+    country: "US",
+  },
+  order_set: { lab_test_ids: [labTestId] },
+  ...extra,
+})
+
+const captureExtraOrder = (reply: Reply, ctx: Context) => {
+  const id = (reply.body as { order?: { id?: unknown } } | null)?.order?.id
+  if (typeof id === "string") ctx.extraOrders.push(id)
+}
 
 type Step = {
   name: string
@@ -158,6 +268,11 @@ const scenario = (corpus: SealedCorpus, withOrders: boolean): Step[] => {
       request: () => ({ method: "GET", path: "/v3/lab_tests/labs" }),
     },
     {
+      name: "lab tests (bare array)",
+      compare: "shape",
+      request: () => ({ method: "GET", path: "/v3/lab_tests" }),
+    },
+    {
       name: `area info ${zip}`,
       compare: "exact",
       request: () => ({ method: "GET", path: `/v3/order/area/info?zip_code=${zip}&radius=100` }),
@@ -171,25 +286,7 @@ const scenario = (corpus: SealedCorpus, withOrders: boolean): Step[] => {
         request: (ctx) => ({
           method: "POST",
           path: "/v3/order",
-          body: {
-            user_id: ctx.userId,
-            patient_details: {
-              first_name: "Mockingbird",
-              last_name: "Verify",
-              dob: "1990-01-01",
-              gender: "female",
-              phone_number: "+14155551234",
-              email: "verify@example.com",
-            },
-            patient_address: {
-              first_line: "1 Main St",
-              city: "San Diego",
-              state: "CA",
-              zip: "92101",
-              country: "US",
-            },
-            order_set: { lab_test_ids: [labTestId] },
-          },
+          body: orderBody(ctx.userId, labTestId),
         }),
         capture: (reply, ctx) => {
           const id = (reply.body as { order?: { id?: unknown } } | null)?.order?.id
@@ -207,6 +304,56 @@ const scenario = (corpus: SealedCorpus, withOrders: boolean): Step[] => {
         compare: "shape",
         skip: (ctx) => !ctx.real.orderId || !ctx.mock.orderId,
         request: (ctx) => ({ method: "POST", path: `/v3/order/${ctx.orderId}/cancel` }),
+      },
+    )
+  }
+  // Unknown-order 404s: Junction words each endpoint's differently, so every one is exact.
+  const unknownOrder = crypto.randomUUID()
+  const calls = orderScopedCalls(unknownOrder)
+  for (const operationId of Object.keys(ORDER_NOT_FOUND)) {
+    const call = calls[operationId]
+    if (!call) continue
+    steps.push({
+      name: `unknown order 404 ${operationId}`,
+      compare: "exact",
+      request: () => call,
+    })
+  }
+  // What an empty `team_id_allowlist` means for ordering is unverified (SUPPORT.md): order
+  // through such an account by explicit id, and with the id omitted, and compare.
+  const openAccount = corpus.labAccounts.find(
+    (account) =>
+      Array.isArray(account.team_id_allowlist) &&
+      account.team_id_allowlist.length === 0 &&
+      account.status === "active",
+  )
+  const openLabTest = openAccount
+    ? corpus.catalog.labTests.find(
+        (test) =>
+          String(test.lab?.slug ?? "").toLowerCase() === String(openAccount.lab).toLowerCase(),
+      )
+    : undefined
+  if (withOrders && openAccount && openLabTest) {
+    steps.push(
+      {
+        name: `order.create via empty-allowlist account ${String(openAccount.id)}`,
+        compare: "shape",
+        request: (ctx) => ({
+          method: "POST",
+          path: "/v3/order",
+          body: orderBody(ctx.userId, openLabTest.id, { lab_account_id: openAccount.id }),
+        }),
+        capture: captureExtraOrder,
+      },
+      {
+        name: `order.create for ${String(openAccount.lab)} with lab_account_id omitted`,
+        compare: "shape",
+        request: (ctx) => ({
+          method: "POST",
+          path: "/v3/order",
+          body: orderBody(ctx.userId, openLabTest.id),
+        }),
+        capture: captureExtraOrder,
       },
     )
   }
@@ -290,7 +437,10 @@ export const verifyAgainstReal = async (options: VerifyOptions): Promise<VerifyR
 
   // ── scenario ─────────────────────────────────────────────────────
   const clientUserId = `mockingbird-verify-${Date.now().toString(36)}`
-  const ctx: Record<Side, Context> = { real: { clientUserId }, mock: { clientUserId } }
+  const ctx: Record<Side, Context> = {
+    real: { clientUserId, extraOrders: [] },
+    mock: { clientUserId, extraOrders: [] },
+  }
   const steps = scenario(options.corpus, options.orders === true)
   let ran = 0
   let divergent = 0
@@ -334,8 +484,9 @@ export const verifyAgainstReal = async (options: VerifyOptions): Promise<VerifyR
     }
   } finally {
     // Never leave the verify user behind on the real team: it counts against the sandbox cap.
-    if (ctx.real.orderId) {
-      await call("real", "POST", `/v3/order/${ctx.real.orderId}/cancel`).catch(() => undefined)
+    for (const orderId of [ctx.real.orderId, ...ctx.real.extraOrders]) {
+      if (orderId === undefined) continue
+      await call("real", "POST", `/v3/order/${orderId}/cancel`).catch(() => undefined)
     }
     if (ctx.real.userId) {
       await call("real", "DELETE", `/v2/user/${ctx.real.userId}`).catch(() => undefined)

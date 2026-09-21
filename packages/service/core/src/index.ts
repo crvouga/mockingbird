@@ -24,6 +24,13 @@ export { parseForm, sortIssues } from "./form-schema.js"
 export type { FieldResult } from "./http.js"
 export { codePointLength, coerce, HttpError, jsonRes, jsonRes as jsonResponse } from "./http.js"
 export { IdSequence, opaqueToken } from "./ids.js"
+export type { Journal, JournalEntry, JournalQuery, ResponseNotes } from "./journal.js"
+export {
+  annotateResponse,
+  createJournal,
+  DEFAULT_JOURNAL_SIZE,
+  responseNotes,
+} from "./journal.js"
 export type { Metrics, MetricsReport, RequestLog } from "./metrics.js"
 export { createMetrics } from "./metrics.js"
 export type { Rng } from "./rng.js"
@@ -34,7 +41,7 @@ export type {
   ServiceInstance,
   ServiceRuntime,
 } from "./runtime.js"
-export { createRuntime, DEFAULT_NAMESPACE } from "./runtime.js"
+export { createRuntime, DEFAULT_NAMESPACE, MOCKINGBIRD_HEADER } from "./runtime.js"
 export type {
   APIOptions,
   OperationContext,
@@ -52,3 +59,4 @@ export {
 } from "./service.js"
 export type { NamespaceSnapshot } from "./snapshot.js"
 export { restoreNamespace, snapshotNamespace } from "./snapshot.js"
+export { PACKAGE_VERSION, UNRELEASED_VERSION } from "./version.js"

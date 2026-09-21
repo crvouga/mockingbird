@@ -11,6 +11,10 @@ export type RequestLog = {
   unmatched: boolean
   /** Set when a fault rule produced the response. */
   faultId?: string
+  /** Resource ids the handler touched (`userId`, `orderId`, …), when the service reports them. */
+  ids?: Record<string, string>
+  /** Set when the service created a resource the request referred to but that did not exist. */
+  adopted?: boolean
 }
 
 export type MetricsReport = {

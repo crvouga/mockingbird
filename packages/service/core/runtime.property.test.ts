@@ -4,14 +4,18 @@ import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import {
   ADMIN_KEY_HEADER,
+  annotateResponse,
   Collection,
   createClock,
+  createJournal,
   createRng,
   createRuntime,
   createService,
   type InstanceContext,
   jsonRes,
+  MOCKINGBIRD_HEADER,
   NAMESPACE_HEADER,
+  PACKAGE_VERSION,
   parseDuration,
 } from "./src/index.js"
 
@@ -304,5 +308,92 @@ describe("runtime", () => {
     const runtime = createRuntime({ name: "notes", document, create: notesService })
     const res = await call(runtime, "GET", "/v1/notes", { headers: { [NAMESPACE_HEADER]: "a b" } })
     expect(res.status).toBe(400)
+    expect(res.headers.get(MOCKINGBIRD_HEADER)).toBe(`notes@${PACKAGE_VERSION}`)
+  })
+
+  test("every response names the service, its version and the namespace", async () => {
+    const runtime = createRuntime({
+      name: "notes",
+      document,
+      create: notesService,
+      version: "9.9.9",
+    })
+    runtime.faults.add({ id: "f", pathPrefix: "/v1/notes/", status: 503 })
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom("/v1/notes", "/v1/notes/x", "/nope", "/health", "/__admin", "/__admin/x"),
+        fc.constantFrom("default", "w1"),
+        fc.boolean(),
+        async (path, namespace, keyed) => {
+          const res = await call(runtime, "GET", path, {
+            headers: { [NAMESPACE_HEADER]: namespace, ...(keyed ? {} : { "x-key": "" }) },
+          })
+          expect(res.headers.get(MOCKINGBIRD_HEADER)).toBe(`notes@9.9.9; ns=${namespace}`)
+        },
+      ),
+      params,
+    )
+  })
+
+  test("the journal keeps the last requests per namespace, with the ids a service notes", async () => {
+    const annotated = (context: InstanceContext) => {
+      const inner = notesService(context)
+      return {
+        reset: inner.reset,
+        fetch: async (request: Request) => {
+          const response = await inner.fetch(request)
+          return annotateResponse(response, { ids: { noteId: "note_1" }, adopted: true })
+        },
+      }
+    }
+    const runtime = createRuntime({ name: "notes", document, create: annotated, journalSize: 2 })
+    for (const text of ["a", "b", "c"]) await call(runtime, "POST", "/v1/notes", { body: { text } })
+    await call(runtime, "GET", "/v1/notes", { headers: { [NAMESPACE_HEADER]: "other" } })
+    const res = await call(runtime, "GET", "/__admin/requests")
+    const { requests, size } = (await res.json()) as {
+      requests: Record<string, unknown>[]
+      size: number
+    }
+    expect(size).toBe(2)
+    expect(requests).toHaveLength(2)
+    expect(requests.every((entry) => entry.operationId === "notes.create")).toBe(true)
+    expect(requests[0]?.ids).toEqual({ noteId: "note_1" })
+    expect(requests[0]?.adopted).toBe(true)
+    const everywhere = await call(runtime, "GET", "/__admin/requests?all=1")
+    expect(((await everywhere.json()) as { requests: unknown[] }).requests).toHaveLength(3)
+  })
+
+  test("a journal ring keeps the newest entries in arrival order", () => {
+    fc.assert(
+      fc.property(
+        fc.integer({ min: 0, max: 6 }),
+        fc.integer({ min: 0, max: 20 }),
+        (size, count) => {
+          const journal = createJournal(size)
+          for (let i = 0; i < count; i++) {
+            journal.record({
+              service: "s",
+              namespace: "n",
+              operationId: String(i),
+              method: "GET",
+              path: "/",
+              status: 200,
+              durationMs: 0,
+              unmatched: false,
+              at: new Date(i).toISOString(),
+            })
+          }
+          const kept = journal.list({ namespace: "n" }).map((entry) => Number(entry.operationId))
+          const expected = Array.from({ length: count }, (_, i) => i).slice(
+            size === 0 ? count : -size,
+          )
+          expect(kept).toEqual(expected)
+          expect(
+            journal.list({ namespace: "n", since: 3 }).every((e) => Date.parse(e.at) >= 3),
+          ).toBe(true)
+        },
+      ),
+      params,
+    )
   })
 })

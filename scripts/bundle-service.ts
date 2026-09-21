@@ -19,6 +19,7 @@ import { $ } from "bun"
 import { build } from "esbuild"
 import { rollup } from "rollup"
 import { dts } from "rollup-plugin-dts"
+import { VERSION_PLACEHOLDER } from "./bundle-service-version.ts"
 
 const pkgDir = process.cwd()
 const pkg = JSON.parse(await Bun.file(join(pkgDir, "package.json")).text()) as {
@@ -75,6 +76,9 @@ const js = await build({
   mainFields: ["module", "main"],
   target: "es2022",
   sourcemap: true,
+  // The unreleased placeholder; `release:publish` rewrites it to the version it publishes
+  // (see UNRELEASED_VERSION in packages/service/core/src/version.ts).
+  define: { __MOCKINGBIRD_PACKAGE_VERSION__: JSON.stringify(VERSION_PLACEHOLDER) },
   external: [...external, "node:*", "bun", "bun:*"],
   logLevel: "warning",
   metafile: true,

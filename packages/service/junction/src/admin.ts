@@ -5,8 +5,22 @@ import {
   jsonRes,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
+import {
+  fixtureErrorMessage,
+  IDENTITY_MODES,
+  type IdentityMode,
+  type JunctionFixtures,
+  type OrderFixture,
+  type UserFixture,
+} from "./fixtures.js"
 import type { JunctionAPI } from "./index.js"
-import type { LabAccountInput } from "./lab-accounts.js"
+import {
+  LAB_ACCOUNT_PRESETS,
+  type LabAccountLayout,
+  labAccountFromPreset,
+} from "./lab-account-presets.js"
+import { type LabAccountInput, renderLabAccount } from "./lab-accounts.js"
+import { sandboxUserQuotaBody } from "./limits.js"
 import type { GeoMode, ResultFixture } from "./state.js"
 import type { WebhookDispatcher } from "./webhooks.js"
 
@@ -148,12 +162,7 @@ export const FAULT_PRESETS: Readonly<Record<string, Omit<FaultRule, "id">>> = {
   sandbox_user_quota: {
     operationId: "create_user_v2_user_post",
     status: 400,
-    body: {
-      detail: {
-        error_type: "INVALID_REQUEST",
-        error_message: "You have reached the maximum of 50 Sandbox users",
-      },
-    },
+    body: sandboxUserQuotaBody(50),
   },
   rate_limited: {
     status: 429,
@@ -203,6 +212,23 @@ const adminError = (status: number, message: string) =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
+
+/**
+ * Run an admin mutation, turning a bad input into a 400 naming the field, a clash into a
+ * 409, and a missing reference into a 404 — all in the admin error shape.
+ */
+const guarded = (run: () => Response): Response => {
+  try {
+    return run()
+  } catch (error) {
+    if (error instanceof TypeError) return adminError(400, error.message)
+    if (error instanceof Error && error.name === "LabAccountConflict") {
+      return adminError(409, error.message)
+    }
+    const { status, message } = fixtureErrorMessage(error)
+    return adminError(status, message)
+  }
+}
 
 export type JunctionAdminOptions = {
   webhooks: WebhookDispatcher | undefined
@@ -278,15 +304,133 @@ export const junctionAdminRoutes =
       "GET /lab-accounts": (request) => jsonRes(200, { data: api(request).labAccounts() }),
       "PUT /lab-accounts": (request) => {
         const body = isRecord(request.body) ? request.body : {}
-        if (body.accounts !== null && !Array.isArray(body.accounts)) {
-          return adminError(400, 'body needs "accounts": an array, or null to restore the default')
+        const accounts = body.accounts
+        const presets = body.presets
+        if (
+          (accounts === undefined && presets === undefined) ||
+          (accounts !== undefined && accounts !== null && !Array.isArray(accounts)) ||
+          (presets !== undefined && !Array.isArray(presets))
+        ) {
+          return adminError(
+            400,
+            'body needs "accounts": an array (or null to restore the default), and/or "presets": an array of preset names',
+          )
         }
-        try {
-          const accounts = body.accounts === null ? undefined : (body.accounts as LabAccountInput[])
-          return jsonRes(200, { data: api(request).configureLabAccounts(accounts) })
-        } catch (error) {
-          return adminError(400, error instanceof Error ? error.message : String(error))
+        const layout: LabAccountLayout | undefined =
+          presets !== undefined
+            ? {
+                presets: presets as string[],
+                ...(Array.isArray(accounts) ? { accounts: accounts as LabAccountInput[] } : {}),
+              }
+            : accounts === null
+              ? undefined
+              : (accounts as LabAccountInput[])
+        return guarded(() => jsonRes(200, { data: api(request).configureLabAccounts(layout) }))
+      },
+      "POST /lab-accounts": (request) => {
+        if (!isRecord(request.body)) return adminError(400, "expected one lab account object")
+        const input = request.body as LabAccountInput
+        return guarded(() => jsonRes(201, api(request).addLabAccount(input)))
+      },
+      "PATCH /lab-accounts/:id": (request) => {
+        if (!isRecord(request.body))
+          return adminError(400, "expected an object of fields to change")
+        const patch = request.body as Partial<LabAccountInput>
+        return guarded(() => {
+          const updated = api(request).patchLabAccount(request.params.id as string, patch)
+          return updated
+            ? jsonRes(200, updated)
+            : adminError(404, `no lab account ${request.params.id} in ${request.namespace}`)
+        })
+      },
+      "DELETE /lab-accounts/:id": (request) =>
+        api(request).removeLabAccount(request.params.id as string)
+          ? jsonRes(200, { status: "ok" })
+          : adminError(404, `no lab account ${request.params.id} in ${request.namespace}`),
+      "GET /lab-accounts/presets": (request) =>
+        jsonRes(200, {
+          presets: Object.fromEntries(
+            Object.keys(LAB_ACCOUNT_PRESETS).map((name) => {
+              const record = labAccountFromPreset(name, { teamId: api(request).teamId })
+              return [name, record ? renderLabAccount(record) : null]
+            }),
+          ),
+        }),
+      "POST /lab-accounts/presets/:name": (request) => {
+        const body = isRecord(request.body) ? request.body : {}
+        if (body.id !== undefined && typeof body.id !== "string") {
+          return adminError(400, "id must be a string")
         }
+        const name = request.params.name as string
+        return guarded(() => {
+          const record = api(request).addLabAccountPreset(name, body.id as string | undefined)
+          return record
+            ? jsonRes(201, record)
+            : adminError(
+                404,
+                `no lab-account preset ${name}; one of ${Object.keys(LAB_ACCOUNT_PRESETS).join(", ")}`,
+              )
+        })
+      },
+
+      "GET /team": (request) => jsonRes(200, { teamId: api(request).teamId }),
+
+      "GET /limits": (request) => jsonRes(200, { limits: api(request).limits }),
+      "PUT /limits": (request) => {
+        if (!isRecord(request.body)) return adminError(400, "expected an object of limits")
+        const input = request.body
+        return guarded(() => jsonRes(200, { limits: api(request).configureLimits(input) }))
+      },
+
+      "GET /identity": (request) => jsonRes(200, { identity: api(request).identity }),
+      "PUT /identity": (request) => {
+        const mode = isRecord(request.body) ? request.body.mode : undefined
+        if (!IDENTITY_MODES.includes(mode as IdentityMode)) {
+          return adminError(400, `body needs "mode": one of ${IDENTITY_MODES.join(", ")}`)
+        }
+        api(request).identity = mode as IdentityMode
+        return jsonRes(200, { identity: mode })
+      },
+
+      "POST /users": (request) => {
+        if (!isRecord(request.body)) return adminError(400, "expected one user object")
+        const input = request.body as UserFixture
+        return guarded(() => jsonRes(201, api(request).insertUsers([input])[0]))
+      },
+      "POST /users/bulk": (request) => {
+        const users = isRecord(request.body) ? request.body.users : undefined
+        if (!Array.isArray(users)) return adminError(400, 'body needs "users": an array')
+        return guarded(() =>
+          jsonRes(201, { users: api(request).insertUsers(users as UserFixture[]) }),
+        )
+      },
+      "DELETE /users/:id": (request) =>
+        api(request).hardDeleteUser(request.params.id as string)
+          ? jsonRes(200, { status: "ok" })
+          : adminError(404, `no user ${request.params.id} in ${request.namespace}`),
+      "POST /orders": (request) => {
+        if (!isRecord(request.body)) return adminError(400, "expected one order object")
+        const { emitWebhooks, ...input } = request.body
+        return guarded(() =>
+          jsonRes(
+            201,
+            api(request).insertOrders([input as OrderFixture], {
+              emitWebhooks: emitWebhooks === true,
+            })[0],
+          ),
+        )
+      },
+      "POST /import": (request) => {
+        if (!isRecord(request.body)) {
+          return adminError(400, 'expected { "users": [...], "orders": [...] }')
+        }
+        const { emitWebhooks, ...fixtures } = request.body
+        return guarded(() => {
+          const loaded = api(request).importFixtures(fixtures as JunctionFixtures, {
+            emitWebhooks: emitWebhooks === true,
+          })
+          return jsonRes(201, loaded)
+        })
       },
 
       "GET /corpus": (request) =>

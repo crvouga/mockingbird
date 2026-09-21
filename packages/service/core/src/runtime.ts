@@ -4,10 +4,18 @@ import { clearNamespace, type SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { type Clock, createClock } from "./clock.js"
 import { type AdminRoutes, createControlPlane, NAMESPACE_HEADER } from "./control.js"
 import { createFaultRegistry, type FaultRegistry } from "./faults.js"
+import { createJournal, DEFAULT_JOURNAL_SIZE, type Journal, responseNotes } from "./journal.js"
 import { createMetrics, type Metrics, type RequestLog } from "./metrics.js"
 import { createRng, type Rng } from "./rng.js"
 import { bootSqlite } from "./service.js"
 import { type NamespaceSnapshot, restoreNamespace, snapshotNamespace } from "./snapshot.js"
+import { PACKAGE_VERSION } from "./version.js"
+
+/**
+ * Stamped on every response the runtime returns — vendor, fault, admin and health alike —
+ * as `<service>@<version>; ns=<namespace>`, so a consumer can tell the mock from the vendor.
+ */
+export const MOCKINGBIRD_HEADER = "x-mockingbird"
 
 /** What the runtime needs from a service: a Fetch handler it can reset. */
 export type ServiceInstance = FetchAPI & { reset(): Promise<void> }
@@ -44,6 +52,10 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   adminKey?: string
   /** Structured request log sink, called once per request. */
   onLog?: (entry: RequestLog) => void
+  /** Requests each namespace's journal keeps (`GET /__admin/requests`). Default 1000; 0 turns it off. */
+  journalSize?: number
+  /** Reported in the `x-mockingbird` header. Default: the bundled package's version. */
+  version?: string
 }
 
 export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
@@ -52,6 +64,7 @@ export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   readonly clock: Clock
   readonly faults: FaultRegistry
   readonly metrics: Metrics
+  readonly journal: Journal
   readonly rng: Rng
   /** The instance behind `namespace` (the default one when omitted), created on first use. */
   instance(namespace?: string): T
@@ -108,6 +121,8 @@ export const createRuntime = <T extends ServiceInstance>(
   const rng = createRng(options.seed ?? 0)
   const faults = createFaultRegistry(createRng(options.seed ?? 0))
   const metrics = createMetrics()
+  const journal = createJournal(options.journalSize ?? DEFAULT_JOURNAL_SIZE)
+  const version = options.version ?? PACKAGE_VERSION
   const instances = new Map<string, T>()
   const operationIdFor = options.document ? operationMatcher(options.document) : () => undefined
 
@@ -157,6 +172,7 @@ export const createRuntime = <T extends ServiceInstance>(
     clock,
     faults,
     metrics,
+    journal,
     rng,
     instance,
     namespaces: () => [...instances.keys()].sort(),
@@ -164,13 +180,29 @@ export const createRuntime = <T extends ServiceInstance>(
     snapshot,
     restore,
     fetch: async (request) => {
+      const namespace = control.namespaceOf(request)
+      const stamp = (response: Response): Response => {
+        // An invalid namespace is not echoed back.
+        const value = NAMESPACE_PATTERN.test(namespace)
+          ? `${options.name}@${version}; ns=${namespace}`
+          : `${options.name}@${version}`
+        try {
+          response.headers.set(MOCKINGBIRD_HEADER, value)
+          return response
+        } catch {
+          // Immutable headers (a response passed through from `fetch`): copy it.
+          const copy = new Response(response.body, response)
+          copy.headers.set(MOCKINGBIRD_HEADER, value)
+          return copy
+        }
+      }
       const handled = await control.handle(request)
-      if (handled) return handled
+      if (handled) return stamp(handled)
       const started = performance.now()
       const url = new URL(request.url)
-      const namespace = control.namespaceOf(request)
       const operationId = operationIdFor(request, url.pathname)
-      const log = (status: number, faultId?: string) => {
+      const log = (status: number, faultId?: string, response?: Response) => {
+        const noted = response ? responseNotes(response) : undefined
         const entry: RequestLog = {
           service: options.name,
           namespace,
@@ -181,20 +213,25 @@ export const createRuntime = <T extends ServiceInstance>(
           durationMs: Math.round((performance.now() - started) * 100) / 100,
           unmatched: options.document !== undefined && operationId === undefined,
           ...(faultId !== undefined ? { faultId } : {}),
+          ...(noted?.ids && Object.keys(noted.ids).length > 0 ? { ids: noted.ids } : {}),
+          ...(noted?.adopted ? { adopted: true } : {}),
         }
         metrics.record(entry)
+        journal.record({ ...entry, at: new Date(clock.now()).toISOString() })
         options.onLog?.(entry)
       }
       if (!NAMESPACE_PATTERN.test(namespace)) {
         log(400)
-        return new Response(
-          JSON.stringify({
-            error: {
-              type: "mockingbird_admin",
-              message: `${NAMESPACE_HEADER} must match ${NAMESPACE_PATTERN}`,
-            },
-          }),
-          { status: 400, headers: { "content-type": "application/json" } },
+        return stamp(
+          new Response(
+            JSON.stringify({
+              error: {
+                type: "mockingbird_admin",
+                message: `${NAMESPACE_HEADER} must match ${NAMESPACE_PATTERN}`,
+              },
+            }),
+            { status: 400, headers: { "content-type": "application/json" } },
+          ),
         )
       }
       const faulted = await faults.take({
@@ -205,11 +242,11 @@ export const createRuntime = <T extends ServiceInstance>(
       })
       if (faulted) {
         log(faulted.response.status, faulted.id)
-        return faulted.response
+        return stamp(faulted.response)
       }
       const response = await instance(namespace).fetch(request)
-      log(response.status)
-      return response
+      log(response.status, undefined, response)
+      return stamp(response)
     },
   }
 
@@ -219,6 +256,7 @@ export const createRuntime = <T extends ServiceInstance>(
     clock,
     faults,
     metrics,
+    journal,
     defaultNamespace: DEFAULT_NAMESPACE,
     namespaces: runtime.namespaces,
     reset,

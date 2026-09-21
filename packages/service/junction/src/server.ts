@@ -8,7 +8,8 @@ import {
 } from "@crvouga/mockingbird-adapter-node"
 import { defaultCorpus } from "./corpus.js"
 import { pullCorpus } from "./corpus-tools.js"
-import type { LabAccountInput } from "./lab-accounts.js"
+import { IDENTITY_MODES, type IdentityMode, type JunctionFixtures } from "./fixtures.js"
+import type { LabAccountLayout } from "./lab-account-presets.js"
 import { createRuntime, type JunctionRuntime, type JunctionRuntimeOptions } from "./runtime.js"
 import { parseSealedCorpus, type SealedCorpus } from "./sealed-corpus.js"
 import type { GeoMode } from "./state.js"
@@ -62,6 +63,24 @@ export const createServer = async (
 const asString = (value: string | boolean | undefined): string | undefined =>
   typeof value === "string" && value !== "" ? value : undefined
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const count = (value: string | undefined, flag: string): number | undefined => {
+  if (value === undefined) return undefined
+  if (!/^\d+$/.test(value)) throw new Error(`${flag} must be a non-negative integer (got ${value})`)
+  return Number.parseInt(value, 10)
+}
+
+const readJson = async <T>(path: string): Promise<T> => {
+  const raw = await readFile(path, "utf8").catch(() => undefined)
+  if (raw === undefined) throw new Error(`junction mock: file not found: ${path}`)
+  try {
+    return JSON.parse(raw) as T
+  } catch (error) {
+    throw new Error(`junction mock: ${path} is not JSON (${(error as Error).message})`)
+  }
+}
+
 const retryDelays = (value: string | undefined): number[] | undefined => {
   if (value === undefined) return undefined
   const delays = value.split(",").map((part) => Number.parseInt(part.trim(), 10))
@@ -90,7 +109,36 @@ export const serveTarget: ServeTarget = {
     "lab-accounts": {
       type: "string",
       value: "<file>",
-      description: "JSON array of lab accounts to route orders through",
+      description:
+        'Lab accounts to route orders through: a JSON array, or { "presets": [...], "accounts": [...] }',
+    },
+    "team-id": {
+      type: "string",
+      value: "<uuid>",
+      description: "Team the mock answers as (default: the corpus's recorded team)",
+    },
+    "max-users": {
+      type: "string",
+      value: "<n>",
+      description: "Enforce the sandbox's live-user cap (default: unlimited)",
+    },
+    identity: {
+      type: "string",
+      value: "<strict|adopt-users>",
+      description: "Unknown user ids: 404 (strict) or create on first use",
+      default: "strict",
+    },
+    fixtures: {
+      type: "string",
+      value: "<file>",
+      description:
+        'Users and orders every namespace starts with: { "users": [...], "orders": [...] }',
+    },
+    "journal-size": {
+      type: "string",
+      value: "<n>",
+      description: "Requests each namespace's journal keeps (GET /__admin/requests)",
+      default: "1000",
     },
     "seed-url": {
       type: "string",
@@ -138,9 +186,20 @@ export const serveTarget: ServeTarget = {
     }
     const accountsFile = asString(values["lab-accounts"])
     const labAccounts =
-      accountsFile === undefined
-        ? undefined
-        : (JSON.parse(await readFile(accountsFile, "utf8")) as LabAccountInput[])
+      accountsFile === undefined ? undefined : await readJson<LabAccountLayout>(accountsFile)
+    const fixturesFile = asString(values.fixtures)
+    const fixtures =
+      fixturesFile === undefined ? undefined : await readJson<JunctionFixtures>(fixturesFile)
+    const teamId = asString(values["team-id"])
+    if (teamId !== undefined && !UUID.test(teamId)) {
+      throw new Error(`--team-id must be a UUID (got ${teamId})`)
+    }
+    const maxUsers = count(asString(values["max-users"]), "--max-users")
+    const journalSize = count(asString(values["journal-size"]), "--journal-size")
+    const identity = asString(values.identity)
+    if (identity !== undefined && !IDENTITY_MODES.includes(identity as IdentityMode)) {
+      throw new Error(`--identity must be one of ${IDENTITY_MODES.join(", ")} (got ${identity})`)
+    }
     const webhookUrl = asString(values["webhook-url"])
     const webhookSecret =
       asString(values["webhook-secret"]) ?? process.env.MOCKINGBIRD_JUNCTION_WEBHOOK_SECRET
@@ -153,6 +212,11 @@ export const serveTarget: ServeTarget = {
       ...(corpus ? { corpus } : {}),
       ...(geo ? { geo: geo as GeoMode } : {}),
       ...(labAccounts ? { labAccounts } : {}),
+      ...(fixtures ? { fixtures } : {}),
+      ...(teamId !== undefined ? { teamId } : {}),
+      ...(maxUsers !== undefined ? { limits: { maxUsers } } : {}),
+      ...(identity !== undefined ? { identity: identity as IdentityMode } : {}),
+      ...(journalSize !== undefined ? { journalSize } : {}),
       ...(webhookUrl !== undefined && webhookSecret !== undefined
         ? {
             webhooks: {
@@ -177,7 +241,15 @@ export const serveTarget: ServeTarget = {
         ? `corpus ${info.label}: ${info.observations} observations, ${info.zips} ZIPs, ${info.labTests} lab tests, ${info.labAccounts} lab accounts (recorded ${info.recordedAt} from ${info.source})`
         : "corpus none: synthetic catalog and coverage",
       `geo ${api.geoMode}${api.geoMode === "corpus" ? " (unknown ZIPs answer 424 MOCKINGBIRD_UNKNOWN_ZIP)" : ""}`,
+      `team ${api.teamId}`,
       `lab accounts: ${api.labAccounts().length}`,
+      `limits: ${
+        Object.entries(api.limits)
+          .filter(([, value]) => value !== null && value !== false)
+          .map(([key, value]) => `${key}=${String(value)}`)
+          .join(", ") || "none (sandbox caps off)"
+      }`,
+      `identity ${api.identity}`,
       `webhooks: ${junction.webhooks ? "signed delivery on" : "off"}`,
       "auth: any x-vital-api-key value (e.g. sk_us_mockingbird)",
     ]

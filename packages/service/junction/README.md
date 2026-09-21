@@ -3,12 +3,13 @@
 Stateful mock of the [Junction (formerly Vital) API](https://docs.junction.com/): users
 (`/v2/user`), the lab-testing catalog, lab orders (create, cancel, simulate, results,
 requisitions), at-home phlebotomy and patient-service-center (PSC) scheduling, and the
-`labtest.order.*` / `labtest.appointment.updated` webhooks. All 39 operations in the vendored
+`labtest.order.*` / `labtest.appointment.updated` webhooks. All 40 operations in the vendored
 OpenAPI subset are served, and behaviour is checked by differential property tests against the
 Junction sandbox.
 
 Use it to take Junction off your suite's critical path: no sandbox key, no shared 50-user sandbox
-cap, no cross-suite interference. Serve it as a local origin with one command, or run it in-process.
+cap (the mock enforces no sandbox limit unless a test [asks for one](#sandbox-limits)), no
+cross-suite interference. Serve it as a local origin with one command, or run it in-process.
 
 ```bash
 npx mockingbird-junction serve   # http://127.0.0.1:8787, recorded sandbox corpus loaded
@@ -54,19 +55,26 @@ npx mockingbird-junction serve --help
 | `--host <host>` | `127.0.0.1` | Interface to bind |
 | `--corpus <default\|none\|file>` | `default` | The shipped corpus, no corpus (synthetic data), or a file from `corpus pull` |
 | `--geo <corpus\|synthetic>` | `corpus` with a corpus | How unknown ZIPs are answered; see [Geo](#geo-corpus-or-synthetic) |
-| `--lab-accounts <file>` | built-in fixtures | JSON array of [lab accounts](#lab-accounts) |
+| `--lab-accounts <file>` | built-in fixtures | [Lab accounts](#lab-accounts): a JSON array, or `{ "presets": [...], "accounts": [...] }` |
+| `--team-id <uuid>` | the corpus's team | The [team](#team-identity) the mock answers as |
+| `--max-users <n>` | unlimited | Enforce the sandbox's [live-user cap](#sandbox-limits) |
+| `--identity <strict\|adopt-users>` | `strict` | Unknown `user_id`s: 404, or [create on first use](#fixtures-and-identity) |
+| `--fixtures <file>` | — | [Users and orders](#fixtures-and-identity) every namespace starts with |
+| `--journal-size <n>` | `1000` | Requests each namespace's [journal](#is-this-the-mock) keeps |
 | `--webhook-url <url>` / `--webhook-secret <whsec_…>` | off | Deliver [signed webhooks](#webhooks) (secret also from `MOCKINGBIRD_JUNCTION_WEBHOOK_SECRET`) |
 | `--webhook-retry-delays <ms,…>` | Svix's schedule | Delay before each delivery attempt, e.g. `0,1000,5000` in tests |
 | `--webhook-scope <scope>` | — | Sent as `x-mockingbird-scope` on every delivery |
 | `--admin-key <key>` | open | Require `x-mockingbird-admin-key` on `/__admin/*` (also `MOCKINGBIRD_ADMIN_KEY`) |
 | `--seed <seed>` | `0` | Seeds fault rates and retry jitter |
 | `--log <pretty\|json\|off>` | `pretty` | One line per request: operation id, status, duration, namespace, fault |
+| `--log-requests` | — | Same as `--log json`: one JSON line per request with the ids it touched, never bodies |
 | `--seed-url <url>` / `--seed-key <key>` | — | Pull a corpus from a live team at boot. Slow and a live dependency; prefer a committed `corpus pull` file |
 | `--config <file>` | — | Serve every service in a `mockingbird.json` instead ([below](#many-services-from-one-config)) |
 
 At startup it prints the listen address, the loaded corpus (its version label, observation, ZIP,
-lab-test and lab-account counts, recording date and source), the geo mode, and whether webhook
-delivery is on.
+lab-test and lab-account counts, recording date and source), the geo mode, the team id, the
+lab-account count, which sandbox limits are on (normally none), the identity mode, and whether
+webhook delivery is on.
 
 ### Many services from one config
 
@@ -224,7 +232,12 @@ Every Mockingbird service answers the same control surface, outside the vendor's
 - `x-mockingbird-namespace: <name>` — isolates a request's data (`[A-Za-z0-9_.-]{1,64}`). Each
   namespace is a separate team over one shared database, so parallel workers share one process
   without seeing each other. The corpus is shared read-only; creating a namespace is cheap. Admin
-  routes take the namespace from `?namespace=`, then the header, then `default`.
+  routes take the namespace from `?namespace=`, then the header, then `default`. Configuration set
+  through the admin API (lab accounts, limits, identity, geo) belongs to one namespace and survives
+  that namespace's `POST /__admin/reset`; data does not.
+- `x-mockingbird: junction@<version>; ns=<namespace>` — on **every** response: vendor answers,
+  errors, faults, admin and health. Junction never sends it, so it tells the mock from the vendor
+  (see [Is this the mock?](#is-this-the-mock)).
 
 | Route | Does |
 | --- | --- |
@@ -241,7 +254,19 @@ Every Mockingbird service answers the same control surface, outside the vendor's
 | `POST /__admin/orders/{id}/transition` | Move an order: `{ "to": "completed", "result": "abnormal" }` ([order control](#order-control)) |
 | `GET` / `PUT /__admin/results/{id}` | Read or install an exact result payload / PDF for an order |
 | `GET /__admin/result-fixtures` | The named results |
-| `GET` / `PUT /__admin/lab-accounts` | Read or replace the namespace's [lab accounts](#lab-accounts) (`{ "accounts": null }` restores the default) |
+| `GET` / `PUT /__admin/lab-accounts` | Read or replace the namespace's [lab accounts](#lab-accounts) (`{ "accounts": [...], "presets": [...] }`; `{ "accounts": null }` restores the default) |
+| `POST /__admin/lab-accounts` | Add one account; 409 if the id exists |
+| `PATCH` / `DELETE /__admin/lab-accounts/{id}` | Merge fields into an account (`{ "status": "suspended" }`, `{ "states": [...] }`) / remove it; 404 if absent |
+| `GET /__admin/lab-accounts/presets` | Every [preset](#lab-account-presets), with its full record |
+| `POST /__admin/lab-accounts/presets/{name}` | Add a preset account; body `{ "id": "…" }` overrides its id |
+| `GET /__admin/team` | `{ "teamId" }` — the [team](#team-identity) the namespace answers as |
+| `GET` / `PUT /__admin/limits` | Read or change the namespace's [sandbox limits](#sandbox-limits) |
+| `GET` / `PUT /__admin/identity` | Read or set `{ "mode": "strict" \| "adopt-users" }` ([identity](#fixtures-and-identity)) |
+| `POST /__admin/users`, `POST /__admin/users/bulk` | Insert a user (or `{ "users": [...] }`, all or none) with a chosen `user_id`; 409 on a duplicate id or `client_user_id` |
+| `DELETE /__admin/users/{id}` | Remove a user outright, leaving no deletion tombstone |
+| `POST /__admin/orders` | Insert an order, optionally already in a `status`, through `create_order`'s record builder |
+| `POST /__admin/import` | `{ "users": [...], "orders": [...] }` in one call |
+| `GET` / `DELETE /__admin/requests` | The namespace's [request journal](#is-this-the-mock) (`?operationId=`, `?status=`, `?since=`, `?limit=`, `?all=1`) / clear it |
 | `GET /__admin/corpus`, `PUT /__admin/geo` | The loaded corpus; switch [geo mode](#geo-corpus-or-synthetic) |
 | `GET /__admin/webhooks` | [Deliveries](#webhooks) with every attempt |
 | `POST /__admin/webhooks/{id}/replay`, `POST /__admin/webhooks/flush` | Redeliver one message; run pending retries now |
@@ -327,8 +352,150 @@ console.log(junction.instance().labAccounts().length) // 3
 ```
 
 Rejections keep Junction's body shape, `400 {"detail": "Lab account is not associated with lab labcorp"}`.
-`PUT /__admin/lab-accounts` swaps them per namespace at runtime. `delegated_flow` is stored and
-listed, but see [not modelled](#what-is-and-is-not-modelled).
+`delegated_flow` is stored and listed, but see [not modelled](#what-is-and-is-not-modelled).
+
+Availability reads that take a `lab_account_id` (`GET /v3/order/area/info`) check it against the
+same live list, so an id `create_order` accepts is never a 404 there.
+
+### Changing accounts at runtime
+
+Each namespace has its own layout, kept across its own reset. Change one account at a time, or
+replace them all:
+
+```bash
+curl -X POST  localhost:8787/__admin/lab-accounts/presets/bioreference_ny_nj_delegated
+curl -X PATCH localhost:8787/__admin/lab-accounts/$ID -d '{"status": "suspended"}'
+curl -X POST  localhost:8787/__admin/lab-accounts -d '{"id": "…", "lab": "quest", "states": ["AZ"]}'
+curl -X DELETE localhost:8787/__admin/lab-accounts/$ID
+curl -X PUT   localhost:8787/__admin/lab-accounts -d '{"presets": ["quest_platform"], "accounts": []}'
+```
+
+A bad field is a 400 in the admin shape naming it, e.g. `lab account x: states: ZZ is not a US
+state code`. `--lab-accounts` and the `labAccounts` option take the same layout, so a stack can
+declare it at boot with no admin call:
+
+```json
+{ "presets": ["bioreference_ny_nj_delegated", { "name": "quest_platform", "id": "…" }], "accounts": [] }
+```
+
+### Lab-account presets
+
+Named after what they model; ids are `deterministicUuid("junction:lab-account:<name>")` unless
+given. Where a preset copies an account recorded from a real BioReference-linked sandbox team
+(2026-09-21), its billing states are the recording's. `PLATFORM_ACCOUNT_STATES` is every state
+but NJ, NY and RI (47).
+
+| Preset | `lab` | `delegated_flow` | `allowed_billing` | `team_id_allowlist` | Source |
+| --- | --- | --- | --- | --- | --- |
+| `bioreference_ny_nj_delegated` | `bioreference` | `order_delegated` | `client_bill`: NY, NJ | the team | requested shape, **not** a recorded account |
+| `bioreference_delegated_multi_state` | `bioreference` | `order_delegated` | `client_bill`: every state but NY, NJ (48) | the team | recorded |
+| `bioreference_customer_multi_state` | `bioreference` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | recorded ("Junction BioReference Account") |
+| `bioreference_patient_bill_passthrough` | `bioreference` | `not_delegated` | `patient_bill_passthrough`: NJ, NY | the team | recorded |
+| `quest_platform` / `labcorp_platform` | `quest` / `labcorp` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | recorded ("Junction Quest/Labcorp Account") |
+| `suspended_bioreference` / `suspended_quest` / `suspended_labcorp` | as above | `not_delegated` | as the platform accounts | `[]` | the platform shapes with `status: "suspended"` |
+
+Every preset is `status: "active"` unless named `suspended_*`. `GET /__admin/lab-accounts/presets`
+returns the full records.
+
+### Team identity
+
+The mock answers as one team: `team_id` on users, orders and webhooks, and the team that
+`team_id_allowlist` is checked against. It is, in order: `teamId` / `--team-id`, the team a
+version-2 corpus recorded (`corpus pull` reads it from a listed user, else from the accounts'
+allowlists), else the fixed `MOCK_TEAM_ID`. `GET /__admin/team` reports it.
+
+A version-2 corpus keeps each account's allowlist **verbatim**, so an account the real team is not
+linked to answers `400 {"detail": "Lab account is not linked to your team"}` exactly as it does
+live. A version-1 corpus (no `teamId`) still loads and behaves as 0.2.0 did: every recorded account
+is also linked to the mock team.
+
+**Open question — empty allowlists.** Junction's own Quest, Labcorp and BioReference accounts carry
+`team_id_allowlist: []`, and a real team's listing returns them, so the mock lists them and treats
+them as linked. Whether *ordering* through one — by explicit id, or when it is one of several
+active accounts for a lab with the id omitted — behaves the same live is **not verified**.
+`verify --orders` checks it whenever the corpus has such an account; until a run records the
+answer, a suite that depends on it should run against the sandbox too.
+
+## Sandbox limits
+
+The mock exists to escape the sandbox's restrictions, so it enforces none of them unless a test
+asks — this is a tested guarantee (500 users in a loop all succeed), not an accident.
+
+| Sandbox limit | Modelled | Default | Turn it on |
+| --- | --- | --- | --- |
+| 50 live users per team | yes, byte-exact body; deleted users free their slot | off (unlimited) | `limits: { maxUsers: 50 }`, `--max-users 50`, `PUT /__admin/limits {"maxUsers": 50}` |
+| `POST /v3/order/{id}/test` only in sandbox | as a switch: refuses a key that is not `sk_us_…`/`sk_eu_…` (400, body not recorded) | off | `simulateRequiresSandbox: true` |
+| Rate limits | as a per-namespace budget: 429 `{"detail":"Too Many Requests"}`, `retry-after: 1` (shape not recorded) | off | `rateLimitPerSecond: n` |
+
+`PUT /__admin/limits` merges (`null` lifts a numeric limit) and is per namespace;
+`GET /__admin/limits` returns the effective values. For a one-off failure instead of a standing
+limit, the `sandbox_user_quota` [fault preset](#faults-and-error-shapes) is still there.
+
+## Fixtures and identity
+
+A suite often needs state the public API cannot build: database fixtures that already carry real
+Junction `user_id`s, or an order already in some status. Insert them directly:
+
+```bash
+curl -X POST localhost:8787/__admin/users -d '{"user_id": "3f0c…", "client_user_id": "patient-1"}'
+curl -X POST localhost:8787/__admin/orders -d '{"user_id": "3f0c…", "lab_test_id": "…", "status": "completed"}'
+curl -X POST localhost:8787/__admin/import -d @test/junction-fixtures.json
+```
+
+- Users take `user_id?`, `client_user_id`, `created_on?`, `fallback_time_zone?`,
+  `fallback_birth_date?`, `ingestion_start?`, `ingestion_end?`. A duplicate `user_id` or
+  `client_user_id` is a 409; `POST /__admin/users/bulk` inserts all or none.
+- Orders take `order_id?`, `user_id`, `lab_test_id`, `lab_account_id?`, `status?` (any
+  [transition target](#order-control)), `collection_method?`, `patient_details?`,
+  `patient_address?`, `billing_type?`, `created_at?` and `result_fixture?` (as
+  `PUT /__admin/results/{id}` takes it). Request validation is skipped; references are not — the
+  user and lab test must exist (404 otherwise).
+- Inserted records go through the same builders as `create_user` / `create_order`, so every read
+  path (`GET /v2/user/{id}`, resolve by `client_user_id`, `GET /v3/order/{id}`,
+  `GET /v3/orders?user_id=`) sees them as API-created. Default timestamps read the mock clock.
+- **No webhook fires** unless the body has `"emitWebhooks": true`: fixtures should not trigger
+  backend side effects.
+- `fixtures` / `--fixtures <file>` loads `{ "users": [...], "orders": [...] }` into every namespace
+  at creation and again on each reset.
+
+For flow suites that do not care about Junction identity, `identity: "adopt-users"` (or
+`--identity adopt-users`, or `PUT /__admin/identity {"mode": "adopt-users"}` per namespace) creates
+an unknown, well-formed `user_id` on first use — in `create_order` and `GET /v3/orders?user_id=` —
+and the request proceeds. The journal marks the request `adopted: true`. **Orders are never
+adopted**: an unknown order id always 404s, because inventing an order hides real bugs. The default,
+`strict`, is Junction's own behaviour.
+
+## Is this the mock?
+
+A mock 404 and a sandbox 404 are byte-identical, which is how a backend half-pointed at the sandbox
+goes unnoticed. Three things make it visible:
+
+- **`x-mockingbird` on every response.** Assert on it in a test helper:
+
+  ```ts
+  import { expect } from "vitest"
+
+  /** Wrap the fetch your Junction client uses; fails any call that did not reach the mock. */
+  export const mockOnlyFetch =
+    (inner: typeof fetch = fetch): typeof fetch =>
+    async (input, init) => {
+      const response = await inner(input, init)
+      expect(response.headers.get("x-mockingbird"), `${String(input)} did not reach the Junction mock`).toMatch(
+        /^junction@/,
+      )
+      return response
+    }
+  ```
+
+- **The request journal.** Each namespace keeps its last 1000 requests (`--journal-size`,
+  `journalSize`): operation id, method, path, status, duration, fault id, the user / order /
+  lab-account ids it touched, and when (mock clock). `GET /__admin/requests?operationId=create_order_v3_order_post`
+  proves an order was placed here; an empty answer proves it was not. Never bodies.
+- **Miss headers on 404s.** A missing user or order keeps Junction's body byte for byte and adds
+  `x-mockingbird-miss: order <id>` (or `user <id>`, `user client:<client_user_id>`) and
+  `x-mockingbird-known: users=<n> orders=<n>`.
+
+`--log-requests` prints the same fields as one JSON line per request.
 
 ## Order control
 
@@ -370,12 +537,16 @@ delayed simulations (`?delay=<seconds>`) due and moves appointment windows, with
 ## Faults and error shapes
 
 Error bodies the mock reproduces byte for byte, checked against the sandbox by `verify` and the
-parity suite:
+parity suite (`ORDER_NOT_FOUND` holds the unknown-order text per operation id):
 
 | Case | Status | Body |
 | --- | --- | --- |
 | `GET /v2/user/{unknown id}` | 404 | `{"detail":"Not found"}` |
 | `GET /v2/user/resolve/{unknown client_user_id}` | 404 | `{"detail":"User not found"}` |
+| Unknown order: get order, requisition PDF | 404 | `{"detail":"This order doesn't exist"}` |
+| Unknown order: cancel, simulate | 404 | `{"detail":"Order doesn't exist"}` |
+| Unknown order: result, result metadata, result PDF | 404 | `{"detail":"Order not found"}` |
+| Unknown order: every phlebotomy / PSC appointment route | 404 | `{"detail":"This order doesn't exist."}` (trailing period included) |
 | Missing `x-vital-api-key` | 401 | `{"detail":"Missing x-vital-api-key"}` |
 | Request validation | 422 | `{"detail":[{"type":…,"loc":[…],"msg":…,"input":…}]}` (Pydantic shape) |
 | Business rule | 400 | `{"detail":"<message>"}` or `{"detail":{"error_type":"INVALID_REQUEST","error_message":"…"}}` |
@@ -452,10 +623,12 @@ npx mockingbird-junction verify --real-key "$JUNCTION_SANDBOX_KEY" --orders --sa
 
 - **Drift**: re-fetches each recorded observation (or `--sample n` of them) and reports any that no
   longer match production — the signal to re-pull.
-- **Scenario**: creates a user, reads it back, provokes the documented 404s, reads the catalog and a
+- **Scenario**: creates a user, reads it back, provokes the documented 404s (including every
+  order-scoped operation against a random unknown order), reads the catalog (paged and bare) and a
   covered ZIP's serviceability, and deletes the user; with `--orders`, also places, reads and
-  cancels an order for the corpus's first lab test. Status codes must match; bodies must match in
-  shape, and byte for byte for the documented error bodies.
+  cancels an order for the corpus's first lab test, and — when the corpus has an account with an
+  empty `team_id_allowlist` — orders through it with and without its id. Status codes must match;
+  bodies must match in shape, and byte for byte for the documented error bodies.
 
 It exits 1 on any divergence. The scenario always deletes its user (and cancels its order), because
 it runs against the same capped sandbox the mock exists to relieve. `verifyAgainstReal` is the same
@@ -482,7 +655,12 @@ A mock that is silent about its gaps is how a green suite starts lying. Specific
   - `delegated_flow`-specific ordering. Accounts carry the field and orders follow the documented
     selection and billing rules above, but any additional behaviour Junction applies to delegated
     accounts is not reproduced. Run `verify --orders` with your team's corpus to check what you rely on.
-  - Rate limits and outages, except when injected as faults.
+  - Rate limits and outages, except when injected as faults or switched on as
+    [limits](#sandbox-limits).
+  - Whether an account with an empty `team_id_allowlist` can be ordered through (see
+    [Team identity](#team-identity)); the mock assumes it can.
+  - Adopted users (`adopt-users`) have `client_user_id` equal to their `user_id`; nothing in
+    Junction corresponds to adoption.
   - Real 429 / 5xx bodies: the presets are plausible, not recorded.
   - Phlebotomy availability breadth: the sandbox serves it only for `85004`; the mock generates slots
     for any covered ZIP.
@@ -496,7 +674,7 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 
 | Export | Description |
 | --- | --- |
-| `createRuntime` | `(options?: JunctionRuntimeOptions) => JunctionRuntime` — the served mock (health, admin, namespaces, clock, faults, metrics, webhooks) as one `fetch`. Options: `corpus`, `geo`, `labAccounts`, `webhooks`, `onWebhook`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`. |
+| `createRuntime` | `(options?: JunctionRuntimeOptions) => JunctionRuntime` — the served mock (health, admin, namespaces, clock, faults, metrics, journal, webhooks) as one `fetch`. Options: `corpus`, `geo`, `labAccounts`, `teamId`, `limits`, `identity`, `fixtures`, `journalSize`, `webhooks`, `onWebhook`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`. |
 | `JunctionAPI` | Class. `new JunctionAPI(options?)`: one namespace's mock, implementing `fetch(request: Request): Promise<Response>`. |
 | `JUNCTION_NAMESPACE` | `"junction"` — the default namespace's storage key when sharing a `sqlite` client. |
 | `document` | The vendored Junction OpenAPI document (Mockingbird subset) that drives routing. |
@@ -507,7 +685,21 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `fingerprintCorpus` | `(corpus) => Promise<string>` — SHA-256 of a corpus's content. |
 | `corpusLabel` | `(corpus) => string` — the short label `/health` and logs show, e.g. `v1-2026-09-18-HqFDuEAuhkwD`. |
 | `parseSealedCorpus` | `(value: unknown) => SealedCorpus`; throws on a non-object or unsupported `version`. |
-| `SEALED_CORPUS_VERSION` | Current corpus format version (`1`). |
+| `SEALED_CORPUS_VERSION` | Current corpus format version (`2`: adds `teamId`). |
+| `SUPPORTED_SEALED_CORPUS_VERSIONS` | Versions `parseSealedCorpus` loads (`[1, 2]`). |
+| `MOCK_TEAM_ID` | The team id used when neither `teamId` nor the corpus gives one. |
+| `OTHER_TEAM_ID` | A team that is not the mock's, for fixtures modelling another team's account. |
+| `isLinkedToTeam` | `(account, teamId) => boolean` — the allowlist rule (`[]` counts as linked). |
+| `LAB_ACCOUNT_PRESETS` | The [lab-account presets](#lab-account-presets), without ids. |
+| `presetAccountId` | `(name) => string` — a preset's default id. |
+| `PLATFORM_ACCOUNT_STATES` / `DELEGATED_ACCOUNT_STATES` | The recorded 47- and 48-state client-bill lists. |
+| `LabAccountConflict` | Thrown by `addLabAccount` for an id that exists. |
+| `DEFAULT_LIMITS` | Every [sandbox limit](#sandbox-limits), off. |
+| `sandboxUserQuotaBody` | `(max) => body` — the sandbox's user-cap 400 body. |
+| `IDENTITY_MODES` | `["strict", "adopt-users"]`. |
+| `FixtureError` | Thrown by the fixture inserts; `status` is 400, 404 or 409. |
+| `ORDER_NOT_FOUND` | Junction's unknown-order `detail`, by operation id. |
+| `MISS_HEADER` / `KNOWN_HEADER` | `"x-mockingbird-miss"` / `"x-mockingbird-known"`. |
 | `verifyAgainstReal` | `(options: VerifyOptions) => Promise<VerifyReport>` — the `verify` command as a function. |
 | `DEFAULT_JUNCTION_BASE_URL` | `"https://api.sandbox.tryvital.io"`. |
 | `isSandboxKey` / `SANDBOX_KEY_PREFIXES` | Whether a key is a sandbox team key (`sk_us_` / `sk_eu_`). |
@@ -539,8 +731,8 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 `JunctionRuntime` (from `createRuntime`) members: `fetch`, `instance(namespace?)`, `namespaces()`,
 `reset(namespace? | "*")`, `snapshot(namespace?)`, `restore(snapshot, namespace?)`, `clock`
 (`now`, `set`, `advance`, `freeze`, `unfreeze`, `reset`, `state`), `faults` (`add`, `list`,
-`remove`, `clear`), `metrics` (`report`, `reset`), `webhooks` (`deliveries`, `replay`, `flush`,
-`idle`, `clear`), `sqlite`, `rng`.
+`remove`, `clear`), `metrics` (`report`, `reset`), `journal` (`list`, `clear`, `size`), `webhooks`
+(`deliveries`, `replay`, `flush`, `idle`, `clear`), `sqlite`, `rng`.
 
 `JunctionAPI` members:
 
@@ -551,7 +743,12 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `installCorpus(corpus)` | Install a `SealedCorpus`: observations (shared, read-only), catalog, labs, lab accounts, ZIP coverage. |
 | `corpusInfo()` | `CorpusInfo \| undefined` — label, recording date, source and counts. |
 | `geoMode` | `"corpus" \| "synthetic"`, settable. |
-| `configureLabAccounts(accounts?)` / `labAccounts()` | Replace (or restore with `undefined`) / read the team's lab accounts. |
+| `configureLabAccounts(layout?)` / `labAccounts()` | Replace (a list, or `{ presets, accounts }`; `undefined` restores the default) / read the team's lab accounts. |
+| `addLabAccount(input)` / `addLabAccountPreset(name, id?)` / `patchLabAccount(id, patch)` / `removeLabAccount(id)` | Change one account; kept across `reset()`. |
+| `teamId` | The team this namespace answers as. |
+| `limits` / `configureLimits(input)` | Read / change the sandbox limits; kept across `reset()`. |
+| `identity` | `"strict" \| "adopt-users"`, settable. |
+| `insertUsers(users)` / `insertOrders(orders, { emitWebhooks? })` / `importFixtures(fixtures, options?)` / `hardDeleteUser(id)` | The [fixture backdoor](#fixtures-and-identity). |
 | `order(id)` / `orders()` | Read orders. |
 | `transitionOrder(id, status, { now, flags? })` | Move an order to a full status and publish its webhook. |
 | `installResultFixture(orderId, fixture)` / `resultFixture(orderId)` | Serve an exact result payload / PDF for an order. |
@@ -571,7 +768,11 @@ type JunctionAPIOptions = {
   now?: () => number             // clock in ms; default Date.now
   corpus?: SealedCorpus          // installed now and on every reset()
   geo?: "corpus" | "synthetic"   // default "corpus" with a corpus, else "synthetic"
-  labAccounts?: LabAccountInput[]
+  labAccounts?: LabAccountInput[] | { presets?: (string | { name; id? })[]; accounts?: LabAccountInput[] }
+  teamId?: string                // default: the corpus's recorded team, else MOCK_TEAM_ID
+  limits?: { maxUsers?: number | null; simulateRequiresSandbox?: boolean; rateLimitPerSecond?: number | null }
+  identity?: "strict" | "adopt-users"  // default "strict"
+  fixtures?: { users?: UserFixture[]; orders?: OrderFixture[] }  // loaded now and on every reset()
   onWebhook?: WebhookPublisher   // called with every recorded event
   webhook?: JunctionWebhookOptions
 }
@@ -586,7 +787,7 @@ type JunctionWebhookEvent = {
   event_type: "labtest.order.created" | "labtest.order.updated" | "labtest.appointment.updated"
   data: Record<string, unknown>; team_id: string; user_id: string; client_user_id: string
 }
-type SealedCorpus = { version: 1; recordedAt; source; fingerprint?; observations; catalog: { labTests; labs; expectedResults }; labAccounts }
+type SealedCorpus = { version: 1 | 2; recordedAt; source; teamId?; fingerprint?; observations; catalog: { labTests; labs; expectedResults }; labAccounts }
 type SeedSource = { fetch: (request: Request) => Promise<Response>; baseUrl: string; headers: Record<string, string> }
 type OperationId / SupportedOperationId  // string unions of operationIds / supportedOperationIds
 ```

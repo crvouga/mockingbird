@@ -128,3 +128,18 @@ This mock exposes deterministic delivery records and can add seeded jitter aroun
 - Junction may return 429 or 503 under infrastructure stress; idempotent requests should be retried with backoff.
 - The mock does not emulate a global rate limit, but parity tests may inject provider delay and failure.
 - API and webhook identifiers must be correlated with application identifiers by the consumer.
+
+## Lab accounts and the team
+
+- The mock answers as one team (`teamId` option, `--team-id`, else the team a version-2 corpus
+  recorded, else `MOCK_TEAM_ID`). `team_id_allowlist` is checked against it by `create_order`,
+  the lab-account listing and availability reads that take `lab_account_id`, all against the same
+  live account list.
+- An account whose allowlist names only other teams is refused with
+  `400 {"detail": "Lab account is not linked to your team"}`.
+- **Open question: empty allowlists.** Junction's own platform accounts (Quest, Labcorp,
+  BioReference; `org_id: null`) carry `team_id_allowlist: []` and appear in a real team's listing,
+  so the mock lists them and treats them as linked. Ordering through one — explicitly, or as one of
+  several active accounts for a lab when `lab_account_id` is omitted — has not been observed.
+  `verify --orders` runs both cases whenever the corpus has such an account; record the outcome
+  here when it does.
