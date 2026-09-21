@@ -14,4 +14,4 @@ How this repo uses it (details in [docs/SECRETS.md](docs/SECRETS.md)):
 - **Live parity** — `bun run parity*` runs under `vault run --config prd` (sandbox keys live in
   `secret/personal/prd`).
 
-Agent commands (`/ci`, `/pr-ready`, `/parity-loop`) live in `.agents/commands/`; see the README.
+Agent commands (`/ci`, `/pr-merge`, `/parity-loop`) live in `.agents/commands/`; see the README.

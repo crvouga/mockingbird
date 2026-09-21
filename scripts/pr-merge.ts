@@ -1,10 +1,10 @@
 #!/usr/bin/env bun
 /**
- * Agentic PR-ready engine. Mechanical git/GitHub work for the /pr-ready command
- * (see .agents/commands/pr-ready.md); the agent only supplies judgment: commit
+ * Agentic PR-merge engine. Mechanical git/GitHub work for the /pr-merge command
+ * (see .agents/commands/pr-merge.md); the agent only supplies judgment: commit
  * message, conflict resolution, PR title/body, and CI root-cause fixes.
  *
- *   bun scripts/pr-ready.ts <command> [flags]   # or: bun run pr:ready <command>
+ *   bun scripts/pr-merge.ts <command> [flags]   # or: bun run pr:merge <command>
  *
  * Every command except `logs` prints exactly one JSON object on stdout.
  * `logs` prints a plain-text excerpt. Human/child noise never reaches stdout.
@@ -16,8 +16,8 @@ import { unlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-// Operate on the repository of the current working directory: `bun run pr:ready`
-// and `bun scripts/pr-ready.ts` both run from the repo root, and this keeps the
+// Operate on the repository of the current working directory: `bun run pr:merge`
+// and `bun scripts/pr-merge.ts` both run from the repo root, and this keeps the
 // engine usable against any checkout (e.g. a throwaway sandbox repo).
 const root = process.cwd()
 
@@ -30,7 +30,7 @@ const ALLOWED_MERGE_METHODS = ["merge"]
 
 const EXIT = { ok: 0, fail: 1, usage: 2, conflicts: 3, pending: 4 } as const
 
-const USAGE = `bun scripts/pr-ready.ts <command> [flags]
+const USAGE = `bun scripts/pr-merge.ts <command> [flags]
 
 commands:
   status    snapshot: worktree, upstream, base, PR, checks
@@ -40,10 +40,14 @@ commands:
   sync      merge origin/<base>         (--continue after resolving conflicts)
   pr        view or create the PR       (--title, --body|--body-file, --ready)
   checks    poll PR checks to terminal  (--interval, --timeout, --once)
-  logs      print a failing run log     (<check|run-url>, --name, --tail)
+  logs      print a failing check's log (<check|run-url>, --name, --tail); third-party
+            checks (GitGuardian, …) print their check-run report
+  rerun     re-run a failed check       (<check>, --name)
+  guardian  GitGuardian incidents on the PR head   (list | ignore --incident <id>
+            --reason test_credential|false_positive|low_risk; needs GITGUARDIAN_API_KEY)
   ruleset   verify/apply merge gate     (--apply)
   repo      verify/apply repo settings  (--apply)
-  merge     land the PR                 (--auto)
+  merge     land the PR once pushed, synced and every check green (--auto, --dry-run)
 
 common flags:
   --base <branch>   trunk branch (${TRUNK_BRANCH}); any other value is rejected`
@@ -472,6 +476,7 @@ type PrView = {
   reviewDecision?: string
   baseRefName?: string
   headRefName?: string
+  headRefOid?: string
 }
 
 type Check = { name: string; state: string; bucket: string; link: string; workflow?: string }
@@ -554,13 +559,42 @@ function pendingList(checks: Check[]): { name: string; bucket: string; link: str
     .map((check) => ({ name: check.name, bucket: check.bucket, link: check.link }))
 }
 
+/** A GitHub check run, as reported by any app (Actions or third-party, e.g. GitGuardian). */
+type CheckRun = {
+  id: number
+  name: string
+  status: string
+  conclusion: string | null
+  html_url: string | null
+  details_url: string | null
+  app?: { slug: string; name: string } | null
+  check_suite?: { id: number } | null
+  output?: { title: string | null; summary: string | null; text: string | null } | null
+}
+
+/** The newest check runs named `name` on the PR head commit. */
+async function checkRunsByName(slug: string, sha: string, name: string): Promise<CheckRun[]> {
+  const res = await gh([
+    "api",
+    `repos/${slug}/commits/${sha}/check-runs?check_name=${encodeURIComponent(name)}&filter=latest&per_page=100`,
+  ])
+  if (res.code !== 0) die(EXIT.fail, { step: "check-runs", output: res.stderr || res.stdout })
+  return (JSON.parse(res.stdout) as { check_runs: CheckRun[] }).check_runs
+}
+
+async function prHeadSha(branch: string): Promise<string> {
+  const pr = await readPr(branch)
+  if (!pr?.headRefOid) die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+  return pr.headRefOid
+}
+
 async function readPr(branch: string): Promise<PrView | null> {
   const res = await gh([
     "pr",
     "view",
     branch,
     "--json",
-    "number,url,state,title,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName",
+    "number,url,state,title,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName,headRefOid",
   ])
   if (res.code !== 0) return null
   return JSON.parse(res.stdout) as PrView
@@ -672,7 +706,7 @@ async function cmdCommit(): Promise<void> {
     messageFile !== undefined ? (await Bun.file(messageFile).text()).trim() : (message ?? "")
   if (!text) die(EXIT.usage, { error: "empty commit message", usage: USAGE })
 
-  const msgPath = join(tmpdir(), `pr-ready-commit-msg-${process.pid}.txt`)
+  const msgPath = join(tmpdir(), `pr-merge-commit-msg-${process.pid}.txt`)
   await Bun.write(msgPath, `${text}\n`)
 
   const lint = await run(["bunx", "--no", "--", "commitlint", "--edit", msgPath])
@@ -782,7 +816,7 @@ async function cmdSync(): Promise<void> {
   }
   if (worktree.dirty) {
     die(EXIT.usage, {
-      error: "worktree not clean; commit first (bun scripts/pr-ready.ts commit …)",
+      error: "worktree not clean; commit first (bun scripts/pr-merge.ts commit …)",
     })
   }
 
@@ -855,7 +889,7 @@ async function cmdPr(): Promise<void> {
   let bodyPath = bodyFile
   let tempBody: string | null = null
   if (bodyPath === undefined) {
-    tempBody = join(tmpdir(), `pr-ready-pr-body-${process.pid}.md`)
+    tempBody = join(tmpdir(), `pr-merge-pr-body-${process.pid}.md`)
     await Bun.write(tempBody, body ?? "")
     bodyPath = tempBody
   }
@@ -961,7 +995,9 @@ async function cmdLogs(): Promise<void> {
       die(EXIT.usage, { error: "unknown check", available: checks.map((c) => c.name) })
     }
     runId = match.link.match(/\/actions\/runs\/(\d+)/)?.[1] ?? null
-    if (!runId) die(EXIT.usage, { error: "check has no actions run link", name: target })
+    // A third-party app's check (GitGuardian, …) has no Actions log: its findings are the
+    // check run's own report.
+    if (!runId) return printCheckRunReport(branch, target)
   }
 
   const view = await gh(["run", "view", runId, "--log-failed"])
@@ -976,6 +1012,177 @@ async function cmdLogs(): Promise<void> {
       ? [`… ${lines.length - tail} earlier lines omitted`, ...lines.slice(-tail)]
       : lines
   process.stdout.write(`${shown.join("\n")}\n`)
+}
+
+async function printCheckRunReport(branch: string, name: string): Promise<void> {
+  const slug = await repoSlug()
+  const runs = await checkRunsByName(slug, await prHeadSha(branch), name)
+  if (runs.length === 0) die(EXIT.usage, { error: "no check run on the PR head", name })
+  const lines: string[] = []
+  for (const run of runs) {
+    lines.push(
+      `# ${run.name} (${run.app?.name ?? "unknown app"}): ${run.conclusion ?? run.status}`,
+      `details: ${run.details_url ?? run.html_url ?? "none"}`,
+      "",
+      run.output?.title ?? "",
+      run.output?.summary ?? "",
+      run.output?.text ?? "",
+    )
+  }
+  const tail = Number(opt("--tail") ?? 120)
+  const all = lines.join("\n").split("\n")
+  const shown =
+    all.length > tail ? [...all.slice(0, tail), `… ${all.length - tail} more lines omitted`] : all
+  process.stdout.write(`${shown.join("\n")}\n`)
+}
+
+async function cmdRerun(): Promise<void> {
+  if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
+  const name = opt("--name") ?? argv[1]
+  if (!name) die(EXIT.usage, { error: "rerun needs a check name", usage: USAGE })
+  const branch = await currentBranch()
+  const fetched = await fetchChecks(branch)
+  if (!fetched.ok) die(EXIT.fail, { step: "rerun", output: fetched.reason })
+  const match = fetched.checks.find((check) => check.name === name)
+  if (!match) {
+    die(EXIT.usage, { error: "unknown check", available: fetched.checks.map((c) => c.name) })
+  }
+
+  const runId = match.link.match(/\/actions\/runs\/(\d+)/)?.[1]
+  if (runId) {
+    const rerun = await gh(["run", "rerun", runId, "--failed"])
+    if (rerun.code !== 0) die(EXIT.fail, { step: "rerun", output: rerun.stderr || rerun.stdout })
+    emit({ ok: true, name, via: "actions", runId })
+    return
+  }
+
+  // A third-party app's check: ask GitHub to re-request its check suite, which the app re-runs.
+  const slug = await repoSlug()
+  const runs = await checkRunsByName(slug, await prHeadSha(branch), name)
+  const suiteId = runs[0]?.check_suite?.id
+  if (!suiteId) die(EXIT.fail, { step: "rerun", error: "check run has no check suite", name })
+  const rerequest = await gh([
+    "api",
+    "--method",
+    "POST",
+    `repos/${slug}/check-suites/${suiteId}/rerequest`,
+  ])
+  if (rerequest.code !== 0) {
+    die(EXIT.fail, {
+      step: "rerun",
+      output: rerequest.stderr || rerequest.stdout,
+      hint: `re-run it from the app instead: ${runs[0]?.details_url ?? match.link}`,
+    })
+  }
+  emit({ ok: true, name, via: "check-suite", app: runs[0]?.app?.slug ?? null, suiteId })
+}
+
+// ---------------------------------------------------------------------------
+// GitGuardian
+// ---------------------------------------------------------------------------
+
+const GITGUARDIAN_CHECK = "GitGuardian Security Checks"
+const GITGUARDIAN_KEY_ENV = "GITGUARDIAN_API_KEY"
+const GITGUARDIAN_IGNORE_REASONS = ["test_credential", "false_positive", "low_risk"]
+
+type GuardianIncident = {
+  id: string
+  url: string
+  status: string
+  detector: string
+  commit: string
+  file: string
+  line: number | null
+}
+
+/**
+ * Incidents from the GitGuardian check run's report: one Markdown table row per finding,
+ * `| [id](incident url) | status | detector | commit | file | [View secret](…#diff-…R<line>) |`.
+ */
+function parseGuardianIncidents(text: string): GuardianIncident[] {
+  const incidents: GuardianIncident[] = []
+  for (const line of text.split("\n")) {
+    const row = line.match(
+      /^\|\s*\[(\d+)\]\((https?:\/\/[^)\s]+)\)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*([0-9a-f]{7,40})\s*\|\s*([^|]*?)\s*\|\s*(.*)$/,
+    )
+    if (!row) continue
+    const [, id, url, status, detector, commit, file, rest] = row
+    const lineNumber = rest?.match(/#diff-[0-9a-f]+R(\d+)/)?.[1]
+    incidents.push({
+      id: id as string,
+      url: url as string,
+      status: status as string,
+      detector: detector as string,
+      commit: commit as string,
+      file: file as string,
+      line: lineNumber ? Number(lineNumber) : null,
+    })
+  }
+  return incidents
+}
+
+async function cmdGuardian(): Promise<void> {
+  if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
+  const sub = argv[1] && !argv[1].startsWith("-") ? argv[1] : "list"
+  if (sub === "ignore") return guardianIgnore()
+  if (sub !== "list") die(EXIT.usage, { error: `unknown guardian command: ${sub}`, usage: USAGE })
+
+  const branch = await currentBranch()
+  const slug = await repoSlug()
+  const runs = await checkRunsByName(slug, await prHeadSha(branch), GITGUARDIAN_CHECK)
+  const run = runs[0]
+  if (!run) {
+    emit({ ok: true, check: null, incidents: [] })
+    return
+  }
+  const incidents = parseGuardianIncidents(run.output?.text ?? "")
+  // Whether each flagged commit is already on the remote: a pushed commit cannot be scrubbed
+  // without a force-push, so its incident must be resolved in GitGuardian instead.
+  const withPushed = await Promise.all(
+    incidents.map(async (incident) => {
+      const contains = await git(["branch", "-r", "--contains", incident.commit])
+      return { ...incident, pushed: contains.code === 0 && contains.stdout.length > 0 }
+    }),
+  )
+  emit({
+    ok: run.conclusion !== "failure",
+    check: { conclusion: run.conclusion ?? run.status, details: run.details_url },
+    incidents: withPushed,
+    canIgnore: Boolean(process.env[GITGUARDIAN_KEY_ENV]),
+  })
+  process.exit(run.conclusion === "failure" ? EXIT.fail : EXIT.ok)
+}
+
+/** Resolve one incident as not a leak, through GitGuardian's public API. */
+async function guardianIgnore(): Promise<void> {
+  const id = opt("--incident")
+  const reason = opt("--reason")
+  if (!id || !/^\d+$/.test(id) || !reason || !GITGUARDIAN_IGNORE_REASONS.includes(reason)) {
+    die(EXIT.usage, {
+      error: `guardian ignore needs --incident <id> and --reason <${GITGUARDIAN_IGNORE_REASONS.join("|")}>`,
+      usage: USAGE,
+    })
+  }
+  const key = process.env[GITGUARDIAN_KEY_ENV]
+  if (!key) {
+    die(EXIT.fail, {
+      step: "guardian-auth",
+      error: `${GITGUARDIAN_KEY_ENV} is not set`,
+      vault: `secret/personal/dev key ${GITGUARDIAN_KEY_ENV} (a GitGuardian API token with incidents:write)`,
+      run: "bun scripts/vault-run.ts -- bun scripts/pr-merge.ts guardian ignore --incident <id> --reason <reason>",
+    })
+  }
+  const api = "https://api.gitguardian.com"
+  const response = await fetch(`${api}/v1/incidents/secrets/${id}/ignore`, {
+    method: "POST",
+    headers: { authorization: `Token ${key}`, "content-type": "application/json" },
+    body: JSON.stringify({ ignore_reason: reason }),
+  })
+  const body = await response.text()
+  if (!response.ok) {
+    die(EXIT.fail, { step: "guardian-ignore", status: response.status, output: body.slice(0, 500) })
+  }
+  emit({ ok: true, incident: id, reason, status: response.status })
 }
 
 async function cmdRuleset(): Promise<void> {
@@ -1033,11 +1240,70 @@ async function cmdRepo(): Promise<void> {
   process.exit(drift.length === 0 ? EXIT.ok : EXIT.fail)
 }
 
+/** mergeStateStatus values GitHub reports for a PR it will merge right now. */
+const MERGEABLE_STATES = ["CLEAN", "HAS_HOOKS"]
+
+/**
+ * Everything that keeps the PR from landing. `pending` means wait (checks still running, or
+ * GitHub still computing mergeability); `blockers` need work first. Every reported check counts,
+ * required or not: a failing third-party check (GitGuardian, …) blocks just like CI does.
+ */
+async function mergeReadiness(branch: string, base: string, pr: PrView) {
+  const blockers: string[] = []
+  const pending: { name: string; bucket: string; link: string }[] = []
+
+  if (pr.state !== "OPEN") blockers.push(`PR is ${pr.state}`)
+  if (pr.isDraft) blockers.push("PR is a draft (run `pr --ready`)")
+  const worktree = await worktreeStatus()
+  if (worktree.dirty) blockers.push("worktree not clean (commit, then publish)")
+  const counts = await git(["rev-list", "--left-right", "--count", "@{u}...HEAD"])
+  const [behindUpstream, ahead] = counts.stdout.split(/\s+/).map((n) => Number(n) || 0)
+  if (counts.code !== 0) blockers.push("branch has no upstream (run `publish`)")
+  else if (ahead || behindUpstream) {
+    blockers.push(`local and remote branch differ (ahead ${ahead}, behind ${behindUpstream})`)
+  }
+  if ((await git(["fetch", "--quiet", "origin", base])).code === 0) {
+    const behind = await git(["rev-list", "--count", `HEAD..origin/${base}`])
+    if (Number(behind.stdout) > 0) blockers.push(`behind origin/${base} (run \`sync\`)`)
+  }
+
+  const fetched = await fetchChecks(branch)
+  if (!fetched.ok) blockers.push(`checks unavailable: ${fetched.reason}`)
+  else if (!fetched.reported)
+    pending.push({ name: "(no checks reported yet)", bucket: "pending", link: "" })
+  else {
+    pending.push(...pendingList(fetched.checks))
+    for (const check of fetched.checks) {
+      if (check.bucket === "fail" || check.bucket === "cancel") {
+        blockers.push(`check "${check.name}" is ${check.bucket} (${check.link})`)
+      }
+    }
+  }
+
+  const state = pr.mergeStateStatus ?? "UNKNOWN"
+  if (blockers.length === 0 && pending.length === 0 && !MERGEABLE_STATES.includes(state)) {
+    if (state === "UNKNOWN") pending.push({ name: "(mergeability)", bucket: "pending", link: "" })
+    else blockers.push(`GitHub reports mergeStateStatus ${state}`)
+  }
+  return { blockers, pending, mergeStateStatus: state }
+}
+
 async function cmdMerge(): Promise<void> {
   if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
   const branch = await currentBranch()
+  const base = await baseBranch()
+  requireTrunk(base)
   const existing = await readPr(branch)
   if (!existing) die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+
+  const { blockers, pending, mergeStateStatus } = await mergeReadiness(branch, base, existing)
+  if (blockers.length > 0)
+    die(EXIT.fail, { step: "merge-gate", blockers, pending, mergeStateStatus })
+  if (pending.length > 0) die(EXIT.pending, { step: "merge-gate", pending, mergeStateStatus })
+  if (flag("--dry-run")) {
+    emit({ ok: true, ready: true, number: existing.number, url: existing.url, mergeStateStatus })
+    return
+  }
 
   const auto = flag("--auto")
   const args = ["pr", "merge", branch, "--merge"]
@@ -1047,16 +1313,24 @@ async function cmdMerge(): Promise<void> {
     die(EXIT.fail, { step: "merge", output: merged.stderr || merged.stdout })
   }
 
-  const pr = await readPr(branch)
+  // Merging is asynchronous on GitHub's side; wait briefly for the PR to report MERGED.
+  let pr = await readPr(branch)
+  for (let i = 0; i < 15 && pr?.state !== "MERGED"; i++) {
+    await Bun.sleep(2000)
+    pr = await readPr(branch)
+  }
+  const state = pr?.state ?? existing.state
   emit({
-    ok: true,
+    ok: state === "MERGED",
+    merged: state === "MERGED",
     method: "merge",
     auto,
     number: pr?.number ?? existing.number,
     url: pr?.url ?? existing.url,
-    state: pr?.state ?? existing.state,
+    state,
     mergeStateStatus: pr?.mergeStateStatus ?? null,
   })
+  process.exit(state === "MERGED" ? EXIT.ok : EXIT.pending)
 }
 
 // ---------------------------------------------------------------------------
@@ -1083,6 +1357,10 @@ async function main(): Promise<void> {
       return cmdChecks()
     case "logs":
       return cmdLogs()
+    case "rerun":
+      return cmdRerun()
+    case "guardian":
+      return cmdGuardian()
     case "ruleset":
       return cmdRuleset()
     case "repo":

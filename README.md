@@ -239,13 +239,13 @@ Keep the committed hook file in `.husky/commit-msg` — the generated `.husky/_`
 only merge commits are allowed (squash and rebase are disabled). Head branches are deleted on
 merge, and the aggregate `Required` job (Commitlint + Check + the trunk policy) is the required
 status check, with no bypass actors. PRs use the minimal template in
-`.github/pull_request_template.md`. The gate is codified in `scripts/pr-ready.ts`:
+`.github/pull_request_template.md`. The gate is codified in `scripts/pr-merge.ts`:
 
 ```bash
-bun run pr:ready repo                            # verify merge settings / auto-delete / auto-merge
-bun run pr:ready repo --apply
-bun run pr:ready ruleset                         # verify the `Protect main` ruleset
-bun run pr:ready ruleset --apply
+bun run pr:merge repo                            # verify merge settings / auto-delete / auto-merge
+bun run pr:merge repo --apply
+bun run pr:merge ruleset                         # verify the `Protect main` ruleset
+bun run pr:merge ruleset --apply
 ```
 
 ### Agent commands
@@ -256,8 +256,9 @@ harness — `.claude/commands`, `.cursor/commands`, `.opencode/command`, `.winds
 canonical file; `bun run agents:sync` creates missing links and `bun run check:agents` (part of
 `bun run check`) fails CI on drift.
 
-`/pr-ready` takes the current branch all the way to a green PR: commit, push, merge `origin/main`,
-resolve conflicts, open the PR, and loop CI fixes until every check passes.
+`/pr-merge` takes the current branch all the way to a merged PR: commit, push, merge `origin/main`,
+resolve conflicts, open the PR, fix every failing check (CI and third-party checks such as
+GitGuardian), then merge automatically once everything is green.
 
 ### Package publishing
 
