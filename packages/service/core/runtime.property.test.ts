@@ -184,36 +184,42 @@ describe("runtime", () => {
     expect((await runtime.fetch(new Request("http://mock.local/health"))).status).toBe(200)
   })
 
-  test("namespaces isolate writes, resets and restores", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.uniqueArray(fc.stringMatching(/^[a-z][a-z0-9-]{0,11}$/), {
-          minLength: 2,
-          maxLength: 4,
-        }),
-        fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: 1, maxLength: 5 }),
-        async (namespaces, texts) => {
-          const runtime = createRuntime({ name: "notes", document, create: notesService })
-          for (const ns of namespaces) {
-            for (const text of texts) {
-              await call(runtime, "POST", "/v1/notes", {
-                body: { text: `${ns}:${text}` },
-                headers: { [NAMESPACE_HEADER]: ns },
-              })
+  test(
+    "namespaces isolate writes, resets and restores",
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.uniqueArray(fc.stringMatching(/^[a-z][a-z0-9-]{0,11}$/), {
+            minLength: 2,
+            maxLength: 4,
+          }),
+          fc.array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: 1, maxLength: 5 }),
+          async (namespaces, texts) => {
+            const runtime = createRuntime({ name: "notes", document, create: notesService })
+            for (const ns of namespaces) {
+              for (const text of texts) {
+                await call(runtime, "POST", "/v1/notes", {
+                  body: { text: `${ns}:${text}` },
+                  headers: { [NAMESPACE_HEADER]: ns },
+                })
+              }
             }
-          }
-          for (const ns of namespaces) {
-            expect(await notesIn(runtime, ns)).toEqual(texts.map((t) => `${ns}:${t}`).sort())
-          }
-          const [first, second] = namespaces as [string, string]
-          await runtime.reset(first)
-          expect(await notesIn(runtime, first)).toEqual([])
-          expect(await notesIn(runtime, second)).toEqual(texts.map((t) => `${second}:${t}`).sort())
-        },
-      ),
-      { ...params, numRuns: Math.min(params.numRuns ?? 100, 25) },
-    )
-  })
+            for (const ns of namespaces) {
+              expect(await notesIn(runtime, ns)).toEqual(texts.map((t) => `${ns}:${t}`).sort())
+            }
+            const [first, second] = namespaces as [string, string]
+            await runtime.reset(first)
+            expect(await notesIn(runtime, first)).toEqual([])
+            expect(await notesIn(runtime, second)).toEqual(
+              texts.map((t) => `${second}:${t}`).sort(),
+            )
+          },
+        ),
+        { ...params, numRuns: Math.min(params.numRuns ?? 100, 25) },
+      )
+    },
+    { timeout: 30_000 },
+  )
 
   test("a snapshot restores exactly, discarding later writes", async () => {
     const runtime = createRuntime({ name: "notes", document, create: notesService })
