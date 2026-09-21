@@ -54,6 +54,21 @@ const { links } = await (await fetch(`${mock.url}/__admin/outbox/${messages[0].i
 // links[0] === "https://app.test/family/invitations/claim?token=abc"
 ```
 
+Whatever sends the mail (the SDK above, or raw HTTP), the outbox is the assertion surface:
+
+```ts
+import { createServer } from "@crvouga/mockingbird-service-resend/server"
+
+const mock = await createServer()
+await fetch(`${mock.url}/emails`, {
+  method: "POST",
+  headers: { "content-type": "application/json", authorization: "Bearer re_test" },
+  body: JSON.stringify({ from: "no-reply@example.com", to: ["invitee@example.com"], subject: "Hi", text: "Hello" }),
+})
+const sent = await (await fetch(`${mock.url}/__admin/outbox?to=invitee@example.com`)).json()
+await mock.close()
+```
+
 ### Routes
 
 | Route | Behaviour |

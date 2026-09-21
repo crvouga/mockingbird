@@ -59,6 +59,24 @@ await cal.events.insert({
 })
 ```
 
+An event created "in Google's UI" (admin route) is what the app then lists and syncs:
+
+```ts
+import { createServer } from "@crvouga/mockingbird-service-google-calendar/server"
+
+const google = await createServer()
+await fetch(`${google.url}/__admin/events`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    email: "dr.house@example.com",
+    event: { summary: "Rounds", start: { dateTime: "2026-10-01T15:00:00Z" }, end: { dateTime: "2026-10-01T16:00:00Z" } },
+  }),
+})
+const stored = await (await fetch(`${google.url}/__admin/events?email=dr.house@example.com`)).json()
+await google.close()
+```
+
 ### Routes
 
 | Route | Behaviour |

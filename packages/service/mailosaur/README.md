@@ -67,6 +67,23 @@ const message = await mailosaur.messages.get("abcd1234", { sentTo: "member-app-x
 message.text?.codes?.[0]?.value // "604218"
 ```
 
+The inbox can also be read without the SDK, through the admin routes:
+
+```ts
+import { createServer } from "@crvouga/mockingbird-service-mailosaur/server"
+
+const inbox = await createServer()
+const response = await fetch(`${inbox.url}/__admin/ingest`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ to: "member-app-x1@abcd1234.mailosaur.net", text: "Your verification code is 604218. " }),
+})
+const { id } = (await response.json()) as { id: string }
+const { codes } = (await (await fetch(`${inbox.url}/__admin/outbox/${id}/links`)).json()) as { codes: string[] }
+// codes[0] === "604218"
+await inbox.close()
+```
+
 ### Routes
 
 | Route | Behaviour |

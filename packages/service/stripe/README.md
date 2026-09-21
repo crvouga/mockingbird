@@ -54,6 +54,24 @@ await stripe.paymentMethods.attach("pm_card_visa", { customer: customer.id }) //
 await server.close()
 ```
 
+Or over raw HTTP, the way any Stripe client talks to it:
+
+```ts
+import { createServer } from "@crvouga/mockingbird-service-stripe/server"
+
+const server = await createServer()
+const response = await fetch(`${server.url}/v1/customers`, {
+  method: "POST",
+  headers: {
+    authorization: "Bearer sk_test_mso",
+    "content-type": "application/x-www-form-urlencoded",
+  },
+  body: new URLSearchParams({ email: "qa@example.com" }),
+})
+const customer = (await response.json()) as { id: string; email: string }
+await server.close()
+```
+
 ### Pointing the app at it
 
 stripe-node accepts `host`, `port` and `protocol`; route every `new Stripe(...)` through one options

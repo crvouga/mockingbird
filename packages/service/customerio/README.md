@@ -54,6 +54,22 @@ await fetch(`${cio.url}/__admin/reporting-events`, {
 })
 ```
 
+Without the SDK, drive the mock directly and read back what the app sent:
+
+```ts
+import { createServer } from "@crvouga/mockingbird-service-customerio/server"
+
+const cio = await createServer()
+await fetch(`${cio.url}/v1/identify`, {
+  method: "POST",
+  headers: { "content-type": "application/json", authorization: `Basic ${btoa("wk:")}` },
+  body: JSON.stringify({ userId: "42", traits: { email: "ada@example.com" } }),
+})
+const profiles = await (await fetch(`${cio.url}/__admin/profiles`)).json()
+const deliveries = await (await fetch(`${cio.url}/__admin/outbox?userId=42`)).json()
+await cio.close()
+```
+
 ### Routes
 
 | Route | Behaviour |
