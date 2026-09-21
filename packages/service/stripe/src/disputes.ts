@@ -17,6 +17,8 @@ export const disputeHandlers = (services: Services): Record<string, OperationHan
     const params = queryParams(context)
     const charge = stringOf(params, "charge")
     const paymentIntent = stringOf(params, "payment_intent")
+    if (paymentIntent !== null && !scope.account.paymentIntents.has(paymentIntent))
+      throw resourceMissing("paymentintent", paymentIntent, "payment_intent", 400)
     const page = await paginate<DisputeRecord>(scope.account.disputes, params, {
       url: "/v1/disputes",
       kind: "dispute",
@@ -26,7 +28,14 @@ export const disputeHandlers = (services: Services): Record<string, OperationHan
         (paymentIntent === null || record.payment_intent === paymentIntent),
       render: renderDispute,
     })
-    return jsonResponse(200, page)
+    // Stripe still returns the legacy `count` (the matching disputes) on this list.
+    const count = scope.account.disputes.list({
+      where: (record) =>
+        matchesCreated(record.created, params.created) &&
+        (charge === null || record.charge === charge) &&
+        (paymentIntent === null || record.payment_intent === paymentIntent),
+    }).length
+    return jsonResponse(200, { ...page, count })
   },
   GetDisputesDispute: async (context) => {
     const scope = requestScope(services, context)

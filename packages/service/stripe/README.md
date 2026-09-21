@@ -1,21 +1,16 @@
 # @crvouga/mockingbird-service-stripe
 
-Stateful, in-process mock of the [Stripe API](https://docs.stripe.com/api) for test suites. It is
-driven by a vendored subset of Stripe's OpenAPI contract and verified by differential property tests
-against Stripe test mode. Covered: customers (including search and balance transactions), payment
-methods, payment and setup intents, charges, refunds, disputes (read-only), checkout sessions,
-invoices and invoice items, subscriptions and subscription schedules, coupons and promotion codes,
-products, prices, and an event ledger (`/v1/events`) with a webhook hook.
+Stateful, in-process mock of the [Stripe API](https://docs.stripe.com/api) for test suites: accounts
+chosen by API key, customers and balances, payment methods, payment and setup intents, charges,
+refunds, disputes, checkout (with a hosted page and a Stripe.js stand-in), invoices, subscriptions
+that renew when the clock moves, subscription schedules, coupons, promotion codes, products,
+prices, test clocks, webhook endpoints, the balance ledger and the event log — with signed webhooks
+fanned out to every matching endpoint. Responses are rendered at the caller's `Stripe-Version`
+(`2024-06-20`, `2025-02-24.acacia`, or the vendored latest), and the whole surface is verified by
+differential property tests against Stripe test mode.
 
-Use it when server-side code talks to Stripe through `fetch` or stripe-node and you want the suite
-to run offline with no `api.stripe.com` egress. It does not serve Stripe.js or hosted checkout
-(`js.stripe.com`, `checkout.stripe.com`); browser-driven checkout still needs real Stripe test mode.
-
-- Operation coverage (88 of 108 operations in the vendored spec, with reasons for each gap):
+- Operation coverage (111 of 115 operations in the vendored spec, with reasons for each gap):
   [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/SUPPORT.md)
-- Scope and proof: [stripe-drop-in.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/docs/stripe-drop-in.md)
-  · Consumer wiring checklist: [qa-followon.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/docs/qa-followon.md)
-  · [QA coverage](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/docs/qa-coverage.md)
 - Stripe API reference: https://docs.stripe.com/api · Upstream OpenAPI: https://github.com/stripe/openapi
 
 ## Install
@@ -25,274 +20,284 @@ npm install -D @crvouga/mockingbird-service-stripe
 ```
 
 ESM only. Requires Node >= 22 or Bun >= 1.2. No native dependencies: state lives in an in-memory
-SQLite engine (pure TypeScript, bundled in). To serve it over HTTP run `npx mockingbird-stripe serve`, or
-use `createServer` from `./server` (Node) or `createRuntime` with any Fetch server.
+SQLite engine (pure TypeScript, bundled in).
 
 ## Usage
 
-Behaviour the examples rely on (all from the source):
-
-- **Any host works.** Routing uses only the path (`/v1/...`), so `https://api.stripe.com`,
-  `http://127.0.0.1:<port>` or any made-up origin is fine.
-- **Auth is required.** Every request needs `Authorization: Bearer <key>` where the key matches
-  `^(sk|rk)_test_[A-Za-z0-9]+$`. Missing header or any other shape (including `sk_live_...` and
-  keys with extra underscores such as `sk_test_my_key`) returns Stripe's 401 error body.
-- **One key = one account.** State is partitioned by bearer key, so an object created with
-  `sk_test_a` is `resource_missing` (404) under `sk_test_b`.
-- Request bodies are `application/x-www-form-urlencoded` with Stripe's bracket notation, exactly
-  as stripe-node sends them. Every response carries `request-id` and `stripe-version` headers.
-- `Idempotency-Key` on POSTs is honoured: a replay returns the cached response, a replay with
-  different parameters returns 400.
-
-### Serve it: `mockingbird-stripe serve` or `createServer`
-
 ```bash
-npx mockingbird-stripe serve                 # http://127.0.0.1:12111
-npx mockingbird-stripe serve --port 0 --log json --admin-key local-admin
-npx mockingbird-stripe serve --config mockingbird.json   # every service in one config
+npx mockingbird-stripe serve                  # http://127.0.0.1:12111
+npx mockingbird-stripe serve --accounts accounts.json --admin-key local-admin
+npx mockingbird-stripe serve --config mockingbird.json   # every service in one process
 ```
 
 ```ts
+import Stripe from "stripe"
 import { createServer } from "@crvouga/mockingbird-service-stripe/server"
 
-const server = await createServer() // any free port; server.url, server.port
-const response = await fetch(`${server.url}/v1/products?limit=3`, { headers: { authorization: "Bearer sk_test_mockingbird" } })
-console.log(response.status) // 200
+const server = await createServer({
+  accounts: [
+    // Legacy STRIPE_API_KEY, STRIPE_MSO_API_KEY and the EMR key all act as MSO and share state.
+    { id: "acct_mso", keys: ["sk_test_legacy", "sk_test_mso", "sk_test_emr", "pk_test_mso"], corpus: true },
+    { id: "acct_pc", keys: ["sk_test_pc"] },
+    { id: "acct_pp", keys: ["sk_test_pp"], apiVersion: "2025-02-24.acacia" },
+  ],
+})
+const url = new URL(server.url)
+const stripe = new Stripe("sk_test_mso", {
+  apiVersion: "2024-06-20",
+  host: url.hostname,
+  port: Number(url.port),
+  protocol: "http",
+})
+const customer = await stripe.customers.create({ email: "qa@example.com" })
+await stripe.paymentMethods.attach("pm_card_visa", { customer: customer.id }) // a new pm_ id
 await server.close()
 ```
 
-Served this way — or through `createRuntime()`, the same thing as one runtime-neutral `fetch` —
-the mock also answers Mockingbird's service contract, outside Stripe's bearer-key check:
+### Pointing the app at it
 
-- `GET /health` — unauthenticated readiness probe.
-- `/__admin/*` — reset (`POST /__admin/reset`), snapshots (`POST /__admin/snapshots`,
-  `POST /__admin/snapshots/{id}/restore`), clock (`POST /__admin/clock {"advance": "2h"}`), fault
-  injection (`POST /__admin/faults {"operationId": …, "status": 503, "count": 1}`), and metrics with
-  unmatched-route counts (`GET /__admin/metrics`). `GET /__admin` lists every route; `--admin-key`
-  locks them behind `x-mockingbird-admin-key`.
-- `x-mockingbird-namespace: <name>` — isolates a request's data, so parallel workers share one
-  process without seeing each other.
+stripe-node accepts `host`, `port` and `protocol`; route every `new Stripe(...)` through one options
+factory reading `STRIPE_API_HOST` / `STRIPE_API_PORT` / `STRIPE_API_PROTOCOL` (the catalog's G-S1),
+and give raw `fetch('https://api.stripe.com…')` call sites the same base URL. Keys must look like
+test keys (`sk_test_…`, `rk_test_…`; `pk_test_…` for the Stripe.js stand-in). Point the browser at
+the mock's `GET /v3` instead of `https://js.stripe.com/v3` (G-S3); `session.url` already points at
+the mock's hosted page.
 
-The [Junction README](https://github.com/crvouga/mockingbird/tree/main/packages/service/junction#the-service-contract)
-documents the contract in full.
+### Accounts and namespaces
 
-### In-process (inject `fetch`)
+State is partitioned by **account**, and the account is chosen by API key:
 
-```ts
-import { StripeAPI } from "@crvouga/mockingbird-service-stripe"
+- `PUT /__admin/accounts {"accounts": [{id, keys, apiVersion?, webhookSecrets?, corpus?, displayName?}]}`
+  (also `createRuntime({accounts})` / `serve --accounts <json|file>`). Every key listed on an
+  account acts as it. Any other test key is an account of its own (`accountOfKey(key)`), so an MSO
+  key reading a PC object gets Stripe's exact `404 resource_missing` (`No such payment_intent: 'pi_…'`).
+- `apiVersion` is the account's default version (requests without `Stripe-Version`) and the version
+  its webhook payloads render at (default `2024-06-20`, what every backend receiver of ours pins).
+- `webhookSecrets: {"<receiver url>": "whsec_…"}` delivers every event of the account there.
+- `corpus: true` seeds the recorded catalog (below).
 
-const stripe = new StripeAPI({ now: () => Date.UTC(2026, 0, 1) })
+**Namespaces** isolate parallel workers; each namespace has its own copy of every account. Carriers:
+the `x-mockingbird-namespace` header, the `/ns/<namespace>/…` path prefix, or **by API key**:
+`PUT /__admin/credentials {"credentials": {"sk_test_worker1": "w1"}}` (stripe-node cannot add
+headers). Hosted-page URLs carry the `/ns/<namespace>` prefix so the browser lands in the same one.
 
-const auth = { authorization: "Bearer sk_test_mockingbird" }
+### API versions
 
-const created = await stripe.fetch(
-  new Request("https://api.stripe.com/v1/customers", {
-    method: "POST",
-    headers: { ...auth, "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ email: "qa@example.com", "metadata[userId]": "1001" }),
-  }),
-)
-const customer = (await created.json()) as { id: string; created: number }
-console.log(created.status, customer.id) // 200 "cus_..."
-
-// Any code that accepts a fetch function can be pointed at the mock:
-const mockFetch = (input: string | URL | Request, init?: RequestInit) =>
-  stripe.fetch(new Request(input, init))
-const listed = await mockFetch("https://api.stripe.com/v1/customers?limit=10", { headers: auth })
-console.log(((await listed.json()) as { data: unknown[] }).data.length) // 1
-```
-
-`now` drives `created`-style fields (Stripe returns seconds; `now` returns milliseconds).
-
-### Over HTTP
-
-```ts
-import { StripeAPI } from "@crvouga/mockingbird-service-stripe"
-
-const stripe = new StripeAPI()
-const server = Bun.serve({
-  port: 0, // ephemeral
-  hostname: "127.0.0.1",
-  fetch: (request) => stripe.fetch(request),
-})
-const baseUrl = `http://127.0.0.1:${server.port}`
-
-const response = await fetch(`${baseUrl}/v1/products?limit=3`, {
-  headers: { authorization: "Bearer sk_test_mockingbird" },
-})
-console.log(response.status) // 200
-
-server.stop()
-```
-
-On Node, `createServer` (above) is the listener; any Fetch-style server also works with
-`StripeAPI#fetch` or `createRuntime().fetch`.
-
-### Pointing stripe-node at it
-
-stripe-node accepts `host`, `port` and `protocol`. This is the construction the package's own
-client smoke test uses (stripe 16.x, `apiVersion: "2024-06-20"`):
-
-```js
-import Stripe from "stripe"
-
-const client = new Stripe("sk_test_mockingbird", {
-  apiVersion: "2024-06-20",
-  host: "127.0.0.1",
-  port: server.port, // from Bun.serve() above
-  protocol: "http",
-})
-await client.customers.create({ email: "qa@example.com" })
-```
-
-With `mockingbird-stripe serve` on port 12111, host, port and protocol are the only wiring. Add a
-base-URL override (e.g. `STRIPE_API_BASE_URL=http://127.0.0.1:12111`) at every place your app
-constructs a Stripe client; a client built with `new Stripe(key)` and no options cannot be
-redirected. Test payment methods and tokens such as `pm_card_visa`, `pm_card_authenticationRequired`
-and `tok_chargeDeclinedInsufficientFunds` behave like their Stripe counterparts
-(`QA_TEST_PAYMENT_METHODS` and `QA_TEST_CARD_TOKENS` list the ones the suites exercise).
+`Stripe-Version` picks the shape. `2024-06-20` (and anything before 2024-09-30) returns
+`invoice.discount` (with the coupon embedded), `invoice.charge` / `payment_intent` / `subscription` /
+`paid` / `subscription_details`, `subscription.current_period_*` and `subscription.discount`, and
+invoice lines with `price` objects; `2025-02-24.acacia` adds `total_pretax_credit_amounts`;
+2025-03-31.basil and later (the vendored latest) drop those and use `parent`, `pricing`,
+`discount.source` and item-level periods. `charge.refunds` appears only with `expand[]=refunds` at
+every one of these versions. `GET /v1/invoices/upcoming` answers at the older versions and returns
+Stripe's "deprecated" 404 at basil and later. Expansion is generic (any path through ids the mock
+holds, ancestors included); Stripe's own rules are enforced: a non-expandable first segment is
+`This property cannot be expanded (metadata).` and more than four levels is
+`property_expansion_max_depth` (verified against test mode at all three versions).
 
 ### Webhooks
 
-The mock records an event for every state change (readable through `GET /v1/events` and
-`webhookEvents()`), and calls `onWebhook` with each one. Delivery and signing are up to you;
-Stripe signs `"<t>.<body>"` with HMAC-SHA256 keyed by the `whsec_` secret verbatim, which
-`stripe.webhooks.constructEvent` accepts:
+Every state change records an event in the account's log (`GET /v1/events`, filterable by
+`types[]` and `created`) and publishes it through the shared webhook hub, signed
+`Stripe-Signature: t=<wall-clock unix>,v1=<hex HMAC-SHA256(secret, "t.body")>` over the exact bytes —
+`stripe.webhooks.constructEvent` verifies them.
 
-```ts
-import { createHmac } from "node:crypto"
-import { accountOfKey, StripeAPI } from "@crvouga/mockingbird-service-stripe"
+- Endpoints: `PUT /__admin/webhook-endpoints [{account, url, secret, enabledEvents: ["*"|…]}]`
+  (`account` is an account id or any of its keys; omit it to receive every account),
+  `serve --webhook-url/--webhook-secret`, accounts' `webhookSecrets`, and endpoints created through
+  `POST /v1/webhook_endpoints` (signed with the `whsec_` returned at creation). One event fans out to
+  every matching endpoint, as on Stripe. Retries follow the hub's schedule.
+- `GET /__admin/webhooks`, `/webhooks/events`, `POST /__admin/webhooks/:id/replay`, `/webhooks/flush`.
+- Delivery faults: presets `webhook_duplicate` (same event id twice — our receiver's in-flight
+  dedupe answers 500), `webhook_reorder` (the next two swapped), `webhook_drop` (never delivered,
+  still in `GET /v1/events` for the replay worker).
+- Metadata is copied verbatim, so the PC route's quarantine rule (`metadata.intent ∈ {pc_order,
+  kb_membership, shop_purchase, stripe_membership}` or `source=supplement` + `billingInvoiceId`)
+  only fires for sessions that would trip it on Stripe.
 
-const WEBHOOK_URL = "http://127.0.0.1:3100/webhooks/stripe"
-const WEBHOOK_SECRET = "whsec_local_test"
-const account = accountOfKey("sk_test_mockingbird")
+Events emitted: `customer.*`, `payment_method.attached|detached|updated`,
+`payment_intent.created|succeeded|payment_failed|canceled|requires_action|amount_capturable_updated`,
+`charge.succeeded|failed|captured|refunded|dispute.created`, `setup_intent.created|succeeded|setup_failed|canceled|requires_action`,
+`checkout.session.completed|expired|async_payment_succeeded`,
+`invoice.created|finalized|updated|paid|payment_succeeded|payment_failed|voided|deleted|upcoming`,
+`invoiceitem.created`, `customer.subscription.created|updated|deleted` (with
+`data.previous_attributes`), `subscription_schedule.*`, `refund.created|updated|failed`,
+`product.*`, `price.*` (with `previous_attributes`), `coupon.*`, `promotion_code.*`,
+`test_helpers.test_clock.*`.
 
-const stripe = new StripeAPI({
-  onWebhook: (event) => {
-    if (event.account !== account) return
-    const t = Math.floor(Date.now() / 1000)
-    const v1 = createHmac("sha256", WEBHOOK_SECRET).update(`${t}.${event.body}`).digest("hex")
-    void fetch(WEBHOOK_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json", "stripe-signature": `t=${t},v1=${v1}` },
-      body: event.body,
-    }).catch(() => undefined)
-  },
-})
+### Lifecycles and the clock
 
-// Or assert on recorded events directly:
-console.log(stripe.webhookEvents(account).map((event) => event.type))
-```
+`POST /__admin/clock {"advance": "32d"}` (or `set`) moves the mock clock and immediately runs every
+clock-driven lifecycle, so their webhooks fire at once; the served mock also ticks every second.
 
-### Resetting between tests
+- **Renewals**: past `current_period_end` a subscription cycles — a `subscription_cycle` invoice is
+  finalized and charged off-session to the default payment method, then `invoice.paid` +
+  `customer.subscription.updated` (`previous_attributes.current_period_end`), or
+  `invoice.payment_failed` and `past_due`. Trials end into a cycle; `cancel_at_period_end` cancels
+  (`customer.subscription.deleted`). `invoice.upcoming` fires 3 days before renewal.
+- `incomplete` subscriptions become `incomplete_expired` after 23 h (their invoice is voided).
+- Checkout Sessions expire at `expires_at` (`checkout.session.expired`).
+- Schedule phases advance; the last one releases or cancels per `end_behavior`.
+- **Test clocks**: customers created with `test_clock` live on the clock's time;
+  `POST /v1/test_helpers/test_clocks/:id/advance` runs their lifecycles and the clock reads `ready`
+  on the next retrieve.
+- `POST /__admin/tick` runs the lifecycle without moving the clock.
 
-`reset()` clears every account's objects, the event ledger and the idempotency cache. Create one
-instance per suite and reset it in `beforeEach`:
+Payment behaviour: `payment_behavior` omitted (`allow_incomplete`) charges the default payment method
+now and returns `incomplete` on a decline; `error_if_incomplete` fails the call with the 402;
+`default_incomplete` leaves the first invoice's PaymentIntent (with its `client_secret`) for the
+customer, and paying it through Stripe.js activates the subscription. `trial_end`,
+`backdate_start_date` + `billing_cycle_anchor` + `proration_behavior=none` (a $0 first invoice),
+item updates with `always_invoice` (billed now) or `create_prorations` (next invoice), and
+discounts with stable `di_` ids (`discounts=""` clears) are modelled. A $0 invoice is `paid` on
+finalize; a customer credit balance is applied at finalize; `void` works only on open invoices
+(`You can only pass in open invoices. This invoice isn't open.`).
 
-```ts
-import { beforeEach, expect, test } from "bun:test"
-import { StripeAPI } from "@crvouga/mockingbird-service-stripe"
+### Hosted Checkout page and Stripe.js
 
-const stripe = new StripeAPI()
-beforeEach(() => stripe.reset())
+- `GET /c/pay/:sessionId` — the page `session.url` points to: card number, expiry, CVC, ZIP and
+  Pay/Cancel with `data-testid`s `stripe-mock-card`, `stripe-mock-exp`, `stripe-mock-cvc`,
+  `stripe-mock-zip`, `stripe-mock-pay`, `stripe-mock-cancel` (a decline shows
+  `stripe-mock-error`). Pay completes the session (creating the customer, the PaymentIntent with
+  `payment_intent_data.metadata`, the Subscription with `subscription_data.metadata`, or the
+  SetupIntent), emits `checkout.session.completed` and 302s to `success_url` with
+  `{CHECKOUT_SESSION_ID}` substituted raw and `%7B…%7D`-encoded; Cancel 302s to `cancel_url`.
+- `POST /__admin/checkout/sessions/:id/complete {"card": "4242…"}` does the same without a browser;
+  `…/expire` and `…/async_payment_succeeded` too.
+- `GET /v3` — the Stripe.js stand-in: `Stripe(pk)`, `elements()` → `create("payment"|"card")`,
+  `confirmPayment`, `confirmSetup`, `confirmCardPayment`, `confirmCardSetup`,
+  `retrievePaymentIntent`, `retrieveSetupIntent`, `createPaymentMethod`, `handleCardAction`. It calls
+  `POST /v1/{payment,setup}_intents/:id/confirm` with the publishable key and `client_secret` (the
+  requests UI suites already wait for); 3-D Secure cards are authenticated in place.
 
-test("starts empty", async () => {
-  const response = await stripe.fetch(
-    new Request("https://api.stripe.com/v1/customers", {
-      headers: { authorization: "Bearer sk_test_mockingbird" },
-    }),
-  )
-  expect(((await response.json()) as { data: unknown[] }).data).toEqual([])
-})
-```
+A publishable key may only confirm or read an intent whose `client_secret` it presents, and create
+payment methods; anything else is Stripe's 401.
 
-## What is and is not modelled
+### Test values
 
-- **Modelled**: the 88 operations in [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/SUPPORT.md),
-  whose behaviour is checked by live parity against Stripe test mode; state partitioned per API key;
-  the test payment methods and card tokens listed above.
-- **Not modelled**: the 20 operations SUPPORT.md marks unsupported, each with its reason; Stripe.js
-  and hosted checkout (`js.stripe.com`, `checkout.stripe.com`); real rate-limit and 5xx bodies —
-  `POST /__admin/faults` injects Mockingbird's own, which are shape-plausible, not recorded;
-  anything outside the vendored spec, which 404s and is counted in `GET /__admin/metrics` under
-  `unmatched`.
-- **Determinism**: with a fixed clock and `seed`, ids and timestamps replay exactly — two runtimes
-  given the same clock produce the same `cus_…` ids and `created` values.
+- Payment methods: `pm_card_visa`, `pm_card_mastercard`, `pm_card_amex`, `pm_card_discover`,
+  `pm_card_visa_debit`, `pm_card_chargeDeclined`, `pm_card_chargeDeclinedInsufficientFunds`,
+  `pm_card_chargeDeclinedExpiredCard`, `pm_card_chargeCustomerFail`,
+  `pm_card_authenticationRequired`, `pm_card_threeDSecure2Required`, `pm_card_createDispute` —
+  each use clones a new `pm_`.
+- Tokens: `tok_visa`, `tok_chargeCustomerFail` (attaches, then every charge declines),
+  `tok_chargeDeclinedInsufficientFunds`, `tok_chargeDeclinedExpiredCard`, `tok_createDispute`, …
+- Card numbers (page, Stripe.js): `4242424242424242` succeeds, `4000000000000002` declines,
+  `4000000000009995` insufficient funds, `4000002500003155` 3-D Secure, `4000051230000072` the HSA
+  card (`funding: prepaid`, `issuer: OPTUM BANK`, what our HSA/FSA detection matches).
+- Off-session declines answer 402 `card_error` with `charge`, `decline_code`, `advice_code`,
+  `payment_method` and the failed `payment_intent` embedded, as Stripe does.
+- Client secrets are `pi_<id>_secret_<x>` / `seti_<id>_secret_<x>`.
+
+### Idempotency
+
+POSTs with `Idempotency-Key` go through the shared `IdempotencyStore`, scoped per account: a
+replay returns the stored response byte for byte (with `idempotent-replayed: true`); the same key
+with different parameters is 400 `idempotency_error`; a concurrent request on an in-flight key is
+409 `idempotency_key_in_use`, with Stripe's wording.
+
+### Fault presets
+
+`POST /__admin/faults {"preset": "<name>", "count"?: n}`: `card_declined`, `insufficient_funds`,
+`expired_card`, `authentication_required` (the next charge attempt declines), `rate_limited` (429
+`rate_limit`), `api_error` (500 `api_error`), `permission_error` (403), `connection_drop`,
+`idempotency_in_flight` (500 ms processing, so a concurrent retry gets 409), `search_lag` (search
+hides objects younger than 60 s — search is consistent otherwise), `webhook_duplicate`,
+`webhook_reorder`, `webhook_drop`.
+
+### Admin routes (beyond the standard contract)
+
+`GET|PUT /__admin/accounts`, `PUT /__admin/webhook-endpoints`, `PUT /__admin/refunds/:id
+{status, failure_reason}` (emits `refund.failed` / `refund.updated`), `POST /__admin/disputes
+{payment_intent|charge, reason?, amount?}` (emits `charge.dispute.created`),
+`POST /__admin/checkout/sessions/:id/complete|expire|async_payment_succeeded`,
+`POST /__admin/setup_intents/:id/succeed`, `GET /__admin/charges/:id`, `POST /__admin/tick`. The
+standard ones (`/health`, reset, snapshots, clock, faults, metrics, `GET /__admin/requests`,
+credentials, webhooks) come from the shared runtime. The journal records operation, status and ids
+only — never bodies, card numbers or emails.
+
+### Corpus
+
+`GEVITI_CORPUS` is the recorded test-mode catalog our seeded fixtures point at (reference-data
+products and prices, catalog plans, shop fixtures, QA snapshots such as `prod_SNj3rQYHrHNS0H` /
+`price_1StxtjGBBGmxLhdL8PzNSEgX`, and runbook coupons and promotion codes; 144 products, 172
+prices). Accounts with `corpus: true` answer those ids byte for byte; customers, intents and
+subscriptions are never recorded. The membership lookup keys our env expects
+(`membership_<tier>_<interval>`, e.g. `membership_plus_annually`) are attached to the matching
+recorded prices (listed in `synthesizedLookupKeys`). Pass your own with `createRuntime({corpus})`.
 
 ## API
 
-`StripeAPI` is the main export; the rest supports account scoping, contract introspection and the
-QA corpus used by the parity suites.
+`StripeAPI` is the engine; `createRuntime` wraps it in the service contract. From
+`@crvouga/mockingbird-service-stripe`:
 
 | Export | Description |
 | --- | --- |
-| `createRuntime` | `(options?) => StripeRuntime` — the mock with the service contract (health, admin, namespaces, clock, faults, metrics) as one runtime-neutral `fetch`. Options: `sqlite`, `clock`, `seed`, `adminKey`, `onLog`, `onWebhook`. `./server` adds `createServer(options?)` (Node; `port`, `host`), `serveTarget` and `DEFAULT_PORT` (`12111`). |
-| `StripeAPI` | Class. `new StripeAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. |
-| `accountOfKey` | `(key: string) => string` — the opaque `acct_...` partition id for an API key (use it to filter `webhookEvents`). |
-| `accountOf` | `(request: Request) => string` — the partition id for a request's bearer key. |
-| `STRIPE_NAMESPACE` | `"stripe"` — SQLite namespace holding every Stripe record when sharing a `sqlite` client. |
-| `document` | The vendored Stripe OpenAPI document (Mockingbird subset) that drives routing and validation. |
-| `operationIds` | Every `operationId` in `document` (108). |
-| `supportedOperationIds` | The `operationId`s the mock implements (88); the rest return a Stripe-shaped error. |
-| `QA_SURFACE_OPS` | Operations the QA suites exercise (same set as `supportedOperationIds`). |
-| `QA_METADATA` | Pinned metadata values (`intent`, `source`, `userId`) the suites send. |
-| `QA_AMOUNTS` | Pinned amounts in cents: `1000`, `15000`, `17999`. |
+| `createRuntime` | `(options?) => StripeRuntime` — the mock with the full contract. Options: `accounts`, `webhooks {endpoints, retryDelaysMs, fetch}`, `corpus`, `publicUrl`, `webhookApiVersion`, `lifecycle`, `tickMs`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`, `onWebhook`. The runtime adds `webhooks`, `accounts`, `tick()`, `stop()`. |
+| `StripeAPI` | Class; `new StripeAPI(options?)` implements `fetch(request)`. Members: `reset()`, `tick(force?)`, `webhookEvents(account?)`, `webhookDeliveryAttempts(account?)`, `apiWebhookEndpoints()`, `accountIds()`, `scopeFor(account)`, `importStateFrom(source)`, `accounts`, `app`, `sqlite`. |
+| `STRIPE_PRESETS` | The named fault presets above. |
+| `AccountDirectory` | Keys → accounts (`configure`, `accountFor`, `config`, `list`, `resolve`). |
+| `DEFAULT_WEBHOOK_API_VERSION` | `"2024-06-20"`. |
+| `accountOfKey` | `(key) => string` — the account id of an unconfigured key. |
+| `accountOf` | `(request) => string` — the same, from a request's bearer key. |
+| `STRIPE_API_VERSION` | The vendored latest version (`2026-08-26.dahlia`). |
+| `LEGACY_API_VERSION` | `"2024-06-20"`. |
+| `ACACIA_API_VERSION` | `"2025-02-24.acacia"`. |
+| `GEVITI_CORPUS` | The bundled recorded catalog. |
+| `TEST_TOKENS` | Every modelled `tok_…`. |
+| `TEST_PAYMENT_METHOD_IDS` | Every modelled magic `pm_card_…`. |
+| `TEST_CARD_NUMBERS` | Every modelled test card number. |
+| `STRIPE_NAMESPACE` | `"stripe"` — SQLite namespace of every record. |
+| `document` | The vendored OpenAPI document (Mockingbird subset). |
+| `operationIds` | Every `operationId` in `document`. |
+| `supportedOperationIds` | The ones the mock implements. |
+| `QA_SURFACE_OPS` | Operations the parity walks cover (supported, minus the browser pages). |
+| `QA_METADATA` | Pinned metadata values the parity walks send. |
+| `QA_AMOUNTS` | Pinned amounts in cents. |
 | `QA_CUSTOMER` | Pinned customer `email`, `name`, `phone`. |
-| `QA_TEST_PAYMENT_METHODS` | Test payment method ids the suites attach (`pm_card_visa`, ...). |
-| `QA_TEST_CARD_TOKENS` | Test card tokens the suites use (`tok_visa`, decline tokens, ...). |
-| `QA_SEARCH_QUERIES` | Search queries the suites issue against `/v1/customers/search`. |
-| `QA_COUPON_CODES` | Coupon / promotion codes used by the coupon flows. |
-| `reshapeQaCommand` | Parity-walk hook that pins sampled commands onto QA corpus values (for the repo's parity runner). |
+| `QA_TEST_PAYMENT_METHODS` | Test payment methods the walks use. |
+| `QA_TEST_CARD_TOKENS` | Test card tokens the walks use. |
+| `QA_SEARCH_QUERIES` | Search queries the walks issue. |
+| `QA_COUPON_CODES` | Promotion codes the walks use. |
+| `reshapeQaCommand` | Parity-walk hook pinning sampled commands onto those values. |
 
-`StripeAPI` members:
+From `@crvouga/mockingbird-service-stripe/server` (Node): `createServer(options?)` (runtime options
+plus `port`, `host`; resolves `{url, port, runtime, close}`), `serveTarget` (the `serve` wiring:
+`--accounts`, `--webhook-url`, `--webhook-secret`, `--public-url`) and `DEFAULT_PORT` (`12111`).
 
-| Member | Description |
-| --- | --- |
-| `fetch(request)` | Handle one Stripe REST request. |
-| `reset()` | `Promise<void>` — clear all state, events and cached idempotent responses. |
-| `webhookEvents(account?)` | `StripeWebhookEvent[]`, oldest first; `account` narrows to one `accountOfKey(...)` partition. |
-| `webhookDeliveryAttempts(account?)` | Delivery attempts recorded for the event ledger. |
-| `importStateFrom(source)` | Adopt another `StripeAPI` instance's state (used by seeded parity walks). |
-| `app` | The underlying Hono app. |
-| `sqlite` | The `SqliteClient` holding state. |
+## Deliberately not modelled
 
-Options and types:
-
-```text
-type StripeAPIOptions = {
-  sqlite?: SqliteClient        // share one client across services; default: fresh in-memory DB
-  now?: () => number           // clock in ms for created-style fields; default Date.now
-  onWebhook?: WebhookPublisher // called with every event the mock records
-}
-type StripeWebhookEvent = { type: string; account: string; body: string } // body is the JSON event
-type WebhookPublisher = (event: StripeWebhookEvent) => void
-type OperationId / SupportedOperationId  // string unions of operationIds / supportedOperationIds
-```
-
-`SqliteClient` is the storage port bundled with this package (`exec`, `prepare(sql).run/all/get`,
-`transaction`); `Database` from `@crvouga/mockingbird-service-sqlite` satisfies it, as do
-better-sqlite3 and wrapped `bun:sqlite`.
+- **Stripe.js internals**: the stand-in covers the calls our UI makes; Payment Element wallets,
+  Link, `paymentRequest` (it reports no wallet) and Elements styling are not modelled. Native
+  PaymentSheet cannot be redirected (member-app native keeps its fake provider).
+- **Connect** (`Stripe-Account`, application fees, transfers), tax, shipping, Radar, mandates,
+  meters, quotes, credit notes, payouts, and non-card payment methods (bank debits, wallets).
+- **Smart retries / dunning**: a failed renewal goes `past_due` once; later automatic retries,
+  `unpaid` and dunning emails are not run.
+- **Proration arithmetic** is day-fraction approximate (Stripe prorates to the second);
+  `auto_advance` drafts are not finalized an hour later.
+- **Webhook endpoint `api_version`**: payloads render at the account's version, not per endpoint.
+- **Live keys** (`sk_live_…`) are refused with Stripe's 401: the mock is test mode only.
+- Operations marked unsupported in SUPPORT.md (charge create/update, checkout session update,
+  dispute evidence).
+- Rate-limit, 5xx and permission bodies come from presets, worded as Stripe words them but not
+  recorded from traffic.
 
 ## Development
 
 For contributors to the mockingbird repo only; these scripts are not shipped in the npm package.
 
 ```bash
-bun test                     # self-parity, auth/idempotency and namespace suites (offline)
-bun run mock:server          # serve over HTTP on PORT (default 12111), GET /health for readiness
-bun run client-parity        # stripe-node smoke proof, including webhook signature verification
-bun run parity               # live differential parity against Stripe test mode
-MOCKINGBIRD_STRIPE_SECRET_KEY=sk_test_... bun run parity -- --only GetPrices,GetProducts
+bun test                   # self-parity, acceptance (via test/consumer.ts), stripe-node drop-in, contract
+bun run parity             # live differential parity against Stripe test mode (safe operations)
+bun run parity -- --include-unsafe --only PostCustomers,GetCustomers
+bun run client-parity      # stripe-node smoke proof with webhook signature verification
+bun run vendor             # re-vendor openapi.yaml from the pinned upstream spec
 ```
 
-`mock:server` delivers webhooks to the targets in `MOCKINGBIRD_STRIPE_WEBHOOK_TARGETS` (a JSON array
-of `{apiKey, url, secret}`, matched by the API key that produced the event) or to a single fallback
-target from `MOCKINGBIRD_STRIPE_WEBHOOK_URL` + `MOCKINGBIRD_STRIPE_WEBHOOK_SECRET`:
-
-```bash
-PORT=12111 MOCKINGBIRD_STRIPE_WEBHOOK_TARGETS='[{"apiKey":"sk_test_mso","url":"http://127.0.0.1:3100/billing/webhooks/stripe/mso","secret":"whsec_..."}]' bun run mock:server
-```
-
-Live parity needs a real `sk_test_` key and mutates a shared test account.
+Live parity loads `MOCKINGBIRD_STRIPE_SECRET_KEY` (a `sk_test_` key) from the environment or Vault
+(`secret/personal/prd`) and exits 2 without one. By default it walks only safe operations and
+leaves out account-global ones (account profile, lifetime balance, lingering test clocks and
+webhook endpoints).
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).

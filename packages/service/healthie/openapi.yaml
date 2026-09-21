@@ -1,0 +1,197 @@
+openapi: 3.1.0
+info:
+  title: Healthie GraphQL API (Mockingbird subset)
+  description: |
+    Stateful mock of the legacy Healthie GraphQL surface our backend still calls: signIn, users,
+    user, currentUser, updateUser (profile, password, multipart avatar, avatar removal),
+    updateClient, location(s) CRUD, documents and folders (with a `currentUser` root), document
+    upload (GraphQL multipart request spec), deletion and `expiring_url` downloads served by the
+    mock, requestedFormCompletion, form answer groups, initial form answers, offerings, billing
+    items and updateBillingItem. GraphQL is one HTTP operation; the documents it accepts are
+    executed with the reference `graphql` implementation against a hand-authored subset of
+    Healthie's schema, so selection sets, aliases, variables and errors behave like the real API.
+  version: "1"
+  x-mockingbird-upstream:
+    note: >-
+      Hand-authored from the selection sets in our consumer
+      (apps/backend/src/modules/global-services/services/healthie-client/healthie-client.service.ts).
+servers:
+  - url: https://staging-api.gethealthie.com
+paths:
+  /graphql:
+    post:
+      operationId: Graphql
+      description: |
+        One GraphQL document per request, as JSON `{query, variables, operationName}` or as a
+        GraphQL multipart request (`operations` + `map` + file parts) for `Upload` variables.
+        `Authorization: Bearer|Basic <api key>` (or the bare key) selects the viewer; no header
+        is anonymous (only `signIn` works); an unknown key answers `API Key is Invalid`.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GraphqlRequest"
+          multipart/form-data:
+            schema:
+              type: object
+              required: [operations, map]
+              properties:
+                operations:
+                  type: string
+                  description: The JSON request, with `null` where each file goes.
+                map:
+                  type: string
+                  description: 'JSON `{"<part>": ["variables.<path>"]}`.'
+      responses:
+        "200":
+          description: A GraphQL response (errors, when any, ride along with HTTP 200)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphqlResponse"
+        "400":
+          description: The body is not a GraphQL request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphqlResponse"
+  /files/{fileToken}:
+    parameters:
+      - name: fileToken
+        in: path
+        required: true
+        description: The signed, expiring token inside a document's `expiring_url` or a user's `avatar_url`.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 200
+    get:
+      operationId: DownloadFile
+      description: The bytes behind `document.expiring_url` / `user.avatar_url` (S3 in production).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The stored file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: Expired or tampered link
+          content:
+            text/plain:
+              schema:
+                type: string
+        "404":
+          description: The file was deleted
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  schemas:
+    GraphqlRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: >-
+            Any GraphQL document. The enum below is only what random parity walks send (a
+            cross-section of our consumer's documents); the mock executes any valid document.
+          enum:
+            - "query { currentUser { id email first_name last_name active timezone } }"
+            - "query getUserById($id: ID!) { user(id: $id) { id full_name email dietitian_id location { id line1 city state zip } other_provider_ids } }"
+            - "query ListPatients($email: String) { users(keywords: $email) { id email first_name dietitian { id full_name } } }"
+            - "query locations { locations { id line1 state city zip } }"
+            - "query location($id: ID) { location(id: $id) { id line1 state city zip } }"
+            - "query listFiles($folder_id: String) { currentUser { id } documents(should_paginate: false, folder_id: $folder_id) { id display_name file_content_type owner { id } } folders(should_paginate: false, folder_id: $folder_id) { id name folder_id owner { id } } }"
+            - "mutation createFolder($name: String, $folder_id: String) { createFolder(input: { name: $name, folder_id: $folder_id }) { folder { id name folder_id } messages { field message } } }"
+            - "mutation signIn($email: String, $password: String) { signIn(input: { email: $email, password: $password, generate_api_token: true, allow_multiple_api_keys: true }) { api_key user { id active } } }"
+            - "query getOfferings($offering_id: ID) { offerings(should_paginate: false, client_visibility: \"all\", offering_id: $offering_id) { id name billing_frequency currency price visibility_status } }"
+            - "query billingItems($client_id: ID) { billingItems(offerings_only: true, client_id: $client_id) { id state is_canceled offering { id name } recurring_payment { is_paused } } }"
+            - "mutation updateClient($id: ID, $metadata: String) { updateClient(input: { id: $id, metadata: $metadata }) { user { id metadata } messages { field message } } }"
+            - "mutation updateBillingItem($id: ID, $note: String) { updateBillingItem(input: { id: $id, is_paused: true }) { billingItem { id recurring_payment { is_paused } } messages { field message } } updateBillingWebhook: updateBillingItem(input: { id: $id, note: $note }) { billingItem { id } messages { field message } } }"
+            - "query formAnswerGroups($user_id: String!) { formAnswerGroups(user_id: $user_id) { id name filler { id name email } } }"
+            - "query requestedFormCompletion($id: ID) { requestedFormCompletion(id: $id) { id recipient { first_name email } sender { full_name qualifications } } }"
+            - "query { __typename }"
+            - "query { notAField }"
+        variables:
+          type: object
+          properties:
+            id:
+              type: string
+              enum: ["100001", "100002", "100003", "900001", "400001", "999999"]
+            email:
+              type: string
+              enum: ["admin@healthie.mock", "patient@healthie.mock", "nobody@healthie.mock"]
+            password:
+              type: string
+              enum: ["Password123!", "wrong-password"]
+            name:
+              type: string
+              minLength: 1
+              maxLength: 24
+            folder_id:
+              type: string
+              enum: ["500001", "500002"]
+            metadata:
+              type: string
+              maxLength: 60
+            note:
+              type: string
+              maxLength: 20
+            offering_id:
+              type: string
+              enum: ["200001", "200002", "299999"]
+            client_id:
+              type: string
+              enum: ["100003", "100004"]
+            user_id:
+              type: string
+              enum: ["100003", "100004"]
+        operationName:
+          description: Optional; walks send none (every enumerated document has one operation).
+          type: ["string", "null"]
+          enum: [null]
+    GraphqlError:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        locations:
+          type: array
+          items:
+            type: object
+            properties:
+              line:
+                type: integer
+              column:
+                type: integer
+        path:
+          type: array
+          items:
+            type: ["string", "integer"]
+        extensions:
+          type: object
+    GraphqlResponse:
+      type: object
+      properties:
+        data:
+          type: ["object", "null"]
+        errors:
+          type: array
+          items:
+            $ref: "#/components/schemas/GraphqlError"

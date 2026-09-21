@@ -1,0 +1,490 @@
+openapi: 3.1.0
+info:
+  title: Resend API (Mockingbird subset)
+  description: |
+    Stateful mock subset of the Resend email API: send (with `Idempotency-Key`), retrieve a sent
+    email, and the received-email (inbound) endpoints our care-chat hydration reads, including
+    the attachment download URL. Trimmed from Resend's published API reference to what
+    `resend@4.8.0` and our backend call.
+  version: "1"
+  x-mockingbird-upstream:
+    note: >-
+      Trimmed from https://resend.com/docs/api-reference (emails/send-email, emails/retrieve-email,
+      receiving/retrieve-received-email, receiving/list-attachments); request/response shapes
+      cross-checked against resend@4.8.0 (dist/index.mjs) and our consumer
+      (send-emails.service.ts, notification-dispatcher email.ts, resend-inbound-email.client.ts).
+servers:
+  - url: https://api.resend.com
+security:
+  - bearerAuth: []
+paths:
+  /emails:
+    post:
+      operationId: SendEmail
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          description: Replays the first response for the same key and payload (1–256 characters).
+          schema:
+            type: string
+            pattern: "^[!-~]{1,256}$"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendEmailBody"
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: string
+                    x-mockingbird-resource:
+                      type: email
+                      identity: true
+                    x-mockingbird-volatile:
+                      kind: id
+        "400":
+          description: Invalid idempotency key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Idempotency key reused with another payload, or still in flight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /emails/{email_id}:
+    parameters:
+      - name: email_id
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: email
+            missing: 00000000-0000-4000-8000-000000000000
+    get:
+      operationId: GetEmail
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The sent email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Email"
+        "401":
+          description: Missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Unknown email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /emails/receiving/{email_id}:
+    parameters:
+      - $ref: "#/components/parameters/ReceivedEmailId"
+    get:
+      operationId: GetReceivedEmail
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The received email, with its content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReceivedEmail"
+        "401":
+          description: Missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Unknown email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /emails/receiving/{email_id}/attachments:
+    parameters:
+      - $ref: "#/components/parameters/ReceivedEmailId"
+    get:
+      operationId: ListReceivedEmailAttachments
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Attachment metadata with short-lived download URLs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data]
+                properties:
+                  object:
+                    type: string
+                    enum: [list]
+                  has_more:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ReceivedAttachment"
+        "401":
+          description: Missing API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Unknown email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /downloads/inbound/{attachment_id}:
+    get:
+      operationId: DownloadReceivedAttachment
+      description: >-
+        The `download_url` of a received attachment: unauthenticated (it stands in for Resend's
+        signed CDN URL), the raw bytes with their content type and length.
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: attachment_id
+          in: path
+          required: true
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: received_attachment
+              missing: 00000000-0000-4000-8000-000000000000
+      responses:
+        "200":
+          description: The attachment bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: Unknown attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: "`Authorization: Bearer re_…`"
+  parameters:
+    ReceivedEmailId:
+      name: email_id
+      in: path
+      required: true
+      schema:
+        type: string
+        x-mockingbird-resource-ref:
+          type: received_email
+          missing: 00000000-0000-4000-8000-000000000000
+  schemas:
+    Address:
+      type: string
+      description: "`email@example.com` or `Name <email@example.com>`"
+      pattern: "^([^<>@]* <[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+>|[A-Za-z0-9._+-]+@[A-Za-z0-9-]+(\\.[A-Za-z0-9-]+)+)$"
+      maxLength: 120
+    Recipients:
+      oneOf:
+        - $ref: "#/components/schemas/Address"
+        - type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/Address"
+    SendEmailBody:
+      type: object
+      required: [from, to, subject]
+      properties:
+        from:
+          $ref: "#/components/schemas/Address"
+        to:
+          $ref: "#/components/schemas/Recipients"
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 200
+        html:
+          type: string
+          maxLength: 5000
+        text:
+          type: string
+          maxLength: 5000
+        cc:
+          $ref: "#/components/schemas/Recipients"
+        bcc:
+          $ref: "#/components/schemas/Recipients"
+        reply_to:
+          $ref: "#/components/schemas/Recipients"
+        scheduled_at:
+          type: string
+          maxLength: 60
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+            maxLength: 500
+        tags:
+          type: array
+          maxItems: 10
+          items:
+            type: object
+            required: [name, value]
+            properties:
+              name:
+                type: string
+                pattern: "^[A-Za-z0-9_-]{1,256}$"
+              value:
+                type: string
+                pattern: "^[A-Za-z0-9_-]{1,256}$"
+        attachments:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            properties:
+              filename:
+                type: string
+                minLength: 1
+                maxLength: 100
+              content:
+                description: Base64 bytes (or a JSON-serialised Node Buffer).
+                oneOf:
+                  - type: string
+                    maxLength: 10000
+                  - type: object
+                    required: [type, data]
+                    properties:
+                      type:
+                        type: string
+                        enum: [Buffer]
+                      data:
+                        type: array
+                        maxItems: 10000
+                        items:
+                          type: integer
+                          minimum: 0
+                          maximum: 255
+              path:
+                type: string
+                maxLength: 500
+              content_type:
+                type: string
+                maxLength: 100
+              inline_content_id:
+                type: string
+                maxLength: 100
+    Email:
+      type: object
+      required: [object, id, to, from, created_at, subject, html, text, bcc, cc, reply_to, last_event]
+      properties:
+        object:
+          type: string
+          enum: [email]
+        id:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        to:
+          type: array
+          items:
+            type: string
+        from:
+          type: string
+        created_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        subject:
+          type: string
+        html:
+          type: ["string", "null"]
+        text:
+          type: ["string", "null"]
+        bcc:
+          type: ["array", "null"]
+          items:
+            type: string
+        cc:
+          type: ["array", "null"]
+          items:
+            type: string
+        reply_to:
+          type: ["array", "null"]
+          items:
+            type: string
+        last_event:
+          type: string
+          enum: [delivered, scheduled]
+        scheduled_at:
+          type: ["string", "null"]
+        tags:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              value:
+                type: string
+    ReceivedAttachment:
+      type: object
+      required: [id, filename, content_type, size, download_url]
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: received_attachment
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        filename:
+          type: string
+        content_type:
+          type: string
+        content_disposition:
+          type: ["string", "null"]
+        content_id:
+          type: ["string", "null"]
+        size:
+          type: integer
+        download_url:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        expires_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    ReceivedEmail:
+      type: object
+      required: [object, id, to, from, created_at, subject, html, text, message_id, attachments]
+      properties:
+        object:
+          type: string
+          enum: [email]
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: received_email
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        to:
+          type: array
+          items:
+            type: string
+        from:
+          type: string
+        cc:
+          type: array
+          items:
+            type: string
+        bcc:
+          type: array
+          items:
+            type: string
+        reply_to:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        subject:
+          type: ["string", "null"]
+        html:
+          type: ["string", "null"]
+        text:
+          type: ["string", "null"]
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        message_id:
+          type: ["string", "null"]
+        attachments:
+          type: array
+          items:
+            type: object
+            required: [id, filename, content_type]
+            properties:
+              id:
+                type: string
+              filename:
+                type: string
+              content_type:
+                type: string
+              content_disposition:
+                type: ["string", "null"]
+              content_id:
+                type: ["string", "null"]
+    Error:
+      type: object
+      description: Resend's error body; the SDK returns it verbatim as `error`.
+      required: [statusCode, name, message]
+      properties:
+        statusCode:
+          type: integer
+        name:
+          type: string
+        message:
+          type: string

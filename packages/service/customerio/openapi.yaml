@@ -1,0 +1,570 @@
+openapi: 3.1.0
+info:
+  title: Customer.io CDP + App API (Mockingbird subset)
+  description: |
+    Stateful mock subset of Customer.io: the Segment-compatible CDP ingestion endpoints
+    (`identify`, `track`, `batch`, as `@customerio/cdp-analytics-node` posts them), the App API
+    transactional sends (email, SMS, inbox message) and transactional-message catalog, and the
+    link-tracking click endpoint. One process serves all three hosts (`cdp.customer.io`,
+    `api.customer.io`, the tracking domain); their paths do not collide.
+  version: "1"
+  x-mockingbird-upstream:
+    note: >-
+      Hand-authored from Customer.io's CDP (Segment spec) and App API reference, trimmed to
+      what our consumer sends: customer-io.client.service.ts / notification-adapter.ts /
+      transactional-email-adapter.ts (backend), transactional-client.ts (notification-processor),
+      customerio-trigger-name-validator.ts (notification-service) and
+      mobile-links-click-reporter.service.ts.
+servers:
+  - url: https://api.customer.io
+  - url: https://cdp.customer.io
+paths:
+  /v1/identify:
+    post:
+      operationId: CdpIdentify
+      security:
+        - cdpWriteKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IdentifyEvent"
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpSuccess"
+        "400":
+          description: Malformed event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpError"
+        "401":
+          description: Missing or unknown write key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpError"
+  /v1/track:
+    post:
+      operationId: CdpTrack
+      security:
+        - cdpWriteKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrackEvent"
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpSuccess"
+        "400":
+          description: Malformed event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpError"
+        "401":
+          description: Missing or unknown write key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpError"
+  /v1/batch:
+    post:
+      operationId: CdpBatch
+      description: "What `@customerio/cdp-analytics-node` posts: `{batch: [...]}`."
+      security:
+        - cdpWriteKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [batch]
+              properties:
+                batch:
+                  type: array
+                  maxItems: 5
+                  items:
+                    anyOf:
+                      - $ref: "#/components/schemas/IdentifyEvent"
+                      - $ref: "#/components/schemas/TrackEvent"
+                sentAt:
+                  type: string
+                context:
+                  type: object
+      responses:
+        "200":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpSuccess"
+        "400":
+          description: Malformed batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpError"
+        "401":
+          description: Missing or unknown write key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CdpError"
+  /v1/send/email:
+    post:
+      operationId: SendEmail
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendEmailRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Queued"
+        "400":
+          $ref: "#/components/responses/AppError"
+        "401":
+          $ref: "#/components/responses/AppError"
+        "404":
+          $ref: "#/components/responses/AppError"
+  /v1/send/sms:
+    post:
+      operationId: SendSms
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendSmsRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Queued"
+        "400":
+          $ref: "#/components/responses/AppError"
+        "401":
+          $ref: "#/components/responses/AppError"
+        "404":
+          $ref: "#/components/responses/AppError"
+  /v1/send/inbox_message:
+    post:
+      operationId: SendInboxMessage
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendInboxRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Queued"
+        "400":
+          $ref: "#/components/responses/AppError"
+        "401":
+          $ref: "#/components/responses/AppError"
+        "404":
+          $ref: "#/components/responses/AppError"
+  /v1/transactional:
+    get:
+      operationId: ListTransactionalMessages
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Every transactional message in the workspace (no pagination)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages]
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TransactionalMessage"
+        "401":
+          $ref: "#/components/responses/AppError"
+  /v1/transactional/{transactional_id}:
+    parameters:
+      - name: transactional_id
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: transactional_message
+            missing: "999999"
+    get:
+      operationId: GetTransactionalMessage
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: One transactional message
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    $ref: "#/components/schemas/TransactionalMessage"
+        "401":
+          $ref: "#/components/responses/AppError"
+        "404":
+          $ref: "#/components/responses/AppError"
+  /click/{linkId}:
+    parameters:
+      - name: linkId
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[A-Za-z0-9_~-][A-Za-z0-9._~-]{0,63}$"
+    post:
+      operationId: ReportClick
+      description: |
+        Link-tracking click report on the tracking domain (our backend posts it when a smart
+        link opens the app directly). Unauthenticated.
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        "200":
+          description: Click recorded (no body)
+        "404":
+          description: Unknown link
+          content:
+            text/plain:
+              schema:
+                type: string
+    get:
+      operationId: FollowClick
+      description: A browser following a tracked link; redirects to the original URL.
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        "302":
+          description: Redirect to the original URL
+        "404":
+          description: Unknown link
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    cdpWriteKey:
+      type: http
+      scheme: basic
+      description: "`Basic base64(<write key>:)` (the CDP source write key as the username)."
+    appApiKey:
+      type: http
+      scheme: bearer
+      description: "`Bearer <App API key>`."
+  responses:
+    Queued:
+      description: Queued for delivery
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [delivery_id, queued_at]
+            properties:
+              delivery_id:
+                type: string
+                x-mockingbird-resource:
+                  type: delivery
+                  identity: true
+                x-mockingbird-volatile:
+                  kind: id
+              queued_at:
+                type: integer
+                x-mockingbird-volatile:
+                  kind: timestamp
+    AppError:
+      description: An App API error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [meta]
+            properties:
+              meta:
+                type: object
+                required: [error]
+                properties:
+                  error:
+                    type: string
+  schemas:
+    CdpSuccess:
+      type: object
+      required: [success]
+      properties:
+        success:
+          type: boolean
+    CdpError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    IdentifyEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [identify]
+        userId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        anonymousId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        traits:
+          type: object
+          additionalProperties: true
+        context:
+          type: object
+        integrations:
+          type: object
+        timestamp:
+          type: string
+        messageId:
+          type: string
+          maxLength: 128
+        _metadata:
+          type: object
+    TrackEvent:
+      type: object
+      required: [event]
+      properties:
+        type:
+          type: string
+          enum: [track]
+        userId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        anonymousId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        event:
+          type: string
+          minLength: 1
+          maxLength: 150
+        properties:
+          type: object
+          additionalProperties: true
+        context:
+          type: object
+        integrations:
+          type: object
+        timestamp:
+          type: string
+        messageId:
+          type: string
+          maxLength: 128
+        _metadata:
+          type: object
+    Identifiers:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        email:
+          type: string
+          format: email
+          maxLength: 120
+        cio_id:
+          type: string
+          maxLength: 64
+    TransactionalMessageId:
+      oneOf:
+        - type: string
+          minLength: 1
+          maxLength: 150
+        - type: integer
+          minimum: 1
+    SendEmailRequest:
+      type: object
+      required: [transactional_message_id, identifiers]
+      properties:
+        transactional_message_id:
+          $ref: "#/components/schemas/TransactionalMessageId"
+        identifiers:
+          $ref: "#/components/schemas/Identifiers"
+        to:
+          type: string
+          maxLength: 200
+        from:
+          type: string
+          maxLength: 200
+        subject:
+          type: string
+          maxLength: 300
+        body:
+          type: string
+        message_data:
+          type: object
+          additionalProperties: true
+        send_to_unsubscribed:
+          type: boolean
+        tracked:
+          type: boolean
+        disable_message_retention:
+          type: boolean
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+        attachments:
+          description: >-
+            Customer.io documents a `{filename: base64}` map; our backend sends an array of
+            `{filename, content, content_type}`. Both are accepted.
+          oneOf:
+            - type: object
+              additionalProperties:
+                type: string
+            - type: array
+              items:
+                type: object
+                required: [filename, content]
+                properties:
+                  filename:
+                    type: string
+                  content:
+                    type: string
+                  content_type:
+                    type: string
+    SendSmsRequest:
+      type: object
+      required: [transactional_message_id, identifiers]
+      properties:
+        transactional_message_id:
+          $ref: "#/components/schemas/TransactionalMessageId"
+        identifiers:
+          $ref: "#/components/schemas/Identifiers"
+        to:
+          type: string
+          maxLength: 20
+        message_data:
+          type: object
+          additionalProperties: true
+        send_to_unsubscribed:
+          type: boolean
+        tracked:
+          type: boolean
+        disable_message_retention:
+          type: boolean
+    SendInboxRequest:
+      type: object
+      required: [transactional_message_id, identifiers]
+      properties:
+        transactional_message_id:
+          $ref: "#/components/schemas/TransactionalMessageId"
+        identifiers:
+          $ref: "#/components/schemas/Identifiers"
+        message_data:
+          type: object
+          additionalProperties: true
+    TransactionalMessage:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        trigger_name:
+          type: string
+          x-mockingbird-resource:
+            type: transactional_message
+            identity: true
+        description:
+          type: string
+        send_to_unsubscribed:
+          type: boolean
+        link_tracking:
+          type: boolean
+        open_tracking:
+          type: boolean
+        hide_message_body:
+          type: boolean
+        queue_drafts:
+          type: boolean
+        created_at:
+          type: integer
+        updated_at:
+          type: integer

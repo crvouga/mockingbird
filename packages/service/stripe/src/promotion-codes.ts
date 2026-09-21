@@ -2,9 +2,11 @@ import {
   jsonResponse,
   type OperationContext,
   type OperationHandler,
+  opaqueToken,
 } from "@crvouga/mockingbird-service"
-import { parameterMissing, resourceMissing } from "./errors.js"
+import { invalidRequest, parameterMissing, resourceMissing } from "./errors.js"
 import {
+  changedFields,
   mergeRecordMetadata,
   type RequestScope,
   requestScope,
@@ -14,8 +16,8 @@ import {
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams } from "./params.js"
-import { renderCoupon, renderCustomer, renderProduct, renderPromotionCode } from "./render.js"
-import type { CouponRecord, PromotionCodeRecord } from "./state.js"
+import { renderPromotionCode } from "./render.js"
+import type { PromotionCodeRecord } from "./state.js"
 import { seconds } from "./state.js"
 
 type RecordValue = Record<string, unknown>
@@ -85,57 +87,12 @@ const restrictionsOf = (value: unknown): Restrictions | undefined => {
   }
 }
 
-const expansionPaths = (expand: unknown): string[] =>
-  Array.isArray(expand)
-    ? expand.filter((path): path is string => typeof path === "string")
-    : typeof expand === "string" && expand !== ""
-      ? [expand]
-      : []
-
-const renderCouponWithProducts = (scope: RequestScope, coupon: CouponRecord): RecordValue => {
-  const rendered = renderCoupon(coupon)
-  rendered.applies_to = {
-    products: coupon.applies_to_products.map((id) => {
-      const product = scope.account.products.get(id)
-      return product ? renderProduct(product) : id
-    }),
-  }
-  return rendered
-}
-
+/** Coupon expansion (and `coupon.applies_to`) is applied generically after the handler. */
 const renderPromotionExpanded = (
   scope: RequestScope,
   promotion: PromotionCodeRecord,
-  expand: unknown,
-): RecordValue => {
-  const rendered = renderPromotionCode(promotion)
-  const paths = expansionPaths(expand)
-  const couponPath = paths.some(
-    (path) =>
-      path === "coupon" ||
-      path === "data.coupon" ||
-      path === "coupon.applies_to" ||
-      path === "data.coupon.applies_to",
-  )
-  if (couponPath) {
-    const coupon = scope.account.coupons.get(promotion.coupon)
-    if (coupon) {
-      rendered.coupon = paths.some(
-        (path) => path === "coupon.applies_to" || path === "data.coupon.applies_to",
-      )
-        ? renderCouponWithProducts(scope, coupon)
-        : renderCoupon(coupon)
-    }
-  }
-  if (
-    paths.some((path) => path === "customer" || path === "data.customer") &&
-    promotion.customer !== null
-  ) {
-    const customer = scope.account.customers.get(promotion.customer)
-    if (customer?.kind === "live") rendered.customer = renderCustomer(customer.customer)
-  }
-  return rendered
-}
+  _expand: unknown,
+): RecordValue => renderPromotionCode(promotion, scope.account)
 
 export const promotionCodeHandlers = (services: Services): Record<string, OperationHandler> => {
   const create: OperationHandler = async (context) => {
@@ -152,14 +109,19 @@ export const promotionCodeHandlers = (services: Services): Record<string, Operat
     requireCoupon(scope, couponId)
     const customer = stringOf(params, "customer")
     if (customer !== null) requireLiveCustomer(scope, customer)
-    const code = stringOf(params, "code")
-    if (code === null) throw parameterMissing("code")
+    const code =
+      stringOf(params, "code") ?? opaqueToken(scope.ids.next("promo_code_"), 8).toUpperCase()
+    const clash = scope.account.promotionCodes.list({
+      where: (record) => record.active && record.code.toLowerCase() === code.toLowerCase(),
+    })[0]
+    if (clash !== undefined)
+      throw invalidRequest(`An active promotion code with \`code: ${code}\` already exists.`)
     const restrictions = restrictionsOf(raw.restrictions) ?? {
       first_time_transaction: false,
       minimum_amount: null,
       minimum_amount_currency: null,
     }
-    const id = scope.ids.next("promo_")
+    const id = scope.ids.next("promo_", 24)
     const record: PromotionCodeRecord = {
       id,
       active: typeof params.active === "boolean" ? params.active : true,
@@ -174,6 +136,7 @@ export const promotionCodeHandlers = (services: Services): Record<string, Operat
       times_redeemed: 0,
     }
     scope.account.promotionCodes.insert(id, record)
+    scope.emit("promotion_code.created", renderPromotionCode(record, scope.account))
     return jsonResponse(200, renderPromotionExpanded(scope, record, params.expand))
   }
 
@@ -187,7 +150,7 @@ export const promotionCodeHandlers = (services: Services): Record<string, Operat
       const active = typeof params.active === "boolean" ? params.active : undefined
       const page = await paginate(scope.account.promotionCodes, params, {
         url: "/v1/promotion_codes",
-        kind: "promotion_code",
+        kind: "promotion code",
         where: (record) =>
           matchesCreated(record.created, params.created) &&
           (code === null || record.code === code) &&
@@ -204,7 +167,7 @@ export const promotionCodeHandlers = (services: Services): Record<string, Operat
       const params = queryParams(context)
       const id = context.params.promotion_code ?? ""
       const record = scope.account.promotionCodes.get(id)
-      if (!record) throw resourceMissing("promotion_code", id, "promotion_code")
+      if (!record) throw resourceMissing("promotion code", id, "promotion_code")
       return jsonResponse(200, renderPromotionExpanded(scope, record, params.expand))
     },
     PostPromotionCodesPromotionCode: async (context) => {
@@ -212,7 +175,7 @@ export const promotionCodeHandlers = (services: Services): Record<string, Operat
       const params = parsedBody(context, ["metadata", "restrictions"], false)
       const id = context.params.promotion_code ?? ""
       const current = scope.account.promotionCodes.get(id)
-      if (!current) throw resourceMissing("promotion_code", id, "promotion_code")
+      if (!current) throw resourceMissing("promotion code", id, "promotion_code")
       const raw = formRecord(context)
       const restrictions = restrictionsOf(raw.restrictions)
       const next: PromotionCodeRecord = {
@@ -221,7 +184,27 @@ export const promotionCodeHandlers = (services: Services): Record<string, Operat
         metadata: mergeRecordMetadata(current.metadata, raw.metadata),
         restrictions: restrictions ?? current.restrictions,
       }
+      if (next.active && !current.active) {
+        const clash = scope.account.promotionCodes.list({
+          where: (record) =>
+            record.id !== id &&
+            record.active &&
+            record.code.toLowerCase() === next.code.toLowerCase(),
+        })[0]
+        if (clash !== undefined)
+          throw invalidRequest(
+            `An active promotion code with \`code: ${next.code}\` already exists.`,
+          )
+      }
       scope.account.promotionCodes.update(id, next)
+      scope.emit(
+        "promotion_code.updated",
+        renderPromotionCode(next, scope.account),
+        changedFields(
+          renderPromotionCode(current, scope.account),
+          renderPromotionCode(next, scope.account),
+        ),
+      )
       return jsonResponse(200, renderPromotionExpanded(scope, next, params.expand))
     },
   }

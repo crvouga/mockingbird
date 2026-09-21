@@ -1,101 +1,99 @@
 import { jsonResponse, type OperationHandler } from "@crvouga/mockingbird-service"
+import { afterIntentSucceeded } from "./billing.js"
+import { requestInfo } from "./context.js"
 import { invalidRequest, parameterMissing } from "./errors.js"
-import { applyExpand, type ExpandResolvers } from "./expand.js"
 import {
+  booleanOf,
   clientSecretFor,
-  completeSessionsForIntent,
-  confirmPaymentIntent,
   customerEmail,
+  intOf,
   mergeRecordMetadata,
   type RequestScope,
+  recordOf,
   requestScope,
   requireIntent,
   requireLiveCustomer,
-  resolvePaymentMethod,
   type Services,
+  stringOf,
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams } from "./params.js"
 import {
-  renderCharge,
-  renderCustomer,
-  renderInvoice,
-  renderPaymentIntent,
-  renderPaymentMethod,
-} from "./render.js"
+  confirmIntent,
+  paymentMethodFromCard,
+  paymentMethodFromToken,
+  resolvePaymentMethod,
+} from "./payments.js"
+import { renderCharge, renderPaymentIntent } from "./render.js"
 import { searchRecords } from "./search.js"
-import { type PaymentIntentRecord, seconds } from "./state.js"
+import { type PaymentIntentRecord, type PaymentMethodRecord, seconds } from "./state.js"
 
 const DEFAULT_PAYMENT_METHOD_TYPES = ["card", "link"]
 
-const expanders = (scope: RequestScope): ExpandResolvers => ({
-  latest_charge: (id) => {
-    const charge = scope.account.charges.get(id)
-    return charge ? renderCharge(charge) : undefined
-  },
-  payment_method: (id) => {
-    const method = scope.account.paymentMethods.get(id)
-    return method ? renderPaymentMethod(method) : undefined
-  },
-  invoice: (id) => {
-    const invoice = scope.account.invoices.get(id)
-    return invoice ? renderInvoice(invoice, scope.account) : undefined
-  },
-  customer: (id) => {
-    const entry = scope.account.customers.get(id)
-    return entry?.kind === "live" ? renderCustomer(entry.customer) : undefined
-  },
-})
+const CANCELABLE = [
+  "requires_payment_method",
+  "requires_capture",
+  "requires_confirmation",
+  "requires_action",
+  "processing",
+]
 
-const amountOf = (params: Params, key: string): number | undefined => {
-  const value = params[key]
-  if (value === undefined || value === "") return undefined
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined
-}
-
-const stringOf = (params: Params, key: string): string | null => {
-  const value = params[key]
-  return typeof value === "string" && value !== "" ? value : null
-}
-
-const booleanOf = (params: Params, key: string): boolean =>
-  params[key] === true || params[key] === "true"
-
-const stringListOf = (params: Params, key: string): string[] => {
+const stringListOf = (params: Params, key: string): string[] | undefined => {
   const value = params[key]
   if (Array.isArray(value))
     return value.filter((entry): entry is string => typeof entry === "string" && entry !== "")
   if (typeof value === "string" && value !== "") return value.split(",")
-  return DEFAULT_PAYMENT_METHOD_TYPES
+  return undefined
+}
+
+/**
+ * A publishable-key caller (the Stripe.js stand-in) must present the intent's client secret, and
+ * may send raw card details as `payment_method_data` instead of a payment method id.
+ */
+const assertClientSecret = (
+  context: Parameters<OperationHandler>[0],
+  params: Params,
+  intent: { id: string; client_secret: string },
+) => {
+  if (!requestInfo(context.request).publishable) return
+  const secret = params.client_secret
+  if (typeof secret !== "string" || secret === "") throw parameterMissing("client_secret")
+  if (secret !== intent.client_secret)
+    throw invalidRequest(
+      `The client_secret provided does not match any associated PaymentIntent on this account. Ensure the publishable key used belongs to the same account that created the PaymentIntent.`,
+      "client_secret",
+    )
+}
+
+/** `payment_method` id, or `payment_method_data[type]=card` with a card number or token. */
+export const paymentMethodFromParams = (
+  scope: RequestScope,
+  params: Params,
+): PaymentMethodRecord | null => {
+  const id = stringOf(params, "payment_method")
+  if (id !== null) return resolvePaymentMethod(scope, id)
+  const data = recordOf(params.payment_method_data)
+  if (data === undefined) return null
+  const card = recordOf(data.card)
+  if (typeof card?.number === "string")
+    return paymentMethodFromCard(scope, card.number, "payment_method_data[card][number]")
+  if (typeof card?.token === "string") return paymentMethodFromToken(scope, card.token)
+  return null
 }
 
 export const paymentIntentHandlers = (services: Services): Record<string, OperationHandler> => {
-  const render = (scope: RequestScope, record: PaymentIntentRecord, params: Params) =>
-    applyExpand(renderPaymentIntent(record), params.expand, expanders(scope))
+  const render = (record: PaymentIntentRecord) => renderPaymentIntent(record)
 
-  /**
-   * Confirm and, when the intent succeeds, emit `payment_intent.succeeded` (and complete any
-   * checkout session waiting on it). A declined card records `payment_intent.payment_failed`
-   * before the 402 travels back to the caller.
-   */
-  const confirmOrDecline = (
+  /** Confirm, then settle the invoice the intent pays, if any. */
+  const confirm = (
     scope: RequestScope,
-    record: PaymentIntentRecord,
-    paymentMethod: string | null,
-  ): PaymentIntentRecord => {
-    try {
-      const confirmed = confirmPaymentIntent(scope, record, paymentMethod)
-      if (confirmed.status === "succeeded") {
-        scope.emit("payment_intent.succeeded", renderPaymentIntent(confirmed))
-        completeSessionsForIntent(scope, { paymentIntent: confirmed.id })
-      }
-      return confirmed
-    } catch (error) {
-      const failed = scope.account.paymentIntents.get(record.id) ?? record
-      scope.emit("payment_intent.payment_failed", renderPaymentIntent(failed))
-      throw error
-    }
+    intent: PaymentIntentRecord,
+    method: PaymentMethodRecord,
+    offSession: boolean,
+  ) => {
+    const settled = confirmIntent(scope, intent, method, { offSession })
+    afterIntentSucceeded(scope, settled)
+    return scope.account.paymentIntents.get(settled.id) ?? settled
   }
 
   return {
@@ -109,31 +107,36 @@ export const paymentIntentHandlers = (services: Services): Record<string, Operat
         where: (record) =>
           matchesCreated(record.created, params.created) &&
           (customer === null || record.customer === customer),
-        render: (record) => render(scope, record, params),
+        render,
       })
       return jsonResponse(200, page)
     },
     PostPaymentIntents: async (context) => {
       const scope = requestScope(services, context)
       const params = bodyParams(context)
-      const amount = amountOf(params, "amount")
+      const amount = intOf(params.amount)
       if (amount === undefined) throw parameterMissing("amount")
       const currency = stringOf(params, "currency")
       if (currency === null) throw parameterMissing("currency")
       const customer = stringOf(params, "customer")
       if (customer !== null) requireLiveCustomer(scope, customer)
-      const requestedMethod = stringOf(params, "payment_method")
-      const paymentMethod =
-        requestedMethod === null ? null : resolvePaymentMethod(scope, requestedMethod).id
-      const id = scope.ids.next("pi_")
+      const method = paymentMethodFromParams(scope, params)
+      const automatic = recordOf(params.automatic_payment_methods)
+      const id = scope.ids.next("pi_", 24)
       const record: PaymentIntentRecord = {
         id,
         amount,
         amount_capturable: 0,
         amount_received: 0,
-        capture_method: stringOf(params, "capture_method") === "manual" ? "manual" : "automatic",
+        capture_method:
+          stringOf(params, "capture_method") === "manual"
+            ? "manual"
+            : stringOf(params, "capture_method") === "automatic"
+              ? "automatic"
+              : "automatic_async",
         client_secret: clientSecretFor(id),
-        confirmation_method: "automatic",
+        confirmation_method:
+          stringOf(params, "confirmation_method") === "manual" ? "manual" : "automatic",
         created: seconds(scope.now),
         currency,
         customer,
@@ -142,23 +145,42 @@ export const paymentIntentHandlers = (services: Services): Record<string, Operat
         last_payment_error: null,
         latest_charge: null,
         metadata: (params.metadata as Record<string, string> | undefined) ?? {},
-        payment_method: paymentMethod,
-        payment_method_types: stringListOf(params, "payment_method_types"),
+        payment_method: method?.id ?? null,
+        payment_method_types:
+          stringListOf(params, "payment_method_types") ?? DEFAULT_PAYMENT_METHOD_TYPES,
         receipt_email: stringOf(params, "receipt_email") ?? customerEmail(scope, customer),
         setup_future_usage: stringOf(params, "setup_future_usage"),
-        status: "requires_payment_method",
+        status: method === null ? "requires_payment_method" : "requires_confirmation",
         canceled_at: null,
         cancellation_reason: null,
         charge_ids: [],
+        automatic_payment_methods:
+          automatic === undefined
+            ? null
+            : {
+                enabled: booleanOf(automatic.enabled) ?? false,
+                allow_redirects:
+                  typeof automatic.allow_redirects === "string"
+                    ? automatic.allow_redirects
+                    : "always",
+              },
+        next_action: null,
       }
       scope.account.paymentIntents.insert(id, record)
-      if (booleanOf(params, "confirm")) {
+      scope.emit("payment_intent.created", renderPaymentIntent(record))
+      if (booleanOf(params.confirm) === true) {
+        if (method === null)
+          throw invalidRequest(
+            "You cannot confirm this PaymentIntent because it's missing a payment method. You can either update the PaymentIntent with a payment method and then confirm it again, or confirm it again directly with a payment method or ConfirmationToken.",
+            undefined,
+            "payment_intent_unexpected_state",
+          )
         return jsonResponse(
           200,
-          render(scope, confirmOrDecline(scope, record, paymentMethod), params),
+          render(confirm(scope, record, method, booleanOf(params.off_session) === true)),
         )
       }
-      return jsonResponse(200, render(scope, record, params))
+      return jsonResponse(200, render(record))
     },
     GetPaymentIntentsSearch: async (context) => {
       const scope = requestScope(services, context)
@@ -168,90 +190,117 @@ export const paymentIntentHandlers = (services: Services): Record<string, Operat
         200,
         searchRecords(records, params, {
           url: "/v1/payment_intents/search",
-          render: (record) => render(scope, record, params),
+          render,
+          lag: scope.effect("search_lag"),
+          now: scope.now,
         }),
       )
     },
     GetPaymentIntentsIntent: async (context) => {
       const scope = requestScope(services, context)
       const params = queryParams(context)
-      return jsonResponse(
-        200,
-        render(scope, requireIntent(scope, context.params.intent ?? ""), params),
-      )
+      const intent = requireIntent(scope, context.params.intent ?? "")
+      assertClientSecret(context, params, intent)
+      return jsonResponse(200, render(intent))
     },
     PostPaymentIntentsIntent: async (context) => {
       const scope = requestScope(services, context)
       const params = bodyParams(context)
       const current = requireIntent(scope, context.params.intent ?? "")
-      const amount = amountOf(params, "amount")
+      const amount = intOf(params.amount)
       const customer = stringOf(params, "customer")
       if (customer !== null) requireLiveCustomer(scope, customer)
-      const requestedMethod = stringOf(params, "payment_method")
+      if (current.status === "succeeded" || current.status === "canceled") {
+        const touchesMoney =
+          amount !== undefined || customer !== null || params.payment_method !== undefined
+        if (touchesMoney)
+          throw invalidRequest(
+            `You cannot update this PaymentIntent because it has a status of ${current.status}.`,
+            undefined,
+            "payment_intent_unexpected_state",
+          )
+      }
+      const method = paymentMethodFromParams(scope, params)
       const next: PaymentIntentRecord = {
         ...current,
         amount: amount ?? current.amount,
         customer: customer ?? current.customer,
         description: stringOf(params, "description") ?? current.description,
         metadata: mergeRecordMetadata(current.metadata, params.metadata),
-        payment_method:
-          requestedMethod === null
-            ? current.payment_method
-            : resolvePaymentMethod(scope, requestedMethod).id,
+        payment_method: method?.id ?? current.payment_method,
         receipt_email: stringOf(params, "receipt_email") ?? current.receipt_email,
         setup_future_usage: stringOf(params, "setup_future_usage") ?? current.setup_future_usage,
       }
       scope.account.paymentIntents.update(next.id, next)
-      return jsonResponse(200, render(scope, next, params))
+      return jsonResponse(200, render(next))
     },
     PostPaymentIntentsIntentConfirm: async (context) => {
       const scope = requestScope(services, context)
       const params = bodyParams(context)
       const current = requireIntent(scope, context.params.intent ?? "")
-      if (current.status === "canceled")
-        throw invalidRequest(
-          "The PaymentIntent has a status of canceled, so it cannot be confirmed.",
-          undefined,
-          "payment_intent_unexpected_state",
-        )
+      assertClientSecret(context, params, current)
       if (current.status === "succeeded")
         throw invalidRequest(
-          "This PaymentIntent is already succeeded and cannot be confirmed again.",
+          "You cannot confirm this PaymentIntent because it has already succeeded after being previously confirmed.",
           undefined,
           "payment_intent_unexpected_state",
         )
-      const requestedMethod = stringOf(params, "payment_method")
+      if (current.status === "canceled")
+        throw invalidRequest(
+          "You cannot confirm this PaymentIntent because it has a status of canceled. Only a PaymentIntent with one of the following statuses may be confirmed: requires_confirmation, requires_payment_method, requires_action.",
+          undefined,
+          "payment_intent_unexpected_state",
+        )
       const method =
-        requestedMethod === null
-          ? current.payment_method
-          : resolvePaymentMethod(scope, requestedMethod).id
+        paymentMethodFromParams(scope, params) ??
+        (current.payment_method === null
+          ? null
+          : resolvePaymentMethod(scope, current.payment_method))
       if (method === null)
         throw invalidRequest(
-          "You cannot confirm this PaymentIntent because it has no payment method attached to it.",
-          "payment_method",
+          "You cannot confirm this PaymentIntent because it's missing a payment method. You can either update the PaymentIntent with a payment method and then confirm it again, or confirm it again directly with a payment method or ConfirmationToken.",
+          undefined,
+          "payment_intent_unexpected_state",
         )
-      return jsonResponse(200, render(scope, confirmOrDecline(scope, current, method), params))
+      const withFutureUsage =
+        stringOf(params, "setup_future_usage") === null
+          ? current
+          : { ...current, setup_future_usage: stringOf(params, "setup_future_usage") }
+      return jsonResponse(
+        200,
+        render(confirm(scope, withFutureUsage, method, booleanOf(params.off_session) === true)),
+      )
     },
     PostPaymentIntentsIntentCancel: async (context) => {
       const scope = requestScope(services, context)
       const params = bodyParams(context)
       const current = requireIntent(scope, context.params.intent ?? "")
-      if (current.status === "succeeded")
+      if (!CANCELABLE.includes(current.status))
         throw invalidRequest(
-          "The PaymentIntent has a status of succeeded, so it cannot be canceled.",
+          `You cannot cancel this PaymentIntent because it has a status of ${current.status}. Only a PaymentIntent with one of the following statuses may be canceled: ${CANCELABLE.join(", ")}.`,
           undefined,
           "payment_intent_unexpected_state",
         )
+      if (current.latest_charge !== null && current.status === "requires_capture") {
+        const charge = scope.account.charges.get(current.latest_charge)
+        if (charge)
+          scope.account.charges.update(charge.id, {
+            ...charge,
+            amount_refunded: charge.amount,
+            refunded: true,
+          })
+      }
       const next: PaymentIntentRecord = {
         ...current,
         amount_capturable: 0,
         canceled_at: seconds(scope.now),
         cancellation_reason: stringOf(params, "cancellation_reason"),
+        next_action: null,
         status: "canceled",
       }
       scope.account.paymentIntents.update(next.id, next)
       scope.emit("payment_intent.canceled", renderPaymentIntent(next))
-      return jsonResponse(200, render(scope, next, params))
+      return jsonResponse(200, render(next))
     },
     PostPaymentIntentsIntentCapture: async (context) => {
       const scope = requestScope(services, context)
@@ -263,15 +312,13 @@ export const paymentIntentHandlers = (services: Services): Record<string, Operat
           undefined,
           "payment_intent_unexpected_state",
         )
-      const capturedAmount = amountOf(params, "amount_to_capture") ?? current.amount
+      const capturedAmount = intOf(params.amount_to_capture) ?? current.amount
       if (current.latest_charge !== null) {
         const charge = scope.account.charges.get(current.latest_charge)
         if (charge) {
-          scope.account.charges.update(charge.id, {
-            ...charge,
-            amount_captured: capturedAmount,
-            captured: true,
-          })
+          const captured = { ...charge, amount_captured: capturedAmount, captured: true }
+          scope.account.charges.update(charge.id, captured)
+          scope.emit("charge.captured", renderCharge(captured))
         }
       }
       const next: PaymentIntentRecord = {
@@ -282,8 +329,7 @@ export const paymentIntentHandlers = (services: Services): Record<string, Operat
       }
       scope.account.paymentIntents.update(next.id, next)
       scope.emit("payment_intent.succeeded", renderPaymentIntent(next))
-      completeSessionsForIntent(scope, { paymentIntent: next.id })
-      return jsonResponse(200, render(scope, next, params))
+      return jsonResponse(200, render(next))
     },
   }
 }

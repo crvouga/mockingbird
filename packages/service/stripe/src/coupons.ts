@@ -2,8 +2,9 @@ import {
   jsonResponse,
   type OperationContext,
   type OperationHandler,
+  opaqueToken,
 } from "@crvouga/mockingbird-service"
-import { invalidRequest, parameterMissing } from "./errors.js"
+import { invalidRequest, parameterMissing, StripeError } from "./errors.js"
 import {
   mergeRecordMetadata,
   type RequestScope,
@@ -13,7 +14,7 @@ import {
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams } from "./params.js"
-import { renderCoupon, renderProduct } from "./render.js"
+import { renderCoupon, renderDeletedCoupon } from "./render.js"
 import type { CouponRecord } from "./state.js"
 import { seconds } from "./state.js"
 
@@ -68,30 +69,12 @@ const currencyOptionsOf = (value: unknown): Record<string, CurrencyOption> => {
   return result
 }
 
-const expansionPaths = (expand: unknown): string[] =>
-  Array.isArray(expand)
-    ? expand.filter((path): path is string => typeof path === "string")
-    : typeof expand === "string" && expand !== ""
-      ? [expand]
-      : []
-
+/** `applies_to` is includable: the generic expansion step adds it when asked for. */
 const renderCouponExpanded = (
-  scope: RequestScope,
+  _scope: RequestScope,
   coupon: CouponRecord,
-  expand: unknown,
-): RecordValue => {
-  const rendered = renderCoupon(coupon)
-  const paths = expansionPaths(expand)
-  if (paths.some((path) => path === "applies_to" || path === "data.applies_to")) {
-    rendered.applies_to = {
-      products: coupon.applies_to_products.map((id) => {
-        const product = scope.account.products.get(id)
-        return product ? renderProduct(product) : id
-      }),
-    }
-  }
-  return rendered
-}
+  _expand: unknown,
+): RecordValue => renderCoupon(coupon)
 
 const stringOf = (params: Params, key: string): string | null => {
   const value = params[key]
@@ -117,7 +100,16 @@ export const couponHandlers = (services: Services): Record<string, OperationHand
       typeof params.duration_in_months === "number" ? params.duration_in_months : null
     if (duration === "repeating" && durationInMonths === null)
       throw parameterMissing("duration_in_months")
-    const id = scope.ids.next("coupon_")
+    const requested =
+      stringOf(params, "id") ?? (typeof raw.id === "string" && raw.id !== "" ? raw.id : null)
+    if (requested !== null && scope.account.coupons.get(requested))
+      throw new StripeError({
+        status: 400,
+        code: "resource_already_exists",
+        message: "Coupon already exists.",
+        param: "id",
+      })
+    const id = requested ?? opaqueToken(scope.ids.next("coupon_"), 8)
     const record: CouponRecord = {
       id,
       amount_off: amountOff,
@@ -137,6 +129,7 @@ export const couponHandlers = (services: Services): Record<string, OperationHand
       valid: true,
     }
     scope.account.coupons.insert(id, record)
+    scope.emit("coupon.created", renderCoupon(record))
     return jsonResponse(200, renderCouponExpanded(scope, record, params.expand))
   }
 
@@ -158,6 +151,13 @@ export const couponHandlers = (services: Services): Record<string, OperationHand
       const params = queryParams(context)
       const coupon = requireCoupon(scope, context.params.coupon ?? "")
       return jsonResponse(200, renderCouponExpanded(scope, coupon, params.expand))
+    },
+    DeleteCouponsCoupon: async (context) => {
+      const scope = requestScope(services, context)
+      const coupon = requireCoupon(scope, context.params.coupon ?? "")
+      scope.account.coupons.delete(coupon.id)
+      scope.emit("coupon.deleted", renderCoupon({ ...coupon, valid: false }))
+      return jsonResponse(200, renderDeletedCoupon(coupon.id))
     },
     PostCouponsCoupon: async (context) => {
       const scope = requestScope(services, context)

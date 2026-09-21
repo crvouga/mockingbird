@@ -2,14 +2,19 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **108**
-- supported by the mock: **88**
-- parity enabled: **87**
+- operations in spec: **115**
+- supported by the mock: **111**
+- parity enabled: **106**
 
 | operationId | route | mock | parity | notes |
 | --- | --- | --- | --- | --- |
-| `GetBalanceTransactions` | `GET /v1/balance_transactions` | ❌ unsupported | — | the ledger is exposed through customer balance transactions |
-| `GetBalanceTransactionsId` | `GET /v1/balance_transactions/{id}` | ❌ unsupported | — | the ledger is exposed through customer balance transactions |
+| `PostThreeDSecureAuthenticate` | `POST /c/3ds/{intent}/authenticate` | ✅ supported | ❌ disabled | the 3-D Secure challenge the Stripe.js stand-in completes has no public API |
+| `GetCheckoutPage` | `GET /c/pay/{session}` | ✅ supported | ❌ disabled | the hosted Checkout page is HTML served by the mock in place of checkout.stripe.com |
+| `PostCheckoutPage` | `POST /c/pay/{session}` | ✅ supported | ❌ disabled | the hosted Checkout page form post is served by the mock in place of checkout.stripe.com |
+| `GetAccount` | `GET /v1/account` | ✅ supported | ✅ |  |
+| `GetBalance` | `GET /v1/balance` | ✅ supported | ✅ |  |
+| `GetBalanceTransactions` | `GET /v1/balance_transactions` | ✅ supported | ✅ |  |
+| `GetBalanceTransactionsId` | `GET /v1/balance_transactions/{id}` | ✅ supported | ✅ |  |
 | `GetCharges` | `GET /v1/charges` | ✅ supported | ✅ |  |
 | `PostCharges` | `POST /v1/charges` | ❌ unsupported | — | charges are always created through PaymentIntents |
 | `GetChargesCharge` | `GET /v1/charges/{charge}` | ✅ supported | ✅ |  |
@@ -24,7 +29,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `PostCoupons` | `POST /v1/coupons` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetCouponsCoupon` | `GET /v1/coupons/{coupon}` | ✅ supported | ✅ |  |
 | `PostCouponsCoupon` | `POST /v1/coupons/{coupon}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
-| `DeleteCouponsCoupon` | `DELETE /v1/coupons/{coupon}` | ❌ unsupported | — | the e2e path never deletes a coupon |
+| `DeleteCouponsCoupon` | `DELETE /v1/coupons/{coupon}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetCustomers` | `GET /v1/customers` | ✅ supported | ✅ |  |
 | `PostCustomers` | `POST /v1/customers` | ✅ supported | ✅ |  |
 | `GetCustomersCustomer` | `GET /v1/customers/{customer}` | ✅ supported | ✅ |  |
@@ -51,6 +56,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `PostInvoicesInvoiceFinalize` | `POST /v1/invoices/{invoice}/finalize` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetInvoicesInvoiceLines` | `GET /v1/invoices/{invoice}/lines` | ✅ supported | ✅ |  |
 | `PostInvoicesInvoicePay` | `POST /v1/invoices/{invoice}/pay` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `PostInvoicesInvoiceVoid` | `POST /v1/invoices/{invoice}/void` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetInvoicesUpcoming` | `GET /v1/invoices/upcoming` | ✅ supported | ❌ disabled | route is absent from the pinned upstream spec (2026-08-26.dahlia previews invoices instead); the e2e SDK still calls it |
 | `GetPaymentIntents` | `GET /v1/payment_intents` | ✅ supported | ✅ |  |
 | `PostPaymentIntents` | `POST /v1/payment_intents` | ✅ supported | ⚠️ unsafe (opt-in) |  |
@@ -91,10 +97,10 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `PostSetupIntentsIntentCancel` | `POST /v1/setup_intents/{intent}/cancel` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `PostSetupIntentsIntentConfirm` | `POST /v1/setup_intents/{intent}/confirm` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetSubscriptionItems` | `GET /v1/subscription_items` | ✅ supported | ✅ |  |
-| `PostSubscriptionItems` | `POST /v1/subscription_items` | ❌ unsupported | — | item mutations go through the subscription in the e2e path |
+| `PostSubscriptionItems` | `POST /v1/subscription_items` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetSubscriptionItemsItem` | `GET /v1/subscription_items/{item}` | ✅ supported | ✅ |  |
-| `PostSubscriptionItemsItem` | `POST /v1/subscription_items/{item}` | ❌ unsupported | — | item mutations go through the subscription in the e2e path |
-| `DeleteSubscriptionItemsItem` | `DELETE /v1/subscription_items/{item}` | ❌ unsupported | — | item mutations go through the subscription in the e2e path |
+| `PostSubscriptionItemsItem` | `POST /v1/subscription_items/{item}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `DeleteSubscriptionItemsItem` | `DELETE /v1/subscription_items/{item}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetSubscriptionSchedules` | `GET /v1/subscription_schedules` | ✅ supported | ✅ |  |
 | `PostSubscriptionSchedules` | `POST /v1/subscription_schedules` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetSubscriptionSchedulesSchedule` | `GET /v1/subscription_schedules/{schedule}` | ✅ supported | ✅ |  |
@@ -106,13 +112,14 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GetSubscriptionsSubscriptionExposedId` | `GET /v1/subscriptions/{subscription_exposed_id}` | ✅ supported | ✅ |  |
 | `PostSubscriptionsSubscriptionExposedId` | `POST /v1/subscriptions/{subscription_exposed_id}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `DeleteSubscriptionsSubscriptionExposedId` | `DELETE /v1/subscriptions/{subscription_exposed_id}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
-| `GetTestHelpersTestClocks` | `GET /v1/test_helpers/test_clocks` | ❌ unsupported | — | test clocks are not modelled; customers carry no test clock |
-| `PostTestHelpersTestClocks` | `POST /v1/test_helpers/test_clocks` | ❌ unsupported | — | test clocks are not modelled; customers carry no test clock |
-| `GetTestHelpersTestClocksTestClock` | `GET /v1/test_helpers/test_clocks/{test_clock}` | ❌ unsupported | — | test clocks are not modelled; customers carry no test clock |
-| `DeleteTestHelpersTestClocksTestClock` | `DELETE /v1/test_helpers/test_clocks/{test_clock}` | ❌ unsupported | — | test clocks are not modelled; customers carry no test clock |
-| `PostTestHelpersTestClocksTestClockAdvance` | `POST /v1/test_helpers/test_clocks/{test_clock}/advance` | ❌ unsupported | — | test clocks are not modelled; customers carry no test clock |
-| `GetWebhookEndpoints` | `GET /v1/webhook_endpoints` | ❌ unsupported | — | webhook targets come from server configuration, not the API |
-| `PostWebhookEndpoints` | `POST /v1/webhook_endpoints` | ❌ unsupported | — | webhook targets come from server configuration, not the API |
-| `GetWebhookEndpointsWebhookEndpoint` | `GET /v1/webhook_endpoints/{webhook_endpoint}` | ❌ unsupported | — | webhook targets come from server configuration, not the API |
-| `PostWebhookEndpointsWebhookEndpoint` | `POST /v1/webhook_endpoints/{webhook_endpoint}` | ❌ unsupported | — | webhook targets come from server configuration, not the API |
-| `DeleteWebhookEndpointsWebhookEndpoint` | `DELETE /v1/webhook_endpoints/{webhook_endpoint}` | ❌ unsupported | — | webhook targets come from server configuration, not the API |
+| `GetTestHelpersTestClocks` | `GET /v1/test_helpers/test_clocks` | ✅ supported | ✅ |  |
+| `PostTestHelpersTestClocks` | `POST /v1/test_helpers/test_clocks` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `GetTestHelpersTestClocksTestClock` | `GET /v1/test_helpers/test_clocks/{test_clock}` | ✅ supported | ✅ |  |
+| `DeleteTestHelpersTestClocksTestClock` | `DELETE /v1/test_helpers/test_clocks/{test_clock}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `PostTestHelpersTestClocksTestClockAdvance` | `POST /v1/test_helpers/test_clocks/{test_clock}/advance` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `GetWebhookEndpoints` | `GET /v1/webhook_endpoints` | ✅ supported | ✅ |  |
+| `PostWebhookEndpoints` | `POST /v1/webhook_endpoints` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `GetWebhookEndpointsWebhookEndpoint` | `GET /v1/webhook_endpoints/{webhook_endpoint}` | ✅ supported | ✅ |  |
+| `PostWebhookEndpointsWebhookEndpoint` | `POST /v1/webhook_endpoints/{webhook_endpoint}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `DeleteWebhookEndpointsWebhookEndpoint` | `DELETE /v1/webhook_endpoints/{webhook_endpoint}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `GetStripeJs` | `GET /v3` | ✅ supported | ❌ disabled | the Stripe.js stand-in is JavaScript served by the mock in place of js.stripe.com/v3 |

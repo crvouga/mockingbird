@@ -32,7 +32,7 @@ const pageEvents = (records: WebhookEventRecord[], params: Record<string, unknow
     (types.length === 0 || types.includes(record.type))
   const cursorIndex = (id: string, param: string) => {
     const index = records.findIndex((record) => record.id === id)
-    if (index === -1) throw resourceMissing("event", id, param, 400)
+    if (index === -1) throw resourceMissing("notification", id, param, 400)
     return index
   }
   const limit = clampLimit(params.limit)
@@ -62,8 +62,19 @@ const pageEvents = (records: WebhookEventRecord[], params: Record<string, unknow
 export const eventHandlers = (services: Services): Record<string, OperationHandler> => ({
   GetEvents: async (context) => {
     const scope = requestScope(services, context)
-    const params = queryParams(context)
     const records = scope.account.events.list({ order: "newest" }).map((entry) => entry.value)
+    // Cursors are checked in Stripe's parameter order, before `types`.
+    const cursor = (key: string) => (params: Record<string, unknown>) => {
+      const id = params[key]
+      if (typeof id === "string" && id !== "" && !records.some((record) => record.id === id))
+        throw resourceMissing("notification", id, key, 400)
+    }
+    const params = queryParams(context, {
+      validate: {
+        ending_before: cursor("ending_before"),
+        starting_after: cursor("starting_after"),
+      },
+    })
     return jsonResponse(200, pageEvents(records, params))
   },
 

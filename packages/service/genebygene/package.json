@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-genebygene",
   "version": "0.0.0-development",
-  "description": "Stateful mock of the GeneByGene Nucleus API (token, products, orders) verified by differential property tests against the GeneByGene staging sandbox.",
+  "description": "Stateful mock of Gene by Gene's Nucleus API v2 and auth host: tokens with credential blocking, catalog, shipping quotes, orders, kits, demographics, three-layer cancel, results with presigned downloads and S3 writes, subscriptions, and GxG-signed webhooks.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -38,7 +38,12 @@
   "keywords": [
     "mockingbird",
     "service",
-    "genebygene"
+    "genebygene",
+    "gene-by-gene",
+    "gxg",
+    "nucleus",
+    "genomics",
+    "lab"
   ],
   "mockingbird": {
     "runtime": "portable",

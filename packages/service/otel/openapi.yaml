@@ -1,0 +1,866 @@
+openapi: 3.1.0
+info:
+  title: OTLP/HTTP collector and OpenObserve search (Mockingbird subset)
+  description: |
+    An OTLP/HTTP receiver (traces, logs, metrics; JSON and protobuf) in front of the
+    OpenObserve (O2) search API, over one store: a test emits a span or a structured `event`
+    log and queries it back with the same SQL our clients send.
+  version: '1'
+  x-mockingbird-upstream:
+    note: OTLP/HTTP per opentelemetry-proto v1 (https://opentelemetry.io/docs/specs/otlp/); the O2 routes
+      follow OpenObserve's API (/api-doc/openapi.json, v0.92) trimmed to what our clients call.
+servers:
+- url: https://otel.gogeviti.com
+- url: https://observe.gogeviti.com
+security:
+- bearerAuth: []
+paths:
+  /v1/traces:
+    post:
+      operationId: ExportTraces
+      summary: OTLP/HTTP trace export (ExportTraceServiceRequest)
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportTraceServiceRequest'
+          application/x-protobuf:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: 'Accepted. JSON requests get `{partialSuccess: {}}`; protobuf requests get an empty
+            protobuf response.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Undecodable payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '401':
+          description: Missing or unknown bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '415':
+          description: Neither application/json nor application/x-protobuf
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '429':
+          description: Throttled (retried by the SDK), with retry-after
+          headers:
+            retry-after:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '500':
+          description: Collector error (not retried by the SDK)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '502':
+          description: Bad gateway (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '503':
+          description: Unavailable (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '504':
+          description: Gateway timeout (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+  /v1/logs:
+    post:
+      operationId: ExportLogs
+      summary: OTLP/HTTP log export (ExportLogsServiceRequest)
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportLogsServiceRequest'
+          application/x-protobuf:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: 'Accepted. JSON requests get `{partialSuccess: {}}`; protobuf requests get an empty
+            protobuf response.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Undecodable payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '401':
+          description: Missing or unknown bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '415':
+          description: Neither application/json nor application/x-protobuf
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '429':
+          description: Throttled (retried by the SDK), with retry-after
+          headers:
+            retry-after:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '500':
+          description: Collector error (not retried by the SDK)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '502':
+          description: Bad gateway (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '503':
+          description: Unavailable (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '504':
+          description: Gateway timeout (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+  /v1/metrics:
+    post:
+      operationId: ExportMetrics
+      summary: 'OTLP/HTTP metrics export: accepted and counted, never stored'
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportMetricsServiceRequest'
+          application/x-protobuf:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: 'Accepted. JSON requests get `{partialSuccess: {}}`; protobuf requests get an empty
+            protobuf response.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExportResponse'
+            application/x-protobuf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Undecodable payload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '401':
+          description: Missing or unknown bearer token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '415':
+          description: Neither application/json nor application/x-protobuf
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '429':
+          description: Throttled (retried by the SDK), with retry-after
+          headers:
+            retry-after:
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '500':
+          description: Collector error (not retried by the SDK)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '502':
+          description: Bad gateway (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '503':
+          description: Unavailable (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+        '504':
+          description: Gateway timeout (retried)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RpcStatus'
+  /api/organizations:
+    get:
+      operationId: ListOrganizations
+      summary: 'O2: the organizations the Basic user belongs to (display name → identifier)'
+      security:
+      - basicAuth: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: Organizations
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organizations'
+        '401':
+          description: Bad Basic credentials, or an org the user cannot see — including an org's display
+            name in place of its identifier
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/{org}/streams:
+    parameters:
+    - name: org
+      in: path
+      required: true
+      description: The org **identifier** (not its display name)
+      schema:
+        type: string
+        x-mockingbird-resource-ref:
+          type: organization
+          missing: no-such-org
+    get:
+      operationId: ListStreams
+      summary: 'O2: the org''s streams of one type'
+      security:
+      - basicAuth: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - logs
+          - traces
+      responses:
+        '200':
+          description: Streams
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamList'
+        '401':
+          description: Bad Basic credentials, or an org the user cannot see — including an org's display
+            name in place of its identifier
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/{org}/streams/{stream}/schema:
+    parameters:
+    - name: org
+      in: path
+      required: true
+      description: The org **identifier** (not its display name)
+      schema:
+        type: string
+        x-mockingbird-resource-ref:
+          type: organization
+          missing: no-such-org
+    - name: stream
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+        - default
+        - other
+    get:
+      operationId: GetStreamSchema
+      summary: 'O2: a stream''s schema (`schema[].name` are the queryable, lowercased, flattened fields)'
+      security:
+      - basicAuth: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - logs
+          - traces
+      responses:
+        '200':
+          description: Schema
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StreamSchema'
+        '401':
+          description: Bad Basic credentials, or an org the user cannot see — including an org's display
+            name in place of its identifier
+          content:
+            text/plain:
+              schema:
+                type: string
+        '404':
+          description: Nothing has been ingested into this stream
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/O2Error'
+  /api/{org}/_search:
+    parameters:
+    - name: org
+      in: path
+      required: true
+      description: The org **identifier** (not its display name)
+      schema:
+        type: string
+        x-mockingbird-resource-ref:
+          type: organization
+          missing: no-such-org
+    post:
+      operationId: Search
+      summary: 'O2: SQL search over a stream'
+      security:
+      - basicAuth: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - name: type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - logs
+          - traces
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - query
+              properties:
+                query:
+                  type: object
+                  required:
+                  - sql
+                  properties:
+                    sql:
+                      anyOf:
+                      - type: string
+                        enum:
+                        - SELECT * FROM "default" WHERE event IS NOT NULL ORDER BY _timestamp DESC
+                        - SELECT * FROM "default" WHERE event IN ('checkout_completed') ORDER BY _timestamp
+                          DESC
+                        - SELECT service_name, count(*) AS n FROM "default" GROUP BY service_name ORDER
+                          BY n DESC
+                        - SELECT * FROM "default" WHERE severity_text IN ('ERROR', 'FATAL')
+                        - SELECT * FROM "default" WHERE clientUserId = '1'
+                      - type: string
+                        maxLength: 200
+                    start_time:
+                      type: integer
+                      minimum: 0
+                      description: µs since epoch
+                    end_time:
+                      type: integer
+                      minimum: 0
+                      description: µs since epoch
+                    from:
+                      type: integer
+                      minimum: 0
+                      maximum: 100
+                    size:
+                      type: integer
+                      minimum: -1
+                      maximum: 1000
+                search_type:
+                  type: string
+                  maxLength: 20
+      responses:
+        '200':
+          description: Hits
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          description: Unsupported SQL, or an unknown field (O2 lowercases every field; a camelCase column
+            is unknown)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/O2Error'
+        '401':
+          description: Bad Basic credentials, or an org the user cannot see — including an org's display
+            name in place of its identifier
+          content:
+            text/plain:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    basicAuth:
+      type: http
+      scheme: basic
+  schemas:
+    KeyValue:
+      type: object
+      required:
+      - key
+      - value
+      properties:
+        key:
+          type: string
+          enum:
+          - service.name
+          - event
+          - clientUserId
+          - http.method
+          - deployment.environment.name
+          - attempt
+        value:
+          type: object
+          properties:
+            stringValue:
+              type: string
+              maxLength: 20
+            intValue:
+              type:
+              - string
+              - integer
+            boolValue:
+              type: boolean
+            doubleValue:
+              type: number
+    ExportTraceServiceRequest:
+      type: object
+      properties:
+        resourceSpans:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+            properties:
+              resource:
+                type: object
+                properties:
+                  attributes:
+                    type: array
+                    maxItems: 4
+                    items:
+                      $ref: '#/components/schemas/KeyValue'
+              scopeSpans:
+                type: array
+                maxItems: 2
+                items:
+                  type: object
+                  properties:
+                    scope:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          maxLength: 20
+                    spans:
+                      type: array
+                      maxItems: 3
+                      items:
+                        type: object
+                        required:
+                        - traceId
+                        - spanId
+                        - name
+                        properties:
+                          traceId:
+                            type: string
+                            pattern: ^[0-9a-f]{32}$
+                          spanId:
+                            type: string
+                            pattern: ^[0-9a-f]{16}$
+                          parentSpanId:
+                            type: string
+                            pattern: ^[0-9a-f]{16}$
+                          name:
+                            type: string
+                            maxLength: 30
+                          kind:
+                            type: integer
+                            minimum: 0
+                            maximum: 5
+                          startTimeUnixNano:
+                            type: string
+                            pattern: ^1[0-9]{18}$
+                          endTimeUnixNano:
+                            type: string
+                            pattern: ^1[0-9]{18}$
+                          attributes:
+                            type: array
+                            maxItems: 4
+                            items:
+                              $ref: '#/components/schemas/KeyValue'
+                          status:
+                            type: object
+                            properties:
+                              code:
+                                type: integer
+                                minimum: 0
+                                maximum: 2
+                              message:
+                                type: string
+                                maxLength: 40
+    ExportLogsServiceRequest:
+      type: object
+      properties:
+        resourceLogs:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+            properties:
+              resource:
+                type: object
+                properties:
+                  attributes:
+                    type: array
+                    maxItems: 4
+                    items:
+                      $ref: '#/components/schemas/KeyValue'
+              scopeLogs:
+                type: array
+                maxItems: 2
+                items:
+                  type: object
+                  properties:
+                    scope:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                          maxLength: 20
+                    logRecords:
+                      type: array
+                      maxItems: 3
+                      items:
+                        type: object
+                        properties:
+                          timeUnixNano:
+                            type: string
+                            pattern: ^1[0-9]{18}$
+                          observedTimeUnixNano:
+                            type: string
+                            pattern: ^1[0-9]{18}$
+                          severityNumber:
+                            type: integer
+                            minimum: 0
+                            maximum: 24
+                          severityText:
+                            type: string
+                            enum:
+                            - TRACE
+                            - DEBUG
+                            - INFO
+                            - WARN
+                            - ERROR
+                            - FATAL
+                            - info
+                            - error
+                          body:
+                            type: object
+                            properties:
+                              stringValue:
+                                type: string
+                                maxLength: 40
+                          attributes:
+                            type: array
+                            maxItems: 4
+                            items:
+                              $ref: '#/components/schemas/KeyValue'
+                          traceId:
+                            type: string
+                            pattern: ^[0-9a-f]{32}$
+                          spanId:
+                            type: string
+                            pattern: ^[0-9a-f]{16}$
+    ExportMetricsServiceRequest:
+      type: object
+      properties:
+        resourceMetrics:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+            properties:
+              resource:
+                type: object
+                properties:
+                  attributes:
+                    type: array
+                    maxItems: 4
+                    items:
+                      $ref: '#/components/schemas/KeyValue'
+              scopeMetrics:
+                type: array
+                maxItems: 2
+                items:
+                  type: object
+                  properties:
+                    metrics:
+                      type: array
+                      maxItems: 3
+                      items:
+                        type: object
+                        properties:
+                          name:
+                            type: string
+                            maxLength: 30
+                          unit:
+                            type: string
+                            maxLength: 10
+    ExportResponse:
+      type: object
+      required:
+      - partialSuccess
+      properties:
+        partialSuccess:
+          type: object
+          properties:
+            rejectedSpans:
+              type:
+              - string
+              - integer
+            rejectedLogRecords:
+              type:
+              - string
+              - integer
+            rejectedDataPoints:
+              type:
+              - string
+              - integer
+            errorMessage:
+              type: string
+    RpcStatus:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+    O2Error:
+      type: object
+      required:
+      - code
+      - message
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        error_detail:
+          type: string
+    Organizations:
+      type: object
+      required:
+      - data
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required:
+            - identifier
+            - name
+            properties:
+              id:
+                type: integer
+              identifier:
+                type: string
+                x-mockingbird-resource:
+                  type: organization
+                  identity: true
+              name:
+                type: string
+              type:
+                type: string
+    StreamList:
+      type: object
+      required:
+      - list
+      properties:
+        list:
+          type: array
+          items:
+            type: object
+            required:
+            - name
+            - stream_type
+            properties:
+              name:
+                type: string
+              stream_type:
+                type: string
+              storage_type:
+                type: string
+              stats:
+                type: object
+    StreamSchema:
+      type: object
+      required:
+      - name
+      - stream_type
+      - schema
+      properties:
+        name:
+          type: string
+        stream_type:
+          type: string
+        storage_type:
+          type: string
+        stats:
+          type: object
+        schema:
+          type: array
+          items:
+            type: object
+            required:
+            - name
+            - type
+            properties:
+              name:
+                type: string
+              type:
+                type: string
+                enum:
+                - Utf8
+                - Int64
+                - Float64
+                - Boolean
+        settings:
+          type: object
+    SearchResponse:
+      type: object
+      required:
+      - took
+      - hits
+      - total
+      - from
+      - size
+      properties:
+        took:
+          type: integer
+          x-mockingbird-volatile:
+            kind: opaque
+        hits:
+          type: array
+          items:
+            type: object
+        total:
+          type: integer
+        from:
+          type: integer
+        size:
+          type: integer
+        scan_size:
+          type: integer
+        scan_records:
+          type: integer
+        is_partial:
+          type: boolean
+        cached_ratio:
+          type: integer

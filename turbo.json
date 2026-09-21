@@ -1,36 +1,82 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
-  "globalDependencies": ["tsconfig.base.json", "biome.json"],
-  "globalEnv": ["CI", "GITHUB_ACTIONS"],
+  "globalDependencies": [
+    "tsconfig.base.json",
+    "biome.json"
+  ],
+  "globalEnv": [
+    "CI",
+    "GITHUB_ACTIONS"
+  ],
   "tasks": {
     "generate": {
-      "dependsOn": ["^build"],
-      "inputs": ["openapi.yaml", "codegen.json"],
-      "outputs": ["src/generated/**", "SUPPORT.md"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "openapi.yaml",
+        "codegen.json"
+      ],
+      "outputs": [
+        "src/generated/**",
+        "SUPPORT.md"
+      ]
     },
     "generate:check": {
-      "dependsOn": ["^build"],
-      "inputs": ["openapi.yaml", "codegen.json", "src/generated/**", "SUPPORT.md"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "openapi.yaml",
+        "codegen.json",
+        "src/generated/**",
+        "SUPPORT.md"
+      ]
     },
     "openapi:check": {
-      "dependsOn": ["^build"],
-      "inputs": ["openapi.yaml"]
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "openapi.yaml"
+      ]
     },
     "build": {
-      "dependsOn": ["^build", "generate"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "!README.md"],
-      "outputs": ["dist/**"]
+      "dependsOn": [
+        "^build",
+        "generate"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!README.md"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
     },
     "typecheck": {
-      "dependsOn": ["^build", "generate"],
-      "inputs": ["$TURBO_DEFAULT$", "!README.md"]
+      "dependsOn": [
+        "^build",
+        "generate"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!README.md"
+      ]
     },
     "lint": {
-      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/biome.json"]
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/biome.json"
+      ]
     },
     "test": {
-      "dependsOn": ["build", "^build"],
+      "dependsOn": [
+        "build",
+        "^build"
+      ],
       "env": [
         "FC_SEED",
         "FC_NUM_RUNS",
@@ -40,11 +86,16 @@
         "MOCKINGBIRD_MEDPLUM_VERSION",
         "MEDPLUM_MOCK_CACHE_DIR"
       ],
-      "inputs": ["$TURBO_DEFAULT$", "!README.md"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!README.md"
+      ],
       "outputs": []
     },
     "portability": {
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "inputs": [
         "$TURBO_DEFAULT$",
         "!**/*.test.ts",
@@ -53,13 +104,22 @@
       ]
     },
     "pack:check": {
-      "dependsOn": ["build"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "$TURBO_ROOT$/scripts/pack-check.ts"]
+      "dependsOn": [
+        "build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "$TURBO_ROOT$/scripts/pack-check.ts"
+      ]
     },
     "parity": {
-      "dependsOn": ["build"],
+      "dependsOn": [
+        "build"
+      ],
       "cache": false,
       "passThroughEnv": [
+        "MOCKINGBIRD_*",
         "FC_SEED",
         "FC_NUM_RUNS",
         "MOCKINGBIRD_MAX_COMMANDS",
@@ -112,7 +172,14 @@
       ]
     },
     "//#check:format": {
-      "inputs": ["biome.json", "scripts/**", "docs/**", "*.json", "*.md", ".github/**"]
+      "inputs": [
+        "biome.json",
+        "scripts/**",
+        "docs/**",
+        "*.json",
+        "*.md",
+        ".github/**"
+      ]
     }
   }
 }

@@ -6,7 +6,7 @@ import { serveTarget } from "./server.js"
 const code = await runCli(
   {
     bin: "mockingbird-genebygene",
-    description: "stateful GeneByGene API mock",
+    description: "stateful Gene by Gene (Nucleus API v2 + auth host) mock",
     commands: { serve: serveCommand(serveTarget) },
   },
   process.argv.slice(2),

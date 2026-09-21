@@ -179,7 +179,8 @@ check("subscription exposes a period end", typeof subscription.current_period_en
 const invoices = await mso.invoices.list({ customer: customer.id })
 check("subscription created an invoice", invoices.data.length > 0)
 
-const paid = await mso.invoices.pay(invoices.data[0]?.id ?? "")
+// The subscription charged its default payment method at creation, as Stripe does.
+const paid = await mso.invoices.retrieve(invoices.data[0]?.id ?? "")
 check("invoice paid", paid.status === "paid")
 const paidOnly = await mso.invoices.list({ customer: customer.id, status: "paid" })
 check(

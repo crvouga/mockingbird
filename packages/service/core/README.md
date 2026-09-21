@@ -120,6 +120,20 @@ the body is read.
 | `PACKAGE_VERSION` / `UNRELEASED_VERSION` | `string` | The bundled service's version (stamped by `release:publish`); `"0.0.0-development"` from source. |
 | `createJournal` | `(size = 1000) => Journal` | Per-namespace ring buffer of request logs behind `GET /__admin/requests`. |
 | `annotateResponse` / `responseNotes` | `(response, { ids?, adopted? }) => Response` | Attach the ids a handler touched to a response for the journal and log, without changing what the client sees. |
+| `createRuntime` | `(options: RuntimeOptions) => ServiceRuntime` | Wrap a service in the full contract: `/health`, `/__admin/*`, namespaces (header, `/ns/<name>/…` prefix, or `credential`-mapped via `PUT /__admin/credentials`), clock, faults and `presets`, metrics, journal, optional `webhooks` hub. |
+| `faultEffect` / `faultEffects` | `(request, name?) => params \| list` | The `effect` fault rules that fired for a request, so a handler can switch on a named vendor misbehaviour. |
+| `DroppedConnectionError` | `class extends TypeError` | What an in-process `runtime.fetch` throws for a `drop: true` fault; the Node adapter destroys the socket instead. |
+| `bearerToken` / `basicAuth` / `sigV4AccessKeyId` / `anyCredential` | `(request) => …` | Read a vendor credential (for the runtime's `credential` hook). |
+| `createCredentialRegistry` / `maskCredential` | | The credential → namespace map behind `/__admin/credentials`, and how admin output shows a credential. |
+| `createWebhookHub` | `(options: WebhookHubOptions) => WebhookHub` | Signed outbound webhooks: fan-out by event type and tags, vendor retry schedule, replay, flush, duplicate/reorder/drop faults. Wall-clock signature timestamps. |
+| `signers` | `{ none, svix, timestamped, twilio, header, custom }` | Vendor signature schemes for the hub. |
+| `webhookAdminRoutes` | `(hub) => AdminRoutes` | `/__admin/webhooks*` and `/__admin/webhook-endpoints` (added automatically when `webhooks` is passed to `createRuntime`). |
+| `hmac` / `sha` / `signSvix` / `signTimestamped` / `signTwilio` / `svixSecretBytes` / `timingSafeEqual` / `toHex` / `toBase64` / `fromBase64` | | WebCrypto signing primitives. |
+| `OutboxStore` / `outboxAdminRoutes` / `parseSince` | | What a comms mock "sent", per namespace, and `GET /__admin/outbox?to=&since=`. |
+| `extractLinks` / `extractCodes` | `(html) => string[]`, `(text, length?) => string[]` | Links and numeric codes in a message. |
+| `IdempotencyStore` / `requestFingerprint` / `stableStringify` | | Idempotency keys: replay, mismatch error, in-flight conflict. |
+| `bodyIssues` / `issuesByField` | `(context) => BodyIssue[]` | Validate a JSON body against the operation's contract schema; group issues Laravel-style. |
+| `putObject` / `signV4` | | SigV4-signed S3 `PutObject` (for vendors that hand the app an `s3://` object). |
 
 Types:
 

@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun"],
+    "paths": {
+      "twilio": ["./node_modules/twilio/index.d.ts"]
+    }
+  },
+  "include": ["src", "test", "scripts", "*.test.ts"]
+}
