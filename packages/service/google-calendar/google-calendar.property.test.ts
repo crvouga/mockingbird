@@ -38,7 +38,7 @@ describe("GoogleCalendarAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: Math.max(params.numRuns ?? 60, 60),
+        numRuns: Math.max(params.numRuns ?? 120, 120),
         maxCommands: 30,
         coverageBias: 4,
         latencyToleranceMs: 1_000,

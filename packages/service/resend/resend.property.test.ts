@@ -43,7 +43,7 @@ describe("ResendAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 25,
+        numRuns: Math.max(params.numRuns ?? 100, 100),
         maxCommands: 20,
         latencyToleranceMs: 1_000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),

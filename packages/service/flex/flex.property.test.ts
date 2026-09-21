@@ -40,11 +40,17 @@ describe("FlexAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 40,
+        numRuns: Math.max(params.numRuns ?? 100, 100),
         maxCommands: 20,
         coverageBias: 4,
         // Session create is the richest operation (modes, line items, customers): walk it more.
-        weights: { CreateCheckoutSession: 4, GetCheckoutSession: 2, RefundCheckoutSession: 2 },
+        // Setup intents only exist after a setup-mode create, so fetch them more often too.
+        weights: {
+          CreateCheckoutSession: 4,
+          GetCheckoutSession: 2,
+          RefundCheckoutSession: 2,
+          GetSetupIntent: 3,
+        },
         // Both sides share one scheduler; a GC pause on a loaded machine is not a divergence.
         latencyToleranceMs: 5_000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
