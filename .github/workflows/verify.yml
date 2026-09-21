@@ -28,6 +28,7 @@ jobs:
   junction:
     name: Junction sandbox
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
@@ -46,4 +47,5 @@ jobs:
             secret/data/personal/prd MOCKINGBIRD_JUNCTION_API_KEY | MOCKINGBIRD_JUNCTION_API_KEY
 
       - name: mockingbird-junction verify (shipped corpus, with orders)
+        timeout-minutes: 15
         run: bun run --cwd packages/service/junction verify -- --sample 60 --orders
