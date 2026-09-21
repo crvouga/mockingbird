@@ -24,8 +24,11 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { $ } from "bun"
 import {
+  changelog,
   computePlan,
   npmVersions,
+  packedManifest,
+  pinManifest,
   REPO,
   type Release,
   redact,
@@ -33,6 +36,7 @@ import {
   retiredPackages,
   root,
   tagName,
+  unresolvablePins,
   WORKFLOW_FILE,
 } from "./lib.ts"
 
@@ -66,18 +70,29 @@ if (plan.releases.length === 0) {
   console.log(`release:publish: ${plan.releases.length} package(s)${dryRun ? " (dry-run)" : ""}`)
 }
 
-// Pin every public package to its release (or last released) version for packing.
+// Pin every public package for packing: its own version, and its workspace
+// dependencies rewritten to the versions this run resolves them to.
 const originals = new Map<string, string>()
 for (const pkg of plan.packages) {
   const version = plan.versions.get(pkg.name)
   if (!version) continue
   const raw = readFileSync(pkg.manifestPath, "utf8")
   originals.set(pkg.manifestPath, raw)
-  writeFileSync(pkg.manifestPath, raw.replace(/"version":\s*"[^"]*"/, `"version": "${version}"`))
+  writeFileSync(pkg.manifestPath, pinManifest(raw, version, plan.versions))
+}
+
+// Each release ships its whole changelog, generated from the tags; removed after packing.
+const changelogs: string[] = []
+for (const release of plan.releases) {
+  const path = join(release.pkg.dir, "CHANGELOG.md")
+  writeFileSync(path, await changelog(release.pkg, release))
+  changelogs.push(path)
 }
 
 const packDir = mkdtempSync(join(tmpdir(), "mockingbird-release-"))
 const failed = new Set<string>()
+/** `<name>@<version>` of everything this run put on npm, which `npm view` may not show yet. */
+const releasedNow = new Set<string>()
 // setup-node's .npmrc reads NODE_AUTH_TOKEN; leave it empty to force OIDC. Locally, use the npm login.
 const npmEnv = (withToken: boolean) =>
   local ? process.env : { ...process.env, NODE_AUTH_TOKEN: withToken ? npmToken : "" }
@@ -98,6 +113,40 @@ function fail(name: string, lines: string[]): void {
   for (const line of lines) console.error(`  ${redact(line)}`)
 }
 
+/**
+ * A consumer runs `npm i <pkg>` with no overrides, so every workspace pin in the
+ * packed manifest has to be a real version that npm can already serve. Releases are
+ * topologically ordered, so a dependency released in this same run is there first.
+ */
+async function assertInstallable(release: Release, tarball: string): Promise<boolean> {
+  const manifest = await packedManifest(tarball)
+  const bad = unresolvablePins(manifest)
+  if (bad.length > 0) {
+    fail(release.pkg.name, ["packed manifest pins no consumer could resolve:", ...bad])
+    return false
+  }
+  for (const dep of release.pkg.runtimeDeps) {
+    const pinned =
+      manifest.dependencies?.[dep] ??
+      manifest.peerDependencies?.[dep] ??
+      manifest.optionalDependencies?.[dep]
+    if (!pinned || releasedNow.has(`${dep}@${pinned}`)) continue
+    const published = await npmVersions(dep)
+    if (!Array.isArray(published)) {
+      fail(release.pkg.name, [`npm view ${dep}: ${published.error}`])
+      return false
+    }
+    if (!published.includes(pinned)) {
+      fail(release.pkg.name, [
+        `pins ${dep}@${pinned}, which is not on npm — installing it would fail.`,
+        `Releases are ordered dependencies-first; check that ${dep} released in this run.`,
+      ])
+      return false
+    }
+  }
+  return true
+}
+
 async function publish(release: Release): Promise<boolean> {
   const { pkg, version } = release
   const published = await npmVersions(pkg.name)
@@ -107,6 +156,7 @@ async function publish(release: Release): Promise<boolean> {
   }
   if (published.includes(version)) {
     console.log(`skip ${pkg.name}@${version} (already on npm)`)
+    releasedNow.add(`${pkg.name}@${version}`)
     return true
   }
   const isNew = published.length === 0
@@ -130,8 +180,10 @@ async function publish(release: Release): Promise<boolean> {
     fail(pkg.name, ["bun pm pack failed", packed.stderr.toString()])
     return false
   }
+  if (!(await assertInstallable(release, tarball))) return false
   if (dryRun) {
     console.log(`would publish ${pkg.name}@${version}${isNew ? " (new package)" : ""}`)
+    releasedNow.add(`${pkg.name}@${version}`)
     return true
   }
 
@@ -152,6 +204,7 @@ async function publish(release: Release): Promise<boolean> {
     ])
     return false
   }
+  releasedNow.add(`${pkg.name}@${version}`)
   return true
 }
 
@@ -233,6 +286,7 @@ try {
   }
   await deprecateRetiredPackages()
 } finally {
+  for (const path of changelogs) rmSync(path, { force: true })
   for (const [path, raw] of originals) writeFileSync(path, raw)
   rmSync(packDir, { recursive: true, force: true })
 }
