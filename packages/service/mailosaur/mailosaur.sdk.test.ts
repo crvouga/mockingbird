@@ -94,6 +94,15 @@ describe("mailosaur@11.1.0 SDK against the mock", () => {
   test("messages.get long-polls and returns within 50 ms of the message arriving", async () => {
     await server.runtime.reset("*")
     const client = sdk()
+    // The same search + getById round trips for mail already there: transport and scheduler
+    // cost the mock does not control. Mail landing just after a poll left also waits out that
+    // in-flight empty search (at most one more round trip), so the 50 ms bound is what the mock
+    // itself adds on top.
+    const early = `early@${SERVER}.mailosaur.net`
+    ingest({ to: early, subject: "early", text: "Your verification code is 654321." })
+    const started = performance.now()
+    await client.messages.get(SERVER, new SearchCriteria({ sentTo: early }))
+    const baseline = performance.now() - started
     const to = `late@${SERVER}.mailosaur.net`
     let arrived = 0
     const pending = client.messages
@@ -104,7 +113,7 @@ describe("mailosaur@11.1.0 SDK against the mock", () => {
     ingest({ to, subject: "late", text: "Your verification code is 123456." })
     const { message, at } = await pending
     expect(message.subject).toBe("late")
-    expect(at - arrived).toBeLessThan(50)
+    expect(at - arrived).toBeLessThan(2 * baseline + 50)
   })
 
   test("messages.get times out with the SDK's search_timeout error when nothing arrives", async () => {

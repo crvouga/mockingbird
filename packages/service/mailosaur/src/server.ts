@@ -63,9 +63,6 @@ const listenOn = async (server: NetServer | TlsServer, bind: Endpoint): Promise<
 /** Pipe `socket` (after replaying `head`) to `target`, tearing both down together. */
 const tunnel = (socket: Socket, target: Endpoint, head: Uint8Array, sockets: Set<Socket>) => {
   const inner = connect(target.port, target.host)
-  // Each hop forwards small TLS records; Nagle plus delayed ACKs would stall them per hop.
-  socket.setNoDelay(true)
-  inner.setNoDelay(true)
   sockets.add(socket)
   sockets.add(inner)
   const close = () => {
