@@ -17,6 +17,7 @@ info:
     Get order transaction: https://docs.junction.com/api-reference/lab-testing/order-transactions/get-order-transaction
     Get order transaction result: https://docs.junction.com/api-reference/lab-testing/results/get-order-transaction-results
     Lab tests: https://docs.junction.com/api-reference/lab-testing/tests-paginated
+    Lab tests (deprecated, unpaged): https://docs.junction.com/api-reference/lab-testing/tests/get-lab-tests
     Appointment availability: https://docs.junction.com/api-reference/lab-testing/appointments/get-appointment-availability
     Book appointment: https://docs.junction.com/api-reference/lab-testing/appointments/book-appointment
     Get appointment: https://docs.junction.com/api-reference/lab-testing/appointments/get-appointment
@@ -380,6 +381,130 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /v3/lab_tests:
+    get:
+      operationId: get_lab_tests_for_team_v3_lab_tests_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      summary: Get Lab Tests For Team
+      description: GET all the lab tests the team has access to.
+      deprecated: true
+      parameters:
+      - name: generation_method
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/LabTestGenerationMethodFilter'
+          description: Filter on whether auto-generated lab tests created by Vital, manually created lab
+            tests, or all lab tests should be returned.
+          default: manual
+        description: Filter on whether auto-generated lab tests created by Vital, manually created lab tests,
+          or all lab tests should be returned.
+      - name: lab_slug
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by the slug of the lab for these lab tests.
+          title: Lab Slug
+        description: Filter by the slug of the lab for these lab tests.
+      - name: collection_method
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/LabTestCollectionMethod'
+          - type: 'null'
+          description: Filter by the collection method for these lab tests.
+          title: Collection Method
+        description: Filter by the collection method for these lab tests.
+      - name: status
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - $ref: '#/components/schemas/LabTestStatus'
+          - type: 'null'
+          description: Filter by the status of these lab tests.
+          title: Status
+        description: Filter by the status of these lab tests.
+      - name: marker_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: integer
+          - type: 'null'
+          description: Filter to only include lab tests containing these marker IDs.
+          title: Marker Ids
+        description: Filter to only include lab tests containing these marker IDs.
+      - name: provider_ids
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: array
+            items:
+              type: string
+          - type: 'null'
+          description: Filter to only include lab tests containing these provider IDs.
+          title: Provider Ids
+        description: Filter to only include lab tests containing these provider IDs.
+      - name: name
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Filter by the name of the lab test (a case-insensitive substring search).
+          title: Name
+        description: Filter by the name of the lab test (a case-insensitive substring search).
+      - name: order_key
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - enum:
+            - price
+            - created_at
+            - updated_at
+            type: string
+          - type: 'null'
+          title: Order Key
+      - name: order_direction
+        in: query
+        required: false
+        schema:
+          enum:
+          - asc
+          - desc
+          type: string
+          default: asc
+          title: Order Direction
+      responses:
+        '200':
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ClientFacingLabTest'
+                title: Response Get Lab Tests For Team V3 Lab Tests Get
+        '422':
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
   /v3/lab_tests/{lab_test_id}:
     parameters:
       - name: lab_test_id
@@ -1805,6 +1930,9 @@ components:
     LabTestCollectionMethod:
       type: string
       enum: [testkit, walk_in_test, at_home_phlebotomy, on_site_collection]
+    LabTestGenerationMethodFilter:
+      type: string
+      enum: [auto, manual, all]
     LabTestSampleType:
       type: string
       enum: [dried_blood_spot, arm_collector, serum, saliva, urine, stool]

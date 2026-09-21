@@ -11,7 +11,8 @@ import {
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
-import { type LabAccountRecord, labAccountById } from "./lab-accounts.js"
+import { isLinkedToTeam, type LabAccountRecord, labAccountById } from "./lab-accounts.js"
+import { orderMissing } from "./not-found.js"
 import type {
   AppointmentEventRecord,
   AppointmentModality,
@@ -19,7 +20,6 @@ import type {
   BookingKeyRecord,
   JunctionState,
 } from "./state.js"
-import { MOCK_TEAM_ID } from "./state.js"
 
 /** Status of the unknown-ZIP error: unused by Junction, and not retried by HTTP clients. */
 export const UNKNOWN_ZIP_STATUS = 424
@@ -648,7 +648,7 @@ const zipCodeOf = (context: OperationContext, required: boolean): string | undef
  * Optional `lab_account_id` for an availability check: it must be a UUID, exist for this
  * team, and be active — the same account rules Create Order applies.
  */
-const labAccountOf = (context: OperationContext): LabAccountRecord | null => {
+const labAccountOf = (state: JunctionState, context: OperationContext): LabAccountRecord | null => {
   const raw = context.query.lab_account_id
   if (raw === undefined) return null
   if (typeof raw !== "string" || !isUuid(raw)) {
@@ -656,8 +656,8 @@ const labAccountOf = (context: OperationContext): LabAccountRecord | null => {
       detail: [uuidError(typeof raw === "string" ? raw : String(raw), ["query", "lab_account_id"])],
     })
   }
-  const account = labAccountById(raw)
-  if (!account?.team_id_allowlist.includes(MOCK_TEAM_ID))
+  const account = labAccountById(raw, state.listLabAccounts())
+  if (!account || !isLinkedToTeam(account, state.teamId))
     throw new HttpError(404, { detail: "Lab account does not exist" })
   if (account.status !== "active") throw new HttpError(400, { detail: "Lab account is not active" })
   return account
@@ -895,24 +895,16 @@ function invalidBookingKey(): never {
 
 type Order = NonNullable<ReturnType<JunctionState["orders"]["get"]>>
 
-const requireOrder = (
-  state: JunctionState,
-  orderId: string,
-  context: OperationContext,
-  missingMessage = "This order doesn't exist.",
-): Order => {
+const requireOrder = (state: JunctionState, orderId: string, context: OperationContext): Order => {
   if (!isUuid(orderId)) {
     throw new HttpError(422, { detail: [uuidError(orderId, ["path", "order_id"])] })
   }
-  const order: Order | undefined = state.orders.get(orderId)
-  if (order === undefined) notFound(missingMessage)
-  const loaded: Order = order
+  const loaded: Order =
+    state.orders.get(orderId) ?? orderMissing(state, context.operation.operationId, orderId)
   state.applyDueSimulateTransitions(context.now(), (_due, finalStatus, flags) => {
     applySimulateTransition(state, loaded, finalStatus, flags, context)
   })
-  const fresh: Order | undefined = state.orders.get(orderId)
-  if (fresh === undefined) notFound(missingMessage)
-  return fresh
+  return state.orders.get(orderId) ?? orderMissing(state, context.operation.operationId, orderId)
 }
 
 const orderCollectionMethod = (order: Order): string => {
@@ -1227,7 +1219,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
     }
     const zip = rawZip.slice(0, 5)
     requireCoveredZip(state, zip)
-    return jsonRes(200, areaInfoFor(zip, radius, labAccountOf(context)))
+    return jsonRes(200, areaInfoFor(zip, radius, labAccountOf(state, context)))
   },
 
   get_psc_info_v3_order_psc_info_get: async (context: OperationContext) => {

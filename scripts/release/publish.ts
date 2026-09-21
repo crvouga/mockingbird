@@ -19,10 +19,11 @@
  *   bun run release:publish                (CI, on main)
  *   bun run release:publish -- --local     (maintainer bootstrap: your npm login, no provenance)
  */
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { $ } from "bun"
+import { VERSION_PLACEHOLDER } from "../bundle-service-version.ts"
 import {
   changelog,
   computePlan,
@@ -79,6 +80,19 @@ for (const pkg of plan.packages) {
   const raw = readFileSync(pkg.manifestPath, "utf8")
   originals.set(pkg.manifestPath, raw)
   writeFileSync(pkg.manifestPath, pinManifest(raw, version, plan.versions))
+  // Bundles carry VERSION_PLACEHOLDER (scripts/bundle-service.ts) where the service reports
+  // its version, e.g. the `x-mockingbird` header; stamp the version being published.
+  const dist = join(pkg.dir, "dist")
+  if (!existsSync(dist)) continue
+  for (const file of readdirSync(dist, { recursive: true, encoding: "utf8" })) {
+    if (!file.endsWith(".js")) continue
+    const path = join(dist, file)
+    const code = readFileSync(path, "utf8")
+    const placeholder = JSON.stringify(VERSION_PLACEHOLDER)
+    if (!code.includes(placeholder)) continue
+    originals.set(path, code)
+    writeFileSync(path, code.replaceAll(placeholder, JSON.stringify(version)))
+  }
 }
 
 // Each release ships its whole changelog, generated from the tags; removed after packing.

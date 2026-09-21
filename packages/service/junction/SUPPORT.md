@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **39**
-- supported by the mock: **39**
-- parity enabled: **21**
+- operations in spec: **40**
+- supported by the mock: **40**
+- parity enabled: **22**
 
 | operationId | route | mock | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -18,6 +18,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `get_latest_user_info_user_v2_user__user_id__info_latest_get` | `GET /v2/user/{user_id}/info/latest` | ✅ supported | ✅ |  |
 | `get_paginated_lab_tests_for_team_v3_lab_test_get` | `GET /v3/lab_test` | ✅ supported | ✅ |  |
 | `get_team_lab_accounts_v3_lab_test_lab_account_get` | `GET /v3/lab_test/lab_account` | ✅ supported | ❌ disabled | lab-account inventory is fixture-owned; the mock models the documented shape, filters and routing rules, not a live account inventory |
+| `get_lab_tests_for_team_v3_lab_tests_get` | `GET /v3/lab_tests` | ✅ supported | ✅ |  |
 | `get_lab_test_for_team_v3_lab_tests__lab_test_id__get` | `GET /v3/lab_tests/{lab_test_id}` | ✅ supported | ✅ |  |
 | `get_labs_v3_lab_tests_labs_get` | `GET /v3/lab_tests/labs` | ✅ supported | ✅ |  |
 | `get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get` | `GET /v3/lab_tests/{lab_test_id}/markers` | ✅ supported | ✅ |  |

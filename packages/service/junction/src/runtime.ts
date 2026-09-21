@@ -6,9 +6,11 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { junctionAdminRoutes } from "./admin.js"
+import type { IdentityMode, JunctionFixtures } from "./fixtures.js"
 import { document } from "./generated/openapi.js"
 import { JUNCTION_NAMESPACE, JunctionAPI } from "./index.js"
-import type { LabAccountInput } from "./lab-accounts.js"
+import type { LabAccountLayout } from "./lab-account-presets.js"
+import type { JunctionLimitsInput } from "./limits.js"
 import type { SealedCorpus } from "./sealed-corpus.js"
 import type { GeoMode, WebhookPublisher } from "./state.js"
 import {
@@ -25,8 +27,18 @@ export type JunctionRuntimeOptions = {
   corpus?: SealedCorpus
   /** Default: `corpus` when a corpus is loaded, otherwise `synthetic`. */
   geo?: GeoMode
-  /** The team's lab accounts; see {@link JunctionAPIOptions.labAccounts}. */
-  labAccounts?: readonly LabAccountInput[]
+  /** The team's lab accounts, or `{ presets, accounts }`; see {@link JunctionAPIOptions.labAccounts}. */
+  labAccounts?: LabAccountLayout
+  /** The team the mock answers as. Default: the corpus's recorded team, else a fixed id. */
+  teamId?: string
+  /** Sandbox-only restrictions, every one off by default; per namespace via `PUT /__admin/limits`. */
+  limits?: JunctionLimitsInput
+  /** `adopt-users` creates unknown user ids on first use. Default `strict`. */
+  identity?: IdentityMode
+  /** Users and orders every namespace starts with, re-applied on each reset. */
+  fixtures?: JunctionFixtures
+  /** Requests each namespace's journal keeps (`GET /__admin/requests`). Default 1000. */
+  journalSize?: number
   /** Deliver signed webhooks here, with Svix's retry schedule. */
   webhooks?: WebhookEndpoint
   /** Called in-process for every webhook event, delivered or not. */
@@ -61,6 +73,7 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
+    ...(options.journalSize !== undefined ? { journalSize: options.journalSize } : {}),
     create: ({ namespace, publicNamespace, sqlite, clock, rng }) => {
       const api = new JunctionAPI({
         sqlite,
@@ -70,6 +83,10 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
         ...(options.corpus ? { corpus: options.corpus } : {}),
         ...(options.geo ? { geo: options.geo } : {}),
         ...(options.labAccounts ? { labAccounts: options.labAccounts } : {}),
+        ...(options.teamId !== undefined ? { teamId: options.teamId } : {}),
+        ...(options.limits ? { limits: options.limits } : {}),
+        ...(options.identity ? { identity: options.identity } : {}),
+        ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         onWebhook: (event) => {
           options.onWebhook?.(event, publicNamespace)
           webhooks?.publish(event, publicNamespace)
@@ -88,6 +105,7 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
       return {
         corpus: info?.label ?? null,
         geo: runtime.instance().geoMode,
+        teamId: runtime.instance().teamId,
         webhooks: webhooks ? "on" : "off",
       }
     },

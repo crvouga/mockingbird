@@ -104,6 +104,16 @@ export class Collection<T> {
     return result.changes > 0
   }
 
+  /** How many records the collection holds, without reading them. */
+  count(): number {
+    const row = this.sqlite
+      .prepare(
+        "SELECT COUNT(*) AS n FROM mockingbird_records WHERE namespace = ? AND collection = ?",
+      )
+      .get<{ n: number }>(this.namespace, this.name)
+    return Number(row?.n ?? 0)
+  }
+
   list(options: ListRecordsOptions<T> = {}): Array<Stored<T> & { id: string }> {
     const rows = this.sqlite
       .prepare(

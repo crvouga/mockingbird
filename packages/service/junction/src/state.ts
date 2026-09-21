@@ -7,6 +7,8 @@ import {
   type LabTestRecord,
   TEAM_LABS,
 } from "./catalog.js"
+import type { IdentityMode } from "./fixtures.js"
+import { DEFAULT_LIMITS, type JunctionLimits } from "./limits.js"
 
 export type { CatalogMarker, ExpectedResult, LabTestRecord } from "./catalog.js"
 export { expectedResultsFor, LAB_TEST_CATALOG, labTestById, TEAM_LABS } from "./catalog.js"
@@ -316,6 +318,14 @@ export class JunctionState {
 
   /** Configuration, not data: set by JunctionAPI and re-applied on reset. */
   geoMode: GeoMode = "synthetic"
+  /** The team this mock answers as: `team_id` on users and orders, and lab-account linking. */
+  teamId: string = MOCK_TEAM_ID
+  /** Sandbox-only restrictions to enforce; every one is off by default. */
+  limits: JunctionLimits = { ...DEFAULT_LIMITS }
+  /** Whether an unknown `user_id` is refused (`strict`) or created on first use. */
+  identity: IdentityMode = "strict"
+  private webhooksMuted = 0
+  private readonly adoptedRequests = new WeakSet<Request>()
   /** ZIPs the loaded corpus has serviceability records for. */
   coveredZips: ReadonlySet<string> = new Set()
   /** Identifies the loaded corpus in errors and `/health`. */
@@ -674,7 +684,27 @@ export class JunctionState {
     return deterministicUuid(`junction:testkit:${orderId}`)
   }
 
+  /** Run `fn` without publishing any webhook: how fixtures load without side effects. */
+  muteWebhooks<T>(fn: () => T): T {
+    this.webhooksMuted++
+    try {
+      return fn()
+    } finally {
+      this.webhooksMuted--
+    }
+  }
+
+  /** Record that handling `request` adopted an unknown user (see `requireUser`). */
+  noteAdoption(request: Request): void {
+    this.adoptedRequests.add(request)
+  }
+
+  adopted(request: Request): boolean {
+    return this.adoptedRequests.has(request)
+  }
+
   publishWebhook(event: JunctionWebhookEvent, now = Date.now()): void {
+    if (this.webhooksMuted > 0) return
     const sequence = this.webhookEvents.nextSequence()
     const snapshot = clone(event)
     this.webhookEvents.insert(String(sequence), { sequence, event: snapshot })

@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import fc from "fast-check"
-import { JunctionAPI, parseSealedCorpus, SEALED_CORPUS_VERSION } from "./src/index.js"
+import {
+  JunctionAPI,
+  parseSealedCorpus,
+  SEALED_CORPUS_VERSION,
+  SUPPORTED_SEALED_CORPUS_VERSIONS,
+} from "./src/index.js"
 
 const corpusPath = new URL("./corpus/sandbox-sealed.json", import.meta.url)
 const corpus = parseSealedCorpus(JSON.parse(readFileSync(corpusPath, "utf8")))
@@ -27,7 +32,8 @@ const corpusKey = (index: number): string => {
 
 describe("sealed corpus fidelity", () => {
   test("the committed corpus is present and versioned", () => {
-    expect(corpus.version).toBe(SEALED_CORPUS_VERSION)
+    expect(SUPPORTED_SEALED_CORPUS_VERSIONS).toContain(corpus.version)
+    expect(corpus.version).toBeLessThanOrEqual(SEALED_CORPUS_VERSION)
     expect(sealedKeys.length).toBeGreaterThan(0)
     expect(corpus.catalog.labTests.length).toBeGreaterThan(0)
     expect(corpus.catalog.labs.length).toBeGreaterThan(0)

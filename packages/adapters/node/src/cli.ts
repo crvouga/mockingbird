@@ -144,6 +144,11 @@ const COMMON_SERVE_OPTIONS: Record<string, CliOption> = {
     description: "Request log format",
     default: "pretty",
   },
+  "log-requests": {
+    type: "boolean",
+    description:
+      "One JSON line per request: namespace, operationId, status, ids touched (never bodies). Same as --log json",
+  },
   config: {
     type: "string",
     value: "<file>",
@@ -158,8 +163,9 @@ const formatLog = (format: LogFormat) => {
     const op = entry.operationId ?? (entry.unmatched ? "UNMATCHED" : "-")
     const ns = entry.namespace === "default" ? "" : ` [${entry.namespace}]`
     const fault = entry.faultId ? ` fault=${entry.faultId}` : ""
+    const adopted = entry.adopted ? " adopted" : ""
     console.log(
-      `${entry.service} ${entry.method} ${entry.path} ${entry.status} ${op} ${entry.durationMs}ms${ns}${fault}`,
+      `${entry.service} ${entry.method} ${entry.path} ${entry.status} ${op} ${entry.durationMs}ms${ns}${fault}${adopted}`,
     )
   }
 }
@@ -233,7 +239,9 @@ export const serveCommand = (target: ServeTarget): CliCommand => ({
   summary: `Serve the ${target.name} mock over HTTP`,
   options: { ...COMMON_SERVE_OPTIONS, ...target.options },
   async run(values) {
-    const log = (asString(values.log) ?? "pretty") as LogFormat
+    const log = (
+      values["log-requests"] === true ? "json" : (asString(values.log) ?? "pretty")
+    ) as LogFormat
     if (!["pretty", "json", "off"].includes(log)) {
       console.error(`--log must be pretty, json or off (got ${log})`)
       return 2

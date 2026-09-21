@@ -4,8 +4,14 @@ import type { GetCacheEntry } from "./state.js"
 /**
  * Version of the sealed-corpus on-disk format. Bumped whenever the shape changes so a
  * stale recording is rejected instead of half-applied.
+ *
+ * - 1: observations, catalog and lab accounts.
+ * - 2: adds `teamId`, the recording team, so lab-account allowlists load verbatim.
  */
-export const SEALED_CORPUS_VERSION = 1
+export const SEALED_CORPUS_VERSION = 2
+
+/** Versions `parseSealedCorpus` still loads. A version-1 corpus behaves as it did in 0.2.0. */
+export const SUPPORTED_SEALED_CORPUS_VERSIONS: readonly number[] = [1, 2]
 
 /**
  * Exact sandbox recording of the provider-owned reads a drop-in consumer depends on:
@@ -14,9 +20,14 @@ export const SEALED_CORPUS_VERSION = 1
  * `booking_key`s can never match a live cache key, so it stays with the generator.
  */
 export type SealedCorpus = {
-  version: typeof SEALED_CORPUS_VERSION
+  version: 1 | typeof SEALED_CORPUS_VERSION
   recordedAt: string
   source: string
+  /**
+   * The recording team's id (version 2+). When present it is the mock's default team,
+   * and each lab account's `team_id_allowlist` is kept exactly as recorded.
+   */
+  teamId?: string
   /** SHA-256 of the recording's content, written by `corpus pull`. Identifies it in logs. */
   fingerprint?: string
   observations: Record<string, GetCacheEntry>
@@ -34,8 +45,11 @@ export const parseSealedCorpus = (value: unknown): SealedCorpus => {
     throw new Error("sealed corpus must be an object")
   }
   const record = value as Record<string, unknown>
-  if (record.version !== SEALED_CORPUS_VERSION) {
+  if (!SUPPORTED_SEALED_CORPUS_VERSIONS.includes(record.version as number)) {
     throw new Error(`unsupported sealed corpus version: ${String(record.version)}`)
+  }
+  if (record.teamId !== undefined && typeof record.teamId !== "string") {
+    throw new Error("sealed corpus teamId must be a string")
   }
   return record as unknown as SealedCorpus
 }
