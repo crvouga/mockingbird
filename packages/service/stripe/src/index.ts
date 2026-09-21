@@ -99,7 +99,8 @@ export class StripeAPI implements FetchAPI {
 
   constructor(options: StripeAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
-    const state = new StripeState(sqlite, STRIPE_NAMESPACE)
+    const namespace = options.namespace ?? STRIPE_NAMESPACE
+    const state = new StripeState(sqlite, namespace)
     this.state = state
     const services: Services = { state, publish: options.onWebhook }
     const handlers = {
@@ -127,7 +128,7 @@ export class StripeAPI implements FetchAPI {
       document,
       handlers: defineOperations<SupportedOperationId>(handlers),
       sqlite,
-      namespace: STRIPE_NAMESPACE,
+      namespace,
       now: options.now,
       notFound: (request) => errorResponse({ status: 404, message: unrecognizedUrl(request) }),
       onError: (error) => {
@@ -238,3 +239,6 @@ export class StripeAPI implements FetchAPI {
     await this.service.reset()
   }
 }
+
+export type { StripeRuntime, StripeRuntimeOptions } from "./runtime.js"
+export { createRuntime } from "./runtime.js"

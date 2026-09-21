@@ -25,8 +25,8 @@ npm install -D @crvouga/mockingbird-service-stripe
 ```
 
 ESM only. Requires Node >= 22 or Bun >= 1.2. No native dependencies: state lives in an in-memory
-SQLite engine (pure TypeScript, bundled in). To serve it over HTTP use `Bun.serve` under Bun, or
-install `@hono/node-server` under Node.
+SQLite engine (pure TypeScript, bundled in). To serve it over HTTP run `npx mockingbird-stripe serve`, or
+use `createServer` from `./server` (Node) or `createRuntime` with any Fetch server.
 
 ## Usage
 
@@ -43,6 +43,38 @@ Behaviour the examples rely on (all from the source):
   as stripe-node sends them. Every response carries `request-id` and `stripe-version` headers.
 - `Idempotency-Key` on POSTs is honoured: a replay returns the cached response, a replay with
   different parameters returns 400.
+
+### Serve it: `mockingbird-stripe serve` or `createServer`
+
+```bash
+npx mockingbird-stripe serve                 # http://127.0.0.1:12111
+npx mockingbird-stripe serve --port 0 --log json --admin-key local-admin
+npx mockingbird-stripe serve --config mockingbird.json   # every service in one config
+```
+
+```ts
+import { createServer } from "@crvouga/mockingbird-service-stripe/server"
+
+const server = await createServer() // any free port; server.url, server.port
+const response = await fetch(`${server.url}/v1/products?limit=3`, { headers: { authorization: "Bearer sk_test_mockingbird" } })
+console.log(response.status) // 200
+await server.close()
+```
+
+Served this way — or through `createRuntime()`, the same thing as one runtime-neutral `fetch` —
+the mock also answers Mockingbird's service contract, outside Stripe's bearer-key check:
+
+- `GET /health` — unauthenticated readiness probe.
+- `/__admin/*` — reset (`POST /__admin/reset`), snapshots (`POST /__admin/snapshots`,
+  `POST /__admin/snapshots/{id}/restore`), clock (`POST /__admin/clock {"advance": "2h"}`), fault
+  injection (`POST /__admin/faults {"operationId": …, "status": 503, "count": 1}`), and metrics with
+  unmatched-route counts (`GET /__admin/metrics`). `GET /__admin` lists every route; `--admin-key`
+  locks them behind `x-mockingbird-admin-key`.
+- `x-mockingbird-namespace: <name>` — isolates a request's data, so parallel workers share one
+  process without seeing each other.
+
+The [Junction README](https://github.com/crvouga/mockingbird/tree/main/packages/service/junction#the-service-contract)
+documents the contract in full.
 
 ### In-process (inject `fetch`)
 
@@ -93,17 +125,8 @@ console.log(response.status) // 200
 server.stop()
 ```
 
-On Node use any Fetch-style server, e.g. `@hono/node-server` (`npm install -D @hono/node-server`),
-whose callback receives the bound port:
-
-```js
-import { serve } from "@hono/node-server"
-const server = serve(
-  { fetch: (request) => stripe.fetch(request), port: 0, hostname: "127.0.0.1" },
-  (info) => console.log(`http://127.0.0.1:${info.port}`),
-)
-// ... later: server.close()
-```
+On Node, `createServer` (above) is the listener; any Fetch-style server also works with
+`StripeAPI#fetch` or `createRuntime().fetch`.
 
 ### Pointing stripe-node at it
 
@@ -122,7 +145,8 @@ const client = new Stripe("sk_test_mockingbird", {
 await client.customers.create({ email: "qa@example.com" })
 ```
 
-Add a base-URL override (e.g. `STRIPE_API_BASE_URL=http://127.0.0.1:12111`) at every place your app
+With `mockingbird-stripe serve` on port 12111, host, port and protocol are the only wiring. Add a
+base-URL override (e.g. `STRIPE_API_BASE_URL=http://127.0.0.1:12111`) at every place your app
 constructs a Stripe client; a client built with `new Stripe(key)` and no options cannot be
 redirected. Test payment methods and tokens such as `pm_card_visa`, `pm_card_authenticationRequired`
 and `tok_chargeDeclinedInsufficientFunds` behave like their Stripe counterparts
@@ -189,6 +213,7 @@ QA corpus used by the parity suites.
 
 | Export | Description |
 | --- | --- |
+| `createRuntime` | `(options?) => StripeRuntime` — the mock with the service contract (health, admin, namespaces, clock, faults, metrics) as one runtime-neutral `fetch`. Options: `sqlite`, `clock`, `seed`, `adminKey`, `onLog`, `onWebhook`. `./server` adds `createServer(options?)` (Node; `port`, `host`), `serveTarget` and `DEFAULT_PORT` (`12111`). |
 | `StripeAPI` | Class. `new StripeAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. |
 | `accountOfKey` | `(key: string) => string` — the opaque `acct_...` partition id for an API key (use it to filter `webhookEvents`). |
 | `accountOf` | `(request: Request) => string` — the partition id for a request's bearer key. |
