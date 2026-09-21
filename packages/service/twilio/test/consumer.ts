@@ -4,8 +4,9 @@
  * interpretation are kept as they are there. The one addition is the G-T1 seam: every
  * `new Twilio(...)` gets an `httpClient` that sends to the mock instead of `*.twilio.com`.
  */
-import { RequestClient, type Twilio, validateRequest } from "twilio"
+
 import { twilioMockUrl } from "../src/index.js"
+import { RequestClient, type Twilio, validateRequest } from "./twilio-sdk.js"
 
 // ---- G-T1: the httpClient seam ---------------------------------------------------------------
 

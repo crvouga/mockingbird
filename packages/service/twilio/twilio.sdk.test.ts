@@ -1,6 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import { request as httpRequest } from "node:http"
-import { Twilio, validateRequest } from "twilio"
 import { synthesizeWav } from "./src/index.js"
 import { createServer, type TwilioServer } from "./src/server.js"
 import {
@@ -11,6 +10,7 @@ import {
   TwilioRecordingHttpAdapter,
   TwilioWebhookReceiver,
 } from "./test/consumer.js"
+import { Twilio, validateRequest } from "./test/twilio-sdk.js"
 
 /**
  * The official twilio-node SDK (5.10.0, the version our consumer pins) pointed at the served

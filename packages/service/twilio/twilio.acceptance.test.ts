@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
-import { Twilio } from "twilio"
 import { createRuntime, TWILIO_PRESETS } from "./src/index.js"
 import {
   emrValidatePhone,
@@ -17,6 +16,7 @@ import {
   TwilioWebhookReceiver,
   UsersBackend,
 } from "./test/consumer.js"
+import { Twilio } from "./test/twilio-sdk.js"
 
 const params = fcParameters(process.env)
 const MOCK = "http://twilio.mock"
