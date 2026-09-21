@@ -1,0 +1,158 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getCompatibility, getAllServices } from "../lib/data";
+
+const compatibility = await getCompatibility();
+const services = await getAllServices();
+const features = ["Fetch API", "Node Server", "CLI", "GraphQL", "WebSocket", "HTTP/2"] as const;
+---
+
+<BaseLayout
+  title="Compatibility Matrix"
+  description="Feature support matrix across all services"
+>
+  <h1>Compatibility Matrix</h1>
+  <p style="color: var(--color-muted);">
+    Service feature support at a glance. All services are isomorphic and runnable in-process.
+  </p>
+
+  <style>
+    .matrix-table {
+      width: 100%;
+      margin: 30px 0;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+
+    .matrix-table th,
+    .matrix-table td {
+      padding: 10px 12px;
+      text-align: center;
+      border: 1px solid var(--color-border);
+    }
+
+    .matrix-table th {
+      background-color: rgba(0, 0, 0, 0.03);
+      font-weight: 600;
+      position: sticky;
+      top: 0;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .matrix-table th {
+        background-color: rgba(255, 255, 255, 0.05);
+      }
+    }
+
+    .matrix-table tbody tr:hover {
+      background-color: rgba(0, 102, 204, 0.02);
+    }
+
+    .matrix-table th:first-child {
+      text-align: left;
+      min-width: 150px;
+    }
+
+    .matrix-table td:first-child {
+      text-align: left;
+      font-weight: 500;
+    }
+
+    .check {
+      color: #009900;
+      font-weight: 600;
+    }
+
+    .cross {
+      color: var(--color-muted);
+      opacity: 0.3;
+    }
+
+    .legend {
+      margin: 30px 0;
+      padding: 15px;
+      background-color: rgba(0, 0, 0, 0.02);
+      border-radius: 6px;
+      border-left: 3px solid var(--color-primary);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .legend {
+        background-color: rgba(255, 255, 255, 0.02);
+      }
+    }
+
+    .feature-desc {
+      font-size: 12px;
+      color: var(--color-muted);
+      margin-top: 5px;
+    }
+  </style>
+
+  <div class="legend">
+    <p>
+      <strong>✓</strong> = Feature supported · <strong>−</strong> = Feature not implemented
+    </p>
+    <p class="feature-desc">
+      All services speak <code>fetch(Request) → Response</code> and maintain state in SQLite.
+      Choose your surface based on your deployment: Fetch for in-process/client-side,
+      Node Server for containerized deployments, CLI for local testing.
+    </p>
+  </div>
+
+  <div style="overflow-x: auto;">
+    <table class="matrix-table">
+      <thead>
+        <tr>
+          <th>Service</th>
+          {features.map((feature) => (
+            <th title={feature}>{feature}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {services.map((service) => {
+          const svcCompat = compatibility.features[service.name] || {};
+          return (
+            <tr>
+              <td>
+                <a href={`/service/${service.name}`}>
+                  {service.name}
+                </a>
+              </td>
+              {features.map((feature) => (
+                <td>
+                  <span class={svcCompat[feature] ? "check" : "cross"}>
+                    {svcCompat[feature] ? "✓" : "−"}
+                  </span>
+                </td>
+              ))}
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Legend</h2>
+  <ul>
+    <li>
+      <strong>Fetch API:</strong> In-process, synchronous fetch handler for testing and in-browser use
+    </li>
+    <li>
+      <strong>Node Server:</strong> HTTP server runnable via <code>createServer()</code> or CLI
+    </li>
+    <li>
+      <strong>CLI:</strong> Command-line interface via <code>npx mockingbird-&lt;service&gt;</code>
+    </li>
+    <li>
+      <strong>GraphQL:</strong> Native GraphQL query language support (in addition to REST)
+    </li>
+    <li>
+      <strong>WebSocket:</strong> Real-time bidirectional communication
+    </li>
+    <li>
+      <strong>HTTP/2:</strong> Server Push and streaming over HTTP/2 with h2c
+    </li>
+  </ul>
+</BaseLayout>

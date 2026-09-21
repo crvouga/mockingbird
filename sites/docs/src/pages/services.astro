@@ -1,0 +1,116 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getAllServices } from "../lib/data";
+
+const services = await getAllServices();
+---
+
+<BaseLayout
+  title="Services"
+  description="Complete catalog of Mockingbird services"
+>
+  <h1>Services</h1>
+  <p style="color: var(--color-muted);">
+    {services.length} stateful mocks, all agent-friendly and fully documented.
+  </p>
+
+  <style>
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+      margin: 30px 0;
+    }
+
+    .service-card {
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 20px;
+      transition: all 0.2s;
+    }
+
+    .service-card:hover {
+      border-color: var(--color-primary);
+      box-shadow: 0 2px 8px rgba(0, 102, 204, 0.1);
+    }
+
+    .service-name {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .service-desc {
+      font-size: 14px;
+      color: var(--color-muted);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    .service-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .badge {
+      display: inline-block;
+      background-color: rgba(0, 102, 204, 0.1);
+      color: var(--color-primary);
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .service-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--color-border);
+    }
+
+    .service-links a {
+      font-size: 13px;
+      color: var(--color-primary);
+    }
+  </style>
+
+  <div class="services-grid">
+    {services.map((service) => (
+      <div class="service-card">
+        <div class="service-name">
+          <a href={`/service/${service.name}`}>
+            {service.name}
+          </a>
+        </div>
+
+        <div class="service-desc">
+          {service.description.substring(0, 150)}
+          {service.description.length > 150 ? "..." : ""}
+        </div>
+
+        <div class="service-meta">
+          {service.surfaces.map((surface) => (
+            <span class="badge">{surface}</span>
+          ))}
+          <span class="badge" style="background-color: rgba(0, 150, 0, 0.1); color: #009900;">
+            {service.runtime}
+          </span>
+        </div>
+
+        <div class="service-links">
+          <a href={service.npmUrl} target="_blank" rel="noopener">npm</a>
+          <a href={service.readmeUrl} target="_blank" rel="noopener">README</a>
+          {service.supportUrl && (
+            <a href={service.supportUrl} target="_blank" rel="noopener">SUPPORT</a>
+          )}
+          <a href={service.repoUrl} target="_blank" rel="noopener">repo</a>
+        </div>
+      </div>
+    ))}
+  </div>
+</BaseLayout>

@@ -1,0 +1,1209 @@
+{
+  "generated": "2026-09-21T23:58:22.666Z",
+  "version": "1.0.0",
+  "rationale": "Mockingbird provides stateful test doubles for 40+ third-party HTTP APIs and SQL databases.\nEach mock speaks the provider's real surface (fetch(Request) → Response), keeps state in SQLite,\nand is driven by a vendored OpenAPI contract. Use them in tests instead of hitting the network,\nor serve them over Node/Bun when you need a local origin.\n\nWhy this matters: No more mocking libraries with divergent behavior. No more flaky tests that pass\nagainst mocks but fail against real APIs. Mockingbird keeps behavior in sync with the real vendor\nthrough continuous property-based testing (PBT) against live sandboxes.\n\nAll mocks are isomorphic and runnable client-side (in browser, Workers, etc.) with Hono.",
+  "services": [
+    {
+      "name": "aha",
+      "packageName": "@crvouga/mockingbird-service-aha",
+      "description": "Stateful mock of the AHA at-home phlebotomy partner API: HMAC-signed create-order and cancel, raw or wrapped envelopes, idempotency keys, and the order-status webhooks (Scheduled, Check Out, …) our bloodwork handler consumes.",
+      "provider": "aha",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "aha",
+        "phlebotomy",
+        "bloodwork",
+        "lab",
+        "webhooks"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-aha",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/aha",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/aha/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/aha/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "aws-speech",
+      "packageName": "@crvouga/mockingbird-service-aws-speech",
+      "description": "Stateful mock of AWS Polly (SynthesizeSpeech, StartSpeechSynthesisStream) and Transcribe (streaming over h2c, batch jobs), with exact event-stream framing and scripted transcripts.",
+      "provider": "aws",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "aws",
+        "polly",
+        "transcribe",
+        "speech",
+        "tts",
+        "stt",
+        "eventstream"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-aws-speech",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/aws-speech",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/aws-speech/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/aws-speech/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "bedrock",
+      "packageName": "@crvouga/mockingbird-service-bedrock",
+      "description": "Stateful, scriptable mock of AWS Bedrock Runtime (Converse, ConverseStream, InvokeModel incl. Titan embeddings, Nova Sonic bidirectional streams over h2c) and AgentCore InvokeHarness, with exact event-stream framing.",
+      "provider": "bedrock",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "bedrock",
+        "aws",
+        "llm",
+        "converse",
+        "eventstream",
+        "nova-sonic",
+        "agentcore",
+        "titan"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-bedrock",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/bedrock",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/bedrock/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/bedrock/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "caretalk",
+      "packageName": "@crvouga/mockingbird-service-caretalk",
+      "description": "Stateful mock of CareTalk's external API: client-login tokens, GetForm definitions, SavePatientForm rounds, patient search/insert, states, free slots and appointments.",
+      "provider": "caretalk",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "caretalk",
+        "forms",
+        "telehealth"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-caretalk",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/caretalk",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/caretalk/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/caretalk/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "customerio",
+      "packageName": "@crvouga/mockingbird-service-customerio",
+      "description": "Stateful mock of Customer.io: Segment-compatible CDP (identify/track/batch, SDK drop-in), App API transactional email/SMS/inbox sends with an outbox, message catalog, link-click tracking, and signed reporting webhooks.",
+      "provider": "customerio",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "customerio",
+        "customer.io",
+        "cdp",
+        "transactional-email",
+        "outbox"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-customerio",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/customerio",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/customerio/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/customerio/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "daily",
+      "packageName": "@crvouga/mockingbird-service-daily",
+      "description": "Stateful mock of the Daily.co REST API: rooms, presence, eject, meeting tokens (minted and self-signed HS256, verified and decodable), and transcription/recording webhooks with transcripts written to S3.",
+      "provider": "daily",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "daily",
+        "daily.co",
+        "video",
+        "webrtc",
+        "meeting-tokens",
+        "webhooks"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-daily",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/daily",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/daily/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/daily/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "WebSocket",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "easypost",
+      "packageName": "@crvouga/mockingbird-service-easypost",
+      "description": "Stateful mock of the EasyPost trackers API: create/re-use trackers, EasyPost's test tracking codes, admin status transitions and EasyPost's error envelope.",
+      "provider": "easypost",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "easypost",
+        "shipping",
+        "tracking"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-easypost",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/easypost",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/easypost/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/easypost/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "edamam",
+      "packageName": "@crvouga/mockingbird-service-edamam",
+      "description": "Stateful mock of the Edamam APIs our apps call: food-database parser, nutrients and image analysis, nutrition analysis, recipe search v2, meal-planner select and shopping lists, over a built-in food and recipe corpus.",
+      "provider": "edamam",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "edamam",
+        "nutrition",
+        "recipes",
+        "meal-planning"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-edamam",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/edamam",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/edamam/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/edamam/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "firstpromoter",
+      "packageName": "@crvouga/mockingbird-service-firstpromoter",
+      "description": "Stateful mock of the FirstPromoter v2 API: promoters (adopt-before-create by cust_id), signup tracking by tid / promoter_id / ref token, iframe login, archive, and Basic-auth lead_becomes_referral webhooks.",
+      "provider": "firstpromoter",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "firstpromoter",
+        "affiliate",
+        "referrals"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-firstpromoter",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/firstpromoter",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/firstpromoter/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/firstpromoter/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "flex",
+      "packageName": "@crvouga/mockingbird-service-flex",
+      "description": "Stateful mock of the Flex HSA/FSA payments API: products (recorded catalog corpus), checkout sessions in payment, off-session and setup modes, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks.",
+      "provider": "flex",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "flex",
+        "withflex",
+        "hsa",
+        "fsa",
+        "payments",
+        "checkout"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-flex",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/flex",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/flex/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/flex/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "formbricks",
+      "packageName": "@crvouga/mockingbird-service-formbricks",
+      "description": "Stateful mock of Formbricks (Geviti fork): client environment state seeded from our production survey clone, response creation with the fork's validation errors, the v1 management API, the widget script, and responseFinished webhooks.",
+      "provider": "formbricks",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "formbricks",
+        "surveys",
+        "forms",
+        "webhooks"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-formbricks",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/formbricks",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/formbricks/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/formbricks/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "fullscript",
+      "packageName": "@crvouga/mockingbird-service-fullscript",
+      "description": "Stateful mock of the Fullscript lab-ordering API: per-practitioner OAuth, clinic, session grants, forward-only lab orders with results, lab-order events, expiring result PDFs, and Fullscript-Signature webhooks.",
+      "provider": "fullscript",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "fullscript",
+        "labs",
+        "oauth",
+        "webhooks"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-fullscript",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/fullscript",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/fullscript/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/fullscript/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "genebygene",
+      "packageName": "@crvouga/mockingbird-service-genebygene",
+      "description": "Stateful mock of Gene by Gene's Nucleus API v2 and auth host: tokens with credential blocking, catalog, shipping quotes, orders, kits, demographics, three-layer cancel, results with presigned downloads and S3 writes, subscriptions, and GxG-signed webhooks.",
+      "provider": "genebygene",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "genebygene",
+        "gene-by-gene",
+        "gxg",
+        "nucleus",
+        "genomics",
+        "lab"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-genebygene",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/genebygene",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/genebygene/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/genebygene/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "google-calendar",
+      "packageName": "@crvouga/mockingbird-service-google-calendar",
+      "description": "Stateful mock of the Google Calendar v3 API and Google OAuth our EMR calls: events list/insert/update/delete/watch, channels.stop, calendarList/calendars, token exchange/refresh/revoke and userinfo, with signed-by-header push notifications.",
+      "provider": "google-calendar",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "google-calendar",
+        "googleapis",
+        "oauth2",
+        "calendar"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-google-calendar",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/google-calendar",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/google-calendar/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/google-calendar/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "google-maps",
+      "packageName": "@crvouga/mockingbird-service-google-maps",
+      "description": "Mock of Google Places Autocomplete / Details / Find Place, the Geocoding API and a Maps JavaScript (places) shim, over a QA address corpus, with Google's status codes and fault presets.",
+      "provider": "google",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "google",
+        "maps",
+        "places",
+        "geocoding",
+        "autocomplete"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-google-maps",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/google-maps",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/google-maps/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/google-maps/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "healthie",
+      "packageName": "@crvouga/mockingbird-service-healthie",
+      "description": "Stateful mock of the Healthie GraphQL API (legacy surface): signIn, users, currentUser, updateUser/updateClient (incl. multipart avatar), locations, documents and folders with served downloads, form answers, offerings, billing items, and the IP-allowlisted status webhooks.",
+      "provider": "healthie",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "healthie",
+        "graphql",
+        "ehr"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-healthie",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/healthie",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/healthie/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/healthie/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "GraphQL"
+      ]
+    },
+    {
+      "name": "intercom",
+      "packageName": "@crvouga/mockingbird-service-intercom",
+      "description": "Stateful mock of the Intercom REST API 2.11: contacts (search, create with 409 on duplicates, update, get), conversations (create with Idempotency-Key, reply as JSON or multipart, close/open, get, cursor search), admins, and X-Hub-Signature-signed admin reply/close/open webhooks.",
+      "provider": "intercom",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "intercom",
+        "messaging",
+        "webhooks"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-intercom",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/intercom",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/intercom/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/intercom/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "junction",
+      "packageName": "@crvouga/mockingbird-service-junction",
+      "description": "Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox.",
+      "provider": "junction",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "junction",
+        "vital"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-junction",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/junction",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "klaviyo",
+      "packageName": "@crvouga/mockingbird-service-klaviyo",
+      "description": "Stateful mock of the Klaviyo events API: JSON:API event create (Ordered Product, Placed Order), event reads, unique_id dedupe, JSON:API errors and an outbox.",
+      "provider": "klaviyo",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "klaviyo",
+        "email-marketing",
+        "events",
+        "json-api"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-klaviyo",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/klaviyo",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/klaviyo/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/klaviyo/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "llamacloud",
+      "packageName": "@crvouga/mockingbird-service-llamacloud",
+      "description": "Stateful mock of the LlamaCloud platform API: project and pipeline lookup, pipeline documents, and deterministic (scripted or term-overlap) retrieval, verified against the official llama_cloud_services SDK.",
+      "provider": "llamacloud",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "llamacloud",
+        "llamaindex",
+        "rag",
+        "retrieval"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-llamacloud",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/llamacloud",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/llamacloud/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/llamacloud/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "mailosaur",
+      "packageName": "@crvouga/mockingbird-service-mailosaur",
+      "description": "Stateful mock of the Mailosaur email/SMS testing API (messages search, get, delete, long-poll) with an HTTP ingest so other mocks can drop mail in (Mockingbird service contract).",
+      "provider": "mailosaur",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "mailosaur",
+        "email",
+        "inbox",
+        "testing",
+        "mock"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-mailosaur",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/mailosaur",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/mailosaur/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/mailosaur/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "makor-cpg",
+      "packageName": "@crvouga/mockingbird-service-makor-cpg",
+      "description": "Stateful mock of the legacy Makor AI (CPG) API: care plans, plus-user, bloodwork webhook, subscriptions, Wholescripts orders, AI patient summaries and async-review scripts (processing → complete on the mock clock), with permissive CORS for browser-direct calls.",
+      "provider": "makor",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "makor",
+        "cpg",
+        "ai-summary",
+        "cors"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-makor-cpg",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/makor-cpg",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/makor-cpg/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/makor-cpg/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "medplum",
+      "packageName": "@crvouga/mockingbird-service-medplum",
+      "description": "Stateful Medplum mock that self-hosts the real Medplum server as a child process on embedded Postgres and Redis, exposed through the Mockingbird FetchAPI contract.",
+      "provider": "medplum",
+      "runtime": "node",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "medplum",
+        "fhir"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-medplum",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/medplum",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/medplum/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/medplum/SUPPORT.md",
+      "entries": {
+        "default": "portable"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server"
+      ]
+    },
+    {
+      "name": "odx",
+      "packageName": "@crvouga/mockingbird-service-odx",
+      "description": "Stateful mock of the (retired) Optimal DX partner API: patients, partner links, HL7 and structured lab imports, Functional Health Reports (JSON/PDF), webhook registrations, and signed PatientTest webhooks.",
+      "provider": "odx",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "odx",
+        "optimal-dx",
+        "hl7",
+        "lab-results"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-odx",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/odx",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/odx/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/odx/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "otel",
+      "packageName": "@crvouga/mockingbird-service-otel",
+      "description": "Stateful mock of an OTLP/HTTP collector (JSON and protobuf traces and logs) and the OpenObserve search API over the same store.",
+      "provider": "otel",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "otel",
+        "opentelemetry",
+        "otlp",
+        "openobserve",
+        "o2"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-otel",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/otel",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/otel/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/otel/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "payload-cms",
+      "packageName": "@crvouga/mockingbird-service-payload-cms",
+      "description": "Stateful mock of the Payload CMS collection REST API: paginated finds with a where-query subset, find by id, a seeded marketing collection and admin-editable documents.",
+      "provider": "payload",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "payload",
+        "payload-cms",
+        "cms"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-payload-cms",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/payload-cms",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/payload-cms/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/payload-cms/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "GraphQL"
+      ]
+    },
+    {
+      "name": "persona",
+      "packageName": "@crvouga/mockingbird-service-persona",
+      "description": "Stateful mock of the Persona identity-verification API: inquiry create, list (reusable lookup), get, a hosted flow page, admin lifecycle transitions, and Persona-Signature webhooks.",
+      "provider": "persona",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "persona",
+        "identity-verification",
+        "kyc"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-persona",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/persona",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/persona/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/persona/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "pharmetika",
+      "packageName": "@crvouga/mockingbird-service-pharmetika",
+      "description": "Stateful mock of the Pharmetika compounding-pharmacy provider portal: clinics, patients, medication-order validate / EPCS prepare / submit / lookup, the v7 cancel, the medication-template catalog, and status webhooks.",
+      "provider": "pharmetika",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "pharmetika",
+        "pharmacy",
+        "erx",
+        "epcs"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-pharmetika",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/pharmetika",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/pharmetika/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/pharmetika/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "plane",
+      "packageName": "@crvouga/mockingbird-service-plane",
+      "description": "Stateful mock of the Plane REST API v1: cursor-paginated work items, comments, links, states and labels, with Plane's rate limit and error shapes.",
+      "provider": "plane",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "plane",
+        "issue-tracker",
+        "work-items"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-plane",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/plane",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/plane/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/plane/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "portal-agent",
+      "packageName": "@crvouga/mockingbird-service-portal-agent",
+      "description": "Stateful mock of our eRx portal agent (LifeFile/VPI browser runner): the fulfilment job endpoint with strict response rules, a job store, fault presets, and x-internal-key callbacks.",
+      "provider": "portal-agent",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "portal-agent",
+        "lifefile",
+        "vpi",
+        "pharmacy",
+        "erx"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-portal-agent",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/portal-agent",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/portal-agent/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/portal-agent/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "postgres",
+      "packageName": "@crvouga/mockingbird-service-postgres",
+      "description": "Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies",
+      "provider": "postgresql",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "postgres",
+        "postgresql",
+        "typescript",
+        "in-memory",
+        "database",
+        "sql"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-postgres",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/postgres",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/SUPPORT.md",
+      "entries": {
+        "default": "portable"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "posthog",
+      "packageName": "@crvouga/mockingbird-service-posthog",
+      "description": "Stateful mock of PostHog: /flags v2 and legacy /decide evaluation with per-test flag, variant and payload control, remote config, gzip/base64 capture (/batch/, /e/, /i/v0/e/), recordings intake, and the feature-flag management and HogQL API slice.",
+      "provider": "posthog",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "posthog",
+        "feature-flags",
+        "analytics",
+        "capture"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-posthog",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/posthog",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/posthog/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/posthog/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "prism",
+      "packageName": "@crvouga/mockingbird-service-prism",
+      "description": "Stateful mock of the Prism Labs body-scan API: subjects, scans, presigned capture upload, processing stages to READY, and deterministic body-composition, measurement, health-report and asset results.",
+      "provider": "prism",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "prism",
+        "prism-labs",
+        "body-scan"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-prism",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/prism",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/prism/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/prism/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "resend",
+      "packageName": "@crvouga/mockingbird-service-resend",
+      "description": "Stateful mock of the Resend email API (send with idempotency, received emails, attachments) with an outbox and Svix-signed inbound webhooks (Mockingbird service contract).",
+      "provider": "resend",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "resend",
+        "email",
+        "outbox",
+        "webhooks",
+        "mock"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-resend",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/resend",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/resend/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/resend/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "rxvortex",
+      "packageName": "@crvouga/mockingbird-service-rxvortex",
+      "description": "Stateful mock of the RxVortex (Strive) pharmacy API: OAuth token, order submit, status, cancel, recovery by sender order id, preset catalog, and signed status webhooks.",
+      "provider": "rxvortex",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "rxvortex",
+        "strive",
+        "pharmacy",
+        "erx"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-rxvortex",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/rxvortex",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/rxvortex/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/rxvortex/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "slack",
+      "packageName": "@crvouga/mockingbird-service-slack",
+      "description": "Stateful mock of Slack incoming webhooks and the Web API (chat.postMessage and friends) with an outbox of every alert the app sent.",
+      "provider": "slack",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "slack",
+        "webhook",
+        "outbox"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-slack",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/slack",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/slack/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/slack/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "sqlite",
+      "packageName": "@crvouga/mockingbird-service-sqlite",
+      "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
+      "provider": "typescript",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "sqlite",
+        "typescript",
+        "in-memory",
+        "database",
+        "sql"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/SUPPORT.md",
+      "entries": {
+        "default": "portable"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "CLI"
+      ]
+    },
+    {
+      "name": "stripe",
+      "packageName": "@crvouga/mockingbird-service-stripe",
+      "description": "Stateful mock of the Stripe API (accounts by key, customers, payments, subscriptions with renewals, invoices, checkout with a hosted page, a Stripe.js stand-in, signed webhooks) at API versions 2024-06-20 and 2025-02-24.acacia, verified by differential property tests against Stripe test mode.",
+      "provider": "stripe",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "stripe",
+        "payments",
+        "checkout",
+        "webhooks",
+        "billing"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-stripe",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/stripe",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "twilio",
+      "packageName": "@crvouga/mockingbird-service-twilio",
+      "description": "Stateful mock of Twilio Verify, Lookup v2, Messaging and Recordings on one port, with signed inbound SMS and voice webhooks (Mockingbird service contract).",
+      "provider": "twilio",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "twilio",
+        "verify",
+        "otp",
+        "lookup",
+        "sms",
+        "mock"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-twilio",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/twilio",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/twilio/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/twilio/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI",
+        "HTTP/2"
+      ]
+    },
+    {
+      "name": "vpi",
+      "packageName": "@crvouga/mockingbird-service-vpi",
+      "description": "Stateful mock of the VPI compounding pharmacy API: JWT authentication, products, clinic, patients, providers, saveNewPrescription drafts and the three paged prescription status lists.",
+      "provider": "vpi",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "vpi",
+        "pharmacy",
+        "erx",
+        "compounding"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-vpi",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/vpi",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/vpi/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/vpi/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    },
+    {
+      "name": "wholescripts",
+      "packageName": "@crvouga/mockingbird-service-wholescripts",
+      "description": "Stateful mock of the Wholescripts supplement fulfilment API: product and private-label catalogs, order submit, status polling and cancel, with admin status transitions.",
+      "provider": "wholescripts",
+      "runtime": "portable",
+      "keywords": [
+        "mockingbird",
+        "service",
+        "wholescripts",
+        "supplements",
+        "medpax",
+        "fulfilment"
+      ],
+      "npmUrl": "https://www.npmjs.com/package/@crvouga/mockingbird-service-wholescripts",
+      "repoUrl": "https://github.com/crvouga/mockingbird/tree/main/packages/service/wholescripts",
+      "readmeUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/wholescripts/README.md",
+      "supportUrl": "https://github.com/crvouga/mockingbird/blob/main/packages/service/wholescripts/SUPPORT.md",
+      "entries": {
+        "server": "node",
+        "cli": "node"
+      },
+      "status": "implemented",
+      "surfaces": [
+        "Fetch API",
+        "Node Server",
+        "CLI"
+      ]
+    }
+  ]
+}

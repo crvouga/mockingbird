@@ -16,7 +16,8 @@
     "packages/parity/*",
     "packages/service/*",
     "packages/adapters/*",
-    "packages/auth/*"
+    "packages/auth/*",
+    "sites/docs"
   ],
   "trustedDependencies": [
     "embedded-postgres",
@@ -35,7 +36,7 @@
     "lint": "bun scripts/vault-run.ts -- turbo run lint",
     "test": "bun scripts/vault-run.ts -- turbo run test",
     "generate": "bun scripts/vault-run.ts -- turbo run generate",
-    "check": "bun scripts/vault-run.ts -- turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:agents check:llms check:format",
+    "check": "bun scripts/vault-run.ts -- turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:agents check:llms check:format && bun run docs:generate",
     "check:full": "bun scripts/ci-local.ts",
     "pack:check": "bun scripts/vault-run.ts -- turbo run pack:check",
     "portability": "bun scripts/vault-run.ts -- turbo run portability",
@@ -54,6 +55,9 @@
     "llms:sync": "bun scripts/llms-txt.ts",
     "check:format": "biome format .",
     "format": "biome format --write .",
+    "docs:generate": "bun scripts/generate-docs.ts",
+    "docs:build": "bun run docs:generate && bun run --cwd sites/docs build",
+    "docs:dev": "bun run docs:generate && bun run --cwd sites/docs dev",
     "prepare": "husky",
     "gh": "open https://github.com/crvouga/mockingbird/actions",
     "release:plan": "bun scripts/release/plan.ts",

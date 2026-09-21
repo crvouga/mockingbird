@@ -1,0 +1,62 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { getCatalog } from "../lib/data";
+
+const catalog = await getCatalog();
+const serviceCount = catalog.services.length;
+---
+
+<BaseLayout title="Home">
+  <h1>Mockingbird</h1>
+  <p style="font-size: 18px; color: var(--color-muted); margin-bottom: 30px;">
+    Stateful test doubles for {serviceCount}+ third-party APIs and SQL databases
+  </p>
+
+  <div style="max-width: 800px;">
+    <h2>Why Mockingbird</h2>
+    <p>{catalog.rationale}</p>
+
+    <h2 style="margin-top: 40px;">Key Features</h2>
+    <ul style="margin-left: 20px; margin-bottom: 20px;">
+      <li style="margin-bottom: 10px;">
+        <strong>Real Surface, Real Behavior:</strong> Mocks speak the provider's actual API surface
+        (fetch(Request) → Response) and maintain state in SQLite
+      </li>
+      <li style="margin-bottom: 10px;">
+        <strong>Driven by OpenAPI:</strong> Every mock is generated from a vendored OpenAPI contract
+      </li>
+      <li style="margin-bottom: 10px;">
+        <strong>Property-Based Testing:</strong> Continuous differential testing against real sandboxes
+        ensures behavior stays in sync
+      </li>
+      <li style="margin-bottom: 10px;">
+        <strong>Multiple Surfaces:</strong> Isomorphic Fetch API, Node server, CLI, or serve over HTTP/2
+      </li>
+      <li style="margin-bottom: 10px;">
+        <strong>Zero Network Dependency:</strong> Drop into any test process, no external services needed
+      </li>
+      <li style="margin-bottom: 10px;">
+        <strong>Client-Side Compatible:</strong> Run in browsers, Workers, or embedded environments
+      </li>
+    </ul>
+
+    <h2 style="margin-top: 40px;">Quick Start</h2>
+    <pre>npm install -D @crvouga/mockingbird-service-stripe</pre>
+
+    <pre>import &#123; StripeAPI &#125; from "@crvouga/mockingbird-service-stripe";
+
+const stripe = new StripeAPI();
+const req = new Request("https://api.stripe.com/v1/customers", &#123;
+  method: "POST",
+  headers: &#123; authorization: "Bearer sk_test_mockingbird" &#125;,
+  body: "description=ACME%20Inc",
+&#125;);
+
+const res = await stripe.fetch(req);
+console.log(await res.json()); // &#123; id: "cus_...", description: "ACME Inc", ... &#125;</pre>
+
+    <p>
+      <a href="/services">Browse all {serviceCount} services →</a>
+    </p>
+  </div>
+</BaseLayout>

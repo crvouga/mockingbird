@@ -1,0 +1,244 @@
+---
+import BaseLayout from "../../layouts/BaseLayout.astro";
+import { getAllServices, getService } from "../../lib/data";
+
+export async function getStaticPaths() {
+  const services = await getAllServices();
+  return services.map((service) => ({
+    params: { name: service.name },
+    props: { service },
+  }));
+}
+
+interface Props {
+  service: {
+    name: string;
+    packageName: string;
+    description: string;
+    provider: string;
+    runtime: "portable" | "node" | "bun";
+    keywords: string[];
+    npmUrl: string;
+    repoUrl: string;
+    readmeUrl: string;
+    supportUrl?: string;
+    entries: Record<string, "node" | "bun" | "portable">;
+    status: "implemented" | "experimental" | "deprecated";
+    surfaces: string[];
+  };
+}
+
+const { service } = Astro.props;
+---
+
+<BaseLayout
+  title={service.name}
+  description={service.description}
+>
+  <h1>{service.name}</h1>
+  <p style="font-size: 16px; color: var(--color-muted); margin-bottom: 20px;">
+    {service.description}
+  </p>
+
+  <style>
+    .metadata {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin: 30px 0;
+      padding: 20px;
+      background-color: rgba(0, 0, 0, 0.02);
+      border-radius: 8px;
+      border-left: 3px solid var(--color-primary);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .metadata {
+        background-color: rgba(255, 255, 255, 0.02);
+      }
+    }
+
+    .metadata-item {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .metadata-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--color-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+
+    .metadata-value {
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .badge-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .badge {
+      display: inline-block;
+      background-color: rgba(0, 102, 204, 0.1);
+      color: var(--color-primary);
+      padding: 4px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin: 20px 0;
+    }
+
+    .links a {
+      font-size: 14px;
+      color: var(--color-primary);
+      font-weight: 500;
+    }
+
+    .section {
+      margin: 40px 0;
+      padding: 20px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+    }
+
+    .section h3 {
+      margin-top: 0;
+    }
+
+    .runtime-badge {
+      background-color: rgba(0, 150, 0, 0.1);
+      color: #009900;
+    }
+
+    .surface-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .entry-code {
+      background-color: rgba(0, 0, 0, 0.05);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .entry-code {
+        background-color: rgba(255, 255, 255, 0.1);
+      }
+    }
+  </style>
+
+  <div class="links">
+    <a href={service.npmUrl} target="_blank" rel="noopener">→ npm package</a>
+    <a href={service.readmeUrl} target="_blank" rel="noopener">→ README</a>
+    {service.supportUrl && (
+      <a href={service.supportUrl} target="_blank" rel="noopener">→ SUPPORT</a>
+    )}
+    <a href={service.repoUrl} target="_blank" rel="noopener">→ source code</a>
+  </div>
+
+  <div class="metadata">
+    <div class="metadata-item">
+      <div class="metadata-label">Package</div>
+      <div class="metadata-value"><code>{service.packageName}</code></div>
+    </div>
+
+    <div class="metadata-item">
+      <div class="metadata-label">Runtime</div>
+      <div class="metadata-value">
+        <span class="badge runtime-badge">{service.runtime}</span>
+      </div>
+    </div>
+
+    <div class="metadata-item">
+      <div class="metadata-label">Status</div>
+      <div class="metadata-value">
+        <span class="badge">{service.status}</span>
+      </div>
+    </div>
+
+    <div class="metadata-item">
+      <div class="metadata-label">Surfaces</div>
+      <div class="metadata-value">
+        <div class="surface-list">
+          {service.surfaces.map((surface) => (
+            <span class="badge">{surface}</span>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Entry Points</h3>
+    <p style="color: var(--color-muted); font-size: 14px; margin-bottom: 12px;">
+      Import paths and their runtime targets
+    </p>
+    <ul style="list-style: none; margin: 0; padding: 0;">
+      {Object.entries(service.entries).map(([entry, runtime]) => (
+        <li style="margin-bottom: 8px; padding: 8px; background-color: rgba(0,0,0,0.02); border-radius: 4px;">
+          <span class="entry-code">import ... from "{service.packageName}{entry === "default" ? "" : `/${entry}`}"</span>
+          <span style="color: var(--color-muted); font-size: 12px; margin-left: 8px;">({runtime})</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+
+  <div class="section">
+    <h3>Keywords</h3>
+    <div class="badge-list">
+      {service.keywords.map((keyword) => (
+        <span class="badge" style="background-color: rgba(100, 100, 100, 0.1); color: var(--color-muted);">
+          {keyword}
+        </span>
+      ))}
+    </div>
+  </div>
+
+  <div class="section">
+    <h3>Agent Integration</h3>
+    <p>
+      This service is fully documented and agent-friendly. The README includes:
+    </p>
+    <ul style="margin-left: 20px;">
+      <li>Complete API surface with OpenAPI backing</li>
+      <li>Stateful behavior and state management</li>
+      <li>Real-world usage examples</li>
+      <li>Webhook and event handling</li>
+      <li>Property-based testing coverage</li>
+      <li>Parity verification against real providers</li>
+    </ul>
+    <p style="margin-top: 15px;">
+      See <a href={service.readmeUrl} target="_blank" rel="noopener">the README</a> for
+      complete integration details.
+    </p>
+  </div>
+
+  <h2>Installation</h2>
+  <pre>npm install -D {service.packageName}
+# or
+bun add -D {service.packageName}</pre>
+
+  <h2>Usage</h2>
+  <p>
+    Every service provides a synchronous, in-process <code>fetch</code> handler that speaks
+    the real API surface. See the
+    <a href={service.readmeUrl} target="_blank" rel="noopener">README</a> for detailed examples
+    and API reference.
+  </p>
+</BaseLayout>
