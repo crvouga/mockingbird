@@ -11,8 +11,54 @@ import {
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams } from "./params.js"
+import { recordBalanceTransaction } from "./payments.js"
 import { renderCharge, renderPaymentIntent, renderRefund } from "./render.js"
-import { type RefundRecord, seconds } from "./state.js"
+import { type RefundRecord, type RefundStatus, seconds } from "./state.js"
+
+const REFUND_STATUSES: readonly RefundStatus[] = [
+  "pending",
+  "requires_action",
+  "succeeded",
+  "failed",
+  "canceled",
+]
+
+/**
+ * Move a refund to another status (`PUT /__admin/refunds/:id`). A refund that fails or is
+ * canceled gives the money back to the charge; `refund.failed` or `refund.updated` is emitted.
+ */
+export const moveRefund = (
+  scope: RequestScope,
+  current: RefundRecord,
+  status: string,
+  failureReason: string | null,
+): RefundRecord => {
+  if (!REFUND_STATUSES.includes(status as RefundStatus))
+    throw invalidRequest(`Invalid status: must be one of ${REFUND_STATUSES.join(", ")}`, "status")
+  const next: RefundRecord = {
+    ...current,
+    status: status as RefundStatus,
+    failure_reason: status === "failed" ? (failureReason ?? "unknown") : null,
+  }
+  scope.account.refunds.update(current.id, next)
+  const released = ["failed", "canceled"]
+  if (released.includes(status) && !released.includes(current.status) && current.charge !== null) {
+    const charge = scope.account.charges.get(current.charge)
+    if (charge) {
+      const amountRefunded = Math.max(0, charge.amount_refunded - current.amount)
+      scope.account.charges.update(charge.id, {
+        ...charge,
+        amount_refunded: amountRefunded,
+        refunded: amountRefunded >= charge.amount && amountRefunded > 0,
+      })
+    }
+  }
+  scope.emit(status === "failed" ? "refund.failed" : "refund.updated", renderRefund(next), {
+    status: current.status,
+    ...(status === "failed" ? { failure_reason: current.failure_reason ?? null } : {}),
+  })
+  return next
+}
 
 const stringOf = (params: Params, key: string): string | null => {
   const value = params[key]
@@ -113,7 +159,7 @@ export const refundHandlers = (services: Services): Record<string, OperationHand
         `Refund amount (${amount}) is greater than the remaining amount that can be refunded (${remaining}).`,
         "amount",
       )
-    const id = scope.ids.next("re_")
+    const id = scope.ids.next("re_", 24)
     const refund: RefundRecord = {
       id,
       amount,
@@ -125,16 +171,26 @@ export const refundHandlers = (services: Services): Record<string, OperationHand
       reason: stringOf(params, "reason"),
       receipt_number: null,
       status: "succeeded",
+      failure_reason: null,
+      balance_transaction: recordBalanceTransaction(scope, {
+        amount: -amount,
+        currency: charge.currency,
+        source: id,
+        type: "refund",
+        description: "REFUND FOR CHARGE",
+      }),
     }
     const amountRefunded = charge.amount_refunded + amount
-    scope.account.charges.update(charge.id, {
+    const refundedCharge = {
       ...charge,
       amount_refunded: amountRefunded,
       refund_ids: [...charge.refund_ids, id],
       refunded: amountRefunded >= charge.amount,
-    })
+    }
+    scope.account.charges.update(charge.id, refundedCharge)
     scope.account.refunds.insert(id, refund)
     scope.emit("refund.created", renderRefund(refund))
+    scope.emit("charge.refunded", renderCharge(refundedCharge))
     return jsonResponse(200, render(scope, refund, params.expand))
   },
   GetRefundsRefund: async (context) => {

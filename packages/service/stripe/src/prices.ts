@@ -6,7 +6,7 @@ import {
 import { invalidRequest, parameterInvalidEmpty, resourceMissing } from "./errors.js"
 import { applyExpand, type ExpandResolvers } from "./expand.js"
 import { mergeMetadata, optionalBoolean, parseUnitAmountDecimal, strip } from "./fields.js"
-import { type RequestScope, requestScope, type Services } from "./internal.js"
+import { changedFields, type RequestScope, requestScope, type Services } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams, SUPPORTED_CURRENCIES } from "./params.js"
 import { requireProduct } from "./products.js"
@@ -211,7 +211,11 @@ export const priceHandlers = (services: Services): Record<string, OperationHandl
       if (!current) throw resourceMissing("price", id, "price")
       const price = applyShared(scope, current, params)
       scope.account.prices.update(id, price)
-      scope.emit("price.updated", render(scope, price, params))
+      scope.emit(
+        "price.updated",
+        renderPrice(price),
+        changedFields(renderPrice(current), renderPrice(price)),
+      )
       return jsonResponse(200, render(scope, price, params))
     },
   }

@@ -1,0 +1,206 @@
+openapi: 3.1.0
+info:
+  title: Payload CMS REST API (Mockingbird subset)
+  description: |
+    Stateful mock subset of Payload CMS's auto-generated collection REST API: find documents
+    (with a `where` query subset, `limit`, `page`, `sort`) and find one by id. Hand-authored
+    from Payload's REST API docs and the consumer's response type (payload-cms-response.type.ts).
+  version: "2"
+  x-mockingbird-upstream:
+    note: >-
+      Shapes from https://payloadcms.com/docs/rest-api/overview and
+      https://payloadcms.com/docs/queries/overview; the consumer is
+      apps/backend/src/modules/cms/payload-cms/payload-cms.service.ts.
+servers:
+  - url: https://payload.gogeviti.com
+paths:
+  /api/{collection}:
+    parameters:
+      - name: collection
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [marketing]
+    get:
+      operationId: FindDocuments
+      description: >-
+        Paginated find. `where[<field>][<operator>]=<value>` supports equals, not_equals, in,
+        not_in, exists, greater_than(_equal), less_than(_equal), like, contains, and nested
+        `where[and|or][<i>]…`. Only the consumer's filters are declared here for parity walks.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: where[type][equals]
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [referral, banner, email]
+        - name: where[isActive][equals]
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: ["true", "false"]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 20
+        - name: sort
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [createdAt, -createdAt, name, -name, id, -id]
+      responses:
+        "200":
+          description: A page of documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaginatedDocs"
+        "400":
+          description: Invalid query
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "404":
+          description: Unknown collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+  /api/{collection}/{id}:
+    parameters:
+      - name: collection
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [marketing]
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          description: The seeded documents are 1-3; anything else is a 404.
+          pattern: "^[1-5]$"
+    get:
+      operationId: FindDocumentById
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketingDoc"
+        "404":
+          description: Unknown document or collection
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+components:
+  schemas:
+    MarketingDoc:
+      type: object
+      required: [id, name, type, createdAt, updatedAt]
+      properties:
+        id:
+          type: integer
+          description: Integer ids, as Payload's Postgres adapter issues them (the consumer types `id` as a number).
+        name:
+          type: string
+        type:
+          type: string
+          enum: [referral, banner, email]
+        isActive:
+          type: boolean
+        cardTitle:
+          type: ["string", "null"]
+        cardSubtitle:
+          type: ["string", "null"]
+        cardDescription:
+          type: ["string", "null"]
+        ctaTitle:
+          type: ["string", "null"]
+        ctaActionText:
+          type: ["string", "null"]
+        shareMessage:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updatedAt:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    PaginatedDocs:
+      type: object
+      required:
+        - docs
+        - totalDocs
+        - limit
+        - totalPages
+        - page
+        - pagingCounter
+        - hasPrevPage
+        - hasNextPage
+        - prevPage
+        - nextPage
+      properties:
+        docs:
+          type: array
+          items:
+            $ref: "#/components/schemas/MarketingDoc"
+        totalDocs:
+          type: integer
+        limit:
+          type: integer
+        totalPages:
+          type: integer
+        page:
+          type: integer
+        pagingCounter:
+          type: integer
+        hasPrevPage:
+          type: boolean
+        hasNextPage:
+          type: boolean
+        prevPage:
+          type: ["integer", "null"]
+        nextPage:
+          type: ["integer", "null"]
+    Errors:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            required: [message]
+            properties:
+              message:
+                type: string

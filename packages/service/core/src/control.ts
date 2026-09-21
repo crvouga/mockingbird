@@ -48,6 +48,8 @@ export type ControlContext = {
   describe(): Record<string, unknown>
   routes: AdminRoutes
   adminKey: string | undefined
+  /** Expand a named fault preset; enables `POST /faults {"preset": "<name>"}`. */
+  applyPreset?(name: string, namespace: string, overrides: Partial<FaultRule>): FaultRule[]
 }
 
 export type ControlPlane = {
@@ -165,8 +167,30 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
 
     "GET /faults": () => json(200, { faults: context.faults.list() }),
     "POST /faults": ({ body, namespace }) => {
-      if (!isRecord(body) || typeof body.status !== "number") {
-        return adminError(400, "a fault needs a numeric status")
+      if (isRecord(body) && typeof body.preset === "string") {
+        if (!context.applyPreset) return adminError(400, `${context.name} has no fault presets`)
+        const { preset, ...overrides } = body
+        try {
+          return json(201, {
+            preset,
+            rules: context.applyPreset(preset, namespace, overrides as Partial<FaultRule>),
+          })
+        } catch (error) {
+          return adminError(404, error instanceof Error ? error.message : String(error))
+        }
+      }
+      if (
+        !isRecord(body) ||
+        (typeof body.status !== "number" &&
+          typeof body.delayMs !== "number" &&
+          typeof body.latencyMs !== "number" &&
+          body.drop !== true &&
+          typeof body.effect !== "string")
+      ) {
+        return adminError(
+          400,
+          "a fault needs a numeric status, a delayMs/latencyMs, drop: true, an effect, or a preset",
+        )
       }
       const rule = {
         // Scoped to the caller's namespace unless it asks for every one, so one worker's

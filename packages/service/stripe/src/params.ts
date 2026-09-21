@@ -1,5 +1,5 @@
 import type { FormValue } from "@crvouga/mockingbird-http-codec"
-import type { SchemaObject } from "@crvouga/mockingbird-openapi"
+import { resolveSchema, type SchemaObject } from "@crvouga/mockingbird-openapi"
 import { type FormIssue, type OperationContext, parseForm } from "@crvouga/mockingbird-service"
 import {
   humanList,
@@ -10,6 +10,7 @@ import {
   parameterUnknown,
   StripeError,
 } from "./errors.js"
+import { expandPathsOf } from "./expand.js"
 import { document } from "./generated/openapi.js"
 
 /** Stripe words enum alternatives in its own order, not the spec's alphabetical one. */
@@ -61,6 +62,12 @@ export const issueToError = (issue: FormIssue): StripeError => {
       return invalidRequest("Invalid array", issue.path)
     case "invalid-enum": {
       const leaf = leafName(issue.path)
+      // `metadata` is an object or "" (unset); any other scalar gets Stripe's metadata message.
+      if (leaf === "metadata")
+        return invalidRequest(
+          "Invalid value for `metadata`. Metadata must be a single object containing key-value pairs.  See the metadata documentation for more details: https://docs.stripe.com/api/metadata",
+          issue.path,
+        )
       if (leaf === "currency")
         return invalidRequest(
           `Invalid currency: ${issue.raw}. Stripe currently supports these currencies: ${SUPPORTED_CURRENCIES.join(", ")}`,
@@ -146,6 +153,60 @@ const topLevelKey = (path: string) => {
   return bracket === -1 ? path : path.slice(0, bracket)
 }
 
+/** Ruby's `Float#to_s`, which Stripe uses to echo a decimal: `1.0e-07`, `0.123`. */
+const rubyFloat = (raw: string): string => {
+  const value = Number(raw)
+  if (value !== 0 && Math.abs(value) < 1e-4) {
+    const [mantissa = "0", exponent = "0"] = value.toExponential().split("e")
+    const digits = mantissa.includes(".") ? mantissa : `${mantissa}.0`
+    const sign = exponent.startsWith("-") ? "-" : "+"
+    return `${digits}e${sign}${exponent.replace(/^[+-]/, "").padStart(2, "0")}`
+  }
+  const text = String(value)
+  return text.includes(".") || text.includes("e") ? text : `${text}.0`
+}
+
+/**
+ * Stripe's checks on `package_dimensions` (probed in test mode): fields are tried in the order
+ * length, width, height, weight; a value that is not a plain decimal or has more than 15
+ * fraction digits is an "Invalid decimal"; then each may carry at most two decimal places.
+ */
+const packageDimensionsError = (
+  issues: FormIssue[],
+  raw: FormValue | undefined,
+): StripeError | undefined => {
+  const fields = ["length", "width", "height", "weight"] as const
+  const values = typeof raw === "object" && raw !== null ? (raw as Record<string, FormValue>) : {}
+  for (const field of fields) {
+    const issue = issues.find((item) => item.path === `package_dimensions[${field}]`)
+    if (issue) return issueToError(issue)
+    const value = values[field]
+    if (typeof value === "string" && /\.\d{16,}$/.test(value))
+      return invalidRequest(`Invalid decimal: ${value}`, `package_dimensions[${field}]`)
+  }
+  if (issues[0]) return issueToError(issues[0])
+  for (const field of fields) {
+    const value = values[field]
+    const fraction = typeof value === "string" ? (value.split(".")[1] ?? "").replace(/0+$/, "") : ""
+    if (typeof value === "string" && fraction.length > 2)
+      return invalidRequest(
+        `Invalid decimal: ${rubyFloat(value)}; must contain at maximum two decimal places.`,
+        `package_dimensions[${field}]`,
+      )
+  }
+  return undefined
+}
+
+/** `created`-style filters: an integer, or an object of `gt`/`gte`/`lt`/`lte` bounds. */
+const isRangeFilter = (schema: SchemaObject | undefined): boolean => {
+  if (!schema) return false
+  const resolved = resolveSchema(document, schema)
+  return (resolved.anyOf ?? []).some((branch) => {
+    const properties = resolveSchema(document, branch).properties ?? {}
+    return "gt" in properties && "lte" in properties
+  })
+}
+
 /** Parse a raw form object against a schema, throwing Stripe's first complaint. */
 export const parseParams = (
   schema: SchemaObject,
@@ -165,12 +226,15 @@ export const parseParams = (
   ]
   for (const key of order) {
     const issues = parsed.issues.filter((item) => topLevelKey(item.path) === key)
-    const issue =
-      key === "package_dimensions"
-        ? ((["width", "height", "length", "weight"] as const)
-            .map((field) => issues.find((item) => item.path === `package_dimensions[${field}]`))
-            .find((item) => item !== undefined) ?? issues[0])
-        : issues[0]
+    // A range filter given as a scalar is read as `key[eq]`, an integer (even when empty).
+    const scalar = (raw as Record<string, FormValue> | undefined)?.[key]
+    if (typeof scalar === "string" && isRangeFilter(schema.properties?.[key]) && issues.length > 0)
+      throw parameterInvalidInteger(`${key}[eq]`, scalar)
+    if (key === "package_dimensions") {
+      const error = packageDimensionsError(issues, (raw as Record<string, FormValue>)?.[key])
+      if (error) throw error
+    }
+    const issue = issues[0]
     if (issue) throw issueToError(issue)
     options.validate?.[key]?.(params)
   }
@@ -214,6 +278,18 @@ const stringMetadata = (params: Params): Params => {
   return { ...params, metadata: kept }
 }
 
+/**
+ * `expand` is validated and applied centrally (see `expand.ts`): the contract narrows it to an
+ * enum only so parity walks generate meaningful paths, so it is lifted out before schema
+ * parsing and handed back as a plain list.
+ */
+const withoutExpand = (raw: FormValue | undefined): { rest: FormValue; expand: string[] } => {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
+    return { rest: raw ?? {}, expand: [] }
+  const { expand, ...rest } = raw as Record<string, FormValue>
+  return { rest: rest as FormValue, expand: expandPathsOf(expand) }
+}
+
 /** Body parameters for POST operations. Stripe treats a missing/empty body as no parameters. */
 export const bodyParams = (context: OperationContext, options: ParamOptions = {}): Params => {
   const body = context.body
@@ -225,11 +301,26 @@ export const bodyParams = (context: OperationContext, options: ParamOptions = {}
     raw.preferred_locales === ""
   )
     delete raw.preferred_locales
-  return stringMetadata(parseParams(formBodySchema(context), raw, options))
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw) && raw.expand === "")
+    throw parameterInvalidEmpty("expand")
+  const { rest, expand } = withoutExpand(raw)
+  const params = stringMetadata(parseParams(formBodySchema(context), rest, options))
+  return expand.length === 0 ? params : { ...params, expand }
 }
 
-export const queryParams = (context: OperationContext, options: ParamOptions = {}): Params =>
-  stringMetadata(parseParams(querySchema(context), context.query, options))
+export const queryParams = (context: OperationContext, options: ParamOptions = {}): Params => {
+  const { rest, expand } = withoutExpand(context.query as FormValue)
+  const params = stringMetadata(parseParams(querySchema(context), rest, options))
+  // Every list that takes both refuses them together (probed against live Stripe).
+  if (params.customer !== undefined && params.customer_account !== undefined)
+    throw invalidRequest(
+      "You may only specify one of these parameters: customer, customer_account.",
+      "customer",
+    )
+  // `expand=` (an empty list) is kept as "" so handlers that validate it first can refuse it.
+  if (context.query.expand === "") return { ...params, expand: "" }
+  return expand.length === 0 ? params : { ...params, expand }
+}
 
 /** Stripe reads `""` as "unset" for optional scalars. */
 export const unsetToNull = <T>(value: T | "" | undefined): T | null | undefined =>

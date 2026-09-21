@@ -41,6 +41,8 @@ export type OperationContext = {
   /** Service namespace used for records / sequences. */
   namespace: string
   operation: Operation
+  /** The vendor contract the service was built from. */
+  document: OpenAPIDocument
   now: () => number
 }
 
@@ -173,6 +175,7 @@ export const createService = (options: ServiceOptions): Service => {
         sqlite: options.sqlite,
         namespace: options.namespace,
         operation,
+        document: options.document,
         now,
       }
       const short = await options.before?.(context)

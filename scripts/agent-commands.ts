@@ -1,6 +1,6 @@
 /**
  * Agent commands live once in `.agents/commands/<name>.md` and are symlinked into every
- * agent harness, so /pr-ready (and friends) is the same file in Claude Code, Cursor, Codex,
+ * agent harness, so /pr-merge (and friends) is the same file in Claude Code, Cursor, Codex,
  * OpenCode, Windsurf, and GitHub Copilot. Edit the canonical file; never the links.
  *
  *   bun run agents:sync     create / repair the links

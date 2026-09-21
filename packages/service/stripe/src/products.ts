@@ -8,6 +8,7 @@ import {
   parameterInvalidEmpty,
   parameterMissing,
   resourceMissing,
+  StripeError,
 } from "./errors.js"
 import { applyExpand, type ExpandResolvers } from "./expand.js"
 import {
@@ -18,7 +19,7 @@ import {
   strippedString,
   validateStatementDescriptor,
 } from "./fields.js"
-import { type RequestScope, requestScope, type Services } from "./internal.js"
+import { changedFields, type RequestScope, requestScope, type Services } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams } from "./params.js"
 import { renderDeletedProduct, renderPrice, renderProduct } from "./render.js"
@@ -63,6 +64,9 @@ const productValidators = (
         throw parameterInvalidEmpty("name")
     },
     description: notEmpty("description"),
+    metadata: (params) => {
+      if (mode === "create" && params.metadata === "") throw parameterInvalidEmpty("metadata")
+    },
     unit_label: notEmpty("unit_label"),
     images: (params) => {
       if (!Array.isArray(params.images)) return
@@ -93,7 +97,13 @@ const apply = (current: ProductRecord, params: Params, now: number): ProductReco
     next.images = params.images === "" ? [] : (params.images as string[])
   if (params.marketing_features !== undefined)
     next.marketing_features =
-      params.marketing_features === "" ? [] : (params.marketing_features as Array<{ name: string }>)
+      params.marketing_features === ""
+        ? []
+        : // Stripe trims each feature name.
+          (params.marketing_features as Array<{ name: string }>).map((feature) => ({
+            ...feature,
+            name: feature.name.trim(),
+          }))
   next.metadata = mergeMetadata(current.metadata, params.metadata)
   if (typeof params.name === "string") next.name = strip(params.name)
   if (params.package_dimensions !== undefined) {
@@ -108,6 +118,8 @@ const apply = (current: ProductRecord, params: Params, now: number): ProductReco
   )
   next.unit_label = optionalString(params, "unit_label", current.unit_label)
   if (params.url !== undefined) next.url = params.url as string
+  if (params.default_price !== undefined)
+    next.default_price = params.default_price === "" ? null : (params.default_price as string)
   return next
 }
 
@@ -142,7 +154,15 @@ export const productHandlers = (services: Services): Record<string, OperationHan
         after: validateProductUrl,
       })
       const now = seconds(scope.now)
-      const id = scope.ids.next("prod_")
+      const requested = typeof params.id === "string" && params.id !== "" ? params.id : null
+      if (requested !== null && scope.account.products.get(requested))
+        throw new StripeError({
+          status: 400,
+          code: "resource_already_exists",
+          message: "Product already exists.",
+          param: "id",
+        })
+      const id = requested ?? scope.ids.next("prod_")
       const base: ProductRecord = {
         id,
         active: true,
@@ -200,6 +220,8 @@ export const productHandlers = (services: Services): Record<string, OperationHan
       const page = searchRecords(records, params, {
         url: "/v1/products/search",
         render: renderProduct,
+        lag: scope.effect("search_lag"),
+        now: scope.now,
       })
       return jsonResponse(200, applyExpand(page, params.expand, expanders(scope)))
     },
@@ -222,9 +244,23 @@ export const productHandlers = (services: Services): Record<string, OperationHan
         validate: productValidators("update", current),
         after: validateProductUrl,
       })
+      const defaultPrice = params.default_price
+      if (typeof defaultPrice === "string" && defaultPrice !== "") {
+        const price = scope.account.prices.get(defaultPrice)
+        if (!price) throw resourceMissing("price", defaultPrice, "default_price")
+        if (price.product !== id)
+          throw invalidRequest(
+            `The price \`${defaultPrice}\` does not belong to this product.`,
+            "default_price",
+          )
+      }
       const product = apply(current, params, seconds(scope.now))
       scope.account.products.update(id, product)
-      scope.emit("product.updated", render(scope, product, params))
+      scope.emit(
+        "product.updated",
+        renderProduct(product),
+        changedFields(renderProduct(current), renderProduct(product)),
+      )
       return jsonResponse(200, render(scope, product, params))
     },
 

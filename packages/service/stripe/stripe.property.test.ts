@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { listOperations } from "@crvouga/mockingbird-openapi"
+import { operationMetadata } from "@crvouga/mockingbird-openapi-metadata"
 import { ParityError, parity } from "@crvouga/mockingbird-parity"
 import { Database } from "@crvouga/mockingbird-service-sqlite"
 import { fcParameters } from "@crvouga/mockingbird-testing"
@@ -56,6 +58,64 @@ describe("StripeAPI", () => {
       expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(0)
     },
     { timeout: 120_000 },
+  )
+
+  test(
+    "pinned walks together exercise every parity-enabled operation",
+    async () => {
+      const enabled = listOperations(document)
+        .filter((operation) => {
+          const meta = operationMetadata(operation.operation)
+          return meta.supported && meta.parity.enabled
+        })
+        .map((operation) => operation.operationId)
+      const exercised = new Set<string>()
+      // Coverage-biased walks from fixed seeds, so the union is reproducible; each is a full
+      // lockstep comparison with spec conformance, like the random walks above.
+      for (const seed of [3, 11, 12, 14, 15, 16]) {
+        const reference = new StripeAPI({ now })
+        const report = await parity({
+          provider: "stripe",
+          spec: document,
+          real: {
+            baseUrl: `https://${MOCK_HOST}`,
+            allowedHosts: [MOCK_HOST],
+            headers: () => AUTH,
+            fetch: (request) => reference.fetch(request),
+          },
+          mock: {
+            create: () => new StripeAPI({ now }),
+            baseUrl: `https://${MOCK_HOST}`,
+            headers: () => AUTH,
+          },
+          cleanup: async () => {
+            await reference.reset()
+          },
+          includeUnsafe: true,
+          numRuns: 200,
+          maxCommands: 150,
+          coverageBias: 30,
+          invalidProbability: 0.05,
+          missingProbability: 0.03,
+          weights: {
+            PostSubscriptionItems: 4,
+            PostSubscriptionItemsItem: 4,
+            DeleteSubscriptionItemsItem: 4,
+            GetSubscriptionItems: 3,
+            PostPaymentMethodsPaymentMethodAttach: 4,
+            GetPaymentMethodsPaymentMethod: 3,
+            PostSubscriptions: 3,
+          },
+          seed,
+          sleep: async () => {},
+          log: () => {},
+          latencyToleranceMs: 1_000,
+        })
+        for (const id of Object.keys(report.exercised)) exercised.add(id)
+      }
+      expect(enabled.filter((id) => !exercised.has(id))).toEqual([])
+    },
+    { timeout: 180_000 },
   )
 
   test(
@@ -219,6 +279,15 @@ describe("StripeAPI", () => {
       }),
     )
     expect(paymentMethodResponse.status).toBe(200)
+    const attached = (await paymentMethodResponse.clone().json()) as { id: string }
+    const defaulted = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers/${customer.id}`, {
+        method: "POST",
+        headers: form({}).headers,
+        body: new URLSearchParams({ "invoice_settings[default_payment_method]": attached.id }),
+      }),
+    )
+    expect(defaulted.status).toBe(200)
     const intentResponse = await stripe.fetch(
       new Request(`https://${MOCK_HOST}/v1/payment_intents`, {
         method: "POST",

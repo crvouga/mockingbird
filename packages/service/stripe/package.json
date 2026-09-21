@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-stripe",
   "version": "0.0.0-development",
-  "description": "Stateful mock of the Stripe API (customers, payments, subscriptions, invoices, checkout, webhooks) driven by its OpenAPI contract and verified by differential property tests against Stripe test mode.",
+  "description": "Stateful mock of the Stripe API (accounts by key, customers, payments, subscriptions with renewals, invoices, checkout with a hosted page, a Stripe.js stand-in, signed webhooks) at API versions 2024-06-20 and 2025-02-24.acacia, verified by differential property tests against Stripe test mode.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -38,7 +38,11 @@
   "keywords": [
     "mockingbird",
     "service",
-    "stripe"
+    "stripe",
+    "payments",
+    "checkout",
+    "webhooks",
+    "billing"
   ],
   "mockingbird": {
     "runtime": "portable",
@@ -60,7 +64,8 @@
     "mock:server": "bun scripts/server.ts",
     "client-parity": "bun scripts/client-parity.ts",
     "parity": "bun scripts/parity.ts",
-    "pack:check": "bun ../../../scripts/pack-check.ts"
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "portability": "bun ../../../scripts/portability.ts"
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
@@ -83,6 +88,7 @@
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
     "@crvouga/mockingbird-commands": "workspace:*",
-    "@crvouga/mockingbird-adapter-node": "workspace:*"
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "stripe-v17": "npm:stripe@17.7.0"
   }
 }

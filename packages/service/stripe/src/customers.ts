@@ -1,5 +1,11 @@
 import { jsonResponse, type OperationHandler, opaqueToken } from "@crvouga/mockingbird-service"
-import { parameterMissing, resourceMissing } from "./errors.js"
+import { cancelSubscription } from "./billing.js"
+import {
+  invalidRequest,
+  parameterInvalidEmpty,
+  parameterMissing,
+  resourceMissing,
+} from "./errors.js"
 import { applyExpand, type ExpandResolvers } from "./expand.js"
 import { mergeMetadata, optionalString, strippedString, validateEmail } from "./fields.js"
 import {
@@ -36,7 +42,13 @@ const toAddress = (raw: unknown): Address => {
   const out = {} as Record<(typeof ADDRESS_KEYS)[number], string | null>
   for (const key of ADDRESS_KEYS) {
     const value = input[key]
-    out[key] = value === undefined ? null : value
+    // Stripe upper-cases the country code it stores (live: "sN" comes back "SN").
+    out[key] =
+      value === undefined
+        ? null
+        : key === "country"
+          ? value.replace(/[a-z]/g, (letter) => letter.toUpperCase())
+          : value
   }
   return out
 }
@@ -79,6 +91,12 @@ const apply = (current: CustomerRecord, params: Params): CustomerRecord => {
       footer?: string
     }
     if (settings.custom_fields !== undefined) {
+      if (Array.isArray(settings.custom_fields))
+        settings.custom_fields.forEach((field, index) => {
+          for (const key of ["name", "value"] as const)
+            if ((field as Record<string, unknown>)?.[key] === "")
+              throw parameterInvalidEmpty(`invoice_settings[custom_fields][${index}][${key}]`)
+        })
       next.invoice_settings.custom_fields =
         settings.custom_fields === ""
           ? []
@@ -136,7 +154,16 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
         shipping: null,
         tax_exempt: "none",
       }
-      const customer = apply(base, params)
+      const clock =
+        typeof params.test_clock === "string" && params.test_clock !== "" ? params.test_clock : null
+      if (clock !== null && !scope.account.testClocks.get(clock))
+        throw resourceMissing("test_clock", clock, "test_clock")
+      const customer = { ...apply(base, params), test_clock: clock }
+      if (customer.invoice_settings.default_payment_method !== null)
+        throw invalidRequest(
+          `The customer does not have a payment method with the ID ${customer.invoice_settings.default_payment_method}. The payment method must be attached to the customer.`,
+          "invoice_settings[default_payment_method]",
+        )
       scope.account.customers.insert(id, { kind: "live", customer })
       scope.emit("customer.created", renderCustomer(customer))
       return jsonResponse(200, render(scope, customer, params))
@@ -145,11 +172,14 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
     GetCustomers: async (context) => {
       const scope = requestScope(services, context)
       const params = queryParams(context)
+      const clock =
+        typeof params.test_clock === "string" && params.test_clock !== "" ? params.test_clock : null
+      if (clock !== null && !scope.account.testClocks.get(clock))
+        throw resourceMissing("billingclock", clock, "test_clock", 400)
       const email = params.email
       const page = await paginate<CustomerEntry>(scope.account.customers, params, {
         url: "/v1/customers",
         kind: "customer",
-        exists: (entry) => entry.kind === "live",
         where: (entry) =>
           entry.kind === "live" &&
           matchesCreated(entry.customer.created, params.created) &&
@@ -171,6 +201,8 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
         searchRecords(records, params, {
           url: "/v1/customers/search",
           render: renderCustomer,
+          lag: scope.effect("search_lag"),
+          now: scope.now,
         }),
       )
     },
@@ -197,6 +229,16 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
       if (!entry || entry.kind === "deleted")
         throw resourceMissing("customer", id, "id", entry?.kind === "deleted" ? 400 : 404)
       const customer = apply(entry.customer, params)
+      const defaultMethod = customer.invoice_settings.default_payment_method
+      if (
+        defaultMethod !== null &&
+        defaultMethod !== entry.customer.invoice_settings.default_payment_method &&
+        scope.account.paymentMethods.get(defaultMethod)?.customer !== id
+      )
+        throw invalidRequest(
+          `The customer does not have a payment method with the ID ${defaultMethod}. The payment method must be attached to the customer.`,
+          "invoice_settings[default_payment_method]",
+        )
       scope.account.customers.update(id, { kind: "live", customer })
       scope.emit("customer.updated", renderCustomer(customer))
       return jsonResponse(200, render(scope, customer, params))
@@ -207,6 +249,11 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
       const id = context.params.customer ?? ""
       const entry = scope.account.customers.get(id)
       if (!entry || entry.kind === "deleted") throw resourceMissing("customer", id, "id")
+      for (const subscription of scope.account.subscriptions.list({
+        where: (record) =>
+          record.customer === id && !["canceled", "incomplete_expired"].includes(record.status),
+      }))
+        cancelSubscription(scope, subscription.value)
       scope.account.customers.update(id, { kind: "deleted", id })
       scope.emit("customer.deleted", renderDeletedCustomer(id))
       return jsonResponse(200, renderDeletedCustomer(id))
@@ -216,13 +263,15 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
       const scope = requestScope(services, context)
       const params = queryParams(context)
       const id = context.params.customer ?? ""
-      requireLiveCustomer(scope, id, "customer")
+      // Stripe resolves the list cursor before the customer in the path.
       const page = await paginate(scope.account.balanceTransactions, params, {
         url: `/v1/customers/${id}/balance_transactions`,
-        kind: "customer_balance_transaction",
+        // Stripe names an unknown cursor on this list by its internal model.
+        kind: "abstracttransaction",
         where: (record) => record.customer === id && matchesCreated(record.created, params.created),
         render: renderCustomerBalanceTransaction,
       })
+      requireLiveCustomer(scope, id, "customer")
       return jsonResponse(200, page)
     },
 

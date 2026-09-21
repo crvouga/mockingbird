@@ -36,16 +36,11 @@ reference points for what had to be modelled, not dependencies of this repositor
 
 ## Deliberate gaps
 
-| Gap | Reason |
-| --- | --- |
-| Hosted checkout (`checkout.stripe.com`), Payment Element (`js.stripe.com`) | browser-side Stripe.js; no HTTP API mock can serve it. UI suites keep real Stripe. |
-| `invoice.payment_failed`, `invoice.upcoming` events | failed-payment/renewal scenarios are driven by the Kill Bill rail, not Stripe; the mock never emits these (the replay worker simply finds none). |
-| `refund.failed` | refunds only issue against a succeeded charge, so no refund-failure path exists; `refund.created` and `refund.updated` are emitted. |
-| `charge.dispute.created` | no code path creates a dispute in the covered suites. |
-| Test clocks (`testHelpers.testClocks.*`) | not modelled; customers carry no test clock, so the advance-clock command fails its own validation before reaching Stripe. |
-| Webhook endpoints API, top-level balance transactions, `charges.create`, coupon delete | declared `supported: false` with reasons in `SUPPORT.md`. |
-| `invoice.payment_succeeded` | the mock emits `invoice.paid` only: both types route to the same handler in the consumer, and emitting both would double-process. |
-| Invoice discounts / coupon redemption counts on payment | invoice discounts are unsupported in the contract, so `times_redeemed` is not incremented by invoice payment. |
-| Unmodelled request parameters (tax, shipping, Connect, mandates, Radar, Meters) | stamped `x-mockingbird-unsupported`, so parity walks never generate them. |
+See the README's "Deliberately not modelled" section. In short: Connect, tax, shipping, Radar,
+mandates, non-card payment methods, smart retries/dunning beyond the first `past_due`, exact
+proration arithmetic, per-endpoint webhook API versions, and Stripe.js features our UI does not
+call. Hosted checkout, the Stripe.js stand-in, test clocks, webhook endpoints, the balance ledger,
+`invoice.payment_failed`, `invoice.upcoming`, `refund.failed` (admin) and
+`charge.dispute.created` (admin or `tok_createDispute`) are now modelled.
 
 Re-sweep the consumer whenever a new Stripe call site appears.

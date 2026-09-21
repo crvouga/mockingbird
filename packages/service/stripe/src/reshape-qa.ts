@@ -5,6 +5,7 @@ import {
   QA_CUSTOMER,
   QA_METADATA,
   QA_SEARCH_QUERIES,
+  QA_TEST_CARD_TOKENS,
   QA_TEST_PAYMENT_METHODS,
 } from "./qa-corpus.js"
 
@@ -99,6 +100,11 @@ export const reshapeQaCommand = (
     const code = pick(QA_COUPON_CODES, rng)
     if (code !== undefined) next.code = code
     return withBody(command, next)
+  }
+
+  if (id === "PostPaymentMethods") {
+    const token = pick(QA_TEST_CARD_TOKENS, rng)
+    return withBody(command, { type: "card", card: { token: token ?? "tok_visa" } })
   }
 
   if (id === "PostInvoiceitems") {

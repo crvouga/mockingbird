@@ -22,7 +22,12 @@ export type FaultRule = {
    * rules added through `POST /__admin/faults` default to the calling namespace.
    */
   namespace?: string
-  status: number
+  /**
+   * Status of the injected response. Omit for a rule that only delays (`delayMs` /
+   * `latencyMs`), only drops the connection (`drop`), or only switches on an `effect`:
+   * the request then still reaches the service.
+   */
+  status?: number
   /** Response body, serialized as JSON. A string is sent as-is. */
   body?: unknown
   headers?: Record<string, string>
@@ -32,6 +37,43 @@ export type FaultRule = {
   rate?: number
   /** Hold the response back this long, to exercise timeouts. */
   delayMs?: number
+  /** Alias of `delayMs`. */
+  latencyMs?: number
+  /**
+   * Drop the connection instead of answering: an in-process `fetch` rejects with a
+   * `TypeError`, and a served mock destroys the socket. Models "unknown outcome" failures.
+   */
+  drop?: boolean
+  /**
+   * A named service behaviour to switch on for the matching request instead of (or
+   * before) a canned response, e.g. `created_but_500` or `numeric_tracking_id`. Services
+   * read it with `faultEffects(request)`.
+   */
+  effect?: string
+  /** Parameters for `effect`. */
+  params?: Record<string, unknown>
+  /** From the preset this rule was expanded from, if any. */
+  preset?: string
+}
+
+/** A fault that fired for one request. */
+export type FaultHit = {
+  id: string
+  /** The injected response; absent when the rule only delays, drops, or sets an effect. */
+  response?: Response
+  drop?: boolean
+  effect?: { name: string; params: Record<string, unknown> }
+}
+
+/**
+ * A named, documented fault a suite switches on by name
+ * (`POST /__admin/faults {"preset": "rate_limited"}`): one or more rules, and optionally a
+ * webhook delivery fault.
+ */
+export type FaultPreset = {
+  description: string
+  rules?: Omit<FaultRule, "id">[]
+  webhook?: { mode: "duplicate" | "reorder" | "drop"; count?: number }
 }
 
 /** What a request looks like to the fault matcher. */
@@ -48,10 +90,11 @@ export type FaultRegistry = {
   remove(id: string): boolean
   clear(): void
   /**
-   * The fault this request should get, or `undefined` to let it through.
-   * Consumes one of the matching rule's remaining uses.
+   * Every fault this request should get, in rule order, stopping at the first that answers
+   * or drops (effect-only and delay-only rules let later rules match too). Consumes one of
+   * each matching rule's remaining uses.
    */
-  take(candidate: FaultCandidate): Promise<{ id: string; response: Response } | undefined>
+  take(candidate: FaultCandidate): Promise<FaultHit[]>
 }
 
 type Entry = { rule: FaultRule; remaining: number | null; hits: number }
@@ -73,11 +116,12 @@ const matches = (rule: FaultRule, candidate: FaultCandidate): boolean => {
 }
 
 const faultResponse = (rule: FaultRule): Response => {
+  const status = rule.status ?? 500
   const headers = { "content-type": "application/json", ...rule.headers }
-  if (typeof rule.body === "string")
-    return new Response(rule.body, { status: rule.status, headers })
+  if (typeof rule.body === "string") return new Response(rule.body, { status, headers })
+  if (rule.body === null) return new Response(null, { status, headers: rule.headers ?? {} })
   const body = rule.body === undefined ? { detail: "Injected by Mockingbird" } : rule.body
-  return new Response(JSON.stringify(body), { status: rule.status, headers })
+  return new Response(JSON.stringify(body), { status, headers })
 }
 
 /**
@@ -106,6 +150,7 @@ export const createFaultRegistry = (rng: Rng = createRng(0)): FaultRegistry => {
       entries.length = 0
     },
     async take(candidate) {
+      const hits: FaultHit[] = []
       for (const entry of entries) {
         if (entry.remaining === 0) continue
         if (!matches(entry.rule, candidate)) continue
@@ -114,12 +159,20 @@ export const createFaultRegistry = (rng: Rng = createRng(0)): FaultRegistry => {
         if (rng.next() >= rate) continue
         entry.hits++
         if (entry.remaining !== null) entry.remaining--
-        if (entry.rule.delayMs !== undefined && entry.rule.delayMs > 0) {
-          await new Promise((resolve) => setTimeout(resolve, entry.rule.delayMs))
+        const delay = entry.rule.delayMs ?? entry.rule.latencyMs
+        if (delay !== undefined && delay > 0) {
+          await new Promise((resolve) => setTimeout(resolve, delay))
         }
-        return { id: entry.rule.id, response: faultResponse(entry.rule) }
+        const hit: FaultHit = { id: entry.rule.id }
+        if (entry.rule.effect !== undefined) {
+          hit.effect = { name: entry.rule.effect, params: entry.rule.params ?? {} }
+        }
+        if (entry.rule.drop === true) hit.drop = true
+        else if (entry.rule.status !== undefined) hit.response = faultResponse(entry.rule)
+        hits.push(hit)
+        if (hit.drop || hit.response) break
       }
-      return undefined
+      return hits
     },
   }
 }

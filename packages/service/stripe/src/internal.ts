@@ -1,105 +1,199 @@
-import { type OperationContext, opaqueToken } from "@crvouga/mockingbird-service"
-import { accountOf } from "./account.js"
-import { cardError, invalidRequest, parameterMissing, resourceMissing } from "./errors.js"
+import { faultEffect, type OperationContext, opaqueToken } from "@crvouga/mockingbird-service"
+import type { AccountDirectory } from "./accounts.js"
+import { requestInfo } from "./context.js"
+import { invalidRequest, parameterMissing, resourceMissing } from "./errors.js"
 import { mergeMetadata } from "./fields.js"
-import { renderCheckoutSession, renderInvoice, renderPaymentIntent } from "./render.js"
+import { shapeForEra } from "./shape.js"
 import {
   type AccountState,
-  type ChargeRecord,
   type CustomerEntry,
   type CustomerRecord,
-  type DiscountRecord,
-  type InvoiceLineRecord,
-  type InvoiceRecord,
   type Metadata,
-  type PaymentIntentRecord,
-  type PaymentMethodRecord,
   type PriceRecord,
   type StripeState,
   seconds,
 } from "./state.js"
-import {
-  type CardDetails,
-  chargeOutcomeFor,
-  TEST_CARD_TOKENS,
-  TEST_PAYMENT_METHODS,
-} from "./test-tokens.js"
-import { STRIPE_API_VERSION } from "./version.js"
+import { type ApiEra, eraOf } from "./version.js"
 
 type RecordValue = Record<string, unknown>
 
-/** What the server publishes when the mock records an event. */
-export type StripeWebhookEvent = { type: string; account: string; body: string }
+/** What the server publishes when the mock records an event: the exact bytes to deliver. */
+export type StripeWebhookEvent = {
+  /** `evt_…`, the id receivers dedupe on. */
+  id: string
+  type: string
+  /** The account partition the event belongs to (webhook endpoints are tagged with it). */
+  account: string
+  /** The JSON event, rendered at the account's webhook API version. */
+  body: string
+}
 
 export type WebhookPublisher = (event: StripeWebhookEvent) => void
-
-/** Everything a handler needs, resolved once per request from the bearer key. */
-export type RequestScope = {
-  account: AccountState
-  ids: StripeState["ids"]
-  now: () => number
-  emit: (type: string, object: RecordValue, previous?: RecordValue) => string
-}
 
 export type Services = {
   state: StripeState
   publish: WebhookPublisher | undefined
+  accounts: AccountDirectory
+  /** Version webhook payloads render at, per account. */
+  deliveryVersion: (account: string) => string
+  /** How many endpoints an event of this account will be delivered to (`pending_webhooks`). */
+  pendingWebhooks: (account: string, type: string) => number
+  /** Path prefix that selects this instance's namespace (`/ns/<name>`), or `""`. */
+  namespacePrefix: string
+  /** Public base URL override for hosted pages; defaults to the caller's origin. */
+  publicUrl: string | undefined
+  /** Webhook endpoints created or changed through the API (the runtime re-derives fan-out). */
+  endpointsChanged?: () => void
+}
+
+/** Everything a handler needs, resolved once per request (or per clock tick). */
+export type RequestScope = {
+  services: Services
+  account: AccountState
+  ids: StripeState["ids"]
+  /** The mock clock, in ms. */
+  now: () => number
+  era: ApiEra
+  /** Public base URL of this namespace's hosted pages, e.g. `http://127.0.0.1:12111/ns/w1`. */
+  base: string
+  /** Parameters of a fault effect that fired for this request, if it did. */
+  effect: (name: string) => Record<string, unknown> | undefined
+  emit: (type: string, object: RecordValue, previous?: RecordValue) => string
+}
+
+const eventRequest = (id: string | null, idempotencyKey: string | null) => ({
+  id,
+  idempotency_key: idempotencyKey,
+})
+
+/**
+ * Record an event in the account's ledger (feeding `GET /v1/events`) and hand the webhook
+ * payload to the publisher. The ledger keeps the full rendering, so `GET /v1/events` can shape
+ * it for whichever API version reads it; the delivered bytes are shaped for the account's
+ * webhook version.
+ */
+const recordEvent = (
+  services: Services,
+  account: AccountState,
+  now: () => number,
+  request: { id: string | null; idempotency_key: string | null },
+  type: string,
+  object: RecordValue,
+  previous: RecordValue | undefined,
+): string => {
+  const { state } = services
+  const id = state.ids.next("evt_", 24)
+  const created = seconds(now)
+  const version = services.deliveryVersion(account.account)
+  const data = previous === undefined ? { object } : { object, previous_attributes: previous }
+  const payload: RecordValue = {
+    id,
+    object: "event",
+    api_version: version,
+    created,
+    data,
+    livemode: false,
+    pending_webhooks: services.pendingWebhooks(account.account, type),
+    request,
+    type,
+  }
+  const stored = JSON.stringify(payload)
+  const sequence = account.events.nextSequence()
+  account.events.insert(String(sequence), {
+    id,
+    type,
+    created,
+    account: account.account,
+    body: stored,
+    data: data as { object: RecordValue; previous_attributes?: RecordValue },
+  })
+  const body = JSON.stringify(shapeForEra(payload, eraOf(version)))
+  // Delivery is best-effort: a failing publisher must never turn the API call into a 500. The
+  // event is already in the ledger, so `GET /v1/events` (and a replay sweep) still sees it.
+  try {
+    services.publish?.({ id, type, account: account.account, body })
+  } catch (error) {
+    console.error(
+      `stripe webhook publisher failed: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  }
+  return id
 }
 
 export const requestScope = (services: Services, context: OperationContext): RequestScope => {
-  const { state } = services
-  const account = state.for(accountOf(context.request))
-  const now = context.now
+  const info = requestInfo(context.request)
+  const account = services.state.for(info.account)
+  const idempotencyKey = context.request.headers.get("idempotency-key")
+  let requestId: string | undefined
   return {
+    services,
     account,
-    ids: state.ids,
-    now,
+    ids: services.state.ids,
+    now: context.now,
+    era: info.era,
+    base: services.publicUrl ?? `${info.origin}${services.namespacePrefix}`,
+    effect: (name) => faultEffect(context.request, name),
     emit: (type, object, previous) => {
-      const id = state.ids.next("evt_")
-      const created = seconds(now)
-      const payload: RecordValue = {
-        id,
-        object: "event",
-        api_version: STRIPE_API_VERSION,
-        created,
-        data: previous === undefined ? { object } : { object, previous_attributes: previous },
-        livemode: false,
-        pending_webhooks: 1,
-        request: { id: state.ids.next("req_"), idempotency_key: null },
+      requestId ??= services.state.ids.next("req_")
+      return recordEvent(
+        services,
+        account,
+        context.now,
+        eventRequest(requestId, idempotencyKey),
         type,
-      }
-      const body = JSON.stringify(payload)
-      const sequence = account.events.nextSequence()
-      account.events.insert(String(sequence), {
-        id,
-        type,
-        created,
-        account: account.account,
-        body,
-        data: payload.data as { object: RecordValue; previous_attributes?: RecordValue },
-      })
-      account.webhookDeliveryAttempts.insert(`${id}:1`, {
-        message_id: id,
-        account: account.account,
-        attempt: 1,
-        scheduled_at: new Date(now()).toISOString(),
-        timeout_ms: 15_000,
-        acknowledged: true,
-      })
-      // Delivery is best-effort: a failing publisher must never turn the API call into a 500. The
-      // event is already in the ledger, so `GET /v1/events` (and the caller's replay sweep) can
-      // still see it.
-      try {
-        services.publish?.({ type, account: account.account, body })
-      } catch (error) {
-        console.error(
-          `stripe webhook publisher failed: ${error instanceof Error ? error.message : String(error)}`,
-        )
-      }
-      return id
+        object,
+        previous,
+      )
     },
   }
 }
+
+/** A request's scope, acting on an account found by object id (browser pages, 3-D Secure). */
+export const scopeForAccount = (
+  services: Services,
+  context: OperationContext,
+  account: string,
+): RequestScope => {
+  const info = requestInfo(context.request)
+  const partition = services.state.for(account)
+  return {
+    services,
+    account: partition,
+    ids: services.state.ids,
+    now: context.now,
+    era: "basil",
+    base: services.publicUrl ?? `${info.origin}${services.namespacePrefix}`,
+    effect: (name) => faultEffect(context.request, name),
+    emit: (type, object, previous) =>
+      recordEvent(
+        services,
+        partition,
+        context.now,
+        eventRequest(null, null),
+        type,
+        object,
+        previous,
+      ),
+  }
+}
+
+/** A scope for work nobody requested: clock ticks and admin actions. */
+export const systemScope = (
+  services: Services,
+  account: AccountState,
+  now: () => number,
+  base = services.publicUrl ?? `http://localhost${services.namespacePrefix}`,
+): RequestScope => ({
+  services,
+  account,
+  ids: services.state.ids,
+  now,
+  era: "basil",
+  base,
+  effect: () => undefined,
+  emit: (type, object, previous) =>
+    recordEvent(services, account, now, eventRequest(null, null), type, object, previous),
+})
 
 /** Every field that changed, in the shape Stripe sends as `data.previous_attributes`. */
 export const changedFields = (
@@ -107,8 +201,8 @@ export const changedFields = (
   next: RecordValue,
 ): RecordValue | undefined => {
   const changed: RecordValue = {}
-  for (const [key, value] of Object.entries(next)) {
-    if (previous[key] === value) continue
+  for (const key of new Set([...Object.keys(previous), ...Object.keys(next)])) {
+    if (JSON.stringify(previous[key]) === JSON.stringify(next[key])) continue
     changed[key] = previous[key] ?? null
   }
   return Object.keys(changed).length === 0 ? undefined : changed
@@ -131,6 +225,17 @@ export const customerEmail = (scope: RequestScope, id: string | null) =>
 export const customerName = (scope: RequestScope, id: string | null) =>
   id === null ? null : (findCustomer(scope, id)?.name ?? null)
 
+/**
+ * The current time for a customer, in seconds: its test clock's frozen time when it has one,
+ * the mock clock otherwise.
+ */
+export const customerNow = (scope: RequestScope, customerId: string | null): number => {
+  if (customerId === null) return seconds(scope.now)
+  const clock = findCustomer(scope, customerId)?.test_clock
+  if (!clock) return seconds(scope.now)
+  return scope.account.testClocks.get(clock)?.frozen_time ?? seconds(scope.now)
+}
+
 export const requirePrice = (scope: RequestScope, id: string, param = "price"): PriceRecord => {
   const price = scope.account.prices.get(id)
   if (!price) throw resourceMissing("price", id, param)
@@ -141,276 +246,6 @@ export const requirePrice = (scope: RequestScope, id: string, param = "price"): 
 export const priceAmount = (price: PriceRecord, quantity: number) =>
   Math.round(Number(price.unit_amount_decimal) * quantity)
 
-/**
- * Resolve a payment method id, materialising Stripe's documented test payment methods
- * (`pm_card_visa` and friends) the first time they are used.
- */
-export const resolvePaymentMethod = (scope: RequestScope, id: string): PaymentMethodRecord => {
-  const existing = scope.account.paymentMethods.get(id)
-  if (existing) return existing
-  const details = TEST_PAYMENT_METHODS[id]
-  if (!details) throw resourceMissing("payment_method", id, "payment_method")
-  const record: PaymentMethodRecord = {
-    id,
-    type: "card",
-    created: seconds(scope.now),
-    customer: null,
-    billing_details: {},
-    card: cardPayload(details),
-    metadata: {},
-    token: id,
-  }
-  scope.account.paymentMethods.insert(id, record)
-  return record
-}
-
-export const cardPayload = (details: CardDetails): RecordValue => ({
-  brand: details.brand,
-  checks: details.checks,
-  country: details.country,
-  display_brand: details.brand,
-  exp_month: details.exp_month,
-  exp_year: details.exp_year,
-  fingerprint: opaqueToken(`card:${details.brand}:${details.last4}`, 16),
-  funding: details.funding,
-  last4: details.last4,
-})
-
-export const paymentMethodFromToken = (
-  scope: RequestScope,
-  token: string,
-): { record: PaymentMethodRecord; details: CardDetails } => {
-  const details = TEST_CARD_TOKENS[token]
-  if (!details) throw invalidRequest(`No such token: '${token}'`, "card[token]", "resource_missing")
-  const id = scope.ids.next("pm_")
-  const record: PaymentMethodRecord = {
-    id,
-    type: "card",
-    created: seconds(scope.now),
-    customer: null,
-    billing_details: {},
-    card: cardPayload(details),
-    metadata: {},
-    token,
-  }
-  scope.account.paymentMethods.insert(id, record)
-  return { record, details }
-}
-
-/**
- * Charge a payment intent. Success marks the intent succeeded and records a charge; a declining
- * test token raises the matching `card_error` instead, exactly as Stripe does at confirmation time.
- */
-export const confirmPaymentIntent = (
-  scope: RequestScope,
-  intent: PaymentIntentRecord,
-  paymentMethodId: string | null,
-): PaymentIntentRecord => {
-  if (intent.status === "canceled")
-    throw invalidRequest(
-      `The PaymentIntent has a status of canceled, so it cannot be confirmed.`,
-      undefined,
-      "payment_intent_unexpected_state",
-    )
-  if (paymentMethodId === null) return intent
-  if (intent.capture_method === "manual") {
-    const charge = createCharge(scope, {
-      amount: intent.amount,
-      captured: false,
-      currency: intent.currency,
-      customer: intent.customer,
-      payment_intent: intent.id,
-      payment_method: paymentMethodId,
-      invoice: intent.invoice,
-      metadata: intent.metadata,
-    })
-    const authorized: PaymentIntentRecord = {
-      ...intent,
-      amount_capturable: intent.amount,
-      latest_charge: charge.id,
-      payment_method: paymentMethodId,
-      status: "requires_capture",
-      charge_ids: [...intent.charge_ids, charge.id],
-    }
-    scope.account.paymentIntents.update(intent.id, authorized)
-    return authorized
-  }
-  const outcome = chargeOutcomeFor(paymentMethodId)
-  if (outcome.kind === "card_error") {
-    const failed: PaymentIntentRecord = {
-      ...intent,
-      payment_method: paymentMethodId,
-      status: "requires_payment_method",
-      last_payment_error: {
-        code: outcome.code,
-        decline_code: outcome.decline_code ?? null,
-        message: outcome.message,
-        type: "card_error",
-      },
-    }
-    scope.account.paymentIntents.update(intent.id, failed)
-    throw cardError(outcome.message, outcome.code, outcome.decline_code ?? outcome.code)
-  }
-  const charge = createCharge(scope, {
-    amount: intent.amount,
-    currency: intent.currency,
-    customer: intent.customer,
-    payment_intent: intent.id,
-    payment_method: paymentMethodId,
-    invoice: intent.invoice,
-    metadata: intent.metadata,
-  })
-  const succeeded: PaymentIntentRecord = {
-    ...intent,
-    amount_received: intent.amount,
-    amount_capturable: 0,
-    latest_charge: charge.id,
-    payment_method: paymentMethodId,
-    status: "succeeded",
-    charge_ids: [...intent.charge_ids, charge.id],
-  }
-  scope.account.paymentIntents.update(intent.id, succeeded)
-  return succeeded
-}
-
-export const createCharge = (
-  scope: RequestScope,
-  input: {
-    amount: number
-    currency: string
-    customer: string | null
-    payment_intent: string | null
-    payment_method: string | null
-    captured?: boolean
-    invoice?: string | null
-    metadata?: Metadata
-  },
-): ChargeRecord => {
-  const id = scope.ids.next("ch_")
-  const captured = input.captured ?? true
-  const record: ChargeRecord = {
-    id,
-    amount: input.amount,
-    amount_captured: captured ? input.amount : 0,
-    amount_refunded: 0,
-    captured,
-    created: seconds(scope.now),
-    currency: input.currency,
-    customer: input.customer,
-    description: null,
-    disputed: false,
-    invoice: input.invoice ?? null,
-    metadata: input.metadata ?? {},
-    paid: true,
-    payment_intent: input.payment_intent,
-    payment_method: input.payment_method,
-    refunded: false,
-    status: "succeeded",
-    refund_ids: [],
-  }
-  scope.account.charges.insert(id, record)
-  return record
-}
-
-/** `<pi>_secret_<opaque>`: callers recover the intent id by splitting on `_secret_`. */
-export const clientSecretFor = (id: string) => `${id}_secret_${opaqueToken(`${id}:secret`, 24)}`
-
-/**
- * A checkout session completes when its payment intent (or setup intent) succeeds: the session
- * flips to `complete` with the matching payment status and Stripe emits
- * `checkout.session.completed`.
- */
-export const completeSessionsForIntent = (
-  scope: RequestScope,
-  intent: { paymentIntent?: string; setupIntent?: string },
-) => {
-  for (const entry of scope.account.checkoutSessions.list({ order: "oldest" })) {
-    const session = entry.value
-    if (session.status !== "open") continue
-    const matches =
-      (intent.paymentIntent !== undefined && session.payment_intent === intent.paymentIntent) ||
-      (intent.setupIntent !== undefined && session.setup_intent === intent.setupIntent)
-    if (!matches) continue
-    const completed = {
-      ...session,
-      payment_status:
-        session.mode === "setup" ? ("no_payment_required" as const) : ("paid" as const),
-      status: "complete" as const,
-    }
-    scope.account.checkoutSessions.update(session.id, completed)
-    scope.emit("checkout.session.completed", renderCheckoutSession(completed))
-  }
-}
-
-/**
- * Open an invoice for the given lines: Stripe's `subscription_create` / `manual` invoices start
- * open with `amount_due` equal to the summed lines, and emit `invoice.created`.
- */
-export const openInvoice = (
-  scope: RequestScope,
-  input: {
-    customer: string | null
-    subscription: string | null
-    lines: InvoiceLineRecord[]
-    billingReason: string
-    metadata?: Metadata
-    period?: { start: number; end: number }
-  },
-): InvoiceRecord => {
-  const id = scope.ids.next("in_")
-  const created = seconds(scope.now)
-  const subtotal = input.lines.reduce((total, line) => total + line.amount, 0)
-  const customer = input.customer === null ? undefined : findCustomer(scope, input.customer)
-  const previous = scope.account.invoices
-    .list({ order: "oldest" })
-    .filter((entry) => entry.value.customer === input.customer).length
-  const prefix = customer?.invoice_prefix ?? "MOCKING"
-  const period = input.period ?? { start: created, end: created }
-  const record: InvoiceRecord = {
-    id,
-    amount_due: subtotal,
-    amount_paid: 0,
-    amount_remaining: subtotal,
-    attempt_count: 0,
-    attempted: false,
-    auto_advance: true,
-    billing_reason: input.billingReason,
-    charge: null,
-    collection_method: "charge_automatically",
-    created,
-    currency: input.lines[0]?.currency ?? "usd",
-    customer: input.customer,
-    customer_email: customer?.email ?? null,
-    customer_name: customer?.name ?? null,
-    description: null,
-    discount_ids: [],
-    due_date: null,
-    ending_balance: 0,
-    hosted_invoice_url: `https://invoice.stripe.com/i/${id}`,
-    invoice_pdf: `https://pay.stripe.com/invoice/${id}/pdf`,
-    metadata: input.metadata ?? {},
-    next_payment_attempt: null,
-    number: `${prefix}-${String(previous + 1).padStart(4, "0")}`,
-    paid: false,
-    payment_intent: null,
-    period_end: period.end,
-    period_start: period.start,
-    status: "open",
-    status_transitions: {
-      finalized_at: created,
-      marked_uncollectible_at: null,
-      paid_at: null,
-      voided_at: null,
-    },
-    subscription: input.subscription,
-    subtotal,
-    total: subtotal,
-    lines: input.lines,
-  }
-  scope.account.invoices.insert(id, record)
-  scope.emit("invoice.created", renderInvoice(record, scope.account))
-  return record
-}
 export const requireIntent = (scope: RequestScope, id: string, param = "intent") => {
   const intent = scope.account.paymentIntents.get(id)
   if (!intent) throw resourceMissing("payment_intent", id, param)
@@ -441,7 +276,7 @@ export const requireSubscription = (
 
 export const requireSession = (scope: RequestScope, id: string, param = "session") => {
   const session = scope.account.checkoutSessions.get(id)
-  if (!session) throw resourceMissing("checkout.session", id, param)
+  if (!session) throw resourceMissing("checkout session", id, param)
   return session
 }
 
@@ -468,7 +303,11 @@ export const applyBalanceTransaction = (
   const ending = input.customer.balance + input.amount
   scope.account.customers.update(input.customer.id, {
     kind: "live",
-    customer: { ...input.customer, balance: ending },
+    customer: {
+      ...input.customer,
+      balance: ending,
+      currency: input.customer.currency ?? input.currency,
+    },
   })
   scope.account.balanceTransactions.insert(id, {
     id,
@@ -490,115 +329,49 @@ export const applyBalanceTransaction = (
 export const mergeRecordMetadata = (current: Metadata, incoming: unknown): Metadata =>
   incoming === undefined ? current : mergeMetadata(current, incoming)
 
-export const adjustmentsByReason = (reason: string | null): RecordValue[] =>
-  reason === null ? [] : [{ amount: 0, discount: null, reason }]
-
-/** A draft invoice's money fields are derived from its lines. */
-export const recomputeInvoice = (invoice: InvoiceRecord): InvoiceRecord => {
-  const subtotal = invoice.lines.reduce((total, line) => total + line.amount, 0)
-  const paid = invoice.amount_paid
-  return {
-    ...invoice,
-    subtotal,
-    total: subtotal,
-    amount_due: Math.max(0, subtotal - paid),
-    amount_remaining: Math.max(0, subtotal - paid),
-  }
-}
-
-export const invoiceLineFromItem = (
-  scope: RequestScope,
-  item: {
-    id: string
-    amount: number
-    currency: string
-    description: string | null
-    quantity: number
-    metadata: Metadata
-    price: string | null
-  },
-): InvoiceLineRecord => ({
-  id: scope.ids.next("il_"),
-  amount: item.amount,
-  currency: item.currency,
-  description: item.description,
-  discount_amounts: [],
-  invoice_item: item.id,
-  metadata: item.metadata,
-  period: { start: seconds(scope.now), end: seconds(scope.now) },
-  price: item.price,
-  quantity: item.quantity,
-  proration: false,
-  subtotal: item.amount,
-  type: "invoiceitem",
-})
-
-export const invoiceLineFromPrice = (
-  scope: RequestScope,
-  price: PriceRecord,
-  quantity: number,
-): InvoiceLineRecord => ({
-  id: scope.ids.next("il_"),
-  amount: priceAmount(price, quantity),
-  currency: price.currency,
-  description: null,
-  discount_amounts: [],
-  invoice_item: null,
-  metadata: {},
-  period: { start: seconds(scope.now), end: seconds(scope.now) },
-  price: price.id,
-  quantity,
-  proration: false,
-  subtotal: priceAmount(price, quantity),
-  type: "subscription",
-})
-
-export const createDiscount = (
-  scope: RequestScope,
-  input: {
-    coupon: string
-    promotion_code?: string | null
-    customer?: string | null
-    subscription?: string | null
-    end?: number | null
-  },
-): DiscountRecord => {
-  const id = scope.ids.next("di_")
-  const record: DiscountRecord = {
-    id,
-    coupon: input.coupon,
-    promotion_code: input.promotion_code ?? null,
-    customer: input.customer ?? null,
-    subscription: input.subscription ?? null,
-    start: seconds(scope.now),
-    end: input.end ?? null,
-  }
-  scope.account.discounts.insert(id, record)
-  return record
-}
-
-export const subscriptionPeriod = (
-  now: () => number,
-  interval: "day" | "week" | "month" | "year",
-  count: number,
-) => {
-  const start = seconds(now)
-  const secondsPerDay = 86_400
-  const days =
-    interval === "day"
-      ? count
-      : interval === "week"
-        ? count * 7
-        : interval === "month"
-          ? count * 30
-          : count * 365
-  return { start, end: start + days * secondsPerDay }
-}
-
 export const requireParam = (params: RecordValue, key: string): string => {
   const value = params[key]
   if (typeof value !== "string" || value === "") throw parameterMissing(key)
   return value
 }
 
-export const renderIntentForEvent = (intent: PaymentIntentRecord) => renderPaymentIntent(intent)
+export const stringOf = (params: RecordValue, key: string): string | null => {
+  const value = params[key]
+  return typeof value === "string" && value !== "" ? value : null
+}
+
+export const intOf = (value: unknown): number | undefined => {
+  if (value === undefined || value === "" || value === null) return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : undefined
+}
+
+export const booleanOf = (value: unknown): boolean | undefined =>
+  value === true || value === "true"
+    ? true
+    : value === false || value === "false"
+      ? false
+      : undefined
+
+export const recordOf = (value: unknown): RecordValue | undefined =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as RecordValue)
+    : undefined
+
+/** `<id>_secret_<opaque>`: callers recover the intent id by splitting on `_secret_`. */
+export const clientSecretFor = (id: string) => `${id}_secret_${opaqueToken(`${id}:secret`, 24)}`
+
+/** Ensure a Stripe id-like path segment names something in this account. */
+export const assertFound = <T>(
+  value: T | undefined,
+  kind: string,
+  id: string,
+  param: string,
+): T => {
+  if (value === undefined) throw resourceMissing(kind, id, param)
+  return value
+}
+
+/** Stripe rejects an unknown enum value with this sentence shape. */
+export const invalidEnum = (param: string, allowed: readonly string[]) =>
+  invalidRequest(`Invalid ${param}: must be one of ${allowed.join(", ")}`, param)

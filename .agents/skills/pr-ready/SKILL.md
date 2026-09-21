@@ -1,1 +1,0 @@
-../../commands/pr-ready.md

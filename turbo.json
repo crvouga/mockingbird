@@ -60,6 +60,7 @@
       "dependsOn": ["build"],
       "cache": false,
       "passThroughEnv": [
+        "MOCKINGBIRD_*",
         "FC_SEED",
         "FC_NUM_RUNS",
         "MOCKINGBIRD_MAX_COMMANDS",

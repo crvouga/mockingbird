@@ -97,7 +97,7 @@ export const chargeHandlers = (services: Services): Record<string, OperationHand
   GetChargesCharge: async (context) => {
     const scope = requestScope(services, context)
     const params = queryParams(context)
-    const charge = requireCharge(scope, context.params.charge ?? "")
+    const charge = requireCharge(scope, context.params.charge ?? "", "id")
     return jsonResponse(200, render(scope, charge, params.expand))
   },
 })
