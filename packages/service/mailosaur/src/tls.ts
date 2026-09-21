@@ -44,8 +44,13 @@ const oid = (dotted: string): Uint8Array => {
   return tlv(0x06, Uint8Array.from(out))
 }
 
-const integer = (value: Uint8Array) =>
-  tlv(0x02, (value[0] ?? 0) & 0x80 ? Uint8Array.from([0, ...value]) : value)
+/** A non-negative DER INTEGER: minimal bytes (no redundant leading zeros), 0x00-padded if the high bit is set. */
+const integer = (value: Uint8Array) => {
+  let start = 0
+  while (start < value.length - 1 && value[start] === 0) start++
+  const bytes = value.subarray(start)
+  return tlv(0x02, (bytes[0] ?? 0) & 0x80 ? Uint8Array.from([0, ...bytes]) : bytes)
+}
 
 const utcTime = (date: Date) => {
   const two = (n: number) => String(n).padStart(2, "0")
