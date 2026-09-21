@@ -9,8 +9,9 @@
  * Every command except `logs` prints exactly one JSON object on stdout.
  * `logs` prints a plain-text excerpt. Human/child noise never reaches stdout.
  *
- * Required check contexts mirror the job names in .github/workflows/ci.yml —
- * rename a job there and REQUIRED_CHECK_CONTEXTS must follow.
+ * Every check that runs on a PR is required. The contexts mirror the job names in
+ * .github/workflows/ci.yml (rename a job there and REQUIRED_CHECKS must follow) plus the
+ * GitGuardian app's check; each is pinned to the app that reports it.
  */
 import { unlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -24,8 +25,16 @@ const root = process.cwd()
 const TRUNK_BRANCH = "main"
 const RULESET_NAME = "Protect main"
 const LEGACY_RULESET_NAMES = ["Require CI on main"]
-const REQUIRED_CHECK_CONTEXTS = ["Required"]
 const ACTIONS_INTEGRATION_ID = 15368
+const GITGUARDIAN_INTEGRATION_ID = 46505
+/** Release is left out: it only runs on pushes to main, never on a PR. */
+const REQUIRED_CHECKS: RequiredStatusCheck[] = [
+  { context: "Required", integration_id: ACTIONS_INTEGRATION_ID },
+  { context: "Commitlint", integration_id: ACTIONS_INTEGRATION_ID },
+  { context: "Check", integration_id: ACTIONS_INTEGRATION_ID },
+  { context: "GitGuardian Security Checks", integration_id: GITGUARDIAN_INTEGRATION_ID },
+]
+const REQUIRED_CHECK_CONTEXTS = REQUIRED_CHECKS.map((check) => check.context)
 const ALLOWED_MERGE_METHODS = ["merge"]
 
 const EXIT = { ok: 0, fail: 1, usage: 2, conflicts: 3, pending: 4 } as const
@@ -300,10 +309,7 @@ function canonicalRuleset(base: string): CanonicalRuleset {
         parameters: {
           strict_required_status_checks_policy: true,
           do_not_enforce_on_create: false,
-          required_status_checks: REQUIRED_CHECK_CONTEXTS.map((context) => ({
-            context,
-            integration_id: ACTIONS_INTEGRATION_ID,
-          })),
+          required_status_checks: REQUIRED_CHECKS,
         },
       },
       { type: "deletion" },
@@ -319,8 +325,10 @@ function ruleDrift(found: RulesetRule, want: CanonicalRule): string[] {
   const live = found.parameters ?? {}
   const expected = want.parameters ?? {}
   if (want.type === "required_status_checks") {
-    const contexts = (live.required_status_checks ?? []).map((c) => c.context).sort()
-    const wanted = (expected.required_status_checks ?? []).map((c) => c.context).sort()
+    // A context and the app that must report it: a same-named check from another app is drift.
+    const key = (c: RequiredStatusCheck) => `${c.context}@${c.integration_id ?? "any"}`
+    const contexts = (live.required_status_checks ?? []).map(key).sort()
+    const wanted = (expected.required_status_checks ?? []).map(key).sort()
     if (JSON.stringify(contexts) !== JSON.stringify(wanted)) {
       drift.push(`contexts=[${contexts.join(",")}]`)
     }
