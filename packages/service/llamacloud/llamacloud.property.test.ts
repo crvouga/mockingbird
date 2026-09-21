@@ -32,7 +32,7 @@ describe("LlamaCloudAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 150,
+        numRuns: Math.max(params.numRuns ?? 150, 150),
         maxCommands: 20,
         // Everything below the pipeline needs a pipeline id from an earlier search in the same
         // walk, and document reads/deletes need a document from an earlier write.

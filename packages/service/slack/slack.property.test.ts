@@ -32,7 +32,7 @@ describe("SlackAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 30,
+        numRuns: Math.max(params.numRuns ?? 100, 100),
         maxCommands: 25,
         latencyToleranceMs: 1_000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),

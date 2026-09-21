@@ -53,7 +53,7 @@ describe("VpiAPI", () => {
           CheckProviderSignatureNeededDuplicate: 3,
         },
         coverageBias: 4,
-        numRuns: params.numRuns ?? 100,
+        numRuns: Math.max(params.numRuns ?? 200, 200),
         maxCommands: 30,
         latencyToleranceMs: 1_000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),

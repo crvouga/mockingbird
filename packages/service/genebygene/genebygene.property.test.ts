@@ -51,7 +51,7 @@ describe("GeneByGeneAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 250,
+        numRuns: Math.max(params.numRuns ?? 250, 250),
         maxCommands: 30,
         coverageBias: 4,
         weights: {

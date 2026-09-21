@@ -95,7 +95,7 @@ describe("FlexAPI", () => {
             },
             only: ["ListProducts"],
             numRuns: 10,
-            maxCommands: 3,
+            maxCommands: 6,
             seed,
             invalidProbability: 0,
             sleep: async () => {},
