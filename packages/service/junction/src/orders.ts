@@ -11,7 +11,6 @@ import {
   type LabAccountStatus,
   renderLabAccount,
   selectLabAccount,
-  TEAM_LAB_ACCOUNTS,
 } from "./lab-accounts.js"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
@@ -752,7 +751,9 @@ export const orderHandlers = (state: JunctionState) => ({
   get_team_lab_accounts_v3_lab_test_lab_account_get: async (context: OperationContext) => {
     const requestedId = labAccountIdFilter(context)
     const status = labAccountStatusFilter(context)
-    const data = TEAM_LAB_ACCOUNTS.filter((entry) => entry.team_id_allowlist.includes(MOCK_TEAM_ID))
+    const data = state
+      .listLabAccounts()
+      .filter((entry) => entry.team_id_allowlist.includes(MOCK_TEAM_ID))
       .filter((entry) => requestedId === null || entry.id === requestedId)
       .filter((entry) => status === null || entry.status === status)
       .map(renderLabAccount)
@@ -903,6 +904,7 @@ export const orderHandlers = (state: JunctionState) => ({
       labSlug,
       typeof body.lab_account_id === "string" ? body.lab_account_id : null,
       MOCK_TEAM_ID,
+      state.listLabAccounts(),
     )
     const billingType =
       typeof body.billing_type === "string" && body.billing_type !== ""

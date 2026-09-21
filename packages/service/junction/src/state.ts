@@ -230,6 +230,48 @@ export type OrderRecord = {
   order_transaction: OrderTransactionEmbed
 }
 
+/**
+ * A lab account as the ordering rules read it. Structurally `LabAccountRecord` from
+ * lab-accounts.ts, restated here because that module imports this one.
+ */
+export type StoredLabAccount = {
+  id: string
+  lab: string
+  org_id: string | null
+  status: "active" | "pending" | "suspended" | "ready_to_launch"
+  delegated_flow: "order_delegated" | "result_delegated" | "fully_delegated" | "not_delegated"
+  provider_account_id: string
+  account_name: string | null
+  default_clinical_notes: string | null
+  business_units: string[] | null
+  allowed_billing: Record<string, readonly string[]>
+  team_id_allowlist: readonly string[]
+}
+
+/**
+ * A chosen result for one order, installed through the admin API. Replaces the
+ * generated biomarker lines, so a suite can assert on an exact payload — an abnormal
+ * panel, a critical value, a missing marker — instead of whatever the generator made.
+ */
+export type ResultFixture = {
+  /** The fixture's name, for logs and `GET /__admin/results`. */
+  name: string
+  results?: unknown[]
+  missing_results?: unknown[] | null
+  interpretation?: string
+  /** Served from `GET /v3/order/{id}/result/pdf` instead of the generated PDF. */
+  pdf_base64?: string
+}
+
+/**
+ * How serviceability reads answer a ZIP the loaded corpus has no record for.
+ *
+ * - `synthetic`: invent plausible coverage. Right for property tests that walk random ZIPs.
+ * - `corpus`: refuse with a documented Mockingbird error. Right for a mock standing in for
+ *   the vendor, where invented coverage would silently disagree with production.
+ */
+export type GeoMode = "synthetic" | "corpus"
+
 export type WebhookPublisher = (event: JunctionWebhookEvent) => void
 
 export type JunctionWebhookOptions = {
@@ -267,9 +309,23 @@ export class JunctionState {
 
   readonly labTests: Collection<LabTestRecord>
   readonly labs: Collection<Record<string, unknown>>
-  readonly labAccounts: Collection<Record<string, unknown>>
+  readonly labAccounts: Collection<StoredLabAccount>
+  readonly resultFixtures: Collection<ResultFixture>
   readonly expectedResults: Collection<ExpectedResult[]>
   readonly getCache: Collection<GetCacheEntry>
+
+  /** Configuration, not data: set by JunctionAPI and re-applied on reset. */
+  geoMode: GeoMode = "synthetic"
+  /** ZIPs the loaded corpus has serviceability records for. */
+  coveredZips: ReadonlySet<string> = new Set()
+  /** Identifies the loaded corpus in errors and `/health`. */
+  corpusLabel: string | undefined
+  /**
+   * The loaded corpus's recorded reads. Immutable and shared by every namespace, so it
+   * lives outside SQLite: copying hundreds of large bodies into each namespace would
+   * make a new namespace cost seconds, and snapshots would copy them too.
+   */
+  corpusObservations: ReadonlyMap<string, GetCacheEntry> = new Map()
 
   constructor(
     sqlite: SqliteClient,
@@ -302,6 +358,7 @@ export class JunctionState {
     this.labTests = new Collection(sqlite, namespace, "lab_tests")
     this.labs = new Collection(sqlite, namespace, "labs")
     this.labAccounts = new Collection(sqlite, namespace, "lab_accounts")
+    this.resultFixtures = new Collection(sqlite, namespace, "result_fixtures")
     this.expectedResults = new Collection(sqlite, namespace, "expected_results")
     this.getCache = new Collection(sqlite, namespace, "get_cache")
     this.ids = new IdSequence(sqlite, namespace, "junction")
@@ -326,13 +383,6 @@ export class JunctionState {
     if (lab.id !== undefined && lab.id !== null) return String(lab.id)
     if (typeof lab.slug === "string" && lab.slug.length > 0) return lab.slug
     return opaqueToken(`junction:lab:${JSON.stringify(lab)}`, 16)
-  }
-
-  labAccountKeyOf(account: Record<string, unknown>): string {
-    if (typeof account.lab_account_id === "string" && account.lab_account_id.length > 0) {
-      return account.lab_account_id
-    }
-    return this.labKeyOf(account)
   }
 
   labTestById(id: string): LabTestRecord | undefined {
@@ -406,7 +456,7 @@ export class JunctionState {
     return this.labs.list({ order: "oldest" }).map((entry) => entry.value)
   }
 
-  listLabAccounts(): Record<string, unknown>[] {
+  listLabAccounts(): StoredLabAccount[] {
     return this.labAccounts.list({ order: "oldest" }).map((entry) => entry.value)
   }
 
@@ -429,17 +479,18 @@ export class JunctionState {
     }
   }
 
-  replaceLabAccounts(entries: readonly Record<string, unknown>[]): void {
+  replaceLabAccounts(entries: readonly StoredLabAccount[]): void {
     this.clearCollection(this.labAccounts)
-    for (const entry of entries) this.labAccounts.insert(this.labAccountKeyOf(entry), clone(entry))
+    for (const entry of entries) this.labAccounts.insert(entry.id, clone(entry))
   }
 
   putGetCache(key: string, entry: GetCacheEntry): void {
     this.getCache.insert(key, clone(entry))
   }
 
+  /** A recorded read: one seeded into this namespace first, then the shared corpus. */
   getGetCache(key: string): GetCacheEntry | undefined {
-    const entry = this.getCache.get(key)
+    const entry = this.getCache.get(key) ?? this.corpusObservations.get(key)
     return entry ? clone(entry) : undefined
   }
 

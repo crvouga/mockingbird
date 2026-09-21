@@ -198,14 +198,18 @@ export const TEAM_LAB_ACCOUNTS: readonly LabAccountRecord[] = [
 /** Every lab slug in the team lab inventory — these labs have a Junction platform account. */
 export const PLATFORM_ACCOUNT_LABS: readonly string[] = TEAM_LABS.map((lab) => String(lab.slug))
 
-export const labAccountById = (id: string): LabAccountRecord | undefined =>
-  TEAM_LAB_ACCOUNTS.find((entry) => entry.id === id)
+export const labAccountById = (
+  id: string,
+  accounts: readonly LabAccountRecord[] = TEAM_LAB_ACCOUNTS,
+): LabAccountRecord | undefined => accounts.find((entry) => entry.id === id)
 
-/** Team-linked accounts for a lab, in fixture order. */
-export const linkedLabAccounts = (labSlug: string, teamId: string): LabAccountRecord[] =>
-  TEAM_LAB_ACCOUNTS.filter(
-    (entry) => entry.lab === labSlug && entry.team_id_allowlist.includes(teamId),
-  )
+/** Team-linked accounts for a lab, in configured order. */
+export const linkedLabAccounts = (
+  labSlug: string,
+  teamId: string,
+  accounts: readonly LabAccountRecord[] = TEAM_LAB_ACCOUNTS,
+): LabAccountRecord[] =>
+  accounts.filter((entry) => entry.lab === labSlug && entry.team_id_allowlist.includes(teamId))
 
 export const effectiveBilling = (
   account: LabAccountRecord | "platform",
@@ -221,9 +225,10 @@ export const selectLabAccount = (
   labSlug: string,
   requestedId: string | null,
   teamId: string,
+  accounts: readonly LabAccountRecord[] = TEAM_LAB_ACCOUNTS,
 ): LabAccountRecord | "platform" => {
   if (requestedId !== null) {
-    const linked = labAccountById(requestedId)
+    const linked = labAccountById(requestedId, accounts)
     if (!linked) throw new HttpError(400, { detail: "Lab account does not exist" })
     if (!linked.team_id_allowlist.includes(teamId))
       throw new HttpError(400, { detail: "Lab account is not linked to your team" })
@@ -233,7 +238,7 @@ export const selectLabAccount = (
       throw new HttpError(400, { detail: "Lab account is not active" })
     return linked
   }
-  const candidates = linkedLabAccounts(labSlug, teamId)
+  const candidates = linkedLabAccounts(labSlug, teamId, accounts)
   if (candidates.length === 0) {
     if (PLATFORM_ACCOUNT_LABS.includes(labSlug)) return "platform"
     throw new HttpError(400, { detail: `No active lab account is available for lab ${labSlug}` })
@@ -264,3 +269,103 @@ export const renderLabAccount = (entry: LabAccountRecord): Record<string, unknow
   ),
   team_id_allowlist: [...entry.team_id_allowlist],
 })
+
+/**
+ * A lab account as a consumer configures it. Mirrors `ClientFacingLabAccount`, with
+ * every field but `id` and `lab` optional, plus a `states` shorthand for the common
+ * case of an account that client-bills in a fixed set of states.
+ */
+export type LabAccountInput = {
+  id: string
+  /** Lab slug, e.g. `"quest"`, `"labcorp"`, `"bioreference"`. */
+  lab: string
+  status?: LabAccountStatus
+  delegated_flow?: LabAccountDelegatedFlow
+  account_name?: string | null
+  provider_account_id?: string
+  org_id?: string | null
+  business_units?: string[] | null
+  default_clinical_notes?: string | null
+  /** Billing type → states it is allowed in. Takes precedence over `states`. */
+  allowed_billing?: Record<string, readonly string[]>
+  /** Shorthand for `allowed_billing: { client_bill: states }`. Default: every state. */
+  states?: readonly string[]
+  /** Teams the account is linked to. Default: the mock team, so it is selectable. */
+  team_id_allowlist?: readonly string[]
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const stringList = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string")
+    ? [...(value as string[])]
+    : undefined
+
+/** Normalize a consumer's configuration into the record the ordering rules read. */
+export const labAccountFromInput = (input: LabAccountInput): LabAccountRecord => {
+  if (typeof input.id !== "string" || input.id === "")
+    throw new TypeError("lab account needs a non-empty id")
+  if (typeof input.lab !== "string" || input.lab === "")
+    throw new TypeError(`lab account ${input.id} needs a lab slug`)
+  for (const state of input.states ?? []) {
+    if (!US_STATES.includes(state))
+      throw new TypeError(`lab account ${input.id}: ${state} is not a US state code`)
+  }
+  return {
+    id: input.id,
+    lab: input.lab.toLowerCase(),
+    org_id: input.org_id === undefined ? MOCK_ORG_ID : input.org_id,
+    status: input.status ?? "active",
+    delegated_flow: input.delegated_flow ?? "not_delegated",
+    provider_account_id:
+      input.provider_account_id ?? opaqueToken(`junction:lab-account-provider:${input.id}`, 16),
+    account_name: input.account_name ?? null,
+    default_clinical_notes: input.default_clinical_notes ?? null,
+    business_units: input.business_units ?? null,
+    allowed_billing: input.allowed_billing ?? { client_bill: input.states ?? ALL_BILLING_STATES },
+    team_id_allowlist: input.team_id_allowlist ?? [MOCK_TEAM_ID],
+  }
+}
+
+/**
+ * Read a `ClientFacingLabAccount` from a real team's listing (a pulled corpus).
+ *
+ * The listing only returns accounts linked to the calling team, so each one is linked
+ * to the mock team too — the real team id is kept alongside, never replaced.
+ */
+export const labAccountFromClientFacing = (
+  value: Record<string, unknown>,
+): LabAccountRecord | undefined => {
+  if (typeof value.id !== "string" || typeof value.lab !== "string") return undefined
+  const billing: Record<string, readonly string[]> = {}
+  if (isRecord(value.allowed_billing)) {
+    for (const [type, states] of Object.entries(value.allowed_billing)) {
+      const list = stringList(states)
+      if (list) billing[type] = list
+    }
+  }
+  const allowlist = stringList(value.team_id_allowlist) ?? []
+  return {
+    id: value.id,
+    lab: value.lab.toLowerCase(),
+    org_id: typeof value.org_id === "string" ? value.org_id : null,
+    status: LAB_ACCOUNT_STATUSES.includes(value.status as LabAccountStatus)
+      ? (value.status as LabAccountStatus)
+      : "active",
+    delegated_flow:
+      typeof value.delegated_flow === "string"
+        ? (value.delegated_flow as LabAccountDelegatedFlow)
+        : "not_delegated",
+    provider_account_id:
+      typeof value.provider_account_id === "string"
+        ? value.provider_account_id
+        : opaqueToken(`junction:lab-account-provider:${value.id}`, 16),
+    account_name: typeof value.account_name === "string" ? value.account_name : null,
+    default_clinical_notes:
+      typeof value.default_clinical_notes === "string" ? value.default_clinical_notes : null,
+    business_units: stringList(value.business_units) ?? null,
+    allowed_billing: billing,
+    team_id_allowlist: allowlist.includes(MOCK_TEAM_ID) ? allowlist : [...allowlist, MOCK_TEAM_ID],
+  }
+}

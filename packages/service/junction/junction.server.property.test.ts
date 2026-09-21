@@ -74,7 +74,7 @@ describe("junction mock server contract", () => {
   test("/health is reachable without auth", async () => {
     const response = await fetch(`${base}/health`)
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: "ok" })
+    expect(await response.json()).toMatchObject({ status: "ok" })
   })
 
   test("area info is gated by the api key and serves the corpus", async () => {
@@ -93,7 +93,7 @@ describe("junction mock server contract", () => {
   test("POST /__admin/reset returns ok", async () => {
     const response = await fetch(`${base}/__admin/reset`, { method: "POST" })
     expect(response.status).toBe(200)
-    expect(await response.json()).toEqual({ status: "ok" })
+    expect(await response.json()).toMatchObject({ status: "ok" })
   })
 
   test("missing corpus path exits non-zero with a clear message", async () => {
@@ -175,12 +175,15 @@ describe("junction mock server contract", () => {
     receiver.close()
     const payload = JSON.parse(delivery.body) as { event_type?: string }
     expect(payload.event_type).toBe("labtest.order.created")
+    const id = delivery.headers["svix-id"]
     const timestamp = delivery.headers["svix-timestamp"]
     const signature = delivery.headers["svix-signature"]
+    expect(typeof id).toBe("string")
     expect(typeof timestamp).toBe("string")
     expect(typeof signature).toBe("string")
+    // Standard Svix: HMAC-SHA256 over "<svix-id>.<svix-timestamp>.<body>".
     const expected = createHmac("sha256", Buffer.from(keyB64, "base64"))
-      .update(`${String(timestamp)}.${delivery.body}`)
+      .update(`${String(id)}.${String(timestamp)}.${delivery.body}`)
       .digest("base64")
     expect(signature).toBe(`v1,${expected}`)
   })

@@ -7,13 +7,27 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./corpus": {
+      "types": "./dist/corpus.d.ts",
+      "default": "./dist/corpus.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
     }
+  },
+  "bin": {
+    "mockingbird-junction": "./dist/cli.js"
   },
   "publishConfig": {
     "access": "public",
@@ -33,6 +47,10 @@
   ],
   "mockingbird": {
     "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
     "layer": "service"
   },
   "scripts": {
@@ -53,7 +71,8 @@
     "webhook:deploy": "wrangler deploy --config webhook-receiver/wrangler.jsonc",
     "webhook:register": "bun scripts/register-webhook.ts",
     "portability": "bun ../../../scripts/portability.ts",
-    "pack:check": "bun ../../../scripts/pack-check.ts"
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "verify": "bun src/cli.ts verify"
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",

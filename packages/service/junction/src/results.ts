@@ -202,21 +202,25 @@ export const resultsHandlers = (state: JunctionState) => ({
     const user = state.users.get(order.user_id)
     if (!resultsReady(order)) resultsNotAvailable(order.id)
     const flags = flagsOf(order)
-    const results = biomarkerLines(order, flags)
-    const missing = flags.hasMissingResults
-      ? [
-          {
-            name: (order.lab_test.markers ?? [])[0]?.name ?? "Unknown marker",
-            slug: (order.lab_test.markers ?? [])[0]?.slug ?? "unknown-marker",
-            inferred_failure_type: "quantity_not_sufficient_failure",
-            note: "Specimen quantity was not sufficient to run this marker.",
-            loinc: null,
-            loinc_slug: null,
-            provider_id: (order.lab_test.markers ?? [])[0]?.provider_id ?? null,
-            source_markers: null,
-          },
-        ]
-      : null
+    const fixture = state.resultFixtures.get(order.id)
+    const results = fixture?.results ?? biomarkerLines(order, flags)
+    const missing =
+      fixture?.missing_results !== undefined
+        ? fixture.missing_results
+        : flags.hasMissingResults
+          ? [
+              {
+                name: (order.lab_test.markers ?? [])[0]?.name ?? "Unknown marker",
+                slug: (order.lab_test.markers ?? [])[0]?.slug ?? "unknown-marker",
+                inferred_failure_type: "quantity_not_sufficient_failure",
+                note: "Specimen quantity was not sufficient to run this marker.",
+                loinc: null,
+                loinc_slug: null,
+                provider_id: (order.lab_test.markers ?? [])[0]?.provider_id ?? null,
+                source_markers: null,
+              },
+            ]
+          : null
     return jsonRes(200, {
       metadata: metadataOf(order, user?.client_user_id ?? order.user_id),
       results,
@@ -250,7 +254,11 @@ export const resultsHandlers = (state: JunctionState) => ({
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context, "Order not found")
     if (!resultsReady(order)) resultsNotAvailable(order.id)
-    const bytes = deterministicPdf(`Lab results ${order.id}`)
+    const fixturePdf = state.resultFixtures.get(order.id)?.pdf_base64
+    const bytes =
+      fixturePdf !== undefined
+        ? Uint8Array.from(atob(fixturePdf), (char) => char.charCodeAt(0))
+        : deterministicPdf(`Lab results ${order.id}`)
     return new Response(bytes as unknown as BodyInit, {
       status: 200,
       headers: { "content-type": "application/pdf" },

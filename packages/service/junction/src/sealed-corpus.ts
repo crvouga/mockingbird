@@ -17,6 +17,8 @@ export type SealedCorpus = {
   version: typeof SEALED_CORPUS_VERSION
   recordedAt: string
   source: string
+  /** SHA-256 of the recording's content, written by `corpus pull`. Identifies it in logs. */
+  fingerprint?: string
   observations: Record<string, GetCacheEntry>
   catalog: {
     labTests: LabTestRecord[]
