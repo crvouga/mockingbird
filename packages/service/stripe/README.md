@@ -206,6 +206,19 @@ test("starts empty", async () => {
 })
 ```
 
+## What is and is not modelled
+
+- **Modelled**: the 88 operations in [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/SUPPORT.md),
+  whose behaviour is checked by live parity against Stripe test mode; state partitioned per API key;
+  the test payment methods and card tokens listed above.
+- **Not modelled**: the 20 operations SUPPORT.md marks unsupported, each with its reason; Stripe.js
+  and hosted checkout (`js.stripe.com`, `checkout.stripe.com`); real rate-limit and 5xx bodies —
+  `POST /__admin/faults` injects Mockingbird's own, which are shape-plausible, not recorded;
+  anything outside the vendored spec, which 404s and is counted in `GET /__admin/metrics` under
+  `unmatched`.
+- **Determinism**: with a fixed clock and `seed`, ids and timestamps replay exactly — two runtimes
+  given the same clock produce the same `cus_…` ids and `created` values.
+
 ## API
 
 `StripeAPI` is the main export; the rest supports account scoping, contract introspection and the

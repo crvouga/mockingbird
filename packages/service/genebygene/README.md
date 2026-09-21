@@ -164,6 +164,19 @@ test("catalog has the seed product", async () => {
 })
 ```
 
+## What is and is not modelled
+
+- **Modelled**: all four operations in the vendored subset (see
+  [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/genebygene/SUPPORT.md)),
+  each verified by live parity against GeneByGene staging, including the documented token and
+  validation errors.
+- **Not modelled**: any endpoint outside those four, which 404s and is counted in
+  `GET /__admin/metrics` under `unmatched`; real rate-limit and 5xx bodies — `POST /__admin/faults`
+  injects Mockingbird's own, which are shape-plausible, not recorded; token expiry is reported
+  (`expires_in: 3600`) but never enforced.
+- **Determinism**: tokens are deterministic per client id/secret pair, and with a fixed clock and
+  `seed` ids and timestamps replay exactly.
+
 ## API
 
 | Export | Description |
