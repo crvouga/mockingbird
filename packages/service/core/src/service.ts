@@ -21,6 +21,11 @@ export type APIOptions = {
   sqlite?: SqliteClient
   /** Clock used for `created`-style fields. Default `Date.now`. */
   now?: () => number
+  /**
+   * Storage namespace for this instance's records. Instances sharing one SQLite
+   * client stay isolated when their namespaces differ. Defaults to the service name.
+   */
+  namespace?: string
 }
 
 export type OperationContext = {

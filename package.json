@@ -44,6 +44,7 @@
     "parity:stripe": "bun scripts/vault-run.ts --config prd -- turbo run parity --filter=@crvouga/mockingbird-service-stripe",
     "parity:junction": "bun scripts/vault-run.ts --config prd -- turbo run parity --filter=@crvouga/mockingbird-service-junction",
     "parity:genebygene": "bun scripts/vault-run.ts --config prd -- turbo run parity --filter=@crvouga/mockingbird-service-genebygene",
+    "verify:junction": "bun scripts/vault-run.ts --config prd -- bun run --cwd packages/service/junction verify -- --sample 60 --orders",
     "check:boundaries": "bun scripts/check-boundaries.ts",
     "check:agents": "bun scripts/agent-commands.ts --check",
     "agents:sync": "bun scripts/agent-commands.ts",

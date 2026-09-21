@@ -21,6 +21,29 @@ import type {
 } from "./state.js"
 import { MOCK_TEAM_ID } from "./state.js"
 
+/** Status of the unknown-ZIP error: unused by Junction, and not retried by HTTP clients. */
+export const UNKNOWN_ZIP_STATUS = 424
+export const UNKNOWN_ZIP_ERROR_TYPE = "MOCKINGBIRD_UNKNOWN_ZIP"
+
+/**
+ * In `corpus` geo mode, refuse a ZIP the corpus has no serviceability record for.
+ *
+ * The error is deliberately not Junction-shaped in status: a consumer that classifies
+ * vendor errors must not mistake a fixture gap for a real validation failure and carry
+ * on. It fails loudly, and says how to close the gap.
+ */
+const requireCoveredZip = (state: JunctionState, zip: string): void => {
+  if (state.geoMode !== "corpus" || state.coveredZips.has(zip)) return
+  throw new HttpError(UNKNOWN_ZIP_STATUS, {
+    detail: {
+      error_type: UNKNOWN_ZIP_ERROR_TYPE,
+      error_message: `ZIP ${zip} is not in the loaded Junction corpus (${String(state.coveredZips.size)} ZIPs covered). Record it with \`mockingbird-junction corpus pull --zip ${zip}\`, or serve with --geo synthetic to invent coverage.`,
+      zip_code: zip,
+      corpus: state.corpusLabel ?? null,
+    },
+  })
+}
+
 const cachedResponse = (state: JunctionState, context: OperationContext) => {
   const body =
     context.request.method.toUpperCase() === "GET" ||
@@ -935,7 +958,7 @@ const appendOrderStatusEvent = (
   state: JunctionState,
   order: Order,
   status: string,
-  context: OperationContext,
+  context: Pick<OperationContext, "now">,
 ): void => {
   const now = state.isoNow(context.now)
   const eventId =
@@ -998,6 +1021,25 @@ const applySimulationFlags = (order: Order, flags: Record<string, unknown> | nul
  *     jump through partial then completed (+ result date fields)
  *   - `failed.*` → append the failed status
  */
+/** Set the expected and worst-case result dates from the lab test's turnaround times. */
+const markExpectedResultDates = (order: Order, nowMs: number): void => {
+  const now = new Date(nowMs)
+  const commonDays =
+    typeof order.lab_test.common_tat_days === "number" && order.lab_test.common_tat_days > 0
+      ? order.lab_test.common_tat_days
+      : 3
+  const worstDays =
+    typeof order.lab_test.worst_case_tat_days === "number" && order.lab_test.worst_case_tat_days > 0
+      ? order.lab_test.worst_case_tat_days
+      : 5
+  const expected = new Date(now)
+  expected.setUTCDate(expected.getUTCDate() + commonDays)
+  const worst = new Date(now)
+  worst.setUTCDate(worst.getUTCDate() + worstDays)
+  order.expected_result_by_date = expected.toISOString().slice(0, 10)
+  order.worst_case_result_by_date = worst.toISOString().slice(0, 10)
+}
+
 const applySimulateTransition = (
   state: JunctionState,
   order: Order,
@@ -1083,24 +1125,7 @@ const applySimulateTransition = (
     appendOrderStatusEvent(state, order, status, context)
   }
   if (applyFlags) applySimulationFlags(order, flags)
-  if (markCompleteDates) {
-    const now = new Date(context.now())
-    const commonDays =
-      typeof order.lab_test.common_tat_days === "number" && order.lab_test.common_tat_days > 0
-        ? order.lab_test.common_tat_days
-        : 3
-    const worstDays =
-      typeof order.lab_test.worst_case_tat_days === "number" &&
-      order.lab_test.worst_case_tat_days > 0
-        ? order.lab_test.worst_case_tat_days
-        : 5
-    const expected = new Date(now)
-    expected.setUTCDate(expected.getUTCDate() + commonDays)
-    const worst = new Date(now)
-    worst.setUTCDate(worst.getUTCDate() + worstDays)
-    order.expected_result_by_date = expected.toISOString().slice(0, 10)
-    order.worst_case_result_by_date = worst.toISOString().slice(0, 10)
-  }
+  if (markCompleteDates) markExpectedResultDates(order, context.now())
   state.orders.update(order.id, order)
   state.publishOrderWebhook(order, "labtest.order.updated", context.now())
 }
@@ -1201,6 +1226,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
       })
     }
     const zip = rawZip.slice(0, 5)
+    requireCoveredZip(state, zip)
     return jsonRes(200, areaInfoFor(zip, radius, labAccountOf(context)))
   },
 
@@ -1283,6 +1309,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
     if (!lab) {
       throw new HttpError(404, { detail: "Lab not found." })
     }
+    requireCoveredZip(state, zip)
     // The sandbox returns the nearest sites within the radius, capped at 30 entries; the
     // mock synthesizes a deterministic inventory of the same contract.
     const within = withinRadiusFor(zip, lab.slug, radius)
@@ -1347,6 +1374,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
         ],
       })
     }
+    requireCoveredZip(state, zip)
     const startDate = startDateOf(context, context.now())
     const { timezone, days } = generatePhlebotomySlots(
       state,
@@ -1402,6 +1430,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
         throw new HttpError(422, { detail: "site_codes must be a JSON array of strings" })
       }
     }
+    if (zip !== undefined) requireCoveredZip(state, zip)
     const { timezone, days } = generatePscSlots(
       state,
       zip ?? "",
@@ -1708,6 +1737,38 @@ export const cascadeCancelAppointments = (
   const order = state.orders.get(orderId)
   if (!order) return
   cancelAppointment(state, appointment, order, nowMs)
+}
+
+/**
+ * Put an order straight into `status`, as the admin API does. Unlike `simulate_order`
+ * it skips the sandbox's stepwise rules, but it records the same event, dates and
+ * appointment cascade and publishes the same webhook a real transition does.
+ */
+export const forceOrderStatus = (
+  state: JunctionState,
+  order: Order,
+  status: string,
+  flags: Record<string, unknown> | null,
+  context: Pick<OperationContext, "now">,
+): void => {
+  const hasRequisition = order.events.some((entry) =>
+    typeof entry.status === "string" ? entry.status.endsWith(".requisition_created") : false,
+  )
+  if (!hasRequisition && !status.startsWith("received.")) {
+    // A real order passes through requisition before anything else; keep the ids it mints.
+    appendOrderStatusEvent(
+      state,
+      order,
+      `received.${status.split(".")[1]}.requisition_created`,
+      context,
+    )
+  }
+  appendOrderStatusEvent(state, order, status, context)
+  if (flags) applySimulationFlags(order, flags)
+  if (status.startsWith("completed.")) markExpectedResultDates(order, context.now())
+  state.orders.update(order.id, order)
+  if (status.startsWith("cancelled.")) cascadeCancelAppointments(state, order.id, context.now())
+  state.publishOrderWebhook(order, "labtest.order.updated", context.now())
 }
 
 export { applySimulateTransition, appointmentOfOrder, renderAppointment, requireOrder }

@@ -37,7 +37,8 @@ export class GeneByGeneAPI implements FetchAPI {
 
   constructor(options: GeneByGeneAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
-    this.state = new GeneByGeneState(sqlite, GENEBYGENE_NAMESPACE)
+    const namespace = options.namespace ?? GENEBYGENE_NAMESPACE
+    this.state = new GeneByGeneState(sqlite, namespace)
     const handlers = defineOperations<SupportedOperationId>({
       ...geneByGeneHandlers(this.state),
     })
@@ -45,7 +46,7 @@ export class GeneByGeneAPI implements FetchAPI {
       document,
       handlers,
       sqlite,
-      namespace: GENEBYGENE_NAMESPACE,
+      namespace,
       now: options.now,
       notFound: () => jsonRes(404, { message: "Not Found" }),
       onError: (error) => {
@@ -66,3 +67,6 @@ export class GeneByGeneAPI implements FetchAPI {
     this.state.ensureSeedProducts()
   }
 }
+
+export type { GeneByGeneRuntime, GeneByGeneRuntimeOptions } from "./runtime.js"
+export { createRuntime } from "./runtime.js"

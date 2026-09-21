@@ -29,7 +29,7 @@ https://raw.githubusercontent.com/crvouga/workspace/main/INTEGRATING.md
   [`.vault.yaml`](../.vault.yaml). In CI, [`.github/actions/setup`](../.github/actions/setup/action.yml)
   loads them with Vault GitHub OIDC (role `github-actions`, policy `ci-read`) — no stored token.
 - **Live parity sandbox keys** (`MOCKINGBIRD_*`) — in `personal/prd`; `bun run parity*` runs under
-  `vault run --config prd`. CI publish never reads them.
+  `vault run --config prd`. CI publish never reads them; the Verify workflow reads the Junction key.
 
 Local setup, once per machine (from a `crvouga/workspace` checkout; needs the `vault`/`bao` CLI + `jq`):
 
@@ -88,7 +88,9 @@ Field name = env var name, in `secret/personal/prd` (API path `secret/data/perso
 | Junction | `MOCKINGBIRD_JUNCTION_API_KEY` |
 | GeneByGene | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID`, `MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET` |
 
-`bun run parity*` injects them with `vault run --config prd`. Scripts run directly fall back to
+`bun run parity*` and `bun run verify:junction` inject them with `vault run --config prd`. The
+[Verify workflow](../.github/workflows/verify.yml) (daily, not a required check) reads only
+`MOCKINGBIRD_JUNCTION_API_KEY`, through the same GitHub OIDC role as the Turborepo cache. Scripts run directly fall back to
 `@crvouga/mockingbird-openbao`, which reads `secret/data/personal/prd` (override per provider with
 `MOCKINGBIRD_OPENBAO_PATH_<PROVIDER>`) using `VAULT_TOKEN` / `BAO_TOKEN` / `~/.vault-token`, or a
 GitHub OIDC JWT (`MOCKINGBIRD_OPENBAO_JWT`, role `github-actions`).

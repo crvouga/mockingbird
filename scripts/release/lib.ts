@@ -79,7 +79,7 @@ export function retiredPackages(packages: WorkspacePackage[]): Retired[] {
 
 // ── Workspace discovery ────────────────────────────────────────────
 
-type Manifest = {
+export type Manifest = {
   name?: string
   version?: string
   private?: boolean
@@ -186,6 +186,61 @@ export function topoSort<T extends { name: string; runtimeDeps: string[] }>(pkgs
   return out
 }
 
+// ── Publish manifests ──────────────────────────────────────────────
+
+const RUNTIME_DEP_FIELDS = ["dependencies", "peerDependencies", "optionalDependencies"] as const
+
+/**
+ * Pin a manifest for packing: its own version, plus every `workspace:` runtime
+ * dependency rewritten to the concrete version that dependency resolves to.
+ *
+ * Rewriting the specifiers here is what makes a published pin installable.
+ * `bun pm pack` does substitute `workspace:*`, but from its lockfile view of the
+ * workspace rather than the manifest on disk — so pinning only the `version`
+ * field still ships `"<dep>": "0.0.0-development"`, a version that does not
+ * exist on npm, and every consumer needs an override to install at all.
+ */
+export function pinManifest(raw: string, version: string, versions: Map<string, string>): string {
+  // Fields this script does not model are preserved: JSON.parse keeps them.
+  const manifest = JSON.parse(raw) as Manifest
+  manifest.version = version
+  for (const field of RUNTIME_DEP_FIELDS) {
+    const deps = manifest[field]
+    if (!deps) continue
+    for (const [dep, range] of Object.entries(deps)) {
+      if (!range.startsWith("workspace:")) continue
+      const resolved = versions.get(dep)
+      if (!resolved) {
+        throw new Error(
+          `release: ${manifest.name ?? "(unnamed)"} depends on ${dep} (${range}), which has no published version`,
+        )
+      }
+      deps[dep] = resolved
+    }
+  }
+  return `${JSON.stringify(manifest, null, 2)}\n`
+}
+
+/** Runtime dependency pins a consumer could not resolve from npm alone. */
+export function unresolvablePins(manifest: Manifest): string[] {
+  const bad: string[] = []
+  for (const field of RUNTIME_DEP_FIELDS) {
+    for (const [dep, range] of Object.entries(manifest[field] ?? {})) {
+      if (range.startsWith("workspace:") || range.includes(PLACEHOLDER_VERSION)) {
+        bad.push(`${field}.${dep} = "${range}"`)
+      }
+    }
+  }
+  return bad
+}
+
+/** The `package.json` a consumer would install, read back out of a packed tarball. */
+export async function packedManifest(tarball: string): Promise<Manifest> {
+  const read = await $`tar -xzOf ${tarball} package/package.json`.quiet().nothrow()
+  if (read.exitCode !== 0) throw new Error(`could not read package.json from ${tarball}`)
+  return JSON.parse(read.stdout.toString()) as Manifest
+}
+
 // ── Git ────────────────────────────────────────────────────────────
 
 export const tagName = (name: string, version: string): string => `${name}@${version}`
@@ -204,10 +259,10 @@ export async function latestTaggedVersion(name: string): Promise<string | null> 
 export type Commit = { hash: string; subject: string; body: string }
 
 /** Non-merge commits since `tag` that touched any of `dirs` (PR commits are commitlint-enforced). */
-export async function commitsTouching(tag: string, dirs: string[]): Promise<Commit[]> {
+export async function commitsTouching(tag: string, dirs: string[], to = "HEAD"): Promise<Commit[]> {
   const sep = "\u001e"
   const result =
-    await $`git log --no-merges ${`--format=%H%x1f%s%x1f%b${sep}`} ${`${tag}..HEAD`} -- ${dirs}`
+    await $`git log --no-merges ${`--format=%H%x1f%s%x1f%b${sep}`} ${`${tag}..${to}`} -- ${dirs}`
       .cwd(root)
       .quiet()
   return result
@@ -367,21 +422,28 @@ export async function computePlan(): Promise<Plan> {
   }
 }
 
-export function releaseNotes(release: Release, versions: Map<string, string>): string {
+/** Releasable commits grouped under Breaking / Features / Fixes headings, as Markdown lines. */
+function commitSections(commits: Commit[]): string[] {
   const lines: string[] = []
   const link = (c: Commit) =>
     `- ${stripType(c.subject)} ([${c.hash.slice(0, 7)}](https://github.com/${REPO}/commit/${c.hash}))`
-  if (release.bump === "initial") lines.push("Initial release.", "")
   const sections: [string, (c: Commit) => boolean][] = [
     ["⚠️ Breaking changes", (c) => parseCommit(c).bump === "major"],
     ["Features", (c) => parseCommit(c).bump === "minor"],
     ["Fixes and improvements", (c) => parseCommit(c).bump === "patch"],
   ]
   for (const [title, match] of sections) {
-    const matched = release.commits.filter(match)
+    const matched = commits.filter(match)
     if (matched.length === 0) continue
     lines.push(`### ${title}`, "", ...matched.map(link), "")
   }
+  return lines
+}
+
+export function releaseNotes(release: Release, versions: Map<string, string>): string {
+  const lines: string[] = []
+  if (release.bump === "initial") lines.push("Initial release.", "")
+  lines.push(...commitSections(release.commits))
   if (release.dependencyUpdates.length > 0) {
     lines.push(
       "### Dependencies",
@@ -393,4 +455,42 @@ export function releaseNotes(release: Release, versions: Map<string, string>): s
   const pkgUrl = `https://www.npmjs.com/package/${release.pkg.name}/v/${release.version}`
   lines.push(`npm: [${release.pkg.name}@${release.version}](${pkgUrl})`)
   return lines.join("\n")
+}
+
+/**
+ * The package's whole changelog, newest first: the release being cut (when given),
+ * then every tagged release, each with the releasable commits since the tag before it.
+ * Built from git tags at publish time, so nothing version-shaped is ever committed.
+ */
+export async function changelog(pkg: WorkspacePackage, upcoming?: Release): Promise<string> {
+  const listed = await $`git tag --list ${`${pkg.name}@*`}`.cwd(root).quiet().nothrow()
+  const tagged = listed
+    .text()
+    .split("\n")
+    .map((t) => t.trim().slice(pkg.name.length + 1))
+    .filter((v) => /^\d+\.\d+\.\d+$/.test(v))
+    .sort((a, b) => Bun.semver.order(b, a))
+  const lines = [`# Changelog — ${pkg.name}`, ""]
+  if (upcoming) {
+    lines.push(`## ${upcoming.version} (${new Date().toISOString().slice(0, 10)})`, "")
+    if (upcoming.bump === "initial") lines.push("Initial release.", "")
+    lines.push(...commitSections(upcoming.commits))
+    if (upcoming.dependencyUpdates.length > 0) {
+      lines.push("### Dependencies", "", ...upcoming.dependencyUpdates.map((d) => `- \`${d}\``), "")
+    }
+  }
+  for (const [index, version] of tagged.entries()) {
+    const tag = tagName(pkg.name, version)
+    const date = (await $`git log -1 --format=%as ${tag}`.cwd(root).quiet().nothrow()).text().trim()
+    lines.push(`## ${version}${date ? ` (${date})` : ""}`, "")
+    const previous = tagged[index + 1]
+    if (previous === undefined) {
+      lines.push("Initial release.", "")
+      continue
+    }
+    const commits = await commitsTouching(tagName(pkg.name, previous), pkg.sourceDirs, tag)
+    const sections = commitSections(commits)
+    lines.push(...(sections.length > 0 ? sections : ["Dependency updates only.", ""]))
+  }
+  return `${lines.join("\n").trimEnd()}\n`
 }

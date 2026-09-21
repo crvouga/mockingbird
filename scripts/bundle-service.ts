@@ -8,7 +8,8 @@
  * and declarations with rollup-plugin-dts. check:boundaries keeps private packages
  * out of a public package's `dependencies`.
  *
- * Runs from the package directory; one entry per `exports` subpath (./dist/x.js ← src/x.ts).
+ * Runs from the package directory; one entry per `exports` subpath and per `bin` target
+ * (./dist/x.js ← src/x.ts). A bin gets no declarations, and keeps its `#!` line.
  *
  *   bun ../../../scripts/bundle-service.ts
  */
@@ -23,6 +24,7 @@ const pkgDir = process.cwd()
 const pkg = JSON.parse(await Bun.file(join(pkgDir, "package.json")).text()) as {
   name: string
   exports: Record<string, { types: string; default: string }>
+  bin?: string | Record<string, string>
   dependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
   mockingbird?: { runtime?: string }
@@ -40,11 +42,22 @@ const packageRoot = (id: string) =>
 const isInlined = (id: string) =>
   /^@crvouga\/mockingbird(?:-|\/|$)/.test(id) && !external.includes(packageRoot(id))
 
-const entries = Object.values(pkg.exports).map((target) => {
-  const out = target.default.replace(/^\.\//, "")
-  const name = out.replace(/^dist\//, "").replace(/\.js$/, "")
+const entryName = (target: string) =>
+  target
+    .replace(/^\.\//, "")
+    .replace(/^dist\//, "")
+    .replace(/\.js$/, "")
+const entries: { name: string; src: string; types: string | undefined }[] = Object.values(
+  pkg.exports,
+).map((target) => {
+  const name = entryName(target.default)
   return { name, src: `src/${name}.ts`, types: target.types.replace(/^\.\//, "") }
 })
+for (const target of typeof pkg.bin === "string" ? [pkg.bin] : Object.values(pkg.bin ?? {})) {
+  const name = entryName(target)
+  if (!entries.some((e) => e.name === name))
+    entries.push({ name, src: `src/${name}.ts`, types: undefined })
+}
 for (const e of entries) {
   if (!existsSync(join(pkgDir, e.src))) throw new Error(`${pkg.name}: missing entry ${e.src}`)
 }
@@ -79,6 +92,7 @@ try {
     pkgDir,
   )
   for (const e of entries) {
+    if (e.types === undefined) continue
     const bundle = await rollup({
       input: join(types, `${e.name}.d.ts`),
       external: (id) => isBare(id) && !isInlined(id),

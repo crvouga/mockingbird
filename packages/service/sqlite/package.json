@@ -27,7 +27,8 @@
     "COMPATIBILITY-AUDIT.md",
     "README.md",
     "LICENSE",
-    "compat"
+    "compat",
+    "CHANGELOG.md"
   ],
   "repository": {
     "type": "git",

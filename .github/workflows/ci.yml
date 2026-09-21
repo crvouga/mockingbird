@@ -1,5 +1,9 @@
 # Local replica: bun run check:full
 #
+# Every job and long-running step carries a timeout: a PR check must be fast and bounded,
+# so anything that hangs fails the run instead of occupying a runner until GitHub's
+# 6-hour default.
+#
 # One turbo graph (`bun run check`) does all the work; .github/actions/setup caches
 # node_modules and loads the shared Turborepo remote cache credentials from Vault (GitHub
 # OIDC, no stored token), so unchanged packages are never rebuilt or retested.
@@ -29,6 +33,7 @@ jobs:
     name: Commitlint
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -63,6 +68,7 @@ jobs:
   check:
     name: Check
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       id-token: write # Vault OIDC → Turborepo remote cache
@@ -74,10 +80,12 @@ jobs:
       - uses: ./.github/actions/setup
 
       - name: Check (format, lint, typecheck, build, test, pack, portability, boundaries)
+        timeout-minutes: 20
         run: bun run check -- --output-logs=errors-only
 
       # Pack every public package like the release does and install it into a clean npm project.
       - name: Consumer smoke (npm install + import + typecheck every published entry point)
+        timeout-minutes: 6
         run: bun run release:smoke
 
   # Single required status check for the ruleset. Also enforces the trunk policy: PRs
@@ -87,6 +95,7 @@ jobs:
     if: always() && github.event_name == 'pull_request'
     needs: [commitlint, check]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: All required checks passed
         env:
@@ -115,6 +124,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [check]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
       id-token: write
@@ -141,13 +151,16 @@ jobs:
       # Replayed from the remote cache Check filled for this commit — no rebuild.
       - name: Build and verify packages
         if: steps.plan.outputs.has_changes == 'true'
+        timeout-minutes: 15
         run: bunx turbo run build pack:check portability --output-logs=errors-only
 
       - name: Consumer smoke
         if: steps.plan.outputs.has_changes == 'true'
+        timeout-minutes: 6
         run: bun run release:smoke
 
       - name: Publish, tag, and create GitHub Releases
+        timeout-minutes: 20
         if: steps.plan.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}

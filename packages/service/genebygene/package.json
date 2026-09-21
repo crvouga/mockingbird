@@ -7,13 +7,23 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
     }
+  },
+  "bin": {
+    "mockingbird-genebygene": "./dist/cli.js"
   },
   "publishConfig": {
     "access": "public",
@@ -32,6 +42,10 @@
   ],
   "mockingbird": {
     "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
     "layer": "service"
   },
   "scripts": {
@@ -62,6 +76,7 @@
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-http-codec": "workspace:*"
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*"
   }
 }

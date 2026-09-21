@@ -25,27 +25,29 @@ Availability is **not** recorded: sealed availability bodies carry far-future sl
 single-use `booking_key`s that can never match a live `start_date` cache key. Availability
 stays with the deterministic generator.
 
-Record once (requires a sandbox key — `~/.vault-token` or `MOCKINGBIRD_JUNCTION_API_KEY`):
+The recording is shipped in the package (`@crvouga/mockingbird-service-junction/corpus`) and is
+what `mockingbird-junction serve` loads by default. Re-record it (requires a sandbox key —
+`~/.vault-token` or `MOCKINGBIRD_JUNCTION_API_KEY`):
 
 ```bash
 cd packages/service/junction
-bun run corpus:record            # writes corpus/sandbox-sealed.json
-bun run corpus:record -- --force # overwrite an existing recording
+bun run corpus:record -- --force # rewrites corpus/sandbox-sealed.json via pullCorpus
 ```
 
-Serve the mock with the corpus installed (`node:http` via the Node adapter; runs under
-`bun` or `node`):
+A consumer records its own team instead, with `npx mockingbird-junction corpus pull --out <file>`,
+and compares recordings with `corpus diff`.
+
+Serve the mock with the corpus installed:
 
 ```bash
-MOCKINGBIRD_JUNCTION_CORPUS=corpus/sandbox-sealed.json bun run mock:serve
-# defaults: HOST=127.0.0.1 PORT=8787 (PORT=0 = ephemeral)
-# defaults to corpus/sandbox-sealed.json when that file exists
+npx mockingbird-junction serve                     # shipped corpus, 127.0.0.1:8787
+npx mockingbird-junction serve --corpus my-team.json
+bun run mock:serve                                 # same, configured by HOST, PORT, MOCKINGBIRD_JUNCTION_CORPUS
 ```
 
-Routes: `GET /health` → `{"status":"ok"}` and `POST /__admin/reset` → `await api.reset()`,
-both matched before the API (so they bypass the `x-vital-api-key` gate). Everything else is
-served by `JunctionAPI.fetch`. If `MOCKINGBIRD_JUNCTION_CORPUS` points at a missing file the
-server prints `junction mock corpus not found: <path>` and exits non-zero.
+`GET /health` and `/__admin/*` are served ahead of the `x-vital-api-key` gate; see the
+[service contract](../README.md#the-service-contract). With a corpus, ZIPs it does not cover answer
+`424 MOCKINGBIRD_UNKNOWN_ZIP` unless `--geo synthetic`.
 
 Programmatic install (no filesystem, `dist` stays portable):
 

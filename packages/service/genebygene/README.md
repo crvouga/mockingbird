@@ -21,8 +21,8 @@ npm install -D @crvouga/mockingbird-service-genebygene
 ```
 
 ESM only. Requires Node >= 22 or Bun >= 1.2. No native dependencies: state lives in an in-memory
-SQLite engine (pure TypeScript, bundled in). To serve it over HTTP use `Bun.serve` under Bun, or
-install `@hono/node-server` under Node.
+SQLite engine (pure TypeScript, bundled in). To serve it over HTTP run `npx mockingbird-genebygene serve`, or
+use `createServer` from `./server` (Node) or `createRuntime` with any Fetch server.
 
 ## Usage
 
@@ -40,6 +40,38 @@ Routes and behaviour (all from the source):
 - **The bearer token is not validated.** Any `Authorization: Bearer <value>` passes; a missing or
   non-Bearer header returns 401 `{ error: "unauthorized" }`.
 - Orders stay `Pending`; there are no status transitions.
+
+### Serve it: `mockingbird-genebygene serve` or `createServer`
+
+```bash
+npx mockingbird-genebygene serve                 # http://127.0.0.1:8788
+npx mockingbird-genebygene serve --port 0 --log json --admin-key local-admin
+npx mockingbird-genebygene serve --config mockingbird.json   # every service in one config
+```
+
+```ts
+import { createServer } from "@crvouga/mockingbird-service-genebygene/server"
+
+const server = await createServer() // any free port; server.url, server.port
+const response = await fetch(`${server.url}/api/v2/products`, { headers: { authorization: "Bearer any-token" } })
+console.log(response.status) // 200
+await server.close()
+```
+
+Served this way — or through `createRuntime()`, the same thing as one runtime-neutral `fetch` —
+the mock also answers Mockingbird's service contract, outside the bearer-token check:
+
+- `GET /health` — unauthenticated readiness probe.
+- `/__admin/*` — reset (`POST /__admin/reset`), snapshots (`POST /__admin/snapshots`,
+  `POST /__admin/snapshots/{id}/restore`), clock (`POST /__admin/clock {"advance": "2h"}`), fault
+  injection (`POST /__admin/faults {"operationId": …, "status": 503, "count": 1}`), and metrics with
+  unmatched-route counts (`GET /__admin/metrics`). `GET /__admin` lists every route; `--admin-key`
+  locks them behind `x-mockingbird-admin-key`.
+- `x-mockingbird-namespace: <name>` — isolates a request's data, so parallel workers share one
+  process without seeing each other.
+
+The [Junction README](https://github.com/crvouga/mockingbird/tree/main/packages/service/junction#the-service-contract)
+documents the contract in full.
 
 ### In-process (inject `fetch`)
 
@@ -102,17 +134,8 @@ console.log(token.status, apiBaseUrl) // 200
 server.stop()
 ```
 
-Any Fetch-style server works, since `GeneByGeneAPI` only needs `fetch(request)`. On Node use
-`@hono/node-server` (`npm install -D @hono/node-server`), whose callback receives the bound port:
-
-```js
-import { serve } from "@hono/node-server"
-const server = serve(
-  { fetch: (request) => gbg.fetch(request), port: 0, hostname: "127.0.0.1" },
-  (info) => console.log(`http://127.0.0.1:${info.port}`),
-)
-// ... later: server.close()
-```
+On Node, `createServer` (above) is the listener; any Fetch-style server also works with
+`GeneByGeneAPI#fetch` or `createRuntime().fetch`.
 
 ### Resetting between tests
 
@@ -141,10 +164,24 @@ test("catalog has the seed product", async () => {
 })
 ```
 
+## What is and is not modelled
+
+- **Modelled**: all four operations in the vendored subset (see
+  [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/genebygene/SUPPORT.md)),
+  each verified by live parity against GeneByGene staging, including the documented token and
+  validation errors.
+- **Not modelled**: any endpoint outside those four, which 404s and is counted in
+  `GET /__admin/metrics` under `unmatched`; real rate-limit and 5xx bodies — `POST /__admin/faults`
+  injects Mockingbird's own, which are shape-plausible, not recorded; token expiry is reported
+  (`expires_in: 3600`) but never enforced.
+- **Determinism**: tokens are deterministic per client id/secret pair, and with a fixed clock and
+  `seed` ids and timestamps replay exactly.
+
 ## API
 
 | Export | Description |
 | --- | --- |
+| `createRuntime` | `(options?) => GeneByGeneRuntime` — the mock with the service contract (health, admin, namespaces, clock, faults, metrics) as one runtime-neutral `fetch`. Options: `sqlite`, `clock`, `seed`, `adminKey`, `onLog`. `./server` adds `createServer(options?)` (Node; `port`, `host`), `serveTarget` and `DEFAULT_PORT` (`8788`). |
 | `GeneByGeneAPI` | Class. `new GeneByGeneAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. Members: `fetch(request)`, `reset()`, `app` (Hono app), `sqlite` (`SqliteClient`). |
 | `GENEBYGENE_NAMESPACE` | `"genebygene"` — SQLite namespace holding the mock's state when sharing a `sqlite` client. |
 | `document` | The vendored GeneByGene OpenAPI document (Mockingbird subset) that drives routing. |

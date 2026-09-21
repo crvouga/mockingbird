@@ -18,6 +18,42 @@ tarball (`node_modules/<package>/README.md`); [`llms.txt`](llms.txt) is a genera
 npm install -D @crvouga/mockingbird-service-stripe
 ```
 
+### Serving a mock: one contract for every HTTP service
+
+The HTTP services (Stripe, Junction, GeneByGene) ship a CLI and a Node server as well as the
+in-process `fetch`, and all answer the same control surface, so a stack learns it once:
+
+```bash
+npx mockingbird-junction serve --port 8787          # one service
+npx mockingbird-junction serve --config mockingbird.json   # every service in the config
+```
+
+| Surface | What it gives you |
+| --- | --- |
+| `mockingbird-<service> serve` · `createServer()` (`./server`) · `createRuntime()` | A listening server, from the CLI or Node, or the same thing as one runtime-neutral `fetch` |
+| `GET /health` | Unauthenticated readiness probe, outside the vendor's auth gate |
+| `/__admin/*` (`x-mockingbird-admin-key` optional) | Reset, snapshot/restore, clock control, fault injection, metrics with unmatched-route counts; service-specific routes on top (e.g. Junction order transitions) |
+| `x-mockingbird-namespace` | Per-request isolation: parallel workers share one process without sharing data |
+| `--seed`, clock control | Seeded randomness and an injectable clock, so a run replays exactly |
+| `--log json` | One structured line per request: operation id, status, duration, namespace, fault |
+
+`mockingbird.json` names services by their package suffix and takes each one's `serve` flags;
+any installed service's CLI can serve all of them:
+
+```json
+{
+  "services": {
+    "junction": { "port": 8787, "options": { "corpus": "./test/junction-corpus.json" } },
+    "stripe": { "port": 12111 }
+  }
+}
+```
+
+[Junction's README](packages/service/junction/README.md#the-service-contract) documents the contract
+in full, including its corpus (`corpus pull`, `corpus diff`) and `verify` against the real vendor.
+Medplum proxies a real Medplum server and the database engines are not HTTP APIs, so they are
+outside this contract.
+
 ## Requirements
 
 - **Node.js ≥ 22** or **Bun ≥ 1.2** (ESM only).
@@ -107,6 +143,7 @@ Exception: [`@crvouga/mockingbird-service-medplum`](packages/service/medplum) se
 | `bun run parity:stripe` | `https://api.stripe.com` (test mode) | `MOCKINGBIRD_STRIPE_SECRET_KEY` (`sk_test_*`) or Vault `secret/personal/prd` |
 | `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `MOCKINGBIRD_JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) or Vault `secret/personal/prd` |
 | `bun run parity:genebygene` | staging auth + API | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` or Vault `secret/personal/prd` |
+| `bun run verify:junction` | Junction sandbox | `mockingbird-junction verify`: corpus drift plus a stateful scenario; also runs daily in the [Verify workflow](.github/workflows/verify.yml) |
 
 ## Packages
 
