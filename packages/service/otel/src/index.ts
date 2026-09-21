@@ -254,14 +254,17 @@ export class OtelAPI implements FetchAPI {
     const stream = context.request.headers.get("stream-name")?.trim() || "default"
     const type: StreamType = kind === "traces" ? "traces" : "logs"
     const orgs = new Set<string>()
-    for (const ingested of rows) {
-      const org = this.state.routeOrg(ingested.resource)
-      orgs.add(org)
-      this.state.ingest(
-        { org, stream, type, row: ingested.row },
-        ingested.hadBody ? { body: "Utf8" } : {},
-      )
-    }
+    // One transaction per export: a transaction per row makes a large batch crawl.
+    this.sqlite.transaction(() => {
+      for (const ingested of rows) {
+        const org = this.state.routeOrg(ingested.resource)
+        orgs.add(org)
+        this.state.ingest(
+          { org, stream, type, row: ingested.row },
+          ingested.hadBody ? { body: "Utf8" } : {},
+        )
+      }
+    })
     return annotateResponse(ok(), {
       ids: {
         accepted: String(rows.length),

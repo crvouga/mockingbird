@@ -343,7 +343,8 @@ describe("S18.3 O2 search through the backend bloodwork-ops client", () => {
       size: 1_000,
     })
     expect(limited.map((hit) => hit.attempt)).toEqual([0, 1, 2, 3, 4])
-  })
+    // 2 500 rows through the in-memory SQLite engine: well past the 5 s default on a busy runner.
+  }, 60_000)
 
   test("more than 10 pages is truncated at 10", async () => {
     const h = harness()
