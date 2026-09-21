@@ -164,6 +164,24 @@ describe("A7 error shapes and faults", () => {
       { ...params, numRuns: Math.min(params.numRuns ?? 100, 10) },
     )
   })
+
+  test("an admin-injected fault stays in the namespace that asked for it", async () => {
+    const runtime = createRuntime()
+    const added = await call(runtime, "POST", "/__admin/faults/presets/sandbox_user_quota", {
+      body: { count: 1 },
+      headers: { "x-mockingbird-namespace": "worker-a" },
+    })
+    expect(added.status).toBe(201)
+    const create = (namespace: string) =>
+      call(runtime, "POST", "/v2/user", {
+        body: { client_user_id: "c" },
+        headers: { "x-mockingbird-namespace": namespace },
+      })
+    // worker-b is untouched; worker-a takes the one injected failure, then recovers.
+    expect((await create("worker-b")).status).toBe(200)
+    expect((await create("worker-a")).status).toBe(400)
+    expect((await create("worker-a")).status).toBe(200)
+  })
 })
 
 describe("A6 geo realism", () => {

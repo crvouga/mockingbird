@@ -335,6 +335,7 @@ export const junctionAdminRoutes =
         }
         const overrides = isRecord(request.body) ? request.body : {}
         const rule = runtime.faults.add({
+          namespace: request.namespace,
           ...preset,
           ...overrides,
           id: typeof overrides.id === "string" ? overrides.id : (request.params.name as string),

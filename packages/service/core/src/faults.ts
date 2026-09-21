@@ -16,6 +16,12 @@ export type FaultRule = {
   method?: string
   /** Fault only paths starting with this prefix. Omit to match every path. */
   pathPrefix?: string
+  /**
+   * Fault only this namespace. Omit (or `"*"`) to fault every namespace — which is what
+   * an in-process caller usually wants, and what a parallel worker usually does not:
+   * rules added through `POST /__admin/faults` default to the calling namespace.
+   */
+  namespace?: string
   status: number
   /** Response body, serialized as JSON. A string is sent as-is. */
   body?: unknown
@@ -33,6 +39,7 @@ export type FaultCandidate = {
   operationId: string | undefined
   method: string
   path: string
+  namespace: string
 }
 
 export type FaultRegistry = {
@@ -50,6 +57,13 @@ export type FaultRegistry = {
 type Entry = { rule: FaultRule; remaining: number | null; hits: number }
 
 const matches = (rule: FaultRule, candidate: FaultCandidate): boolean => {
+  if (
+    rule.namespace !== undefined &&
+    rule.namespace !== "*" &&
+    rule.namespace !== candidate.namespace
+  ) {
+    return false
+  }
   if (rule.operationId !== undefined && rule.operationId !== candidate.operationId) return false
   if (rule.method !== undefined && rule.method.toUpperCase() !== candidate.method.toUpperCase()) {
     return false

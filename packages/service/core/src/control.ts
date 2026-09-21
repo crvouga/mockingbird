@@ -162,11 +162,14 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
     },
 
     "GET /faults": () => json(200, { faults: context.faults.list() }),
-    "POST /faults": ({ body }) => {
+    "POST /faults": ({ body, namespace }) => {
       if (!isRecord(body) || typeof body.status !== "number") {
         return adminError(400, "a fault needs a numeric status")
       }
       const rule = {
+        // Scoped to the caller's namespace unless it asks for every one, so one worker's
+        // injected failure never lands on another's request.
+        namespace,
         ...body,
         id: typeof body.id === "string" ? body.id : `fault_${context.faults.list().length + 1}`,
       } as FaultRule

@@ -396,9 +396,11 @@ junction.faults.add({ ...FAULT_PRESETS.sandbox_user_quota, id: "quota", count: 1
 junction.faults.add({ id: "flaky-orders", operationId: "create_order_v3_order_post", status: 503, rate: 0.25 })
 ```
 
-A rule matches on `operationId`, `method` and `pathPrefix` (all optional), fires `count` times or
-forever, for a `rate` of matching requests (seeded, so a run replays identically), after an
-optional `delayMs`. Over HTTP: `POST /__admin/faults` with the same fields, or
+A rule matches on `operationId`, `method`, `pathPrefix` and `namespace` (all optional), fires
+`count` times or forever, for a `rate` of matching requests (seeded, so a run replays identically),
+after an optional `delayMs`. A rule added through the admin API defaults to the calling namespace,
+so one worker's injected failure never lands on another's request; one added in-process, as above,
+applies to every namespace unless given a `namespace`. Over HTTP: `POST /__admin/faults` with the same fields, or
 `POST /__admin/faults/presets/sandbox_user_quota`.
 
 ## Webhooks

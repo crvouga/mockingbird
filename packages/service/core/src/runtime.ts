@@ -201,6 +201,7 @@ export const createRuntime = <T extends ServiceInstance>(
         operationId,
         method: request.method,
         path: url.pathname,
+        namespace,
       })
       if (faulted) {
         log(faulted.response.status, faulted.id)
