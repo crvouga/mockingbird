@@ -3,6 +3,12 @@
  *
  * Reads the package's `mockingbird.runtime` claim (portable | node | bun) and
  * verifies the built `dist` bundle does not use APIs outside that runtime.
+ *
+ * An entry point can claim a different runtime in `mockingbird.entries`, keyed by its
+ * dist name — `{ "server": "node", "cli": "node" }` lets a portable service ship a Node
+ * listener and CLI. Each built file must then satisfy every runtime whose entry
+ * reaches it through static imports, so a chunk shared with the portable main entry
+ * stays portable, and only files reached solely from Node entries may use `node:*`.
  * Runs from a workspace package directory (turbo runs it where `portability`
  * is defined).
  *
@@ -27,7 +33,9 @@ if (!existsSync(pkgPath)) {
 
 const pkg = JSON.parse(await Bun.file(pkgPath).text()) as {
   name?: string
-  mockingbird?: { runtime?: string }
+  exports?: Record<string, string | { default?: string; import?: string }>
+  bin?: string | Record<string, string>
+  mockingbird?: { runtime?: string; entries?: Record<string, string> }
 }
 
 const name = pkg.name || "(unnamed)"
@@ -75,29 +83,84 @@ if (!existsSync(distDir)) {
   fail(`${name}: no dist/ — build first (bun run build) so portability can be checked`)
 }
 
-const forbidden = forbiddenByRuntime[runtime] ?? []
+for (const [entry, claim] of Object.entries(pkg.mockingbird?.entries ?? {})) {
+  if (!["portable", "node", "bun"].includes(claim)) {
+    fail(`${name}: mockingbird.entries.${entry} must be portable | node | bun (got ${claim})`)
+  }
+}
+
 let scanned = 0
 
-function checkEntry(rel: string, text: string): void {
+function checkEntry(rel: string, text: string, runtimes: Set<string>): void {
   scanned++
-  for (const pattern of forbidden) {
-    if (pattern.test(text)) {
-      fail(`${name}: ${rel} is not ${runtime}-portable (uses ${pattern.label})`)
-      return
+  for (const claim of runtimes) {
+    for (const pattern of forbiddenByRuntime[claim] ?? []) {
+      if (pattern.test(text)) {
+        fail(`${name}: ${rel} is not ${claim}-portable (uses ${pattern.label})`)
+        return
+      }
     }
   }
 }
 
-console.log(`portability: ${name} (runtime=${runtime})`)
-const distJs = join(pkgDir, "dist/index.js")
-if (existsSync(distJs)) {
-  checkEntry(join("dist", "index.js"), await Bun.file(distJs).text())
+const entryRuntimes = pkg.mockingbird?.entries ?? {}
+console.log(
+  `portability: ${name} (runtime=${runtime}${
+    Object.keys(entryRuntimes).length > 0
+      ? `; ${Object.entries(entryRuntimes)
+          .map(([e, r]) => `${e}=${r}`)
+          .join(", ")}`
+      : ""
+  })`,
+)
+
+const files = new Map<string, string>()
+for (const rel of new Bun.Glob("dist/**/*.js").scanSync({ cwd: pkgDir })) {
+  files.set(rel.replaceAll("\\", "/"), await Bun.file(join(pkgDir, rel)).text())
 }
-const glob = new Bun.Glob("dist/**/*.js")
-for (const entry of glob.scanSync({ cwd: pkgDir })) {
-  const abs = join(pkgDir, entry)
-  if (abs === distJs) continue
-  checkEntry(entry, await Bun.file(abs).text())
+
+/** Relative static and dynamic imports of a built file, as dist-relative paths. */
+const RELATIVE_IMPORT = /(?:\bfrom|\bimport)\s*\(?\s*["'](\.{1,2}\/[^"']+)["']/g
+const importsOf = (rel: string): string[] => {
+  const dir = rel.split("/").slice(0, -1)
+  return [...(files.get(rel) ?? "").matchAll(RELATIVE_IMPORT)].map((m) => {
+    const parts = [...dir]
+    for (const segment of (m[1] as string).split("/")) {
+      if (segment === "..") parts.pop()
+      else if (segment !== ".") parts.push(segment)
+    }
+    return parts.join("/")
+  })
+}
+
+const entryTargets = [
+  ...Object.values(pkg.exports ?? {}).map((target) =>
+    typeof target === "string" ? target : (target.default ?? target.import),
+  ),
+  ...(typeof pkg.bin === "string" ? [pkg.bin] : Object.values(pkg.bin ?? {})),
+]
+  .filter((target): target is string => typeof target === "string" && target.endsWith(".js"))
+  .map((target) => target.replace(/^\.\//, ""))
+
+// Every runtime whose entry reaches a file, through static imports, must accept it.
+const required = new Map<string, Set<string>>()
+for (const target of new Set(entryTargets)) {
+  const entryName = target.replace(/^dist\//, "").replace(/\.js$/, "")
+  const claim = entryRuntimes[entryName] ?? runtime
+  const queue = [target]
+  const seen = new Set<string>()
+  for (let next = queue.pop(); next !== undefined; next = queue.pop()) {
+    if (seen.has(next) || !files.has(next)) continue
+    seen.add(next)
+    const set = required.get(next) ?? new Set<string>()
+    set.add(claim)
+    required.set(next, set)
+    queue.push(...importsOf(next))
+  }
+}
+
+for (const [rel, text] of files) {
+  checkEntry(rel, text, required.get(rel) ?? new Set([runtime]))
 }
 
 if (scanned === 0) {
