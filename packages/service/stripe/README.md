@@ -30,7 +30,7 @@ npx mockingbird-stripe serve --accounts accounts.json --admin-key local-admin
 npx mockingbird-stripe serve --config mockingbird.json   # every service in one process
 ```
 
-```ts
+```js
 import Stripe from "stripe"
 import { createServer } from "@crvouga/mockingbird-service-stripe/server"
 

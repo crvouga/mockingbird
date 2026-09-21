@@ -38,22 +38,28 @@ twilio-node builds a host for each product (`api.twilio.com`, `verify.twilio.com
 `{mock}/api/2010-04-01/…`, `{mock}/verify/v2/…`, `{mock}/lookups/v2/…`. Pass every
 `new Twilio(...)` an `httpClient` that rewrites the URL. `twilioMockUrl` does the rewrite:
 
-```ts
+```js
 import { RequestClient, Twilio } from "twilio"
 import { twilioMockUrl } from "@crvouga/mockingbird-service-twilio"
 
 /** https://verify.twilio.com/v2/Services/VA…/Verifications → {base}/verify/v2/Services/VA…/Verifications */
 class MockRequestClient extends RequestClient {
-  constructor(private readonly baseUrl: string) {
+  constructor(baseUrl) {
     super()
+    this.baseUrl = baseUrl
   }
-  override request(opts: Parameters<RequestClient["request"]>[0]) {
-    return super.request({ ...opts, uri: twilioMockUrl(opts.uri, this.baseUrl) }) as Promise<never>
+  request(opts) {
+    return super.request({ ...opts, uri: twilioMockUrl(opts.uri, this.baseUrl) })
   }
 }
 
+const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN } = process.env
 const base = process.env.TWILIO_API_BASE_URL // e.g. http://127.0.0.1:8798
-const client = new Twilio(accountSid, authToken, base ? { httpClient: new MockRequestClient(base) } : {})
+const client = new Twilio(
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  base ? { httpClient: new MockRequestClient(base) } : {},
+)
 ```
 
 The mock also routes by the `Host` header. A request that reaches it as `lookups.twilio.com`

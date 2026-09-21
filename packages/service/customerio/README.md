@@ -35,7 +35,7 @@ npx mockingbird-customerio serve --port 8810 \
   --webhook-secret "$CUSTOMERIO_REPORTING_WEBHOOK_SIGNING_KEY"
 ```
 
-```ts
+```js
 import { Analytics } from "@customerio/cdp-analytics-node"
 import { createServer } from "@crvouga/mockingbird-service-customerio/server"
 

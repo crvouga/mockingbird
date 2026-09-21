@@ -35,7 +35,7 @@ npx mockingbird-resend serve --port 8794 \
 RESEND_BASE_URL=http://127.0.0.1:8794 node app.js
 ```
 
-```ts
+```js
 import { createServer } from "@crvouga/mockingbird-service-resend/server"
 
 const mock = await createServer()

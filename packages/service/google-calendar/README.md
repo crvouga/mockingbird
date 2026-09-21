@@ -36,7 +36,7 @@ posts pushes to whatever `address` the app registers (http is allowed unless
 npx mockingbird-google-calendar serve --port 8820 --client "$GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_SECRET"
 ```
 
-```ts
+```js
 import { auth, calendar } from "@googleapis/calendar"
 import { OAuth2Client } from "google-auth-library"
 import { createServer } from "@crvouga/mockingbird-service-google-calendar/server"

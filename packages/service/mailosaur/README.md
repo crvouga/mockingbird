@@ -43,7 +43,7 @@ must not see it, since other HTTP clients (axios) also read it and would be tunn
 mock too. If the mock can bind 443, `--tls-port 443` and `new MailosaurClient(key,
 "https://127.0.0.1/")` work without the proxy.
 
-```ts
+```js
 import { createServer } from "@crvouga/mockingbird-service-mailosaur/server"
 import MailosaurClient from "mailosaur"
 
