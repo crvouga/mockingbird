@@ -8,6 +8,20 @@ const SUPER_SECRET = "mockingbird-local-secret"
 
 export const authScenarios: Scenario[] = [
   {
+    name: "auth: discovery documents and GET logout",
+    steps: [
+      { method: "GET", path: "/.well-known/openid-configuration", auth: "none" },
+      { method: "GET", path: "/.well-known/smart-configuration", auth: "none" },
+      { method: "GET", path: "/fhir/R4/.well-known/smart-configuration", auth: "none" },
+      { method: "GET", path: "/oauth2/logout" },
+      {
+        name: "GET logout revokes the project client token",
+        method: "GET",
+        path: "/fhir/R4/Patient?_count=1",
+      },
+    ],
+  },
+  {
     name: "auth: unauthenticated and malformed credentials",
     steps: [
       { method: "GET", path: "/fhir/R4/Patient", auth: "none" },

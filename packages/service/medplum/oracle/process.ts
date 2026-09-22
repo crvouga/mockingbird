@@ -11,7 +11,9 @@ import { findFreePort } from "./ports.js"
 import { RedisServerProcess } from "./redis.js"
 
 const HEALTHCHECK_PATH = "/healthcheck"
-const SERVER_START_TIMEOUT_MS = 5 * 60 * 1000
+// A pristine server builds all bundled StructureDefinitions and ValueSets before listening.
+// On a busy development host that routinely takes longer than five minutes.
+const SERVER_START_TIMEOUT_MS = 15 * 60 * 1000
 const HEALTHCHECK_POLL_INTERVAL_MS = 500
 const CHILD_STOP_GRACE_MS = 10000
 
