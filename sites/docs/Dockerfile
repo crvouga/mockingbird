@@ -6,6 +6,8 @@ FROM oven/bun:1.4.0 AS bun
 
 FROM node:22-bookworm-slim AS build
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
+# Package builds spawn `bunx` (a symlink to bun in the official image).
+RUN ln -sf bun /usr/local/bin/bunx
 WORKDIR /app
 ENV HUSKY=0 TURBO_TELEMETRY_DISABLED=1
 COPY . .
