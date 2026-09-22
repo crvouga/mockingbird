@@ -27,6 +27,20 @@ export interface TocEntry {
   text: string
 }
 
+export interface ServiceExample {
+  id: string
+  key: string
+  title: string
+  description: string
+  entry: string
+  sources: { path: string; code: string; html: string }[]
+}
+
+/** Browser components may return a disposer; importing their module must be DOM-free. */
+export interface ExampleModule {
+  mount(host: HTMLElement): void | (() => void) | Promise<undefined | (() => void)>
+}
+
 export interface Service {
   name: string
   packageName: string
@@ -63,6 +77,7 @@ export interface Service {
   readme: { markdown: string; html: string; toc: TocEntry[] }
   /** First TypeScript example in the README that only imports the package's main entry. */
   example: { code: string; html: string } | null
+  examples: ServiceExample[]
   hue: number
 }
 

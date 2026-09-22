@@ -138,3 +138,49 @@ bunx biome check --write .          # this package only — never at the repo ro
 bun run build && bun run pack:check && bun run portability
 bun test
 ```
+
+## Bespoke interactive examples
+
+A service can attach any number of interactive examples to its docs page through
+`mockingbird.examples` in its `package.json`. Keep the implementation in that service's
+`examples/` directory:
+
+```json
+{
+  "mockingbird": {
+    "examples": [{
+      "id": "google-login",
+      "title": "Try a complete Google login",
+      "description": "An app, its Hono server, and the OAuth provider run in one tab.",
+      "entry": "examples/google-login/index.ts",
+      "sources": ["examples/google-login/app.ts", "examples/google-login/index.ts"]
+    }]
+  }
+}
+```
+
+IDs must be unique within the service and use kebab-case. Entry and source files must
+exist inside `examples/`; the catalog rejects missing files and path escapes. Omitting
+`sources` displays the entry file. Entries export `mount(host: HTMLElement)`, optionally
+async, returning a cleanup function (or nothing). Keep module imports free of DOM side
+effects; only `mount` should access the DOM. Release listeners and local state on cleanup.
+Add `examples` to the service's typecheck includes and declare its dependencies normally.
+
+The docs render a launch button, lazy-load the component, and display highlighted source
+files. Example metadata also appears in `/catalog.json`. Use native accessible controls,
+respect the docs theme, and scope styles to the component (Shadow DOM works well). The
+example owns its mock instances, so repeated launches and different examples stay isolated.
+
+The OAuth example is a complete reference: `app.ts` runs Hono plus `oauth4webapi` and the
+actual OAuth mock through a local Fetch dispatcher; `transport.ts` handles virtual cookies
+and redirects; `index.ts` keeps the app in its own sandboxed frame and opens a separate provider popup
+(with a dialog fallback when popups are blocked). Provider HTML forms use the same transport;
+the callback closes the provider surface and updates the app. Its application and transport modules run unchanged in
+Bun or a browser. No network listeners, fetch monkey patches, service workers, or real
+provider accounts are required. The small cookie jar models the example's two fixed HTTPS
+origins; it is not a general browser cookie-policy implementation.
+
+Browser Fetch also strips forbidden `Cookie`/`Set-Cookie` headers from synthetic objects.
+The reference example therefore uses an explicit local header envelope for cookies and
+origin, with no global Fetch patches. The OAuth mock's optional `cookieHeaders` setting
+supports this envelope; normal HTTP mode continues to use standard headers.

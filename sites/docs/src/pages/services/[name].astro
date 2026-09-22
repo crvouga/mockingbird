@@ -4,6 +4,7 @@ import Icon from "../../components/Icon.astro"
 import Install from "../../components/Install.astro"
 import Monogram from "../../components/Monogram.astro"
 import Playground from "../../components/Playground.astro"
+import ServiceExamples from "../../components/ServiceExamples.astro"
 import SqlConsole from "../../components/SqlConsole.astro"
 import TierBadge from "../../components/TierBadge.astro"
 import Base from "../../layouts/Base.astro"
@@ -34,6 +35,7 @@ const { service: s, prev, next } = Astro.props
 const category = CATEGORIES[s.category as CategorySlug]
 const unsupported = s.operations.filter((o) => !o.supported)
 const toc = [
+  ...s.examples.map((e) => ({ depth: 2, slug: `example-${e.id}`, text: e.title })),
   ...(s.kind !== "node" ? [{ depth: 2, slug: "playground", text: "Playground" }] : []),
   ...(s.opsTotal > 0 ? [{ depth: 2, slug: "operations", text: "Operations" }] : []),
   { depth: 2, slug: "docs", text: "Documentation" },
@@ -97,6 +99,7 @@ const toc = [
 
     <div class="layout">
       <div class="content">
+        <ServiceExamples service={s} />
         {
           s.kind === "http" && (
             <section id="playground" class="block">

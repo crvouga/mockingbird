@@ -39,6 +39,12 @@ export const GET: APIRoute = () => {
         unsupported: s.operations.filter((o) => !o.supported).map((o) => o.id),
       },
       contract: s.contract,
+      examples: s.examples.map((e) => ({
+        id: e.id,
+        title: e.title,
+        description: e.description,
+        url: `/services/${s.name}#example-${e.id}`,
+      })),
       docs: {
         page: `/services/${s.name}`,
         markdown: `/services/${s.name}.md`,

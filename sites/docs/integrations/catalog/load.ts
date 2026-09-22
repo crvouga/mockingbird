@@ -13,6 +13,7 @@ import type {
   ServiceKind,
   ServiceStatus,
 } from "../../src/lib/types.ts"
+import { exampleSource, readExamples } from "./examples.ts"
 import { highlight, renderMarkdown } from "./markdown.ts"
 import { authHint, extractOperations, serverOrigin } from "./openapi.ts"
 
@@ -33,7 +34,7 @@ export function watchedFiles({ repoRoot }: CatalogPaths): string[] {
   const dir = join(repoRoot, "packages/service")
   return [
     ...readdirSync(dir).flatMap((name) =>
-      ["package.json", "README.md", "dist/index.js"].map((f) => join(dir, name, f)),
+      ["package.json", "README.md", "dist/index.js", "examples"].map((f) => join(dir, name, f)),
     ),
     ...readdirSync(join(repoRoot, "docs"))
       .filter((f) => f.endsWith(".md"))
@@ -143,6 +144,23 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
         services: names,
       })
       const exampleCode = findExample(readmeMarkdown, pkg.name)
+      const definitions = readExamples(meta.examples, dir)
+      const examples = await Promise.all(
+        definitions.map(async (example) => ({
+          ...example,
+          key: `${name}/${example.id}`,
+          sources: await Promise.all(
+            (example.sources ?? [example.entry]).map(async (path) => {
+              const code = exampleSource(dir, path)
+              return {
+                path,
+                code,
+                html: await highlight(code, path.endsWith(".css") ? "css" : "ts"),
+              }
+            }),
+          ),
+        })),
+      )
 
       if (kind === "sql") {
         problems.push(...validateSnippets(name, mod))
@@ -188,6 +206,7 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
         example: exampleCode
           ? { code: exampleCode, html: await highlight(exampleCode, "ts") }
           : null,
+        examples,
         hue: hue(name),
       }
     }),
@@ -302,7 +321,8 @@ async function runQuickStart(
   if (!target) return `${QUICK_START.package} is not a published service`
   const entry = pathToFileURL(join(serviceDir, target.name, "dist/index.js")).href
   const logs: unknown[][] = []
-  const key = "__mockingbirdQuickStart"
+  // A fresh module URL is required after catalog invalidation; ESM caches data URLs.
+  const key = `__mockingbirdQuickStart_${crypto.randomUUID().replaceAll("-", "")}`
   ;(globalThis as Record<string, unknown>)[key] = (...args: unknown[]) => logs.push(args)
   const source = `const console = { log: (...a) => globalThis.${key}(...a) };\n${QUICK_START.code.replaceAll(JSON.stringify(QUICK_START.package), JSON.stringify(entry))}`
   try {
