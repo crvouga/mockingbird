@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: Amazon Cognito Identity Provider (Mockingbird subset)
+  version: "2016-04-18"
+  description: Hand-trimmed AWS JSON 1.1 user-pools contract used by the AWS SDK clients.
+servers:
+  - url: https://cognito-idp.us-east-1.amazonaws.com
+security:
+  - sigv4: []
+paths:
+  /:
+    post:
+      operationId: CognitoRpc
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: false }
+      parameters:
+        - name: X-Amz-Target
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^AWSCognitoIdentityProviderService\.[A-Za-z]+$'
+      requestBody:
+        required: true
+        content:
+          application/x-amz-json-1.1:
+            schema: { type: object, additionalProperties: true }
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        "200":
+          description: Operation-specific AWS JSON response.
+          content:
+            application/x-amz-json-1.1:
+              schema: { type: object, additionalProperties: true }
+        "400":
+          description: Cognito service exception.
+          content:
+            application/x-amz-json-1.1:
+              schema:
+                type: object
+                required: [__type, message]
+                properties:
+                  __type: { type: string }
+                  message: { type: string }
+                additionalProperties: true
+  /{poolId}/.well-known/openid-configuration:
+    get:
+      operationId: Discovery
+      security: []
+      x-mockingbird: { supported: true, parity: { enabled: false, reason: Local issuer metadata. } }
+      parameters:
+        - { name: poolId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: OIDC discovery.
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+  /{poolId}/.well-known/jwks.json:
+    get:
+      operationId: Jwks
+      security: []
+      x-mockingbird: { supported: true, parity: { enabled: false, reason: Local signing keys. } }
+      parameters:
+        - { name: poolId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: JSON Web Key Set.
+          content: { application/json: { schema: { type: object, additionalProperties: true } } }
+components:
+  securitySchemes:
+    sigv4:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: AWS SigV4; fixture signatures are accepted and access-key ids select namespaces.
