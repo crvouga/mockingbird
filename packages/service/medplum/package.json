@@ -34,7 +34,9 @@
   ],
   "mockingbird": {
     "runtime": "node",
-    "layer": "service"
+    "layer": "service",
+    "category": "health",
+    "displayName": "Medplum"
   },
   "engines": {
     "node": ">=22.18.0"

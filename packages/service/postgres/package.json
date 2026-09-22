@@ -117,7 +117,9 @@
   ],
   "mockingbird": {
     "runtime": "portable",
-    "layer": "service"
+    "layer": "service",
+    "category": "databases",
+    "displayName": "PostgreSQL"
   },
   "trustedDependencies": [
     "@embedded-postgres/darwin-arm64",

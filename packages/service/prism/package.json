@@ -48,7 +48,9 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "health",
+    "displayName": "Prism Labs"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",
