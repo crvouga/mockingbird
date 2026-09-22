@@ -1,6 +1,12 @@
 {
   "extends": "astro/tsconfigs/strict",
   "compilerOptions": {
-    "jsxImportSource": "astro"
-  }
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["src/**/*.ts", "integrations/**/*.ts", "astro.config.ts", ".astro/types.d.ts"],
+  "exclude": ["dist"]
 }

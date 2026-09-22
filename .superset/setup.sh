@@ -31,10 +31,6 @@ else
   echo "⚠️  bun.lock has changes - dependencies may be out of sync"
 fi
 
-# Generate documentation
-echo "📚 Generating documentation..."
-bun run docs:generate
-
 # Verify workspace integrity
 echo "🔍 Checking workspace boundaries..."
 bun run check:boundaries 2>&1 || {
@@ -47,5 +43,5 @@ echo ""
 echo "Next steps:"
 echo "  bun run check          # Run all quality gates"
 echo "  bun run test           # Run test suites"
-echo "  bun run docs:dev       # Start docs dev server (http://localhost:3000)"
+echo "  bun docs               # Build the services, then start the docs dev server"
 echo "  bun run parity:stripe  # Run live parity tests (with credentials)"

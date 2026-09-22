@@ -1,0 +1,284 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../components/Icon.astro"
+import Sprite from "../components/Sprite.astro"
+import "../styles/global.css"
+
+interface Props {
+  title?: string
+  description?: string
+  /** A markdown twin of this page, advertised to agents with `rel="alternate"`. */
+  markdown?: string
+}
+
+const {
+  title,
+  description = `Stateful mocks for ${catalog.totals.services} third-party APIs and SQL databases. Real vendor surfaces, real state, in-process in Node, Bun, browsers and Workers.`,
+  markdown,
+} = Astro.props
+const fullTitle = title
+  ? `${title} · Mockingbird`
+  : "Mockingbird · Stateful mocks for the APIs you depend on"
+const path = Astro.url.pathname.replace(/\/$/, "") || "/"
+const nav = [
+  { href: "/services", label: "Services" },
+  { href: "/coverage", label: "Coverage" },
+  { href: "/why", label: "Why" },
+]
+const favicon = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🐦‍⬛</text></svg>')}`
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={fullTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0c" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" href={favicon} />
+    <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
+    {markdown && <link rel="alternate" type="text/markdown" href={markdown} />}
+    <script is:inline>
+      try {
+        var t = localStorage.getItem("mb:theme")
+        if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+        document.documentElement.dataset.theme = t
+      } catch (e) {
+        document.documentElement.dataset.theme = "light"
+      }
+    </script>
+  </head>
+  <body>
+    <Sprite />
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header" data-header>
+      <div class="container">
+        <a class="brand" href="/" aria-label="Mockingbird home">
+          <span class="emoji" aria-hidden="true">🐦‍⬛</span>
+          <span class="wordmark">Mockingbird</span>
+        </a>
+        <nav class="nav" aria-label="Primary">
+          {
+            nav.map((item) => (
+              <a href={item.href} aria-current={path === item.href || path.startsWith(`${item.href}/`) ? "page" : undefined}>
+                {item.label}
+              </a>
+            ))
+          }
+        </nav>
+        <div class="header-actions">
+          <button class="search-trigger" type="button" data-palette-open aria-label="Search services">
+            <Icon name="search" />
+            <span>Search services…</span>
+            <kbd data-mod-key>⌘K</kbd>
+          </button>
+          <a class="icon-btn gh" href={catalog.repo} target="_blank" rel="noopener" aria-label="Mockingbird on GitHub">
+            <Icon name="github" />
+          </a>
+          <button class="icon-btn theme-toggle" type="button" data-theme-toggle aria-label="Toggle dark mode">
+            <Icon name="sun" />
+            <Icon name="moon" />
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main id="main">
+      <slot />
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-grid">
+          <div>
+            <a class="brand" href="/"><span class="emoji" aria-hidden="true">🐦‍⬛</span> Mockingbird</a>
+            <p>Stateful test doubles for the third-party APIs and databases your app depends on.</p>
+          </div>
+          <div>
+            <h2>Docs</h2>
+            <ul>
+              <li><a href="/services">Services</a></li>
+              <li><a href="/coverage">Coverage</a></li>
+              <li><a href="/why">Why Mockingbird</a></li>
+            </ul>
+          </div>
+          <div>
+            <h2>For agents</h2>
+            <ul>
+              <li><a href="/llms.txt">llms.txt</a></li>
+              <li><a href="/llms-full.txt">llms-full.txt</a></li>
+              <li><a href="/catalog.json">catalog.json</a></li>
+            </ul>
+          </div>
+          <div>
+            <h2>Project</h2>
+            <ul>
+              <li><a href={catalog.repo} target="_blank" rel="noopener">GitHub</a></li>
+              <li><a href="https://www.npmjs.com/search?q=%40crvouga%2Fmockingbird-service" target="_blank" rel="noopener">npm</a></li>
+              <li><a href={`${catalog.repo}/blob/main/docs/AUTHORING_A_SERVICE.md`} target="_blank" rel="noopener">Add a service</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="footer-base">
+          <span>MIT licensed.</span>
+          <span>Every page is generated from the service packages at build time.</span>
+        </div>
+      </div>
+    </footer>
+
+    <dialog class="palette" data-palette aria-label="Search">
+      <div class="palette-box">
+        <label class="palette-input">
+          <Icon name="search" />
+          <input type="text" placeholder="Search services, operations, pages…" autocomplete="off" spellcheck="false" data-palette-input aria-controls="palette-results" />
+          <kbd>esc</kbd>
+        </label>
+        <ul class="palette-results" id="palette-results" role="listbox" data-palette-results></ul>
+        <div class="palette-foot">
+          <span><kbd>↑</kbd><kbd>↓</kbd> to navigate</span>
+          <span><kbd>↵</kbd> to open</span>
+        </div>
+      </div>
+    </dialog>
+
+    <script>
+      import "../client/site.ts"
+    </script>
+  </body>
+</html>
+
+<style is:global>
+  .palette {
+    width: min(640px, calc(100vw - 32px));
+    max-height: min(560px, calc(100dvh - 120px));
+    margin: 12vh auto auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    background: var(--bg-elevated);
+    color: var(--fg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+
+  .palette::backdrop {
+    background: rgb(10 10 12 / 0.4);
+    backdrop-filter: blur(2px);
+  }
+
+  .palette[open] {
+    animation: palette-in 0.16s var(--ease);
+  }
+
+  @keyframes palette-in {
+    from {
+      opacity: 0;
+      transform: translateY(-6px) scale(0.99);
+    }
+  }
+
+  .palette-box {
+    display: flex;
+    flex-direction: column;
+    max-height: inherit;
+  }
+
+  .palette-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--fg-subtle);
+  }
+
+  .palette-input input {
+    flex: 1;
+    height: 54px;
+    border: 0;
+    outline: none;
+    background: transparent;
+    color: var(--fg);
+    font-size: 15.5px;
+  }
+
+  .palette-results {
+    list-style: none;
+    margin: 0;
+    padding: 6px;
+    overflow-y: auto;
+  }
+
+  .palette-results .group {
+    padding: 10px 10px 6px;
+    color: var(--fg-subtle);
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .palette-results a {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 10px;
+    border-radius: 9px;
+  }
+
+  .palette-results a[aria-selected="true"] {
+    background: var(--bg-muted);
+  }
+
+  .palette-results .monogram {
+    --size: 30px;
+  }
+
+  .palette-results .meta {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .palette-results .meta strong {
+    display: block;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .palette-results .meta span {
+    display: block;
+    color: var(--fg-subtle);
+    font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .palette-results .kind {
+    color: var(--fg-faint);
+    font-size: 12px;
+  }
+
+  .palette-results .empty {
+    padding: 32px 12px;
+    text-align: center;
+    color: var(--fg-subtle);
+  }
+
+  .palette-foot {
+    display: flex;
+    gap: 16px;
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-subtle);
+    color: var(--fg-subtle);
+    font-size: 12px;
+  }
+
+  .palette-foot kbd {
+    margin-right: 3px;
+  }
+</style>

@@ -1,0 +1,37 @@
+---
+import Icon from "../components/Icon.astro"
+import Base from "../layouts/Base.astro"
+---
+
+<Base title="Not found">
+  <div class="container notfound">
+    <span class="emoji" aria-hidden="true">🐦‍⬛</span>
+    <h1>This page flew off.</h1>
+    <p class="lede">The link may be old, or the service may have a different name. Search from the header, or start from the catalog.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="/services">Browse services <Icon name="arrow-right" /></a>
+      <button type="button" class="btn btn-secondary" data-palette-open><Icon name="search" /> Search</button>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .notfound {
+    display: grid;
+    justify-items: center;
+    gap: 14px;
+    padding-block: 120px 40px;
+    text-align: center;
+  }
+  .notfound .emoji {
+    font-size: 56px;
+  }
+  .notfound h1 {
+    font-size: 36px;
+  }
+  .actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 8px;
+  }
+</style>
