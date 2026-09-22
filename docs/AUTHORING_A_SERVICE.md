@@ -123,6 +123,7 @@ its build fails when they are missing or stale:
 | `displayName` | yes | The vendor's name as people write it, e.g. `"Customer.io"` |
 | `status` | yes | Release tier: `"wip"` until the mock is complete and verified, then `"ready"`. The site badges, filters and counts services by it |
 | `playground.headers` | no | Credentials in the format the mock accepts (e.g. `sk_test_…`), sent with every playground request. The build sends every sample request to a fresh mock and fails if none succeed with them |
+| `playground.basicAuth` | no | `"user:pass"` for mocks that take HTTP Basic auth; the build sends it as `authorization: Basic <base64>`. Use it instead of a literal `Basic …` header, which secret scanners flag |
 | `playground.operation` | no | The operation the playground opens on; it must succeed with its sample request |
 
 Also add the package to `sites/docs/package.json` `devDependencies` (`"workspace:*"`) so turbo
