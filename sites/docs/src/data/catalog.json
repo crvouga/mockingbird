@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-22T00:03:53.570Z",
+  "generated": "2026-09-22T00:11:06.056Z",
   "version": "1.0.0",
   "rationale": "Mockingbird provides stateful test doubles for 40+ third-party HTTP APIs and SQL databases.\nEach mock speaks the provider's real surface (fetch(Request) → Response), keeps state in SQLite,\nand is driven by a vendored OpenAPI contract. Use them in tests instead of hitting the network,\nor serve them over Node/Bun when you need a local origin.\n\nWhy this matters: No more mocking libraries with divergent behavior. No more flaky tests that pass\nagainst mocks but fail against real APIs. Mockingbird keeps behavior in sync with the real vendor\nthrough continuous property-based testing (PBT) against live sandboxes.\n\nAll mocks are isomorphic and runnable client-side (in browser, Workers, etc.) with Hono.",
   "services": [
