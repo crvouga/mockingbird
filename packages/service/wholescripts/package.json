@@ -49,7 +49,12 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "pharmacy",
+    "displayName": "Wholescripts",
+    "playground": {
+      "basicAuth": "mockingbird:mockingbird"
+    }
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

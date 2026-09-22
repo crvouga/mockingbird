@@ -51,7 +51,14 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "payments",
+    "displayName": "Flex",
+    "playground": {
+      "headers": {
+        "authorization": "Bearer fsk_test_mockingbird"
+      }
+    }
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",
