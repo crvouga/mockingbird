@@ -97,6 +97,7 @@ It prints the listening address and the seeded client credentials. Point `Medplu
 ### `createServer` (Node)
 
 ```ts
+import { MedplumClient } from "@medplum/core"
 import { createServer } from "@crvouga/mockingbird-service-medplum/server"
 
 const server = await createServer() // any free port; the base URL is the listening address
