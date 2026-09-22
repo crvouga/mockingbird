@@ -61,6 +61,10 @@ bun run secrets:doctor
 # Push NPM_TOKEN from Vault (personal/prd) to the NPM_TOKEN Actions secret
 bun run secrets:sync
 
+# Missing NPM_TOKEN? Prompt securely, store + sync it, then rerun and watch failed CI
+bun run release:fix-ci                  # latest failed CI run on main
+bun run release:fix-ci -- 35698422509   # specific run
+
 # What the next release would publish
 bun run release:plan
 bun run release:publish -- --dry-run
