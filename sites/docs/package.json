@@ -22,6 +22,7 @@
     "@crvouga/mockingbird-service-aws-speech": "workspace:*",
     "@crvouga/mockingbird-service-bedrock": "workspace:*",
     "@crvouga/mockingbird-service-caretalk": "workspace:*",
+    "@crvouga/mockingbird-service-cognito": "workspace:*",
     "@crvouga/mockingbird-service-customerio": "workspace:*",
     "@crvouga/mockingbird-service-daily": "workspace:*",
     "@crvouga/mockingbird-service-easypost": "workspace:*",
