@@ -26,6 +26,22 @@ Stop and report to the user only if `gh auth status` fails, if a command returns
 report the key name and Vault path, never a value; OIDC/infrastructure; an external outage; a real
 leaked credential that must be rotated).
 
+## Fast path
+
+After committing local changes and running the relevant local checks, use one command:
+
+```
+bun run pr:merge advance --timeout 1800
+```
+
+It syncs both the remote head and `origin/main`, publishes, creates a PR if needed using the
+non-merge commit subjects, marks a draft ready, waits for every check, inspects review feedback,
+and merges. It stops with one JSON object at the first blocker. Fix the reported conflict, check,
+or review concern and rerun. Pass `--title` and `--body-file` to control a new PR's text. If the
+output contains general PR comments, read and address them, then rerun with
+`--comments-reviewed`. Confirm `merged: true`; a pending merge is not completion. The detailed
+commands below are for investigating and fixing blockers.
+
 ## 1. Preflight
 
 ```
@@ -110,7 +126,9 @@ commits are not on the remote yet, so remove the value from history locally as a
 bun run pr:merge sync
 ```
 
-- `alreadyUpToDate: true` or `merged: true` (exit 0) → continue. If `merged: true`, `publish` again.
+- `alreadyUpToDate: true` or `merged: true` (exit 0) → continue. If `pushNeeded: true`, `publish` again.
+- `sync` fetches and merges remote head changes before `origin/main`, preserving work from another
+  workspace without a force push.
 - exit 3 (`step: "merge"`) → for each path in `conflicts`: read both sides (`git diff <path>`), resolve by
   hand preserving **both** intents (never take one side wholesale), `git add <path>`, then
   `bun run pr:merge sync --continue`. If the merge commit lands, `publish` again.
@@ -213,6 +231,19 @@ Each incident has its `id`, `detector`, `commit`, `file`, `line`, and whether th
 
 Never force-push to scrub a pushed commit (see Rules), and never use a secret-scanning bypass for a
 real credential.
+
+## Review feedback
+
+```
+bun run pr:merge comments
+```
+
+The JSON lists unresolved review threads and recent general comments. Read each concern, make a
+code change or explain why no change is needed, and reply to the thread with
+`bun run pr:merge reply --thread <id> --body-file <file>`. Then run
+`bun run pr:merge resolve --thread <id>` only after its concern is addressed. Reply to a general
+comment with `gh pr comment <number> --body-file <file>` when appropriate. Rerun `comments` until
+threads are resolved. The merge gate checks unresolved threads and changes-requested reviews.
 
 ## 7. Merge
 
