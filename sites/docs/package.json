@@ -55,6 +55,7 @@
     "@crvouga/mockingbird-service-prism": "workspace:*",
     "@crvouga/mockingbird-service-resend": "workspace:*",
     "@crvouga/mockingbird-service-rxvortex": "workspace:*",
+    "@crvouga/mockingbird-service-s3": "workspace:*",
     "@crvouga/mockingbird-service-slack": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",

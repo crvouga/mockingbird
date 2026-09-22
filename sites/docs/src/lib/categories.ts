@@ -23,6 +23,7 @@ export const CATEGORIES = {
   logistics: { label: "Maps & logistics", blurb: "Places, geocoding and shipment tracking." },
   identity: { label: "Identity", blurb: "Identity verification and KYC." },
   databases: { label: "Databases", blurb: "In-memory SQL engines with real dialect semantics." },
+  storage: { label: "Storage", blurb: "Object and file storage APIs for binary test fixtures." },
 } as const satisfies Record<string, { label: string; blurb: string }>
 
 export type CategorySlug = keyof typeof CATEGORIES
