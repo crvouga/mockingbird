@@ -33,7 +33,7 @@ Do not work around a mock in your own project: file a GitHub issue on crvouga/mo
 
 ## Work in progress
 
-- [@crvouga/mockingbird-service-aha](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aha/README.md): Stateful mock of the AHA at-home phlebotomy partner API: HMAC-signed create-order and cancel, raw or wrapped envelopes, idempotency keys, and the order-status webhooks (Scheduled, Check Out, …) our bloodwork handler consumes.
+- [@crvouga/mockingbird-service-aha](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aha/README.md): Stateful AHA phlebotomy mock with signed HTTP orders, status webhooks, and a real deterministic SSH/SFTP result server.
 - [@crvouga/mockingbird-service-aha SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aha/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-aws-speech](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aws-speech/README.md): Stateful mock of AWS Polly (SynthesizeSpeech, StartSpeechSynthesisStream) and Transcribe (streaming over h2c, batch jobs), with exact event-stream framing and scripted transcripts.
 - [@crvouga/mockingbird-service-aws-speech SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aws-speech/SUPPORT.md): coverage matrix
