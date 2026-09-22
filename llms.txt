@@ -35,6 +35,8 @@ Do not work around a mock in your own project: file a GitHub issue on crvouga/mo
 
 - [@crvouga/mockingbird-service-aha](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aha/README.md): Stateful AHA phlebotomy mock with signed HTTP orders, status webhooks, and a real deterministic SSH/SFTP result server.
 - [@crvouga/mockingbird-service-aha SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aha/SUPPORT.md): coverage matrix
+- [@crvouga/mockingbird-service-aws-secrets](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aws-secrets/README.md): Stateful AWS Secrets Manager and SSM Parameter Store mock with versions, stages, rotation, and redacted controls.
+- [@crvouga/mockingbird-service-aws-secrets SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aws-secrets/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-aws-speech](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aws-speech/README.md): Stateful mock of AWS Polly (SynthesizeSpeech, StartSpeechSynthesisStream) and Transcribe (streaming over h2c, batch jobs), with exact event-stream framing and scripted transcripts.
 - [@crvouga/mockingbird-service-aws-speech SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aws-speech/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-bedrock](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/bedrock/README.md): Stateful, scriptable mock of AWS Bedrock Runtime (Converse, ConverseStream, InvokeModel incl. Titan embeddings, Nova Sonic bidirectional streams over h2c) and AgentCore InvokeHarness, with exact event-stream framing.
