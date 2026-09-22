@@ -10,7 +10,8 @@ WORKDIR /app
 ENV HUSKY=0 TURBO_TELEMETRY_DISABLED=1
 COPY . .
 RUN bun install --frozen-lockfile
-RUN bunx turbo run build --filter=@crvouga/mockingbird-docs... --output-logs=errors-only
+# bunx is a separate symlink; only the bun binary is copied in above.
+RUN bun x turbo run build --filter=@crvouga/mockingbird-docs... --output-logs=errors-only
 
 FROM nginx:1.29-alpine
 COPY --from=build /app/sites/docs/dist /usr/share/nginx/html
