@@ -1,19 +1,33 @@
 # @crvouga/mockingbird-service-medplum
 
-Stateful Medplum "mock" that runs the **real [Medplum](https://www.medplum.com/) server** rather
-than reimplementing its FHIR API. It self-hosts a pinned Medplum build as a child process on
-embedded Postgres and a throwaway `redis-server` process, and exposes it through a Fetch-style
-contract (`fetch(Request) -> Response`) plus explicit `start` / `reset` / `stop` lifecycle calls.
+Stateful, in-process mock of a self-hosted [Medplum](https://www.medplum.com/) server (v5.1.37)
+for test suites. It covers:
 
-Use it for integration tests that need genuine Medplum/FHIR behaviour (search, validation,
-auth, versioning) without a hosted Medplum project. Because it runs the real server, the full
-Medplum API is available; the vendored contract used for parity covers healthcheck, the login and
-token flow, and Patient search/create/read/update/delete
-([SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/medplum/SUPPORT.md)).
+- **FHIR R4 REST**: create, read, update, delete, conditional writes, JSON Patch, versioning and
+  history, and search with the server's semantics (chained, `_has`, `_filter`, `_include` /
+  `_revinclude`, `_sort`, `_total`, `_summary`, `_elements`, offset and cursor paging).
+- **Operations**: batch and transaction bundles, `$validate`, `$expunge`, `Patient/$everything`,
+  GraphQL, and Binary storage with signed attachment URLs.
+- **Auth**: OAuth2 password login with PKCE, authorization code, client credentials, refresh
+  tokens with rotation, and Basic auth, all as ES384 JWTs with a JWKS.
+- **Access control and admin**: access policies, and the project admin API (invite, clients,
+  members).
 
-Costs to know before choosing it: the **first** `start()` clones and builds Medplum (several
-minutes, network required); every `start()` boots Postgres, Redis and the server (seconds, not
-milliseconds). Share one instance per test file or suite, not per test.
+It is built on `@medplum/core` and the server's own FHIR router (`@medplum/fhir-router`, vendored),
+so validation messages, search results and OperationOutcomes match the server's.
+
+**Portable**: it needs no child process, database or native module. State lives in an in-memory
+SQLite engine written in TypeScript, and crypto is WebCrypto. It runs anywhere JavaScript does:
+Node, Bun, workerd (Cloudflare Workers) and browsers. The `./server` entry and the CLI are
+the only Node-specific parts.
+
+Parity is proven against the real thing. Every scenario in `test/scenarios` (32 scenarios, 481
+exchanges: status, headers and body) and seeded random walks run against a self-hosted Medplum
+v5.1.37 and the mock, and they must agree exchange by exchange. The oracle's recording replays
+in CI.
+
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/medplum/SUPPORT.md)
+- Medplum docs: https://www.medplum.com/docs · FHIR R4: https://hl7.org/fhir/R4/
 
 ## Install
 
@@ -21,173 +35,232 @@ milliseconds). Share one instance per test file or suite, not per test.
 npm install -D @crvouga/mockingbird-service-medplum
 ```
 
-Requirements:
-
-- Node.js >= 22.18 (`engines`). Also used under Bun by this repo's own tests.
-- `git` and `npm` on `PATH` for the one-time clone and build
-  (`git clone` -> `npm ci` -> `npm run build:fast`, following Medplum's
-  [install-from-scratch](https://www.medplum.com/docs/self-hosting/install-from-scratch) flow).
-- A `redis-server` binary on `PATH` (macOS: `brew install redis`, Debian/Ubuntu:
-  `apt-get install redis-server`). Set `MOCKINGBIRD_REDIS_SERVER` to point at it if it lives
-  elsewhere. It is spawned per run with persistence disabled; nothing is compiled or downloaded.
-- The postinstall script of `embedded-postgres` must run:
-  - **Bun**: list it under `trustedDependencies` in your root `package.json`.
-  - **pnpm**: approve it once with `pnpm approve-builds`.
-- Disk under `~/.cache/mockingbird/medplum-server/<version>` for the Medplum clone and build.
+ESM only. Requires Node >= 22 or Bun >= 1.2 (any runtime with WebCrypto and
+`DecompressionStream` for the portable entry). `@medplum/core` is a dependency; bring your own
+`@medplum/core` `MedplumClient` if you use the SDK.
 
 ## Usage
 
-### Lifecycle
-
-| Call | Behaviour |
-| --- | --- |
-| `await createMedplumAPI(options?)` | Construct a `MedplumAPI` and `await start()` it. |
-| `await medplum.start()` | Pick free ports; boot embedded Postgres (database `medplum`) and a `redis-server` child process; ensure the Medplum build exists in the cache (clone/build on first run); write a per-run `medplum.config.json` into a temp dir; spawn `packages/server/dist/index.js` with the current runtime (`process.execPath`); poll `GET /healthcheck` (up to 5 minutes). Idempotent and safe to call concurrently. |
-| `medplum.fetch(request)` | Proxy the request to the running server. Only the path and query of `request.url` are used, so any origin works. Redirects are returned, not followed. |
-| `await medplum.reset()` | Stop the server, drop and recreate the `medplum` database, restart and wait for healthy. The server re-runs migrations and seeding on boot, so state is pristine. Clears the cached access token. Throws if not started. |
-| `await medplum.stop()` | SIGTERM the server (SIGKILL after 10s), stop Redis and Postgres, delete the temp dir. No-op if not started. |
-
-A process exit / SIGINT / SIGTERM guard kills the child processes if your test runner dies. The
-first run's clone/build steps have timeouts of 10 minutes (clone), 30 minutes (`npm ci`) and 60
-minutes (build); progress goes to `onLog` and to `<cacheRoot>/<version>.log`.
-
-### Seeded credentials and tokens
-
-Each boot seeds Medplum's example project and super admin (`admin@example.com` /
-`medplum_admin`, exported as `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`) and a
-`ClientApplication` for the mock's fixed client id. `getAccessToken()` logs in with those
-credentials (`POST /auth/login`, PKCE `plain`) and exchanges the code at `POST /oauth2/token`,
-returning a bearer token that is cached until `reset()` or `stop()`. Send it as
-`Authorization: Bearer <token>`.
-
-### Example
+### In-process with the Medplum SDK
 
 ```ts
-import { createMedplumAPI } from "@crvouga/mockingbird-service-medplum"
-
-const medplum = await createMedplumAPI({ onLog: (message) => console.log(message) })
-try {
-  const token = await medplum.getAccessToken()
-  const headers = { authorization: `Bearer ${token}`, "content-type": "application/fhir+json" }
-
-  // Direct HTTP against the internal base URL (http://127.0.0.1:<apiPort>/):
-  const created = await fetch(new URL("/fhir/R4/Patient", medplum.getBaseUrl()), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ resourceType: "Patient", name: [{ given: ["Ada"], family: "Lovelace" }] }),
-  })
-  const patient = (await created.json()) as { id: string }
-
-  // Through fetch(request) (any origin; path and query are forwarded):
-  const read = await medplum.fetch(
-    new Request(`https://medplum.test/fhir/R4/Patient/${patient.id}`, { headers }),
-  )
-  console.log(read.status) // 200
-} finally {
-  await medplum.stop()
-}
-```
-
-### Pointing the Medplum SDK (or any client) at it
-
-The server listens on `http://127.0.0.1:<apiPort>/` (`getBaseUrl()`), with CORS open
-(`allowedOrigins: "*"`) and rate limits disabled. For `@medplum/core`'s `MedplumClient`, pass that
-URL as `baseUrl` and sign in with the seeded super admin, or hand it the token:
-
-```js
 import { MedplumClient } from "@medplum/core"
+import type { Patient } from "@medplum/fhirtypes"
+import { DEFAULT_CLIENT_ID, DEFAULT_CLIENT_SECRET, MedplumAPI } from "@crvouga/mockingbird-service-medplum"
 
-const client = new MedplumClient({ baseUrl: medplum.getBaseUrl() })
-client.setAccessToken(await medplum.getAccessToken())
-await client.searchResources("Patient")
+const mock = new MedplumAPI() // answers as http://localhost:8103/
+const medplum = new MedplumClient({
+  baseUrl: "http://localhost:8103/",
+  fetch: (url: string, init?: RequestInit) => mock.fetch(new Request(url, init)),
+})
+await medplum.startClientLogin(DEFAULT_CLIENT_ID, DEFAULT_CLIENT_SECRET)
+
+const patient = await medplum.createResource<Patient>({
+  resourceType: "Patient",
+  name: [{ given: ["Ada"], family: "Lovelace" }],
+})
+const found = await medplum.searchResources("Patient", { name: "lovelace" })
+console.log(found[0]?.id === patient.id) // true
+
+await mock.reset() // back to the seeded state
 ```
 
-### Resetting between tests
+Every `MedplumAPI` seeds what a fresh self-hosted server seeds, which is the super admin
+(`admin@example.com` / `medplum_admin`) and the R4 base project. It also seeds a ready project,
+**Mockingbird** (`DEFAULT_PROJECT_ID`), with a project-admin client application
+(`DEFAULT_CLIENT_ID` / `DEFAULT_CLIENT_SECRET`). Pass `project: false` to seed only what the
+server does.
 
-`reset()` restarts the server on a fresh database, so it costs roughly one server boot. Prefer
-unique data per test and reset between files or suites:
+### `mockingbird-medplum serve`
+
+```bash
+npx mockingbird-medplum serve                     # http://127.0.0.1:8103
+npx mockingbird-medplum serve --port 0 --client-id 0b9e4a5c-0000-4000-8000-00000000c1d1 --client-secret local
+npx mockingbird-medplum serve --help
+```
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--port <n>` | `8103` | Port to listen on (`0` for any free port) |
+| `--host <host>` | `127.0.0.1` | Interface to bind |
+| `--base-url <url>` | the listening address | Public base URL the server answers as (`fullUrl`s, `Location`, token issuer) |
+| `--client-id <uuid>` / `--client-secret <secret>` | `DEFAULT_CLIENT_ID` / `DEFAULT_CLIENT_SECRET` | The default project's client application |
+| `--project-id <uuid>` | `DEFAULT_PROJECT_ID` | The default project's id |
+| `--super-admin-email <email>` / `--super-admin-password <password>` | `admin@example.com` / `medplum_admin` | The seeded super admin |
+| `--admin-key <key>` | open | Require `x-mockingbird-admin-key` on `/__admin/*` |
+| `--log <pretty\|json\|off>` | `pretty` | One line per request |
+| `--config <file>` | — | Serve every service in a `mockingbird.json` (use `"medplum"` as the service name) |
+
+It prints the listening address and the seeded client credentials. Point `MedplumClient`
+(`baseUrl: "http://127.0.0.1:8103/"`) or your backend's Medplum base URL at it.
+
+### `createServer` (Node)
 
 ```ts
-import { afterAll, beforeAll, expect, test } from "bun:test"
-import { MedplumAPI } from "@crvouga/mockingbird-service-medplum"
+import { MedplumClient } from "@medplum/core"
+import { createServer } from "@crvouga/mockingbird-service-medplum/server"
 
-const medplum = new MedplumAPI()
-beforeAll(() => medplum.start(), 15 * 60 * 1000) // first run builds Medplum
-afterAll(() => medplum.stop())
-
-test("healthcheck", async () => {
-  const response = await medplum.fetch(new Request("http://medplum.test/healthcheck"))
-  expect(response.status).toBe(200)
-})
-
-test("starts clean after reset", async () => {
-  await medplum.reset()
-  const token = await medplum.getAccessToken()
-  const response = await medplum.fetch(
-    new Request("http://medplum.test/fhir/R4/Patient?name=Lovelace", {
-      headers: { authorization: `Bearer ${token}` },
-    }),
-  )
-  expect(response.status).toBe(200)
-}, 5 * 60 * 1000)
+const server = await createServer() // any free port; the base URL is the listening address
+const medplum = new MedplumClient({ baseUrl: `${server.url}/` })
+// ...
+await server.close()
 ```
+
+`createServer(options)` takes every `createRuntime` option plus `port` (default `0`) and `host`
+(default `127.0.0.1`). The result has `url`, `port`, `runtime` and `close()`.
+
+### `createRuntime` (any Fetch server)
+
+`createRuntime` is the whole served mock as a single runtime-neutral `fetch(request)`. That
+includes health, the `/__admin/*` control plane, namespaces, the clock, faults and the request
+journal. Hand it to `Bun.serve`, a Worker or Deno, or call it directly:
+
+```ts
+import { createRuntime } from "@crvouga/mockingbird-service-medplum"
+
+const medplum = createRuntime({ baseUrl: "https://medplum.test/" })
+export default { fetch: (request: Request) => medplum.fetch(request) }
+```
+
+Namespaces isolate data. A request picks one with `x-mockingbird-namespace: <name>`, with a
+`/ns/<name>/` base-URL prefix (`new MedplumClient({ baseUrl: "http://localhost:8103/ns/worker-1/" })`),
+or through its client id (`PUT /__admin/credentials {"credentials": {"<clientId>": "<namespace>"}}`).
+A client is recognized from Basic auth, from a bearer token's `client_id`, or from the
+`client_id` field of a form-encoded token request.
+
+### Admin routes (beyond the standard contract)
+
+| Route | Does |
+| --- | --- |
+| `GET /__admin/medplum` | The namespace's base URL, default project and client, and super admin |
+| `PUT /__admin/medplum/clients/:id` `{"secret"?, "name"?, "projectId"?, "admin"?}` | Create or replace a client application with a chosen id and secret |
+| `POST /__admin/medplum/users` `{"email", "password", "firstName"?, "lastName"?, "profileType"?, "admin"?, "projectId"?}` | Add a user with a password login and a membership |
+| `POST /__admin/medplum/token` `{"clientId"?}` | A bearer token for a client (default: the default client) |
+| `POST /__admin/medplum/resources[?projectId=]` | Seed a resource, an array, or a Bundle's entries, keeping given ids |
+| `GET /__admin/medplum/resources/:type` | Every current resource of a type, across projects |
+| `POST /__admin/medplum/logins/revoke` | Revoke every login, so all issued tokens stop working |
+
+The standard contract also serves `POST /__admin/reset`, snapshot and restore, the clock, faults,
+`GET /__admin/requests` and metrics.
+
+### Fault presets
+
+`POST /__admin/faults {"preset": "<name>"}`. Add `count` to limit how many requests it hits.
+
+| Preset | Effect |
+| --- | --- |
+| `rate_limited` | Every FHIR request answers 429 with the server's quota OperationOutcome |
+| `token_expired` | FHIR requests answer 401 as if the token expired |
+| `server_error` | FHIR requests fail with the server's unhandled-error 500 |
+| `token_server_error` | `POST /oauth2/token` fails with a 500 |
+| `write_drop` | Creates and batches drop the connection |
+| `slow_search` | Searches take 3 s |
+
+### Faithful details worth knowing
+
+- Deleted resources answer 410 Gone, and their history ends with a delete entry.
+- An update that changes nothing keeps its version.
+- Resources are validated against the FHIR R4 and Medplum StructureDefinitions, with the
+  server's messages.
+- Transaction bundles are atomic only when the project has the `transaction-bundles` feature, as
+  on the server. Without it, entries commit one by one.
+- Search follows Postgres semantics. Name and address matching is by token prefix, sorts use C
+  collation (missing values last ascending), and dates compare in UTC. Only the sort key orders
+  results, so ties and unsorted pages have no guaranteed order on the server; don't rely on it.
+- `:missing` on lookup-table parameters (`name`, `family`, `given`, `address`…)
+  matches nothing either way, as on the server.
+- Super admins get no refresh token from a password login, as on the server.
+
+## Deliberately not modelled
+
+These answer the server's 404 (or are stored but inert):
+
+- terminology operations (`ValueSet/$expand`, `CodeSystem/$lookup`, …)
+- bulk `$export`
+- bots (`Bot/$execute`)
+- subscription delivery (Subscription resources are stored, but nothing is sent)
+- email
+- self-registration (`/auth/newuser`)
+- the super-admin maintenance routes (`/admin/super/*`)
+
+The optional server features (`BlobStorage`, `Redis`, `WebSocket` subscriptions) are not
+emulated.
 
 ## API
 
 | Export | Description |
 | --- | --- |
-| `MedplumAPI` | Class. `new MedplumAPI(options?)`; implements the Fetch contract `fetch(request: Request): Promise<Response>`. Does not start anything until `start()`. |
-| `createMedplumAPI` | `(options?) => Promise<MedplumAPI>` — construct and `start()`. |
-| `SUPER_ADMIN_EMAIL` | `"admin@example.com"` — seeded super admin email. |
-| `SUPER_ADMIN_PASSWORD` | `"medplum_admin"` — seeded super admin password. |
-| `buildServerConfig` | `(input: { apiPort, dbPort, redisPort, dataDir, superAdminEmail?, superAdminPassword? }) => MedplumServerConfig` — the `medplum.config.json` the mock writes. |
-| `resolveMedplumPaths` | `(options?: { version?, cacheDir? }) => MedplumPaths` — where the clone, server entry and build marker live. |
+| `MedplumAPI` | Class. `new MedplumAPI(options?)`; `fetch(request: Request): Promise<Response>` is the Medplum server. |
+| `createRuntime` | `(options?: MedplumRuntimeOptions) => MedplumRuntime` — the served mock with the Mockingbird service contract. |
+| `MEDPLUM_PRESETS` | The fault presets above, as `Record<string, FaultPreset>`. |
+| `MEDPLUM_NAMESPACE` | `"medplum"` — the service name and default namespace. |
+| `document` | The vendored OpenAPI contract (`openapi.yaml`). |
+| `operationIds` / `supportedOperationIds` | Every operation id in the contract / the ones the mock serves. |
+| `DEFINITIONS_VERSION` | The `@medplum/definitions` release the embedded FHIR definitions come from. |
+| `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD` | `"admin@example.com"` / `"medplum_admin"` — the server's seeded super admin. |
+| `SUPER_ADMIN_CLIENT_ID` / `SUPER_ADMIN_CLIENT_SECRET` | The super admin's client application (`client_credentials` as super admin). |
+| `DEFAULT_PROJECT_ID` | The ready project's id. |
+| `DEFAULT_CLIENT_ID` / `DEFAULT_CLIENT_SECRET` | The ready project's client application. |
+| `DEFAULT_BASE_URL` | `"http://localhost:8103/"`, Medplum's default base URL. |
+| `createServer` / `serveTarget` / `DEFAULT_PORT` | From `./server` (Node): serve over `node:http`; the CLI's flags; `8103`. |
 
 `MedplumAPI` members:
 
 | Member | Description |
 | --- | --- |
-| `start()` / `stop()` / `reset()` | Lifecycle, see Usage. |
-| `fetch(request)` | Proxy one request to the running server. |
-| `getAccessToken()` | `Promise<string>` — cached bearer token for the seeded super admin. |
-| `getBaseUrl()` | `"http://127.0.0.1:<apiPort>/"`; throws if not started. |
-| `apiPort` | Port of the running server; throws if not started. |
-| `isStarted` | `boolean`. |
+| `fetch(request)` | One request to the server. Only the path and query of `request.url` route it. |
+| `ready()` | Resolves once the definitions are loaded and the namespace is seeded (`fetch` waits for it). |
+| `reset()` | Drop everything and reseed. |
+| `describe()` | `{ baseUrl, project, superAdmin }` — the seeded credentials. |
+| `putClient({ id, secret?, name?, projectId?, admin? })` | Create or replace a client application. |
+| `addUser(fixture, projectId?)` | Add a user with a password login and a membership. |
+| `accessToken(clientId?)` | A bearer token for a client (default: the default client). |
+| `putResource(resource, projectId?)` | Write a resource as the system, keeping a given id. |
+| `resources(type)` | Every current resource of a type, across projects. |
+| `systemSearch(query)` | Search as the system (every project), e.g. `"Patient?name=ada"`. |
+| `revokeAllLogins()` | Revoke every login; returns how many. |
 
-Options and types:
+Options:
 
 ```text
 type MedplumAPIOptions = {
-  version?: string                  // Medplum git tag; default MOCKINGBIRD_MEDPLUM_VERSION env, else "v5.1.37"
-  cacheDir?: string                 // cache root; default MEDPLUM_MOCK_CACHE_DIR env, else ~/.cache/mockingbird/medplum-server
-  onLog?: (message: string) => void // build progress and server stdout/stderr
-  email?: string                    // login for getAccessToken(); default SUPER_ADMIN_EMAIL
-  password?: string                 // default SUPER_ADMIN_PASSWORD
+  baseUrl?: string          // public base URL, trailing slash; default "http://localhost:8103/"
+  now?: () => number        // clock for meta.lastUpdated, token lifetimes; default Date.now
+  namespace?: string        // storage namespace; default "medplum"
+  seed?: number | string    // seeds generated ids and secrets; default the namespace
+  sqlite?: SqliteClient     // default @crvouga/mockingbird-service-sqlite
+  superAdmin?: { email?, password?, clientId?, clientSecret? }
+  project?: false | { id?, name?, clientId?, clientSecret?, clientAdmin?, users?: MedplumUserFixture[] }
+  maxSearchOffset?: number  // largest _offset accepted; default unlimited, as on the server
 }
-type MedplumProcessOptions = { version?; cacheDir?; onLog? }
-type MedplumPaths = { version; cacheRoot; cloneDir: "<cacheRoot>/<version>"; serverEntry; buildMarker }
-type MedplumProcessInfo = { apiPort; dbPort; redisPort; baseUrl; dataDir; paths; config }
-type MedplumServerConfig             // shape of medplum.config.json (see buildServerConfig)
+type MedplumUserFixture = { email; password; firstName?; lastName?; profileType?: "Practitioner" | "Patient" | "RelatedPerson"; admin? }
+type MedplumRuntimeOptions = Omit<MedplumAPIOptions, "now" | "namespace"> & { clock?; adminKey?; onLog?; journalSize? }
 ```
 
-`email` / `password` only change which credentials `getAccessToken()` sends; the server always
-seeds `SUPER_ADMIN_EMAIL` / `SUPER_ADMIN_PASSWORD`.
+Ids and secrets are deterministic per namespace and seed, so two mocks given the same requests
+return the same ids.
 
 ## Development
 
 For contributors to the mockingbird repo only.
 
-Tests are property-based. The always-on properties cover config generation and port picking
-without touching the network. The full self-hosted properties (server boot, self-parity between
-two independent servers, reset semantics, stop/restart lifecycle) run only with
-`MOCKINGBIRD_MEDPLUM_E2E=1`:
-
 ```bash
-bun test
-MOCKINGBIRD_MEDPLUM_E2E=1 bun test   # first run pays the clone/build cost (several minutes, logged)
+bun run test                          # unit, SDK, auth, runtime, property and recorded-oracle tests
+bun run portability                   # bundle for the browser platform and run it in workerd
+bun run parity                        # boot a self-hosted Medplum and run every scenario and random walks live
+bun run oracle:record                 # refresh test/fixtures/oracle-recording.json from the oracle
+MOCKINGBIRD_MEDPLUM_ORACLE=1 bun test medplum.oracle.test.ts   # the live comparison as a test
+MOCKINGBIRD_MEDPLUM_ORACLE_URL=http://127.0.0.1:8103/ bun test medplum.oracle.test.ts
 ```
 
-In this repo, the root `package.json` already lists `embedded-postgres` under
-`trustedDependencies`.
+The oracle (`oracle/`, dev-only) is the real Medplum server built from the pinned tag
+(`MOCKINGBIRD_MEDPLUM_VERSION`, default `v5.1.37`) into `~/.cache/mockingbird/medplum-server`
+(`MEDPLUM_MOCK_CACHE_DIR`). It runs on embedded Postgres and a `redis-server` on `PATH`. The
+first boot clones and builds it, which takes several minutes. After changing a scenario, run
+`bun run oracle:record`.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).
+`src/vendor/fhir-router` is `@medplum/fhir-router` 5.1.37 (Apache-2.0), with the changes listed
+in its README. `bun run generate` regenerates the operation table and the embedded definitions,
+and `generate:check` fails when they are stale.
+
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).

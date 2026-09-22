@@ -51,7 +51,10 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "communication",
+    "displayName": "Daily",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

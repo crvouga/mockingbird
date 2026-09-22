@@ -1,0 +1,18 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/service/*/README.md",
+        "$TURBO_ROOT$/packages/service/*/SUPPORT.md",
+        "$TURBO_ROOT$/packages/service/*/package.json",
+        "$TURBO_ROOT$/docs/*.md",
+        "$TURBO_ROOT$/llms.txt"
+      ],
+      "outputs": ["dist/**"]
+    }
+  }
+}

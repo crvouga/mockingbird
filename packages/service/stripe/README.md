@@ -318,4 +318,4 @@ Live parity loads `MOCKINGBIRD_STRIPE_SECRET_KEY` (a `sk_test_` key) from the en
 leaves out account-global ones (account profile, lifetime balance, lingering test clocks and
 webhook endpoints).
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).

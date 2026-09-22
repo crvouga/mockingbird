@@ -7,7 +7,7 @@
 # One turbo graph (`bun run check`) does all the work; .github/actions/setup caches
 # node_modules and loads the shared Turborepo remote cache credentials from Vault (GitHub
 # OIDC, no stored token), so unchanged packages are never rebuilt or retested.
-# Shared infra contract: https://raw.githubusercontent.com/crvouga/workspace/main/INTEGRATING.md
+# Shared infra contract: https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
 # On main, Release publishes every changed package (versions from Conventional Commits).
 #
 # The workflow file name is part of each package's npm Trusted Publisher — keep it `ci.yml`.

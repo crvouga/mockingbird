@@ -118,6 +118,9 @@
   ],
   "mockingbird": {
     "runtime": "portable",
-    "layer": "service"
+    "layer": "service",
+    "category": "databases",
+    "displayName": "SQLite",
+    "status": "ready"
   }
 }

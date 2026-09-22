@@ -53,7 +53,10 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "ai",
+    "displayName": "AWS Bedrock",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

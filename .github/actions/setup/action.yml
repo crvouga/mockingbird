@@ -1,7 +1,7 @@
 name: Setup
 description: Bun + cached node_modules + the shared Turborepo remote cache (credentials from Vault via OIDC).
 
-# Shared infra contract: https://raw.githubusercontent.com/crvouga/workspace/main/INTEGRATING.md
+# Shared infra contract: https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
 # The calling job needs `permissions: id-token: write` when remote-cache is on.
 
 inputs:
@@ -25,7 +25,8 @@ runs:
           node_modules
           packages/*/node_modules
           packages/*/*/node_modules
-        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json') }}
+          sites/*/node_modules
+        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'sites/*/package.json') }}
 
     - if: steps.deps.outputs.cache-hit != 'true'
       shell: bash

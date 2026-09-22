@@ -51,7 +51,10 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "health",
+    "displayName": "Junction",
+    "status": "ready"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

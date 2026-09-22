@@ -36,7 +36,8 @@
         "FC_NUM_RUNS",
         "MOCKINGBIRD_MAX_COMMANDS",
         "MOCKINGBIRD_TRACE",
-        "MOCKINGBIRD_MEDPLUM_E2E",
+        "MOCKINGBIRD_MEDPLUM_ORACLE",
+        "MOCKINGBIRD_MEDPLUM_ORACLE_URL",
         "MOCKINGBIRD_MEDPLUM_VERSION",
         "MEDPLUM_MOCK_CACHE_DIR"
       ],
@@ -108,6 +109,18 @@
         "llms.txt",
         "scripts/llms-txt.ts",
         "scripts/release/lib.ts",
+        "sites/docs/src/lib/**",
+        "packages/**/package.json",
+        "!packages/**/node_modules/**"
+      ]
+    },
+    "//#check:readme": {
+      "inputs": [
+        "README.md",
+        "scripts/readme.ts",
+        "scripts/release/lib.ts",
+        "sites/docs/src/lib/**",
+        "docs/*.md",
         "packages/**/package.json",
         "!packages/**/node_modules/**"
       ]
