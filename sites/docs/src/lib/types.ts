@@ -73,8 +73,22 @@ export interface CategorySummary {
   count: number
 }
 
+export interface Guide {
+  file: string
+  slug: string
+  title: string
+  summary: string
+  markdown: string
+  html: string
+  toc: TocEntry[]
+}
+
 export interface Catalog {
   repo: string
+  guides: Guide[]
+  /** The repo's generated llms.txt, served as-is so agents see one index. */
+  llmsTxt: string
+  quickStart: { html: string }
   services: Service[]
   categories: CategorySummary[]
   totals: {

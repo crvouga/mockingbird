@@ -5,46 +5,12 @@ import Install from "../components/Install.astro"
 import Monogram from "../components/Monogram.astro"
 import ServiceCard from "../components/ServiceCard.astro"
 import Base from "../layouts/Base.astro"
+import { AGENTS, CONTRACT, FEATURES, HEADLINE, PITCH, QUICK_START } from "../lib/content.ts"
+import { inline } from "../lib/inline.ts"
 
 const { totals } = catalog
 const ready = catalog.services.filter((s) => s.status === "ready")
-const featured =
-  catalog.services.find((s) => s.name === "slack" && s.example) ??
-  catalog.services.find((s) => s.example)
 const logos = catalog.services.filter((s) => s.kind === "http").slice(0, 18)
-
-const values = [
-  {
-    icon: "plug",
-    title: "The vendor's real surface",
-    body: "Each mock answers the provider's own paths, headers, status codes and error envelopes through fetch(Request) → Response. Point the official SDK at it.",
-  },
-  {
-    icon: "layers",
-    title: "State that behaves",
-    body: "Records persist in an in-memory SQL engine. Created customers can be listed, orders move through their lifecycle, webhooks fire, and reset or snapshot takes one call.",
-  },
-  {
-    icon: "shield",
-    title: "Checked against the real thing",
-    body: "Random walks generated from each vendored OpenAPI contract run against two mock instances in CI, and against the live sandbox when credentials exist.",
-  },
-  {
-    icon: "zap",
-    title: "No network, no waiting",
-    body: "Everything runs in your test process. No sandbox keys, rate limits, shared test accounts or flaky round trips.",
-  },
-  {
-    icon: "globe",
-    title: "Runs anywhere JavaScript runs",
-    body: `${totals.browser} of ${totals.services} mocks are portable: Node, Bun, browsers and Workers. The playgrounds on this site run them in your tab.`,
-  },
-  {
-    icon: "terminal",
-    title: "One contract for every service",
-    body: "Every HTTP mock shares /health, /__admin reset, snapshots, clock control, fault injection, request journals and per-namespace isolation.",
-  },
-]
 ---
 
 <Base>
@@ -56,34 +22,27 @@ const values = [
           <span class="pill-dot"></span>{totals.ready} ready to use · {totals.wip} in progress
           <Icon name="arrow-right" />
         </a>
-        <h1>Mock the APIs you depend on, <span class="accent">with the behavior they really have.</span></h1>
-        <p class="lede">
-          Mockingbird is a catalog of stateful test doubles for third-party HTTP APIs and SQL databases. Each one
-          speaks the vendor's real surface, keeps state, and runs in-process.
-        </p>
+        <h1>{HEADLINE.lead} <span class="accent">{HEADLINE.accent}</span></h1>
+        <p class="lede" set:html={inline(PITCH)} />
         <div class="hero-cta">
           <a class="btn btn-primary" href="/services">Browse services <Icon name="arrow-right" /></a>
           <a class="btn btn-secondary" href="/why">Why Mockingbird</a>
         </div>
         <div class="hero-install">
-          <Install pkg="@crvouga/mockingbird-service-stripe" />
+          <Install pkg={QUICK_START.package} />
         </div>
       </div>
-      {
-        featured?.example && (
-          <div class="hero-code">
-            <div class="window">
-              <div class="window-bar">
-                <span class="dots"><i /><i /><i /></span>
-                <span class="window-title">{featured.name}.test.ts</span>
-                <a href={`/services/${featured.name}`} class="window-link">Try it live <Icon name="arrow-right" /></a>
-              </div>
-              <Fragment set:html={featured.example.html} />
-            </div>
-            <p class="hero-caption">From <a href={`/services/${featured.name}`}>{featured.packageName}</a>'s README, rendered at build time.</p>
+      <div class="hero-code">
+        <div class="window">
+          <div class="window-bar">
+            <span class="dots"><i /><i /><i /></span>
+            <span class="window-title">{QUICK_START.file}</span>
+            <a href="/services/stripe" class="window-link">Try it live <Icon name="arrow-right" /></a>
           </div>
-        )
-      }
+          <Fragment set:html={catalog.quickStart.html} />
+        </div>
+        <p class="hero-caption">The README's quick start. The build runs it against the published package.</p>
+      </div>
     </div>
   </section>
 
@@ -119,11 +78,11 @@ const values = [
     </div>
     <div class="values">
       {
-        values.map((v) => (
+        FEATURES.map((v) => (
           <div class="value">
             <span class="value-icon"><Icon name={v.icon} /></span>
             <h3>{v.title}</h3>
-            <p>{v.body}</p>
+            <p set:html={inline(v.body)} />
           </div>
         ))
       }
@@ -161,14 +120,32 @@ const values = [
   </section>
 
   <section class="section container">
+    <div class="section-head">
+      <span class="eyebrow">The service contract</span>
+      <h2>One contract for every HTTP service.</h2>
+      <p set:html={inline(CONTRACT.intro)} />
+    </div>
+    <div class="contract">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Surface</th><th>What it gives you</th></tr></thead>
+          <tbody>
+            {CONTRACT.rows.map(([surface, detail]) => (
+              <tr><td set:html={inline(surface)} /><td set:html={inline(detail)} /></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="contract-note" set:html={inline(CONTRACT.configNote)} />
+    </div>
+  </section>
+
+  <section class="section container">
     <div class="agents">
       <div>
         <span class="eyebrow">Built for coding agents</span>
         <h2>Docs an agent can read, generated from the code.</h2>
-        <p>
-          Every service README doubles as its integration guide and ships inside the npm tarball. This site publishes the
-          same content as plain markdown and JSON, rebuilt from the packages on every build, so docs cannot drift from behavior.
-        </p>
+        <p set:html={inline(AGENTS)} />
       </div>
       <ul class="agent-links">
         <li><a href="/llms.txt"><Icon name="bot" /><span><strong>/llms.txt</strong>An index of every service with links to its markdown</span></a></li>
@@ -539,6 +516,30 @@ const values = [
     font-size: 15px;
     font-weight: 650;
     letter-spacing: -0.01em;
+  }
+
+  .contract-note {
+    margin-top: 14px;
+    max-width: 760px;
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+
+  .contract td :global(code),
+  .contract-note :global(code),
+  .value p :global(code),
+  .agents p :global(code) {
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-muted);
+    font-size: 0.86em;
+  }
+
+  .agents p :global(a) {
+    color: var(--accent-soft-fg);
+    text-decoration: underline;
+    text-underline-offset: 3px;
   }
 
   .agents {

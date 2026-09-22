@@ -1,17 +1,23 @@
 # mockingbird
 
-> Stateful, contract-checked mocks of third-party HTTP APIs (Stripe, Junction/Vital, GeneByGene, Medplum) and pure-TypeScript in-memory PostgreSQL/SQLite engines for test suites. Every HTTP mock is a Fetch handler (`mock.fetch(request) → Promise<Response>`) published to npm as `@crvouga/mockingbird-service-<name>`. ESM only; Node >= 22 or Bun >= 1.2.
+> Mockingbird is a catalog of stateful test doubles for third-party HTTP APIs and SQL databases. Each one speaks the vendor's real surface, keeps state, and runs in-process. Every HTTP mock is a Fetch handler (`createRuntime().fetch(request) → Promise<Response>`) published to npm as `@crvouga/mockingbird-service-<name>`. ESM only; Node >= 22 or Bun >= 1.2.
 
-Install mocks as devDependencies; each package is self-contained. Prefer injecting `mock.fetch` in-process; when a URL is required, run `npx mockingbird-<service> serve` (or `createServer` from `./server`); every HTTP service answers `GET /health`, `/__admin/*` and `x-mockingbird-namespace`. Read the README of each package you use — it is the integration guide for coding agents (also shipped in `node_modules/<package>/README.md`).
+Install mocks as devDependencies; each package is self-contained. Prefer injecting the mock's `fetch` in-process; when a URL is required, run `npx mockingbird-<service> serve` (or `createServer` from `./server`); every HTTP service answers `GET /health`, `/__admin/*` and `x-mockingbird-namespace`. Read the README of each package you use — it is the integration guide for coding agents (also shipped in `node_modules/<package>/README.md`).
 
-## SQL databases
+Release tiers: **Ready**: Complete, checked against the vendor, and kept stable. Use it in your test suite. **Work in progress**: Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version. Prefer ready services; pin exact versions of work-in-progress ones.
 
+## Ready
+
+- [@crvouga/mockingbird-service-junction](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/README.md): Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox.
+- [@crvouga/mockingbird-service-junction SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-postgres](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/postgres/README.md): Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies
 - [@crvouga/mockingbird-service-postgres COMPATIBILITY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/postgres/COMPATIBILITY.md): coverage matrix
 - [@crvouga/mockingbird-service-sqlite](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/sqlite/README.md): Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies
 - [@crvouga/mockingbird-service-sqlite COMPATIBILITY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/sqlite/COMPATIBILITY.md): coverage matrix
+- [@crvouga/mockingbird-service-stripe](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/stripe/README.md): Stateful mock of the Stripe API (accounts by key, customers, payments, subscriptions with renewals, invoices, checkout with a hosted page, a Stripe.js stand-in, signed webhooks) at API versions 2024-06-20 and 2025-02-24.acacia, verified by differential property tests against Stripe test mode.
+- [@crvouga/mockingbird-service-stripe SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/stripe/SUPPORT.md): coverage matrix
 
-## HTTP API mocks
+## Work in progress
 
 - [@crvouga/mockingbird-service-aha](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aha/README.md): Stateful mock of the AHA at-home phlebotomy partner API: HMAC-signed create-order and cancel, raw or wrapped envelopes, idempotency keys, and the order-status webhooks (Scheduled, Check Out, …) our bloodwork handler consumes.
 - [@crvouga/mockingbird-service-aha SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/aha/SUPPORT.md): coverage matrix
@@ -47,8 +53,6 @@ Install mocks as devDependencies; each package is self-contained. Prefer injecti
 - [@crvouga/mockingbird-service-healthie SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/healthie/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-intercom](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/intercom/README.md): Stateful mock of the Intercom REST API 2.11: contacts (search, create with 409 on duplicates, update, get), conversations (create with Idempotency-Key, reply as JSON or multipart, close/open, get, cursor search), admins, and X-Hub-Signature-signed admin reply/close/open webhooks.
 - [@crvouga/mockingbird-service-intercom SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/intercom/SUPPORT.md): coverage matrix
-- [@crvouga/mockingbird-service-junction](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/README.md): Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox.
-- [@crvouga/mockingbird-service-junction SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-klaviyo](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/klaviyo/README.md): Stateful mock of the Klaviyo events API: JSON:API event create (Ordered Product, Placed Order), event reads, unique_id dedupe, JSON:API errors and an outbox.
 - [@crvouga/mockingbird-service-klaviyo SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/klaviyo/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-llamacloud](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/llamacloud/README.md): Stateful mock of the LlamaCloud platform API: project and pipeline lookup, pipeline documents, and deterministic (scripted or term-overlap) retrieval, verified against the official llama_cloud_services SDK.
@@ -83,8 +87,6 @@ Install mocks as devDependencies; each package is self-contained. Prefer injecti
 - [@crvouga/mockingbird-service-rxvortex SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/rxvortex/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-slack](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/slack/README.md): Stateful mock of Slack incoming webhooks and the Web API (chat.postMessage and friends) with an outbox of every alert the app sent.
 - [@crvouga/mockingbird-service-slack SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/slack/SUPPORT.md): coverage matrix
-- [@crvouga/mockingbird-service-stripe](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/stripe/README.md): Stateful mock of the Stripe API (accounts by key, customers, payments, subscriptions with renewals, invoices, checkout with a hosted page, a Stripe.js stand-in, signed webhooks) at API versions 2024-06-20 and 2025-02-24.acacia, verified by differential property tests against Stripe test mode.
-- [@crvouga/mockingbird-service-stripe SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/stripe/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-twilio](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/twilio/README.md): Stateful mock of Twilio Verify, Lookup v2, Messaging and Recordings on one port, with signed inbound SMS and voice webhooks (Mockingbird service contract).
 - [@crvouga/mockingbird-service-twilio SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/twilio/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-vpi](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/vpi/README.md): Stateful mock of the VPI compounding pharmacy API: JWT authentication, products, clinic, patients, providers, saveNewPrescription drafts and the three paged prescription status lists.

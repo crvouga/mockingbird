@@ -7,9 +7,9 @@ import Playground from "../../components/Playground.astro"
 import SqlConsole from "../../components/SqlConsole.astro"
 import TierBadge from "../../components/TierBadge.astro"
 import Base from "../../layouts/Base.astro"
-import { TIERS } from "../../lib/tiers.ts"
 import { CATEGORIES, type CategorySlug } from "../../lib/categories.ts"
 import { percent } from "../../lib/format.ts"
+import { TIERS } from "../../lib/tiers.ts"
 import type { Service } from "../../lib/types.ts"
 import "../../styles/playground.css"
 
@@ -70,7 +70,7 @@ const toc = [
       {
         s.status === "wip" && (
           <div class="callout callout-warn">
-            <strong>{TIERS.wip.label}.</strong> {TIERS.wip.blurb} Pin an exact version, and check the README's
+            <strong>{TIERS.wip.label}.</strong> {TIERS.wip.blurb} Check the README's
             "Deliberately not modelled" notes before relying on it.
           </div>
         )
@@ -151,7 +151,7 @@ const toc = [
                     {s.operations.map((o) => (
                       <tr data-unsupported={String(!o.supported)}>
                         <td><span class="method" data-m={o.method}>{o.method}</span></td>
-                        <td><code>{o.path}</code></td>
+                        <td class="ops-path"><code>{o.path.split(/(?=\/)/).map((seg, i) => (i === 0 ? seg : <><wbr />{seg}</>))}</code></td>
                         <td>
                           <span class="op-id">{o.id}</span>
                           {o.summary && <span class="op-summary">{o.summary}</span>}
@@ -381,13 +381,18 @@ const toc = [
 
   .ops-table code {
     font-size: 12.5px;
-    word-break: break-all;
+  }
+
+  /* Paths wrap only at "/" (via <wbr>), never mid-segment. */
+  .ops-path {
+    min-width: 12ch;
   }
 
   .op-id {
     display: block;
     font-family: var(--font-mono);
     font-size: 12.5px;
+    overflow-wrap: anywhere;
   }
 
   .op-summary {

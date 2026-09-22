@@ -23,6 +23,7 @@ const path = Astro.url.pathname.replace(/\/$/, "") || "/"
 const nav = [
   { href: "/services", label: "Services" },
   { href: "/coverage", label: "Coverage" },
+  { href: "/docs", label: "Docs" },
   { href: "/why", label: "Why" },
 ]
 const favicon = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🐦‍⬛</text></svg>')}`
@@ -104,6 +105,7 @@ const favicon = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www
             <ul>
               <li><a href="/services">Services</a></li>
               <li><a href="/coverage">Coverage</a></li>
+              <li><a href="/docs">Guides</a></li>
               <li><a href="/why">Why Mockingbird</a></li>
             </ul>
           </div>
