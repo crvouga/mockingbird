@@ -1,7 +1,7 @@
 # Secrets runbook (maintainers)
 
 The mock services (`@crvouga/mockingbird-service-*`, the only published packages) are released
-automatically on every green push to `main` (see the root README → Releasing) and publish with
+automatically on every green push to `main` (see [RELEASING.md](RELEASING.md)) and publish with
 **npm Trusted Publishing (OIDC)**.
 
 OIDC can only publish to packages that already exist on npm and trust this repo. For brand-new

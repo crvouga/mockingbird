@@ -108,6 +108,18 @@
         "llms.txt",
         "scripts/llms-txt.ts",
         "scripts/release/lib.ts",
+        "sites/docs/src/lib/**",
+        "packages/**/package.json",
+        "!packages/**/node_modules/**"
+      ]
+    },
+    "//#check:readme": {
+      "inputs": [
+        "README.md",
+        "scripts/readme.ts",
+        "scripts/release/lib.ts",
+        "sites/docs/src/lib/**",
+        "docs/*.md",
         "packages/**/package.json",
         "!packages/**/node_modules/**"
       ]

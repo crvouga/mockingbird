@@ -2,6 +2,7 @@ import { posix } from "node:path"
 import GithubSlugger from "github-slugger"
 import { Marked, type Tokens } from "marked"
 import { createHighlighter, type Highlighter } from "shiki"
+import { guideSlug } from "../../src/lib/guides.ts"
 import type { TocEntry } from "../../src/lib/types.ts"
 
 const LANGS = [
@@ -143,6 +144,12 @@ export function rewriteHref(href: string, ctx: LinkContext, mode: "link" | "raw"
   const resolved = posix.normalize(posix.join(ctx.dir, pathPart)).replace(/\/$/, "")
   const service = /^packages\/service\/([a-z0-9-]+)(?:\/README\.md)?$/.exec(resolved)?.[1]
   if (service && ctx.services.has(service) && mode === "link") return `/services/${service}${hash}`
+  if (mode === "link") {
+    const guide = /^docs\/([A-Za-z0-9_-]+)\.md$/.exec(resolved)?.[1]
+    if (guide) return `/docs/${guideSlug(guide)}${hash}`
+    if (resolved === "README.md") return hash === "#services" ? "/services" : `/${hash}`
+    if (resolved === "llms.txt") return "/llms.txt"
+  }
   if (mode === "raw")
     return `${ctx.repo.replace("github.com", "raw.githubusercontent.com")}/main/${resolved}`
   return `${ctx.repo}/blob/main/${resolved}${hash}`
