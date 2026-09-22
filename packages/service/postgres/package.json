@@ -119,7 +119,8 @@
     "runtime": "portable",
     "layer": "service",
     "category": "databases",
-    "displayName": "PostgreSQL"
+    "displayName": "PostgreSQL",
+    "status": "ready"
   },
   "trustedDependencies": [
     "@embedded-postgres/darwin-arm64",

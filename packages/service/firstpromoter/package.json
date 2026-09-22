@@ -51,6 +51,7 @@
     "layer": "service",
     "category": "marketing",
     "displayName": "FirstPromoter",
+    "status": "wip",
     "playground": {
       "headers": {
         "authorization": "Bearer fp_mockingbird",

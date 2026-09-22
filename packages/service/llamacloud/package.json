@@ -51,7 +51,8 @@
     },
     "layer": "service",
     "category": "ai",
-    "displayName": "LlamaCloud"
+    "displayName": "LlamaCloud",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

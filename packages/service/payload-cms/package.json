@@ -50,7 +50,8 @@
     },
     "layer": "service",
     "category": "productivity",
-    "displayName": "Payload CMS"
+    "displayName": "Payload CMS",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

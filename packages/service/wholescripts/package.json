@@ -52,6 +52,7 @@
     "layer": "service",
     "category": "pharmacy",
     "displayName": "Wholescripts",
+    "status": "wip",
     "playground": {
       "basicAuth": "mockingbird:mockingbird"
     }

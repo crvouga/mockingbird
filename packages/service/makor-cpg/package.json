@@ -51,7 +51,8 @@
     },
     "layer": "service",
     "category": "health",
-    "displayName": "Makor CPG"
+    "displayName": "Makor CPG",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

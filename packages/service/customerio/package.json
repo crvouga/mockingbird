@@ -52,7 +52,8 @@
     },
     "layer": "service",
     "category": "marketing",
-    "displayName": "Customer.io"
+    "displayName": "Customer.io",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",
