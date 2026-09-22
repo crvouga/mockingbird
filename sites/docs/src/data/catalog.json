@@ -1,5 +1,5 @@
 {
-  "generated": "2026-09-21T23:58:22.666Z",
+  "generated": "2026-09-22T00:03:53.570Z",
   "version": "1.0.0",
   "rationale": "Mockingbird provides stateful test doubles for 40+ third-party HTTP APIs and SQL databases.\nEach mock speaks the provider's real surface (fetch(Request) → Response), keeps state in SQLite,\nand is driven by a vendored OpenAPI contract. Use them in tests instead of hitting the network,\nor serve them over Node/Bun when you need a local origin.\n\nWhy this matters: No more mocking libraries with divergent behavior. No more flaky tests that pass\nagainst mocks but fail against real APIs. Mockingbird keeps behavior in sync with the real vendor\nthrough continuous property-based testing (PBT) against live sandboxes.\n\nAll mocks are isomorphic and runnable client-side (in browser, Workers, etc.) with Hono.",
   "services": [
@@ -32,7 +32,11 @@
         "Node Server",
         "CLI",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-aha\"\n\nconst aha = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:3000/bloodwork/aha-webhook\", secret: \"aha-webhook-secret\" },\n})\nconst admin = (path: string, body: unknown) =>\n  aha.fetch(\n    new Request(`http://aha.test/__admin${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\" },\n      body: JSON.stringify(body),\n    }),\n  )\n\n// …the app's checkout calls POST /v1/geviti/create-order for GV-101…\n\n// AHA books the draw: our handler books the EMR appointment for 10:30 Denver time.\nawait admin(\"/orders/GV-101/transition\", {\n  status: \"Scheduled\",\n  scheduledAt: \"2026-10-01T16:30:00Z\",\n  timeZone: \"America/Denver\",\n})\n// The phlebotomist checks out with a sample: our handler sets vitalBloodDrawn.\nawait admin(\"/orders/GV-101/transition\", { status: \"Check Out\", drawStatus: \"Sample Collected\" })",
+        "description": "Live example for aha"
+      }
     },
     {
       "name": "aws-speech",
@@ -65,7 +69,11 @@
         "Node Server",
         "CLI",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { createServer } from \"@crvouga/mockingbird-service-aws-speech/server\"\n\nconst speech = await createServer({ port: 8797 })\n// What the next voice session \"hears\": partials while audio streams in, then the final.\nawait fetch(`${speech.url}/__admin/transcripts`, {\n  method: \"PUT\",\n  headers: { \"content-type\": \"application/json\" },\n  body: JSON.stringify({ match: { any: true }, partials: [\"I have\", \"I have a headache\"], final: \"I have a headache.\" }),\n})\n// …the backend's /v2/chatbot/voice turn transcribes, replies, and speaks through Polly…\nawait speech.close()",
+        "description": "Live example for aws-speech"
+      }
     },
     {
       "name": "bedrock",
@@ -99,7 +107,11 @@
         "Node Server",
         "CLI",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { createServer } from \"@crvouga/mockingbird-service-bedrock/server\"\n\nconst bedrock = await createServer({ port: 8796 })\nawait fetch(`${bedrock.url}/__admin/scripts`, {\n  method: \"PUT\",\n  headers: { \"content-type\": \"application/json\" },\n  body: JSON.stringify({\n    scripts: [\n      {\n        id: \"rx-symptom-approval\",\n        match: { modelId: \"*sonnet*\", lastUserText: { contains: \"dizzy\" }, toolsInclude: [\"report_rx_symptom\"] },\n        turns: [\n          {\n            toolUse: { name: \"report_rx_symptom\", input: { symptoms: [{ symptomDefinitionId: 7, severity: 3 }] } },\n            stopReason: \"tool_use\",\n          },\n          {\n            expectToolResult: { name: \"report_rx_symptom\" },\n            text: \"I've flagged that for your care team.\",\n            chunkSize: 12,\n            usage: { inputTokens: 1200, outputTokens: 40, cacheReadInputTokens: 900 },\n          },\n        ],\n      },\n    ],\n  }),\n})\n// …the backend's streamText turn now emits the approval card; approving resumes the turn.\nawait bedrock.close()",
+        "description": "Live example for bedrock"
+      }
     },
     {
       "name": "caretalk",
@@ -127,7 +139,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-caretalk\"\n\nconst caretalk = createRuntime()\nconst call = (path: string, init: RequestInit = {}) =>\n  caretalk.fetch(new Request(`http://caretalk.test${path}`, init))\n\nconst { token } = (await (\n  await call(\"/externalapi/Auth/client-login\", {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    // Any credentials log in unless --api-user pins them.\n    body: JSON.stringify({ userName: \"geviti-api\", password: crypto.randomUUID() }),\n  })\n).json()) as { token: string }\nconst [form] = (await (\n  await call(\"/externalapi/Forms/GetForm/health-history\", {\n    headers: { authorization: `Bearer ${token}` },\n  })\n).json()) as { fullFormDto: { id: number } }[]\n// After the app's form-submission queue runs, assert what reached CareTalk:\nconst { submissions } = (await (await call(\"/__admin/form-submissions\")).json()) as {\n  submissions: unknown[]\n}",
+        "description": "Live example for caretalk"
+      }
     },
     {
       "name": "customerio",
@@ -157,7 +173,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { Analytics } from \"@customerio/cdp-analytics-node\"\nimport { createServer } from \"@crvouga/mockingbird-service-customerio/server\"\n\nconst cio = await createServer({\n  webhooks: { url: \"http://127.0.0.1:3000/v1/customer-io/reporting-webhook\", secret: \"k\".repeat(32) },\n})\nconst analytics = new Analytics({ writeKey: \"wk\", host: cio.url, maxEventsInBatch: 1 })\nanalytics.identify({ userId: \"42\", traits: { email: \"ada@example.com\" } })\nawait analytics.closeAndFlush()\n\n// The member unsubscribes in Customer.io: the signed reporting event reaches the backend.\nawait fetch(`${cio.url}/__admin/reporting-events`, {\n  method: \"POST\",\n  headers: { \"content-type\": \"application/json\" },\n  body: JSON.stringify({ metric: \"unsubscribed\", userId: \"42\", objectType: \"customer\" }),\n})",
+        "description": "Live example for customerio"
+      }
     },
     {
       "name": "daily",
@@ -190,7 +210,11 @@
         "CLI",
         "WebSocket",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-daily\"\n\nconst daily = createRuntime({\n  settings: { roomUrlBase: \"https://geviti-mock.daily.test/\" },\n  webhooks: { url: \"http://127.0.0.1:4000/v1/webhooks/daily\", secret: \"whsec-daily\" },\n  transcripts: { endpoint: \"http://127.0.0.1:4569\", bucket: \"emr-transcripts\" },\n})\nconst admin = (path: string, body: unknown) =>\n  daily.fetch(\n    new Request(`http://daily.test/__admin${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\" },\n      body: JSON.stringify(body),\n    }),\n  )\n\n// …the EMR books an appointment: POST /v1/rooms + POST /v1/meeting-tokens…\n\n// End the call: writes <room>/<session>.json to S3, then fires transcription.stopped.\nawait admin(\"/rooms/<room name>/session\", {\n  participants: [{ userId: \"prac-1\" }, { userId: \"pat-1\" }],\n  durationSec: 1200,\n  transcript: [{ s: \"prac-1\", t: \"How are you feeling?\", ts: 0.5, te: 2.1 }],\n})",
+        "description": "Live example for daily"
+      }
     },
     {
       "name": "easypost",
@@ -218,7 +242,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-easypost\"\n\nconst easypost = createRuntime()\nconst auth = { authorization: `Basic ${btoa(\"EZTK_test:\")}` }\n\n// Seed a status before the app looks the code up (or move an existing tracker).\nawait easypost.fetch(\n  new Request(\"http://easypost.test/__admin/trackers/1Z999AA10123456784/transition\", {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    body: JSON.stringify({ status: \"out_for_delivery\" }),\n  }),\n)\nconst tracker = await easypost.fetch(\n  new Request(\"http://easypost.test/v2/trackers\", {\n    method: \"POST\",\n    headers: { ...auth, \"content-type\": \"application/x-www-form-urlencoded\" },\n    body: \"tracker[tracking_code]=1Z999AA10123456784&tracker[carrier]=UPS\",\n  }),\n)\n// → 201 {id: \"trk_…\", status: \"out_for_delivery\", carrier: \"UPS\", status_detail: \"out_for_delivery\", …}",
+        "description": "Live example for easypost"
+      }
     },
     {
       "name": "edamam",
@@ -247,7 +275,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-edamam\"\n\nconst edamam = createRuntime()\nconst parsed = await edamam.fetch(\n  new Request(\n    \"http://edamam.test/api/food-database/v2/parser?app_id=a&app_key=k&ingr=2%20large%20eggs&nutrition-type=logging\",\n  ),\n)\n// → {text, parsed: [{food: {foodId: \"food_egg\", label: \"Egg\", nutrients: {ENERC_KCAL: 143, …}},\n//     quantity: 2, measure: {uri: \"…#Measure_large\", label: \"Large\", weight: 50}}], hints: […]}",
+        "description": "Live example for edamam"
+      }
     },
     {
       "name": "firstpromoter",
@@ -275,7 +307,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-firstpromoter\"\n\nconst fp = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:3000/users/webhooks/first-promoter\", secret: \"user:pass\" },\n})\nconst admin = (path: string, body: unknown) =>\n  fp.fetch(\n    new Request(`http://fp.test/__admin${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\" },\n      body: JSON.stringify(body),\n    }),\n  )\n\n// An existing affiliate, and a click on their link: the tid checkout stores as fp_tid.\nawait admin(\"/promoters\", { email: \"nate@example.com\", ref_token: \"nate91\" })\nconst { tid } = (await (await admin(\"/clicks\", { ref_token: \"nate91\" })).json()) as { tid: string }\n// …the app's invoice handler posts POST /v2/track/signup {email, tid}; the mock converts the\n// referral and posts lead_becomes_referral to the backend with Authorization: Basic…",
+        "description": "Live example for firstpromoter"
+      }
     },
     {
       "name": "flex",
@@ -306,7 +342,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-flex\"\n\nconst flex = createRuntime({\n  webhooks: {\n    url: \"http://127.0.0.1:3000/billing/webhooks/flex\",\n    secret: \"fwhsec_<base64-signing-key>\",\n  },\n})\nconst post = (path: string, body: unknown) =>\n  flex.fetch(\n    new Request(`http://flex.test${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\", authorization: \"Bearer fsk_test_suite\" },\n      body: JSON.stringify(body),\n    }),\n  )\n\nconst { checkout_session } = (await (\n  await post(\"/v1/checkout/sessions\", {\n    checkout_session: {\n      success_url: \"https://app.test/done?session_id={CHECKOUT_SESSION_ID}\",\n      cancel_url: \"https://app.test/cart\",\n      client_reference_id: \"attempt-1\",\n      line_items: [\n        { price_data: { product: \"fprod_01m0tgysj4ahvf8fas60c2ef2d\", unit_amount: 4500 }, quantity: 1 },\n      ],\n    },\n  })\n).json()) as { checkout_session: { checkout_session_id: string; url: string } }\n// …open checkout_session.url in the browser and pay with 4000 0512 3000 0072, or:\nawait post(`/__admin/sessions/${checkout_session.checkout_session_id}/complete`, {})",
+        "description": "Live example for flex"
+      }
     },
     {
       "name": "formbricks",
@@ -335,7 +375,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-formbricks\"\n\nconst formbricks = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:3000/onboarding-tasks/formbricks-webhook?token=s3cret\" },\n})\n// …the member app POSTs /api/v2/client/<env>/responses {surveyId, finished: true, data, userId}…\n// the mock validates it, stores it, and posts responseFinished to the backend.\nconst response = await formbricks.fetch(new Request(\"http://formbricks.test/__admin/responses\"))",
+        "description": "Live example for formbricks"
+      }
     },
     {
       "name": "fullscript",
@@ -364,7 +408,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-fullscript\"\n\nconst fullscript = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:4000/v1/fullscript/webhooks\", secret: \"whsec\", challenge: \"chal\" },\n})\nconst admin = (path: string, body: unknown) =>\n  fullscript.fetch(\n    new Request(`https://fullscript.test/__admin${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\" },\n      body: JSON.stringify(body),\n    }),\n  )\nconst order = (await (await admin(\"/lab-orders\", { patientId: \"fs_pat_1\", treatmentPlanId: \"tp_1\" })).json()) as { id: string }\nawait admin(`/lab-orders/${order.id}/transition`, { to: \"purchased\" }) // order.placed + lab_order.updated\nawait admin(`/lab-orders/${order.id}/transition`, { to: \"results_ready\" }) // results + PDF URLs",
+        "description": "Live example for fullscript"
+      }
     },
     {
       "name": "genebygene",
@@ -395,7 +443,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-genebygene\"\n\nconst gxg = createRuntime({ webhooks: { url: \"http://127.0.0.1:3000/webhooks/gene-by-gene\", secret: \"kv-secret\" } })\nconst call = (path: string, init: RequestInit = {}) => gxg.fetch(new Request(`http://gxg.test${path}`, init))\n\nconst { access_token } = (await (\n  await call(\"/connect/token\", {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/x-www-form-urlencoded\" },\n    body: new URLSearchParams({ grant_type: \"client_credentials\", client_id: \"id\", client_secret: \"s\" }),\n  })\n).json()) as { access_token: string }\n// …the app places POST /api/v2/orders with Authorization: Bearer <access_token>; the response's\n// orderLines[].kitNumbers carry the new kit (Order.Created + KitNumbersGenerated are sent)…\n\nconst admin = (path: string, body: unknown) =>\n  call(`/__admin${path}`, { method: \"POST\", headers: { \"content-type\": \"application/json\" }, body: JSON.stringify(body) })\nawait admin(\"/orders/<orderId>/ship\", {}) // tracking numbers + Order.Shipped\nawait admin(\"/kits/WB3K9Q2X/transition\", { to: \"Received\" }) // Kit.Received\nawait admin(\"/kits/WB3K9Q2X/transition\", { to: \"Completed\", fixture: \"pgx\" }) // results + Kit.Completed\nawait admin(\"/kits/WB7ABCDE/transition\", { to: \"Error\", errorCode: 19 }) // Kit.Error (new collection)",
+        "description": "Live example for genebygene"
+      }
     },
     {
       "name": "google-calendar",
@@ -424,7 +476,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { auth, calendar } from \"@googleapis/calendar\"\nimport { OAuth2Client } from \"google-auth-library\"\nimport { createServer } from \"@crvouga/mockingbird-service-google-calendar/server\"\n\nconst google = await createServer()\nconst oauth = new OAuth2Client({\n  clientId: \"c\",\n  clientSecret: \"s\",\n  redirectUri: \"postmessage\",\n  endpoints: { oauth2TokenUrl: `${google.url}/token`, oauth2RevokeUrl: `${google.url}/revoke` },\n})\n// Authorization code \"4/mock-<name>\" signs in <name>@example.com (\"4/mock-<email>\" for others).\nconst { tokens } = await oauth.getToken(\"4/mock-dr.house\")\nconst client = new auth.OAuth2()\nclient.setCredentials({ access_token: tokens.access_token ?? null })\nconst cal = calendar({ version: \"v3\", auth: client, rootUrl: `${google.url}/` })\nawait cal.events.insert({\n  calendarId: \"primary\",\n  requestBody: { summary: \"Rounds\", start: { dateTime: \"2026-10-01T15:00:00Z\" }, end: { dateTime: \"2026-10-01T16:00:00Z\" } },\n})",
+        "description": "Live example for google-calendar"
+      }
     },
     {
       "name": "google-maps",
@@ -454,7 +510,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-google-maps\"\n\nconst maps = createRuntime()\nconst get = async (path: string) =>\n  (await maps.fetch(new Request(`http://maps.test${path}`))).json()\n\nconst { predictions } = await get(\n  \"/maps/api/place/autocomplete/json?input=1625%20N%20Central&types=address&components=country:us&key=k\",\n)\nconst details = await get(\n  `/maps/api/place/details/json?place_id=${predictions[0].place_id}&fields=address_component&key=k`,\n)\n// details.result.address_components → 1625 / N Central Ave / Phoenix / AZ / 85004\n\n// Make the next two autocomplete calls fail, as QA's manual-entry fallback expects.\nmaps.applyPreset(\"autocomplete_over_query_limit\", \"default\", { count: 2 })",
+        "description": "Live example for google-maps"
+      }
     },
     {
       "name": "healthie",
@@ -483,7 +543,11 @@
         "Node Server",
         "CLI",
         "GraphQL"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime, SEED } from \"@crvouga/mockingbird-service-healthie\"\n\nconst healthie = createRuntime({\n  settings: { orgApiKeys: [\"gh_sbox_test_org\"] },\n  webhooks: { baseUrl: \"http://127.0.0.1:3000\", ip: \"18.206.70.225\" },\n})\nconst graphql = (query: string, variables: object, key?: string) =>\n  healthie.fetch(\n    new Request(\"http://healthie.test/graphql\", {\n      method: \"POST\",\n      headers: {\n        \"content-type\": \"application/json\",\n        AuthorizationSource: \"API\",\n        ...(key ? { authorization: `Basic ${key}` } : {}),\n      },\n      body: JSON.stringify({ query, variables }),\n    }),\n  )\n\n// The seeded demo patient signs in and gets an API key, as the member app does.\nconst signedIn = await graphql(\n  `mutation($e: String, $p: String) {\n     signIn(input: { email: $e, password: $p, generate_api_token: true }) { api_key user { id active } }\n   }`,\n  { e: SEED.patientEmail, p: SEED.patientPassword },\n)\n\n// Ask Healthie to request a form from the patient; POST /forms/webhooks/status follows.\nawait healthie.fetch(\n  new Request(\"http://healthie.test/__admin/requested-forms\", {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    body: JSON.stringify({ recipient_id: SEED.patientId }),\n  }),\n)",
+        "description": "Live example for healthie"
+      }
     },
     {
       "name": "intercom",
@@ -511,7 +575,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-intercom\"\n\nconst intercom = createRuntime({\n  webhooks: {\n    urls: [\"http://127.0.0.1:3000/messaging/webhook\", \"http://127.0.0.1:4000/v1/webhooks/intercom\"],\n    secret: \"whsec-test\",\n  },\n})\n// …the member opens a conversation through the app (POST /conversations)…\n\n// Support answers: appends an admin comment and fires the signed conversation.admin.replied.\nawait intercom.fetch(\n  new Request(\"http://intercom.test/__admin/conversations/215470000000001/admin-reply\", {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    body: JSON.stringify({ adminId: \"1000001\", body: \"Your results are in\" }),\n  }),\n)",
+        "description": "Live example for intercom"
+      }
     },
     {
       "name": "junction",
@@ -539,7 +607,11 @@
         "Node Server",
         "CLI",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { createServer } from \"@crvouga/mockingbird-service-junction/server\"\n\nconst server = await createServer() // shipped corpus, any free port\nconst health = await fetch(`${server.url}/health`)\nconsole.log(health.status) // 200\n\n// Point the Vital SDK (or your backend's Junction base URL) at server.url, then:\nawait server.close()",
+        "description": "Live example for junction"
+      }
     },
     {
       "name": "klaviyo",
@@ -568,7 +640,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-klaviyo\"\n\nconst klaviyo = createRuntime()\n// …the app posts POST /api/events/ with Authorization: Klaviyo-API-Key <key>, revision: 2024-02-15…\nconst response = await klaviyo.fetch(\n  new Request(\"http://klaviyo.test/__admin/outbox?to=ada@example.com&metric=Placed%20Order\"),\n)\nconst { messages } = (await response.json()) as { messages: { metric: string; value: number }[] }",
+        "description": "Live example for klaviyo"
+      }
     },
     {
       "name": "llamacloud",
@@ -597,7 +673,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-llamacloud\"\n\nconst llama = createRuntime({ pipelines: [{ name: \"geviti-member-kb-v1\", projectName: \"Default\" }] })\nconst admin = (path: string, body: unknown) =>\n  llama.fetch(\n    new Request(`http://llamacloud.test/__admin${path}`, {\n      method: \"PUT\",\n      headers: { \"content-type\": \"application/json\" },\n      body: JSON.stringify(body),\n    }),\n  )\n\n// Script what the chat tool retrieves for queries mentioning \"apob\"…\nawait admin(\"/retrieval\", {\n  match: { contains: \"apob\" },\n  nodes: [{ text: \"ApoB counts atherogenic particles.\", score: 0.92, metadata: { file_name: \"apob.md\" } }],\n})\n// …anything else is ranked by term overlap over the documents the app upserted.",
+        "description": "Live example for llamacloud"
+      }
     },
     {
       "name": "mailosaur",
@@ -627,7 +707,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createServer } from \"@crvouga/mockingbird-service-mailosaur/server\"\nimport MailosaurClient from \"mailosaur\"\n\nconst inbox = await createServer({ tls: true })\n// …trust inbox.cert (NODE_EXTRA_CA_CERTS, or tls.setDefaultCACertificates in a test)…\nprocess.env.HTTPS_PROXY = inbox.proxyUrl\nconst mailosaur = new MailosaurClient(\"any-key\")\ndelete process.env.HTTPS_PROXY\n\n// Something \"sends\" the signup email:\nawait fetch(`${inbox.url}/__admin/ingest`, {\n  method: \"POST\",\n  headers: { \"content-type\": \"application/json\" },\n  body: JSON.stringify({\n    to: \"member-app-x1@abcd1234.mailosaur.net\",\n    subject: \"Your verification code\",\n    text: \"Your verification code is 604218. \",\n  }),\n})\nconst message = await mailosaur.messages.get(\"abcd1234\", { sentTo: \"member-app-x1@abcd1234.mailosaur.net\" })\nmessage.text?.codes?.[0]?.value // \"604218\"",
+        "description": "Live example for mailosaur"
+      }
     },
     {
       "name": "makor-cpg",
@@ -656,7 +740,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-makor-cpg\"\n\nconst cpg = createRuntime({ settings: { processingMs: 45_000 } })\nconst admin = (method: string, path: string, body?: unknown) =>\n  cpg.fetch(\n    new Request(`http://makor.test/__admin${path}`, {\n      method,\n      headers: { \"content-type\": \"application/json\" },\n      ...(body === undefined ? {} : { body: JSON.stringify(body) }),\n    }),\n  )\n\n// Member 1652 has an approved plan (the Intercom sync reads it); nobody else does (404, normal).\nawait admin(\"PUT\", \"/care-plans/1652\", { status: \"Approved\", state: \"CA\" })\n// …the EMR generates a review script: it answers `processing` at once…\ncpg.clock.advance(45_000)\n// …and the next GET /api/async-review-script/1652/<labTestId> answers `complete`.",
+        "description": "Live example for makor-cpg"
+      }
     },
     {
       "name": "medplum",
@@ -681,7 +769,11 @@
       "surfaces": [
         "Fetch API",
         "Node Server"
-      ]
+      ],
+      "example": {
+        "code": "import { createMedplumAPI } from \"@crvouga/mockingbird-service-medplum\"\n\nconst medplum = await createMedplumAPI({ onLog: (message) => console.log(message) })\ntry {\n  const token = await medplum.getAccessToken()\n  const headers = { authorization: `Bearer ${token}`, \"content-type\": \"application/fhir+json\" }\n\n  // Direct HTTP against the internal base URL (http://127.0.0.1:<apiPort>/):\n  const created = await fetch(new URL(\"/fhir/R4/Patient\", medplum.getBaseUrl()), {\n    method: \"POST\",\n    headers,\n    body: JSON.stringify({ resourceType: \"Patient\", name: [{ given: [\"Ada\"], family: \"Lovelace\" }] }),\n  })\n  const patient = (await created.json()) as { id: string }\n\n  // Through fetch(request) (any origin; path and query are forwarded):\n  const read = await medplum.fetch(\n    new Request(`https://medplum.test/fhir/R4/Patient/${patient.id}`, { headers }),\n  )\n  console.log(read.status) // 200\n} finally {\n  await medplum.stop()\n}",
+        "description": "Live example for medplum"
+      }
     },
     {
       "name": "odx",
@@ -710,7 +802,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-odx\"\n\nconst odx = createRuntime({ webhook: { url: \"http://127.0.0.1:3000/odx/webhook\" } })\nconst call = (path: string, body?: unknown) =>\n  odx.fetch(\n    new Request(`http://odx.test${path}`, {\n      method: body === undefined ? \"GET\" : \"POST\",\n      headers: { ApiKey: \"any\", \"content-type\": \"application/json\" },\n      ...(body === undefined ? {} : { body: JSON.stringify(body) }),\n    }),\n  )\n\nconst patient = await (\n  await call(\"/v1/practice/p1/patient\", { firstName: \"Ada\", lastName: \"Lovelace\", gender: \"Female\", email: \"ada@example.com\" })\n).json()\n// …the app posts HL7 to /v1/practice/p1/patient/{patientId}/test; the mock answers the parsed\n// PatientTest and posts a signed `Created` webhook to /odx/webhook.",
+        "description": "Live example for odx"
+      }
     },
     {
       "name": "otel",
@@ -741,7 +837,11 @@
         "Node Server",
         "CLI",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-otel\"\n\nconst otel = createRuntime()\nconst call = (path: string, init: RequestInit) => otel.fetch(new Request(`http://otel.test${path}`, init))\n\n// What @opentelemetry/exporter-logs-otlp-http sends for one winston/pino event log.\nawait call(\"/v1/logs\", {\n  method: \"POST\",\n  headers: { \"content-type\": \"application/json\", authorization: \"Bearer ingest-token\" },\n  body: JSON.stringify({\n    resourceLogs: [{\n      resource: { attributes: [{ key: \"service.name\", value: { stringValue: \"backend\" } }] },\n      scopeLogs: [{ logRecords: [{\n        severityText: \"info\",\n        body: { stringValue: \"reconcile done\" }, // dropped: bodies are never stored\n        attributes: [\n          { key: \"event\", value: { stringValue: \"initial_credit_reconcile_completed\" } },\n          { key: \"granted\", value: { intValue: \"1\" } },\n        ],\n      }] }],\n    }],\n  }),\n})\n\n// Long-poll until it lands, then query it the way our O2 clients do.\nawait call(\"/__admin/wait\", {\n  method: \"POST\",\n  headers: { \"content-type\": \"application/json\" },\n  body: JSON.stringify({ kind: \"log\", where: { event: \"initial_credit_reconcile_completed\" } }),\n})\nconst search = await call(\"/api/30rBqcDevOrg7Hn2KmQ4xW9sLtY/_search\", {\n  method: \"POST\",\n  headers: { \"content-type\": \"application/json\", authorization: `Basic ${btoa(\"agent:pw\")}` },\n  body: JSON.stringify({\n    query: { sql: `SELECT * FROM \"default\" WHERE event = 'initial_credit_reconcile_completed'` },\n  }),\n})\n// { hits: [{ service_name: \"backend\", event: \"…\", granted: 1, severity_text: \"info\", _timestamp }], … }",
+        "description": "Live example for otel"
+      }
     },
     {
       "name": "payload-cms",
@@ -770,7 +870,11 @@
         "Node Server",
         "CLI",
         "GraphQL"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-payload-cms\"\n\nconst cms = createRuntime()\nawait cms.fetch(\n  new Request(\"http://cms.test/__admin/collections/marketing/docs\", {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    body: JSON.stringify({ name: \"Fall\", type: \"referral\", isActive: true, cardTitle: \"Fall Rewards\" }),\n  }),\n)\nconst page = await cms.fetch(\n  new Request(\n    \"http://cms.test/api/marketing?where[type][equals]=referral&where[isActive][equals]=true&limit=1\",\n  ),\n)\n// → {docs: [{id: 4, cardTitle: \"Fall Rewards\", …}], totalDocs: 2, limit: 1, …}",
+        "description": "Live example for payload-cms"
+      }
     },
     {
       "name": "persona",
@@ -798,7 +902,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-persona\"\n\nconst persona = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:4000/v1/identify-verification/webhook\", secret: \"wbhsec_test\" },\n})\nconst created = await persona.fetch(\n  new Request(\"http://persona.test/inquiries\", {\n    method: \"POST\",\n    headers: { authorization: \"Bearer persona_sandbox_x\", \"content-type\": \"application/json\" },\n    body: JSON.stringify({\n      data: { type: \"inquiry\", attributes: { \"inquiry-template-id\": \"itmpl_identity\", \"reference-id\": \"patient-1\" } },\n    }),\n  }),\n)\nconst { data } = (await created.json()) as { data: { id: string } }\n\n// Finish it the way a member and Persona's workflow would: started → completed → approved,\n// one signed event per step.\nawait persona.fetch(new Request(`http://persona.test/__admin/inquiries/${data.id}/approve`, { method: \"POST\" }))",
+        "description": "Live example for persona"
+      }
     },
     {
       "name": "pharmetika",
@@ -827,7 +935,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-pharmetika\"\n\nconst pmk = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:3000/prescriptions/webhooks/pharmetika\", secret: \"whsec\" },\n})\nconst admin = (path: string, body: unknown) =>\n  pmk.fetch(\n    new Request(`http://pharmetika.test/__admin${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\" },\n      body: JSON.stringify(body),\n    }),\n  )\n\n// …the app validates and submits PUT /api/v5/provider_portal/medication_order/id/<uuid>/submit…\n\n// Move the order the way the pharmacy would; each step posts the status webhook.\nawait admin(\"/orders/<uuid>/transition\", { to: \"data_entry\" })\nawait admin(\"/orders/<uuid>/transition\", { to: \"shipped\", tracking_id: \"1Z999\" })\nawait admin(\"/orders/<uuid>/transition\", { to: \"completed\" })",
+        "description": "Live example for pharmetika"
+      }
     },
     {
       "name": "plane",
@@ -855,7 +967,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-plane\"\n\nconst plane = createRuntime()\nconst base = \"http://plane.test/api/v1/workspaces/geviti/projects/33333333-3333-4333-8333-333333333333\"\nconst headers = { \"x-api-key\": \"plane_api_test\", \"content-type\": \"application/json\" }\n\nconst created = await plane.fetch(\n  new Request(`${base}/work-items/`, {\n    method: \"POST\",\n    headers,\n    body: JSON.stringify({ name: \"Checkout fails on Safari\" }),\n  }),\n)\nconst item = (await created.json()) as { id: string }\n// Resolve it the way a teammate would; the resolution watcher then sees group \"completed\".\nawait plane.fetch(\n  new Request(`http://plane.test/__admin/work-items/${item.id}/state`, {\n    method: \"POST\",\n    headers,\n    body: JSON.stringify({ state: \"Done\" }),\n  }),\n)",
+        "description": "Live example for plane"
+      }
     },
     {
       "name": "portal-agent",
@@ -885,7 +1001,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-portal-agent\"\n\nconst agent = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:3000/prescriptions/webhooks/portal-agent\", secret: \"cb-key\" },\n})\nconst post = (path: string, body: unknown) =>\n  agent.fetch(\n    new Request(`http://portal-agent.test${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\" },\n      body: JSON.stringify(body),\n    }),\n  )\n\n// …the app posts POST /rx/portal-fulfillment/jobs and gets {status: \"accepted\", agentJobId}…\nconst [job] = agent.instance().jobs()\nif (job) {\n  await post(`/__admin/jobs/${job.agentJobId}/complete`, { status: \"submitted\" })\n  await post(`/__admin/jobs/${job.agentJobId}/complete`, {\n    status: \"submitted\",\n    fulfillmentStatus: \"shipped\",\n    trackingNumber: \"1Z999\",\n  })\n}",
+        "description": "Live example for portal-agent"
+      }
     },
     {
       "name": "postgres",
@@ -912,7 +1032,11 @@
       "status": "implemented",
       "surfaces": [
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { Database, Snapshot } from \"@crvouga/mockingbird-service-postgres\"\n\nconst db = new Database()\n\ndb.exec(`\n  CREATE TABLE users (\n    id serial PRIMARY KEY,\n    email text UNIQUE NOT NULL,\n    created_at timestamptz NOT NULL DEFAULT now()\n  )\n`)\n\ndb.prepare(`INSERT INTO users (email) VALUES ($1)`).run(\"ada@example.com\")\n\nconst users = db.query<{ id: number; email: string; created_at: string }>(`SELECT * FROM users`)\nconsole.log(users) // [{ id: 1, email: \"ada@example.com\", created_at: \"2000-01-01 00:00:00+00\" }]\n\n// Snapshots: freeze a template, fork it cheaply, or persist it as bytes.\nconst seed = db.snapshot()\nconst db2 = seed.open()\nconst bytes = seed.encode()\nconst db3 = Snapshot.decode(bytes).open()\nconsole.log(db2.query(`SELECT count(*) AS n FROM users`), db3.changes) // [{ n: 1n }] 1",
+        "description": "Live example for postgres"
+      }
     },
     {
       "name": "posthog",
@@ -941,7 +1065,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-posthog\"\n\nconst posthog = createRuntime()\nconst admin = (path: string, body: unknown, method = \"PUT\") =>\n  posthog.fetch(\n    new Request(`http://posthog.test/__admin${path}`, { method, body: JSON.stringify(body) }),\n  )\n\n// Per-worker namespaces: map each worker's project token (the SDKs cannot add headers)…\nawait admin(\"/credentials\", { credentials: { phc_worker1: \"w1\" } })\n// …then set flags in that namespace.\nawait admin(\"/flags/shop-coupons?namespace=w1\", { default: true })\nawait admin(\"/flags/rx-category-intake?namespace=w1\", {\n  default: true,\n  payload: { categories: [\"trt\"] },\n  overrides: [{ distinct_id: \"42\", value: false }, { email: \"qa@example.test\", value: \"beta\" }],\n})\nawait admin(\"/flags/mobile-smart-links?namespace=w1\", undefined, \"DELETE\") // absent again\n\n// The app's posthog-node `getFeatureFlag(\"shop-coupons\", \"7\")` now answers true.",
+        "description": "Live example for posthog"
+      }
     },
     {
       "name": "prism",
@@ -969,7 +1097,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-prism\"\n\nconst prism = createRuntime()\nconst api = (path: string, body?: unknown) =>\n  prism.fetch(\n    new Request(`http://prism.test${path}`, {\n      method: body === undefined ? \"GET\" : \"POST\",\n      headers: { authorization: \"Bearer k\", \"content-type\": \"application/json\" },\n      ...(body === undefined ? {} : { body: JSON.stringify(body) }),\n    }),\n  )\n\n// …the app upserts the subject, creates a scan, the capture page PUTs the video…\n// Then finish processing without waiting:\nawait api(\"/__admin/scans/<scan id>/advance\", { to: \"READY\" })",
+        "description": "Live example for prism"
+      }
     },
     {
       "name": "resend",
@@ -999,7 +1131,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createServer } from \"@crvouga/mockingbird-service-resend/server\"\n\nconst mock = await createServer()\nprocess.env.RESEND_BASE_URL = mock.url\nconst { Resend } = await import(\"resend\")\n\nawait new Resend(\"re_test\").emails.send({\n  from: \"Geviti <no-reply@gogeviti.com>\",\n  to: [\"invitee@example.com\"],\n  subject: \"You're invited\",\n  html: '<a href=\"https://app.test/family/invitations/claim?token=abc\">Join</a>',\n})\n\nconst { messages } = await (await fetch(`${mock.url}/__admin/outbox?to=invitee@example.com`)).json()\nconst { links } = await (await fetch(`${mock.url}/__admin/outbox/${messages[0].id}/links`)).json()\n// links[0] === \"https://app.test/family/invitations/claim?token=abc\"",
+        "description": "Live example for resend"
+      }
     },
     {
       "name": "rxvortex",
@@ -1028,7 +1164,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-rxvortex\"\n\nconst rx = createRuntime({\n  webhooks: { url: \"http://127.0.0.1:3000/prescriptions/webhooks/rxvortex\", secret: \"whsec-test\" },\n})\nconst post = (path: string, body: unknown, headers: Record<string, string> = {}) =>\n  rx.fetch(\n    new Request(`http://rxvortex.test${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\", ...headers },\n      body: JSON.stringify(body),\n    }),\n  )\n\nconst { access_token } = (await (\n  await post(\"/api/v1/generate-access-token\", { client_id: \"geviti\", client_secret: \"s\" })\n).json()) as { access_token: string }\n// …the app submits POST /api/v1/orders with Authorization: Bearer <access_token>…\n\n// Move an order the way the pharmacy would; each step emits the signed status webhook.\nawait post(\"/__admin/orders/pay_123/transition\", { to: \"Shipping\", trackingnumber: \"1Z999\" })\nawait post(\"/__admin/orders/pay_123/transition\", { to: \"Delivered\" })",
+        "description": "Live example for rxvortex"
+      }
     },
     {
       "name": "slack",
@@ -1056,7 +1196,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-slack\"\n\nconst slack = createRuntime()\nawait slack.fetch(\n  new Request(\"http://slack.test/services/T000/B000/XXXX\", {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    body: JSON.stringify({ text: \"reconcile failed\", blocks: [{ type: \"divider\" }] }),\n  }),\n) // 200 \"ok\"\n\n// Make the next post fail the way Slack does under load; our clients retry at 0/2/8 s.\nslack.applyPreset(\"rate_limited\", \"default\", { count: 1 })\n\nconst outbox = await slack.fetch(\n  new Request(\"http://slack.test/__admin/outbox?webhook=/services/T000/B000/XXXX\"),\n)\n// { messages: [{ text: \"reconcile failed\", blocks: [...], ts: \"1700000000.000001\", thread_ts: null, … }] }",
+        "description": "Live example for slack"
+      }
     },
     {
       "name": "sqlite",
@@ -1082,7 +1226,11 @@
       "status": "implemented",
       "surfaces": [
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { Database, Snapshot } from \"@crvouga/mockingbird-service-sqlite\"\n\nconst db = new Database()\n\ndb.exec(`\n  CREATE TABLE users (\n    id INTEGER PRIMARY KEY,\n    name TEXT NOT NULL,\n    created_at TEXT DEFAULT (datetime('now'))\n  )\n`)\n\nconst inserted = db.prepare(`INSERT INTO users (name) VALUES (?)`).run(\"Alice\")\nconsole.log(inserted) // { changes: 1, lastInsertRowid: 1 }\n\nconst users = db.query<{ id: number; name: string; created_at: string }>(`SELECT * FROM users`)\nconsole.log(users) // [{ id: 1, name: \"Alice\", created_at: \"2000-01-01 00:00:00\" }]\n\n// Snapshots: freeze a template, fork it cheaply, or persist it as bytes.\nconst seed = db.snapshot()\nconst db2 = seed.open()\nconst bytes = seed.encode()\nconst db3 = Snapshot.decode(bytes).open()\nconsole.log(db2.query(`SELECT count(*) AS n FROM users`), db3.lastInsertRowid) // [{ n: 1 }] 1",
+        "description": "Live example for sqlite"
+      }
     },
     {
       "name": "stripe",
@@ -1113,7 +1261,11 @@
         "Node Server",
         "CLI",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import Stripe from \"stripe\"\nimport { createServer } from \"@crvouga/mockingbird-service-stripe/server\"\n\nconst server = await createServer({\n  accounts: [\n    // Legacy STRIPE_API_KEY, STRIPE_MSO_API_KEY and the EMR key all act as MSO and share state.\n    { id: \"acct_mso\", keys: [\"sk_test_legacy\", \"sk_test_mso\", \"sk_test_emr\", \"pk_test_mso\"], corpus: true },\n    { id: \"acct_pc\", keys: [\"sk_test_pc\"] },\n    { id: \"acct_pp\", keys: [\"sk_test_pp\"], apiVersion: \"2025-02-24.acacia\" },\n  ],\n})\nconst url = new URL(server.url)\nconst stripe = new Stripe(\"sk_test_mso\", {\n  apiVersion: \"2024-06-20\",\n  host: url.hostname,\n  port: Number(url.port),\n  protocol: \"http\",\n})\nconst customer = await stripe.customers.create({ email: \"qa@example.com\" })\nawait stripe.paymentMethods.attach(\"pm_card_visa\", { customer: customer.id }) // a new pm_ id\nawait server.close()",
+        "description": "Live example for stripe"
+      }
     },
     {
       "name": "twilio",
@@ -1145,7 +1297,11 @@
         "Node Server",
         "CLI",
         "HTTP/2"
-      ]
+      ],
+      "example": {
+        "code": "import { RequestClient, Twilio } from \"twilio\"\nimport { twilioMockUrl } from \"@crvouga/mockingbird-service-twilio\"\n\n/** https://verify.twilio.com/v2/Services/VA…/Verifications → {base}/verify/v2/Services/VA…/Verifications */\nclass MockRequestClient extends RequestClient {\n  constructor(baseUrl) {\n    super()\n    this.baseUrl = baseUrl\n  }\n  request(opts) {\n    return super.request({ ...opts, uri: twilioMockUrl(opts.uri, this.baseUrl) })\n  }\n}\n\nconst { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN } = process.env\nconst base = process.env.TWILIO_API_BASE_URL // e.g. http://127.0.0.1:8798\nconst client = new Twilio(\n  TWILIO_ACCOUNT_SID,\n  TWILIO_AUTH_TOKEN,\n  base ? { httpClient: new MockRequestClient(base) } : {},\n)",
+        "description": "Live example for twilio"
+      }
     },
     {
       "name": "vpi",
@@ -1174,7 +1330,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-vpi\"\n\nconst vpi = createRuntime()\nconst post = (path: string, body: unknown, headers: Record<string, string> = {}) =>\n  vpi.fetch(\n    new Request(`http://vpi.test${path}`, {\n      method: \"POST\",\n      headers: { \"content-type\": \"application/json\", ...headers },\n      body: JSON.stringify(body),\n    }),\n  )\n\nconst { jwtToken } = (await (\n  await post(\"/accounts/authenticate\", { email: \"clinic@example.com\", password: \"x\" })\n).json()) as { jwtToken: string }\n// …the app saves a draft with POST /clinic/rxOrdering/saveNewPrescription (Bearer jwtToken)…\n\n// Move it the way the pharmacy would; our poller maps each status.\nawait post(\"/__admin/prescriptions/66b200000000000000000001/transition\", {\n  to: \"Order Completed\",\n  trackingNumber: \"1Z999\",\n})",
+        "description": "Live example for vpi"
+      }
     },
     {
       "name": "wholescripts",
@@ -1203,7 +1363,11 @@
         "Fetch API",
         "Node Server",
         "CLI"
-      ]
+      ],
+      "example": {
+        "code": "import { createRuntime } from \"@crvouga/mockingbird-service-wholescripts\"\n\nconst ws = createRuntime()\nconst auth = { authorization: `Basic ${btoa(\"geviti:secret\")}`, \"content-type\": \"application/json\" }\n\nconst submitted = (await (\n  await ws.fetch(\n    new Request(\"http://wholescripts.test/api/Orders/Submit\", {\n      method: \"POST\",\n      headers: auth,\n      body: JSON.stringify({\n        ShippingAddress: { FName: \"Ada\", LName: \"L\", Address1: \"1 Main St\", City: \"Phoenix\", State: \"AZ\", Zip: \"85004\" },\n        Items: [{ Sku: \"SKU001\", Quantity: 1 }],\n        ShippingMethod: \"Ground\",\n      }),\n    }),\n  )\n).json()) as { orderNumber: string }\n\n// Ship it the way the vendor would; the next GET /api/Orders/Status poll sees it.\nawait ws.fetch(\n  new Request(`http://wholescripts.test/__admin/orders/${submitted.orderNumber}/transition`, {\n    method: \"POST\",\n    headers: { \"content-type\": \"application/json\" },\n    body: JSON.stringify({ to: \"Complete\", trackingNumber: \"1Z999\", carrier: \"UPS\" }),\n  }),\n)",
+        "description": "Live example for wholescripts"
+      }
     }
   ]
 }

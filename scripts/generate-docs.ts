@@ -25,8 +25,12 @@ interface ServiceMetadata {
   readmeUrl: string;
   supportUrl?: string;
   entries: Record<string, "node" | "bun" | "portable">;
-  status: "implemented" | "experimental" | "deprecated";
+  status: "implemented" | "experimental" | "wip";
   surfaces: string[];
+  example?: {
+    code: string;
+    description: string;
+  };
 }
 
 interface Catalog {
@@ -86,8 +90,9 @@ function getServiceMetadata(serviceDir: string): ServiceMetadata | null {
         ? `https://github.com/crvouga/mockingbird/blob/main/packages/service/${serviceName}/SUPPORT.md`
         : undefined,
       entries: pkg.mockingbird.entries || { default: "portable" },
-      status: "implemented",
+      status: detectStatus(serviceName, readmePath, pkgPath),
       surfaces: extractSurfaces(serviceName, readmePath),
+      example: extractExample(serviceName, readmePath),
     };
   } catch {
     return null;
@@ -135,6 +140,67 @@ function extractSurfaces(serviceName: string, readmePath: string): string[] {
     return surfaces.length > 0 ? surfaces : ["Fetch API"];
   } catch {
     return ["Fetch API"];
+  }
+}
+
+function detectStatus(
+  serviceName: string,
+  readmePath: string,
+  pkgPath: string
+): "implemented" | "experimental" | "wip" {
+  try {
+    const readme = readFileSync(readmePath, "utf-8").toLowerCase();
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
+
+    // Check for explicit status markers in README
+    if (
+      readme.includes("work in progress") ||
+      readme.includes("wip") ||
+      readme.includes("not yet implemented") ||
+      pkg.mockingbird?.status === "wip"
+    ) {
+      return "wip";
+    }
+
+    if (
+      readme.includes("experimental") ||
+      pkg.mockingbird?.status === "experimental"
+    ) {
+      return "experimental";
+    }
+
+    // Services with minimal implementation or TODOs
+    if (readme.includes("TODO") && serviceName !== "stripe") {
+      return "wip";
+    }
+
+    return "implemented";
+  } catch {
+    return "implemented";
+  }
+}
+
+function extractExample(
+  serviceName: string,
+  readmePath: string
+): { code: string; description: string } | undefined {
+  try {
+    const readme = readFileSync(readmePath, "utf-8");
+
+    // Look for TypeScript/JavaScript code blocks after "## Usage" or "## Example"
+    const codeBlockRegex = /```(?:typescript|ts|javascript|js)\n([\s\S]*?)```/;
+    const match = readme.match(codeBlockRegex);
+
+    if (match && match[1]) {
+      return {
+        code: match[1].trim(),
+        description: `Live example for ${serviceName}`,
+      };
+    }
+
+    return undefined;
+  } catch {
+    return undefined;
   }
 }
 

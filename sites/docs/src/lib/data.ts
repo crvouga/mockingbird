@@ -12,8 +12,12 @@ export interface ServiceMetadata {
   readmeUrl: string;
   supportUrl?: string;
   entries: Record<string, "node" | "bun" | "portable">;
-  status: "implemented" | "experimental" | "deprecated";
+  status: "implemented" | "experimental" | "wip";
   surfaces: string[];
+  example?: {
+    code: string;
+    description: string;
+  };
 }
 
 export interface Catalog {

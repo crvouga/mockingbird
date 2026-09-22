@@ -1,6 +1,7 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 import { getAllServices } from "../lib/data";
+import StatusBadge from "../components/StatusBadge.astro";
 
 const services = await getAllServices();
 ---
@@ -86,6 +87,10 @@ const services = await getAllServices();
           <a href={`/service/${service.name}`}>
             {service.name}
           </a>
+        </div>
+
+        <div style="margin-bottom: 8px;">
+          <StatusBadge status={service.status} />
         </div>
 
         <div class="service-desc">

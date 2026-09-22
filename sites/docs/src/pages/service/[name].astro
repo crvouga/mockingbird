@@ -1,6 +1,8 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { getAllServices, getService } from "../../lib/data";
+import ServiceExample from "../../components/ServiceExample.astro";
+import StatusBadge from "../../components/StatusBadge.astro";
 
 export async function getStaticPaths() {
   const services = await getAllServices();
@@ -35,10 +37,22 @@ const { service } = Astro.props;
   title={service.name}
   description={service.description}
 >
-  <h1>{service.name}</h1>
+  <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 10px;">
+    <h1 style="margin: 0;">{service.name}</h1>
+    <StatusBadge status={service.status} />
+  </div>
   <p style="font-size: 16px; color: var(--color-muted); margin-bottom: 20px;">
     {service.description}
   </p>
+
+  {service.status === "wip" && (
+    <div style="padding: 12px; background-color: rgba(255, 102, 102, 0.1); border-left: 3px solid #ff6666; border-radius: 4px; margin-bottom: 20px;">
+      <p style="margin: 0; font-size: 14px;">
+        <strong>⚠️ Work in Progress:</strong> This service is not yet complete.
+        <a href={service.repoUrl} target="_blank" rel="noopener">See implementation status</a>.
+      </p>
+    </div>
+  )}
 
   <style>
     .metadata {
@@ -229,16 +243,37 @@ const { service } = Astro.props;
     </p>
   </div>
 
-  <h2>Installation</h2>
+  <h2 id="install">Installation</h2>
   <pre>npm install -D {service.packageName}
 # or
 bun add -D {service.packageName}</pre>
 
-  <h2>Usage</h2>
+  {service.example && (
+    <>
+      <h2>Example</h2>
+      <ServiceExample
+        code={service.example.code}
+        description={service.example.description}
+        serviceName={service.name}
+      />
+    </>
+  )}
+
+  <h2>API Reference</h2>
   <p>
     Every service provides a synchronous, in-process <code>fetch</code> handler that speaks
-    the real API surface. See the
-    <a href={service.readmeUrl} target="_blank" rel="noopener">README</a> for detailed examples
-    and API reference.
+    the real API surface.
   </p>
+  <p>
+    For complete API documentation, examples, and integration patterns, see the
+    <a href={service.readmeUrl} target="_blank" rel="noopener">official README</a>.
+  </p>
+
+  <h2>Surfaces</h2>
+  <p>This service is available as:</p>
+  <ul>
+    {service.surfaces.map((surface) => (
+      <li><strong>{surface}:</strong> Import from <code>{service.packageName}</code></li>
+    ))}
+  </ul>
 </BaseLayout>
