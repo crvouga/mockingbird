@@ -68,7 +68,7 @@ function render(query: string) {
               e.kind === "service"
                 ? `<span class="monogram" style="--h:${e.hue}">${escapeText(e.initials)}</span>`
                 : `<span class="monogram" style="--h:260"><svg class="i"><use href="#i-file"></use></svg></span>`
-            return `<li role="option"><a href="${e.href}" id="pal-${i}" data-index="${i}" aria-selected="${i === active}"><span>${icon}</span><span class="meta"><strong>${escapeText(e.displayName)}</strong><span>${escapeText(e.subtitle)}</span></span><span class="kind">${e.kind === "service" ? escapeText(e.category) : "Page"}</span></a></li>`
+            return `<li role="option"><a href="${e.href}" id="pal-${i}" data-index="${i}" aria-selected="${i === active}"><span>${icon}</span><span class="meta"><strong>${escapeText(e.displayName)}</strong><span>${escapeText(e.subtitle)}</span></span><span class="kind">${e.kind === "service" ? `<span class="badge tier tier-${e.tier}"><span class="dot"></span>${e.tier === "ready" ? "Ready" : "In progress"}</span>` : "Page"}</span></a></li>`
           })
           .join("")}`,
     )

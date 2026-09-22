@@ -11,6 +11,7 @@ export interface PaletteEntry {
   initials: string
   subtitle: string
   category: string
+  tier: string
   hue: number
   text: string
 }
@@ -33,6 +34,7 @@ export const GET: APIRoute = () => {
       initials: initials(s.displayName),
       subtitle: s.description,
       category: CATEGORIES[s.category as CategorySlug].label,
+      tier: s.status,
       hue: s.hue,
       text: [
         s.packageName,
@@ -50,6 +52,7 @@ export const GET: APIRoute = () => {
       initials: "",
       subtitle,
       category: "",
+      tier: "",
       hue: 0,
       text: subtitle,
     })),

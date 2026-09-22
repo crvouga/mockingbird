@@ -2,6 +2,7 @@
 import catalog from "virtual:mockingbird/catalog"
 import Icon from "../components/Icon.astro"
 import Monogram from "../components/Monogram.astro"
+import TierBadge from "../components/TierBadge.astro"
 import Base from "../layouts/Base.astro"
 import { CATEGORIES, type CategorySlug } from "../lib/categories.ts"
 import { percent } from "../lib/format.ts"
@@ -15,8 +16,9 @@ const yes = (on: boolean) => (on ? "yes" : "no")
     <header class="page-head">
       <h1>Coverage</h1>
       <p class="lede">
-        {totals.opsSupported} of {totals.opsTotal} operations across {totals.services} services, computed from each package's vendored
-        contract and exports at build time. Click a column to sort.
+        {totals.ready} services are ready to use and {totals.wip} are in progress. Across all {totals.services},
+        {totals.opsSupported} of {totals.opsTotal} contract operations are mocked, computed from each package at build time.
+        Click a column to sort.
       </p>
     </header>
 
@@ -25,6 +27,7 @@ const yes = (on: boolean) => (on ? "yes" : "no")
         <thead>
           <tr>
             <th><button type="button" data-sort-key="name">Service</button></th>
+            <th><button type="button" data-sort-key="tier">Tier</button></th>
             <th><button type="button" data-sort-key="category">Category</button></th>
             <th><button type="button" data-sort-key="coverage">Operations</button></th>
             <th><button type="button" data-sort-key="browser">Browser</button></th>
@@ -40,6 +43,7 @@ const yes = (on: boolean) => (on ? "yes" : "no")
               const p = percent(s.opsSupported, s.opsTotal)
               return (
                 <tr
+                  data-tier={s.status === "ready" ? "0" : "1"}
                   data-name={s.displayName.toLowerCase()}
                   data-category={CATEGORIES[s.category as CategorySlug].label}
                   data-coverage={s.opsTotal ? s.opsSupported / s.opsTotal + s.opsSupported / 1e6 : -1}
@@ -55,6 +59,7 @@ const yes = (on: boolean) => (on ? "yes" : "no")
                       {s.displayName}
                     </a>
                   </td>
+                  <td><TierBadge tier={s.status} /></td>
                   <td class="muted-cell">{CATEGORIES[s.category as CategorySlug].label}</td>
                   <td>
                     {s.opsTotal > 0 ? (
@@ -81,6 +86,7 @@ const yes = (on: boolean) => (on ? "yes" : "no")
     </div>
 
     <dl class="legend">
+      <div><dt>Tier</dt><dd><strong>Ready</strong>: complete and kept stable. <strong>In progress</strong>: usable, but can still change between releases.</dd></div>
       <div><dt>Operations</dt><dd>Mocked operations out of every operation in the package's vendored OpenAPI contract.</dd></div>
       <div><dt>Browser</dt><dd>The package is portable, so the playground runs it in your tab.</dd></div>
       <div><dt>In-process</dt><dd>Exports <code>createRuntime()</code>: a <code>fetch(Request) → Response</code> for tests.</dd></div>

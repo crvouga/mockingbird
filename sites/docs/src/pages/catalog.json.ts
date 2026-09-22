@@ -1,6 +1,7 @@
 import catalog from "virtual:mockingbird/catalog"
 import type { APIRoute } from "astro"
 import { CATEGORIES, type CategorySlug } from "../lib/categories.ts"
+import { TIERS } from "../lib/tiers.ts"
 
 /** Machine-readable catalog for agents and tools: everything but the rendered docs. */
 export const GET: APIRoute = () => {
@@ -21,7 +22,8 @@ export const GET: APIRoute = () => {
       description: s.description,
       category: s.category,
       categoryLabel: CATEGORIES[s.category as CategorySlug].label,
-      status: s.status,
+      tier: s.status,
+      tierLabel: TIERS[s.status].label,
       runtime: s.runtime,
       kind: s.kind,
       surfaces: s.surfaces,

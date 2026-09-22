@@ -1,6 +1,6 @@
 export type ServiceKind = "http" | "sql" | "node"
 
-export type ServiceStatus = "stable" | "wip"
+export type ServiceStatus = "ready" | "wip"
 
 export interface Operation {
   id: string
@@ -79,6 +79,8 @@ export interface Catalog {
   categories: CategorySummary[]
   totals: {
     services: number
+    ready: number
+    wip: number
     browser: number
     opsSupported: number
     opsTotal: number
