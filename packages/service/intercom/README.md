@@ -203,9 +203,9 @@ never records message bodies or contact details.
 
 | Export | Kind | Description |
 | --- | --- | --- |
-| `IntercomAPI` | class | The in-process mock: `fetch(request)`, `reset()`, `appendPart(…)`, `manage(…)`, `startAdminConversation(…)`, `conversations()`, `contacts()`, `conversationBody(…)`, `contactBody(…)`, `error(…)`, `state`. Options: `sqlite`, `now`, `namespace`, `admins`, `settings`, `onWebhook`. |
+| `IntercomAPI` | class | The in-process mock: `fetch(request)`, `reset()`, `appendPart(…)`, `manage(…)`, `startAdminConversation(…)`, `conversations()`, `contacts()`, `conversationBody(…)`, `contactBody(…)`, `error(…)`, `state`. Options: `sqlite`, `now`, `wallClock`, `namespace`, `admins`, `settings`, `onWebhook`. |
 | `IntercomError` | class | A vendor error (status, code, message) raised by the admin-facing methods. |
-| `createRuntime` | function | The mock with the full service contract (health, admin, namespaces, credentials, presets, webhooks). Options: `webhooks: {urls, secret?, events?, retryDelaysMs?, fetch?}`, `admins`, `settings`, `clock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
+| `createRuntime` | function | The mock with the full service contract (health, admin, namespaces, credentials, presets, webhooks). Options: `webhooks: {urls, secret?, events?, retryDelaysMs?, fetch?}`, `admins`, `settings`, `clock`, `wallClock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
 | `INTERCOM_PRESETS` | object | Every named fault preset. |
 | `INTERCOM_NAMESPACE` | string | The service name, `"intercom"`. |
 | `INTERCOM_TOPICS` | array | Every webhook topic the mock can send. |

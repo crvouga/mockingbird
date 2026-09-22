@@ -20,7 +20,7 @@ import {
   PERSONA_NAMESPACE,
   PersonaAPI,
 } from "./index.js"
-import type { Settings } from "./state.js"
+import type { Settings, SignatureFault } from "./state.js"
 
 /** The header our receiver verifies: `t=<unix>,v1=<hex HMAC-SHA256(secret, "<t>.<body>")>`. */
 export const PERSONA_SIGNATURE_HEADER = "Persona-Signature"
@@ -109,7 +109,7 @@ export const PERSONA_PRESETS: Record<string, FaultPreset> = {
  * the length (our receiver answers 401), `short` truncates the hex (our receiver's
  * `timingSafeEqual` throws on the length mismatch, a 500).
  */
-export type SignatureFault = "mismatch" | "short"
+export type { SignatureFault } from "./state.js"
 
 export type PersonaRuntimeOptions = {
   sqlite?: SqliteClient
@@ -134,10 +134,7 @@ const adminError = (status: number, message: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const adminRoutes = (
-  runtime: ServiceRuntime<PersonaAPI>,
-  signatureFaults: Map<string, SignatureFault[]>,
-): AdminRoutes => {
+const adminRoutes = (runtime: ServiceRuntime<PersonaAPI>): AdminRoutes => {
   const routes: AdminRoutes = {
     "GET /inquiries": ({ namespace }) =>
       json(200, { inquiries: runtime.instance(namespace).inquiries().map(inquiryResource) }),
@@ -158,10 +155,8 @@ const adminRoutes = (
         return adminError(400, 'expected {"mode": "mismatch" | "short", "count"?: n}')
       }
       const count = isRecord(body) && typeof body.count === "number" ? body.count : 1
-      const queue = signatureFaults.get(namespace) ?? []
-      for (let i = 0; i < Math.max(1, count); i++) queue.push(mode)
-      signatureFaults.set(namespace, queue)
-      return json(201, { namespace, mode, pending: queue.length })
+      const pending = runtime.instance(namespace).state.enqueueSignatureFault(mode, count)
+      return json(201, { namespace, mode, pending })
     },
   }
   for (const action of INQUIRY_ACTIONS) {
@@ -186,14 +181,11 @@ const adminRoutes = (
  */
 export const createRuntime = (options: PersonaRuntimeOptions = {}): PersonaRuntime => {
   const { retryDelaysMs, fetch: send, ...endpoint } = options.webhooks ?? { url: "" }
-  /** Signature faults queued per namespace, and the message ids they were assigned to. */
-  const signatureFaults = new Map<string, SignatureFault[]>()
-  const badMessages = new Map<string, SignatureFault>()
   const sign = signers.timestamped(PERSONA_SIGNATURE_HEADER)
   const hub = createWebhookHub({
     signer: signers.custom(async (input) => {
       const headers = await sign(input)
-      const fault = badMessages.get(input.messageId)
+      const fault = input.tags.signatureFault as SignatureFault | undefined
       const value = headers[PERSONA_SIGNATURE_HEADER]
       if (!fault || !value) return headers
       if (fault === "short") {
@@ -222,29 +214,31 @@ export const createRuntime = (options: PersonaRuntimeOptions = {}): PersonaRunti
     credential: bearerToken,
     presets: PERSONA_PRESETS,
     webhooks: hub,
-    create: ({ sqlite, namespace, publicNamespace, clock }) =>
-      new PersonaAPI({
+    create: ({ sqlite, namespace, publicNamespace, clock }) => {
+      let api: PersonaAPI
+      api = new PersonaAPI({
         sqlite,
         namespace,
         publicNamespace,
         now: clock.now,
         ...(options.settings ? { settings: options.settings } : {}),
         onWebhook: (event) => {
-          const queue = signatureFaults.get(publicNamespace)
-          const fault = queue?.shift()
+          const fault = api.state.takeSignatureFault()
           // Event ids repeat across namespaces (per-namespace sequences); message ids must not.
           const id = `${publicNamespace}:${event.data.id}`
-          if (fault) badMessages.set(id, fault)
           hub.publish({
             namespace: publicNamespace,
             type: event.data.attributes.name,
             body: event,
             id,
+            ...(fault ? { tags: { signatureFault: fault } } : {}),
           })
         },
-      }),
+      })
+      return api
+    },
     describe: () => ({ webhooks: hub.endpoints("default").length > 0 ? "on" : "off" }),
-    admin: (rt) => adminRoutes(rt, signatureFaults),
+    admin: adminRoutes,
   })
   return Object.assign(runtime, { webhooks: hub })
 }

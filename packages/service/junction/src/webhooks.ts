@@ -23,6 +23,11 @@ export type WebhookEndpoint = {
   /** Added to every delivery, e.g. a routing scope for a shared receiver. */
   headers?: Record<string, string>
   fetch?: (request: Request) => Promise<Response>
+  /** Injectable wall clock for signatures and delivery records. */
+  now?: () => number
+  /** Injectable scheduler for timeouts and retry delays. */
+  schedule?: (callback: () => void, delayMs: number) => unknown
+  cancel?: (handle: unknown) => void
 }
 
 export type WebhookAttempt = {
@@ -114,10 +119,10 @@ export const verifySvix = async (
   return headers["svix-signature"].split(" ").some((entry) => entry === expected)
 }
 
-type Pending = { delivery: WebhookDelivery; timer: ReturnType<typeof setTimeout> | undefined }
+type Pending = { delivery: WebhookDelivery; timer: unknown | undefined }
 
 /** Keep a long retry from holding the process open, where the runtime supports it. */
-const unref = (timer: ReturnType<typeof setTimeout>) => {
+const unref = (timer: unknown) => {
   ;(timer as { unref?: () => void }).unref?.()
 }
 
@@ -127,6 +132,11 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
   const delays = endpoint.retryDelaysMs ?? WEBHOOK_RETRY_DELAYS_MS
   const timeoutMs = endpoint.timeoutMs ?? 15_000
   const send = endpoint.fetch ?? ((request: Request) => fetch(request))
+  const now = endpoint.now ?? Date.now
+  const scheduleTimer =
+    endpoint.schedule ?? ((callback: () => void, delayMs: number) => setTimeout(callback, delayMs))
+  const cancel =
+    endpoint.cancel ?? ((handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>))
   const deliveries = new Map<string, WebhookDelivery>()
   const pending = new Map<string, Pending>()
   const inFlight = new Set<Promise<void>>()
@@ -136,8 +146,8 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
     const body = JSON.stringify(delivery.event)
     // Wall-clock, never the mock clock: receivers reject timestamps outside ~5 minutes
     // of their own clock, and an advanced mock clock would fail every delivery.
-    const timestamp = Math.floor(Date.now() / 1000)
-    const started = Date.now()
+    const timestamp = Math.floor(now() / 1000)
+    const started = now()
     const record: WebhookAttempt = {
       attempt: delivery.attempts.length + 1,
       at: new Date(started).toISOString(),
@@ -146,7 +156,7 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
       durationMs: 0,
     }
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const timer = scheduleTimer(() => controller.abort(), timeoutMs)
     try {
       const response = await send(
         new Request(endpoint.url, {
@@ -171,8 +181,8 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
           ? error.message
           : String(error)
     } finally {
-      clearTimeout(timer)
-      record.durationMs = Date.now() - started
+      cancel(timer)
+      record.durationMs = now() - started
       delivery.attempts.push(record)
     }
     // Svix treats any 2xx as delivered and retries everything else.
@@ -205,7 +215,7 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
       run()
       return
     }
-    const timer = setTimeout(run, delay)
+    const timer = scheduleTimer(run, delay)
     unref(timer)
     pending.set(delivery.messageId, { delivery, timer })
   }
@@ -230,7 +240,7 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
       const delivery = deliveries.get(messageId)
       if (!delivery) return undefined
       const queued = pending.get(messageId)
-      if (queued?.timer !== undefined) clearTimeout(queued.timer)
+      if (queued?.timer !== undefined) cancel(queued.timer)
       pending.delete(messageId)
       const ok = await attempt(delivery)
       delivery.state = ok ? "delivered" : "failed"
@@ -238,7 +248,7 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
     },
     async flush() {
       for (const [id, queued] of [...pending]) {
-        if (queued.timer !== undefined) clearTimeout(queued.timer)
+        if (queued.timer !== undefined) cancel(queued.timer)
         pending.delete(id)
         track(
           attempt(queued.delivery).then((ok) => {
@@ -256,7 +266,7 @@ export const createWebhookDispatcher = (endpoint: WebhookEndpoint): WebhookDispa
       for (const [id, delivery] of [...deliveries]) {
         if (namespace !== undefined && delivery.namespace !== namespace) continue
         const queued = pending.get(id)
-        if (queued?.timer !== undefined) clearTimeout(queued.timer)
+        if (queued?.timer !== undefined) cancel(queued.timer)
         pending.delete(id)
         deliveries.delete(id)
       }

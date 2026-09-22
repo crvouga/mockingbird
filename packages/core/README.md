@@ -25,6 +25,7 @@ import {
   type FetchHandler,
   fromFetchHandler,
   toFetchHandler,
+  Timeline,
 } from "@crvouga/mockingbird-core"
 
 // Any object with `fetch(request) => Promise<Response>` is a FetchAPI.
@@ -40,6 +41,12 @@ console.log(await response.json()) // { path: "/v1/ping" }
 // And back again: wrap a plain handler so it can go wherever a FetchAPI is expected.
 const wrapped: FetchAPI = fromFetchHandler(async () => new Response("ok"))
 console.log(await (await wrapped.fetch(new Request("https://mock.local/"))).text()) // "ok"
+
+// One persistent checkpoint DAG works for any immutable/COW state representation.
+const history = new Timeline<{ count: number }>({ maxCheckpoints: 100 })
+const root = history.commit({ count: 0 })
+history.fork("experiment", { from: root.id })
+history.commit({ count: 1 }, { branch: "experiment" })
 ```
 
 Pass a mock straight to your code under test as its `fetch`, e.g. `fetch: (input, init) =>
@@ -51,6 +58,12 @@ api.fetch(new Request(input, init))`, or serve it over HTTP with an adapter (see
 | --- | --- | --- |
 | `toFetchHandler` | `(api: FetchAPI) => FetchHandler` | Turn a `FetchAPI` object into a bare handler function. |
 | `fromFetchHandler` | `(handler: FetchHandler) => FetchAPI` | Wrap a bare handler as `{ fetch: handler }`. |
+| `Timeline<T>` | `new Timeline({ now?, maxCheckpoints?, id? })` | Deterministic, storage-agnostic checkpoint DAG with `commit`, `fork`, `checkout`, branch heads and bounded GC. Values are retained by reference so COW snapshots stay O(1). |
+
+`Timeline` is the only history and branching primitive prescribed for Mockingbird state. Storage
+engines may expose immutable COW payloads named `Snapshot` for compatibility and serialization,
+but branch heads, retention, checkout, and garbage collection belong to `Timeline`. Its hot commit
+path is O(1) amortized: an ordered unpinned-node set avoids rescanning history or branch heads.
 
 Types:
 

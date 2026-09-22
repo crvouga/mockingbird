@@ -2,6 +2,7 @@ import type { FetchAPI } from "@crvouga/mockingbird-core"
 import {
   type APIOptions,
   bootSqlite,
+  Collection,
   createService,
   defineOperations,
   faultEffect,
@@ -9,6 +10,7 @@ import {
   jsonResponse,
   type OperationHandler,
   type Service,
+  type WebhookEndpoint,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
@@ -166,6 +168,7 @@ export class StripeAPI implements FetchAPI {
   readonly app: Hono
   readonly sqlite: SqliteClient
   readonly accounts: AccountDirectory
+  readonly adminWebhookEndpoints: Collection<WebhookEndpoint>
   private readonly service: Service
   private readonly state: StripeState
   private readonly services: Services
@@ -179,6 +182,7 @@ export class StripeAPI implements FetchAPI {
     const sqlite = bootSqlite(options.sqlite)
     const namespace = options.namespace ?? STRIPE_NAMESPACE
     const state = new StripeState(sqlite, namespace)
+    this.adminWebhookEndpoints = new Collection(sqlite, namespace, "runtime_webhook_endpoints")
     this.state = state
     this.now = options.now ?? (() => Date.now())
     this.settings = { ...DEFAULT_LIFECYCLE, ...options.lifecycle }

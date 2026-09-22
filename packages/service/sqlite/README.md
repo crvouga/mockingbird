@@ -148,10 +148,11 @@ wrapped `bun:sqlite`) also satisfies the port.
 | Method | Behaviour |
 | --- | --- |
 | `exec(sql)` | Runs all semicolon-separated statements; **discards** row results (`void`). Does **not** accept bind parameters. Read `db.changes` / `db.lastInsertRowid` afterwards if needed (counters reflect the **most recent** completed statement, matching SQLite). |
-| `query(sql, params?)` | **Single statement only** (trailing `;` is fine). Returns all rows. Multi-statement scripts throw `misuse`. |
+| `query(sql, params?, { at? }?)` | **Single statement only** (trailing `;` is fine). Returns all rows. `at` queries an immutable checkpoint without changing live state. Multi-statement scripts throw `misuse`. |
 | `prepare(sql)` | **Single statement only**. Parses immediately; the AST is reused. Pass binds as rest args to `run` / `all` / `get` / `result` on each call. |
 | `transaction(fn)` | If idle: `BEGIN`, `fn()`, `COMMIT`, or `ROLLBACK` + rethrow. If already in a transaction: nested savepoint. A nested SQL `BEGIN` still errors. `close()` inside `fn` throws `misuse`. |
 | `snapshot()` | Freeze a reusable `Snapshot` template (no encode). Illegal inside a transaction. |
+| `checkpoint()` / `branch(at?)` | Name a COW snapshot as a checkpoint; open an isolated branch from it (or current state). |
 | `Snapshot.open()` | Copy-on-write fork from a template. The parent stays open. |
 | `Snapshot.encode()` | Lazy SQLM blob for persistence / worker boot (computed once, cached). |
 | `Snapshot.decode(bytes)` | Decode a blob once per `Uint8Array` (WeakMap); later `open()` calls are copy-on-write. |
@@ -305,10 +306,12 @@ interface DatabaseOptions {
 class Database {
   constructor(options?: DatabaseOptions)
   exec(sql: string): void
-  query<T = QueryRow>(sql: string, params?: readonly BindValue[]): T[]
+  query<T = QueryRow>(sql: string, params?: readonly BindValue[], options?: { at?: Snapshot }): T[]
   prepare(sql: string): Statement
   transaction<T>(fn: () => T): T
   snapshot(): Snapshot
+  checkpoint(): Snapshot
+  branch(at?: Snapshot): Database
   close(): void                             // also [Symbol.dispose] when available
   readonly changes: number
   readonly lastInsertRowid: number | bigint

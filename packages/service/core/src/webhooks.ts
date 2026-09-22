@@ -27,6 +27,9 @@ export type SignInput = {
   signUrl: string
   /** Form parameters, when the body is form-encoded (Twilio signs these, not the body). */
   form: Record<string, string> | undefined
+  /** Stable event type and metadata captured with the message; avoids signer side-channel state. */
+  type: string
+  tags: Readonly<Record<string, string>>
 }
 
 /** Headers to add to one delivery. */
@@ -90,6 +93,7 @@ export type WebhookMessage = {
   body: string
   contentType: string
   tags: Record<string, string>
+  headers?: Record<string, string>
   /** Wall-clock ISO-8601 time of publication. */
   publishedAt: string
 }
@@ -100,6 +104,8 @@ export type WebhookAttempt = {
   status: number | null
   error: string | null
   durationMs: number
+  /** Exact receiver response body, when one was returned. */
+  responseBody?: string | null
 }
 
 export type WebhookDelivery = {
@@ -130,6 +136,8 @@ export type PublishInput = {
   /** Form parameters, when the vendor posts `application/x-www-form-urlencoded`. */
   form?: Record<string, string>
   tags?: Record<string, string>
+  /** Message-specific delivery headers, captured as part of durable message state. */
+  headers?: Record<string, string>
   /** Message id; generated when omitted. */
   id?: string
 }
@@ -152,6 +160,13 @@ export type WebhookHubOptions = {
   onMessage?: (message: WebhookMessage) => void
   /** Messages kept per namespace for `GET /__admin/webhooks/events`. Default 500. */
   keep?: number
+  /** Injectable wall clock for signatures and attempt records. */
+  now?: () => number
+  /** Injectable deterministic identifier source. Receives `"msg_"` or `"dlv_"`. */
+  id?: (prefix: string) => string
+  /** Injectable scheduler used by timeouts and retries. */
+  schedule?: (callback: () => void, delayMs: number) => unknown
+  cancel?: (handle: unknown) => void
 }
 
 export type WebhookHub = {
@@ -173,7 +188,7 @@ export type WebhookHub = {
 
 const DEFAULT_DELAYS = [0, 5_000, 300_000, 1_800_000, 7_200_000] as const
 
-const unref = (timer: ReturnType<typeof setTimeout>) => {
+const unref = (timer: unknown) => {
   ;(timer as { unref?: () => void }).unref?.()
 }
 
@@ -195,11 +210,17 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
   const delivered = options.delivered ?? ((status: number) => status >= 200 && status < 300)
   const send = options.fetch ?? ((request: Request) => fetch(request))
   const keep = options.keep ?? 500
+  const now = options.now ?? Date.now
+  const id = options.id ?? randomId
+  const scheduleTimer =
+    options.schedule ?? ((callback: () => void, delayMs: number) => setTimeout(callback, delayMs))
+  const cancel =
+    options.cancel ?? ((handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>))
   const global = (options.endpoints ?? []).map((e, i) => ({ ...e, id: e.id ?? `we_global_${i}` }))
   const own = new Map<string, WebhookEndpoint[]>()
   const messages: WebhookMessage[] = []
   const deliveries = new Map<string, WebhookDelivery>()
-  const pending = new Map<string, ReturnType<typeof setTimeout> | undefined>()
+  const pending = new Map<string, unknown | undefined>()
   const payloads = new Map<string, { message: WebhookMessage; endpoint: WebhookEndpoint }>()
   const faults = new Map<string, { mode: WebhookFault["mode"]; remaining: number }[]>()
   const held = new Map<string, WebhookMessage[]>()
@@ -214,17 +235,18 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
     const entry = payloads.get(delivery.id)
     if (!entry) return false
     const { message, endpoint } = entry
-    const timestampSeconds = Math.floor(Date.now() / 1000)
-    const started = Date.now()
+    const timestampSeconds = Math.floor(now() / 1000)
+    const started = now()
     const record: WebhookAttempt = {
       attempt: delivery.attempts.length + 1,
       at: new Date(started).toISOString(),
       status: null,
       error: null,
       durationMs: 0,
+      responseBody: null,
     }
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const timer = scheduleTimer(() => controller.abort(), timeoutMs)
     try {
       const signed = await options.signer({
         messageId: message.id,
@@ -236,17 +258,24 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
         form: message.contentType.startsWith("application/x-www-form-urlencoded")
           ? Object.fromEntries(new URLSearchParams(message.body))
           : undefined,
+        type: message.type,
+        tags: message.tags,
       })
       const response = await send(
         new Request(endpoint.url, {
           method: "POST",
-          headers: { "content-type": message.contentType, ...endpoint.headers, ...signed },
+          headers: {
+            "content-type": message.contentType,
+            ...endpoint.headers,
+            ...message.headers,
+            ...signed,
+          },
           body: message.body,
           signal: controller.signal,
         }),
       )
       record.status = response.status
-      await response.body?.cancel()
+      record.responseBody = await response.text()
     } catch (error) {
       record.error = controller.signal.aborted
         ? `timed out after ${timeoutMs}ms`
@@ -254,8 +283,8 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
           ? error.message
           : String(error)
     } finally {
-      clearTimeout(timer)
-      record.durationMs = Date.now() - started
+      cancel(timer)
+      record.durationMs = now() - started
       delivery.attempts.push(record)
     }
     return record.status !== null && delivered(record.status)
@@ -283,7 +312,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       run()
       return
     }
-    const timer = setTimeout(run, delay)
+    const timer = scheduleTimer(run, delay)
     unref(timer)
     pending.set(delivery.id, timer)
   }
@@ -294,7 +323,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
     for (const endpoint of endpointsFor(message.namespace)) {
       if (!matchesEndpoint(endpoint, message)) continue
       const delivery: WebhookDelivery = {
-        id: randomId("dlv_"),
+        id: id("dlv_"),
         messageId: message.id,
         namespace: message.namespace,
         type: message.type,
@@ -336,13 +365,14 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
             ? new URLSearchParams(input.form).toString()
             : JSON.stringify(input.body)
       const message: WebhookMessage = {
-        id: input.id ?? randomId("msg_"),
+        id: input.id ?? id("msg_"),
         namespace: input.namespace,
         type: input.type,
         body,
         contentType,
         tags: input.tags ?? {},
-        publishedAt: new Date().toISOString(),
+        headers: input.headers ?? {},
+        publishedAt: new Date(now()).toISOString(),
       }
       messages.push(message)
       const ofNamespace = messages.filter((m) => m.namespace === message.namespace)
@@ -386,7 +416,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       const waiting = [...pending.entries()]
       for (const [id, timer] of waiting) {
         if (timer === undefined) continue
-        clearTimeout(timer)
+        cancel(timer)
         pending.delete(id)
         const delivery = deliveries.get(id)
         if (!delivery) continue
@@ -411,7 +441,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       for (const [id, delivery] of deliveries) {
         if (namespace !== undefined && delivery.namespace !== namespace) continue
         const timer = pending.get(id)
-        if (timer !== undefined) clearTimeout(timer)
+        if (timer !== undefined) cancel(timer)
         pending.delete(id)
         deliveries.delete(id)
         payloads.delete(id)

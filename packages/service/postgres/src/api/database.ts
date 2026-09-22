@@ -35,6 +35,12 @@ interface AdoptedDatabase {
   readonly int8Mode: Int8Mode;
 }
 
+/** Additive time-travel controls for read APIs. */
+export interface QueryOptions {
+  /** Execute against this immutable checkpoint instead of the live database. */
+  at?: Snapshot;
+}
+
 function isAdopted(value: object): value is AdoptedDatabase {
   return ADOPT in value;
 }
@@ -159,8 +165,9 @@ export class Database {
   }
 
   /** Execute a single-statement query and return all rows keyed by column name. */
-  query<T = QueryRow>(sql: string, params: readonly BindValue[] = []): T[] {
+  query<T = QueryRow>(sql: string, params: readonly BindValue[] = [], options: QueryOptions = {}): T[] {
     this.assertOpen();
+    if (options.at) return options.at.open().query<T>(sql, params);
     return this.prepareSingle(sql).all<T>(...params);
   }
 
@@ -224,6 +231,17 @@ export class Database {
       this.systemClock,
       this.int8Mode,
     );
+  }
+
+  /** Alias for {@link snapshot}, naming the value as a timeline checkpoint. */
+  checkpoint(): Snapshot {
+    return this.snapshot();
+  }
+
+  /** Open a copy-on-write branch from `at`, or from the current state when omitted. */
+  branch(at: Snapshot = this.snapshot()): Database {
+    this.assertOpen();
+    return at.open();
   }
 
   /** Close the database. Further SQL throws. Idempotent. */

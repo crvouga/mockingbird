@@ -129,7 +129,10 @@ const faultResponse = (rule: FaultRule): Response => {
  * wins over a later catch-all. `rate` draws from `rng`, which is seeded, so a
  * partial-failure run replays identically.
  */
-export const createFaultRegistry = (rng: Rng = createRng(0)): FaultRegistry => {
+export const createFaultRegistry = (
+  rng: Rng = createRng(0),
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+): FaultRegistry => {
   const entries: Entry[] = []
   return {
     add(rule) {
@@ -161,7 +164,7 @@ export const createFaultRegistry = (rng: Rng = createRng(0)): FaultRegistry => {
         if (entry.remaining !== null) entry.remaining--
         const delay = entry.rule.delayMs ?? entry.rule.latencyMs
         if (delay !== undefined && delay > 0) {
-          await new Promise((resolve) => setTimeout(resolve, delay))
+          await sleep(delay)
         }
         const hit: FaultHit = { id: entry.rule.id }
         if (entry.rule.effect !== undefined) {

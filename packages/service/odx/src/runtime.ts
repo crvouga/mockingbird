@@ -5,6 +5,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   hmac,
+  opaqueToken,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -89,7 +90,8 @@ export type OdxRuntimeOptions = {
   settings?: Partial<Settings>
   /**
    * Register this webhook in every namespace from the start (`POST /odx/webhook` on our
-   * backend), with this signing key (random when omitted). More can be registered through
+   * backend), with this signing key (deterministically derived from `seed` when omitted).
+   * More can be registered through
    * `POST /v1/webhook`, exactly as `manageWebhooks` does.
    */
   webhook?: { url: string; signingKey?: string }
@@ -170,7 +172,8 @@ export const createRuntime = (options: OdxRuntimeOptions = {}): OdxRuntime => {
   const presetWebhook = options.webhook
     ? {
         url: options.webhook.url,
-        signingKey: options.webhook.signingKey ?? `odx_${crypto.randomUUID().replace(/-/g, "")}`,
+        signingKey:
+          options.webhook.signingKey ?? `odx_${opaqueToken(String(options.seed ?? 0), 32)}`,
       }
     : null
   let sequence = 0

@@ -65,11 +65,17 @@ export type { Rng } from "./rng.js"
 export { createRng, seedFrom } from "./rng.js"
 export type {
   InstanceContext,
+  RuntimeIO,
   RuntimeOptions,
+  ServiceCheckpoint,
   ServiceInstance,
   ServiceRuntime,
+  ServiceTimelineState,
 } from "./runtime.js"
 export {
+  AT_HEADER,
+  BRANCH_HEADER,
+  CHECKPOINT_HEADER,
   createRuntime,
   DEFAULT_NAMESPACE,
   DroppedConnectionError,
@@ -108,7 +114,7 @@ export {
   toHex,
 } from "./signing.js"
 export type { NamespaceSnapshot } from "./snapshot.js"
-export { restoreNamespace, snapshotNamespace } from "./snapshot.js"
+export { restoreNamespace, snapshotNamespace, withNamespaceRollback } from "./snapshot.js"
 export type { BodyIssue } from "./validation.js"
 export { bodyIssues, issuesByField } from "./validation.js"
 export { PACKAGE_VERSION, UNRELEASED_VERSION } from "./version.js"

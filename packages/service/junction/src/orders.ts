@@ -430,7 +430,10 @@ const pyIso = (value: string): string => {
   return `${date}T${time.slice(0, 8)}.${ms}+00:00`
 }
 
-const orderValidation = (body: Record<string, unknown>): unknown[] => {
+const orderValidation = (
+  body: Record<string, unknown>,
+  now: () => number = Date.now,
+): unknown[] => {
   const errors: unknown[] = []
   const userId = body.user_id
   if (userId === undefined) errors.push(missingError(["body", "user_id"], body))
@@ -539,7 +542,7 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
         const emailError = userEmailError(p[field] as string)
         if (emailError) errors.push(emailError)
       } else if (field === "dob") {
-        const dobError = orderDobError(p[field] as string)
+        const dobError = orderDobError(p[field] as string, now())
         if (dobError) errors.push(dobError)
       } else if (field === "phone_number" && !isValidPhone(p[field] as string)) {
         errors.push(phoneError(["body", "patient_details", "phone_number"], p[field]))
@@ -596,11 +599,11 @@ const userEmailError = (value: string) => {
  * accepted, non-zero times produce `date_from_datetime_inexact` with a normalized input,
  * and unmatchable strings produce the "Could not match" value error.
  */
-const orderDobError = (dob: string) => {
+const orderDobError = (dob: string, nowMs: number) => {
   if (/^\d{4}-\d{2}-\d{2}T/.test(dob)) {
     if (/^\d{4}-\d{2}-\d{2}T00:00:00/.test(dob)) {
       const dateOnly = dob.slice(0, 10)
-      if (new Date(`${dateOnly}T00:00:00Z`).getTime() > Date.now()) {
+      if (new Date(`${dateOnly}T00:00:00Z`).getTime() > nowMs) {
         return {
           type: "value_error",
           loc: ["body", "patient_details", "dob"],
@@ -641,7 +644,7 @@ const orderDobError = (dob: string) => {
         ctx: { error: {} },
       }
     }
-    if (new Date(`${dob}T00:00:00Z`).getTime() > Date.now()) {
+    if (new Date(`${dob}T00:00:00Z`).getTime() > nowMs) {
       return {
         type: "value_error",
         loc: ["body", "patient_details", "dob"],
@@ -920,7 +923,7 @@ export const orderHandlers = (state: JunctionState) => ({
         })
       }
     }
-    const errors = orderValidation(body)
+    const errors = orderValidation(body, context.now)
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
     const rawAddress = body.patient_address
     if (

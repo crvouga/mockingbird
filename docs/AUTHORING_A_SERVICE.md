@@ -33,7 +33,7 @@ packages/service/<name>/
 
 | Contract item | How |
 | --- | --- |
-| `GET /health`, `/__admin/*`, reset, snapshots, clock, metrics (with unmatched paths), journal (`GET /__admin/requests`), `x-mockingbird` response header | automatic |
+| `GET /health`, `/__admin/*`, reset, Timeline checkpoints/branches (including legacy snapshot aliases), clock, metrics (with unmatched paths), journal (`GET /__admin/requests`), `x-mockingbird` response header | automatic |
 | Namespaces by header | automatic (`x-mockingbird-namespace`) |
 | Namespaces by path prefix | automatic: `/ns/<name>/…` is stripped and selects `<name>` |
 | Namespaces by credential | pass `credential: (request) => string \| undefined` (`bearerToken`, `basicAuth(r)?.username`, `sigV4AccessKeyId`, or your own); suites map credentials with `PUT /__admin/credentials {"credentials": {"<cred>": "<ns>"}}` |
@@ -48,9 +48,12 @@ packages/service/<name>/
 | Write an object into the stack's S3 (s3rver) | `putObject({endpoint, bucket}, key, body, contentType)` (SigV4) |
 
 Handlers are keyed by `operationId` (`defineOperations<SupportedOperationId>({...})`). Use
-`Collection` for records (so reset/snapshot cover them), `IdSequence` for deterministic ids, the
-injected `now` for every timestamp (the mock clock), and `annotateResponse(res, {ids})` to put
-touched resource ids in the journal.
+`Collection` for all durable or externally observable records (so reset and Timeline history cover
+them), `IdSequence` for deterministic ids, the injected `now` for every timestamp (the mock clock),
+and `annotateResponse(res, {ids})` to put touched resource ids in the journal. `Timeline` is the
+only permitted history/branch/checkpoint coordinator. Never add a provider-local snapshot map or
+rollback manager; use `withNamespaceRollback` for asynchronous atomic work that cannot stay inside
+a SQLite transaction. `bun run check:boundaries` rejects raw snapshot coordination in providers.
 
 **Journal and logging policy:** never store request bodies that contain prompts, message text,
 PHI or card data. Record metadata only. The state you keep should also be the minimum the vendor

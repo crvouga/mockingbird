@@ -111,7 +111,7 @@ export const mapsJavaScript = (
   var tokenSeq = 0;
   function AutocompleteSessionToken() {
     tokenSeq += 1;
-    this._id = "mbst-" + tokenSeq + "-" + Math.random().toString(36).slice(2, 10);
+    this._id = "mbst-" + tokenSeq + "-" + tokenSeq.toString(36).padStart(8, "0");
   }
   AutocompleteSessionToken.prototype.toString = function () { return this._id; };
 

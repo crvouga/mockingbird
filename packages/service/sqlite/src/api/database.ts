@@ -27,6 +27,12 @@ interface AdoptedDatabase {
   readonly systemClock: boolean;
 }
 
+/** Additive time-travel controls for read APIs. */
+export interface QueryOptions {
+  /** Execute against this immutable checkpoint instead of the live database. */
+  at?: Snapshot;
+}
+
 /**
  * Pure TypeScript in-memory SQLite database.
  *
@@ -128,8 +134,9 @@ export class Database {
    * @returns All result rows.
    * @throws {SqliteError} If the database is closed, `sql` is not a single statement, or execution fails.
    */
-  query<T = QueryRow>(sql: string, params: readonly BindValue[] = []): T[] {
+  query<T = QueryRow>(sql: string, params: readonly BindValue[] = [], options: QueryOptions = {}): T[] {
     this.assertOpen();
+    if (options.at) return options.at.open().query<T>(sql, params);
     return this.prepareSingle(sql).all<T>(...params);
   }
 
@@ -199,6 +206,17 @@ export class Database {
       throw new SqliteError("cannot snapshot during a transaction", "transaction");
     }
     return captureSnapshot(this.state, this.prng, this.now, this.seed, this.randomMode, this.systemClock);
+  }
+
+  /** Alias for {@link snapshot}, naming the value as a timeline checkpoint. */
+  checkpoint(): Snapshot {
+    return this.snapshot();
+  }
+
+  /** Open a copy-on-write branch from `at`, or from the current state when omitted. */
+  branch(at: Snapshot = this.snapshot()): Database {
+    this.assertOpen();
+    return at.open();
   }
 
   /**

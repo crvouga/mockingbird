@@ -105,6 +105,8 @@ export const INTERCOM_PRESETS: Record<string, FaultPreset> = {
 export type IntercomRuntimeOptions = {
   sqlite?: SqliteClient
   clock?: Clock
+  /** Real-time clock for webhook freshness/signing; injectable for deterministic tests. */
+  wallClock?: () => number
   seed?: number | string
   adminKey?: string
   onLog?: (entry: RequestLog) => void
@@ -270,6 +272,7 @@ export const createRuntime = (options: IntercomRuntimeOptions = {}): IntercomRun
     ),
     ...(hooks?.retryDelaysMs ? { retryDelaysMs: hooks.retryDelaysMs } : {}),
     ...(hooks?.fetch ? { fetch: hooks.fetch } : {}),
+    ...(options.wallClock ? { now: options.wallClock } : {}),
     endpoints: (hooks?.urls ?? []).map(
       (url, index): WebhookEndpoint => ({
         id: `we_intercom_${index}`,
@@ -295,6 +298,7 @@ export const createRuntime = (options: IntercomRuntimeOptions = {}): IntercomRun
         sqlite,
         namespace,
         now: clock.now,
+        ...(options.wallClock ? { wallClock: options.wallClock } : {}),
         ...(options.admins ? { admins: options.admins } : {}),
         ...(options.settings ? { settings: options.settings } : {}),
         onWebhook: (notification) =>
