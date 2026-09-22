@@ -1,265 +1,587 @@
 ---
-import BaseLayout from "../layouts/BaseLayout.astro";
-import { getCatalog } from "../lib/data";
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../components/Icon.astro"
+import Install from "../components/Install.astro"
+import Monogram from "../components/Monogram.astro"
+import Base from "../layouts/Base.astro"
 
-const catalog = await getCatalog();
-const serviceCount = catalog.services.length;
+const { totals } = catalog
+const featured =
+  catalog.services.find((s) => s.name === "slack" && s.example) ??
+  catalog.services.find((s) => s.example)
+const logos = catalog.services.filter((s) => s.kind === "http").slice(0, 18)
+
+const values = [
+  {
+    icon: "plug",
+    title: "The vendor's real surface",
+    body: "Each mock answers the provider's own paths, headers, status codes and error envelopes through fetch(Request) → Response. Point the official SDK at it.",
+  },
+  {
+    icon: "layers",
+    title: "State that behaves",
+    body: "Records persist in an in-memory SQL engine. Created customers can be listed, orders move through their lifecycle, webhooks fire, and reset or snapshot takes one call.",
+  },
+  {
+    icon: "shield",
+    title: "Checked against the real thing",
+    body: "Random walks generated from each vendored OpenAPI contract run against two mock instances in CI, and against the live sandbox when credentials exist.",
+  },
+  {
+    icon: "zap",
+    title: "No network, no waiting",
+    body: "Everything runs in your test process. No sandbox keys, rate limits, shared test accounts or flaky round trips.",
+  },
+  {
+    icon: "globe",
+    title: "Runs anywhere JavaScript runs",
+    body: `${totals.browser} of ${totals.services} mocks are portable: Node, Bun, browsers and Workers. The playgrounds on this site run them in your tab.`,
+  },
+  {
+    icon: "terminal",
+    title: "One contract for every service",
+    body: "Every HTTP mock shares /health, /__admin reset, snapshots, clock control, fault injection, request journals and per-namespace isolation.",
+  },
+]
 ---
 
-<BaseLayout title="Home">
-  <style>
-    .hero {
-      padding: 80px 20px;
-      text-align: center;
-      background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .hero {
-        background: linear-gradient(135deg, #1a1f2e 0%, #242d3d 100%);
+<Base>
+  <section class="hero">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <a class="pill" href="/services">
+          <span class="emoji" aria-hidden="true">🐦‍⬛</span>
+          {totals.services} mocks · {totals.browser} run in your browser
+          <Icon name="arrow-right" />
+        </a>
+        <h1>Mock the APIs you depend on, <span class="accent">with the behavior they really have.</span></h1>
+        <p class="lede">
+          Mockingbird is a catalog of stateful test doubles for third-party HTTP APIs and SQL databases. Each one
+          speaks the vendor's real surface, keeps state, and runs in-process.
+        </p>
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="/services">Browse services <Icon name="arrow-right" /></a>
+          <a class="btn btn-secondary" href="/why">Why Mockingbird</a>
+        </div>
+        <div class="hero-install">
+          <Install pkg="@crvouga/mockingbird-service-stripe" />
+        </div>
+      </div>
+      {
+        featured?.example && (
+          <div class="hero-code">
+            <div class="window">
+              <div class="window-bar">
+                <span class="dots"><i /><i /><i /></span>
+                <span class="window-title">{featured.name}.test.ts</span>
+                <a href={`/services/${featured.name}`} class="window-link">Try it live <Icon name="arrow-right" /></a>
+              </div>
+              <Fragment set:html={featured.example.html} />
+            </div>
+            <p class="hero-caption">From <a href={`/services/${featured.name}`}>{featured.packageName}</a>'s README, rendered at build time.</p>
+          </div>
+        )
       }
-    }
-
-    .hero-content {
-      max-width: 900px;
-      margin: 0 auto;
-    }
-
-    .hero h1 {
-      font-size: 64px;
-      margin-bottom: 20px;
-      background: linear-gradient(135deg, #0066ff 0%, #0052cc 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .hero-subtitle {
-      font-size: 20px;
-      color: var(--color-text-secondary);
-      margin-bottom: 32px;
-      line-height: 1.6;
-    }
-
-    .hero-cta {
-      display: flex;
-      gap: 16px;
-      justify-content: center;
-      margin-bottom: 60px;
-    }
-
-    .btn {
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-weight: 600;
-      font-size: 15px;
-      text-decoration: none;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-      border: none;
-      cursor: pointer;
-    }
-
-    .btn-primary {
-      background-color: var(--color-primary);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background-color: var(--color-primary-dark);
-      box-shadow: var(--shadow-lg);
-    }
-
-    .btn-secondary {
-      background-color: var(--color-bg);
-      color: var(--color-primary);
-      border: 1.5px solid var(--color-primary);
-    }
-
-    .btn-secondary:hover {
-      background-color: var(--color-primary-lightest);
-    }
-
-    .features {
-      padding: 80px 20px;
-      background-color: var(--color-bg);
-    }
-
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 32px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-
-    .feature-card {
-      padding: 32px;
-      background-color: var(--color-bg-secondary);
-      border-radius: 12px;
-      border: 1px solid var(--color-border-light);
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .feature-card:hover {
-      border-color: var(--color-primary);
-      transform: translateY(-2px);
-      box-shadow: var(--shadow-md);
-    }
-
-    .feature-icon {
-      font-size: 32px;
-      margin-bottom: 16px;
-    }
-
-    .feature-card h3 {
-      margin-top: 0;
-      margin-bottom: 12px;
-    }
-
-    .feature-card p {
-      margin-bottom: 0;
-      font-size: 14px;
-      line-height: 1.6;
-    }
-
-    .code-section {
-      padding: 60px 20px;
-      background-color: var(--color-bg-secondary);
-    }
-
-    .code-section h2 {
-      text-align: center;
-      margin-bottom: 40px;
-    }
-
-    .code-box {
-      max-width: 800px;
-      margin: 0 auto;
-    }
-
-    .stats {
-      display: flex;
-      justify-content: center;
-      gap: 60px;
-      margin: 60px 0;
-      flex-wrap: wrap;
-    }
-
-    .stat {
-      text-align: center;
-    }
-
-    .stat-number {
-      font-size: 42px;
-      font-weight: 700;
-      color: var(--color-primary);
-      margin-bottom: 8px;
-    }
-
-    .stat-label {
-      font-size: 14px;
-      color: var(--color-text-secondary);
-      font-weight: 500;
-    }
-  </style>
-
-  <div class="hero">
-    <div class="hero-content">
-      <h1>Mockingbird</h1>
-      <p class="hero-subtitle">
-        Stateful test doubles for {serviceCount}+ third-party APIs and SQL databases.<br />
-        Real behavior, zero network, fully in-process.
-      </p>
-
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-number">{serviceCount}</div>
-          <div class="stat-label">API Mocks</div>
-        </div>
-        <div class="stat">
-          <div class="stat-number">100%</div>
-          <div class="stat-label">Isomorphic</div>
-        </div>
-        <div class="stat">
-          <div class="stat-number">0ms</div>
-          <div class="stat-label">Latency</div>
-        </div>
-      </div>
-
-      <div class="hero-cta">
-        <a href="/services" class="btn btn-primary">Explore Services</a>
-        <a href="#quick-start" class="btn btn-secondary">Get Started</a>
-      </div>
     </div>
+  </section>
+
+  <div class="container">
+    <section class="stats" aria-label="By the numbers">
+    <div><strong>{totals.services}</strong><span>services</span></div>
+    <div><strong>{totals.opsSupported}</strong><span>vendor operations mocked</span></div>
+    <div><strong>{catalog.categories.length}</strong><span>categories</span></div>
+    <div><strong>0</strong><span>network calls</span></div>
+  </section>
   </div>
 
-  <div class="features">
-    <div class="container">
-      <h2 style="text-align: center; margin-bottom: 48px;">Why Mockingbird?</h2>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon">🔗</div>
-          <h3>Real API Surfaces</h3>
-          <p>Mocks speak the exact same interface as real APIs. Stateful, persistent, and indistinguishable from production.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">✅</div>
-          <h3>Property-Based Testing</h3>
-          <p>Continuously verified against live sandboxes. Your mocks stay in sync with the real vendor—guaranteed.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">⚡</div>
-          <h3>Zero Network Latency</h3>
-          <p>Everything runs in-process. No external APIs, no waiting, instant results. Perfect for fast tests.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🌍</div>
-          <h3>Fully Isomorphic</h3>
-          <p>Run in Node, Bun, browsers, Workers, embedded systems. Same code everywhere. One codebase, infinite targets.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">📦</div>
-          <h3>Self-Contained</h3>
-          <p>Each mock is a single npm package with zero external dependencies. Drop it in, it works.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🎮</div>
-          <h3>Interactive Playgrounds</h3>
-          <p>Try every service in your browser. Run examples live, see results instantly, understand behavior before integrating.</p>
-        </div>
-      </div>
+  <section class="section container">
+    <div class="section-head">
+      <span class="eyebrow">Why it works</span>
+      <h2>Test doubles that don't drift from the vendor.</h2>
+      <p>Hand-written stubs return whatever you guessed. Mockingbird mocks are driven by the vendor's contract and checked against it.</p>
     </div>
-  </div>
+    <div class="values">
+      {
+        values.map((v) => (
+          <div class="value">
+            <span class="value-icon"><Icon name={v.icon} /></span>
+            <h3>{v.title}</h3>
+            <p>{v.body}</p>
+          </div>
+        ))
+      }
+    </div>
+  </section>
 
-  <div class="code-section">
-    <div class="container">
-      <h2 id="quick-start">Quick Start</h2>
+  <section class="section container">
+    <div class="section-head">
+      <span class="eyebrow">Catalog</span>
+      <h2>Payments, health, messaging, AI, and more.</h2>
+      <p>Every category links to a filtered view of the catalog.</p>
+    </div>
+    <div class="cats">
+      {
+        catalog.categories.map((c) => {
+          const members = catalog.services.filter((s) => s.category === c.slug)
+          return (
+            <a class="cat" href={`/services?category=${c.slug}`}>
+              <div class="cat-head">
+                <h3>{c.label}</h3>
+                <span>{c.count}</span>
+              </div>
+              <p>{c.blurb}</p>
+              <div class="cat-members">
+                {members.slice(0, 5).map((s) => <Monogram name={s.displayName} hue={s.hue} size={26} />)}
+              </div>
+            </a>
+          )
+        })
+      }
+    </div>
+    <div class="logo-strip" aria-hidden="true">
+      {logos.map((s) => <span>{s.displayName}</span>)}
+    </div>
+  </section>
 
-      <div class="code-box">
-        <p style="text-align: center; margin-bottom: 24px;">Install a mock service</p>
-        <pre>npm install -D @crvouga/mockingbird-service-stripe</pre>
-
-        <p style="text-align: center; margin: 32px 0 24px 0;">Use it in your tests</p>
-        <pre>import &#123; StripeAPI &#125; from "@crvouga/mockingbird-service-stripe";
-
-const stripe = new StripeAPI();
-const res = await stripe.fetch(
-  new Request("https://api.stripe.com/v1/customers", &#123;
-    method: "POST",
-    headers: &#123; authorization: "Bearer sk_test_mockingbird" &#125;,
-    body: "description=ACME%20Inc",
-  &#125;)
-);
-
-console.log(await res.json());
-// &#123; id: "cus_...", description: "ACME Inc", ... &#125;</pre>
-
-        <p style="text-align: center; margin-top: 32px;">
-          <a href="/services" style="font-size: 16px; font-weight: 600;">
-            Browse all {serviceCount} services →
-          </a>
+  <section class="section container">
+    <div class="agents">
+      <div>
+        <span class="eyebrow">Built for coding agents</span>
+        <h2>Docs an agent can read, generated from the code.</h2>
+        <p>
+          Every service README doubles as its integration guide and ships inside the npm tarball. This site publishes the
+          same content as plain markdown and JSON, rebuilt from the packages on every build, so docs cannot drift from behavior.
         </p>
       </div>
+      <ul class="agent-links">
+        <li><a href="/llms.txt"><Icon name="bot" /><span><strong>/llms.txt</strong>An index of every service with links to its markdown</span></a></li>
+        <li><a href="/llms-full.txt"><Icon name="file" /><span><strong>/llms-full.txt</strong>Every README in one file</span></a></li>
+        <li><a href="/catalog.json"><Icon name="database" /><span><strong>/catalog.json</strong>Surfaces, runtimes and operation coverage</span></a></li>
+        <li><a href="/services/stripe.md"><Icon name="file" /><span><strong>/services/&lt;name&gt;.md</strong>Any service's README as raw markdown</span></a></li>
+      </ul>
     </div>
-  </div>
-</BaseLayout>
+  </section>
+
+  <section class="container">
+    <div class="cta">
+      <h2>Take the vendor off your test suite's critical path.</h2>
+      <div class="hero-cta">
+        <a class="btn btn-accent" href="/services">Find your API <Icon name="arrow-right" /></a>
+        <a class="btn btn-secondary" href={catalog.repo} target="_blank" rel="noopener"><Icon name="github" /> Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    position: relative;
+    padding-block: 72px 40px;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -40% -10% auto;
+    height: 640px;
+    background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
+    pointer-events: none;
+  }
+
+  .hero-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 56px;
+    align-items: center;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 12px 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--fg-muted);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.15s var(--ease);
+  }
+
+  .pill:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+
+  .pill .i {
+    width: 14px;
+    height: 14px;
+  }
+
+  h1 {
+    margin-top: 22px;
+    font-size: clamp(36px, 5.2vw, 58px);
+    line-height: 1.04;
+    letter-spacing: -0.04em;
+    font-weight: 700;
+  }
+
+  .accent {
+    background: linear-gradient(100deg, var(--fg) 0%, var(--accent) 55%, #b35fe8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero .lede {
+    margin-top: 20px;
+    max-width: 540px;
+    font-size: 18px;
+  }
+
+  .hero-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 28px;
+  }
+
+  .hero-install {
+    margin-top: 28px;
+    max-width: 480px;
+  }
+
+  .hero-code {
+    min-width: 0;
+  }
+
+  .window :global(.code) {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .window :global(.code figcaption) {
+    display: none;
+  }
+
+  .window {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-inset);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+
+  .window-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 42px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-subtle);
+  }
+
+  .dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dots i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border-strong);
+  }
+
+  .window-title {
+    flex: 1;
+    color: var(--fg-subtle);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .window-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent-soft-fg);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .window-link .i {
+    width: 13px;
+    height: 13px;
+  }
+
+  .window :global(pre) {
+    margin: 0;
+    padding: 16px 18px;
+    max-height: 440px;
+    overflow: auto;
+    font-size: 12.5px;
+    line-height: 1.7;
+    background: transparent !important;
+  }
+
+  .hero-caption {
+    margin-top: 12px;
+    color: var(--fg-subtle);
+    font-size: 12.5px;
+    text-align: center;
+  }
+
+  .hero-caption a {
+    color: var(--fg-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    margin-top: 48px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-subtle);
+  }
+
+  .stats div {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 22px 24px;
+  }
+
+  .stats div + div {
+    border-left: 1px solid var(--border);
+  }
+
+  .stats strong {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats span {
+    color: var(--fg-subtle);
+    font-size: 13.5px;
+  }
+
+  .values {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  .value {
+    padding: 26px;
+    background: var(--bg);
+  }
+
+  .value-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent-soft-fg);
+  }
+
+  .value h3 {
+    margin-top: 16px;
+    font-size: 15.5px;
+  }
+
+  .value p {
+    margin-top: 8px;
+    color: var(--fg-muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .cats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 14px;
+  }
+
+  .cat {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  }
+
+  .cat:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+  }
+
+  .cat-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .cat-head h3 {
+    font-size: 15px;
+  }
+
+  .cat-head span {
+    color: var(--fg-subtle);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cat p {
+    color: var(--fg-muted);
+    font-size: 13.5px;
+  }
+
+  .cat-members {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .logo-strip {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 26px;
+    margin-top: 40px;
+    color: var(--fg-faint);
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  .agents {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: center;
+    padding: 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-subtle);
+  }
+
+  .agents h2 {
+    margin-top: 10px;
+    font-size: clamp(24px, 3vw, 30px);
+  }
+
+  .agents p {
+    margin-top: 14px;
+    color: var(--fg-muted);
+  }
+
+  .agent-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+  }
+
+  .agent-links a {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    transition: border-color 0.15s var(--ease);
+  }
+
+  .agent-links a:hover {
+    border-color: var(--border-strong);
+  }
+
+  .agent-links .i {
+    margin-top: 2px;
+    color: var(--accent-soft-fg);
+  }
+
+  .agent-links strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  .agent-links span span,
+  .agent-links a > span {
+    color: var(--fg-muted);
+    font-size: 13.5px;
+  }
+
+  .cta {
+    margin-top: 80px;
+    padding: 56px 32px;
+    border-radius: var(--radius-lg);
+    background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%), var(--bg-subtle);
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .cta h2 {
+    max-width: 620px;
+    margin-inline: auto;
+    font-size: clamp(24px, 3.2vw, 32px);
+  }
+
+  .cta .hero-cta {
+    justify-content: center;
+  }
+
+  @media (max-width: 960px) {
+    .hero-grid,
+    .agents {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .values {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .hero {
+      padding-top: 40px;
+    }
+    .stats {
+      grid-template-columns: 1fr 1fr;
+    }
+    .stats div:nth-child(3) {
+      border-left: 0;
+    }
+    .stats div:nth-child(n + 3) {
+      border-top: 1px solid var(--border);
+    }
+    .values {
+      grid-template-columns: 1fr;
+    }
+    .agents {
+      padding: 24px;
+    }
+  }
+</style>

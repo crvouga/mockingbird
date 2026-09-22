@@ -1,0 +1,201 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../components/Icon.astro"
+import Monogram from "../components/Monogram.astro"
+import Base from "../layouts/Base.astro"
+import { CATEGORIES, type CategorySlug } from "../lib/categories.ts"
+import { percent } from "../lib/format.ts"
+
+const { services, totals } = catalog
+const yes = (on: boolean) => (on ? "yes" : "no")
+---
+
+<Base title="Coverage" description="Operations mocked and surfaces shipped by every Mockingbird service, computed from the packages at build time.">
+  <div class="container">
+    <header class="page-head">
+      <h1>Coverage</h1>
+      <p class="lede">
+        {totals.opsSupported} of {totals.opsTotal} operations across {totals.services} services, computed from each package's vendored
+        contract and exports at build time. Click a column to sort.
+      </p>
+    </header>
+
+    <div class="table-wrap cov">
+      <table class="table" data-sortable>
+        <thead>
+          <tr>
+            <th><button type="button" data-sort-key="name">Service</button></th>
+            <th><button type="button" data-sort-key="category">Category</button></th>
+            <th><button type="button" data-sort-key="coverage">Operations</button></th>
+            <th><button type="button" data-sort-key="browser">Browser</button></th>
+            <th><button type="button" data-sort-key="inprocess">In-process</button></th>
+            <th><button type="button" data-sort-key="server">Server</button></th>
+            <th><button type="button" data-sort-key="cli">CLI</button></th>
+            <th><button type="button" data-sort-key="runtime">Runtime</button></th>
+          </tr>
+        </thead>
+        <tbody>
+          {
+            services.map((s) => {
+              const p = percent(s.opsSupported, s.opsTotal)
+              return (
+                <tr
+                  data-name={s.displayName.toLowerCase()}
+                  data-category={CATEGORIES[s.category as CategorySlug].label}
+                  data-coverage={s.opsTotal ? s.opsSupported / s.opsTotal + s.opsSupported / 1e6 : -1}
+                  data-browser={Number(s.surfaces.browser)}
+                  data-inprocess={Number(s.surfaces.inProcess)}
+                  data-server={Number(s.surfaces.server)}
+                  data-cli={Number(Boolean(s.surfaces.cli))}
+                  data-runtime={s.runtime}
+                >
+                  <td>
+                    <a class="cov-svc" href={`/services/${s.name}`}>
+                      <Monogram name={s.displayName} hue={s.hue} size={26} />
+                      {s.displayName}
+                    </a>
+                  </td>
+                  <td class="muted-cell">{CATEGORIES[s.category as CategorySlug].label}</td>
+                  <td>
+                    {s.opsTotal > 0 ? (
+                      <div class="cov-cell">
+                        <span class="bar" style={`--p:${p}%`}><span /></span>
+                        <span class="num">{s.opsSupported}/{s.opsTotal}</span>
+                      </div>
+                    ) : (
+                      <span class="muted-cell">{s.kind === "sql" ? "SQL engine" : "Full server"}</span>
+                    )}
+                  </td>
+                  {[s.surfaces.browser, s.surfaces.inProcess, s.surfaces.server, Boolean(s.surfaces.cli)].map((on) => (
+                    <td class="mark" data-on={yes(on)}>
+                      {on ? <Icon name="check" label="Yes" /> : <span aria-label="No">–</span>}
+                    </td>
+                  ))}
+                  <td><code>{s.runtime}</code></td>
+                </tr>
+              )
+            })
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <dl class="legend">
+      <div><dt>Operations</dt><dd>Mocked operations out of every operation in the package's vendored OpenAPI contract.</dd></div>
+      <div><dt>Browser</dt><dd>The package is portable, so the playground runs it in your tab.</dd></div>
+      <div><dt>In-process</dt><dd>Exports <code>createRuntime()</code>: a <code>fetch(Request) → Response</code> for tests.</dd></div>
+      <div><dt>Server</dt><dd>Ships <code>&lt;package&gt;/server</code>, a Node HTTP server for a local origin.</dd></div>
+      <div><dt>CLI</dt><dd>Ships a <code>mockingbird-&lt;name&gt; serve</code> binary.</dd></div>
+    </dl>
+  </div>
+</Base>
+
+<script>
+  import "../client/coverage.ts"
+</script>
+
+<style>
+  .cov th button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-weight: inherit;
+  }
+
+  .cov th button::after {
+    content: "";
+    display: inline-block;
+    width: 12px;
+    margin-left: 4px;
+    color: var(--fg-faint);
+  }
+
+  .cov th[aria-sort="ascending"] button::after {
+    content: "↑";
+  }
+
+  .cov th[aria-sort="descending"] button::after {
+    content: "↓";
+  }
+
+  .cov td {
+    vertical-align: middle;
+  }
+
+  .cov tbody tr:hover {
+    background: var(--bg-subtle);
+  }
+
+  .cov-svc {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+  }
+
+  .muted-cell {
+    color: var(--fg-subtle);
+  }
+
+  .cov-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 150px;
+  }
+
+  .bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--bg-muted);
+    overflow: hidden;
+  }
+
+  .bar span {
+    display: block;
+    width: var(--p);
+    height: 100%;
+    background: var(--accent);
+  }
+
+  .num {
+    min-width: 52px;
+    color: var(--fg-muted);
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .mark {
+    text-align: center;
+    color: var(--fg-faint);
+  }
+
+  .mark[data-on="yes"] {
+    color: var(--ok);
+  }
+
+  .mark .i {
+    margin-inline: auto;
+  }
+
+  .legend {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    margin: 28px 0 0;
+    color: var(--fg-muted);
+    font-size: 13.5px;
+  }
+
+  .legend dt {
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  .legend dd {
+    margin: 2px 0 0;
+  }
+</style>

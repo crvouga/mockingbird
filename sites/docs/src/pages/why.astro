@@ -1,0 +1,148 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../components/Icon.astro"
+import Base from "../layouts/Base.astro"
+
+const { totals } = catalog
+---
+
+<Base title="Why Mockingbird" description="The case for stateful, contract-driven mocks of third-party APIs.">
+  <div class="container">
+    <header class="page-head why-head">
+      <span class="eyebrow">Rationale</span>
+      <h1>Your tests are only as honest as the fakes they run against.</h1>
+      <p class="lede">
+        Most suites that touch Stripe, Twilio or a lab partner either call a shared sandbox or stub the client. Both fail in ways
+        that are expensive to notice. Mockingbird is a third option.
+      </p>
+    </header>
+
+    <article class="prose why">
+      <h2 id="the-problem">The two usual options</h2>
+      <div class="compare">
+        <div>
+          <h3>Call the vendor's sandbox</h3>
+          <ul>
+            <li>Slow round trips on every test, and rate limits under parallel CI.</li>
+            <li>Shared accounts: one suite's data leaks into another's, and caps like "50 test users" run out.</li>
+            <li>Keys in CI, and outages you did not cause failing your build.</li>
+            <li>Hard to reach the edges: declines, 429s, webhooks arriving late or twice.</li>
+          </ul>
+        </div>
+        <div>
+          <h3>Stub the client</h3>
+          <ul>
+            <li>The stub returns what you assumed, so the test checks your assumption, not the API.</li>
+            <li>No state: create-then-list, pagination and lifecycles are hand-scripted per test.</li>
+            <li>Stubs drift from the vendor silently. The bug shows up in production.</li>
+            <li>Every team writes its own, for every vendor.</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2 id="what-mockingbird-does">What Mockingbird does instead</h2>
+      <p>
+        Each package is a working stand-in for one vendor. It answers the vendor's real paths with the vendor's real response and
+        error shapes, keeps records in an in-memory SQL engine, and runs inside your test process through a plain
+        <code>fetch(Request) → Response</code>. You point the official SDK at it, or call it directly.
+      </p>
+      <ul>
+        <li><strong>Stateful.</strong> A customer you create is there when you list customers. Orders move through their states, subscriptions renew when you move the clock, and webhooks are signed and delivered.</li>
+        <li><strong>Contract-driven.</strong> Every HTTP mock is built against a vendored OpenAPI contract. Today {totals.opsSupported} of the {totals.opsTotal} operations in those contracts are mocked, and each package lists its gaps.</li>
+        <li><strong>Controllable.</strong> The same admin surface everywhere: reset, snapshot and restore, a controllable clock, named fault presets, a request journal, and isolation by namespace so parallel workers share one process safely.</li>
+        <li><strong>Portable.</strong> {totals.browser} of {totals.services} packages are plain portable JavaScript: Node, Bun, browsers and Workers. The playgrounds on this site run the published code in your tab.</li>
+      </ul>
+
+      <h2 id="staying-honest">How the mocks stay honest</h2>
+      <p>A mock is only useful if it behaves like the vendor. Mockingbird checks that continuously with property-based tests driven by each contract:</p>
+      <ol>
+        <li><strong>Self-parity, in CI.</strong> Random stateful walks generated from the OpenAPI spec run against two independent instances. They must agree after every step, and every response must conform to the spec.</li>
+        <li><strong>Live parity, with credentials.</strong> The same walks run against the vendor's real sandbox and a fresh mock. Responses are canonicalized (ids, timestamps, tokens) and diffed, and failures shrink to a minimal reproduction.</li>
+        <li><strong>Consumer acceptance.</strong> Each package drives a port of the consuming app's own client and webhook code, and where the app uses the vendor SDK, the SDK is pointed at the mock.</li>
+      </ol>
+
+      <h2 id="docs-that-cannot-drift">Docs that cannot drift</h2>
+      <p>
+        This site has no hand-maintained copy of anything. Names, categories, surfaces and runtimes come from each package's
+        <code>package.json</code>. Operations and coverage come from the built module's contract. Documentation is the package
+        README, the same file npm ships. Every playground sample request is sent to a fresh mock during the build, and the SQL
+        snippets run against the real engines. If a package changes, the site changes with it, and if the metadata is wrong, the
+        build fails.
+      </p>
+
+      <h2 id="for-agents">For coding agents</h2>
+      <p>
+        Agents integrate a mock the same way people do, so the same sources are published in forms they read well:
+        <a href="/llms.txt">/llms.txt</a> indexes every service, <code>/services/&lt;name&gt;.md</code> serves any README as
+        markdown, <a href="/llms-full.txt">/llms-full.txt</a> has all of them in one file, and
+        <a href="/catalog.json">/catalog.json</a> lists each package's entry points, surfaces and coverage. Inside a project, the
+        README is also at <code>node_modules/&lt;package&gt;/README.md</code>.
+      </p>
+
+      <h2 id="when-not-to-use-it">When not to use it</h2>
+      <ul>
+        <li>For a final check against the real vendor before a release. Run a small live suite for that. Mockingbird's own live parity exists for the same reason.</li>
+        <li>For vendor behavior a mock does not model yet. Each package's README and SUPPORT.md say what is deliberately not modelled.</li>
+      </ul>
+    </article>
+
+    <div class="why-cta">
+      <a class="btn btn-primary" href="/services">Browse the {totals.services} services <Icon name="arrow-right" /></a>
+      <a class="btn btn-secondary" href={`${catalog.repo}/blob/main/docs/AUTHORING_A_SERVICE.md`} target="_blank" rel="noopener">Add a service</a>
+    </div>
+  </div>
+</Base>
+
+<style>
+  .why-head {
+    max-width: 820px;
+  }
+
+  .why-head h1 {
+    margin-top: 12px;
+  }
+
+  .why {
+    max-width: 760px;
+  }
+
+  .why h2:first-child {
+    margin-top: 16px;
+  }
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .compare > div {
+    padding: 18px 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-subtle);
+  }
+
+  .compare h3 {
+    margin: 0 0 8px;
+    font-size: 15.5px;
+  }
+
+  .compare ul {
+    margin: 0;
+    font-size: 14.5px;
+  }
+
+  .why-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 48px;
+  }
+
+  @media (max-width: 720px) {
+    .compare {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

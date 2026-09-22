@@ -1,0 +1,38 @@
+---
+import { SQL_SNIPPETS } from "../lib/sql.ts"
+import type { Service } from "../lib/types.ts"
+import Icon from "./Icon.astro"
+
+interface Props {
+  service: Service
+}
+const { service: s } = Astro.props
+const engine = s.name === "postgres" ? "postgres" : "sqlite"
+const snippets = SQL_SNIPPETS[engine]
+---
+
+<div class="pg" data-sql data-service={s.name}>
+  <script is:inline type="application/json" data-sql-snippets set:html={JSON.stringify(snippets).replace(/</g, "\\u003c")}></script>
+  <div class="pg-head">
+    <div class="pg-status" data-sql-status data-state="idle">
+      <span class="pulse"></span>
+      <span data-sql-status-text>Loads the real {s.packageName} engine into this tab on first run</span>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" data-sql-reset disabled><Icon name="reset" /> New database</button>
+  </div>
+  <div class="sql-snippets">
+    {snippets.map((sn, i) => <button type="button" class="chip-sm" data-snippet={i}>{i + 1}. {sn.label}</button>)}
+  </div>
+  <div class="sql-editor">
+    <textarea class="pg-text" data-sql-input spellcheck="false" aria-label="SQL">{snippets[0]?.sql}</textarea>
+    <div class="sql-actions">
+      <span class="pg-meta">Statements run in order against one in-memory database. These snippets also run during the build.</span>
+      <button type="button" class="btn btn-accent btn-sm" data-sql-run><Icon name="play" /> Run <kbd data-mod-enter>⌘↵</kbd></button>
+    </div>
+  </div>
+  <div class="sql-out" data-sql-out><p class="muted">Run a statement to see results.</p></div>
+</div>
+
+<script>
+  import "../client/sql.ts"
+</script>

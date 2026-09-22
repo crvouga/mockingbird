@@ -1,0 +1,333 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../../components/Icon.astro"
+import ServiceCard from "../../components/ServiceCard.astro"
+import Base from "../../layouts/Base.astro"
+
+const { services, categories, totals } = catalog
+---
+
+<Base title="Services" description={`Search and filter ${totals.services} stateful mocks by category, runtime and surface.`}>
+  <div class="container">
+    <header class="page-head">
+      <h1>Services</h1>
+      <p class="lede">
+        {totals.services} stateful mocks. {totals.browser} run in your browser, and each has a live playground backed by the real
+        mock.
+      </p>
+    </header>
+
+    <div class="toolbar" data-local-search>
+      <label class="search">
+        <Icon name="search" />
+        <input type="search" class="input" placeholder={`Search ${totals.services} services, keywords, operation ids…`} data-q aria-label="Search services" autocomplete="off" spellcheck="false" />
+        <kbd>/</kbd>
+      </label>
+      <div class="toolbar-row">
+        <div class="chips" role="radiogroup" aria-label="Category">
+          <button type="button" class="chip" role="radio" data-cat="" aria-checked="true">All <span>{totals.services}</span></button>
+          {
+            categories.map((c) => (
+              <button type="button" class="chip" role="radio" data-cat={c.slug} aria-checked="false">
+                {c.label} <span>{c.count}</span>
+              </button>
+            ))
+          }
+        </div>
+        <div class="controls">
+          <label class="toggle">
+            <input type="checkbox" data-browser />
+            <span>Runs in browser</span>
+          </label>
+          <select class="select" data-sort aria-label="Sort">
+            <option value="relevance">Best match</option>
+            <option value="name">Name</option>
+            <option value="ops">Most operations</option>
+            <option value="category">Category</option>
+          </select>
+          <div class="seg" role="group" aria-label="View">
+            <button type="button" data-view="grid" aria-label="Grid view" aria-pressed="true"><Icon name="grid" /></button>
+            <button type="button" data-view="list" aria-label="List view" aria-pressed="false"><Icon name="list" /></button>
+          </div>
+        </div>
+      </div>
+      <p class="count" aria-live="polite" data-count>{totals.services} services</p>
+    </div>
+
+    <div class="grid" data-grid data-view="grid">
+      {services.map((s) => <ServiceCard service={s} />)}
+    </div>
+    <script is:inline>
+      try {
+        if (localStorage.getItem("mb:services:view") === "list") document.querySelector("[data-grid]").dataset.view = "list"
+      } catch (e) {}
+    </script>
+
+    <div class="empty" data-empty hidden>
+      <span class="emoji" aria-hidden="true">🐦‍⬛</span>
+      <h2>No services match</h2>
+      <p>Try a vendor name, a keyword or an operation id, or clear the filters.</p>
+      <button type="button" class="btn btn-secondary btn-sm" data-clear>Clear filters</button>
+    </div>
+  </div>
+</Base>
+
+<script>
+  import "../../client/services.ts"
+</script>
+
+<style>
+  .toolbar {
+    position: sticky;
+    top: var(--header-h);
+    z-index: 10;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+    margin-inline: -24px;
+    padding: 12px 24px;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .search {
+    position: relative;
+    display: block;
+  }
+
+  .search > :global(.i) {
+    position: absolute;
+    left: 13px;
+    top: 50%;
+    translate: 0 -50%;
+    color: var(--fg-subtle);
+  }
+
+  .search .input {
+    height: 44px;
+    padding-left: 38px;
+    padding-right: 44px;
+    font-size: 15px;
+  }
+
+  .search .input::-webkit-search-cancel-button {
+    display: none;
+  }
+
+  .search kbd {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    translate: 0 -50%;
+  }
+
+  .toolbar-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .chips {
+    display: flex;
+    gap: 6px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    min-width: 0;
+    flex: 1;
+    mask-image: linear-gradient(90deg, #000 94%, transparent);
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding: 0 11px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--fg-muted);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition: all 0.15s var(--ease);
+  }
+
+  .chip span {
+    color: var(--fg-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .chip:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+
+  .chip[aria-checked="true"] {
+    border-color: var(--fg);
+    background: var(--fg);
+    color: var(--bg);
+  }
+
+  .chip[aria-checked="true"] span {
+    color: color-mix(in srgb, var(--bg) 65%, transparent);
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 32px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--fg-muted);
+    font-size: 13px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .toggle input {
+    accent-color: var(--accent);
+  }
+
+  .select {
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg);
+    color: var(--fg-muted);
+    font-size: 13px;
+  }
+
+  .seg {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .seg button {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 26px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--fg-subtle);
+  }
+
+  .seg button[aria-pressed="true"] {
+    background: var(--bg-muted);
+    color: var(--fg);
+  }
+
+  .count {
+    color: var(--fg-subtle);
+    font-size: 13px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+  }
+
+  .grid[data-view="list"] {
+    grid-template-columns: 1fr;
+    gap: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .grid[data-view="list"] :global(.svc) {
+    display: grid;
+    grid-template-columns: minmax(220px, 280px) 1fr auto;
+    align-items: center;
+    gap: 20px;
+    padding: 12px 16px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .grid[data-view="list"] :global(.svc:last-child) {
+    border-bottom: 0;
+  }
+
+  .grid[data-view="list"] :global(.svc:hover) {
+    background: var(--bg-subtle);
+  }
+
+  .grid[data-view="list"] :global(.monogram) {
+    --size: 32px !important;
+  }
+
+  .grid[data-view="list"] :global(.svc-desc) {
+    -webkit-line-clamp: 1;
+  }
+
+  .grid[data-view="list"] :global(.svc-meta) {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 760px) {
+    .grid[data-view="list"] :global(.svc) {
+      grid-template-columns: 1fr;
+      gap: 8px;
+    }
+    .toolbar {
+      margin-inline: -16px;
+      padding-inline: 16px;
+    }
+    .controls {
+      width: 100%;
+    }
+    .select {
+      flex: 1;
+    }
+  }
+
+  .empty {
+    display: grid;
+    justify-items: center;
+    gap: 8px;
+    padding: 80px 16px;
+    text-align: center;
+    color: var(--fg-muted);
+  }
+
+  .empty .emoji {
+    font-size: 40px;
+    margin-bottom: 8px;
+  }
+
+  .empty h2 {
+    color: var(--fg);
+    font-size: 18px;
+  }
+
+  .empty .btn {
+    margin-top: 10px;
+  }
+</style>
