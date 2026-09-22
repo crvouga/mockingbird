@@ -58,6 +58,7 @@
     "docs:generate": "bun scripts/generate-docs.ts",
     "docs:build": "bun run docs:generate && bun run --cwd sites/docs build",
     "docs:dev": "bun run docs:generate && bun run --cwd sites/docs dev",
+    "docs": "bun run docs:dev",
     "prepare": "husky",
     "gh": "open https://github.com/crvouga/mockingbird/actions",
     "release:plan": "bun scripts/release/plan.ts",
