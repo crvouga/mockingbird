@@ -15,17 +15,14 @@ ESM only. Node 22+ or Bun 1.2+.
 Point the SDK endpoint at the mock and enable path-style addressing. Fixture credentials are validated for presigned requests; the default pair is `fixture` / `fixture`.
 
 ```ts
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3"
 import { createServer } from "@crvouga/mockingbird-service-s3/server"
 
 const mock = await createServer()
-const s3 = new S3Client({
-  endpoint: mock.url,
-  forcePathStyle: true,
-  region: "us-east-1",
-  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+await fetch(`${mock.url}/fixtures`, { method: "PUT" })
+await fetch(`${mock.url}/fixtures/result.bin`, {
+  method: "PUT",
+  body: new Uint8Array([0, 255]),
 })
-await s3.send(new PutObjectCommand({ Bucket: "fixtures", Key: "result.bin", Body: new Uint8Array([0, 255]) }))
 ```
 
 Set an application's S3 endpoint environment variable to the server URL and its region to `us-east-1`. Supported REST operations are CreateBucket, HeadBucket, PutObject, GetObject, HeadObject, DeleteObject, DeleteObjects, CopyObject, ListObjectsV2, and multipart create/upload/complete/abort. SDK `GetObject` bodies retain its streaming helpers.
