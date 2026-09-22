@@ -86,6 +86,9 @@ canonical file; `bun run agents:sync` creates missing links and `bun run check:a
 `/pr-merge` takes the current branch all the way to a merged PR: commit, push, merge `origin/main`,
 resolve conflicts, open the PR, fix every failing check (CI and third-party checks such as
 GitGuardian), then merge automatically once everything is green.
+For a clean, committed branch, `bun run pr:merge advance` performs the mechanical steps in one call
+and returns JSON for the next blocker. `bun run pr:merge comments` lists review threads and recent
+comments; the command has `reply` and `resolve` actions after feedback is addressed.
 
 `/resolve-issues` works the queue of GitHub issues that agents in other projects file through
 [REPORTING_ISSUES.md](REPORTING_ISSUES.md) (label `agent-reported`): claim one, confirm the
