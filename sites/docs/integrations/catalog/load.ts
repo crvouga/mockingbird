@@ -2,8 +2,10 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { CATEGORIES, isCategory } from "../../src/lib/categories.ts"
-import { isTier, TIER_ORDER } from "../../src/lib/tiers.ts"
+import { QUICK_START } from "../../src/lib/content.ts"
+import { guideInfo, sortGuides } from "../../src/lib/guides.ts"
 import { EXPECTED_ERROR_SNIPPETS, SQL_SNIPPETS, splitStatements } from "../../src/lib/sql.ts"
+import { isTier, TIER_ORDER } from "../../src/lib/tiers.ts"
 import type {
   Catalog,
   Operation,
@@ -29,9 +31,15 @@ export interface CatalogPaths {
 /** Every file the catalog reads, so the dev server can reload when one changes. */
 export function watchedFiles({ repoRoot }: CatalogPaths): string[] {
   const dir = join(repoRoot, "packages/service")
-  return readdirSync(dir).flatMap((name) =>
-    ["package.json", "README.md", "dist/index.js"].map((f) => join(dir, name, f)),
-  )
+  return [
+    ...readdirSync(dir).flatMap((name) =>
+      ["package.json", "README.md", "dist/index.js"].map((f) => join(dir, name, f)),
+    ),
+    ...readdirSync(join(repoRoot, "docs"))
+      .filter((f) => f.endsWith(".md"))
+      .map((f) => join(repoRoot, "docs", f)),
+    join(repoRoot, "llms.txt"),
+  ]
 }
 
 export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise<Catalog> {
@@ -197,8 +205,30 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
     .map(([slug, c]) => ({ slug, ...c, count: services.filter((s) => s.category === slug).length }))
     .filter((c) => c.count > 0)
 
+  const guides = await Promise.all(
+    sortGuides(
+      readdirSync(join(repoRoot, "docs"))
+        .filter((f) => f.endsWith(".md"))
+        .map((f) => ({
+          file: f.slice(0, -3),
+          markdown: readFileSync(join(repoRoot, "docs", f), "utf8"),
+        })),
+    ).map(async (source) => ({
+      ...guideInfo(source),
+      markdown: source.markdown,
+      ...(await renderMarkdown(source.markdown, { dir: "docs", repo, services: names })),
+    })),
+  )
+
+  const quickStartProblem = await runQuickStart(packages, serviceDir)
+  if (quickStartProblem)
+    throw new Error(`The shared quick start (src/lib/content.ts) is broken: ${quickStartProblem}`)
+
   return {
     repo,
+    guides,
+    llmsTxt: readFileSync(join(repoRoot, "llms.txt"), "utf8"),
+    quickStart: { html: await highlight(QUICK_START.code, "ts") },
     services,
     categories,
     totals: {
@@ -254,6 +284,35 @@ function validateSnippets(name: string, mod: Json): string[] {
   }
   db.close()
   return problems
+}
+
+/**
+ * Run the README's quick start against the built package it imports. It must log a 2xx status
+ * first and nothing falsy after, so the example people copy is the example that works.
+ */
+async function runQuickStart(
+  packages: { name: string; pkg: Json }[],
+  serviceDir: string,
+): Promise<string | null> {
+  const target = packages.find((p) => p.pkg.name === QUICK_START.package)
+  if (!target) return `${QUICK_START.package} is not a published service`
+  const entry = pathToFileURL(join(serviceDir, target.name, "dist/index.js")).href
+  const logs: unknown[][] = []
+  const key = "__mockingbirdQuickStart"
+  ;(globalThis as Record<string, unknown>)[key] = (...args: unknown[]) => logs.push(args)
+  const source = `const console = { log: (...a) => globalThis.${key}(...a) };\n${QUICK_START.code.replaceAll(JSON.stringify(QUICK_START.package), JSON.stringify(entry))}`
+  try {
+    await nativeImport(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`)
+  } catch (error) {
+    return `it threw ${(error as Error).message}`
+  } finally {
+    delete (globalThis as Record<string, unknown>)[key]
+  }
+  const [first, ...rest] = logs.map((l) => l[0])
+  if (typeof first !== "number" || first < 200 || first >= 300)
+    return `it logged ${String(first)} instead of a 2xx status`
+  if (rest.some((v) => !v)) return `a later check logged ${JSON.stringify(rest)}`
+  return null
 }
 
 const VERIFY_TIMEOUT_MS = 2_000

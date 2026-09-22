@@ -19,7 +19,7 @@ export interface PaletteEntry {
 const PAGES: [string, string, string][] = [
   ["/services", "Services", "Browse and filter every mock"],
   ["/coverage", "Coverage", "Operations mocked per service, and every surface"],
-  ["/why", "Why Mockingbird", "The case for stateful, contract-driven mocks"],
+  ["/docs", "Docs", "Guides for using, testing and contributing"],
   ["/llms.txt", "llms.txt", "Index for coding agents"],
   ["/catalog.json", "catalog.json", "Machine-readable catalog"],
 ]
@@ -43,6 +43,18 @@ export const GET: APIRoute = () => {
         ...s.keywords,
         ...s.operations.map((o) => o.id),
       ].join(" "),
+    })),
+    ...catalog.guides.map((g) => ({
+      kind: "page" as const,
+      href: `/docs/${g.slug}`,
+      name: `docs/${g.slug}`,
+      displayName: g.title,
+      initials: "",
+      subtitle: g.summary,
+      category: "",
+      tier: "",
+      hue: 0,
+      text: `${g.summary} ${g.toc.map((t) => t.text).join(" ")}`,
     })),
     ...PAGES.map(([href, displayName, subtitle]) => ({
       kind: "page" as const,

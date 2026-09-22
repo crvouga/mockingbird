@@ -8,14 +8,13 @@ export const TIERS = {
   ready: {
     label: "Ready",
     short: "Ready",
-    blurb:
-      "Ready to use in your test suite. Behavior is checked against the vendor and kept stable.",
+    blurb: "Complete, checked against the vendor, and kept stable. Use it in your test suite.",
   },
   wip: {
     label: "Work in progress",
     short: "In progress",
     blurb:
-      "Usable, but incomplete: operations, shapes and options can still change between releases.",
+      "Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.",
   },
 } as const satisfies Record<ServiceStatus, { label: string; short: string; blurb: string }>
 
