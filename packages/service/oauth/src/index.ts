@@ -39,10 +39,18 @@ const fail = (error: string, description: string, status = 400) =>
   json({ error, error_description: description }, status)
 const scopes = (value: string) => new Set(value.split(/\s+/).filter(Boolean))
 const validEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
+const WEB_SCHEMES = new Set(["http:", "https:"])
+const FORBIDDEN_REDIRECT_SCHEMES = new Set(["blob:", "data:", "file:", "javascript:", "vbscript:"])
 const safeRedirect = (s: string) => {
   try {
     const u = new URL(s)
-    return ["http:", "https:"].includes(u.protocol) && !u.hash && !u.username && !u.password
+    return (
+      /^[a-z][a-z0-9+.-]*:$/i.test(u.protocol) &&
+      !FORBIDDEN_REDIRECT_SCHEMES.has(u.protocol.toLowerCase()) &&
+      !u.hash &&
+      !u.username &&
+      !u.password
+    )
   } catch {
     return false
   }
@@ -163,7 +171,9 @@ export class OAuthAPI {
       !client.redirectUris.length ||
       !client.redirectUris.every((s) => typeof s === "string" && safeRedirect(s))
     )
-      throw new Error("Client requires id, name and exact HTTP(S) redirectUris without fragments")
+      throw new Error(
+        "Client requires id, name and exact safe redirectUris without fragments or credentials",
+      )
     if (
       client.apple &&
       (client.secret !== undefined ||
@@ -935,6 +945,7 @@ export class OAuthAPI {
   }
   private callback(auth: Authorization, values: Record<string, string>): Response {
     if (auth.state) values.state = auth.state
+    const redirect = new URL(auth.redirectUri)
     if (auth.responseMode === "form_post") {
       const nonce = this.options.nonce?.() ?? crypto.randomUUID()
       const result = page(
@@ -947,18 +958,24 @@ export class OAuthAPI {
             "",
           )}<button class="primary">Continue</button></form><script nonce="${nonce}">document.getElementById('callback').submit()</script>`,
         200,
-        new URL(auth.redirectUri).origin,
+        WEB_SCHEMES.has(redirect.protocol) ? redirect.origin : redirect.protocol,
         nonce,
       )
       return result
     }
-    const url = new URL(auth.redirectUri)
-    if (auth.responseMode === "fragment") url.hash = new URLSearchParams(values).toString()
-    else for (const [k, v] of Object.entries(values)) url.searchParams.set(k, v)
+    let location: string
+    if (!WEB_SCHEMES.has(redirect.protocol)) {
+      const encoded = new URLSearchParams(values).toString()
+      location = `${auth.redirectUri}${auth.responseMode === "fragment" ? "#" : auth.redirectUri.includes("?") ? "&" : "?"}${encoded}`
+    } else {
+      if (auth.responseMode === "fragment") redirect.hash = new URLSearchParams(values).toString()
+      else for (const [k, v] of Object.entries(values)) redirect.searchParams.set(k, v)
+      location = redirect.href
+    }
     return new Response(null, {
       status: 302,
       headers: {
-        location: url.href,
+        location,
         "cache-control": "no-store",
         "referrer-policy": "no-referrer",
       },

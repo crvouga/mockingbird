@@ -163,6 +163,76 @@ describe("OAuth protocol", () => {
     )
     expect(r.status).toBe(200)
   })
+  test("native public clients use exact registered private-scheme callbacks with S256 PKCE", async () => {
+    const nativeCallback = "geviti://Callback/expo%2Freturn?channel=native"
+    const service = new OAuthAPI({
+      provider: "google",
+      accounts: [account],
+      clients: [{ id: "app", name: "Native app", redirectUris: [nativeCallback] }],
+    })
+    const finished = await complete(service, {
+      redirect_uri: nativeCallback,
+      code_challenge: await hash(verifier),
+      code_challenge_method: "S256",
+    })
+    const location = finished.headers.get("location") ?? ""
+    expect(location).toStartWith(`${nativeCallback}&code=`)
+    expect(location).toContain("&state=round-trip")
+    const authorizationCode = new URL(location).searchParams.get("code") ?? ""
+    const tokens = await service.fetch(
+      request("/token", {
+        grant_type: "authorization_code",
+        client_id: "app",
+        redirect_uri: nativeCallback,
+        code: authorizationCode,
+        code_verifier: verifier,
+      }),
+    )
+    expect(tokens.status).toBe(200)
+    expect(await tokens.json()).toMatchObject({ token_type: "Bearer" })
+
+    for (const redirect_uri of [
+      `${nativeCallback}/`,
+      nativeCallback.replace("Callback", "callback"),
+      "attacker://Callback/expo%2Freturn?channel=native",
+    ]) {
+      const rejected = await authorize(service, {
+        redirect_uri,
+        code_challenge: await hash(verifier),
+        code_challenge_method: "S256",
+      })
+      expect(rejected.status).toBe(400)
+      expect(rejected.headers.has("location")).toBe(false)
+    }
+    expect(
+      () =>
+        new OAuthAPI({
+          clients: [{ id: "bad", name: "Bad", redirectUris: ["javascript:alert(1)"] }],
+        }),
+    ).toThrow()
+  })
+  test("Apple form_post exposes a deterministic private-scheme continuation", async () => {
+    const nativeCallback = "com.geviti.app:/oauth2redirect"
+    const service = new OAuthAPI({
+      provider: "apple",
+      accounts: [account],
+      clients: [{ id: "app", name: "Native app", redirectUris: [nativeCallback] }],
+      nonce: () => "fixed-csp-nonce",
+    })
+    const response = await complete(service, {
+      redirect_uri: nativeCallback,
+      response_mode: "form_post",
+      scope: "openid email",
+      code_challenge: await hash(verifier),
+      code_challenge_method: "S256",
+    })
+    const html = await response.text()
+    expect(response.status).toBe(200)
+    expect(html).toContain(`method="post" action="${nativeCallback}"`)
+    expect(html).toContain('name="code"')
+    expect(html).toContain('name="state" value="round-trip"')
+    expect(response.headers.get("content-security-policy")).toContain("form-action com.geviti.app:")
+  })
   test("refresh scope restriction and token-family revocation", async () => {
     const service = api()
     const tokens = await (
@@ -314,6 +384,42 @@ describe("service integration", () => {
       ),
     )
     expect(await start.text()).toContain(`${issuer}/ns/suite/interaction`)
+
+    const adminHeaders = {
+      "content-type": "application/json",
+      "x-mockingbird-admin-key": "fixture-admin",
+    }
+    const registered = await runtime.fetch(
+      new Request(`${issuer}/ns/native/__admin/clients`, {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({
+          id: "native-app",
+          name: "Native app",
+          redirectUris: ["geviti://callback"],
+        }),
+      }),
+    )
+    expect(registered.status).toBe(201)
+    const nativeClients = await (
+      await runtime.fetch(
+        new Request(`${issuer}/ns/native/__admin/clients`, { headers: adminHeaders }),
+      )
+    ).json()
+    expect(
+      nativeClients.clients.find((entry: { id: string }) => entry.id === "native-app"),
+    ).toEqual({
+      id: "native-app",
+      name: "Native app",
+      redirectUris: ["geviti://callback"],
+      requirePkce: true,
+    })
+    const defaultClients = await (
+      await runtime.fetch(new Request(`${issuer}/__admin/clients`, { headers: adminHeaders }))
+    ).json()
+    expect(defaultClients.clients.map((entry: { id: string }) => entry.id)).not.toContain(
+      "native-app",
+    )
   })
   test("HTTP adapter serves HTML and discovery", async () => {
     const server = await createServer({ accounts: [account], clients: [client] })

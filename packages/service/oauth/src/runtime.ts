@@ -93,6 +93,18 @@ export function createRuntime(options: OAuthRuntimeOptions = {}): OAuthRuntime {
           return Response.json({ error: String(error) }, { status: 400 })
         }
       },
+      "GET /clients": ({ namespace }) =>
+        Response.json({
+          clients: runtime
+            .instance(namespace)
+            .clients.list({ order: "oldest" })
+            .map(({ value }) => ({
+              id: value.id,
+              name: value.name,
+              redirectUris: value.redirectUris,
+              requirePkce: value.requirePkce ?? value.secret === undefined,
+            })),
+        }),
       "POST /clients": ({ namespace, body }) => {
         try {
           const client = runtime.instance(namespace).registerClient(body as Client)
