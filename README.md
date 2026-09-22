@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-39-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-40-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-45 services, each its own npm package. Every service declares a release tier:
+46 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (39): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (40): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -93,6 +93,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [Resend](packages/service/resend) | Communication | [`@crvouga/mockingbird-service-resend`](https://www.npmjs.com/package/@crvouga/mockingbird-service-resend) | Stateful mock of the Resend email API (send with idempotency, received emails, attachments) with an outbox and Svix-signed inbound webhooks (Mockingbird service contract). |
 | [Slack](packages/service/slack) | Communication | [`@crvouga/mockingbird-service-slack`](https://www.npmjs.com/package/@crvouga/mockingbird-service-slack) | Stateful mock of Slack incoming webhooks and the Web API (chat.postMessage and friends) with an outbox of every alert the app sent. |
 | [Twilio](packages/service/twilio) | Communication | [`@crvouga/mockingbird-service-twilio`](https://www.npmjs.com/package/@crvouga/mockingbird-service-twilio) | Stateful mock of Twilio Verify, Lookup v2, Messaging and Recordings on one port, with signed inbound SMS and voice webhooks (Mockingbird service contract). |
+| [Amazon DynamoDB](packages/service/dynamodb) | Databases | [`@crvouga/mockingbird-service-dynamodb`](https://www.npmjs.com/package/@crvouga/mockingbird-service-dynamodb) | Stateful Amazon DynamoDB mock with typed items, expressions, indexes, pagination, transactions, and streams. |
 | [AHA](packages/service/aha) | Health & labs | [`@crvouga/mockingbird-service-aha`](https://www.npmjs.com/package/@crvouga/mockingbird-service-aha) | Stateful AHA phlebotomy mock with signed HTTP orders, status webhooks, and a real deterministic SSH/SFTP result server. |
 | [CareTalk](packages/service/caretalk) | Health & labs | [`@crvouga/mockingbird-service-caretalk`](https://www.npmjs.com/package/@crvouga/mockingbird-service-caretalk) | Stateful mock of CareTalk's external API: client-login tokens, GetForm definitions, SavePatientForm rounds, patient search/insert, states, free slots and appointments. |
 | [Edamam](packages/service/edamam) | Health & labs | [`@crvouga/mockingbird-service-edamam`](https://www.npmjs.com/package/@crvouga/mockingbird-service-edamam) | Stateful mock of the Edamam APIs our apps call: food-database parser, nutrients and image analysis, nutrition analysis, recipe search v2, meal-planner select and shopping lists, over a built-in food and recipe corpus. |
