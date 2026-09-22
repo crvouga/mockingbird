@@ -1,1 +1,9 @@
-/// <reference path="../.astro/types.d.ts" />
+declare module "virtual:mockingbird/catalog" {
+  const catalog: import("./lib/types.ts").Catalog
+  export default catalog
+}
+
+declare module "virtual:mockingbird/runtimes" {
+  // biome-ignore lint/suspicious/noExplicitAny: each service module has its own export shape.
+  export const loaders: Record<string, () => Promise<any>>
+}

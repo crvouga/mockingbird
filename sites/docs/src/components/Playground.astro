@@ -1,451 +1,85 @@
 ---
-/**
- * Interactive in-browser playground for mock services.
- * Executes code and shows results in real-time, in-process.
- */
+import type { Service } from "../lib/types.ts"
+import Icon from "./Icon.astro"
 
-export interface Props {
-  serviceName: string;
-  packageName: string;
-  code: string;
-  setup?: string;  // Optional setup code (run before main)
+interface Props {
+  service: Service
 }
-
-const { serviceName, packageName, code, setup } = Astro.props;
-const id = `playground-${serviceName}-${Math.random().toString(36).slice(2, 9)}`;
+const { service: s } = Astro.props
+const operations = s.operations.filter((o) => o.supported)
+const data = { service: s.name, origin: s.origin, operation: s.playground.operation, operations }
 ---
 
-<div class={`playground-container`} data-id={id}>
-  <div class="playground-header">
-    <h3>Interactive Playground</h3>
-    <span class="playground-badge">In-process, client-side</span>
-  </div>
-
-  <div class="playground-layout">
-    <div class="playground-editor">
-      <div class="editor-header">
-        <span>Code</span>
-        <button class="btn-copy" data-code={code} title="Copy code">
-          Copy
-        </button>
-      </div>
-      <pre><code class="language-typescript">{code}</code></pre>
+<div class="pg" data-pg>
+  <script is:inline type="application/json" data-pg-data set:html={JSON.stringify(data).replace(/</g, "\\u003c")}></script>
+  <div class="pg-head">
+    <div class="pg-status" data-pg-status data-state="idle">
+      <span class="pulse"></span>
+      <span data-pg-status-text>Loads the real {s.packageName} into this tab on first send</span>
     </div>
-
-    <div class="playground-output">
-      <div class="output-header">Output</div>
-      <div class="output-content" id={`${id}-output`}>
-        <p style="color: var(--color-muted);">Click "Run" to execute the example...</p>
+    <button type="button" class="btn btn-ghost btn-sm" data-pg-reset disabled><Icon name="reset" /> Reset state</button>
+  </div>
+  <div class="pg-body">
+    <aside class="pg-ops">
+      <input type="search" class="input" placeholder={`Filter ${operations.length} operations`} data-pg-filter aria-label="Filter operations" />
+      <ul data-pg-list>
+        {
+          operations.map((o) => (
+            <li>
+              <button type="button" data-op={o.id} title={o.summary ?? o.id}>
+                <span class="method" data-m={o.method}>{o.method}</span>
+                <span class="op-text">
+                  <span class="op-path">{o.path}</span>
+                  <span class="op-sum">{o.summary ?? o.id}</span>
+                </span>
+                {o.verified && <span class="op-ok" title="The sample request succeeds against a fresh mock" />}
+              </button>
+            </li>
+          ))
+        }
+      </ul>
+    </aside>
+    <div class="pg-main">
+      <form class="pg-line" data-pg-form>
+        <select class="pg-method" data-pg-method aria-label="Method">
+          {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((m) => <option>{m}</option>)}
+        </select>
+        <div class="pg-url">
+          <span class="pg-origin">{s.origin}</span>
+          <input type="text" data-pg-path aria-label="Path and query" spellcheck="false" autocomplete="off" />
+        </div>
+        <button type="submit" class="btn btn-accent btn-sm pg-send" data-pg-send><Icon name="play" /> Send <kbd data-mod-enter>⌘↵</kbd></button>
+      </form>
+      <p class="pg-summary" data-pg-summary></p>
+      <div class="pg-fill" data-pg-fill hidden></div>
+      <div class="pg-req">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-req-tab="body" aria-selected="true">Body</button>
+          <button type="button" role="tab" data-req-tab="headers" aria-selected="false">Headers</button>
+        </div>
+        <textarea class="pg-text" data-req-panel="body" data-pg-body spellcheck="false" aria-label="Request body" placeholder="No body"></textarea>
+        <textarea class="pg-text" data-req-panel="headers" data-pg-headers spellcheck="false" aria-label="Request headers, one per line" hidden></textarea>
+        <p class="pg-note" data-pg-note hidden></p>
+        {s.playground.authHint && <p class="pg-hint"><Icon name="key" /> <span>{s.playground.authHint}</span></p>}
+      </div>
+      <div class="pg-res">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-res-tab="response" aria-selected="true">Response</button>
+          <button type="button" role="tab" data-res-tab="state" aria-selected="false">State</button>
+          <button type="button" role="tab" data-res-tab="journal" aria-selected="false">Journal</button>
+          <span class="pg-meta" data-pg-meta></span>
+        </div>
+        <div class="pg-out" data-res-panel="response">
+          <div class="pg-token" data-pg-token hidden></div>
+          <pre data-pg-response><span class="muted">Send a request to see the mock's response.</span></pre>
+        </div>
+        <div class="pg-out" data-res-panel="state" hidden><pre data-pg-state><span class="muted">Records the mock holds appear here after a request.</span></pre></div>
+        <div class="pg-out" data-res-panel="journal" hidden><pre data-pg-journal><span class="muted">Every request the mock received, from its own /__admin/requests journal.</span></pre></div>
       </div>
     </div>
-  </div>
-
-  <div class="playground-actions">
-    <button class="btn-run" id={`${id}-run`}>
-      ▶ Run Example
-    </button>
-  </div>
-
-  <div class="playground-note">
-    <strong>Runs in your browser:</strong> No server needed. Mock state is in-memory and
-    isolated to this playground.
   </div>
 </div>
 
-<style>
-  .playground-container {
-    margin: 20px 0;
-    border: 1px solid var(--color-border);
-    border-radius: 8px;
-    overflow: hidden;
-    background-color: rgba(0, 0, 0, 0.02);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .playground-container {
-      background-color: rgba(255, 255, 255, 0.02);
-    }
-  }
-
-  .playground-header {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 15px;
-    border-bottom: 1px solid var(--color-border);
-    background-color: rgba(0, 102, 204, 0.05);
-  }
-
-  .playground-header h3 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 600;
-  }
-
-  .playground-badge {
-    display: inline-block;
-    background-color: rgba(0, 153, 0, 0.1);
-    color: #009900;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: 500;
-  }
-
-  .playground-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0;
-    min-height: 300px;
-  }
-
-  @media (max-width: 900px) {
-    .playground-layout {
-      grid-template-columns: 1fr;
-      min-height: auto;
-    }
-  }
-
-  .playground-editor,
-  .playground-output {
-    display: flex;
-    flex-direction: column;
-    border-right: 1px solid var(--color-border);
-  }
-
-  .playground-output {
-    border-right: none;
-  }
-
-  @media (max-width: 900px) {
-    .playground-editor {
-      border-right: none;
-      border-bottom: 1px solid var(--color-border);
-    }
-  }
-
-  .editor-header,
-  .output-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--color-border);
-    font-size: 12px;
-    font-weight: 600;
-    background-color: rgba(0, 0, 0, 0.03);
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .editor-header,
-    .output-header {
-      background-color: rgba(255, 255, 255, 0.03);
-    }
-  }
-
-  .editor-header {
-    justify-content: space-between;
-  }
-
-  .playground-editor pre {
-    margin: 0;
-    padding: 12px;
-    overflow-y: auto;
-    flex: 1;
-    background-color: rgba(0, 0, 0, 0.05);
-    font-size: 12px;
-    line-height: 1.4;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    .playground-editor pre {
-      background-color: rgba(255, 255, 255, 0.03);
-    }
-  }
-
-  .playground-editor code {
-    background: none;
-    padding: 0;
-    color: var(--color-text);
-  }
-
-  .output-content {
-    flex: 1;
-    padding: 12px;
-    overflow-y: auto;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    line-height: 1.4;
-    color: var(--color-text);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-
-  .output-line {
-    margin: 2px 0;
-  }
-
-  .output-line.success {
-    color: #009900;
-  }
-
-  .output-line.error {
-    color: #ff6666;
-  }
-
-  .output-line.info {
-    color: var(--color-muted);
-  }
-
-  .playground-actions {
-    display: flex;
-    gap: 8px;
-    padding: 12px 15px;
-    border-top: 1px solid var(--color-border);
-    background-color: rgba(0, 0, 0, 0.01);
-  }
-
-  .btn-run {
-    padding: 8px 16px;
-    background-color: #009900;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    font-weight: 600;
-    font-size: 13px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-  }
-
-  .btn-run:hover {
-    background-color: #007700;
-  }
-
-  .btn-run:active {
-    background-color: #005500;
-  }
-
-  .btn-run.loading {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  .btn-copy {
-    padding: 4px 8px;
-    background-color: transparent;
-    color: var(--color-primary);
-    border: 1px solid var(--color-primary);
-    border-radius: 3px;
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-copy:hover {
-    background-color: var(--color-primary);
-    color: var(--color-bg);
-  }
-
-  .btn-copy.copied {
-    background-color: #009900;
-    border-color: #009900;
-    color: white;
-  }
-
-  .playground-note {
-    font-size: 12px;
-    color: var(--color-muted);
-    padding: 10px 15px;
-    background-color: rgba(0, 102, 204, 0.05);
-    border-top: 1px solid var(--color-border);
-  }
-
-  .playground-note strong {
-    color: var(--color-text);
-  }
-</style>
-
-<script define:vars={{ id, serviceName, packageName, code, setup }}>
-  // Playground runner - executes code in browser, captures output
-
-  const playgroundId = id;
-  const outputEl = document.getElementById(`${playgroundId}-output`);
-  const runBtn = document.getElementById(`${playgroundId}-run`);
-  const copyBtn = document.querySelector(`[data-id="${playgroundId}"] .btn-copy`);
-
-  // Output helpers
-  const outputLines = [];
-
-  function clearOutput() {
-    outputLines.length = 0;
-    outputEl.innerHTML = "";
-  }
-
-  function addOutput(message, type = "info") {
-    const line = document.createElement("div");
-    line.className = `output-line ${type}`;
-    line.textContent = message;
-    outputEl.appendChild(line);
-    outputLines.push(message);
-  }
-
-  function formatValue(val) {
-    if (val === undefined) return "undefined";
-    if (val === null) return "null";
-    if (typeof val === "string") return JSON.stringify(val);
-    if (typeof val === "object") return JSON.stringify(val, null, 2);
-    return String(val);
-  }
-
-  // Copy to clipboard
-  if (copyBtn) {
-    copyBtn.addEventListener("click", async (e) => {
-      try {
-        await navigator.clipboard.writeText(code);
-        const original = copyBtn.textContent;
-        copyBtn.textContent = "Copied!";
-        copyBtn.classList.add("copied");
-        setTimeout(() => {
-          copyBtn.textContent = original;
-          copyBtn.classList.remove("copied");
-        }, 2000);
-      } catch (err) {
-        console.error("Failed to copy:", err);
-      }
-    });
-  }
-
-  // Run example
-  if (runBtn && outputEl) {
-    runBtn.addEventListener("click", async () => {
-      clearOutput();
-      runBtn.classList.add("loading");
-      runBtn.disabled = true;
-
-      try {
-        addOutput(`Running example for ${serviceName}...`, "info");
-        addOutput("", "info");
-
-        // Create an isolated context for execution
-        // This simulates the mock being imported and used
-        const mockData = {
-          customers: {},
-          orders: {},
-          messages: {},
-          nextId: 1000,
-        };
-
-        // Simple mock implementations for common operations
-        const mockFunctions = {
-          // Generic fetch simulator
-          async fetch(request) {
-            const url = new URL(request.url || "https://api.example.com/");
-            const method = (request.method || "GET").toUpperCase();
-            const body = request.body ? JSON.parse(request.body) : null;
-
-            addOutput(`${method} ${url.pathname}`, "info");
-
-            // Simulate different operations
-            if (url.pathname.includes("/customers")) {
-              if (method === "POST") {
-                const id = `cus_${mockData.nextId++}`;
-                mockData.customers[id] = { id, ...body };
-                addOutput(`✓ Created customer: ${id}`, "success");
-                addOutput(formatValue(mockData.customers[id]), "success");
-                return {
-                  ok: true,
-                  status: 200,
-                  json: async () => mockData.customers[id],
-                };
-              } else if (method === "GET") {
-                addOutput(`✓ Fetched customers`, "success");
-                addOutput(formatValue(Object.values(mockData.customers)), "success");
-                return {
-                  ok: true,
-                  status: 200,
-                  json: async () => ({ data: Object.values(mockData.customers) }),
-                };
-              }
-            }
-
-            if (url.pathname.includes("/orders")) {
-              if (method === "POST") {
-                const id = `ord_${mockData.nextId++}`;
-                mockData.orders[id] = { id, status: "pending", ...body };
-                addOutput(`✓ Created order: ${id}`, "success");
-                addOutput(formatValue(mockData.orders[id]), "success");
-                return {
-                  ok: true,
-                  status: 200,
-                  json: async () => mockData.orders[id],
-                };
-              }
-            }
-
-            addOutput(`✓ Response from ${url.pathname}`, "success");
-            return {
-              ok: true,
-              status: 200,
-              json: async () => ({}),
-            };
-          },
-
-          // Mock API class creator
-          createAPI(name) {
-            return {
-              fetch: mockFunctions.fetch,
-              name: name,
-              _state: mockData,
-            };
-          },
-        };
-
-        // Execute the provided code with mock context
-        const userCode = `
-          (async () => {
-            const { fetch, createAPI } = window.__mockContext;
-            const console = window.__mockConsole;
-
-            ${setup || ""}
-
-            ${code}
-          })()
-        `;
-
-        // Inject context
-        window.__mockContext = mockFunctions;
-        window.__mockConsole = {
-          log: (...args) => {
-            addOutput(args.map(formatValue).join(" "), "info");
-          },
-          error: (...args) => {
-            addOutput(args.map(formatValue).join(" "), "error");
-          },
-          warn: (...args) => {
-            addOutput(args.map(formatValue).join(" "), "info");
-          },
-        };
-
-        // Run it
-        await eval(userCode);
-
-        addOutput("", "info");
-        addOutput("✓ Execution complete", "success");
-      } catch (error) {
-        addOutput(`✗ Error: ${error.message}`, "error");
-        if (error.stack) {
-          addOutput(error.stack.split("\n").slice(0, 3).join("\n"), "error");
-        }
-      } finally {
-        runBtn.classList.remove("loading");
-        runBtn.disabled = false;
-      }
-    });
-
-    // Auto-run on load
-    setTimeout(() => {
-      runBtn.click();
-    }, 100);
-  }
+<script>
+  import "../client/playground.ts"
 </script>

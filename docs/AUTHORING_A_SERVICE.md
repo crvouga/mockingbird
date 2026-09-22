@@ -112,6 +112,22 @@ file under ~60 s.
 point (pack-check enforces this). Also document: how to point the app at it (env vars), routes,
 webhooks, admin routes, presets, namespace carriers, and a **Deliberately not modelled** section.
 
+The docs site (`sites/docs`, `bun docs`) is built from the package itself: the README is the
+service page, the contract gives the operations list and coverage, and the built module runs in
+the page's playground. It reads these fields from the `mockingbird` block of `package.json`, and
+its build fails when they are missing or stale:
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `category` | yes | A slug from `sites/docs/src/lib/categories.ts`, e.g. `"payments"` |
+| `displayName` | yes | The vendor's name as people write it, e.g. `"Customer.io"` |
+| `status` | no | `"wip"` marks an unfinished mock on the site; omit it when the mock is done |
+| `playground.headers` | no | Credentials in the format the mock accepts (e.g. `sk_test_…`), sent with every playground request. The build sends every sample request to a fresh mock and fails if none succeed with them |
+| `playground.operation` | no | The operation the playground opens on; it must succeed with its sample request |
+
+Also add the package to `sites/docs/package.json` `devDependencies` (`"workspace:*"`) so turbo
+builds it before the site.
+
 ## Commands (run inside the package directory only)
 
 ```bash
