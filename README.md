@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-43-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-44-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-49 services, each its own npm package. Every service declares a release tier:
+50 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (43): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (44): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -83,6 +83,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 | Service | Category | Package | What it mocks |
 | --- | --- | --- | --- |
+| [Amazon Textract](packages/service/textract) | AI & speech | [`@crvouga/mockingbird-service-textract`](https://www.npmjs.com/package/@crvouga/mockingbird-service-textract) | Stateful Amazon Textract mock with document analysis jobs, graph blocks, pagination, and deterministic notifications. |
 | [AWS Bedrock](packages/service/bedrock) | AI & speech | [`@crvouga/mockingbird-service-bedrock`](https://www.npmjs.com/package/@crvouga/mockingbird-service-bedrock) | Stateful, scriptable mock of AWS Bedrock Runtime (Converse, ConverseStream, InvokeModel incl. Titan embeddings, Nova Sonic bidirectional streams over h2c) and AgentCore InvokeHarness, with exact event-stream framing. |
 | [AWS Polly & Transcribe](packages/service/aws-speech) | AI & speech | [`@crvouga/mockingbird-service-aws-speech`](https://www.npmjs.com/package/@crvouga/mockingbird-service-aws-speech) | Stateful mock of AWS Polly (SynthesizeSpeech, StartSpeechSynthesisStream) and Transcribe (streaming over h2c, batch jobs), with exact event-stream framing and scripted transcripts. |
 | [LlamaCloud](packages/service/llamacloud) | AI & speech | [`@crvouga/mockingbird-service-llamacloud`](https://www.npmjs.com/package/@crvouga/mockingbird-service-llamacloud) | Stateful mock of the LlamaCloud platform API: project and pipeline lookup, pipeline documents, and deterministic (scripted or term-overlap) retrieval, verified against the official llama_cloud_services SDK. |

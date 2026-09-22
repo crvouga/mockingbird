@@ -1411,6 +1411,29 @@
         "yaml": "2.9.0",
       },
     },
+    "packages/service/textract": {
+      "name": "@crvouga/mockingbird-service-textract",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-textract": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+      },
+      "devDependencies": {
+        "@aws-sdk/client-textract": "3.1132.0",
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/twilio": {
       "name": "@crvouga/mockingbird-service-twilio",
       "version": "0.0.0-development",
@@ -1569,6 +1592,7 @@
         "@crvouga/mockingbird-service-sqs": "workspace:*",
         "@crvouga/mockingbird-service-step-functions": "workspace:*",
         "@crvouga/mockingbird-service-stripe": "workspace:*",
+        "@crvouga/mockingbird-service-textract": "workspace:*",
         "@crvouga/mockingbird-service-twilio": "workspace:*",
         "@crvouga/mockingbird-service-vpi": "workspace:*",
         "@crvouga/mockingbird-service-wholescripts": "workspace:*",
@@ -1670,6 +1694,8 @@
     "@aws-sdk/client-sqs": ["@aws-sdk/client-sqs@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/middleware-sdk-sqs": "^3.972.42", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-C9XBAhAlEJlksBYrS4Wsok5Cknr11AvY37TSR3fIYSD+xpSEvyRPIG4EC6vgRFQzvMD7T1CWWOGIZOGKruKjiQ=="],
 
     "@aws-sdk/client-ssm": ["@aws-sdk/client-ssm@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-PLFPGor3lEvrhpgt9QOfFY1KBqIaoR+aSUgZ0EtzfVJ8KamNX5Lg63iXc+PBMJJpDTI7pQ2Ko1VIbcOgGr3K0A=="],
+
+    "@aws-sdk/client-textract": ["@aws-sdk/client-textract@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-ubrndmvgpDSItspWDRuinHMekaC3LUJxcttIGrrXBz3BGPcL20ESoUXH+fxyfoDJcLidgl06byyO1LQFSE3wrw=="],
 
     "@aws-sdk/client-transcribe": ["@aws-sdk/client-transcribe@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-xSdaZ2CKECCga5MSGbS9hbvK2eJ2gam79UCEL2hMhPTxFqpG63Ax/YOBYFJQyMM3h27dHBb/HiV9/oF7kGzyOA=="],
 
@@ -1986,6 +2012,8 @@
     "@crvouga/mockingbird-service-step-functions": ["@crvouga/mockingbird-service-step-functions@workspace:packages/service/step-functions"],
 
     "@crvouga/mockingbird-service-stripe": ["@crvouga/mockingbird-service-stripe@workspace:packages/service/stripe"],
+
+    "@crvouga/mockingbird-service-textract": ["@crvouga/mockingbird-service-textract@workspace:packages/service/textract"],
 
     "@crvouga/mockingbird-service-twilio": ["@crvouga/mockingbird-service-twilio@workspace:packages/service/twilio"],
 

@@ -64,6 +64,7 @@
     "@crvouga/mockingbird-service-sqs": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",
     "@crvouga/mockingbird-service-step-functions": "workspace:*",
+    "@crvouga/mockingbird-service-textract": "workspace:*",
     "@crvouga/mockingbird-service-twilio": "workspace:*",
     "@crvouga/mockingbird-service-vpi": "workspace:*",
     "@crvouga/mockingbird-service-wholescripts": "workspace:*",
