@@ -132,8 +132,8 @@ username) or the App API key (Bearer) through `PUT /__admin/credentials {"creden
 
 | Export | Kind | Description |
 | --- | --- | --- |
-| `CustomerIoAPI` | class | The in-process mock: `fetch(request)`, `reset()`, `report(input)`, `profiles()`, `state`. Options: `sqlite`, `now`, `namespace`, `messages`, `settings`, `onReport`. |
-| `createRuntime` | function | The mock with the full service contract (health, admin, namespaces, credentials, presets, outbox, reporting webhooks). Options: `webhooks: {url, secret, retryDelaysMs?, fetch?}`, `messages`, `settings`, `clock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
+| `CustomerIoAPI` | class | The in-process mock: `fetch(request)`, `reset()`, `report(input)`, `profiles()`, `state`. Options: `sqlite`, `now`, `wallClock`, `namespace`, `messages`, `settings`, `onReport`. |
+| `createRuntime` | function | The mock with the full service contract (health, admin, namespaces, credentials, presets, outbox, reporting webhooks). Options: `webhooks: {url, secret, retryDelaysMs?, fetch?}`, `messages`, `settings`, `clock`, `wallClock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
 | `CUSTOMERIO_PRESETS` | object | Every named fault preset. |
 | `CUSTOMERIO_NAMESPACE` | string | The service name, `"customerio"`. |
 | `REPORTING_WEBHOOK_PATH` | string | Our receiver's path, `/v1/customer-io/reporting-webhook`. |

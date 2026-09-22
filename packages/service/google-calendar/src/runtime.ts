@@ -269,12 +269,11 @@ const adminRoutes = (runtime: ServiceRuntime<GoogleCalendarAPI>): AdminRoutes =>
 export const createRuntime = (
   options: GoogleCalendarRuntimeOptions = {},
 ): GoogleCalendarRuntime => {
-  const headers = new Map<string, Record<string, string>>()
   const hub = createWebhookHub({
     // Google retries failed pushes with exponential backoff.
     retryDelaysMs: options.push?.retryDelaysMs ?? [0, 1_000, 10_000, 60_000, 600_000],
     ...(options.push?.fetch ? { fetch: options.push.fetch } : {}),
-    signer: signers.custom(({ messageId }) => headers.get(messageId) ?? {}),
+    signer: signers.none(),
   })
   const runtime = createServiceRuntime<GoogleCalendarAPI>({
     name: GOOGLE_CALENDAR_NAMESPACE,
@@ -304,13 +303,13 @@ export const createRuntime = (
           ),
         onPush: (push) => {
           const id = `${push.channel.id}:${push.messageNumber}`
-          headers.set(id, pushHeaders(push))
           hub.publish({
             namespace: publicNamespace,
             type: `calendar.push.${push.state}`,
             body: "",
             contentType: "application/json; charset=UTF-8",
             tags: { channel: push.channel.id },
+            headers: pushHeaders(push),
             id,
           })
         },

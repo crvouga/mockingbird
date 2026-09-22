@@ -219,7 +219,6 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
     ...(options.webhooks?.fetch ? { fetch: options.webhooks.fetch } : {}),
     endpoints: options.webhooks?.endpoints ?? [],
   })
-  const adminEndpoints = new Map<string, WebhookEndpoint[]>()
   let runtimeRef: ServiceRuntime<StripeAPI> | undefined
 
   /** Endpoints of a namespace: admin-configured, account-configured, and API-created. */
@@ -243,17 +242,15 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
       events: endpoint.events,
       tags: { account: endpoint.account },
     }))
-    return [...(adminEndpoints.get(namespace) ?? []), ...fromAccounts, ...fromApi]
+    const fromAdmin =
+      api?.adminWebhookEndpoints.list({ order: "oldest" }).map((row) => row.value) ?? []
+    return [...fromAdmin, ...fromAccounts, ...fromApi]
   }
   const syncEndpoints = (namespace: string) => {
     hub.setEndpoints(namespace, derivedEndpoints(namespace))
   }
   const syncAll = () => {
-    const names = new Set([
-      ...(runtimeRef?.namespaces() ?? []),
-      ...adminEndpoints.keys(),
-      "default",
-    ])
+    const names = new Set([...(runtimeRef?.namespaces() ?? []), "default"])
     for (const name of names) syncEndpoints(name)
   }
   accounts.onChange(syncAll)
@@ -262,27 +259,31 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
   const stripeHub: WebhookHub = {
     ...hub,
     setEndpoints: (namespace, endpoints) => {
-      adminEndpoints.set(
-        namespace,
-        endpoints.map((endpoint) =>
+      const api = runtimeRef?.instance(namespace)
+      if (!api) return []
+      for (const row of api.adminWebhookEndpoints.list()) api.adminWebhookEndpoints.delete(row.id)
+      for (const [index, endpoint] of endpoints.entries()) {
+        api.adminWebhookEndpoints.insert(
+          endpoint.id ?? `we_${namespace}_${index}`,
           endpoint.tags?.account === undefined
             ? endpoint
             : {
                 ...endpoint,
                 tags: { ...endpoint.tags, account: accounts.resolve(endpoint.tags.account) },
               },
-        ),
-      )
+        )
+      }
       syncEndpoints(namespace)
       return hub
         .endpoints(namespace)
-        .filter((endpoint) =>
-          (adminEndpoints.get(namespace) ?? []).some((own) => own.url === endpoint.url),
-        )
+        .filter((endpoint) => api.adminWebhookEndpoints.has(endpoint.id ?? ""))
     },
     clear: (namespace) => {
-      if (namespace === undefined) adminEndpoints.clear()
-      else adminEndpoints.delete(namespace)
+      for (const name of namespace === undefined ? (runtimeRef?.namespaces() ?? []) : [namespace]) {
+        const api = runtimeRef?.instance(name)
+        if (!api) continue
+        for (const row of api.adminWebhookEndpoints.list()) api.adminWebhookEndpoints.delete(row.id)
+      }
       hub.clear(namespace)
       if (namespace === undefined) syncAll()
       else syncEndpoints(namespace)

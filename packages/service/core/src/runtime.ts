@@ -1,4 +1,4 @@
-import type { FetchAPI } from "@crvouga/mockingbird-core"
+import { type Checkpoint, type FetchAPI, Timeline } from "@crvouga/mockingbird-core"
 import { listOperations, type OpenAPIDocument } from "@crvouga/mockingbird-openapi"
 import { clearNamespace, type SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { type Clock, createClock } from "./clock.js"
@@ -13,7 +13,7 @@ import {
 } from "./faults.js"
 import { createJournal, DEFAULT_JOURNAL_SIZE, type Journal, responseNotes } from "./journal.js"
 import { createMetrics, type Metrics, type RequestLog } from "./metrics.js"
-import { createRng, type Rng } from "./rng.js"
+import { createRng, type Rng, seedFrom } from "./rng.js"
 import { bootSqlite } from "./service.js"
 import { type NamespaceSnapshot, restoreNamespace, snapshotNamespace } from "./snapshot.js"
 import { PACKAGE_VERSION } from "./version.js"
@@ -24,6 +24,12 @@ import { type WebhookHub, webhookAdminRoutes } from "./webhooks.js"
  * as `<service>@<version>; ns=<namespace>`, so a consumer can tell the mock from the vendor.
  */
 export const MOCKINGBIRD_HEADER = "x-mockingbird"
+/** Selects a named copy-on-write history branch. `main` is the compatibility default. */
+export const BRANCH_HEADER = "x-mockingbird-branch"
+/** Reads a historical checkpoint. With a branch header, initializes that branch from it. */
+export const AT_HEADER = "x-mockingbird-at"
+/** Identifies the resulting checkpoint on successful mutations. */
+export const CHECKPOINT_HEADER = "x-mockingbird-checkpoint"
 
 /** What the runtime needs from a service: a Fetch handler it can reset. */
 export type ServiceInstance = FetchAPI & { reset(): Promise<void> }
@@ -75,7 +81,25 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   presets?: Record<string, FaultPreset>
   /** Outbound webhooks; adds the `/__admin/webhooks*` routes and clears on reset. */
   webhooks?: WebhookHub
+  /** Retained time-travel checkpoints per namespace. Default 1,000. */
+  maxCheckpoints?: number
+  /** Injectable process IO used for observability and delays; logical service time uses `clock`. */
+  io?: Partial<RuntimeIO>
 }
+
+export type RuntimeIO = {
+  wallNow(): number
+  monotonicNow(): number
+  sleep(ms: number): Promise<void>
+}
+
+export type ServiceTimelineState = Readonly<{
+  snapshot: NamespaceSnapshot
+  clock: Readonly<ReturnType<Clock["state"]>>
+  rngState: number
+}>
+
+export type ServiceCheckpoint = Checkpoint<ServiceTimelineState>
 
 export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   readonly name: string
@@ -98,6 +122,14 @@ export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   reset(namespace?: string): Promise<void>
   snapshot(namespace?: string): NamespaceSnapshot
   restore(snapshot: NamespaceSnapshot, namespace?: string): void
+  /** Capture the current branch. Mutating HTTP calls do this automatically. */
+  checkpoint(namespace?: string, branch?: string): ServiceCheckpoint
+  /** Create an isolated branch, optionally from a historical checkpoint. */
+  branch(name: string, options?: { namespace?: string; at?: string }): ServiceCheckpoint
+  /** Restore a branch, clock, and PRNG to a checkpoint. */
+  checkout(checkpoint: string, options?: { namespace?: string; branch?: string }): void
+  /** Inspect the retained history for a namespace. */
+  timeline(namespace?: string): Timeline<ServiceTimelineState>
 }
 
 /** The namespace used when a request names none. */
@@ -107,8 +139,37 @@ const NAMESPACE_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/
 
 /** `/ns/<namespace>/…`: the namespace carrier for SDKs that only take a base URL. */
 const PATH_PREFIX = /^\/ns\/([^/]+)(\/.*)?$/
+const BRANCH_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 
 const effects = new WeakMap<Request, FaultHit["effect"][]>()
+
+/**
+ * Merge two sorted snapshot row arrays, retaining byte-identical old objects. Unlike the previous
+ * Map/string-key implementation this is allocation-free apart from the result array and O(n).
+ */
+const reuseSorted = <T>(
+  fresh: T[],
+  previous: T[] | undefined,
+  compare: (left: T, right: T) => number,
+  equal: (left: T, right: T) => boolean,
+): T[] => {
+  if (!previous || previous.length === 0) return fresh.map((row) => Object.freeze(row))
+  const result = new Array<T>(fresh.length)
+  let unchanged = fresh.length === previous.length
+  let oldIndex = 0
+  for (let index = 0; index < fresh.length; index++) {
+    const row = fresh[index] as T
+    while (oldIndex < previous.length && compare(previous[oldIndex] as T, row) < 0) {
+      oldIndex++
+    }
+    const old = previous[oldIndex]
+    result[index] =
+      old !== undefined && compare(old, row) === 0 && equal(old, row) ? old : Object.freeze(row)
+    if (result[index] !== previous[index]) unchanged = false
+  }
+  return unchanged ? previous : result
+}
 
 /**
  * The fault effects (`{"effect": "created_but_500"}` rules) that fired for this request, in
@@ -173,54 +234,235 @@ export const createRuntime = <T extends ServiceInstance>(
   const sqlite = bootSqlite(options.sqlite)
   const clock = options.clock ?? createClock()
   const rng = createRng(options.seed ?? 0)
-  const faults = createFaultRegistry(createRng(options.seed ?? 0))
+  const wallNow = options.io?.wallNow ?? Date.now
+  const monotonicNow = options.io?.monotonicNow ?? (() => performance.now())
+  const sleep =
+    options.io?.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
+  const faults = createFaultRegistry(createRng(options.seed ?? 0), sleep)
   const metrics = createMetrics()
   const journal = createJournal(options.journalSize ?? DEFAULT_JOURNAL_SIZE)
   const version = options.version ?? PACKAGE_VERSION
   const instances = new Map<string, T>()
+  const publicNamespaces = new Set<string>()
+  const branchRngs = new Map<string, Rng>()
+  const timelines = new Map<string, Timeline<ServiceTimelineState>>()
+  const branchStorage = new Map<string, string>()
+  const captured = new Map<string, NamespaceSnapshot>()
   const credentials = createCredentialRegistry()
   const operationIdFor = options.document ? operationMatcher(options.document) : () => undefined
 
   const storageNamespace = (name: string) =>
     name === DEFAULT_NAMESPACE ? options.name : `${options.name}:${name}`
 
-  const instance = (name: string = DEFAULT_NAMESPACE): T => {
-    const existing = instances.get(name)
+  const instanceFor = (key: string, publicNamespace = key, isolatedRng?: Rng): T => {
+    const existing = instances.get(key)
     if (existing) return existing
-    if (!NAMESPACE_PATTERN.test(name)) {
-      throw new RangeError(`namespace must match ${NAMESPACE_PATTERN}: ${JSON.stringify(name)}`)
+    if (!NAMESPACE_PATTERN.test(key) || !NAMESPACE_PATTERN.test(publicNamespace)) {
+      throw new RangeError(
+        `namespace must match ${NAMESPACE_PATTERN}: ${JSON.stringify(publicNamespace)}`,
+      )
     }
     const created = options.create({
-      namespace: storageNamespace(name),
-      publicNamespace: name,
+      namespace: storageNamespace(key),
+      publicNamespace,
       sqlite,
       clock,
-      rng,
+      rng: isolatedRng ?? rng,
     })
-    instances.set(name, created)
+    instances.set(key, created)
+    publicNamespaces.add(publicNamespace)
+    if (isolatedRng) branchRngs.set(key, isolatedRng)
     return created
+  }
+
+  const instance = (name: string = DEFAULT_NAMESPACE): T => instanceFor(name)
+
+  const capture = (storage: string): ServiceTimelineState => {
+    const fresh = snapshotNamespace(sqlite, storageNamespace(storage))
+    const previous = captured.get(storage)
+    const snapshot: NamespaceSnapshot = {
+      namespace: fresh.namespace,
+      records: reuseSorted(
+        fresh.records,
+        previous?.records,
+        (left, right) =>
+          left.collection < right.collection
+            ? -1
+            : left.collection > right.collection
+              ? 1
+              : left.seq - right.seq,
+        (left, right) => left.id === right.id && left.value === right.value,
+      ),
+      sequences: reuseSorted(
+        fresh.sequences,
+        previous?.sequences,
+        (left, right) =>
+          left.name < right.name
+            ? -1
+            : left.name > right.name
+              ? 1
+              : left.kind < right.kind
+                ? -1
+                : left.kind > right.kind
+                  ? 1
+                  : 0,
+        (left, right) => left.value === right.value,
+      ),
+    }
+    Object.freeze(snapshot.records)
+    Object.freeze(snapshot.sequences)
+    Object.freeze(snapshot)
+    captured.set(storage, snapshot)
+    return Object.freeze({
+      snapshot,
+      clock: Object.freeze(clock.state()),
+      rngState: (branchRngs.get(storage) ?? rng).state(),
+    })
+  }
+
+  const timeline = (name: string = DEFAULT_NAMESPACE): Timeline<ServiceTimelineState> => {
+    let found = timelines.get(name)
+    if (found) return found
+    instance(name)
+    found = new Timeline<ServiceTimelineState>({
+      now: clock.now,
+      ...(options.maxCheckpoints !== undefined ? { maxCheckpoints: options.maxCheckpoints } : {}),
+    })
+    found.commit(capture(name))
+    timelines.set(name, found)
+    return found
+  }
+
+  const physicalBranch = (namespace: string, branch: string): string => {
+    if (branch === "main") return namespace
+    const mapKey = `${namespace}\0${branch}`
+    const existing = branchStorage.get(mapKey)
+    if (existing) return existing
+    // The hash keeps the internal instance key inside the 64-character namespace contract.
+    const key = `branch_${seedFrom(`${options.name}\0${namespace}\0${branch}`).toString(36)}`
+    branchStorage.set(mapKey, key)
+    return key
+  }
+
+  const ensureBranch = (namespace: string, branch: string, at?: string): string => {
+    if (!BRANCH_PATTERN.test(branch)) throw new RangeError(`branch must match ${BRANCH_PATTERN}`)
+    const history = timeline(namespace)
+    if (branch === "main") {
+      if (at !== undefined) {
+        const point = history.checkout("main", at)
+        restoreNamespace(sqlite, storageNamespace(namespace), point.value.snapshot)
+        captured.set(namespace, point.value.snapshot)
+        rng.setState(point.value.rngState)
+        clock.set(point.value.clock.now)
+        if (point.value.clock.frozen) clock.freeze()
+        else clock.unfreeze()
+      }
+      return namespace
+    }
+    const storage = physicalBranch(namespace, branch)
+    if (!history.hasBranch(branch)) {
+      // Capture unobserved background work before branching from the current main head.
+      if (at === undefined) history.commit(capture(namespace))
+      const point = history.fork(branch, at === undefined ? {} : { from: at })
+      const branchRng = createRng(options.seed ?? 0)
+      if (point) branchRng.setState(point.value.rngState)
+      instanceFor(storage, namespace, branchRng)
+      if (point) restoreNamespace(sqlite, storageNamespace(storage), point.value.snapshot)
+      if (point) captured.set(storage, point.value.snapshot)
+    } else if (at !== undefined && history.head(branch)?.id !== at) {
+      const point = history.checkout(branch, at)
+      if (!instances.has(storage)) {
+        const branchRng = createRng(options.seed ?? 0)
+        branchRng.setState(point.value.rngState)
+        instanceFor(storage, namespace, branchRng)
+      }
+      branchRngs.get(storage)?.setState(point.value.rngState)
+      restoreNamespace(sqlite, storageNamespace(storage), point.value.snapshot)
+      captured.set(storage, point.value.snapshot)
+    } else {
+      if (!instances.has(storage)) {
+        const point = history.head(branch)
+        const branchRng = createRng(options.seed ?? 0)
+        if (point) branchRng.setState(point.value.rngState)
+        instanceFor(storage, namespace, branchRng)
+      }
+    }
+    return storage
+  }
+
+  const checkpoint = (namespace = DEFAULT_NAMESPACE, branch = "main"): ServiceCheckpoint => {
+    const storage = ensureBranch(namespace, branch)
+    return timeline(namespace).commit(capture(storage), { branch })
+  }
+
+  const branch = (
+    name: string,
+    branchOptions: { namespace?: string; at?: string } = {},
+  ): ServiceCheckpoint => {
+    const namespace = branchOptions.namespace ?? DEFAULT_NAMESPACE
+    ensureBranch(namespace, name, branchOptions.at)
+    const head = timeline(namespace).head(name)
+    if (!head) throw new RangeError(`branch ${name} has no checkpoint`)
+    return head
+  }
+
+  const checkout = (
+    checkpointId: string,
+    checkoutOptions: { namespace?: string; branch?: string } = {},
+  ): void => {
+    const namespace = checkoutOptions.namespace ?? DEFAULT_NAMESPACE
+    const branchName = checkoutOptions.branch ?? "main"
+    const history = timeline(namespace)
+    const point = history.checkout(branchName, checkpointId)
+    const storage = ensureBranch(namespace, branchName)
+    restoreNamespace(sqlite, storageNamespace(storage), point.value.snapshot)
+    captured.set(storage, point.value.snapshot)
+    clock.set(point.value.clock.now)
+    if (point.value.clock.frozen) clock.freeze()
+    else clock.unfreeze()
+    ;(branchRngs.get(storage) ?? rng).setState(point.value.rngState)
   }
 
   const reset = async (name: string = DEFAULT_NAMESPACE): Promise<void> => {
     if (name === "*") {
       options.webhooks?.clear()
       for (const each of instances.values()) await each.reset()
+      timelines.clear()
+      branchStorage.clear()
+      branchRngs.clear()
+      captured.clear()
       return
     }
     options.webhooks?.clear(name)
     const target = instances.get(name)
     if (target) await target.reset()
     else clearNamespace(sqlite, storageNamespace(name))
+    for (const [mapping, storage] of branchStorage) {
+      if (!mapping.startsWith(`${name}\0`)) continue
+      const branchInstance = instances.get(storage)
+      if (branchInstance) await branchInstance.reset()
+      else clearNamespace(sqlite, storageNamespace(storage))
+      branchStorage.delete(mapping)
+      branchRngs.delete(storage)
+      captured.delete(storage)
+    }
+    timelines.delete(name)
+    captured.delete(name)
   }
 
   const snapshot = (name: string = DEFAULT_NAMESPACE): NamespaceSnapshot => {
-    instance(name)
-    return snapshotNamespace(sqlite, storageNamespace(name))
+    return checkpoint(name, "main").value.snapshot
   }
 
   const restore = (from: NamespaceSnapshot, name: string = DEFAULT_NAMESPACE): void => {
     instance(name)
     restoreNamespace(sqlite, storageNamespace(name), from)
+    captured.set(name, from)
+    // Import legacy snapshots into the canonical history instead of creating a second rollback
+    // mechanism. The compatibility method stays synchronous and keeps its original return type.
+    const history = timelines.get(name)
+    if (history) history.commit(capture(name), { branch: "main" })
+    else timeline(name)
   }
 
   const runtime: ServiceRuntime<T> = {
@@ -254,10 +496,14 @@ export const createRuntime = <T extends ServiceInstance>(
       return added
     },
     instance,
-    namespaces: () => [...instances.keys()].sort(),
+    namespaces: () => [...publicNamespaces].sort(),
     reset,
     snapshot,
     restore,
+    checkpoint,
+    branch,
+    checkout,
+    timeline,
     fetch: async (incoming) => {
       let request = incoming
       // `/ns/<name>/…` selects a namespace (and is stripped) for SDKs that cannot add headers.
@@ -283,6 +529,8 @@ export const createRuntime = <T extends ServiceInstance>(
         const mapped = credential !== undefined ? credentials.get(credential) : undefined
         if (mapped !== undefined) namespace = mapped
       }
+      const selectedBranch = request.headers.get(BRANCH_HEADER) ?? "main"
+      const at = request.headers.get(AT_HEADER) ?? undefined
       const stamp = (response: Response): Response => {
         // An invalid namespace is not echoed back.
         const value = NAMESPACE_PATTERN.test(namespace)
@@ -300,7 +548,7 @@ export const createRuntime = <T extends ServiceInstance>(
       }
       const handled = await control.handle(request)
       if (handled) return stamp(handled)
-      const started = performance.now()
+      const started = monotonicNow()
       const url = new URL(request.url)
       const operationId = operationIdFor(request, url.pathname)
       const log = (status: number, faultId?: string, response?: Response) => {
@@ -312,7 +560,7 @@ export const createRuntime = <T extends ServiceInstance>(
           method: request.method,
           path: url.pathname,
           status,
-          durationMs: Math.round((performance.now() - started) * 100) / 100,
+          durationMs: Math.round((monotonicNow() - started) * 100) / 100,
           unmatched: options.document !== undefined && operationId === undefined,
           ...(faultId !== undefined ? { faultId } : {}),
           ...(noted?.ids && Object.keys(noted.ids).length > 0 ? { ids: noted.ids } : {}),
@@ -336,6 +584,34 @@ export const createRuntime = <T extends ServiceInstance>(
           ),
         )
       }
+      if (!BRANCH_PATTERN.test(selectedBranch)) {
+        log(400)
+        return stamp(adminFail(400, `${BRANCH_HEADER} must match ${BRANCH_PATTERN}`))
+      }
+      let storage: string
+      try {
+        if (
+          at !== undefined &&
+          selectedBranch === "main" &&
+          !MUTATING_METHODS.has(request.method)
+        ) {
+          const point = timeline(namespace).get(at)
+          storage = physicalBranch(namespace, `at_${at}`)
+          let viewRng = branchRngs.get(storage)
+          if (!viewRng) {
+            viewRng = createRng(options.seed ?? 0)
+            instanceFor(storage, namespace, viewRng)
+          }
+          viewRng.setState(point.value.rngState)
+          restoreNamespace(sqlite, storageNamespace(storage), point.value.snapshot)
+          captured.set(storage, point.value.snapshot)
+        } else {
+          storage = ensureBranch(namespace, selectedBranch, at)
+        }
+      } catch (error) {
+        log(409)
+        return stamp(adminFail(409, error instanceof Error ? error.message : String(error)))
+      }
       const hits = await faults.take({
         operationId,
         method: request.method,
@@ -357,7 +633,20 @@ export const createRuntime = <T extends ServiceInstance>(
           request,
           fired.map((hit) => hit.effect),
         )
-      const response = await instance(namespace).fetch(request)
+      let response = await instanceFor(storage, namespace).fetch(request)
+      if (MUTATING_METHODS.has(request.method) && response.status >= 200 && response.status < 400) {
+        const point = timeline(namespace).commit(capture(storage), { branch: selectedBranch })
+        response = mutableResponse(response)
+        response.headers.set(CHECKPOINT_HEADER, point.id)
+      }
+      if (selectedBranch !== "main") {
+        response = mutableResponse(response)
+        response.headers.set(BRANCH_HEADER, selectedBranch)
+      }
+      if (at !== undefined) {
+        response = mutableResponse(response)
+        response.headers.set(AT_HEADER, at)
+      }
       log(response.status, fired[0]?.id, response)
       return stamp(response)
     },
@@ -365,7 +654,8 @@ export const createRuntime = <T extends ServiceInstance>(
 
   const control = createControlPlane({
     name: options.name,
-    startedAt: Date.now(),
+    startedAt: wallNow(),
+    wallNow,
     clock,
     faults,
     metrics,
@@ -373,8 +663,39 @@ export const createRuntime = <T extends ServiceInstance>(
     defaultNamespace: DEFAULT_NAMESPACE,
     namespaces: runtime.namespaces,
     reset,
-    snapshot: (name) => snapshot(name),
-    restore: (name, from) => restore(from, name),
+    timeTravel: {
+      checkpoint: (name, branchName) => {
+        const point = checkpoint(name, branchName)
+        return {
+          id: point.id,
+          branch: point.branch,
+          parent: point.parent,
+          at: point.at,
+          records: point.value.snapshot.records.length,
+        }
+      },
+      branch: (branchName, branchOptions) => {
+        const point = branch(branchName, branchOptions)
+        return { id: point.id, branch: point.branch, parent: point.parent, at: point.at }
+      },
+      checkout: (checkpointId, checkoutOptions) => checkout(checkpointId, checkoutOptions),
+      retain: (name, checkpointId) => {
+        timeline(name).retain(checkpointId)
+      },
+      release: (name, checkpointId) => timeline(name).release(checkpointId),
+      inspect: (name) => {
+        const history = timeline(name)
+        return {
+          branches: history.branches(),
+          checkpoints: history.checkpoints().map(({ id, branch: branchName, parent, at }) => ({
+            id,
+            branch: branchName,
+            parent,
+            at,
+          })),
+        }
+      },
+    },
     describe: options.describe ?? (() => ({})),
     ...(options.presets
       ? {
@@ -392,6 +713,16 @@ export const createRuntime = <T extends ServiceInstance>(
   })
 
   return runtime
+}
+
+const mutableResponse = (response: Response): Response => {
+  try {
+    response.headers.set("x-mockingbird-mutable-probe", "1")
+    response.headers.delete("x-mockingbird-mutable-probe")
+    return response
+  } catch {
+    return new Response(response.body, response)
+  }
 }
 
 const adminJson = (status: number, body: unknown): Response =>

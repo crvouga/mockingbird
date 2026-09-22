@@ -87,6 +87,8 @@ export type CustomerIoAPIOptions = APIOptions & {
   settings?: Partial<Settings>
   /** Called for every reporting event; the runtime signs and delivers it. */
   onReport?: (event: ReportingEvent) => void
+  /** Wall clock used for receiver freshness checks. Defaults to `Date.now`. */
+  wallClock?: () => number
 }
 
 /** The CDP write key (Basic username) or App API key (Bearer): how requests map to namespaces. */
@@ -141,12 +143,14 @@ export class CustomerIoAPI implements FetchAPI {
   readonly state: CustomerIoState
   private readonly service: Service
   private readonly now: () => number
+  private readonly wallClock: () => number
   private readonly onReport: ((event: ReportingEvent) => void) | undefined
 
   constructor(options: CustomerIoAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
     const namespace = options.namespace ?? CUSTOMERIO_NAMESPACE
     this.now = options.now ?? (() => Date.now())
+    this.wallClock = options.wallClock ?? Date.now
     this.onReport = options.onReport
     this.state = new CustomerIoState(sqlite, namespace, {
       messages: options.messages ?? DEFAULT_TRANSACTIONAL_MESSAGES,
@@ -461,7 +465,7 @@ export class CustomerIoAPI implements FetchAPI {
       object_type: input.objectType ?? (delivery ? delivery.channel : "customer"),
       metric: input.metric,
       // Our receiver rejects timestamps more than 5 min ahead of its wall clock.
-      timestamp: Math.floor(Math.min(this.now(), Date.now()) / 1000),
+      timestamp: Math.floor(Math.min(this.now(), this.wallClock()) / 1000),
       data: {
         identifiers: { id, email, cio_id: null },
         customer_id: id,

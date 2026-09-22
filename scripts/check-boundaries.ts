@@ -341,6 +341,30 @@ for (const file of files) {
   const inSrc = rel.split("/").includes("src") && !file.endsWith(".test.ts")
   const text = await Bun.file(file).text()
 
+  // Service state architecture: provider packages get history/branching exclusively from the
+  // shared runtime's Timeline. Raw namespace payload capture is a core implementation detail;
+  // asynchronous provider rollbacks use withNamespaceRollback instead. This prevents a second
+  // snapshot manager from silently diverging from clocks, PRNG state, branching, and GC.
+  if (
+    /^packages\/service\/(?!core\/|sqlite\/|postgres\/)[^/]+\/src\//.test(rel) &&
+    /\b(?:snapshotNamespace|restoreNamespace)\b/.test(text)
+  ) {
+    fail(
+      `${rel} uses raw namespace snapshots; use the shared runtime Timeline or withNamespaceRollback`,
+    )
+  }
+  if (rel !== "packages/core/src/timeline.ts" && /\bclass\s+Timeline\b/.test(text)) {
+    fail(`${rel} declares a competing Timeline; extend @crvouga/mockingbird-core Timeline instead`)
+  }
+  if (
+    /^packages\/service\/(?!core\/)[^/]+\/src\/runtime\.ts$/.test(rel) &&
+    /\bnew\s+Map\s*</.test(text)
+  ) {
+    fail(
+      `${rel} keeps provider state in a runtime Map; persist it in Collection so Timeline owns it`,
+    )
+  }
+
   for (const specifier of findModuleSpecifiers(text)) {
     if (!VALID_SPECIFIER.test(specifier)) continue
     if (specifier === owner.name) {

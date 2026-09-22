@@ -34,13 +34,12 @@ export const signGxgWebhookBody = async (secret: string, rawBody: string): Promi
 
 /**
  * The GxG delivery headers: `gxg-signature` over the exact bytes, `gxg-eventtype`, and
- * `gxg-notificationid` (the message id, a uuid). The event type is not part of what a signer
- * sees, so the runtime hands in a lookup by message id.
+ * `gxg-notificationid` (the message id, a uuid).
  */
 export const gxgSigner =
-  (eventTypeOf: (messageId: string) => string | undefined): WebhookSigner =>
-  async ({ messageId, body, secret }) => ({
-    "gxg-eventtype": eventTypeOf(messageId) ?? "",
+  (): WebhookSigner =>
+  async ({ messageId, body, secret, type }) => ({
+    "gxg-eventtype": type,
     "gxg-notificationid": messageId,
     ...(secret ? { "gxg-signature": await signGxgWebhookBody(secret, body) } : {}),
   })

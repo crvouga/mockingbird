@@ -42,9 +42,12 @@ export type Settings = {
 
 export const DEFAULT_SETTINGS: Settings = { apiKeys: [], templates: [] }
 
+export type SignatureFault = "mismatch" | "short"
+
 export class PersonaState {
   readonly inquiries: Collection<InquiryRecord>
   readonly settings: Collection<Settings>
+  readonly signatureFaults: Collection<SignatureFault[]>
   readonly ids: IdSequence
 
   constructor(
@@ -54,6 +57,7 @@ export class PersonaState {
   ) {
     this.inquiries = new Collection(sqlite, namespace, "inquiries")
     this.settings = new Collection(sqlite, namespace, "settings")
+    this.signatureFaults = new Collection(sqlite, namespace, "signature_faults")
     this.ids = new IdSequence(sqlite, namespace, "persona")
     this.ensureSeeded()
   }
@@ -81,5 +85,19 @@ export class PersonaState {
 
   nextEventId(): string {
     return this.ids.next("evt_", 24)
+  }
+
+  enqueueSignatureFault(fault: SignatureFault, count: number): number {
+    const queue = this.signatureFaults.get("queue") ?? []
+    for (let index = 0; index < Math.max(1, count); index++) queue.push(fault)
+    if (!this.signatureFaults.update("queue", queue)) this.signatureFaults.insert("queue", queue)
+    return queue.length
+  }
+
+  takeSignatureFault(): SignatureFault | undefined {
+    const queue = this.signatureFaults.get("queue") ?? []
+    const fault = queue.shift()
+    if (fault !== undefined) this.signatureFaults.update("queue", queue)
+    return fault
   }
 }

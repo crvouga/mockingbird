@@ -89,7 +89,6 @@ export class PlaneAPI implements FetchAPI {
   readonly state: PlaneState
   private readonly service: Service
   private readonly now: () => number
-  private readonly hits = new Map<string, number>()
 
   constructor(options: PlaneAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
@@ -153,8 +152,7 @@ export class PlaneAPI implements FetchAPI {
         if (settings.rateLimitPerMinute !== null) {
           const minute = Math.floor(this.now() / 60_000)
           const bucket = `${key}:${minute}`
-          const used = (this.hits.get(bucket) ?? 0) + 1
-          this.hits.set(bucket, used)
+          const used = this.state.takeRateLimit(bucket)
           if (used > settings.rateLimitPerMinute) {
             const reset = (minute + 1) * 60
             return jsonRes(
@@ -179,7 +177,6 @@ export class PlaneAPI implements FetchAPI {
 
   async reset(): Promise<void> {
     await this.service.reset()
-    this.hits.clear()
     this.state.ensureSeeded()
   }
 

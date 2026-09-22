@@ -42,7 +42,7 @@ bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
 | Format | `bun run check:format` | [Biome](https://biomejs.dev) formatting |
 | Lint | `bun run lint` | Biome lint (types, style, complexity) |
 | Typecheck | `bun run typecheck` | `tsc` for every package |
-| Boundaries | `bun run check:boundaries` | Intra-workspace dep graph: internal deps resolve, no cycles, no self-deps, every module import is declared in `package.json`, only mock services are published, and no published package depends on an unpublished one at runtime |
+| Boundaries | `bun run check:boundaries` | Intra-workspace dep graph plus the state architecture: internal deps resolve, no cycles or self-deps, imports are declared, published dependency rules hold, and providers cannot bypass or reimplement the shared Timeline history coordinator |
 | Package integrity | `bun run pack:check` | `dist` + `exports` + `files`, tarball contents, [publint](https://publint.dev), [arethetypeswrong](https://arethetypeswrong.github.io) (ESM-only consumer resolution) |
 | Portability | `bun run portability` | Built `dist` matches the package's `mockingbird.runtime` (portable / node / bun) — no Node/Bun-only API usage where it isn't allowed |
 | Generate & OpenAPI | `bun run generate` / `bun run openapi:check` | Regenerate and verify provider contracts |

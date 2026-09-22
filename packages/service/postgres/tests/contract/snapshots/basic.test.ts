@@ -65,6 +65,19 @@ test("snapshot roundtrip discards later mutations", () => {
   expect(db.query("SELECT id FROM t ORDER BY id")).toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
 });
 
+test("checkpoint queries and branches leave the live database untouched", () => {
+  const db = new Database();
+  db.exec("CREATE TABLE t (id int)");
+  db.exec("INSERT INTO t VALUES (1)");
+  const checkpoint = db.checkpoint();
+  db.exec("INSERT INTO t VALUES (2)");
+  expect(db.query("SELECT id FROM t ORDER BY id", [], { at: checkpoint })).toEqual([{ id: 1 }]);
+  const branch = db.branch(checkpoint);
+  branch.exec("INSERT INTO t VALUES (3)");
+  expect(branch.query("SELECT id FROM t ORDER BY id")).toEqual([{ id: 1 }, { id: 3 }]);
+  expect(db.query("SELECT id FROM t ORDER BY id")).toEqual([{ id: 1 }, { id: 2 }]);
+});
+
 test("snapshot preserves schema constraints and defaults", () => {
   const source = new Database();
   source.exec("CREATE TABLE t (id serial PRIMARY KEY, label text NOT NULL DEFAULT 'x')");

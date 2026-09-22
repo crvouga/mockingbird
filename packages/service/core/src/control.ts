@@ -2,7 +2,6 @@ import type { Clock } from "./clock.js"
 import type { FaultRegistry, FaultRule } from "./faults.js"
 import type { Journal } from "./journal.js"
 import type { Metrics } from "./metrics.js"
-import type { NamespaceSnapshot } from "./snapshot.js"
 
 /** Unauthenticated readiness probe, served ahead of every vendor auth gate. */
 export const HEALTH_PATH = "/health"
@@ -35,6 +34,7 @@ export type AdminRoutes = Record<string, AdminRoute>
 export type ControlContext = {
   name: string
   startedAt: number
+  wallNow: () => number
   clock: Clock
   faults: FaultRegistry
   metrics: Metrics
@@ -42,8 +42,23 @@ export type ControlContext = {
   defaultNamespace: string
   namespaces(): string[]
   reset(namespace: string | "*"): Promise<void>
-  snapshot(namespace: string): NamespaceSnapshot
-  restore(namespace: string, snapshot: NamespaceSnapshot): void
+  timeTravel: {
+    checkpoint(
+      namespace: string,
+      branch: string,
+    ): { id: string; branch: string; parent: string | null; at: number; records?: number }
+    branch(
+      name: string,
+      options: { namespace: string; at?: string },
+    ): { id: string; branch: string; parent: string | null; at: number }
+    checkout(checkpoint: string, options: { namespace: string; branch: string }): void
+    retain(namespace: string, checkpoint: string): void
+    release(namespace: string, checkpoint: string): boolean
+    inspect(namespace: string): {
+      branches: Readonly<Record<string, string>>
+      checkpoints: readonly { id: string; branch: string; parent: string | null; at: number }[]
+    }
+  }
   /** Extra fields for `GET /health`, such as the loaded corpus version. */
   describe(): Record<string, unknown>
   routes: AdminRoutes
@@ -122,7 +137,9 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
 export const createControlPlane = (context: ControlContext): ControlPlane => {
-  const snapshots = new Map<string, NamespaceSnapshot>()
+  // Legacy snapshot ids are opaque aliases to pinned Timeline checkpoints. Timeline remains the
+  // only history owner; this map carries no state value and can be removed with the alias.
+  const snapshots = new Map<string, { namespace: string; checkpoint: string }>()
   let snapshotCounter = 0
 
   const headerNamespace = (request: Request): string =>
@@ -213,22 +230,68 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
     },
 
     "POST /snapshots": ({ namespace }) => {
-      const snapshot = context.snapshot(namespace)
+      const point = context.timeTravel.checkpoint(namespace, "main")
+      context.timeTravel.retain(namespace, point.id)
       snapshotCounter++
       const id = `snap_${snapshotCounter}`
-      snapshots.set(id, snapshot)
-      return json(201, { id, namespace, records: snapshot.records.length })
+      snapshots.set(id, { namespace, checkpoint: point.id })
+      return json(201, { id, namespace, records: point.records ?? 0 })
     },
     "POST /snapshots/:id/restore": ({ params, namespace }) => {
-      const snapshot = snapshots.get(params.id as string)
-      if (!snapshot) return adminError(404, `no snapshot ${params.id}`)
-      context.restore(namespace, snapshot)
+      const alias = snapshots.get(params.id as string)
+      if (!alias) return adminError(404, `no snapshot ${params.id}`)
+      if (alias.namespace !== namespace) {
+        return adminError(409, `snapshot ${params.id} belongs to namespace ${alias.namespace}`)
+      }
+      context.timeTravel.checkout(alias.checkpoint, { namespace, branch: "main" })
       return json(200, { status: "ok", id: params.id, namespace })
     },
-    "DELETE /snapshots/:id": ({ params }) =>
-      snapshots.delete(params.id as string)
-        ? json(200, { status: "ok" })
-        : adminError(404, `no snapshot ${params.id}`),
+    "DELETE /snapshots/:id": ({ params }) => {
+      const id = params.id as string
+      const alias = snapshots.get(id)
+      if (!alias) return adminError(404, `no snapshot ${id}`)
+      snapshots.delete(id)
+      context.timeTravel.release(alias.namespace, alias.checkpoint)
+      return json(200, { status: "ok" })
+    },
+
+    "GET /timeline": ({ namespace }) => json(200, context.timeTravel.inspect(namespace)),
+    "POST /checkpoints": ({ body, namespace }) => {
+      const branch = isRecord(body) && typeof body.branch === "string" ? body.branch : "main"
+      try {
+        return json(201, context.timeTravel.checkpoint(namespace, branch))
+      } catch (error) {
+        return adminError(409, error instanceof Error ? error.message : String(error))
+      }
+    },
+    "POST /branches/:name": ({ params, body, namespace }) => {
+      const at = isRecord(body) && typeof body.at === "string" ? body.at : undefined
+      try {
+        return json(
+          201,
+          context.timeTravel.branch(params.name as string, {
+            namespace,
+            ...(at !== undefined ? { at } : {}),
+          }),
+        )
+      } catch (error) {
+        return adminError(409, error instanceof Error ? error.message : String(error))
+      }
+    },
+    "POST /branches/:name/checkout": ({ params, body, namespace }) => {
+      if (!isRecord(body) || typeof body.checkpoint !== "string") {
+        return adminError(400, 'expected {"checkpoint":"cp_..."}')
+      }
+      try {
+        context.timeTravel.checkout(body.checkpoint, {
+          namespace,
+          branch: params.name as string,
+        })
+        return json(200, { status: "ok", branch: params.name, checkpoint: body.checkpoint })
+      } catch (error) {
+        return adminError(409, error instanceof Error ? error.message : String(error))
+      }
+    },
 
     "GET /requests": ({ url, namespace }) => {
       const status = url.searchParams.get("status")
@@ -282,7 +345,7 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
         return json(200, {
           status: "ok",
           service: context.name,
-          uptimeMs: Date.now() - context.startedAt,
+          uptimeMs: context.wallNow() - context.startedAt,
           clock: context.clock.state(),
           namespaces: context.namespaces().length,
           ...context.describe(),

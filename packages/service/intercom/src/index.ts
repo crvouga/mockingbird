@@ -93,6 +93,8 @@ export type IntercomAPIOptions = APIOptions & {
   settings?: Partial<Settings>
   /** Called for every webhook-worthy event; the runtime signs and delivers it. */
   onWebhook?: (notification: IntercomNotification) => void
+  /** Wall clock used for receiver freshness checks. Defaults to `Date.now`. */
+  wallClock?: () => number
 }
 
 const CONTACT_FIELDS = [
@@ -164,12 +166,14 @@ export class IntercomAPI implements FetchAPI {
   private readonly service: Service
   private readonly idempotency: IdempotencyStore
   private readonly now: () => number
+  private readonly wallClock: () => number
   private readonly onWebhook: ((notification: IntercomNotification) => void) | undefined
 
   constructor(options: IntercomAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
     const namespace = options.namespace ?? INTERCOM_NAMESPACE
     this.now = options.now ?? (() => Date.now())
+    this.wallClock = options.wallClock ?? Date.now
     this.onWebhook = options.onWebhook
     this.state = new IntercomState(sqlite, namespace, {
       admins: options.admins ?? DEFAULT_ADMINS,
@@ -1032,7 +1036,7 @@ export class IntercomAPI implements FetchAPI {
     parts: PartRecord[],
   ): void {
     if (!this.onWebhook) return
-    const wall = Math.floor(Date.now() / 1000)
+    const wall = Math.floor(this.wallClock() / 1000)
     const item = this.conversationBody(conversation, {
       parts: parts.map((part) => ({
         ...part,

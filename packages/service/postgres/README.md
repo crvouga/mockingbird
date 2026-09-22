@@ -157,11 +157,12 @@ back as PostgreSQL text (node-postgres parses timestamps to `Date` and JSON to o
 | --- | --- |
 | `exec(sql)` | Runs all semicolon-separated statements; **discards** row results (`void`). Does **not** accept bind parameters. Read `db.changes` afterwards if needed (reflects the **most recent** completed DML statement). Dump-only `DO` blocks and `ALTER TABLE ... SET (` storage parameters are no-ops. |
 | `registerFunction(spec)` | Install a JavaScript scalar. Not stored in PGMM snapshots; `open()` of a live snapshot copies the implementation by reference. |
-| `query(sql, params?)` | **Single statement only** (trailing `;` is fine). Returns all rows. Multi-statement scripts throw `misuse`. |
+| `query(sql, params?, { at? }?)` | **Single statement only** (trailing `;` is fine). Returns all rows. `at` queries an immutable checkpoint without changing live state. Multi-statement scripts throw `misuse`. |
 | `prepare(sql)` | **Single statement only**. Parses immediately; the AST is reused. Pass binds as rest args to `run` / `all` / `get` / `result` / `textResult` on each call. |
 | `transaction(fn)` | If idle: `BEGIN`, `fn()`, `COMMIT`, or `ROLLBACK` + rethrow. If already in a transaction: nested savepoint. A nested SQL `BEGIN` inside is a no-op warning like PostgreSQL. `close()` inside `fn` throws `misuse`. |
 | `copyFrom(sql, data)` | Executes `COPY table [(cols)] FROM STDIN` with `data` as the copy-in payload (text or csv per the COPY options). Returns rows copied. `COPY ... TO STDOUT` output is returned as result rows by `query`. |
 | `snapshot()` | Freeze a reusable `Snapshot` template (no encode). Illegal inside a transaction (`25P01`). |
+| `checkpoint()` / `branch(at?)` | Name a COW snapshot as a checkpoint; open an isolated branch from it (or current state). |
 | `Snapshot.open()` | Copy-on-write fork from a template. The parent stays open. |
 | `Snapshot.encode()` | Lazy PGMM blob for persistence / worker boot (computed once, cached). |
 | `Snapshot.decode(bytes)` | Decode a blob once per `Uint8Array` (WeakMap); later `open()` calls are copy-on-write. |
@@ -313,11 +314,13 @@ class Database {
   exec(sql: string): void
   registerFunction(spec: { name: string; args: string[]; returns: string; strict?: boolean;
                            fn: (...args: JsValue[]) => JsValue }): void
-  query<T = QueryRow>(sql: string, params?: readonly BindValue[]): T[]
+  query<T = QueryRow>(sql: string, params?: readonly BindValue[], options?: { at?: Snapshot }): T[]
   prepare(sql: string): Statement
   transaction<T>(fn: () => T): T
   copyFrom(sql: string, data: string): number   // COPY t FROM STDIN payload (\copy analog)
   snapshot(): Snapshot
+  checkpoint(): Snapshot
+  branch(at?: Snapshot): Database
   close(): void                                  // also [Symbol.dispose] when available
   readonly changes: number                       // rows affected by the most recent INSERT/UPDATE/DELETE
   readonly seed: number | bigint

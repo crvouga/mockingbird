@@ -133,6 +133,8 @@ type WebhookHubOptionsSubset = {
 export type CustomerIoRuntimeOptions = {
   sqlite?: SqliteClient
   clock?: Clock
+  /** Real-time clock for webhook freshness/signing; injectable for deterministic tests. */
+  wallClock?: () => number
   seed?: number | string
   adminKey?: string
   onLog?: (entry: RequestLog) => void
@@ -269,6 +271,7 @@ export const createRuntime = (options: CustomerIoRuntimeOptions = {}): CustomerI
     ),
     ...(retryDelaysMs ? { retryDelaysMs } : {}),
     ...(send ? { fetch: send } : {}),
+    ...(options.wallClock ? { now: options.wallClock } : {}),
     endpoints: options.webhooks ? [endpoint as WebhookEndpoint] : [],
   })
   const runtime = createServiceRuntime<CustomerIoAPI>({
@@ -287,6 +290,7 @@ export const createRuntime = (options: CustomerIoRuntimeOptions = {}): CustomerI
         sqlite,
         namespace,
         now: clock.now,
+        ...(options.wallClock ? { wallClock: options.wallClock } : {}),
         ...(options.messages ? { messages: options.messages } : {}),
         ...(options.settings ? { settings: options.settings } : {}),
         onReport: (event) =>

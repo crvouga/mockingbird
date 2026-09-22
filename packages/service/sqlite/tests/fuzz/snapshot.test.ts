@@ -130,10 +130,11 @@ describe("snapshot restore fuzz (FZZ-snap-01)", () => {
           db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, a INT, b TEXT)");
           db.exec("INSERT INTO t VALUES (1, 10, 'x')");
           const before = db.query("SELECT id, a, b FROM t ORDER BY id");
-          const snap = db.snapshot();
-          const child = snap.open();
+          const snap = db.checkpoint();
+          const child = db.branch(snap);
           child.exec(`INSERT INTO t VALUES (2, ${a}, '${b.replaceAll("'", "''")}')`);
           expect(db.query("SELECT id, a, b FROM t ORDER BY id")).toEqual(before);
+          expect(db.query("SELECT id, a, b FROM t ORDER BY id", [], { at: snap })).toEqual(before);
           expect(child.query("SELECT id, a, b FROM t ORDER BY id").length).toBe(2);
           child.close();
         } finally {

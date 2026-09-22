@@ -12,6 +12,10 @@ export type Rng = {
   int(min: number, max: number): number
   /** Restart the stream from its seed. */
   reset(): void
+  /** Serializable engine state used by deterministic checkpoints. */
+  state(): number
+  /** Restore a state previously returned by {@link state}. */
+  setState(state: number): void
   seed: number
 }
 
@@ -40,6 +44,13 @@ export const createRng = (seed: number | string = 0): Rng => {
     int: (min, max) => min + Math.floor(next() * (max - min + 1)),
     reset: () => {
       state = numeric
+    },
+    state: () => state,
+    setState: (next) => {
+      if (!Number.isSafeInteger(next) || next < 0 || next > 0xffffffff) {
+        throw new RangeError("rng state must be an unsigned 32-bit integer")
+      }
+      state = next >>> 0
     },
     seed: numeric,
   }

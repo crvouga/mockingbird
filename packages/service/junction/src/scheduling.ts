@@ -1151,7 +1151,7 @@ const linkAppointmentToOrder = (
     transactionOrder.updated_at = nowIso
   }
   state.orders.update(order.id, order)
-  state.publishOrderWebhook(order, "labtest.order.updated")
+  state.publishOrderWebhook(order, "labtest.order.updated", new Date(nowIso).getTime())
 }
 
 const appendAppointmentEvent = (

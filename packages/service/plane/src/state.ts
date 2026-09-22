@@ -129,6 +129,7 @@ export class PlaneState {
   readonly comments: Collection<PlaneCommentRecord>
   readonly links: Collection<PlaneLinkRecord>
   readonly settings: Collection<Settings>
+  readonly rateLimits: Collection<number>
   private readonly ids: IdSequence
 
   constructor(
@@ -143,6 +144,7 @@ export class PlaneState {
     this.comments = new Collection(sqlite, namespace, "comments")
     this.links = new Collection(sqlite, namespace, "links")
     this.settings = new Collection(sqlite, namespace, "settings")
+    this.rateLimits = new Collection(sqlite, namespace, "rate_limits")
     this.ids = new IdSequence(sqlite, namespace, "plane")
     this.ensureSeeded()
   }
@@ -161,6 +163,12 @@ export class PlaneState {
     const next = { ...this.current(), ...patch }
     this.settings.insert("settings", next)
     return next
+  }
+
+  takeRateLimit(bucket: string): number {
+    const used = (this.rateLimits.get(bucket) ?? 0) + 1
+    if (!this.rateLimits.update(bucket, used)) this.rateLimits.insert(bucket, used)
+    return used
   }
 
   uuid(kind: string): string {

@@ -1,4 +1,4 @@
-import { Collection, restoreNamespace, snapshotNamespace } from "@crvouga/mockingbird-service"
+import { Collection, withNamespaceRollback } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Resource } from "@medplum/fhirtypes"
 
@@ -125,12 +125,6 @@ export class FhirStore {
    * transaction bundles and conditional writes, which the server runs in a SQL transaction.
    */
   async atomically<T>(fn: () => Promise<T>): Promise<T> {
-    const before = snapshotNamespace(this.sqlite, this.namespace)
-    try {
-      return await fn()
-    } catch (error) {
-      restoreNamespace(this.sqlite, this.namespace, before)
-      throw error
-    }
+    return withNamespaceRollback(this.sqlite, this.namespace, fn)
   }
 }

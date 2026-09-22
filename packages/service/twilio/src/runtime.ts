@@ -217,8 +217,6 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
   const publicBase = (app?.publicBaseUrl ?? app?.url ?? "").replace(/\/+$/, "")
   const appBase = (app?.url ?? "").replace(/\/+$/, "")
   const send = options.fetch ?? ((request: Request) => fetch(request))
-  // What the app answered each delivery (TwiML, `<Response/>`, an error), keyed by body.
-  const answers = new Map<string, string>()
   const endpoints: WebhookEndpoint[] = app
     ? Object.entries(TWILIO_WEBHOOK_EVENTS).map(([event, path]) => ({
         id: `twilio_${event}`,
@@ -232,12 +230,7 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
     signer: signers.twilio(),
     retryDelaysMs: options.retryDelaysMs ?? [0],
     endpoints,
-    fetch: async (request) => {
-      const sent = await request.clone().text()
-      const response = await send(request)
-      answers.set(`${request.url}\n${sent}`, await response.clone().text())
-      return response
-    },
+    fetch: send,
   })
   const runtime = createServiceRuntime<TwilioAPI>({
     name: TWILIO_NAMESPACE,
@@ -286,7 +279,7 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
           state: d.state,
           status: last?.status ?? null,
           error: last?.error ?? null,
-          response: answers.get(`${d.url}\n${message.body}`) ?? null,
+          response: last?.responseBody ?? null,
         }
       })
     return { params, deliveries }
@@ -375,7 +368,7 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
         break
       }
     }
-    return publish(namespace, `voice.${kind}`, params, `${callSid}:${kind}:${Date.now()}`)
+    return publish(namespace, `voice.${kind}`, params, `${callSid}:${kind}:${runtime.clock.now()}`)
   }
 
   const inner = runtime.fetch

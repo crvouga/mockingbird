@@ -30,6 +30,8 @@ export type OAuthAPIOptions = APIOptions & {
   behavior?: BehaviorInput
   /** Replays behavior choices, never credentials. */
   seed?: number | string
+  /** CSP nonce source for form-post responses. Defaults to `crypto.randomUUID`. */
+  nonce?: () => string
 }
 const json = (body: unknown, status = 200) =>
   Response.json(body, { status, headers: { "cache-control": "no-store", pragma: "no-cache" } })
@@ -934,7 +936,7 @@ export class OAuthAPI {
   private callback(auth: Authorization, values: Record<string, string>): Response {
     if (auth.state) values.state = auth.state
     if (auth.responseMode === "form_post") {
-      const nonce = crypto.randomUUID()
+      const nonce = this.options.nonce?.() ?? crypto.randomUUID()
       const result = page(
         "Continue to your app",
         `<span class="eyebrow">All set</span><h1 id="title">Back to your app</h1><p>Your sign-in response is ready.</p><form id="callback" method="post" action="${escapeHtml(auth.redirectUri)}">${Object.entries(

@@ -150,6 +150,8 @@ export type GeneByGeneRuntimeOptions = {
   }
   /** Write result files into this S3 (s3rver) bucket and report `s3://<bucket>/<key>`. */
   resultsS3?: S3Target
+  /** Optional deterministic webhook event id source. */
+  eventId?: () => string
 }
 
 export type GeneByGeneRuntime = ServiceRuntime<GeneByGeneAPI> & { readonly webhooks: WebhookHub }
@@ -300,10 +302,9 @@ const SUBSCRIPTION_PREFIX = "gxg_sub_"
  * clock control, fault presets, GxG-signed notifications and a request journal.
  */
 export const createRuntime = (options: GeneByGeneRuntimeOptions = {}): GeneByGeneRuntime => {
-  const eventTypes = new Map<string, string>()
   const { url, secret, events, retryDelaysMs, fetch: send } = options.webhooks ?? {}
   const hub = createWebhookHub({
-    signer: gxgSigner((id) => eventTypes.get(id)),
+    signer: gxgSigner(),
     retryDelaysMs: retryDelaysMs ?? GXG_RETRY_DELAYS_MS,
     ...(send ? { fetch: send } : {}),
     endpoints: url
@@ -349,8 +350,7 @@ export const createRuntime = (options: GeneByGeneRuntimeOptions = {}): GeneByGen
         ...(options.resultsS3 ? { resultsS3: options.resultsS3 } : {}),
         onWebhook: (event) => {
           syncSubscriptions(publicNamespace, api)
-          const id = crypto.randomUUID()
-          eventTypes.set(id, event.type)
+          const id = options.eventId?.() ?? api.state.uuid("event")
           hub.publish({ namespace: publicNamespace, type: event.type, body: event.body, id })
         },
       })

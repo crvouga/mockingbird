@@ -4,7 +4,10 @@ import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import {
   ADMIN_KEY_HEADER,
+  AT_HEADER,
   annotateResponse,
+  BRANCH_HEADER,
+  CHECKPOINT_HEADER,
   Collection,
   createClock,
   createJournal,
@@ -222,7 +225,12 @@ describe("runtime", () => {
   )
 
   test("a snapshot restores exactly, discarding later writes", async () => {
-    const runtime = createRuntime({ name: "notes", document, create: notesService })
+    const runtime = createRuntime({
+      name: "notes",
+      document,
+      create: notesService,
+      maxCheckpoints: 2,
+    })
     await call(runtime, "POST", "/v1/notes", { body: { text: "kept" } })
     const snap = await runtime.fetch(
       new Request("http://mock.local/__admin/snapshots", { method: "POST" }),
@@ -231,7 +239,10 @@ describe("runtime", () => {
     const discarded = (await (
       await call(runtime, "POST", "/v1/notes", { body: { text: "discarded" } })
     ).json()) as { id: string }
-    expect(await notesIn(runtime)).toEqual(["discarded", "kept"])
+    for (let index = 0; index < 10; index++) {
+      await call(runtime, "POST", "/v1/notes", { body: { text: `later-${index}` } })
+    }
+    expect(await notesIn(runtime)).toContain("discarded")
     await runtime.fetch(
       new Request(`http://mock.local/__admin/snapshots/${id}/restore`, { method: "POST" }),
     )
@@ -243,6 +254,65 @@ describe("runtime", () => {
       id: string
     }
     expect(next.id).toBe(discarded.id)
+  })
+
+  test("mutation checkpoints support historical reads and isolated branches", async () => {
+    const runtime = createRuntime({
+      name: "notes",
+      document,
+      create: notesService,
+      clock: createClock(() => 1_000),
+    })
+    const first = await call(runtime, "POST", "/v1/notes", { body: { text: "one" } })
+    const checkpoint = first.headers.get(CHECKPOINT_HEADER)
+    expect(checkpoint).toMatch(/^cp_/)
+    await call(runtime, "POST", "/v1/notes", { body: { text: "two" } })
+
+    const historical = await call(runtime, "GET", "/v1/notes", {
+      headers: { [AT_HEADER]: checkpoint as string },
+    })
+    expect(
+      ((await historical.json()) as { data: { text: string }[] }).data.map((n) => n.text),
+    ).toEqual(["one"])
+    expect(await notesIn(runtime)).toEqual(["one", "two"])
+
+    await call(runtime, "POST", "/v1/notes", {
+      body: { text: "alternate" },
+      headers: { [BRANCH_HEADER]: "experiment", [AT_HEADER]: checkpoint as string },
+    })
+    const branchRead = await call(runtime, "GET", "/v1/notes", {
+      headers: { [BRANCH_HEADER]: "experiment" },
+    })
+    expect(
+      ((await branchRead.json()) as { data: { text: string }[] }).data.map((n) => n.text),
+    ).toEqual(["alternate", "one"])
+    expect(await notesIn(runtime)).toEqual(["one", "two"])
+  })
+
+  test("model-based branch walks agree with an in-memory service model", async () => {
+    const action = fc.record({
+      branch: fc.constantFrom("main", "red", "blue"),
+      text: fc.stringMatching(/^[a-z]{1,8}$/),
+    })
+    await fc.assert(
+      fc.asyncProperty(fc.array(action, { minLength: 1, maxLength: 50 }), async (actions) => {
+        const runtime = createRuntime({ name: "notes", document, create: notesService })
+        const model = new Map<string, string[]>([["main", []]])
+        for (const { branch, text } of actions) {
+          if (!model.has(branch)) model.set(branch, [...(model.get("main") as string[])])
+          const headers = branch === "main" ? {} : { [BRANCH_HEADER]: branch }
+          const response = await call(runtime, "POST", "/v1/notes", { body: { text }, headers })
+          expect(response.headers.has(CHECKPOINT_HEADER)).toBe(true)
+          model.get(branch)?.push(text)
+          const read = await call(runtime, "GET", "/v1/notes", { headers })
+          const actual = ((await read.json()) as { data: { text: string }[] }).data.map(
+            (n) => n.text,
+          )
+          expect(actual).toEqual([...(model.get(branch) as string[])].reverse())
+        }
+      }),
+      { ...params, numRuns: Math.min(params.numRuns ?? 100, 30) },
+    )
   })
 
   test("the admin clock drives the service's timestamps", async () => {

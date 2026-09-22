@@ -309,7 +309,7 @@ export class PostHogAPI implements FetchAPI {
     const common = {
       errorsWhileComputingFlags: this.effect(context, "errors_while_computing"),
       ...(quotaLimited ? { quotaLimited: ["feature_flags"] } : {}),
-      requestId: crypto.randomUUID(),
+      requestId: this.state.ids.next("req_", 24),
       evaluatedAt: this.now(),
     }
     const answer = detailed
