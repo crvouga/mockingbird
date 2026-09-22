@@ -7,6 +7,21 @@ set -e
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+if [ -n "${SUPERSET_ROOT_PATH:-}" ] && [ "$SUPERSET_ROOT_PATH" != "$PROJECT_ROOT" ]; then
+  # Copy untracked local files, including ignored .env files, without overwriting workspace files.
+  while IFS= read -r -d '' path; do
+    if [ -f "$SUPERSET_ROOT_PATH/$path" ] && [ ! -e "$PROJECT_ROOT/$path" ]; then
+      mkdir -p "$PROJECT_ROOT/$(dirname "$path")"
+      cp -p "$SUPERSET_ROOT_PATH/$path" "$PROJECT_ROOT/$path"
+    fi
+  done < <(git -C "$SUPERSET_ROOT_PATH" ls-files --others --exclude-standard -z)
+  for source in "$SUPERSET_ROOT_PATH"/.env "$SUPERSET_ROOT_PATH"/.env.*; do
+    [ -f "$source" ] || continue
+    target="$PROJECT_ROOT/${source##*/}"
+    [ -e "$target" ] || cp -p "$source" "$target"
+  done
+fi
+
 echo "🔧 Setting up Mockingbird..."
 
 # Check Node.js and Bun versions

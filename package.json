@@ -58,7 +58,7 @@
     "check:format": "biome format .",
     "format": "biome format --write .",
     "docs": "bun run docs:dev",
-    "docs:dev": "bun scripts/vault-run.ts -- turbo run build --filter=@crvouga/mockingbird-docs^... && bun run --cwd sites/docs dev",
+    "docs:dev": "bun scripts/vault-run.ts -- turbo run build --filter=@crvouga/mockingbird-docs^... && bun run --cwd sites/docs dev --ignore-lock",
     "docs:build": "bun scripts/vault-run.ts -- turbo run build --filter=@crvouga/mockingbird-docs...",
     "docs:preview": "bun run docs:build && bun run --cwd sites/docs preview",
     "prepare": "husky",
