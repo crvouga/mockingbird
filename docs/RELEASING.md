@@ -16,6 +16,7 @@ OIDC cannot create a package that does not exist on npm yet. With the optional `
 bun run release:plan                   # what the next push to main would release
 bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
 bun run release:seed                   # reconcile npm with origin/main using your npm login
+bun run release:fix-ci                 # provision NPM_TOKEN and retry the latest failed CI release
 bun run secrets:doctor                 # npm / Trusted Publishing / NPM_TOKEN status
 ```
 

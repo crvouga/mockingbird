@@ -67,6 +67,7 @@
     "release:publish": "bun scripts/release/publish.ts",
     "release:smoke": "bun scripts/release/consumer-smoke.ts",
     "release:seed": "bun scripts/release/seed.ts",
+    "release:fix-ci": "bun scripts/release/fix-ci.ts",
     "npm": "open https://www.npmjs.com/package/@crvouga/mockingbird",
     "vault:login": "bun scripts/vault-login.ts",
     "secrets:doctor": "bun scripts/secrets/doctor.ts",
