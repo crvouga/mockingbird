@@ -157,6 +157,8 @@ export class MedplumServerProcess {
   }
 
   private async boot(): Promise<void> {
+    // Postgres takes its session time zone from the environment at initdb; the oracle runs in UTC.
+    process.env.TZ = "UTC"
     const dataDir = await mkdtemp(join(tmpdir(), "medplum-mock-"))
     this.runDir = dataDir
     const apiPort = await findFreePort()
@@ -200,7 +202,8 @@ export class MedplumServerProcess {
   private spawnServerProcess(paths: MedplumPaths, dataDir: string): ChildProcess {
     const child = spawn(process.execPath, [paths.serverEntry, "file:medplum.config.json"], {
       cwd: dataDir,
-      env: process.env,
+      // UTC, so "Deleted on …" texts and date casts match the mock's.
+      env: { ...process.env, TZ: "UTC" },
       stdio: ["ignore", "pipe", "pipe"],
     })
     child.stdout?.on("data", (chunk: Buffer) =>

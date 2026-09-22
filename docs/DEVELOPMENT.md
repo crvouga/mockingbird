@@ -87,6 +87,25 @@ canonical file; `bun run agents:sync` creates missing links and `bun run check:a
 resolve conflicts, open the PR, fix every failing check (CI and third-party checks such as
 GitGuardian), then merge automatically once everything is green.
 
+`/resolve-issues` works the queue of GitHub issues that agents in other projects file through
+[REPORTING_ISSUES.md](REPORTING_ISSUES.md) (label `agent-reported`): claim one, confirm the
+reported behavior against the oracle, add a regression test, fix the mock, and ship it through
+`/pr-merge` with `Fixes #<n>`. `feature` requests become acceptance tests plus contract changes;
+`new-service` requests become new packages built through
+[AUTHORING_A_SERVICE.md](AUTHORING_A_SERVICE.md).
+
 ### Package publishing
 
 Published services use `publishConfig.access = "public"` and `publishConfig.provenance = true` (npm Trusted Publishing / OIDC). `bun run pack:check` is the pre-publish gate that confirms each package actually packs, resolves types for an ESM-only consumer, and ships `dist`.
+
+### Docs site hosting
+
+The docs site (`sites/docs`) is hosted on the shared `crvouga/workspace` fleet as the service
+`mockingbird-docs` ([shared-infra contract §4](https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt)).
+[`sites/docs/Dockerfile`](../sites/docs/Dockerfile) builds the static Astro site and serves it
+with nginx on port 80. Its build context is the repo root, because the site renders every service
+package. On every push to `main`, [`.github/workflows/publish.yml`](../.github/workflows/publish.yml)
+calls the workspace's reusable workflow. That workflow pushes `ghcr.io/crvouga/chrisvouga-mockingbird-docs:<sha>`,
+and then `crvouga/workspace` deploys that exact image and health-checks it. Railway never builds this repo.
+
+To check the image locally, run `docker build -f sites/docs/Dockerfile -t mockingbird-docs . && docker run --rm -p 8080:80 mockingbird-docs`.

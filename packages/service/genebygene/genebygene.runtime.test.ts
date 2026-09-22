@@ -289,12 +289,16 @@ describe("served over HTTP", () => {
       expect(done.status).toBe(200)
       const deadline = Date.now() + 3_000
       while (received.length < 4 && Date.now() < deadline) await Bun.sleep(25)
-      expect(received.map((r) => r.event)).toEqual([
+      const events = [
         "GxG.Nucleus.Order.Created",
         "GxG.Nucleus.Order.KitNumbersGenerated",
         "GxG.Nucleus.Kit.Completed",
         "GxG.Nucleus.Kit.Completed",
-      ])
+      ]
+      // The hub publishes in order but posts each delivery concurrently, so events emitted
+      // back to back can reach the sink in either order: check order where it is published.
+      expect(server.runtime.webhooks.messages().map((m) => m.type)).toEqual(events)
+      expect(received.map((r) => r.event).sort()).toEqual([...events].sort())
       expect(received.every((r) => r.verified)).toBe(true)
       const { presignedUrl } = await c.fetchResultPresignedUrl({
         kitNumber: kit,

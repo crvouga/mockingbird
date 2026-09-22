@@ -49,6 +49,16 @@ const body = [
   "",
   `Release tiers: ${TIER_ORDER.map((t) => `**${TIERS[t].label}**: ${TIERS[t].blurb}`).join(" ")} Prefer ready services; pin exact versions of work-in-progress ones.`,
   "",
+  "## Reporting issues and requesting services",
+  "",
+  `Do not work around a mock in your own project: file a GitHub issue on ${REPO} and your fix lands in the next release. Search first (\`gh issue list --repo ${REPO} --state all --search "<service> <operation>"\`), redact every key and all personal data, fill in the kind's template, and run \`gh issue create --repo ${REPO} --title "<title>" --label agent-reported,<kind> --body-file issue.md\`. Feature and service requests are specifications: list the operations you call and number the behaviors you need as Given / When / Then; each becomes an acceptance test.`,
+  "",
+  `- [Filing guide](${RAW}/docs/REPORTING_ISSUES.md): when to file, redaction rules, reproduction and behavior formats, and what happens after.`,
+  `- [Parity mismatch](${RAW}/.github/ISSUE_TEMPLATE/parity.md): title \`[<service>] parity: <what diverges>\`. The mock and its oracle (vendor sandbox or real engine) answer the same requests differently.`,
+  `- [Missing feature](${RAW}/.github/ISSUE_TEMPLATE/feature.md): title \`[<service>] feature: <what is missing>\`. A mock lacks an operation, parameter, event, behavior or test control you use.`,
+  `- [Bug](${RAW}/.github/ISSUE_TEMPLATE/bug.md): title \`[<service>] bug: <what breaks>\`. A mock crashes, leaks state, contradicts its README, or does not build.`,
+  `- [New service](${RAW}/.github/ISSUE_TEMPLATE/new-service.md): title \`[new-service] <Vendor>: <API surface>\`. No package mocks a vendor you depend on; describe the surface, auth, state, behaviors, webhooks and test controls you need.`,
+  "",
   ...TIER_ORDER.flatMap((t) => {
     const lines = grouped.get(t) ?? []
     return lines.length > 0 ? [`## ${TIERS[t].label}`, "", ...lines, ""] : []

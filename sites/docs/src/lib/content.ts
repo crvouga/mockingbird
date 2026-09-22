@@ -113,11 +113,11 @@ npx mockingbird-junction serve --config mockingbird.json  # every service in the
   }
 }`,
   configNote:
-    "`mockingbird.json` names services by their package suffix and takes each one's `serve` flags; any installed service's CLI can serve all of them. Medplum runs a real Medplum server and the database engines are not HTTP APIs, so they are outside this contract.",
+    "`mockingbird.json` names services by their package suffix and takes each one's `serve` flags; any installed service's CLI can serve all of them. The database engines are not HTTP APIs, so they are outside this contract.",
 }
 
 export const AGENTS =
-  "Every service README doubles as its integration guide and ships inside the npm tarball (`node_modules/<package>/README.md`). [`llms.txt`](llms.txt) indexes them by tier, and the docs site publishes the same content as markdown and JSON, rebuilt from the packages on every build."
+  "Every service README doubles as its integration guide and ships inside the npm tarball (`node_modules/<package>/README.md`). [`llms.txt`](llms.txt) indexes them by tier, and the docs site publishes the same content as markdown and JSON, rebuilt from the packages on every build. When a mock diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests."
 
 /** Guides in `docs/`, in the order the README and the site list them. Others follow by name. */
 export const GUIDE_ORDER = [
@@ -126,6 +126,7 @@ export const GUIDE_ORDER = [
   "AUTHORING_A_SERVICE",
   "CATALOG_COVERAGE",
   "DEVELOPMENT",
+  "REPORTING_ISSUES",
   "RELEASING",
   "SECRETS",
 ]

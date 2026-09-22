@@ -21,7 +21,7 @@ packages the release job needs one of:
 All credentials live in the shared self-hosted Vault / OpenBao at `https://vault.chrisvouga.dev`,
 KV v2 `secret/personal/<config>` (`dev` locally, `prd` for production and CI; same key names in
 both, one field per env var). This repo follows the shared-infra contract:
-https://raw.githubusercontent.com/crvouga/workspace/main/INTEGRATING.md
+https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
 
 - **Turborepo remote cache** (`TURBO_API`, `TURBO_TOKEN`, `TURBO_TEAM`, `TURBO_CACHE`) —
   locally every root turbo script (`bun run build|test|check|…`) goes through
