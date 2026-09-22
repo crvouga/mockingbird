@@ -51,7 +51,8 @@
     },
     "layer": "service",
     "category": "observability",
-    "displayName": "PostHog"
+    "displayName": "PostHog",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

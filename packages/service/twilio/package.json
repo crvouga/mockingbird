@@ -54,6 +54,7 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Twilio",
+    "status": "wip",
     "playground": {
       "headers": {
         "authorization": "Basic QUMwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDptb2NraW5nYmlyZA=="

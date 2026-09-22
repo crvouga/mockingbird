@@ -53,6 +53,7 @@
     "layer": "service",
     "category": "payments",
     "displayName": "Stripe",
+    "status": "ready",
     "playground": {
       "operation": "PostCustomers",
       "headers": {
