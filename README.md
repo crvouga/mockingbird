@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-40-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-41-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-46 services, each its own npm package. Every service declares a release tier:
+47 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (40): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (41): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -104,6 +104,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [Optimal DX](packages/service/odx) | Health & labs | [`@crvouga/mockingbird-service-odx`](https://www.npmjs.com/package/@crvouga/mockingbird-service-odx) | Stateful mock of the (retired) Optimal DX partner API: patients, partner links, HL7 and structured lab imports, Functional Health Reports (JSON/PDF), webhook registrations, and signed PatientTest webhooks. |
 | [Prism Labs](packages/service/prism) | Health & labs | [`@crvouga/mockingbird-service-prism`](https://www.npmjs.com/package/@crvouga/mockingbird-service-prism) | Stateful mock of the Prism Labs body-scan API: subjects, scans, presigned capture upload, processing stages to READY, and deterministic body-composition, measurement, health-report and asset results. |
 | [Amazon Cognito](packages/service/cognito) | Identity | [`@crvouga/mockingbird-service-cognito`](https://www.npmjs.com/package/@crvouga/mockingbird-service-cognito) | Stateful Amazon Cognito User Pools mock for AWS SDK and browser authentication tests. |
+| [AWS Secrets Manager & SSM](packages/service/aws-secrets) | Identity | [`@crvouga/mockingbird-service-aws-secrets`](https://www.npmjs.com/package/@crvouga/mockingbird-service-aws-secrets) | Stateful AWS Secrets Manager and SSM Parameter Store mock with versions, stages, rotation, and redacted controls. |
 | [Persona](packages/service/persona) | Identity | [`@crvouga/mockingbird-service-persona`](https://www.npmjs.com/package/@crvouga/mockingbird-service-persona) | Stateful mock of the Persona identity-verification API: inquiry create, list (reusable lookup), get, a hosted flow page, admin lifecycle transitions, and Persona-Signature webhooks. |
 | [EasyPost](packages/service/easypost) | Maps & logistics | [`@crvouga/mockingbird-service-easypost`](https://www.npmjs.com/package/@crvouga/mockingbird-service-easypost) | Stateful mock of the EasyPost trackers API: create/re-use trackers, EasyPost's test tracking codes, admin status transitions and EasyPost's error envelope. |
 | [Google Maps](packages/service/google-maps) | Maps & logistics | [`@crvouga/mockingbird-service-google-maps`](https://www.npmjs.com/package/@crvouga/mockingbird-service-google-maps) | Mock of Google Places Autocomplete / Details / Find Place, the Geocoding API and a Maps JavaScript (places) shim, over a QA address corpus, with Google's status codes and fault presets. |
