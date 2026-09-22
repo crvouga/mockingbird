@@ -49,7 +49,9 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "ai",
+    "displayName": "LlamaCloud"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

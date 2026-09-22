@@ -50,7 +50,15 @@
       "server": "node",
       "cli": "node"
     },
-    "layer": "service"
+    "layer": "service",
+    "category": "payments",
+    "displayName": "Stripe",
+    "playground": {
+      "operation": "PostCustomers",
+      "headers": {
+        "authorization": "Bearer sk_test_mockingbird"
+      }
+    }
   },
   "scripts": {
     "vendor": "bun scripts/vendor.ts",
