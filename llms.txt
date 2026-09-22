@@ -6,10 +6,22 @@ Install mocks as devDependencies; each package is self-contained. Prefer injecti
 
 Release tiers: **Ready**: Complete, checked against the vendor, and kept stable. Use it in your test suite. **Work in progress**: Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version. Prefer ready services; pin exact versions of work-in-progress ones.
 
+## Reporting issues and requesting services
+
+Do not work around a mock in your own project: file a GitHub issue on crvouga/mockingbird and your fix lands in the next release. Search first (`gh issue list --repo crvouga/mockingbird --state all --search "<service> <operation>"`), redact every key and all personal data, fill in the kind's template, and run `gh issue create --repo crvouga/mockingbird --title "<title>" --label agent-reported,<kind> --body-file issue.md`. Feature and service requests are specifications: list the operations you call and number the behaviors you need as Given / When / Then; each becomes an acceptance test.
+
+- [Filing guide](https://raw.githubusercontent.com/crvouga/mockingbird/main/docs/REPORTING_ISSUES.md): when to file, redaction rules, reproduction and behavior formats, and what happens after.
+- [Parity mismatch](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/parity.md): title `[<service>] parity: <what diverges>`. The mock and its oracle (vendor sandbox or real engine) answer the same requests differently.
+- [Missing feature](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/feature.md): title `[<service>] feature: <what is missing>`. A mock lacks an operation, parameter, event, behavior or test control you use.
+- [Bug](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/bug.md): title `[<service>] bug: <what breaks>`. A mock crashes, leaks state, contradicts its README, or does not build.
+- [New service](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/new-service.md): title `[new-service] <Vendor>: <API surface>`. No package mocks a vendor you depend on; describe the surface, auth, state, behaviors, webhooks and test controls you need.
+
 ## Ready
 
 - [@crvouga/mockingbird-service-junction](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/README.md): Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox.
 - [@crvouga/mockingbird-service-junction SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/junction/SUPPORT.md): coverage matrix
+- [@crvouga/mockingbird-service-medplum](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/medplum/README.md): Stateful, portable mock of the self-hosted Medplum server (FHIR R4 REST, OAuth2 and admin API) that runs anywhere JavaScript runs, proven at parity with a real self-hosted Medplum used as the oracle.
+- [@crvouga/mockingbird-service-medplum SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/medplum/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-postgres](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/postgres/README.md): Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies
 - [@crvouga/mockingbird-service-postgres COMPATIBILITY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/postgres/COMPATIBILITY.md): coverage matrix
 - [@crvouga/mockingbird-service-sqlite](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/sqlite/README.md): Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies
@@ -61,8 +73,6 @@ Release tiers: **Ready**: Complete, checked against the vendor, and kept stable.
 - [@crvouga/mockingbird-service-mailosaur SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/mailosaur/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-makor-cpg](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/makor-cpg/README.md): Stateful mock of the legacy Makor AI (CPG) API: care plans, plus-user, bloodwork webhook, subscriptions, Wholescripts orders, AI patient summaries and async-review scripts (processing → complete on the mock clock), with permissive CORS for browser-direct calls.
 - [@crvouga/mockingbird-service-makor-cpg SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/makor-cpg/SUPPORT.md): coverage matrix
-- [@crvouga/mockingbird-service-medplum](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/medplum/README.md): Stateful Medplum mock that self-hosts the real Medplum server as a child process on embedded Postgres and Redis, exposed through the Mockingbird FetchAPI contract.
-- [@crvouga/mockingbird-service-medplum SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/medplum/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-odx](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/odx/README.md): Stateful mock of the (retired) Optimal DX partner API: patients, partner links, HL7 and structured lab imports, Functional Health Reports (JSON/PDF), webhook registrations, and signed PatientTest webhooks.
 - [@crvouga/mockingbird-service-odx SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/odx/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-otel](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/otel/README.md): Stateful mock of an OTLP/HTTP collector (JSON and protobuf traces and logs) and the OpenObserve search API over the same store.

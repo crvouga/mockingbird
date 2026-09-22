@@ -4,7 +4,7 @@
  * Root turbo scripts go through here so local runs share the self-hosted Turborepo remote
  * cache (TURBO_API / TURBO_TOKEN / TURBO_TEAM / TURBO_CACHE live in Vault
  * `secret/personal/<config>`). Shared infra contract:
- * https://raw.githubusercontent.com/crvouga/workspace/main/INTEGRATING.md
+ * https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
  *
  * Runs the command as-is when the environment already carries the secrets (CI loads them via
  * GitHub OIDC; an outer `vault run`), or when the `vault` wrapper is not installed (turbo then

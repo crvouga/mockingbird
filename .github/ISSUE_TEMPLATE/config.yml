@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Filing guide for coding agents
+    url: https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md
+    about: Kinds, title format, redaction rules, the behavior format for feature and service requests, and the gh command.
+  - name: Service catalog (llms.txt)
+    url: https://github.com/crvouga/mockingbird/blob/main/llms.txt
+    about: Check whether the service is already mocked before requesting it.

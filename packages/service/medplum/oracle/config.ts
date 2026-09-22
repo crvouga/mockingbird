@@ -1,3 +1,5 @@
+import { generateKeyPairSync } from "node:crypto"
+
 export type ServerConfigInput = {
   apiPort: number
   dbPort: number
@@ -43,6 +45,9 @@ export type MedplumServerConfig = {
   defaultSuperAdminClientId?: string | undefined
   defaultSuperAdminClientSecret?: string | undefined
   superAdminSecurity: { blockAdmin: false }
+  signingKey?: string
+  signingKeyId?: string
+  signingKeyPassphrase?: string
 }
 
 export const SUPER_ADMIN_EMAIL = "admin@example.com"
@@ -51,6 +56,26 @@ export const SUPER_ADMIN_CLIENT_ID = "6f3f0c17-8bd1-4a56-9d5a-6b21e5b0a101"
 export const SUPER_ADMIN_CLIENT_SECRET = "mockingbird-local-secret"
 const SHUTDOWN_TIMEOUT_MILLISECONDS = 5000
 const HOST = "127.0.0.1"
+
+/** A throwaway RSA key for presigned storage URLs, as every real deployment configures one. */
+const signingKey = (() => {
+  let cached: { signingKey: string; signingKeyId: string; signingKeyPassphrase: string } | undefined
+  return () => {
+    if (cached) return cached
+    const passphrase = "mockingbird-oracle"
+    const { privateKey } = generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      publicKeyEncoding: { type: "spki", format: "pem" },
+      privateKeyEncoding: { type: "pkcs1", format: "pem", cipher: "aes-256-cbc", passphrase },
+    })
+    cached = {
+      signingKey: privateKey,
+      signingKeyId: "mockingbird-oracle",
+      signingKeyPassphrase: passphrase,
+    }
+    return cached
+  }
+})()
 
 export const buildServerConfig = (input: ServerConfigInput): MedplumServerConfig => {
   const { apiPort, dbPort, redisPort, dataDir } = input
@@ -88,6 +113,7 @@ export const buildServerConfig = (input: ServerConfigInput): MedplumServerConfig
     superAdminSecurity: {
       blockAdmin: false,
     },
+    ...signingKey(),
   }
   return config
 }
