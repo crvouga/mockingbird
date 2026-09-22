@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-38-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-39-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-44 services, each its own npm package. Every service declares a release tier:
+45 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (38): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (39): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -86,6 +86,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [AWS Bedrock](packages/service/bedrock) | AI & speech | [`@crvouga/mockingbird-service-bedrock`](https://www.npmjs.com/package/@crvouga/mockingbird-service-bedrock) | Stateful, scriptable mock of AWS Bedrock Runtime (Converse, ConverseStream, InvokeModel incl. Titan embeddings, Nova Sonic bidirectional streams over h2c) and AgentCore InvokeHarness, with exact event-stream framing. |
 | [AWS Polly & Transcribe](packages/service/aws-speech) | AI & speech | [`@crvouga/mockingbird-service-aws-speech`](https://www.npmjs.com/package/@crvouga/mockingbird-service-aws-speech) | Stateful mock of AWS Polly (SynthesizeSpeech, StartSpeechSynthesisStream) and Transcribe (streaming over h2c, batch jobs), with exact event-stream framing and scripted transcripts. |
 | [LlamaCloud](packages/service/llamacloud) | AI & speech | [`@crvouga/mockingbird-service-llamacloud`](https://www.npmjs.com/package/@crvouga/mockingbird-service-llamacloud) | Stateful mock of the LlamaCloud platform API: project and pipeline lookup, pipeline documents, and deterministic (scripted or term-overlap) retrieval, verified against the official llama_cloud_services SDK. |
+| [Amazon SQS](packages/service/sqs) | Communication | [`@crvouga/mockingbird-service-sqs`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqs) | Stateful Amazon SQS mock with visibility, FIFO ordering, deduplication, batches, and redrive. |
 | [Daily](packages/service/daily) | Communication | [`@crvouga/mockingbird-service-daily`](https://www.npmjs.com/package/@crvouga/mockingbird-service-daily) | Stateful mock of the Daily.co REST API: rooms, presence, eject, meeting tokens (minted and self-signed HS256, verified and decodable), and transcription/recording webhooks with transcripts written to S3. |
 | [Intercom](packages/service/intercom) | Communication | [`@crvouga/mockingbird-service-intercom`](https://www.npmjs.com/package/@crvouga/mockingbird-service-intercom) | Stateful mock of the Intercom REST API 2.11: contacts (search, create with 409 on duplicates, update, get), conversations (create with Idempotency-Key, reply as JSON or multipart, close/open, get, cursor search), admins, and X-Hub-Signature-signed admin reply/close/open webhooks. |
 | [Mailosaur](packages/service/mailosaur) | Communication | [`@crvouga/mockingbird-service-mailosaur`](https://www.npmjs.com/package/@crvouga/mockingbird-service-mailosaur) | Stateful mock of the Mailosaur email/SMS testing API (messages search, get, delete, long-poll) with an HTTP ingest so other mocks can drop mail in (Mockingbird service contract). |
