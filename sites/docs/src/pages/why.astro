@@ -79,6 +79,15 @@ const { totals } = catalog
         README is also at <code>node_modules/&lt;package&gt;/README.md</code>.
       </p>
 
+      <h2 id="release-tiers">Release tiers</h2>
+      <p>
+        Every service declares a tier in its <code>package.json</code>, and the site shows it everywhere.
+        <strong>Ready</strong> services ({catalog.totals.ready} today) are complete and kept stable.
+        <strong>Work in progress</strong> services ({catalog.totals.wip}) are usable in a suite, but their operations,
+        response shapes and options can still change between releases, so pin an exact version.
+        <a href="/services?tier=ready">Browse the ready services</a>.
+      </p>
+
       <h2 id="when-not-to-use-it">When not to use it</h2>
       <ul>
         <li>For a final check against the real vendor before a release. Run a small live suite for that. Mockingbird's own live parity exists for the same reason.</li>

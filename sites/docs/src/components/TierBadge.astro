@@ -1,0 +1,13 @@
+---
+import { TIERS } from "../lib/tiers.ts"
+import type { ServiceStatus } from "../lib/types.ts"
+
+interface Props {
+  tier: ServiceStatus
+  long?: boolean
+}
+const { tier, long = false } = Astro.props
+const t = TIERS[tier]
+---
+
+<span class:list={["badge", "tier", `tier-${tier}`]} title={t.blurb}><span class="dot"></span>{long ? t.label : t.short}</span>

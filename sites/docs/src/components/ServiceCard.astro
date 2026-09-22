@@ -3,6 +3,7 @@ import { CATEGORIES, type CategorySlug } from "../lib/categories.ts"
 import type { Service } from "../lib/types.ts"
 import Icon from "./Icon.astro"
 import Monogram from "./Monogram.astro"
+import TierBadge from "./TierBadge.astro"
 
 interface Props {
   service: Service
@@ -27,7 +28,7 @@ const search = [
   data-display={s.displayName}
   data-category={s.category}
   data-kind={s.kind}
-  data-status={s.status}
+  data-tier={s.status}
   data-browser={s.surfaces.browser ? "1" : "0"}
   data-cli={s.surfaces.cli ? "1" : "0"}
   data-ops={s.opsSupported}
@@ -39,7 +40,7 @@ const search = [
       <h3>{s.displayName}</h3>
       <span>{category.label}</span>
     </div>
-    {s.status === "wip" && <span class="badge badge-warn">Work in progress</span>}
+    <TierBadge tier={s.status} />
   </div>
   <p class="svc-desc">{s.description}</p>
   <div class="svc-meta">
@@ -124,53 +125,9 @@ const search = [
     height: 13px;
   }
 
-  .catalog[data-view="list"] {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .catalog[data-view="list"] .svc {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "top meta"
-      "desc meta";
-    align-items: center;
-    gap: 2px 24px;
-  }
-
-  .catalog[data-view="list"] .svc-top {
-    grid-area: top;
-  }
-
-  .catalog[data-view="list"] .svc-desc {
-    grid-area: desc;
-    -webkit-line-clamp: 1;
-  }
-
-  .catalog[data-view="list"] .svc-meta {
-    grid-area: meta;
-    margin: 0;
-    padding: 0;
-    border: 0;
-    justify-content: flex-end;
-  }
-
   @media (max-width: 720px) {
     .svc-hide-sm {
       display: none;
-    }
-
-    .catalog[data-view="list"] .svc {
-      grid-template-columns: 1fr;
-      grid-template-areas: "top" "desc" "meta";
-    }
-
-    .catalog[data-view="list"] .svc-meta {
-      justify-content: flex-start;
-      margin-top: 8px;
-      padding-top: 10px;
-      border-top: 1px solid var(--border);
     }
   }
 </style>

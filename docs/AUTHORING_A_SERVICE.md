@@ -121,7 +121,7 @@ its build fails when they are missing or stale:
 | --- | --- | --- |
 | `category` | yes | A slug from `sites/docs/src/lib/categories.ts`, e.g. `"payments"` |
 | `displayName` | yes | The vendor's name as people write it, e.g. `"Customer.io"` |
-| `status` | no | `"wip"` marks an unfinished mock on the site; omit it when the mock is done |
+| `status` | yes | Release tier: `"wip"` until the mock is complete and verified, then `"ready"`. The site badges, filters and counts services by it |
 | `playground.headers` | no | Credentials in the format the mock accepts (e.g. `sk_test_…`), sent with every playground request. The build sends every sample request to a fresh mock and fails if none succeed with them |
 | `playground.operation` | no | The operation the playground opens on; it must succeed with its sample request |
 

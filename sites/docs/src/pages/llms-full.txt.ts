@@ -1,5 +1,6 @@
 import catalog from "virtual:mockingbird/catalog"
 import type { APIRoute } from "astro"
+import { TIERS } from "../lib/tiers.ts"
 
 export const GET: APIRoute = () => {
   const parts = [
@@ -15,6 +16,7 @@ export const GET: APIRoute = () => {
       `# ${service.displayName}`,
       "",
       `Package: \`${service.packageName}\``,
+      `Tier: ${TIERS[service.status].label}`,
       `Source: ${service.links.source}`,
       "",
       service.readme.markdown.trim(),

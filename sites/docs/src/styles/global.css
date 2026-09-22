@@ -591,6 +591,18 @@ kbd {
   color: var(--ok);
 }
 
+.tier.tier-ready {
+  border-color: transparent;
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.tier.tier-wip {
+  border-color: transparent;
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
 .badge-warn {
   border-color: transparent;
   background: var(--warn-soft);
