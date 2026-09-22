@@ -39815,7 +39815,9 @@ components:
       properties:
         advice_code:
           maxLength: 5000
-          type: string
+          type:
+            - string
+            - "null"
         charge:
           maxLength: 5000
           type: string

@@ -107,7 +107,10 @@ export const stripeJs = (base: string): string => `/* Mockingbird Stripe.js stan
       _clientSecret: clientSecret,
       _elements: created,
       create: function (type, opts) { var element = new Element(type, opts); created.push(element); return element; },
-      getElement: function (type) { return created.filter(function (e) { return e.type === type || (e.type === "payment" && type && type.type === "payment"); })[0] || null; },
+      getElement: function (type) {
+        var elementType = type && type.__elementType ? type.__elementType : type;
+        return created.filter(function (e) { return e.type === elementType || (e.type === "payment" && type && type.type === "payment"); })[0] || null;
+      },
       submit: function () { return Promise.resolve({}); },
       update: function (o) { if (o && o.clientSecret) clientSecret = o.clientSecret; },
       fetchUpdates: function () { return Promise.resolve({}); },
@@ -117,6 +120,44 @@ export const stripeJs = (base: string): string => `/* Mockingbird Stripe.js stan
     var card = element ? element.card() : { number: "4242424242424242", exp_month: 12, exp_year: 2034, cvc: "123" };
     return { type: "card", card: card };
   }
+  var CARD_TOKENS = {
+    "4242424242424242": "tok_visa",
+    "4000056655665556": "tok_visa_debit",
+    "5555555555554444": "tok_mastercard",
+    "378282246310005": "tok_amex",
+    "6011111111111117": "tok_discover",
+    "4000000000000002": "tok_chargeDeclined",
+    "4000000000009995": "tok_chargeDeclinedInsufficientFunds",
+    "4000000000000069": "tok_chargeDeclinedExpiredCard",
+    "4000000000000341": "tok_chargeCustomerFail",
+    "4000002500003155": "tok_threeDSecure2Required",
+    "4000002760003184": "tok_threeDSecureRequired",
+    "4000000000003220": "tok_authenticationRequired",
+    "4000000000000259": "tok_createDispute",
+    "4000051230000072": "tok_hsa",
+  };
+  Stripe.prototype.createToken = function (element) {
+    var card = element && typeof element.card === "function" ? element.card() : null;
+    var number = card && String(card.number || "").replace(/[\\s-]/g, "");
+    var token = number && CARD_TOKENS[number];
+    if (!token) {
+      return Promise.resolve({ error: { type: "card_error", code: "incorrect_number", message: "Your card number is incorrect." } });
+    }
+    return Promise.resolve({
+      token: {
+        id: token,
+        object: "token",
+        type: "card",
+        card: {
+          object: "card",
+          brand: token === "tok_mastercard" ? "Mastercard" : token === "tok_amex" ? "American Express" : token === "tok_discover" ? "Discover" : "Visa",
+          last4: number.slice(-4),
+          exp_month: card.exp_month,
+          exp_year: card.exp_year,
+        },
+      },
+    });
+  };
   Stripe.prototype._finish = function (kind, clientSecret, result, options) {
     var self = this;
     if (result && result.error) return Promise.resolve({ error: result.error });

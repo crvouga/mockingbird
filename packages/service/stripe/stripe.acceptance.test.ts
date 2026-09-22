@@ -771,7 +771,19 @@ describe("S1.9 hosted Checkout page and Stripe.js", () => {
     } as unknown as Record<string, unknown>
     new Function("window", "document", source)(window, {})
     const StripeJs = window.Stripe as (key: string) => {
-      elements: (options: { clientSecret: string }) => { create: (type: string) => unknown }
+      elements: (options?: { clientSecret: string }) => {
+        create: (type: string) => { card: () => Record<string, unknown> }
+        getElement: (type: string | { __elementType: string }) => unknown
+      }
+      createToken: (element: { card: () => Record<string, unknown> }) => Promise<{
+        token?: {
+          id: string
+          object: string
+          type: string
+          card: { last4: string; exp_month: number; exp_year: number }
+        }
+        error?: { type: string; code: string; message: string }
+      }>
       confirmPayment: (
         args: unknown,
       ) => Promise<{ paymentIntent?: { status: string }; error?: { code: string } }>
@@ -786,7 +798,45 @@ describe("S1.9 hosted Checkout page and Stripe.js", () => {
     }
     const stripe = StripeJs(KEYS.msoPublishable)
     const elements = stripe.elements({ clientSecret: intent.client_secret as string })
-    elements.create("payment")
+    const paymentElement = elements.create("payment")
+    expect(elements.getElement("payment")).toBe(paymentElement)
+    expect(elements.getElement({ __elementType: "payment" })).toBe(paymentElement)
+    expect(elements.getElement({ __elementType: "card" })).toBeNull()
+
+    const cards = stripe.elements()
+    const cardElement = cards.create("cardNumber")
+    expect(cards.getElement("cardNumber")).toBe(cardElement)
+    expect(cards.getElement({ __elementType: "cardNumber" })).toBe(cardElement)
+    const magicCards = [
+      ["4242424242424242", "tok_visa"],
+      ["4000056655665556", "tok_visa_debit"],
+      ["5555555555554444", "tok_mastercard"],
+      ["4000000000000002", "tok_chargeDeclined"],
+      ["4000000000009995", "tok_chargeDeclinedInsufficientFunds"],
+    ] as const
+    for (const [number, token] of magicCards) {
+      cardElement.card = () => ({ number, exp_month: 9, exp_year: 2035, cvc: "123" })
+      const tokenized = await stripe.createToken(cardElement)
+      expect(tokenized.token).toMatchObject({
+        id: token,
+        object: "token",
+        type: "card",
+        card: { last4: number.slice(-4), exp_month: 9, exp_year: 2035 },
+      })
+    }
+    cardElement.card = () => ({
+      number: "1234567890123456",
+      exp_month: 9,
+      exp_year: 2035,
+      cvc: "123",
+    })
+    expect(await stripe.createToken(cardElement)).toEqual({
+      error: {
+        type: "card_error",
+        code: "incorrect_number",
+        message: "Your card number is incorrect.",
+      },
+    })
     const result = await stripe.confirmPayment({
       elements,
       confirmParams: { return_url: "http://localhost:3000/after" },
