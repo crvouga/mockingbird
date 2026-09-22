@@ -7,56 +7,259 @@ const serviceCount = catalog.services.length;
 ---
 
 <BaseLayout title="Home">
-  <h1>Mockingbird</h1>
-  <p style="font-size: 18px; color: var(--color-muted); margin-bottom: 30px;">
-    Stateful test doubles for {serviceCount}+ third-party APIs and SQL databases
-  </p>
+  <style>
+    .hero {
+      padding: 80px 20px;
+      text-align: center;
+      background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%);
+    }
 
-  <div style="max-width: 800px;">
-    <h2>Why Mockingbird</h2>
-    <p>{catalog.rationale}</p>
+    @media (prefers-color-scheme: dark) {
+      .hero {
+        background: linear-gradient(135deg, #1a1f2e 0%, #242d3d 100%);
+      }
+    }
 
-    <h2 style="margin-top: 40px;">Key Features</h2>
-    <ul style="margin-left: 20px; margin-bottom: 20px;">
-      <li style="margin-bottom: 10px;">
-        <strong>Real Surface, Real Behavior:</strong> Mocks speak the provider's actual API surface
-        (fetch(Request) → Response) and maintain state in SQLite
-      </li>
-      <li style="margin-bottom: 10px;">
-        <strong>Driven by OpenAPI:</strong> Every mock is generated from a vendored OpenAPI contract
-      </li>
-      <li style="margin-bottom: 10px;">
-        <strong>Property-Based Testing:</strong> Continuous differential testing against real sandboxes
-        ensures behavior stays in sync
-      </li>
-      <li style="margin-bottom: 10px;">
-        <strong>Multiple Surfaces:</strong> Isomorphic Fetch API, Node server, CLI, or serve over HTTP/2
-      </li>
-      <li style="margin-bottom: 10px;">
-        <strong>Zero Network Dependency:</strong> Drop into any test process, no external services needed
-      </li>
-      <li style="margin-bottom: 10px;">
-        <strong>Client-Side Compatible:</strong> Run in browsers, Workers, or embedded environments
-      </li>
-    </ul>
+    .hero-content {
+      max-width: 900px;
+      margin: 0 auto;
+    }
 
-    <h2 style="margin-top: 40px;">Quick Start</h2>
-    <pre>npm install -D @crvouga/mockingbird-service-stripe</pre>
+    .hero h1 {
+      font-size: 64px;
+      margin-bottom: 20px;
+      background: linear-gradient(135deg, #0066ff 0%, #0052cc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
 
-    <pre>import &#123; StripeAPI &#125; from "@crvouga/mockingbird-service-stripe";
+    .hero-subtitle {
+      font-size: 20px;
+      color: var(--color-text-secondary);
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+
+    .hero-cta {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-bottom: 60px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 15px;
+      text-decoration: none;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-primary {
+      background-color: var(--color-primary);
+      color: white;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--color-primary-dark);
+      box-shadow: var(--shadow-lg);
+    }
+
+    .btn-secondary {
+      background-color: var(--color-bg);
+      color: var(--color-primary);
+      border: 1.5px solid var(--color-primary);
+    }
+
+    .btn-secondary:hover {
+      background-color: var(--color-primary-lightest);
+    }
+
+    .features {
+      padding: 80px 20px;
+      background-color: var(--color-bg);
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 32px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      padding: 32px;
+      background-color: var(--color-bg-secondary);
+      border-radius: 12px;
+      border: 1px solid var(--color-border-light);
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .feature-card:hover {
+      border-color: var(--color-primary);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .feature-icon {
+      font-size: 32px;
+      margin-bottom: 16px;
+    }
+
+    .feature-card h3 {
+      margin-top: 0;
+      margin-bottom: 12px;
+    }
+
+    .feature-card p {
+      margin-bottom: 0;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .code-section {
+      padding: 60px 20px;
+      background-color: var(--color-bg-secondary);
+    }
+
+    .code-section h2 {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .code-box {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: center;
+      gap: 60px;
+      margin: 60px 0;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-number {
+      font-size: 42px;
+      font-weight: 700;
+      color: var(--color-primary);
+      margin-bottom: 8px;
+    }
+
+    .stat-label {
+      font-size: 14px;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+    }
+  </style>
+
+  <div class="hero">
+    <div class="hero-content">
+      <h1>Mockingbird</h1>
+      <p class="hero-subtitle">
+        Stateful test doubles for {serviceCount}+ third-party APIs and SQL databases.<br />
+        Real behavior, zero network, fully in-process.
+      </p>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-number">{serviceCount}</div>
+          <div class="stat-label">API Mocks</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number">100%</div>
+          <div class="stat-label">Isomorphic</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number">0ms</div>
+          <div class="stat-label">Latency</div>
+        </div>
+      </div>
+
+      <div class="hero-cta">
+        <a href="/services" class="btn btn-primary">Explore Services</a>
+        <a href="#quick-start" class="btn btn-secondary">Get Started</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="features">
+    <div class="container">
+      <h2 style="text-align: center; margin-bottom: 48px;">Why Mockingbird?</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🔗</div>
+          <h3>Real API Surfaces</h3>
+          <p>Mocks speak the exact same interface as real APIs. Stateful, persistent, and indistinguishable from production.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">✅</div>
+          <h3>Property-Based Testing</h3>
+          <p>Continuously verified against live sandboxes. Your mocks stay in sync with the real vendor—guaranteed.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Zero Network Latency</h3>
+          <p>Everything runs in-process. No external APIs, no waiting, instant results. Perfect for fast tests.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🌍</div>
+          <h3>Fully Isomorphic</h3>
+          <p>Run in Node, Bun, browsers, Workers, embedded systems. Same code everywhere. One codebase, infinite targets.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">📦</div>
+          <h3>Self-Contained</h3>
+          <p>Each mock is a single npm package with zero external dependencies. Drop it in, it works.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎮</div>
+          <h3>Interactive Playgrounds</h3>
+          <p>Try every service in your browser. Run examples live, see results instantly, understand behavior before integrating.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="code-section">
+    <div class="container">
+      <h2 id="quick-start">Quick Start</h2>
+
+      <div class="code-box">
+        <p style="text-align: center; margin-bottom: 24px;">Install a mock service</p>
+        <pre>npm install -D @crvouga/mockingbird-service-stripe</pre>
+
+        <p style="text-align: center; margin: 32px 0 24px 0;">Use it in your tests</p>
+        <pre>import &#123; StripeAPI &#125; from "@crvouga/mockingbird-service-stripe";
 
 const stripe = new StripeAPI();
-const req = new Request("https://api.stripe.com/v1/customers", &#123;
-  method: "POST",
-  headers: &#123; authorization: "Bearer sk_test_mockingbird" &#125;,
-  body: "description=ACME%20Inc",
-&#125;);
+const res = await stripe.fetch(
+  new Request("https://api.stripe.com/v1/customers", &#123;
+    method: "POST",
+    headers: &#123; authorization: "Bearer sk_test_mockingbird" &#125;,
+    body: "description=ACME%20Inc",
+  &#125;)
+);
 
-const res = await stripe.fetch(req);
-console.log(await res.json()); // &#123; id: "cus_...", description: "ACME Inc", ... &#125;</pre>
+console.log(await res.json());
+// &#123; id: "cus_...", description: "ACME Inc", ... &#125;</pre>
 
-    <p>
-      <a href="/services">Browse all {serviceCount} services →</a>
-    </p>
+        <p style="text-align: center; margin-top: 32px;">
+          <a href="/services" style="font-size: 16px; font-weight: 600;">
+            Browse all {serviceCount} services →
+          </a>
+        </p>
+      </div>
+    </div>
   </div>
 </BaseLayout>
