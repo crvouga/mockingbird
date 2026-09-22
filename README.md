@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-37-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-38-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-43 services, each its own npm package. Every service declares a release tier:
+44 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (37): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (38): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -120,6 +120,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [Google Calendar](packages/service/google-calendar) | Productivity | [`@crvouga/mockingbird-service-google-calendar`](https://www.npmjs.com/package/@crvouga/mockingbird-service-google-calendar) | Stateful mock of the Google Calendar v3 API and Google OAuth our EMR calls: events list/insert/update/delete/watch, channels.stop, calendarList/calendars, token exchange/refresh/revoke and userinfo, with signed-by-header push notifications. |
 | [Payload CMS](packages/service/payload-cms) | Productivity | [`@crvouga/mockingbird-service-payload-cms`](https://www.npmjs.com/package/@crvouga/mockingbird-service-payload-cms) | Stateful mock of the Payload CMS collection REST API: paginated finds with a where-query subset, find by id, a seeded marketing collection and admin-editable documents. |
 | [Plane](packages/service/plane) | Productivity | [`@crvouga/mockingbird-service-plane`](https://www.npmjs.com/package/@crvouga/mockingbird-service-plane) | Stateful mock of the Plane REST API v1: cursor-paginated work items, comments, links, states and labels, with Plane's rate limit and error shapes. |
+| [Amazon S3](packages/service/s3) | Storage | [`@crvouga/mockingbird-service-s3`](https://www.npmjs.com/package/@crvouga/mockingbird-service-s3) | Stateful Amazon S3 mock with binary objects, listing, copies, multipart uploads, presigned URLs, and canonical XML errors. |
 
 Operation coverage per service is in each package's `SUPPORT.md` (or `COMPATIBILITY.md` for the SQL engines), and on the docs site's coverage page.
 
