@@ -8,8 +8,8 @@ This directory contains configuration and scripts for deep integration with the 
 # Setup: install dependencies and verify environment
 .superset/setup.sh
 
-# Run: execute quality gates (CI replica)
-.superset/run.sh check
+# Superset Run button: launch the docs site on a free port
+bun docs
 
 # Run specific modes
 .superset/run.sh test       # run tests
@@ -29,10 +29,9 @@ This directory contains configuration and scripts for deep integration with the 
 ```json
 {
   "setup": [".superset/setup.sh"],           // preparation
-  "run": [".superset/run.sh check"],         // default run mode
-  "teardown": [".superset/teardown.sh"],     // cleanup
+  "run": ["bun docs"],                       // docs dev server
+  "teardown": [],                            // setup starts no service
   "env": { "TURBO_TEAM": "..." },            // environment
-  "ports": { "docs-dev": 3000 },             // services
   "requirements": { "node": ">=22" },        // checks
   "commands": { "test": "...", ... }         // shortcuts
 }
@@ -50,8 +49,8 @@ This directory contains configuration and scripts for deep integration with the 
 
 Does:
 1. Verifies Node.js (≥22.0.0) and Bun (≥1.2.0)
-2. Installs dependencies with `bun install --frozen-lockfile`
-3. Generates documentation
+2. Copies local untracked files and `.env*` from `SUPERSET_ROOT_PATH` without overwriting files
+3. Installs dependencies with `bun install --frozen-lockfile`
 4. Checks workspace boundaries
 
 ### `run.sh`
@@ -67,7 +66,7 @@ Modes:
 - **`test`** — run test suites
 - **`build`** — build packages (src → dist)
 - **`docs`** — build static documentation site
-- **`docs:dev`** — start documentation dev server (port 3000)
+- **`docs:dev`** — start documentation dev server on an OS-assigned free port
 - **`parity`** — run live parity tests (requires credentials)
 - **`all`** — check + build + test + docs (CI simulation)
 

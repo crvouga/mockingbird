@@ -42,12 +42,17 @@ const EXIT = { ok: 0, fail: 1, usage: 2, conflicts: 3, pending: 4 } as const
 const USAGE = `bun scripts/pr-merge.ts <command> [flags]
 
 commands:
+  advance   sync, publish, upsert PR, check, review comments, merge
+            (--title, --body-file, --timeout, --comments-reviewed)
   status    snapshot: worktree, upstream, base, PR, checks
   context   compact commit/diff context for message generation
   commit    validate + stage + commit   (-m|--message-file, --amend, --path)
   publish   push the branch             (-u when new, --force-with-lease)
-  sync      merge origin/<base>         (--continue after resolving conflicts)
+  sync      merge remote head and base (--continue after resolving conflicts)
   pr        view or create the PR       (--title, --body|--body-file, --ready)
+  comments  unresolved review threads and recent PR comments
+  reply     reply to a review thread   (--thread, --body|--body-file)
+  resolve   mark an addressed thread resolved (--thread)
   checks    poll PR checks to terminal  (--interval, --timeout, --once)
   logs      print a failing check's log (<check|run-url>, --name, --tail); third-party
             checks (GitGuardian, …) print their check-run report
@@ -493,7 +498,8 @@ type CheckFetch = { ok: true; reported: boolean; checks: Check[] } | { ok: false
 
 async function fetchChecks(branch: string): Promise<CheckFetch> {
   const res = await gh(["pr", "checks", branch, "--json", "name,state,bucket,link,workflow"])
-  if (res.code === 0) {
+  // gh exits nonzero for failing or pending checks even when --json returned valid data.
+  if (res.stdout.startsWith("[")) {
     return { ok: true, reported: true, checks: JSON.parse(res.stdout) as Check[] }
   }
   if (/no checks reported/i.test(res.stderr) || /no checks reported/i.test(res.stdout)) {
@@ -606,6 +612,209 @@ async function readPr(branch: string): Promise<PrView | null> {
   ])
   if (res.code !== 0) return null
   return JSON.parse(res.stdout) as PrView
+}
+
+type ReviewThread = {
+  id: string
+  isResolved: boolean
+  isOutdated: boolean
+  comments: {
+    nodes: {
+      body: string
+      url: string
+      path: string | null
+      line: number | null
+      author: { login: string } | null
+    }[]
+  }
+}
+
+async function unresolvedThreads(slug: string, number: number): Promise<ReviewThread[]> {
+  const [owner, name] = slug.split("/")
+  const query = `query($owner:String!,$name:String!,$number:Int!,$cursor:String){
+    repository(owner:$owner,name:$name){pullRequest(number:$number){reviewThreads(first:100,after:$cursor){
+      pageInfo{hasNextPage endCursor}
+      nodes{id isResolved isOutdated comments(last:3){nodes{body url path line author{login}}}}
+    }}}
+  }`
+  const threads: ReviewThread[] = []
+  let cursor: string | null = null
+  while (true) {
+    const args = [
+      "api",
+      "graphql",
+      "-f",
+      `query=${query}`,
+      "-F",
+      `owner=${owner}`,
+      "-F",
+      `name=${name}`,
+      "-F",
+      `number=${number}`,
+    ]
+    if (cursor) args.push("-F", `cursor=${cursor}`)
+    const result = await gh(args)
+    if (result.code !== 0)
+      die(EXIT.fail, { step: "comments", output: result.stderr || result.stdout })
+    const page = (
+      JSON.parse(result.stdout) as {
+        data: {
+          repository: {
+            pullRequest: {
+              reviewThreads: {
+                pageInfo: { hasNextPage: boolean; endCursor: string | null }
+                nodes: ReviewThread[]
+              }
+            }
+          }
+        }
+      }
+    ).data.repository.pullRequest.reviewThreads
+    threads.push(...page.nodes.filter((thread) => !thread.isResolved))
+    if (!page.pageInfo.hasNextPage) return threads
+    cursor = page.pageInfo.endCursor
+  }
+}
+
+async function cmdComments(): Promise<void> {
+  if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
+  const branch = await currentBranch()
+  const pr = await readPr(branch)
+  if (!pr) die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+  const [slug, details] = await Promise.all([
+    repoSlug(),
+    gh(["pr", "view", branch, "--json", "comments"]),
+  ])
+  if (details.code !== 0) die(EXIT.fail, { step: "comments", output: details.stderr })
+  const threads = await unresolvedThreads(slug, pr.number)
+  const comments = (
+    JSON.parse(details.stdout) as {
+      comments: {
+        body: string
+        url: string
+        author: { login: string } | null
+      }[]
+    }
+  ).comments
+  emit({
+    ok: true,
+    number: pr.number,
+    url: pr.url,
+    unresolvedThreads: threads.map((thread) => ({
+      id: thread.id,
+      outdated: thread.isOutdated,
+      comments: thread.comments.nodes.map((comment) => ({
+        ...comment,
+        body: comment.body.slice(0, 1000),
+      })),
+    })),
+    recentComments: comments.slice(-10).map((comment) => ({
+      ...comment,
+      body: comment.body.slice(0, 1000),
+    })),
+  })
+}
+
+async function cmdReply(): Promise<void> {
+  const id = opt("--thread")
+  const body = opt("--body")
+  const bodyFile = opt("--body-file")
+  if (!id || (body === undefined) === (bodyFile === undefined)) {
+    die(EXIT.usage, { error: "reply needs --thread and exactly one of --body/--body-file" })
+  }
+  const text = bodyFile ? (await Bun.file(bodyFile).text()).trim() : body
+  if (!text) die(EXIT.usage, { error: "reply body is empty" })
+  const query = `mutation($id:ID!,$body:String!){
+    addPullRequestReviewThreadReply(input:{pullRequestReviewThreadId:$id,body:$body}){
+      comment{id url}
+    }
+  }`
+  const result = await gh([
+    "api",
+    "graphql",
+    "-f",
+    `query=${query}`,
+    "-F",
+    `id=${id}`,
+    "-F",
+    `body=${text}`,
+  ])
+  if (result.code !== 0) die(EXIT.fail, { step: "reply", output: result.stderr || result.stdout })
+  emit({ ok: true, thread: id, reply: JSON.parse(result.stdout) })
+}
+
+async function cmdResolve(): Promise<void> {
+  const id = opt("--thread")
+  if (!id) die(EXIT.usage, { error: "resolve needs --thread" })
+  const query = `mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{id isResolved}}}`
+  const result = await gh(["api", "graphql", "-f", `query=${query}`, "-F", `id=${id}`])
+  if (result.code !== 0) die(EXIT.fail, { step: "resolve", output: result.stderr || result.stdout })
+  emit({ ok: true, thread: id, result: JSON.parse(result.stdout) })
+}
+
+async function cmdAdvance(): Promise<void> {
+  const branch = await currentBranch()
+  const base = await baseBranch()
+  requireTrunk(base)
+  if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
+  const worktree = await worktreeStatus()
+  if (worktree.dirty || (await mergeInProgress())) {
+    die(EXIT.usage, {
+      step: "commit",
+      worktree,
+      error: "commit local work or resolve the merge first",
+    })
+  }
+
+  async function step(name: string, args: string[] = []): Promise<Record<string, unknown>> {
+    const result = await run(["bun", join(import.meta.dir, "pr-merge.ts"), name, ...args])
+    let data: Record<string, unknown>
+    try {
+      data = JSON.parse(result.stdout) as Record<string, unknown>
+    } catch {
+      die(EXIT.fail, { step: name, error: result.stderr || result.stdout || "no JSON output" })
+    }
+    if (result.code !== 0) die(result.code, { step: name, ...data })
+    return data
+  }
+
+  await step("sync")
+  await step("publish")
+  const existing = await readPr(branch)
+  if (!existing) {
+    const commits = await git(["log", "--no-merges", "--format=%s", `origin/${base}..HEAD`])
+    const subjects = commits.stdout.split("\n").filter(Boolean)
+    const title = opt("--title") ?? subjects[0]
+    if (!title)
+      die(EXIT.usage, { step: "pr", error: "no non-merge commit for PR title; pass --title" })
+    const bodyFile = opt("--body-file")
+    const body = `## Summary\n\n${subjects
+      .slice(0, 5)
+      .map((subject) => `- ${subject}`)
+      .join("\n")}\n\n## Test plan\n\n- Automated PR checks\n`
+    await step("pr", [
+      "--title",
+      title,
+      ...(bodyFile ? ["--body-file", bodyFile] : ["--body", body]),
+    ])
+  } else if (existing.isDraft) {
+    await step("pr", ["--ready"])
+  }
+
+  await step("checks", ["--timeout", opt("--timeout") ?? "1800"])
+  const comments = await step("comments")
+  const unresolved = comments.unresolvedThreads as unknown[]
+  const recent = comments.recentComments as unknown[]
+  if (unresolved.length > 0 || (recent.length > 0 && !flag("--comments-reviewed"))) {
+    die(EXIT.fail, {
+      step: "comments",
+      error:
+        "address review threads and review recent comments; then rerun with --comments-reviewed",
+      ...comments,
+    })
+  }
+  const merged = await step("merge")
+  emit({ ok: true, branch, base, pr: comments.url, ...merged })
 }
 
 // ---------------------------------------------------------------------------
@@ -828,19 +1037,53 @@ async function cmdSync(): Promise<void> {
     })
   }
 
-  const fetched = await git(["fetch", "origin", base])
+  const fetched = await git(["fetch", "origin"])
   if (fetched.code !== 0) {
     die(EXIT.fail, { step: "fetch", output: fetched.stderr || fetched.stdout })
+  }
+
+  let remoteMerged = false
+  if (await remoteBranchExists(await currentBranch())) {
+    const branch = await currentBranch()
+    const remoteAhead = await git(["rev-list", "--count", `HEAD..origin/${branch}`])
+    if (Number(remoteAhead.stdout) > 0) {
+      const merged = await git([
+        "merge",
+        "--no-edit",
+        "-m",
+        "chore: sync remote branch",
+        `origin/${branch}`,
+      ])
+      const conflicts = await conflictFiles()
+      if (conflicts.length > 0) {
+        die(EXIT.conflicts, {
+          step: "merge-remote",
+          branch,
+          conflicts,
+          hint: "resolve both intents, git add <files>, re-run sync --continue",
+        })
+      }
+      if (merged.code !== 0)
+        die(EXIT.fail, { step: "merge-remote", output: merged.stderr || merged.stdout })
+      remoteMerged = true
+    }
   }
 
   const count = await git(["rev-list", "--count", `HEAD..origin/${base}`])
   const behindBase = count.code === 0 ? Number(count.stdout) || 0 : 0
   if (behindBase === 0) {
-    emit({ ok: true, alreadyUpToDate: true, sha: await headSha(), behindBase: 0 })
+    emit({
+      ok: true,
+      alreadyUpToDate: !remoteMerged,
+      remoteMerged,
+      sha: await headSha(),
+      behindBase: 0,
+      pushNeeded: remoteMerged,
+    })
     return
   }
 
-  const merged = await git(["merge", "--no-edit", `origin/${base}`])
+  const merged = await git(["merge", "--no-edit", "-m", `chore: sync ${base}`, `origin/${base}`])
   const conflicts = await conflictFiles()
   if (conflicts.length > 0) {
     die(EXIT.conflicts, {
@@ -858,6 +1101,7 @@ async function cmdSync(): Promise<void> {
   emit({
     ok: true,
     merged: true,
+    remoteMerged,
     base,
     mergeCommit: await headSha(),
     pushNeeded: true,
@@ -1262,6 +1506,10 @@ async function mergeReadiness(branch: string, base: string, pr: PrView) {
 
   if (pr.state !== "OPEN") blockers.push(`PR is ${pr.state}`)
   if (pr.isDraft) blockers.push("PR is a draft (run `pr --ready`)")
+  if (pr.reviewDecision === "CHANGES_REQUESTED") blockers.push("review requests changes")
+  const threads = await unresolvedThreads(await repoSlug(), pr.number)
+  if (threads.length > 0)
+    blockers.push(`${threads.length} unresolved review thread(s) (run comments)`)
   const worktree = await worktreeStatus()
   if (worktree.dirty) blockers.push("worktree not clean (commit, then publish)")
   const counts = await git(["rev-list", "--left-right", "--count", "@{u}...HEAD"])
@@ -1349,6 +1597,8 @@ async function main(): Promise<void> {
   const first = argv[0]
   const command = first && !first.startsWith("-") ? first : "status"
   switch (command) {
+    case "advance":
+      return cmdAdvance()
     case "status":
       return cmdStatus()
     case "context":
@@ -1361,6 +1611,12 @@ async function main(): Promise<void> {
       return cmdSync()
     case "pr":
       return cmdPr()
+    case "comments":
+      return cmdComments()
+    case "reply":
+      return cmdReply()
+    case "resolve":
+      return cmdResolve()
     case "checks":
       return cmdChecks()
     case "logs":
