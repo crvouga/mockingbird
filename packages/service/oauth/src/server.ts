@@ -1,6 +1,13 @@
 /// <reference types="node" />
+import { readFile } from "node:fs/promises"
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
 import { OAUTH_SCENARIOS, type OAuthScenario } from "./behavior.js"
+import {
+  createMultiRuntime,
+  type OAuthMount,
+  type OAuthMultiRuntime,
+  type OAuthMultiRuntimeOptions,
+} from "./multi.js"
 import { createRuntime, type OAuthRuntime, type OAuthRuntimeOptions } from "./runtime.js"
 export const DEFAULT_PORT = 8810
 export type OAuthServerOptions = OAuthRuntimeOptions & { port?: number; host?: string }
@@ -9,6 +16,14 @@ export const createServer = async (
 ): Promise<Listening & { runtime: OAuthRuntime }> => {
   const { port, host, ...rest } = options
   const runtime = createRuntime(rest)
+  return { ...(await listen(runtime, { port: port ?? 0, ...(host ? { host } : {}) })), runtime }
+}
+export type OAuthMultiServerOptions = OAuthMultiRuntimeOptions & { port?: number; host?: string }
+export const createMultiServer = async (
+  options: OAuthMultiServerOptions,
+): Promise<Listening & { runtime: OAuthMultiRuntime }> => {
+  const { port, host, ...rest } = options
+  const runtime = createMultiRuntime(rest)
   return { ...(await listen(runtime, { port: port ?? 0, ...(host ? { host } : {}) })), runtime }
 }
 export const serveTarget: ServeTarget = {
@@ -26,8 +41,23 @@ export const serveTarget: ServeTarget = {
       description: "Initial behavior scenario (GET /__admin/scenarios lists all)",
     },
     issuer: { type: "string", value: "<url>", description: "Public issuer URL" },
+    mounts: {
+      type: "string",
+      value: "<file>",
+      description: "JSON file with a mounts array; serves every provider on one listener",
+    },
   },
-  create: (values, common) => {
+  create: async (values, common) => {
+    if (typeof values.mounts === "string") {
+      const parsed = JSON.parse(await readFile(values.mounts, "utf8")) as { mounts?: OAuthMount[] }
+      if (!Array.isArray(parsed.mounts))
+        throw new Error("OAuth mounts file requires a mounts array")
+      return createMultiRuntime({
+        mounts: parsed.mounts,
+        ...(common.seed !== undefined ? { seed: common.seed } : {}),
+        ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
+      }) as unknown as OAuthRuntime
+    }
     const provider = values.provider ?? "oidc"
     if (
       provider !== "google" &&

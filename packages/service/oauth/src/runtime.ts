@@ -35,11 +35,13 @@ export type OAuthRuntimeOptions = Omit<OAuthAPIOptions, "namespace" | "now" | "p
   adminKey?: string
   seed?: number | string
   sqlite?: SqliteClient
+  /** Internal storage/runtime name. Multi-mount composition assigns a unique value. */
+  runtimeName?: string
 }
 export type OAuthRuntime = ServiceRuntime<OAuthAPI>
 export function createRuntime(options: OAuthRuntimeOptions = {}): OAuthRuntime {
   return serviceRuntime({
-    name: "oauth",
+    name: options.runtimeName ?? "oauth",
     document,
     presets: OAUTH_PRESETS,
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),

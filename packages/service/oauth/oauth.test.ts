@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { createLocalJWKSet, decodeJwt, jwtVerify } from "jose"
 import { hash } from "./src/crypto.js"
-import { createRuntime, OAuthAPI, type Provider } from "./src/index.js"
-import { createServer } from "./src/server.js"
+import {
+  createMultiRuntime,
+  createRuntime,
+  OAuthAPI,
+  type OAuthMount,
+  type Provider,
+} from "./src/index.js"
+import { createMultiServer, createServer } from "./src/server.js"
 
 const issuer = "https://identity.test"
 const callback = "https://app.test/callback"
@@ -427,6 +433,97 @@ describe("service integration", () => {
       const discovery = await (await fetch(`${server.url}/.well-known/openid-configuration`)).json()
       expect(discovery.issuer).toBe(server.url)
       expect(await (await fetch(server.url)).text()).toContain("Make sign-in")
+    } finally {
+      await server.close()
+    }
+  })
+})
+
+describe("multi-provider runtime", () => {
+  const mounts = [
+    { path: "/google", provider: "google" as const, accounts: [account], clients: [client] },
+    { path: "/apple", provider: "apple" as const, accounts: [account], clients: [client] },
+    { path: "/oauth2", provider: "microsoft" as const, accounts: [account], clients: [client] },
+  ] satisfies [OAuthMount, OAuthMount, OAuthMount]
+
+  test("mounts exact independent issuers, keys and state", async () => {
+    const runtime = createMultiRuntime({ mounts })
+    const google = await (
+      await runtime.fetch(new Request(`${issuer}/google/.well-known/openid-configuration`))
+    ).json()
+    const apple = await (
+      await runtime.fetch(new Request(`${issuer}/apple/.well-known/openid-configuration`))
+    ).json()
+    expect(google.issuer).toBe(`${issuer}/google`)
+    expect(google.authorization_endpoint).toBe(`${issuer}/google/o/oauth2/v2/auth`)
+    expect(apple.issuer).toBe(`${issuer}/apple`)
+    const googleKeys = await (await runtime.fetch(new Request(google.jwks_uri))).json()
+    const appleKeys = await (await runtime.fetch(new Request(apple.jwks_uri))).json()
+    expect(googleKeys.keys[0].kid).not.toBe(appleKeys.keys[0].kid)
+
+    const added = await runtime.fetch(
+      new Request(`${issuer}/google/__admin/accounts`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: "grace", name: "Grace Hopper", email: "grace@example.test" }),
+      }),
+    )
+    expect(added.status).toBe(201)
+    const appleAccounts = await (
+      await runtime.fetch(new Request(`${issuer}/apple/__admin/accounts`))
+    ).json()
+    expect(appleAccounts.accounts.map((entry: { id: string }) => entry.id)).not.toContain("grace")
+  })
+
+  test("mount and namespace routing compose without prefix confusion", async () => {
+    const runtime = createMultiRuntime({ mounts })
+    const discovery = await (
+      await runtime.fetch(
+        new Request(`${issuer}/ns/worker/google/.well-known/openid-configuration`),
+      )
+    ).json()
+    expect(discovery.issuer).toBe(`${issuer}/ns/worker/google`)
+    expect((await runtime.fetch(new Request(`${issuer}/googler/authorize`))).status).toBe(404)
+    expect((await runtime.fetch(new Request(`${issuer}/googleish/authorize`))).status).toBe(404)
+    expect((await runtime.fetch(new Request(`${issuer}/missing/authorize`))).status).toBe(404)
+  })
+
+  test("aggregate health, reset, controls and startup validation", async () => {
+    const runtime = createMultiRuntime({ mounts })
+    const health = await (await runtime.fetch(new Request(`${issuer}/health`))).json()
+    expect(Object.keys(health.mounts)).toEqual(["/google", "/apple", "/oauth2"])
+    expect((await runtime.fetch(new Request(`${issuer}/__admin/mounts`))).status).toBe(200)
+    expect(
+      (
+        await runtime.fetch(
+          new Request(`${issuer}/__admin/clock?mount=/google`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ set: "2030-01-01T00:00:00Z", freeze: true }),
+          }),
+        )
+      ).status,
+    ).toBe(200)
+    expect(runtime.clock.state().frozen).toBe(true)
+    expect(
+      (await runtime.fetch(new Request(`${issuer}/__admin/reset?all=1`, { method: "POST" })))
+        .status,
+    ).toBe(200)
+    expect(() => createMultiRuntime({ mounts: [mounts[0], mounts[0]] })).toThrow(
+      "duplicate OAuth mount path",
+    )
+    expect(() =>
+      createMultiRuntime({ mounts: [{ ...mounts[0], path: "/google/../apple" }] }),
+    ).toThrow("invalid OAuth mount path")
+  })
+
+  test("HTTP adapter serves all mounts on one listener", async () => {
+    const server = await createMultiServer({ mounts })
+    try {
+      const discovery = await (
+        await fetch(`${server.url}/oauth2/.well-known/openid-configuration`)
+      ).json()
+      expect(discovery.issuer).toBe(`${server.url}/oauth2`)
     } finally {
       await server.close()
     }
