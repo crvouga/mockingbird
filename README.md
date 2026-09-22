@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-44-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-45-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-50 services, each its own npm package. Every service declares a release tier:
+51 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (44): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (45): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -91,6 +91,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [AWS Elemental MediaConvert](packages/service/mediaconvert) | Communication | [`@crvouga/mockingbird-service-mediaconvert`](https://www.npmjs.com/package/@crvouga/mockingbird-service-mediaconvert) | Stateful AWS Elemental MediaConvert mock with endpoint discovery, async jobs, EventBridge events, and deterministic S3 outputs. |
 | [Daily](packages/service/daily) | Communication | [`@crvouga/mockingbird-service-daily`](https://www.npmjs.com/package/@crvouga/mockingbird-service-daily) | Stateful mock of the Daily.co REST API: rooms, presence, eject, meeting tokens (minted and self-signed HS256, verified and decodable), and transcription/recording webhooks with transcripts written to S3. |
 | [Intercom](packages/service/intercom) | Communication | [`@crvouga/mockingbird-service-intercom`](https://www.npmjs.com/package/@crvouga/mockingbird-service-intercom) | Stateful mock of the Intercom REST API 2.11: contacts (search, create with 409 on duplicates, update, get), conversations (create with Idempotency-Key, reply as JSON or multipart, close/open, get, cursor search), admins, and X-Hub-Signature-signed admin reply/close/open webhooks. |
+| [LiveKit](packages/service/livekit) | Communication | [`@crvouga/mockingbird-service-livekit`](https://www.npmjs.com/package/@crvouga/mockingbird-service-livekit) | Stateful LiveKit mock with Twirp room APIs, JWT grants, participants, data, SIP/egress controls, and signed webhooks. |
 | [Mailosaur](packages/service/mailosaur) | Communication | [`@crvouga/mockingbird-service-mailosaur`](https://www.npmjs.com/package/@crvouga/mockingbird-service-mailosaur) | Stateful mock of the Mailosaur email/SMS testing API (messages search, get, delete, long-poll) with an HTTP ingest so other mocks can drop mail in (Mockingbird service contract). |
 | [Resend](packages/service/resend) | Communication | [`@crvouga/mockingbird-service-resend`](https://www.npmjs.com/package/@crvouga/mockingbird-service-resend) | Stateful mock of the Resend email API (send with idempotency, received emails, attachments) with an outbox and Svix-signed inbound webhooks (Mockingbird service contract). |
 | [Slack](packages/service/slack) | Communication | [`@crvouga/mockingbird-service-slack`](https://www.npmjs.com/package/@crvouga/mockingbird-service-slack) | Stateful mock of Slack incoming webhooks and the Web API (chat.postMessage and friends) with an outbox of every alert the app sent. |

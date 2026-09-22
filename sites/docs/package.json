@@ -40,6 +40,7 @@
     "@crvouga/mockingbird-service-intercom": "workspace:*",
     "@crvouga/mockingbird-service-junction": "workspace:*",
     "@crvouga/mockingbird-service-klaviyo": "workspace:*",
+    "@crvouga/mockingbird-service-livekit": "workspace:*",
     "@crvouga/mockingbird-service-llamacloud": "workspace:*",
     "@crvouga/mockingbird-service-mailosaur": "workspace:*",
     "@crvouga/mockingbird-service-makor-cpg": "workspace:*",
