@@ -865,6 +865,31 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/service/mediaconvert": {
+      "name": "@crvouga/mockingbird-service-mediaconvert",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-mediaconvert": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+      },
+      "devDependencies": {
+        "@aws-sdk/client-mediaconvert": "3.1132.0",
+        "@aws-sdk/client-s3": "3.1132.0",
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-s3": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/medplum": {
       "name": "@crvouga/mockingbird-service-medplum",
       "version": "0.0.0-development",
@@ -1523,6 +1548,7 @@
         "@crvouga/mockingbird-service-llamacloud": "workspace:*",
         "@crvouga/mockingbird-service-mailosaur": "workspace:*",
         "@crvouga/mockingbird-service-makor-cpg": "workspace:*",
+        "@crvouga/mockingbird-service-mediaconvert": "workspace:*",
         "@crvouga/mockingbird-service-medplum": "workspace:*",
         "@crvouga/mockingbird-service-oauth": "workspace:*",
         "@crvouga/mockingbird-service-odx": "workspace:*",
@@ -1630,6 +1656,8 @@
     "@aws-sdk/client-cognito-identity-provider": ["@aws-sdk/client-cognito-identity-provider@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-+y9Ey22tk1R0+e1E/YS4n8R/LdLY4I5mp/aqwzdNlKRztlcK0ryRTX8E3kXD4+V79BfGMKpxXfPMpzLiLTiyKA=="],
 
     "@aws-sdk/client-dynamodb": ["@aws-sdk/client-dynamodb@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/dynamodb-codec": "^3.973.45", "@aws-sdk/middleware-endpoint-discovery": "^3.972.30", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-n417UaZ23G3WshCBN3zNm2b8QdcA9RtjVK5r0ZqdUqc/fNl4k/NB5hUcYwVpZ6jN/Mv+cFsiN2TqAK7CKGq5aA=="],
+
+    "@aws-sdk/client-mediaconvert": ["@aws-sdk/client-mediaconvert@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-xoUKfxi5NGfMrqYgoC+Rzx1zrH+kF9k+yaUNVCeFc8dsCMe0XbSwYb+Otzp1HSZlQHNAeo+2YIqPmcnxfyNlQQ=="],
 
     "@aws-sdk/client-polly": ["@aws-sdk/client-polly@3.1132.0", "", { "dependencies": { "@aws-sdk/core": "^3.978.0", "@aws-sdk/credential-provider-node": "^3.972.83", "@aws-sdk/eventstream-handler-node": "^3.972.34", "@aws-sdk/middleware-eventstream": "^3.972.29", "@aws-sdk/types": "^3.974.5", "@smithy/core": "^3.33.3", "@smithy/fetch-http-handler": "^5.7.2", "@smithy/node-http-handler": "^4.11.3", "@smithy/types": "^4.17.2", "tslib": "^2.6.2" } }, "sha512-RunK3WifX3l+IksbhqK67TmyvpAYRavBMZ4LjrkL7ff3SIX1oUCgnewSfty//jqeyK3fdslYvNUS050fUeu3rg=="],
 
@@ -1916,6 +1944,8 @@
     "@crvouga/mockingbird-service-mailosaur": ["@crvouga/mockingbird-service-mailosaur@workspace:packages/service/mailosaur"],
 
     "@crvouga/mockingbird-service-makor-cpg": ["@crvouga/mockingbird-service-makor-cpg@workspace:packages/service/makor-cpg"],
+
+    "@crvouga/mockingbird-service-mediaconvert": ["@crvouga/mockingbird-service-mediaconvert@workspace:packages/service/mediaconvert"],
 
     "@crvouga/mockingbird-service-medplum": ["@crvouga/mockingbird-service-medplum@workspace:packages/service/medplum"],
 
