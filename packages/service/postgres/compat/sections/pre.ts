@@ -1,0 +1,26 @@
+import { type CatalogSection, section } from "../scenario-types.ts";
+
+export const PRE_SECTION: CatalogSection = section("PRE", "PREPARE / EXECUTE / DEALLOCATE", true, [
+  ["prep-01", "PREPARE with a typed parameter"],
+  ["prep-02", "PREPARE without declared types infers from usage"],
+  ["prep-03", "PREPARE with multiple typed parameters"],
+  ["prep-04", "text parameter concatenation"],
+  ["exec-01", "EXECUTE runs multiple times"],
+  ["exec-02", "prepared SELECT over a table"],
+  ["exec-03", "prepared statement sees rows inserted after PREPARE"],
+  ["dml-01", "prepared INSERT writes rows"],
+  ["dml-02", "prepared UPDATE and DELETE"],
+  ["txn-01", "EXECUTE inside a transaction commits"],
+  ["txn-02", "EXECUTE rolled back with the transaction"],
+  ["dealloc-01", "DEALLOCATE removes the prepared statement"],
+  ["dealloc-02", "re-PREPARE after DEALLOCATE with a new definition"],
+  ["dealloc-03", "DEALLOCATE PREPARE keyword form"],
+  ["dealloc-04", "DEALLOCATE ALL removes every prepared statement"],
+  ["err-01", "EXECUTE with too few arguments fails"],
+  ["err-02", "EXECUTE with too many arguments fails"],
+  ["err-03", "re-PREPARE of the same name fails with 42P05"],
+  ["err-04", "EXECUTE of an unknown prepared statement fails"],
+  ["err-05", "DEALLOCATE of an unknown prepared statement fails"],
+  ["err-06", "EXECUTE argument that cannot convert fails with 22P02"],
+  ["drop-01", "EXECUTE fails after the referenced table is dropped"],
+]);

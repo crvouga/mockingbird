@@ -1,10 +1,24 @@
 import { HttpError } from "@crvouga/mockingbird-service"
 
+export type StripeErrorType =
+  | "invalid_request_error"
+  | "card_error"
+  | "api_error"
+  | "authentication_error"
+  | "idempotency_error"
+  | "permission_error"
+
 export type StripeErrorInit = {
   status: number
   message: string
   code?: string
   param?: string
+  type?: StripeErrorType
+  decline_code?: string
+  /** Extra fields Stripe puts on some errors (`charge`, `payment_intent`, `advice_code`, …). */
+  extra?: Record<string, unknown>
+  /** Leave `doc_url` out even though a code is set (Stripe omits it on a few errors). */
+  noDocUrl?: boolean
 }
 
 /** Codes that Stripe documents; these carry a `doc_url`. */
@@ -12,15 +26,18 @@ const docUrl = (code: string) => `https://stripe.com/docs/error-codes/${code.rep
 
 /** Stripe serialises error bodies with keys in alphabetical order. */
 export const stripeErrorBody = (init: StripeErrorInit, requestLogUrl: string) => {
-  const error: Record<string, string> = {}
+  const fields: Record<string, unknown> = { ...init.extra }
   if (init.code !== undefined) {
-    error.code = init.code
-    error.doc_url = docUrl(init.code)
+    fields.code = init.code
+    if (init.noDocUrl !== true) fields.doc_url = docUrl(init.code)
   }
-  error.message = init.message
-  if (init.param !== undefined) error.param = init.param
-  error.request_log_url = requestLogUrl
-  error.type = "invalid_request_error"
+  if (init.decline_code !== undefined) fields.decline_code = init.decline_code
+  fields.message = init.message
+  if (init.param !== undefined) fields.param = init.param
+  fields.request_log_url = requestLogUrl
+  fields.type = init.type ?? "invalid_request_error"
+  const error: Record<string, unknown> = {}
+  for (const key of Object.keys(fields).sort()) error[key] = fields[key]
   return { error }
 }
 
@@ -39,8 +56,54 @@ export const invalidRequest = (message: string, param?: string, code?: string) =
     ...(code === undefined ? {} : { code }),
   })
 
+/** Declines answer 402 with `type: "card_error"`, exactly like a real declined charge. */
+export const cardError = (
+  message: string,
+  code: string,
+  declineCode: string,
+  extra: Record<string, unknown> = {},
+) =>
+  new StripeError({
+    status: 402,
+    message,
+    code,
+    decline_code: declineCode,
+    type: "card_error",
+    extra,
+  })
+
+/** A plain message-only 400, as Stripe answers most state errors. */
+export const stateError = (message: string, code?: string, param?: string) =>
+  new StripeError({
+    status: 400,
+    message,
+    ...(code === undefined ? {} : { code }),
+    ...(param === undefined ? {} : { param }),
+  })
+
+/** Stripe adds a hint when the id carries surrounding whitespace or quotes. */
+const idHint = (id: string) =>
+  /^[\s'"]|[\s'"]$/.test(id)
+    ? ". Make sure you use the exact id without extra whitespace or quotes"
+    : ""
+
+/** How Stripe quotes an id inside an error message (Ruby-style escapes, HTML-safe JSON). */
+export const quoteId = (id: string) =>
+  id.replace(/[\\'"<>&]/g, (char) =>
+    char === "<" ? "\\u003C" : char === ">" ? "\\u003E" : char === "&" ? "\\u0026" : `\\${char}`,
+  )
+
+/** Stripe elides the middle of an id longer than 998 characters. */
+const truncateId = (id: string) =>
+  id.length > 998 ? `${id.slice(0, 490)}...(truncated)...${id.slice(-490)}` : id
+
 export const resourceMissing = (kind: string, id: string, param: string, status = 404) =>
-  new StripeError({ status, code: "resource_missing", message: `No such ${kind}: '${id}'`, param })
+  new StripeError({
+    status,
+    code: "resource_missing",
+    message: `No such ${kind}: '${quoteId(truncateId(id))}'${idHint(id)}`,
+    param,
+  })
 
 export const parameterUnknown = (param: string) =>
   new StripeError({

@@ -1,0 +1,47 @@
+import { type CatalogSection, section } from "../scenario-types.ts";
+
+const D = "documented_divergence" as const;
+
+export const CAT_SECTION: CatalogSection = section("CAT", "pg_catalog and information_schema", true, [
+  ["class-01", "user table appears in pg_class with relkind r"],
+  ["class-02", "view appears in pg_class with relkind v"],
+  ["class-03", "sequence appears in pg_class with relkind S"],
+  ["class-04", "pg_class joined to pg_namespace resolves the schema"],
+  ["class-05", "pg_class row disappears after DROP TABLE"],
+  ["attr-01", "pg_attribute lists user columns in order"],
+  ["attr-02", "pg_attribute attnotnull reflects NOT NULL and PK"],
+  ["attr-03", "pg_attribute joined to pg_type resolves column types"],
+  ["type-01", "pg_type has entries for builtin type names"],
+  ["ns-01", "system schemas present in pg_namespace"],
+  ["proc-01", "user function appears in pg_proc"],
+  ["proc-02", "overloads produce multiple pg_proc rows"],
+  ["proc-03", "builtin function present in pg_proc"],
+  ["tabs-01", "pg_tables shows the user table with its schema"],
+  ["views-01", "pg_views shows the user view"],
+  ["info-01", "information_schema.tables reports the user table"],
+  ["info-02", "information_schema.tables reports views as VIEW"],
+  ["info-03", "information_schema.columns basic shape"],
+  ["info-04", "information_schema.columns ordinal positions"],
+  ["info-05", "information_schema.columns numeric data types"],
+  ["cons-01", "information_schema.table_constraints for PK, UNIQUE, CHECK"],
+  ["cons-02", "information_schema.key_column_usage lists key columns"],
+  ["cons-03", "foreign key appears in table_constraints"],
+  ["fn-01", "current_database() and current_schema() shapes"],
+  ["fn-02", "version() reports a PostgreSQL banner"],
+  [
+    "ver-01",
+    "version() full text names postgres-mem",
+    D,
+    "memory: 'PostgreSQL 18.3 (postgres-mem) on TypeScript, in-memory engine'; oracle reports the real build banner",
+    undefined,
+    "version-banner",
+  ],
+  [
+    "viewdef-01",
+    "pg_get_viewdef is not implemented",
+    D,
+    "memory: 42883 function pg_get_viewdef(...) does not exist; PostgreSQL returns the view definition",
+    undefined,
+    "pg-get-viewdef-missing",
+  ],
+]);

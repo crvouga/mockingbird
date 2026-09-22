@@ -1,0 +1,1081 @@
+{
+  "generatedAt": "2026-08-21T18:49:46.346Z",
+  "referenceServerVersion": "18.3",
+  "counts": {
+    "total": 183,
+    "notApplicable": 56,
+    "sqlBehavior": 127,
+    "verified": 43,
+    "partiallyVerified": 26,
+    "unsupported": 58,
+    "unknown": 0
+  },
+  "coverage": {
+    "sql-abort": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": ""
+    },
+    "sql-alteraggregate": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-altercollation": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-alterconversion": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-alterdatabase": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterdefaultprivileges": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterdomain": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/types/"
+      ],
+      "notes": "constraint add/drop supported"
+    },
+    "sql-altereventtrigger": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterextension": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterforeigndatawrapper": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterforeigntable": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterfunction": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/functions/"
+      ],
+      "notes": "parsed no-op"
+    },
+    "sql-altergroup": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterindex": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/indexes/"
+      ],
+      "notes": ""
+    },
+    "sql-alterlanguage": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterlargeobject": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-altermaterializedview": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/views/"
+      ],
+      "notes": "rename supported"
+    },
+    "sql-alteroperator": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-alteropclass": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-alteropfamily": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-alterpolicy": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterprocedure": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "procedures fail loud"
+    },
+    "sql-alterpublication": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterrole": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterroutine": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-alterrule": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-alterschema": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/schemas/"
+      ],
+      "notes": ""
+    },
+    "sql-altersequence": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/sequences/"
+      ],
+      "notes": ""
+    },
+    "sql-alterserver": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterstatistics": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-altersubscription": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-altersystem": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-altertable": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/alter-table/"
+      ],
+      "notes": ""
+    },
+    "sql-altertablespace": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-altertsconfig": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-altertsdictionary": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-altertsparser": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-altertstemplate": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-altertrigger": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/triggers/"
+      ],
+      "notes": "rename supported"
+    },
+    "sql-altertype": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/types/"
+      ],
+      "notes": "ADD VALUE / RENAME supported for enums"
+    },
+    "sql-alteruser": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterusermapping": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-alterview": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/views/"
+      ],
+      "notes": ""
+    },
+    "sql-analyze": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op; no planner statistics"
+    },
+    "sql-begin": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": ""
+    },
+    "sql-call": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "procedures are unsupported; CALL fails loud"
+    },
+    "sql-checkpoint": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op"
+    },
+    "sql-close": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "protocol cursors fail loud"
+    },
+    "sql-cluster": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op"
+    },
+    "sql-comment": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/catalog/"
+      ],
+      "notes": "parsed and accepted; comments are not stored (divergence comment-on-not-stored)"
+    },
+    "sql-commit": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": ""
+    },
+    "sql-commit-prepared": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-copy": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/copy/"
+      ],
+      "notes": "text and csv formats via API hook; binary format unsupported"
+    },
+    "sql-create-access-method": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createaggregate": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createcast": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createcollation": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createconversion": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createdatabase": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createdomain": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/types/",
+        "tests/contract/catalog/"
+      ],
+      "notes": ""
+    },
+    "sql-createeventtrigger": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createextension": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createforeigndatawrapper": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createforeigntable": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createfunction": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/functions/"
+      ],
+      "notes": "LANGUAGE sql plus plpgsql-lite (DECLARE, EXCEPTION WHEN others, CASE, FOR-IN-SELECT, RETURN NEXT); no cursors/NOTICE/packages"
+    },
+    "sql-creategroup": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createindex": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/indexes/"
+      ],
+      "notes": ""
+    },
+    "sql-createlanguage": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-creatematerializedview": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/views/"
+      ],
+      "notes": "materialized views are eager snapshots refreshed by REFRESH MATERIALIZED VIEW"
+    },
+    "sql-createoperator": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createopclass": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createopfamily": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createpolicy": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createprocedure": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "procedures fail loud"
+    },
+    "sql-createpublication": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createrole": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createrule": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createschema": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/schemas/",
+        "tests/contract/search-path/"
+      ],
+      "notes": ""
+    },
+    "sql-createsequence": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/sequences/"
+      ],
+      "notes": ""
+    },
+    "sql-createserver": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createstatistics": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createsubscription": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createtable": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/constraints/",
+        "tests/contract/defaults/",
+        "tests/contract/generated/"
+      ],
+      "notes": ""
+    },
+    "sql-createtableas": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/create-table-as/"
+      ],
+      "notes": ""
+    },
+    "sql-createtablespace": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createtsconfig": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createtsdictionary": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createtsparser": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createtstemplate": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createtransform": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-createtrigger": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/triggers/"
+      ],
+      "notes": "row-level BEFORE/AFTER with LANGUAGE sql-expressible bodies; INSTEAD OF fails loud"
+    },
+    "sql-createtype": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/types/",
+        "tests/contract/catalog/"
+      ],
+      "notes": "enum types supported; composite/range/base types fail loud"
+    },
+    "sql-createuser": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createusermapping": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-createview": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/views/"
+      ],
+      "notes": ""
+    },
+    "sql-deallocate": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/prepare-execute/"
+      ],
+      "notes": ""
+    },
+    "sql-declare": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "protocol cursors fail loud"
+    },
+    "sql-delete": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/delete/"
+      ],
+      "notes": ""
+    },
+    "sql-discard": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/set-show/"
+      ],
+      "notes": "parsed no-op"
+    },
+    "sql-do": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/functions/"
+      ],
+      "notes": "LANGUAGE sql bodies only"
+    },
+    "sql-drop-access-method": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropaggregate": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropcast": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropcollation": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropconversion": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropdatabase": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropdomain": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/types/"
+      ],
+      "notes": ""
+    },
+    "sql-dropeventtrigger": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropextension": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropforeigndatawrapper": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropforeigntable": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropfunction": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/functions/"
+      ],
+      "notes": ""
+    },
+    "sql-dropgroup": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropindex": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/indexes/"
+      ],
+      "notes": ""
+    },
+    "sql-droplanguage": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropmaterializedview": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/views/"
+      ],
+      "notes": ""
+    },
+    "sql-dropoperator": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropopclass": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropopfamily": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-drop-owned": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-droppolicy": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropprocedure": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "procedures fail loud"
+    },
+    "sql-droppublication": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-droprole": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-droproutine": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-droprule": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropschema": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/schemas/"
+      ],
+      "notes": ""
+    },
+    "sql-dropsequence": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/sequences/"
+      ],
+      "notes": ""
+    },
+    "sql-dropserver": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropstatistics": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-dropsubscription": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-droptable": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/alter-table/",
+        "tests/contract/catalog/"
+      ],
+      "notes": ""
+    },
+    "sql-droptablespace": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-droptsconfig": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-droptsdictionary": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-droptsparser": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-droptstemplate": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-droptransform": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "not implemented; statements fail loud via unsupported()"
+    },
+    "sql-droptrigger": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/triggers/"
+      ],
+      "notes": ""
+    },
+    "sql-droptype": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/types/"
+      ],
+      "notes": ""
+    },
+    "sql-dropuser": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropusermapping": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-dropview": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/views/"
+      ],
+      "notes": ""
+    },
+    "sql-end": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": ""
+    },
+    "sql-execute": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/prepare-execute/"
+      ],
+      "notes": ""
+    },
+    "sql-explain": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/errors/"
+      ],
+      "notes": "stub plan shapes; not plan-identical"
+    },
+    "sql-fetch": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "protocol cursors fail loud"
+    },
+    "sql-grant": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op (no roles)"
+    },
+    "sql-importforeignschema": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-insert": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/insert/",
+        "tests/contract/on-conflict/",
+        "tests/contract/returning/"
+      ],
+      "notes": ""
+    },
+    "sql-listen": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "LISTEN/NOTIFY fails loud (single session)"
+    },
+    "sql-load": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-lock": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": "parsed no-op; no concurrent lockers exist"
+    },
+    "sql-merge": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "MERGE fails loud; use INSERT ... ON CONFLICT"
+    },
+    "sql-move": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "protocol cursors fail loud"
+    },
+    "sql-notify": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "LISTEN/NOTIFY fails loud (single session)"
+    },
+    "sql-prepare": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/prepare-execute/"
+      ],
+      "notes": ""
+    },
+    "sql-prepare-transaction": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-reassign-owned": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-refreshmaterializedview": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/views/"
+      ],
+      "notes": ""
+    },
+    "sql-reindex": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op"
+    },
+    "sql-release-savepoint": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/savepoints/"
+      ],
+      "notes": ""
+    },
+    "sql-reset": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/set-show/"
+      ],
+      "notes": ""
+    },
+    "sql-revoke": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op (no roles)"
+    },
+    "sql-rollback": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": ""
+    },
+    "sql-rollback-prepared": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-rollback-to": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/savepoints/"
+      ],
+      "notes": ""
+    },
+    "sql-savepoint": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/savepoints/"
+      ],
+      "notes": ""
+    },
+    "sql-security-label": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op"
+    },
+    "sql-select": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/select/",
+        "tests/contract/joins/",
+        "tests/contract/grouping/",
+        "tests/fuzz/"
+      ],
+      "notes": ""
+    },
+    "sql-selectinto": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "use CREATE TABLE AS; SELECT INTO fails loud"
+    },
+    "sql-set": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/set-show/"
+      ],
+      "notes": ""
+    },
+    "sql-set-constraints": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/foreign-keys/"
+      ],
+      "notes": "DEFERRABLE parsed; constraints check at statement end"
+    },
+    "sql-set-role": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-set-session-authorization": {
+      "status": "NOT_APPLICABLE",
+      "evidence": [],
+      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+    },
+    "sql-set-transaction": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": "parsed; isolation levels are meaningless in a single-session engine"
+    },
+    "sql-show": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/set-show/"
+      ],
+      "notes": ""
+    },
+    "sql-start-transaction": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/transactions/"
+      ],
+      "notes": "isolation-level clauses parsed; single-session engine has no concurrent isolation"
+    },
+    "sql-truncate": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/delete/"
+      ],
+      "notes": ""
+    },
+    "sql-unlisten": {
+      "status": "UNSUPPORTED",
+      "evidence": [],
+      "notes": "LISTEN/NOTIFY fails loud (single session)"
+    },
+    "sql-update": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/update/",
+        "tests/contract/update-from/"
+      ],
+      "notes": ""
+    },
+    "sql-vacuum": {
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/misc/"
+      ],
+      "notes": "parsed no-op; there is no physical storage to vacuum"
+    },
+    "sql-values": {
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/select/",
+        "tests/contract/unions/"
+      ],
+      "notes": ""
+    }
+  }
+}

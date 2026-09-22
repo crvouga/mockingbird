@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { listOperations } from "@crvouga/mockingbird-openapi"
+import { operationMetadata } from "@crvouga/mockingbird-openapi-metadata"
 import { ParityError, parity } from "@crvouga/mockingbird-parity"
+import { Database } from "@crvouga/mockingbird-service-sqlite"
 import { fcParameters } from "@crvouga/mockingbird-testing"
-import { Database } from "@crvouga/sqlite-mem"
 import fc from "fast-check"
-import { document, StripeAPI, supportedOperationIds } from "./src/index.js"
+import { document, StripeAPI } from "./src/index.js"
 
 const params = fcParameters(process.env)
 
@@ -28,10 +30,7 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: async (request) => {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            return reference.fetch(request)
-          },
+          fetch: (request) => reference.fetch(request),
         },
         mock: {
           create: () => new StripeAPI({ now }),
@@ -41,19 +40,82 @@ describe("StripeAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
+        includeUnsafe: true,
         numRuns: params.numRuns ?? 40,
         maxCommands: 25,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
         log: () => {},
+        // Both in-process instances share a busy CI runner, so scheduler stalls can
+        // dominate these sub-millisecond requests. Keep this as a gross-regression
+        // guard; the dedicated benchmark suite owns tight latency budgets.
+        latencyToleranceMs: 1_000,
       })
       expect(report.walks).toBeGreaterThan(0)
-      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
-        supportedOperationIds.length / 2,
-      )
+      // Full-surface coverage is asserted by stripe.qa.seed.property.test.ts; this suite proves
+      // two independent instances agree (and conform) on ordinary walks.
+      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(0)
     },
-    { timeout: 60_000 },
+    { timeout: 120_000 },
+  )
+
+  test(
+    "pinned walks together exercise every parity-enabled operation",
+    async () => {
+      const enabled = listOperations(document)
+        .filter((operation) => {
+          const meta = operationMetadata(operation.operation)
+          return meta.supported && meta.parity.enabled
+        })
+        .map((operation) => operation.operationId)
+      const exercised = new Set<string>()
+      // Coverage-biased walks from fixed seeds, so the union is reproducible; each is a full
+      // lockstep comparison with spec conformance, like the random walks above.
+      for (const seed of [3, 11, 12, 14, 15, 16]) {
+        const reference = new StripeAPI({ now })
+        const report = await parity({
+          provider: "stripe",
+          spec: document,
+          real: {
+            baseUrl: `https://${MOCK_HOST}`,
+            allowedHosts: [MOCK_HOST],
+            headers: () => AUTH,
+            fetch: (request) => reference.fetch(request),
+          },
+          mock: {
+            create: () => new StripeAPI({ now }),
+            baseUrl: `https://${MOCK_HOST}`,
+            headers: () => AUTH,
+          },
+          cleanup: async () => {
+            await reference.reset()
+          },
+          includeUnsafe: true,
+          numRuns: 200,
+          maxCommands: 150,
+          coverageBias: 30,
+          invalidProbability: 0.05,
+          missingProbability: 0.03,
+          weights: {
+            PostSubscriptionItems: 4,
+            PostSubscriptionItemsItem: 4,
+            DeleteSubscriptionItemsItem: 4,
+            GetSubscriptionItems: 3,
+            PostPaymentMethodsPaymentMethodAttach: 4,
+            GetPaymentMethodsPaymentMethod: 3,
+            PostSubscriptions: 3,
+          },
+          seed,
+          sleep: async () => {},
+          log: () => {},
+          latencyToleranceMs: 1_000,
+        })
+        for (const id of Object.keys(report.exercised)) exercised.add(id)
+      }
+      expect(enabled.filter((id) => !exercised.has(id))).toEqual([])
+    },
+    { timeout: 180_000 },
   )
 
   test(
@@ -86,10 +148,11 @@ describe("StripeAPI", () => {
         env: process.env,
         sleep: async () => {},
         log: () => {},
+        latencyToleranceMs: 1_000,
       })
       expect(report.walks).toBeGreaterThan(0)
     },
-    { timeout: 30_000 },
+    { timeout: 120_000 },
   )
 
   test(
@@ -150,6 +213,132 @@ describe("StripeAPI", () => {
     },
     { timeout: 30_000 },
   )
+
+  test("validates test-mode authentication and replays idempotent requests", async () => {
+    const stripe = new StripeAPI({ now })
+    const missing = await stripe.fetch(new Request(`https://${MOCK_HOST}/v1/customers`))
+    expect(missing.status).toBe(401)
+    const invalid = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        headers: { authorization: "Bearer sk_live_secret" },
+      }),
+    )
+    expect(invalid.status).toBe(401)
+
+    const headers = {
+      ...AUTH,
+      "content-type": "application/x-www-form-urlencoded",
+      "idempotency-key": "customer-create-1",
+    }
+    const first = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers,
+        body: new URLSearchParams({ name: "Ada" }),
+      }),
+    )
+    const second = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers,
+        body: new URLSearchParams({ name: "Ada" }),
+      }),
+    )
+    expect(second.status).toBe(200)
+    expect(await second.text()).toBe(await first.text())
+
+    const conflict = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers,
+        body: new URLSearchParams({ name: "Grace" }),
+      }),
+    )
+    expect(conflict.status).toBe(400)
+  })
+
+  test("supports billing client flows without network state", async () => {
+    const stripe = new StripeAPI({ now })
+    const form = (body: Record<string, string>) => ({
+      headers: { ...AUTH, "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams(body),
+    })
+    const customerResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers`, {
+        method: "POST",
+        headers: form({}).headers,
+        body: form({ email: "test@example.com" }).body,
+      }),
+    )
+    const customer = (await customerResponse.json()) as { id: string }
+    const paymentMethodResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/payment_methods/pm_card_visa/attach`, {
+        method: "POST",
+        headers: form({ customer: customer.id }).headers,
+        body: form({ customer: customer.id }).body,
+      }),
+    )
+    expect(paymentMethodResponse.status).toBe(200)
+    const attached = (await paymentMethodResponse.clone().json()) as { id: string }
+    const defaulted = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/customers/${customer.id}`, {
+        method: "POST",
+        headers: form({}).headers,
+        body: new URLSearchParams({ "invoice_settings[default_payment_method]": attached.id }),
+      }),
+    )
+    expect(defaulted.status).toBe(200)
+    const intentResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/payment_intents`, {
+        method: "POST",
+        headers: form({
+          amount: "1000",
+          confirm: "true",
+          currency: "usd",
+          customer: customer.id,
+          payment_method: "pm_card_visa",
+        }).headers,
+        body: form({
+          amount: "1000",
+          confirm: "true",
+          currency: "usd",
+          customer: customer.id,
+          payment_method: "pm_card_visa",
+        }).body,
+      }),
+    )
+    expect(((await intentResponse.json()) as { status: string }).status).toBe("succeeded")
+    const productResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/products`, {
+        method: "POST",
+        headers: form({ name: "Membership" }).headers,
+        body: form({ name: "Membership" }).body,
+      }),
+    )
+    const product = (await productResponse.json()) as { id: string }
+    const priceForm = {
+      currency: "usd",
+      product: product.id,
+      "recurring[interval]": "month",
+      unit_amount: "17999",
+    }
+    const priceResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/prices`, {
+        method: "POST",
+        headers: form(priceForm).headers,
+        body: form(priceForm).body,
+      }),
+    )
+    const price = (await priceResponse.json()) as { id: string }
+    const subscriptionResponse = await stripe.fetch(
+      new Request(`https://${MOCK_HOST}/v1/subscriptions`, {
+        method: "POST",
+        headers: form({ customer: customer.id, "items[0][price]": price.id }).headers,
+        body: form({ customer: customer.id, "items[0][price]": price.id }).body,
+      }),
+    )
+    expect(((await subscriptionResponse.json()) as { status: string }).status).toBe("active")
+  })
 
   test("state is isolated per namespace and reset clears only Stripe", async () => {
     await fc.assert(

@@ -1,3 +1,4 @@
+export { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "./defaults.js"
 export type {
   ExecutionContext,
   FetchLike,
@@ -17,6 +18,7 @@ export type {
   CommandContext,
   ConformanceDetails,
   FailureDetails,
+  LatencyDetails,
   MismatchDetails,
   Redactor,
   TransportDetails,

@@ -179,9 +179,11 @@ export const resolvePlaceholders = (
   if (isPlaceholder(value)) return resolve(value)
   if (Array.isArray(value)) return value.map((item) => resolvePlaceholders(item, resolve))
   if (typeof value === "object" && value !== null) {
-    const out: Record<string, unknown> = {}
-    for (const [key, item] of Object.entries(value)) out[key] = resolvePlaceholders(item, resolve)
-    return out
+    // `Object.fromEntries` defines own properties, so keys like `__proto__` survive the copy;
+    // assigning them onto a fresh object literal would hit the prototype setter instead.
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [key, resolvePlaceholders(item, resolve)]),
+    )
   }
   return value
 }

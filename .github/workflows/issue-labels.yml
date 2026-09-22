@@ -1,0 +1,53 @@
+# Keeps the labels docs/REPORTING_ISSUES.md relies on in sync with .github/labels.json, and labels
+# new issues from their title prefix (`[<service>] <kind>: …`, `[new-service] …`). Reporters without
+# write access cannot set labels themselves, so the title is the contract.
+name: Issue labels
+
+on:
+  push:
+    branches: [main]
+    paths: [.github/labels.json, .github/workflows/issue-labels.yml]
+  issues:
+    types: [opened, edited]
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  sync:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create or update labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          jq -c '.[]' .github/labels.json | while read -r label; do
+            gh label create "$(jq -r .name <<<"$label")" --force \
+              --repo "$GITHUB_REPOSITORY" \
+              --color "$(jq -r .color <<<"$label")" \
+              --description "$(jq -r .description <<<"$label")"
+          done
+
+  label:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Label from title
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: ${{ github.event.issue.title }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: |
+          shopt -s nocasematch
+          kind=""
+          if [[ "$TITLE" =~ ^\[new-service\] ]]; then
+            kind="new-service"
+          elif [[ "$TITLE" =~ ^\[[a-z0-9-]+\]\ *(parity|feature|bug): ]]; then
+            kind="${BASH_REMATCH[1],,}"
+          fi
+          if [[ -n "$kind" ]]; then
+            gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "agent-reported,$kind"
+          fi

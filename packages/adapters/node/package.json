@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-adapter-node",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
+  "private": true,
   "description": "Serve any Mockingbird FetchAPI over node:http.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",
@@ -43,7 +40,8 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
-    "@crvouga/mockingbird-core": "workspace:*"
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.20.1",

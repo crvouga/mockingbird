@@ -1,6 +1,7 @@
 import { HttpError, jsonRes, type OperationContext } from "@crvouga/mockingbird-service"
+import { checkUserQuota } from "./limits.js"
+import { missing } from "./not-found.js"
 import type { JunctionState, UserRecord } from "./state.js"
-import { MOCK_TEAM_ID } from "./state.js"
 
 const jsonBody = (context: OperationContext): Record<string, unknown> => {
   const body = context.body
@@ -57,8 +58,8 @@ const listUsers = (state: JunctionState, offset: number, limit: number) => {
 const isValidUuid = (value: string): boolean =>
   /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value)
 
-function notFound(detail: string): never {
-  throw new HttpError(404, { detail })
+function notFound(state: JunctionState, id: string, detail: string): never {
+  return missing(state, "user", id, detail)
 }
 
 const queryInt = (context: OperationContext, name: string, fallback: number): number => {
@@ -409,7 +410,7 @@ export const userHandlers = (state: JunctionState) => ({
     const body = jsonBody(context)
     const errors = userInfoValidationErrors(body)
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
-    if (!state.users.has(id)) notFound("User not found")
+    if (!state.users.has(id)) notFound(state, id, "User not found")
     const existing = state.userInfo.get(id) ?? {}
     const rawAddress =
       typeof body.address === "object" && body.address !== null && !Array.isArray(body.address)
@@ -476,6 +477,7 @@ export const userHandlers = (state: JunctionState) => ({
         },
       })
     }
+    checkUserQuota(state.limits, state.users.count())
     const userId = state.nextUserId()
     const createdOn = state.isoNow(context.now)
     const tz =
@@ -484,7 +486,7 @@ export const userHandlers = (state: JunctionState) => ({
         : null
     const user: UserRecord = {
       user_id: userId,
-      team_id: MOCK_TEAM_ID,
+      team_id: state.teamId,
       client_user_id: clientUserId,
       created_on: createdOn,
       connected_sources: [],
@@ -510,7 +512,7 @@ export const userHandlers = (state: JunctionState) => ({
     if (state.deletedUsers.has(id)) {
       throw new HttpError(404, { detail: "You have scheduled this user for deletion." })
     }
-    notFound("Not found")
+    notFound(state, id, "Not found")
   },
 
   delete_user_v2_user__user_id__delete: async (context: OperationContext) => {
@@ -522,7 +524,7 @@ export const userHandlers = (state: JunctionState) => ({
           detail: "The user has been scheduled for deletion as per your previous request",
         })
       }
-      notFound("The user does not or no longer exists in this team")
+      notFound(state, id, "The user does not or no longer exists in this team")
     }
     state.users.delete(id)
     state.byClientId.delete(user.client_user_id)
@@ -534,10 +536,11 @@ export const userHandlers = (state: JunctionState) => ({
     context: OperationContext,
   ) => {
     const clientUserId = context.params.client_user_id ?? ""
-    const binding = state.byClientId.get(clientUserId)
-    if (!binding) notFound("User not found")
-    const user = state.users.get(binding.user_id)
-    if (!user) notFound("User not found")
+    const binding =
+      state.byClientId.get(clientUserId) ??
+      notFound(state, `client:${clientUserId}`, "User not found")
+    const user =
+      state.users.get(binding.user_id) ?? notFound(state, binding.user_id, "User not found")
     return jsonRes(200, render(user))
   },
 
@@ -550,7 +553,7 @@ export const userHandlers = (state: JunctionState) => ({
           detail: "The user has been scheduled for deletion as per your previous request",
         })
       }
-      notFound("The user does not or no longer exists in this team")
+      notFound(state, id, "The user does not or no longer exists in this team")
     }
     const body = jsonBody(context)
     const now = state.isoNow(context.now)
@@ -652,9 +655,8 @@ export const userHandlers = (state: JunctionState) => ({
         detail: `Invalid format for parameter user_id: error unmarshaling '${id}' text as *uuid.UUID: invalid UUID length: ${id.length}`,
       })
     }
-    if (!state.users.has(id) && !state.deletedUsers.has(id)) notFound("User not found")
-    const info = state.userInfo.get(id)
-    if (!info) notFound("User demographics data not found")
+    if (!state.users.has(id) && !state.deletedUsers.has(id)) notFound(state, id, "User not found")
+    const info = state.userInfo.get(id) ?? notFound(state, id, "User demographics data not found")
     return jsonRes(200, info)
   },
 

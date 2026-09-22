@@ -1,0 +1,75 @@
+/**
+ * Live parity: the same random walk against the real Flex sandbox and a fresh mock,
+ * canonicalized and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ *
+ *   MOCKINGBIRD_FLEX_API_URL   e.g. https://api.withflex.com
+ *   MOCKINGBIRD_FLEX_API_KEY   a test-mode secret key (fsk_test_…); live keys are refused
+ *
+ * By default only safe operations run (product, session and setup-intent reads). Creating
+ * products, customers and sessions, and refunds, write to the shared sandbox account, so they
+ * need `--include-unsafe`.
+ */
+import { readFile } from "node:fs/promises"
+import { homedir } from "node:os"
+import { join } from "node:path"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { parity } from "@crvouga/mockingbird-parity"
+import { document, FlexAPI } from "../src/index.js"
+
+const readTokenFile = async () => {
+  try {
+    return await readFile(join(homedir(), ".vault-token"), "utf8")
+  } catch {
+    return undefined
+  }
+}
+
+let credentials: Awaited<ReturnType<typeof loadCredentials>>
+try {
+  credentials = await loadCredentials(
+    {
+      provider: "flex",
+      fields: {
+        MOCKINGBIRD_FLEX_API_URL: "MOCKINGBIRD_FLEX_API_URL",
+        MOCKINGBIRD_FLEX_API_KEY: "MOCKINGBIRD_FLEX_API_KEY",
+      },
+    },
+    { env: process.env, readTokenFile },
+  )
+} catch (error) {
+  if (error instanceof CredentialError) {
+    console.error(`flex parity: no sandbox credentials. ${error.message}`)
+    process.exit(2)
+  }
+  throw error
+}
+
+const apiKey = credentials.values.MOCKINGBIRD_FLEX_API_KEY
+if (!apiKey.startsWith("fsk_test_")) {
+  console.error("flex parity: MOCKINGBIRD_FLEX_API_KEY must be a test-mode key (fsk_test_…)")
+  process.exit(2)
+}
+const baseUrl = credentials.values.MOCKINGBIRD_FLEX_API_URL.replace(/\/$/, "")
+
+try {
+  await parity({
+    provider: "flex",
+    spec: document,
+    env: process.env,
+    includeUnsafe: process.argv.includes("--include-unsafe"),
+    real: {
+      baseUrl,
+      allowedHosts: [new URL(baseUrl).host],
+      headers: () => ({ authorization: `Bearer ${apiKey}`, accept: "application/json" }),
+      minIntervalMs: 250,
+    },
+    mock: {
+      create: () => new FlexAPI(),
+      headers: () => ({ authorization: "Bearer fsk_test_parity", accept: "application/json" }),
+    },
+    redact: createRedactor([...credentials.secrets, apiKey]),
+  })
+} catch (error) {
+  console.error(`\n${error instanceof Error ? error.message : String(error)}`)
+  process.exit(1)
+}

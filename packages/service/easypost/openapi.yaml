@@ -1,0 +1,286 @@
+openapi: 3.1.0
+info:
+  title: EasyPost Trackers API (Mockingbird subset)
+  description: |
+    Stateful mock subset of the EasyPost v2 API: create (or re-use) a tracker for a tracking
+    code, retrieve it, and list trackers. Trimmed from EasyPost's published reference to what
+    our genomics tracking lookup calls, plus the two reads that make parity walks meaningful.
+  version: "2"
+  x-mockingbird-upstream:
+    note: >-
+      Shapes from https://docs.easypost.com/docs/trackers; request/response fields our consumer
+      reads come from packages/lib/src/shipment-tracking-status/easypost-client.ts.
+servers:
+  - url: https://api.easypost.com
+security:
+  - basicAuth: []
+paths:
+  /v2/trackers:
+    post:
+      operationId: CreateTracker
+      description: >-
+        Creates a tracker, or answers the existing one when the same tracking code (and
+        carrier) was already tracked. EasyPost's test codes (EZ1000000001 … EZ7000000007)
+        answer their documented fixed statuses.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: "#/components/schemas/CreateTrackerBody"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTrackerBody"
+      responses:
+        "201":
+          description: The tracker (new or re-used)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tracker"
+        "401":
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Missing tracking code or invalid carrier
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: ListTrackers
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: tracking_code
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 40
+        - name: carrier
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [USPS, UPS, FedEx, DHLExpress]
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Newest trackers first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [trackers, has_more]
+                properties:
+                  trackers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Tracker"
+                  has_more:
+                    type: boolean
+        "401":
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Invalid query parameter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v2/trackers/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: tracker
+            missing: trk_00000000000000000000000000000000
+    get:
+      operationId: RetrieveTracker
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The tracker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tracker"
+        "401":
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Unknown tracker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: "The API key as the username, an empty password (`Basic base64(key:)`)."
+  schemas:
+    CreateTrackerBody:
+      type: object
+      required: [tracker]
+      properties:
+        tracker:
+          type: object
+          required: [tracking_code]
+          properties:
+            tracking_code:
+              type: string
+              minLength: 1
+              maxLength: 40
+              examples: [EZ1000000001, EZ4000000004, 1Z999AA10123456784]
+            carrier:
+              type: string
+              enum: [USPS, UPS, FedEx, DHL, DHLExpress]
+    Tracker:
+      type: object
+      required:
+        - id
+        - object
+        - mode
+        - tracking_code
+        - status
+        - status_detail
+        - carrier
+        - tracking_details
+        - public_url
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: tracker
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        object:
+          type: string
+          enum: [Tracker]
+        mode:
+          type: string
+          enum: [test, production]
+        tracking_code:
+          type: string
+        status:
+          type: string
+          enum:
+            - unknown
+            - pre_transit
+            - in_transit
+            - out_for_delivery
+            - delivered
+            - available_for_pickup
+            - return_to_sender
+            - failure
+            - cancelled
+            - error
+        status_detail:
+          type: string
+        carrier:
+          type: string
+        signed_by:
+          type: ["string", "null"]
+        weight:
+          type: ["number", "null"]
+        est_delivery_date:
+          type: ["string", "null"]
+          x-mockingbird-volatile:
+            kind: timestamp
+        shipment_id:
+          type: ["string", "null"]
+        tracking_details:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackingDetail"
+        carrier_detail:
+          type: ["object", "null"]
+        public_url:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        fees:
+          type: array
+          items:
+            type: object
+        created_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updated_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    TrackingDetail:
+      type: object
+      required: [object, message, status, status_detail, datetime, source]
+      properties:
+        object:
+          type: string
+          enum: [TrackingDetail]
+        message:
+          type: string
+        status:
+          type: string
+        status_detail:
+          type: string
+        datetime:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        source:
+          type: string
+        tracking_location:
+          type: object
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            errors:
+              type: array
+              items:
+                type: object

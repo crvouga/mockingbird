@@ -86,6 +86,23 @@ const parsePath = (rawKey: string): string[] => {
 
 const isIndex = (segment: string) => /^(0|[1-9][0-9]*)$/.test(segment)
 
+/**
+ * Write an own property. `__proto__` is the one key with an inherited setter, so it needs
+ * `defineProperty`; every other key shadows its inherited namesake by plain assignment.
+ */
+const put = (target: object, key: string | number, value: FormValue): void => {
+  if (key === "__proto__") {
+    Object.defineProperty(target, key, {
+      value,
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    })
+    return
+  }
+  ;(target as Record<string | number, FormValue>)[key] = value
+}
+
 const assign = (target: FormObject, path: string[], value: string) => {
   let cursor: FormValue = target
   for (let i = 0; i < path.length; i++) {
@@ -96,13 +113,15 @@ const assign = (target: FormObject, path: string[], value: string) => {
         segment === "" ? cursor.length : isIndex(segment) ? Number(segment) : undefined
       if (index === undefined) return
       if (last) {
-        cursor[index] = value
+        put(cursor, index, value)
         return
       }
-      const next: FormValue | undefined = cursor[index]
+      const next: FormValue | undefined = Object.hasOwn(cursor, index)
+        ? (cursor as Record<number, FormValue>)[index]
+        : undefined
       if (next === undefined || typeof next === "string") {
         const created: FormValue = path[i + 1] === "" || isIndex(path[i + 1] as string) ? [] : {}
-        cursor[index] = created
+        put(cursor, index, created)
         cursor = created
       } else {
         cursor = next
@@ -111,14 +130,16 @@ const assign = (target: FormObject, path: string[], value: string) => {
     }
     if (typeof cursor === "string") return
     if (last) {
-      cursor[segment] = value
+      put(cursor, segment, value)
       return
     }
     const nextSegment = path[i + 1] as string
-    const existing: FormValue | undefined = cursor[segment]
+    const existing: FormValue | undefined = Object.hasOwn(cursor, segment)
+      ? (cursor as Record<string, FormValue>)[segment]
+      : undefined
     if (existing === undefined || typeof existing === "string") {
       const created: FormValue = nextSegment === "" || isIndex(nextSegment) ? [] : {}
-      cursor[segment] = created
+      put(cursor, segment, created)
       cursor = created
     } else {
       cursor = existing
@@ -138,7 +159,7 @@ const densify = (value: FormValue): FormValue => {
   if (typeof value === "string") return value
   if (Array.isArray(value)) return value.filter((item) => item !== undefined).map(densify)
   const out: FormObject = {}
-  for (const [key, item] of Object.entries(value)) out[key] = densify(item)
+  for (const [key, item] of Object.entries(value)) put(out, key, densify(item))
   return out
 }
 

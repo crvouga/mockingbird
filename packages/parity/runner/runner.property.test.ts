@@ -295,6 +295,10 @@ const run = (
     },
     mock: { create: () => referenceServer("M", fault, clock) },
     clockSkewSeconds: 0,
+    // Both sides share this process's scheduler, and the real side's 10ms delay is not a
+    // latency budget: on a loaded runner the mock can take longer and raise a latency
+    // failure that masks the injected fault.
+    latencyToleranceMs: 1_000,
     now: clock,
     sleep: async () => {},
     log: (line) => lines.push(line),
@@ -363,7 +367,9 @@ describe("parity runner", () => {
       ),
       { ...params, numRuns: 12 },
     )
-  }, 60_000)
+    // Worst case: a fault that never surfaces runs all 40 walks x 20 commands against the
+    // real side's 10ms delay (~8s), for each of the 12 outer runs (~100s).
+  }, 180_000)
 
   test("the same seed reproduces the same shrunk failure", async () => {
     await fc.assert(

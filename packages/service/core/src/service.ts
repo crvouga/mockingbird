@@ -17,10 +17,15 @@ import { type Context, Hono } from "hono"
 
 /** Options every provider constructor accepts. */
 export type APIOptions = {
-  /** Sync SQLite client. Defaults to `@crvouga/sqlite-mem`. */
+  /** Sync SQLite client. Defaults to `@crvouga/mockingbird-service-sqlite`. */
   sqlite?: SqliteClient
   /** Clock used for `created`-style fields. Default `Date.now`. */
   now?: () => number
+  /**
+   * Storage namespace for this instance's records. Instances sharing one SQLite
+   * client stay isolated when their namespaces differ. Defaults to the service name.
+   */
+  namespace?: string
 }
 
 export type OperationContext = {
@@ -36,6 +41,8 @@ export type OperationContext = {
   /** Service namespace used for records / sequences. */
   namespace: string
   operation: Operation
+  /** The vendor contract the service was built from. */
+  document: OpenAPIDocument
   now: () => number
 }
 
@@ -168,6 +175,7 @@ export const createService = (options: ServiceOptions): Service => {
         sqlite: options.sqlite,
         namespace: options.namespace,
         operation,
+        document: options.document,
         now,
       }
       const short = await options.before?.(context)

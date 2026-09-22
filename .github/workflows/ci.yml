@@ -1,4 +1,16 @@
-# Local replica: bun run check
+# Local replica: bun run check:full
+#
+# Every job and long-running step carries a timeout: a PR check must be fast and bounded,
+# so anything that hangs fails the run instead of occupying a runner until GitHub's
+# 6-hour default.
+#
+# One turbo graph (`bun run check`) does all the work; .github/actions/setup caches
+# node_modules and loads the shared Turborepo remote cache credentials from Vault (GitHub
+# OIDC, no stored token), so unchanged packages are never rebuilt or retested.
+# Shared infra contract: https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
+# On main, Release publishes every changed package (versions from Conventional Commits).
+#
+# The workflow file name is part of each package's npm Trusted Publisher — keep it `ci.yml`.
 name: CI
 
 on:
@@ -19,7 +31,9 @@ env:
 jobs:
   commitlint:
     name: Commitlint
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
@@ -28,30 +42,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/setup
         with:
-          bun-version: "1.4.0"
+          remote-cache: "false"
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Note push commitlint policy
-        if: github.event_name == 'push'
-        run: |
-          set +e
-          bunx commitlint --last --verbose
-          status=$?
-          if [ "$status" -ne 0 ]; then
-            echo "::warning::HEAD is not Conventional Commits. Enforced on PRs."
-          fi
-
+      # Every PR commit lands on main (merge commits only), and each one drives the release bump.
       - name: Validate PR commits
-        if: github.event_name == 'pull_request'
         run: |
-          bunx commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+          git rev-list --first-parent --reverse \
+            ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} |
+          while read -r commit; do
+            git show --no-patch --format=%B "$commit" | bunx commitlint --verbose
+          done
 
       - name: Validate PR title
-        if: github.event_name == 'pull_request'
         uses: amannn/action-semantic-pull-request@v6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -61,107 +65,107 @@ jobs:
             The PR title "{title}" looks empty after the type/scope prefix.
             Use a Conventional Commits title, e.g. "feat: add junction mock".
 
-  quality:
-    name: Quality
+  check:
+    name: Check
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      id-token: write # Vault OIDC → Turborepo remote cache
+    env:
+      FC_NUM_RUNS: "40"
     steps:
       - uses: actions/checkout@v5
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
+      - uses: ./.github/actions/setup
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Check (format, lint, typecheck, build, test, pack, portability, boundaries)
+        timeout-minutes: 20
+        run: bun run check -- --output-logs=errors-only
 
-      - name: Format check
-        run: bun run check:format
+      # Pack every public package like the release does and install it into a clean npm project.
+      - name: Consumer smoke (npm install + import + typecheck every published entry point)
+        timeout-minutes: 6
+        run: bun run release:smoke
 
-      - name: Lint
-        run: bun run lint
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Build
-        run: bun run build
-
-      - name: Package integrity (publint + arethetypeswrong)
-        run: bun run pack:check
-
-      - name: Portability
-        run: bun run portability
-
-      - name: Boundaries
-        run: bun run check:boundaries
-
-      - name: Test naming (property-based only)
-        run: bun run check:tests
-
-  test:
-    name: Test
-    needs: [quality]
+  # Single required status check for the ruleset. Also enforces the trunk policy: PRs
+  # target `main` from a short-lived branch.
+  required:
+    name: Required
+    if: always() && github.event_name == 'pull_request'
+    needs: [commitlint, check]
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Property tests
-        run: bun run test
+      - name: All required checks passed
         env:
-          FC_NUM_RUNS: "20"
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          RESULTS: ${{ needs.commitlint.result }} ${{ needs.check.result }}
+        run: |
+          if [ "$BASE_REF" != "main" ] || [ "$HEAD_REF" = "main" ]; then
+            echo "::error::PRs must target 'main' from a short-lived branch (base=$BASE_REF head=$HEAD_REF)."
+            exit 1
+          fi
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::A required CI job did not succeed (result=$result)."
+              exit 1
+            fi
+          done
+          echo "All required CI jobs passed"
 
-  # Maintainer secrets: Trusted Publishing (OIDC) — docs/SECRETS.md — bun run secrets:doctor
+  # Automated per-package release — scripts/release/lib.ts has the rules; docs/SECRETS.md the setup.
+  # Changed packages (Conventional Commits since their `<name>@<version>` tag, plus dependents)
+  # are versioned, published via npm Trusted Publishing (OIDC), tagged, and given a GitHub Release.
+  # Nothing is committed to main: versions live in tags. Every step is idempotent — re-run to retry.
   release:
     name: Release
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [commitlint, test]
+    needs: [check]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: write
-      issues: write
-      pull-requests: write
       id-token: write
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-          persist-credentials: false
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
+      - uses: ./.github/actions/setup
 
       - uses: actions/setup-node@v5
         with:
-          node-version: lts/*
+          node-version: 24
           registry-url: https://registry.npmjs.org
 
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      # Trusted Publishing needs npm >= 11.5; `npm trust` needs >= 11.10.
+      - name: Update npm
+        run: npm install -g npm@11
 
-      - name: Build
-        run: bun run build
+      - name: Plan
+        id: plan
+        run: bun run release:plan -- --github-output
 
-      - name: Package integrity (publint + arethetypeswrong)
-        run: bun run pack:check
+      # Replayed from the remote cache Check filled for this commit — no rebuild.
+      - name: Build and verify packages
+        if: steps.plan.outputs.has_changes == 'true'
+        timeout-minutes: 15
+        run: bunx turbo run build pack:check portability --output-logs=errors-only
 
-      - name: Portability
-        run: bun run portability
+      - name: Consumer smoke
+        if: steps.plan.outputs.has_changes == 'true'
+        timeout-minutes: 6
+        run: bun run release:smoke
 
-      - name: Release preflight
-        run: bun run release:preflight
-
-      - name: Publish public packages
+      - name: Publish, tag, and create GitHub Releases
+        timeout-minutes: 20
+        if: steps.plan.outputs.has_changes == 'true'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: bun run release:publish
+          GH_TOKEN: ${{ github.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          bun run release:publish

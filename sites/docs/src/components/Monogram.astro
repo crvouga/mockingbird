@@ -1,0 +1,13 @@
+---
+import { initials } from "../lib/format.ts"
+
+interface Props {
+  name: string
+  hue: number
+  size?: number
+}
+const { name, hue, size = 40 } = Astro.props
+const letters = initials(name)
+---
+
+<span class="monogram" style={`--h:${hue};--size:${size}px`} aria-hidden="true">{letters}</span>

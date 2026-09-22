@@ -20,3 +20,12 @@ export const toFetchHandler = (api: FetchAPI): FetchHandler => {
 export const fromFetchHandler = (handler: FetchHandler): FetchAPI => {
   return { fetch: handler }
 }
+
+export type {
+  Checkpoint,
+  CheckpointId,
+  CommitOptions,
+  ForkOptions,
+  TimelineOptions,
+} from "./timeline.js"
+export { Timeline } from "./timeline.js"

@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-parity",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
+  "private": true,
   "description": "Differential property-based test runner: executes generated API walks against a real sandbox API and a Mockingbird mock, comparing every canonicalised response.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",
@@ -51,8 +48,9 @@
     "@crvouga/mockingbird-commands": "workspace:*",
     "@crvouga/mockingbird-canonicalize": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
-    "@crvouga/mockingbird-testing": "workspace:*",
     "fast-check": "4.9.0"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@crvouga/mockingbird-testing": "workspace:*"
+  }
 }

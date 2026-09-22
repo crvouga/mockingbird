@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["bun"],
+    // test/upstream/ holds verbatim copies of our backend's Edamam adapters, written for the
+    // app's compiler settings; src/ is still built with the strict base (tsconfig.build.json).
+    "exactOptionalPropertyTypes": false
+  },
+  "include": ["src", "test", "*.test.ts"]
+}

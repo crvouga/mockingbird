@@ -1,0 +1,21 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import GuideArticle from "../../components/GuideArticle.astro"
+import Base from "../../layouts/Base.astro"
+import type { Guide } from "../../lib/types.ts"
+
+export function getStaticPaths() {
+  return catalog.guides.map((guide) => ({ params: { slug: guide.slug }, props: { guide } }))
+}
+
+interface Props {
+  guide: Guide
+}
+const { guide } = Astro.props
+---
+
+<Base title={guide.title} description={guide.summary} markdown={`/docs/${guide.slug}.md`}>
+  <div class="container">
+    <GuideArticle guide={guide} repo={catalog.repo} />
+  </div>
+</Base>

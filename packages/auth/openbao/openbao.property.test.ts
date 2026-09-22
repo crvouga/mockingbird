@@ -4,7 +4,9 @@ import fc from "fast-check"
 import {
   CredentialError,
   createRedactor,
+  DEFAULT_JWT_ROLE,
   DEFAULT_OPENBAO_ADDRESS,
+  DEFAULT_SECRET_PATH,
   leaks,
   loadCredentials,
   OpenBaoClient,
@@ -101,11 +103,11 @@ describe("openbao credentials", () => {
           }
           const path =
             input.overridePath === undefined
-              ? `secret/data/secret`
+              ? DEFAULT_SECRET_PATH
               : `secret/data/${input.overridePath}`
           const bao = fakeBao({
             jwt: input.jwt,
-            jwtRole: "mockingbird-parity",
+            jwtRole: DEFAULT_JWT_ROLE,
             issuedToken: input.issuedToken,
             secrets: { [path]: { [input.fieldA]: input.valueA, [input.fieldB]: input.valueB } },
           })
@@ -140,7 +142,7 @@ describe("openbao credentials", () => {
               expect(bao.requests[0]).toMatchObject({
                 method: "POST",
                 path: "auth/jwt/login",
-                body: { jwt: input.jwt, role: "mockingbird-parity" },
+                body: { jwt: input.jwt, role: DEFAULT_JWT_ROLE },
               })
               expect(bao.requests.at(-1)).toMatchObject({ path: "auth/token/revoke-self" })
             }
@@ -186,7 +188,7 @@ describe("openbao credentials", () => {
             () => "ok",
             (error: unknown) => error,
           )
-          const url = `${DEFAULT_OPENBAO_ADDRESS}/v1/secret/data/secret`
+          const url = `${DEFAULT_OPENBAO_ADDRESS}/v1/${DEFAULT_SECRET_PATH}`
           if (input.mode === "bogus") {
             expect(outcome).toBeInstanceOf(CredentialError)
           } else if (input.mode === "env") {
@@ -217,7 +219,7 @@ describe("openbao credentials", () => {
       fc.asyncProperty(fc.record({ provider: slug, field: slug, token: secret }), async (input) => {
         const envVar = `MOCKINGBIRD_${input.provider.toUpperCase()}_KEY`
         const spec = { provider: input.provider, fields: { [input.field]: envVar } }
-        const path = `secret/data/secret`
+        const path = DEFAULT_SECRET_PATH
         const bao = fakeBao({
           jwt: "j",
           jwtRole: "r",

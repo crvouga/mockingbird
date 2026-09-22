@@ -110,18 +110,27 @@ async function commitlintJob(): Promise<void> {
   }
 
   const from = (await git(["merge-base", base, "HEAD"])).stdout || base
-  console.log(`Linting commits ${from}..HEAD (base ${base}, branch ${branch})`)
-  const proc = Bun.spawn(["bunx", "commitlint", "--from", from, "--to", "HEAD", "--verbose"], {
-    cwd: root,
-    stdout: "inherit",
-    stderr: "inherit",
-  })
-  const code = await proc.exited
-  if (code !== 0) {
-    printCommitlintHelp("range")
-    console.error("")
-    console.error(`check:full FAILED at "Commitlint" (exit ${code})`)
-    process.exit(code)
+  console.log(`Linting first-parent commits ${from}..HEAD (base ${base}, branch ${branch})`)
+  const hashes = (await git(["rev-list", "--first-parent", "--reverse", `${from}..HEAD`])).stdout
+    .split("\n")
+    .filter(Boolean)
+  for (const hash of hashes) {
+    const message = (await git(["show", "--no-patch", "--format=%B", hash])).stdout
+    const proc = Bun.spawn(["bunx", "commitlint", "--verbose"], {
+      cwd: root,
+      stdin: "pipe",
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    proc.stdin.write(message)
+    proc.stdin.end()
+    const code = await proc.exited
+    if (code !== 0) {
+      printCommitlintHelp("range")
+      console.error("")
+      console.error(`check:full FAILED at "Commitlint" (exit ${code}, commit ${hash})`)
+      process.exit(code)
+    }
   }
   finished.push({ label: "Commitlint", seconds: 0 })
 }
@@ -131,23 +140,18 @@ console.log("Mirrors .github/workflows/ci.yml — skipped: release/publish (main
 if (process.platform !== "linux") {
   notes.push(`CI runs on ubuntu-latest; this host is ${process.platform}.`)
 }
+notes.push(
+  "Trunk policy (PRs target main) is enforced by the Required job only; not reproducible locally.",
+)
 
 job("install")
 await runStep("Install (frozen lockfile)", ["bun", "install", "--frozen-lockfile"])
 
 await commitlintJob()
 
-job("quality  (CI job)")
-await runStep("Format check", ["bun", "run", "check:format"])
-await runStep("Lint", ["bun", "run", "lint"])
-await runStep("Typecheck", ["bun", "run", "typecheck"])
-await runStep("Build", ["bun", "run", "build"])
-await runStep("Package integrity", ["bun", "run", "pack:check"])
-await runStep("Portability", ["bun", "run", "portability"])
-
-job("test  (CI job)")
-await runStep("Build", ["bun", "run", "build"])
-await runStep("Property tests", ["bun", "run", "test"], { env: { FC_NUM_RUNS: "20" } })
+job("check  (CI job)")
+await runStep("Check (turbo graph)", ["bun", "run", "check"], { env: { FC_NUM_RUNS: "40" } })
+await runStep("Consumer smoke", ["bun", "run", "release:smoke"])
 
 const total = finished.reduce((sum, step) => sum + step.seconds, 0)
 console.log("")

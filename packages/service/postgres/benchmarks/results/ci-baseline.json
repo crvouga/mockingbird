@@ -1,0 +1,1379 @@
+{
+  "generatedAt": "2026-08-21T20:40:14.027Z",
+  "tier": "ci",
+  "environment": {
+    "runtime": "bun",
+    "runtimeVersion": "1.4.0",
+    "platform": "linux",
+    "userAgent": "Bun/1.4.0"
+  },
+  "results": [
+    {
+      "name": "startup/new-database",
+      "datasetSize": null,
+      "operation": "new Database()",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.006785,
+      "p95": 0.018908,
+      "p99": 0.035798,
+      "mean": 0.01005,
+      "min": 0.003686,
+      "max": 0.040021,
+      "opsPerSec": 99500.507453,
+      "perOpMs": 0.01005,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 2354176,
+        "heapTotal": 2354176,
+        "rss": 44904448
+      },
+      "memoryAfter": {
+        "heapUsed": 2501632,
+        "heapTotal": 2501632,
+        "rss": 45166592
+      }
+    },
+    {
+      "name": "startup/cold-import-first-query",
+      "datasetSize": null,
+      "operation": "Bun process + import + new Database() + first query",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 28.926463,
+      "p95": 30.877077,
+      "p99": 31.242854,
+      "mean": 29.320671,
+      "min": 28.530306,
+      "max": 31.334298,
+      "opsPerSec": 34.105631,
+      "perOpMs": 29.320671,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 2520064,
+        "heapTotal": 2520064,
+        "rss": 46739456
+      },
+      "memoryAfter": {
+        "heapUsed": 2536448,
+        "heapTotal": 2536448,
+        "rss": 43728896
+      }
+    },
+    {
+      "name": "startup/schema-plus-first-query",
+      "datasetSize": null,
+      "operation": "schema + first query",
+      "engine": "postgres-mem",
+      "iterations": 10,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.345776,
+      "p95": 0.521604,
+      "p99": 0.591462,
+      "mean": 0.366405,
+      "min": 0.256466,
+      "max": 0.608927,
+      "opsPerSec": 2729.221143,
+      "perOpMs": 0.366405,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 2936832,
+        "heapTotal": 2936832,
+        "rss": 46612480
+      },
+      "memoryAfter": {
+        "heapUsed": 3166208,
+        "heapTotal": 3166208,
+        "rss": 48185344
+      }
+    },
+    {
+      "name": "micro/trivial-select/100",
+      "datasetSize": 100,
+      "operation": "SELECT 1",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 20,
+      "p50": 0.462507,
+      "p95": 0.677443,
+      "p99": 2.291423,
+      "mean": 0.561127,
+      "min": 0.249135,
+      "max": 2.694918,
+      "opsPerSec": 35642.529664,
+      "perOpMs": 0.028056,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 5280768,
+        "heapTotal": 5280768,
+        "rss": 53690368
+      },
+      "memoryAfter": {
+        "heapUsed": 3992380,
+        "heapTotal": 7705600,
+        "rss": 60772352
+      }
+    },
+    {
+      "name": "micro/pk-lookup/100",
+      "datasetSize": 100,
+      "operation": "pk lookup",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 10,
+      "p50": 0.766244,
+      "p95": 1.97933,
+      "p99": 2.3465,
+      "mean": 1.033282,
+      "min": 0.523468,
+      "max": 2.438292,
+      "opsPerSec": 9677.900596,
+      "perOpMs": 0.103328,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 3992380,
+        "heapTotal": 8262656,
+        "rss": 63922176
+      },
+      "memoryAfter": {
+        "heapUsed": 4360017,
+        "heapTotal": 12784640,
+        "rss": 73625600
+      }
+    },
+    {
+      "name": "micro/indexed-lookup/100",
+      "datasetSize": 100,
+      "operation": "indexed email lookup",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 10,
+      "p50": 1.002289,
+      "p95": 2.685867,
+      "p99": 2.964333,
+      "mean": 1.281194,
+      "min": 0.622327,
+      "max": 3.033949,
+      "opsPerSec": 7805.21828,
+      "perOpMs": 0.128119,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 4428774,
+        "heapTotal": 13046784,
+        "rss": 77426688
+      },
+      "memoryAfter": {
+        "heapUsed": 4592154,
+        "heapTotal": 13489152,
+        "rss": 75120640
+      }
+    },
+    {
+      "name": "micro/unindexed-filter/100",
+      "datasetSize": 100,
+      "operation": "unindexed filter",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.091688,
+      "p95": 0.174203,
+      "p99": 0.89927,
+      "mean": 0.144238,
+      "min": 0.081633,
+      "max": 1.080537,
+      "opsPerSec": 6932.97855,
+      "perOpMs": 0.144238,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 4592154,
+        "heapTotal": 13506560,
+        "rss": 75382784
+      },
+      "memoryAfter": {
+        "heapUsed": 4649628,
+        "heapTotal": 13506560,
+        "rss": 75513856
+      }
+    },
+    {
+      "name": "micro/insert/100",
+      "datasetSize": 100,
+      "operation": "single insert",
+      "engine": "postgres-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 200,
+      "p50": 5.87739,
+      "p95": 5.87739,
+      "p99": 5.87739,
+      "mean": 5.87739,
+      "min": 5.87739,
+      "max": 5.87739,
+      "opsPerSec": 34028.710023,
+      "perOpMs": 0.029387,
+      "reliablePercentiles": false,
+      "memoryBefore": {
+        "heapUsed": 4649628,
+        "heapTotal": 13506560,
+        "rss": 76300288
+      },
+      "memoryAfter": {
+        "heapUsed": 4649628,
+        "heapTotal": 15439872,
+        "rss": 78135296
+      }
+    },
+    {
+      "name": "micro/update/100",
+      "datasetSize": 100,
+      "operation": "pk update",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 10,
+      "p50": 0.524225,
+      "p95": 1.412731,
+      "p99": 2.218088,
+      "mean": 0.761785,
+      "min": 0.4048,
+      "max": 2.419427,
+      "opsPerSec": 13127.067718,
+      "perOpMs": 0.076178,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 4772835,
+        "heapTotal": 15538176,
+        "rss": 79052800
+      },
+      "memoryAfter": {
+        "heapUsed": 4984451,
+        "heapTotal": 17831936,
+        "rss": 82067456
+      }
+    },
+    {
+      "name": "micro/delete-reinsert/100",
+      "datasetSize": 100,
+      "operation": "delete+insert",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.054967,
+      "p95": 0.187564,
+      "p99": 0.725244,
+      "mean": 0.102998,
+      "min": 0.046279,
+      "max": 0.859664,
+      "opsPerSec": 9708.879256,
+      "perOpMs": 0.102998,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 4984451,
+        "heapTotal": 17831936,
+        "rss": 82198528
+      },
+      "memoryAfter": {
+        "heapUsed": 5057140,
+        "heapTotal": 17831936,
+        "rss": 82329600
+      }
+    },
+    {
+      "name": "micro/filter-select/100",
+      "datasetSize": 100,
+      "operation": "SELECT with filter",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.060842,
+      "p95": 0.085128,
+      "p99": 0.091202,
+      "mean": 0.065807,
+      "min": 0.05289,
+      "max": 0.09272,
+      "opsPerSec": 15195.882524,
+      "perOpMs": 0.065807,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 5057140,
+        "heapTotal": 17831936,
+        "rss": 82329600
+      },
+      "memoryAfter": {
+        "heapUsed": 5057140,
+        "heapTotal": 17831936,
+        "rss": 82329600
+      }
+    },
+    {
+      "name": "micro/order-by/100",
+      "datasetSize": 100,
+      "operation": "ORDER BY",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.150542,
+      "p95": 0.274516,
+      "p99": 0.304848,
+      "mean": 0.174125,
+      "min": 0.122725,
+      "max": 0.312431,
+      "opsPerSec": 5742.995771,
+      "perOpMs": 0.174125,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 5107459,
+        "heapTotal": 17848320,
+        "rss": 82460672
+      },
+      "memoryAfter": {
+        "heapUsed": 5107459,
+        "heapTotal": 17848320,
+        "rss": 82460672
+      }
+    },
+    {
+      "name": "micro/group-by/100",
+      "datasetSize": 100,
+      "operation": "GROUP BY",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.473262,
+      "p95": 0.691185,
+      "p99": 2.023267,
+      "mean": 0.576106,
+      "min": 0.405651,
+      "max": 2.356288,
+      "opsPerSec": 1735.791677,
+      "perOpMs": 0.576106,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 5107459,
+        "heapTotal": 17898496,
+        "rss": 84557824
+      },
+      "memoryAfter": {
+        "heapUsed": 5434279,
+        "heapTotal": 18209792,
+        "rss": 84951040
+      }
+    },
+    {
+      "name": "micro/join/100",
+      "datasetSize": 100,
+      "operation": "JOIN",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.757716,
+      "p95": 1.433387,
+      "p99": 1.706006,
+      "mean": 0.858969,
+      "min": 0.646643,
+      "max": 1.774161,
+      "opsPerSec": 1164.186164,
+      "perOpMs": 0.858969,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 5563142,
+        "heapTotal": 18325504,
+        "rss": 85344256
+      },
+      "memoryAfter": {
+        "heapUsed": 5791262,
+        "heapTotal": 18325504,
+        "rss": 87048192
+      }
+    },
+    {
+      "name": "micro/aggregate/100",
+      "datasetSize": 100,
+      "operation": "aggregate",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.118829,
+      "p95": 0.263275,
+      "p99": 1.077975,
+      "mean": 0.184965,
+      "min": 0.101793,
+      "max": 1.28165,
+      "opsPerSec": 5406.41509,
+      "perOpMs": 0.184965,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 5791262,
+        "heapTotal": 18325504,
+        "rss": 87179264
+      },
+      "memoryAfter": {
+        "heapUsed": 5908449,
+        "heapTotal": 18653184,
+        "rss": 87310336
+      }
+    },
+    {
+      "name": "micro/subquery/100",
+      "datasetSize": 100,
+      "operation": "subquery",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 2.998185,
+      "p95": 5.950747,
+      "p99": 6.276312,
+      "mean": 3.575768,
+      "min": 2.415777,
+      "max": 6.357703,
+      "opsPerSec": 279.660174,
+      "perOpMs": 3.575768,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 6030834,
+        "heapTotal": 18948096,
+        "rss": 87572480
+      },
+      "memoryAfter": {
+        "heapUsed": 6686072,
+        "heapTotal": 18980864,
+        "rss": 93863936
+      }
+    },
+    {
+      "name": "micro/cte/100",
+      "datasetSize": 100,
+      "operation": "CTE",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.060331,
+      "p95": 0.164342,
+      "p99": 0.76419,
+      "mean": 0.1065,
+      "min": 0.053852,
+      "max": 0.914152,
+      "opsPerSec": 9389.644912,
+      "perOpMs": 0.1065,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 6686072,
+        "heapTotal": 18981888,
+        "rss": 93863936
+      },
+      "memoryAfter": {
+        "heapUsed": 6738693,
+        "heapTotal": 18981888,
+        "rss": 93995008
+      }
+    },
+    {
+      "name": "micro/prepared-execute/1000",
+      "datasetSize": 1000,
+      "operation": "prepared execute",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 2,
+      "opsPerSample": 1000,
+      "p50": 299.370062,
+      "p95": 305.894355,
+      "p99": 306.791068,
+      "mean": 297.082437,
+      "min": 282.237732,
+      "max": 307.015246,
+      "opsPerSec": 3366.069063,
+      "perOpMs": 0.297082,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 7827017,
+        "heapTotal": 23930880,
+        "rss": 118898688
+      },
+      "memoryAfter": {
+        "heapUsed": 11281017,
+        "heapTotal": 26634240,
+        "rss": 120602624
+      }
+    },
+    {
+      "name": "workload-a/crud-loop/100",
+      "datasetSize": 100,
+      "operation": "local-first CRUD loop",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 50,
+      "p50": 12.32402,
+      "p95": 13.314848,
+      "p99": 13.33777,
+      "mean": 12.404029,
+      "min": 11.727716,
+      "max": 13.3435,
+      "opsPerSec": 4030.948494,
+      "perOpMs": 0.248081,
+      "reliablePercentiles": true,
+      "layer": "app",
+      "memoryBefore": {
+        "heapUsed": 11392516,
+        "heapTotal": 26961920,
+        "rss": 121257984
+      },
+      "memoryAfter": {
+        "heapUsed": 11877817,
+        "heapTotal": 27142144,
+        "rss": 121520128
+      }
+    },
+    {
+      "name": "workload-b/sync-batch/1000",
+      "datasetSize": 1000,
+      "operation": "sync batch apply",
+      "engine": "postgres-mem",
+      "iterations": 6,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 25.624439,
+      "p95": 28.070308,
+      "p99": 28.592234,
+      "mean": 26.020949,
+      "min": 24.985176,
+      "max": 28.722715,
+      "opsPerSec": 38.430573,
+      "perOpMs": 26.020949,
+      "reliablePercentiles": true,
+      "layer": "app",
+      "memoryBefore": {
+        "heapUsed": 12217239,
+        "heapTotal": 28781568,
+        "rss": 122437632
+      },
+      "memoryAfter": {
+        "heapUsed": 12821216,
+        "heapTotal": 28984320,
+        "rss": 122568704
+      }
+    },
+    {
+      "name": "workload-c/app-queries/200",
+      "datasetSize": 200,
+      "operation": "indexed app queries (composed)",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 215.203756,
+      "p95": 220.444226,
+      "p99": 220.85108,
+      "mean": 214.695749,
+      "min": 208.378567,
+      "max": 220.952793,
+      "opsPerSec": 4.657754,
+      "perOpMs": 214.695749,
+      "reliablePercentiles": true,
+      "layer": "app",
+      "memoryBefore": {
+        "heapUsed": 13412690,
+        "heapTotal": 30869504,
+        "rss": 123879424
+      },
+      "memoryAfter": {
+        "heapUsed": 16073706,
+        "heapTotal": 33490944,
+        "rss": 124796928
+      },
+      "extra": {
+        "userMs": 0.165289,
+        "itemsMs": 0.332271,
+        "joinMs": 220.445569
+      }
+    },
+    {
+      "name": "workload-c/app-query-user/200",
+      "datasetSize": 200,
+      "operation": "app email lookup only",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.100032,
+      "p95": 0.117063,
+      "p99": 0.119934,
+      "mean": 0.101763,
+      "min": 0.091899,
+      "max": 0.120652,
+      "opsPerSec": 9826.706039,
+      "perOpMs": 0.101763,
+      "reliablePercentiles": true,
+      "layer": "api",
+      "memoryBefore": {
+        "heapUsed": 16400774,
+        "heapTotal": 33900544,
+        "rss": 125321216
+      },
+      "memoryAfter": {
+        "heapUsed": 16400774,
+        "heapTotal": 33900544,
+        "rss": 125321216
+      }
+    },
+    {
+      "name": "workload-c/app-query-join/200",
+      "datasetSize": 200,
+      "operation": "app top-spenders aggregate join",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 200.662153,
+      "p95": 222.590116,
+      "p99": 224.093103,
+      "mean": 202.94025,
+      "min": 188.774066,
+      "max": 224.46885,
+      "opsPerSec": 4.927559,
+      "perOpMs": 202.94025,
+      "reliablePercentiles": true,
+      "layer": "api",
+      "memoryBefore": {
+        "heapUsed": 6411903,
+        "heapTotal": 33942528,
+        "rss": 125583360
+      },
+      "memoryAfter": {
+        "heapUsed": 9014415,
+        "heapTotal": 33942528,
+        "rss": 125583360
+      }
+    },
+    {
+      "name": "json/arrow-text/500",
+      "datasetSize": 500,
+      "operation": "jsonb ->> point access",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.566073,
+      "p95": 0.871116,
+      "p99": 0.985854,
+      "mean": 0.538906,
+      "min": 0.166731,
+      "max": 1.014538,
+      "opsPerSec": 1855.612474,
+      "perOpMs": 0.538906,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 10513380,
+        "heapTotal": 33958912,
+        "rss": 126107648
+      },
+      "memoryAfter": {
+        "heapUsed": 10621911,
+        "heapTotal": 33958912,
+        "rss": 126107648
+      }
+    },
+    {
+      "name": "json/arrow-nested/500",
+      "datasetSize": 500,
+      "operation": "jsonb -> then ->> nested access",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.377709,
+      "p95": 1.011288,
+      "p99": 1.23398,
+      "mean": 0.489234,
+      "min": 0.307934,
+      "max": 1.289653,
+      "opsPerSec": 2044.010092,
+      "perOpMs": 0.489234,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 7289215,
+        "heapTotal": 33958912,
+        "rss": 126107648
+      },
+      "memoryAfter": {
+        "heapUsed": 7431289,
+        "heapTotal": 33958912,
+        "rss": 126107648
+      }
+    },
+    {
+      "name": "json/contains/500",
+      "datasetSize": 500,
+      "operation": "jsonb @> containment scan",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 1.200043,
+      "p95": 2.070594,
+      "p99": 2.240437,
+      "mean": 1.268059,
+      "min": 0.704641,
+      "max": 2.282898,
+      "opsPerSec": 788.606995,
+      "perOpMs": 1.268059,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 8550159,
+        "heapTotal": 33958912,
+        "rss": 126369792
+      },
+      "memoryAfter": {
+        "heapUsed": 8791997,
+        "heapTotal": 34057216,
+        "rss": 126369792
+      }
+    },
+    {
+      "name": "tsearch/match/200",
+      "datasetSize": 200,
+      "operation": "tsvector @@ to_tsquery",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 2.663847,
+      "p95": 3.473659,
+      "p99": 3.534841,
+      "mean": 2.80408,
+      "min": 2.472665,
+      "max": 3.550137,
+      "opsPerSec": 356.62319,
+      "perOpMs": 2.80408,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 9213077,
+        "heapTotal": 36075520,
+        "rss": 127942656
+      },
+      "memoryAfter": {
+        "heapUsed": 9331720,
+        "heapTotal": 36321280,
+        "rss": 128204800
+      }
+    },
+    {
+      "name": "engine/group-by-having/1000",
+      "datasetSize": 1000,
+      "operation": "GROUP BY + HAVING",
+      "engine": "postgres-mem",
+      "iterations": 12,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 1.873032,
+      "p95": 2.881108,
+      "p99": 2.891902,
+      "mean": 1.972617,
+      "min": 1.040718,
+      "max": 2.8946,
+      "opsPerSec": 506.940823,
+      "perOpMs": 1.972617,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 9482379,
+        "heapTotal": 36337664,
+        "rss": 128204800
+      },
+      "memoryAfter": {
+        "heapUsed": 9760789,
+        "heapTotal": 36337664,
+        "rss": 128335872
+      }
+    },
+    {
+      "name": "engine/order-by-multi/1000",
+      "datasetSize": 1000,
+      "operation": "ORDER BY two keys LIMIT 50",
+      "engine": "postgres-mem",
+      "iterations": 12,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 2.537101,
+      "p95": 3.827998,
+      "p99": 3.939468,
+      "mean": 2.540292,
+      "min": 1.66611,
+      "max": 3.967336,
+      "opsPerSec": 393.655481,
+      "perOpMs": 2.540292,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 10046595,
+        "heapTotal": 36337664,
+        "rss": 128335872
+      },
+      "memoryAfter": {
+        "heapUsed": 11256059,
+        "heapTotal": 36337664,
+        "rss": 128335872
+      }
+    },
+    {
+      "name": "engine/window-row-number/1000",
+      "datasetSize": 1000,
+      "operation": "ROW_NUMBER() OVER (PARTITION BY ...)",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 3.63424,
+      "p95": 6.53222,
+      "p99": 6.73843,
+      "mean": 4.132052,
+      "min": 2.752296,
+      "max": 6.789982,
+      "opsPerSec": 242.010485,
+      "perOpMs": 4.132052,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 11817628,
+        "heapTotal": 36338688,
+        "rss": 128466944
+      },
+      "memoryAfter": {
+        "heapUsed": 13928428,
+        "heapTotal": 36338688,
+        "rss": 128598016
+      }
+    },
+    {
+      "name": "engine/window-running-sum/1000",
+      "datasetSize": 1000,
+      "operation": "SUM(n) OVER (ORDER BY id)",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 215.440404,
+      "p95": 234.873192,
+      "p99": 236.698738,
+      "mean": 218.616607,
+      "min": 206.342825,
+      "max": 237.155124,
+      "opsPerSec": 4.574218,
+      "perOpMs": 218.616607,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 14100470,
+        "heapTotal": 36339712,
+        "rss": 132268032
+      },
+      "memoryAfter": {
+        "heapUsed": 12992232,
+        "heapTotal": 36585472,
+        "rss": 137117696
+      }
+    },
+    {
+      "name": "engine/cte-join/1000",
+      "datasetSize": 1000,
+      "operation": "CTE + join",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 8.463123,
+      "p95": 9.64318,
+      "p99": 9.963403,
+      "mean": 8.706714,
+      "min": 8.375837,
+      "max": 10.043459,
+      "opsPerSec": 114.853893,
+      "perOpMs": 8.706714,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 13306833,
+        "heapTotal": 36585472,
+        "rss": 138035200
+      },
+      "memoryAfter": {
+        "heapUsed": 14318433,
+        "heapTotal": 36634624,
+        "rss": 138297344
+      }
+    },
+    {
+      "name": "engine/recursive-cte/100",
+      "datasetSize": 100,
+      "operation": "WITH RECURSIVE series",
+      "engine": "postgres-mem",
+      "iterations": 12,
+      "warmup": 2,
+      "opsPerSample": 1,
+      "p50": 0.748498,
+      "p95": 1.432966,
+      "p99": 1.451941,
+      "mean": 0.774891,
+      "min": 0.423097,
+      "max": 1.456685,
+      "opsPerSec": 1290.50339,
+      "perOpMs": 0.774891,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 14318433,
+        "heapTotal": 36634624,
+        "rss": 138428416
+      },
+      "memoryAfter": {
+        "heapUsed": 14487202,
+        "heapTotal": 36634624,
+        "rss": 138883072
+      }
+    },
+    {
+      "name": "engine/string-fns/1000",
+      "datasetSize": 1000,
+      "operation": "upper/lower/length/substring/concat",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 3.038572,
+      "p95": 4.851891,
+      "p99": 5.128418,
+      "mean": 3.397374,
+      "min": 2.406945,
+      "max": 5.19755,
+      "opsPerSec": 294.344996,
+      "perOpMs": 3.397374,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 14692305,
+        "heapTotal": 36749312,
+        "rss": 139407360
+      },
+      "memoryAfter": {
+        "heapUsed": 8285081,
+        "heapTotal": 36782080,
+        "rss": 139407360
+      }
+    },
+    {
+      "name": "engine/date-fns/1000",
+      "datasetSize": 1000,
+      "operation": "date_trunc/extract/to_char",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.34863,
+      "p95": 0.887537,
+      "p99": 1.093079,
+      "mean": 0.450726,
+      "min": 0.314884,
+      "max": 1.144464,
+      "opsPerSec": 2218.640966,
+      "perOpMs": 0.450726,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 8500981,
+        "heapTotal": 36799488,
+        "rss": 139538432
+      },
+      "memoryAfter": {
+        "heapUsed": 8621558,
+        "heapTotal": 36799488,
+        "rss": 139538432
+      }
+    },
+    {
+      "name": "tx/individual-inserts/1000",
+      "datasetSize": 1000,
+      "operation": "1000 inserts autocommit",
+      "engine": "postgres-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1000,
+      "p50": 45.27551,
+      "p95": 45.687142,
+      "p99": 45.723732,
+      "mean": 45.355013,
+      "min": 45.05665,
+      "max": 45.732879,
+      "opsPerSec": 22048.279426,
+      "perOpMs": 0.045355,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 8621558,
+        "heapTotal": 36799488,
+        "rss": 139538432
+      },
+      "memoryAfter": {
+        "heapUsed": 8983986,
+        "heapTotal": 36799488,
+        "rss": 139669504
+      }
+    },
+    {
+      "name": "tx/batched-inserts/1000",
+      "datasetSize": 1000,
+      "operation": "1000 inserts in transaction",
+      "engine": "postgres-mem",
+      "iterations": 3,
+      "warmup": 0,
+      "opsPerSample": 1000,
+      "p50": 46.384611,
+      "p95": 52.724834,
+      "p99": 53.288409,
+      "mean": 48.727457,
+      "min": 46.368456,
+      "max": 53.429303,
+      "opsPerSec": 20522.310591,
+      "perOpMs": 0.048727,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 8983986,
+        "heapTotal": 36799488,
+        "rss": 139669504
+      },
+      "memoryAfter": {
+        "heapUsed": 9348282,
+        "heapTotal": 36848640,
+        "rss": 139669504
+      }
+    },
+    {
+      "name": "index/pk-lookup/1000",
+      "datasetSize": 1000,
+      "operation": "primary key lookup",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 20,
+      "p50": 6.477637,
+      "p95": 7.941101,
+      "p99": 8.803609,
+      "mean": 6.671667,
+      "min": 5.791995,
+      "max": 9.019236,
+      "opsPerSec": 2997.751424,
+      "perOpMs": 0.333583,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 9570332,
+        "heapTotal": 36881408,
+        "rss": 139669504
+      },
+      "memoryAfter": {
+        "heapUsed": 9851938,
+        "heapTotal": 36881408,
+        "rss": 140718080
+      }
+    },
+    {
+      "name": "index/unique-email/1000",
+      "datasetSize": 1000,
+      "operation": "unique index lookup",
+      "engine": "postgres-mem",
+      "iterations": 20,
+      "warmup": 2,
+      "opsPerSample": 20,
+      "p50": 10.033953,
+      "p95": 11.6203,
+      "p99": 12.324754,
+      "mean": 10.268863,
+      "min": 9.695605,
+      "max": 12.500867,
+      "opsPerSec": 1947.63536,
+      "perOpMs": 0.513443,
+      "reliablePercentiles": true,
+      "memoryBefore": {
+        "heapUsed": 10051315,
+        "heapTotal": 37110784,
+        "rss": 140718080
+      },
+      "memoryAfter": {
+        "heapUsed": 10328221,
+        "heapTotal": 37110784,
+        "rss": 140718080
+      }
+    },
+    {
+      "name": "join/small-large/1000",
+      "datasetSize": 1000,
+      "operation": "join small to large",
+      "engine": "postgres-mem",
+      "iterations": 8,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 7.878911,
+      "p95": 8.594971,
+      "p99": 8.834165,
+      "mean": 7.923436,
+      "min": 7.479875,
+      "max": 8.893964,
+      "opsPerSec": 126.207864,
+      "perOpMs": 7.923436,
+      "reliablePercentiles": true,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 10524936,
+        "heapTotal": 37226496,
+        "rss": 140849152
+      },
+      "memoryAfter": {
+        "heapUsed": 10680784,
+        "heapTotal": 37226496,
+        "rss": 140849152
+      }
+    },
+    {
+      "name": "snapshot/export/small",
+      "datasetSize": 200,
+      "operation": "snapshot export",
+      "engine": "postgres-mem",
+      "iterations": 3,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.374665,
+      "p95": 0.502657,
+      "p99": 0.514034,
+      "mean": 0.377148,
+      "min": 0.239901,
+      "max": 0.516878,
+      "opsPerSec": 2651.478995,
+      "perOpMs": 0.377148,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 7515715,
+        "heapTotal": 9619456,
+        "rss": 141504512
+      },
+      "memoryAfter": {
+        "heapUsed": 7515715,
+        "heapTotal": 9852928,
+        "rss": 141897728
+      },
+      "extra": {
+        "snapshotBytes": 17614,
+        "mbPerSec": 46.703151
+      }
+    },
+    {
+      "name": "snapshot/hydrate/small",
+      "datasetSize": 200,
+      "operation": "snapshot hydrate",
+      "engine": "postgres-mem",
+      "iterations": 3,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 0.276897,
+      "p95": 0.312221,
+      "p99": 0.315361,
+      "mean": 0.264482,
+      "min": 0.200402,
+      "max": 0.316146,
+      "opsPerSec": 3780.980408,
+      "perOpMs": 0.264482,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 7629130,
+        "heapTotal": 4636672,
+        "rss": 142557184
+      },
+      "memoryAfter": {
+        "heapUsed": 7629130,
+        "heapTotal": 4947968,
+        "rss": 142557184
+      },
+      "extra": {
+        "snapshotBytes": 17614,
+        "heapDelta": 0,
+        "rssDelta": 659456,
+        "mbPerSec": 66.598189
+      }
+    },
+    {
+      "name": "snapshot/roundtrip/small",
+      "datasetSize": 200,
+      "operation": "export+hydrate+query",
+      "engine": "postgres-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 1.111694,
+      "p95": 1.111694,
+      "p99": 1.111694,
+      "mean": 1.111694,
+      "min": 1.111694,
+      "max": 1.111694,
+      "opsPerSec": 899.528108,
+      "perOpMs": 1.111694,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 7629130,
+        "heapTotal": 7454720,
+        "rss": 142688256
+      },
+      "memoryAfter": {
+        "heapUsed": 7629130,
+        "heapTotal": 7975936,
+        "rss": 142688256
+      }
+    },
+    {
+      "name": "snapshot/export/1mb",
+      "datasetSize": 1000,
+      "operation": "snapshot export",
+      "engine": "postgres-mem",
+      "iterations": 3,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 2.693156,
+      "p95": 3.343782,
+      "p99": 3.401616,
+      "mean": 2.773757,
+      "min": 2.212041,
+      "max": 3.416074,
+      "opsPerSec": 360.521848,
+      "perOpMs": 2.773757,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 7825766,
+        "heapTotal": 6343680,
+        "rss": 143998976
+      },
+      "memoryAfter": {
+        "heapUsed": 11990657,
+        "heapTotal": 6517760,
+        "rss": 148193280
+      },
+      "extra": {
+        "snapshotBytes": 1043214,
+        "mbPerSec": 376.101439
+      }
+    },
+    {
+      "name": "snapshot/hydrate/1mb",
+      "datasetSize": 1000,
+      "operation": "snapshot hydrate",
+      "engine": "postgres-mem",
+      "iterations": 3,
+      "warmup": 1,
+      "opsPerSample": 1,
+      "p50": 1.655023,
+      "p95": 2.234451,
+      "p99": 2.285956,
+      "mean": 1.756936,
+      "min": 1.316953,
+      "max": 2.298832,
+      "opsPerSec": 569.172696,
+      "perOpMs": 1.756936,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 9898199,
+        "heapTotal": 5135360,
+        "rss": 153436160
+      },
+      "memoryAfter": {
+        "heapUsed": 12727518,
+        "heapTotal": 6224896,
+        "rss": 153829376
+      },
+      "extra": {
+        "snapshotBytes": 1043214,
+        "heapDelta": 2829319,
+        "rssDelta": 393216,
+        "mbPerSec": 593.768925
+      }
+    },
+    {
+      "name": "snapshot/roundtrip/1mb",
+      "datasetSize": 1000,
+      "operation": "export+hydrate+query",
+      "engine": "postgres-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 4.889263,
+      "p95": 4.889263,
+      "p99": 4.889263,
+      "mean": 4.889263,
+      "min": 4.889263,
+      "max": 4.889263,
+      "opsPerSec": 204.529803,
+      "perOpMs": 4.889263,
+      "reliablePercentiles": false,
+      "layer": "engine",
+      "memoryBefore": {
+        "heapUsed": 13696394,
+        "heapTotal": 16497664,
+        "rss": 153960448
+      },
+      "memoryAfter": {
+        "heapUsed": 15897981,
+        "heapTotal": 16776192,
+        "rss": 154353664
+      }
+    },
+    {
+      "name": "snapshot/fidelity/200",
+      "datasetSize": 200,
+      "operation": "roundtrip fidelity",
+      "engine": "postgres-mem",
+      "iterations": 1,
+      "warmup": 0,
+      "opsPerSample": 1,
+      "p50": 2.118601,
+      "p95": 2.118601,
+      "p99": 2.118601,
+      "mean": 2.118601,
+      "min": 2.118601,
+      "max": 2.118601,
+      "opsPerSec": 472.009595,
+      "perOpMs": 2.118601,
+      "reliablePercentiles": false,
+      "memoryBefore": {
+        "heapUsed": 15897981,
+        "heapTotal": 17136640,
+        "rss": 154484736
+      },
+      "memoryAfter": {
+        "heapUsed": 15897981,
+        "heapTotal": 17628160,
+        "rss": 154484736
+      }
+    }
+  ]
+}

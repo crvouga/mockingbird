@@ -1,10 +1,11 @@
-# HashiCorp Vault connection for maintainer secret tooling.
-# Used by: bun run secrets:doctor | secrets:check | secrets:sync
-# See docs/SECRETS.md
+# Vault (OpenBao) coordinates — no secrets. Shared infra contract:
+# https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
 #
-# Live parity sandbox keys live under the flat secret/data/secret
-# (see @crvouga/mockingbird-openbao). Publish uses npm OIDC, not Vault.
+# `bun scripts/vault-run.ts` (every root turbo script) wraps commands in `vault run`, which reads
+# this file and injects secret/personal/<config> as env vars: the Turborepo remote cache
+# (TURBO_*) in every config, live-parity sandbox keys (MOCKINGBIRD_*) in prd.
+# Also used by: bun run vault:login | secrets:doctor | secrets:check | secrets:sync
 addr: https://vault.chrisvouga.dev
 mount: secret
 project: personal
-config: prd
+config: dev

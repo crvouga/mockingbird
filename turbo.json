@@ -2,8 +2,7 @@
   "$schema": "https://turbo.build/schema.json",
   "ui": "stream",
   "globalDependencies": ["tsconfig.base.json", "biome.json"],
-  "globalEnv": ["CI", "NPM_TOKEN", "GITHUB_ACTIONS", "ACTIONS_ID_TOKEN_REQUEST_URL"],
-  "globalPassThroughEnv": ["TURBO_TOKEN", "TURBO_TEAM", "TURBO_API"],
+  "globalEnv": ["CI", "GITHUB_ACTIONS"],
   "tasks": {
     "generate": {
       "dependsOn": ["^build"],
@@ -37,7 +36,8 @@
         "FC_NUM_RUNS",
         "MOCKINGBIRD_MAX_COMMANDS",
         "MOCKINGBIRD_TRACE",
-        "MOCKINGBIRD_MEDPLUM_E2E",
+        "MOCKINGBIRD_MEDPLUM_ORACLE",
+        "MOCKINGBIRD_MEDPLUM_ORACLE_URL",
         "MOCKINGBIRD_MEDPLUM_VERSION",
         "MEDPLUM_MOCK_CACHE_DIR"
       ],
@@ -61,6 +61,7 @@
       "dependsOn": ["build"],
       "cache": false,
       "passThroughEnv": [
+        "MOCKINGBIRD_*",
         "FC_SEED",
         "FC_NUM_RUNS",
         "MOCKINGBIRD_MAX_COMMANDS",
@@ -100,11 +101,27 @@
         "!packages/**/dist/**"
       ]
     },
-    "//#check:tests": {
+    "//#check:agents": {
+      "cache": false
+    },
+    "//#check:llms": {
       "inputs": [
-        "scripts/check-test-files.ts",
-        "scripts/lib/**",
-        "packages/**/*.test.ts",
+        "llms.txt",
+        "scripts/llms-txt.ts",
+        "scripts/release/lib.ts",
+        "sites/docs/src/lib/**",
+        "packages/**/package.json",
+        "!packages/**/node_modules/**"
+      ]
+    },
+    "//#check:readme": {
+      "inputs": [
+        "README.md",
+        "scripts/readme.ts",
+        "scripts/release/lib.ts",
+        "sites/docs/src/lib/**",
+        "docs/*.md",
+        "packages/**/package.json",
         "!packages/**/node_modules/**"
       ]
     },

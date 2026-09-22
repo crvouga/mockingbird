@@ -12,6 +12,7 @@ export {
   DEFAULT_JWT_MOUNT,
   DEFAULT_JWT_ROLE,
   DEFAULT_OPENBAO_ADDRESS,
+  DEFAULT_SECRET_PATH,
   loadCredentials,
 } from "./credentials.js"
 export { createRedactor, leaks, REDACTED } from "./redact.js"

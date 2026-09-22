@@ -109,6 +109,45 @@ if (isPublic) {
   }
 }
 
+// --- consumer docs (README ships in the tarball; agents in consumer repos read it from node_modules) ---
+if (isPublic) {
+  const readmePath = join(pkgDir, "README.md")
+  if (!pkg.files?.includes("README.md")) {
+    fail(`${name}: package.json "files" must include "README.md"`)
+  }
+  if (!existsSync(readmePath)) {
+    fail(`${name}: missing README.md — every published package documents itself for consumers`)
+  } else {
+    const readme = await Bun.file(readmePath).text()
+    if (!readme.startsWith(`# ${name}\n`)) {
+      fail(`${name}: README.md must start with "# ${name}"`)
+    }
+    const section = (heading: string): string | null => {
+      const match = readme.match(
+        new RegExp(`^## ${heading}\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, "m"),
+      )
+      return match?.[1] ?? null
+    }
+    if (!section("Install")?.includes(name)) {
+      fail(`${name}: README.md needs an "## Install" section that installs ${name}`)
+    }
+    if (!/```ts\n/.test(section("Usage") ?? "")) {
+      fail(`${name}: README.md needs a "## Usage" section with a \`\`\`ts example`)
+    }
+    // Every runtime export is listed under "## API" (types are covered by the shipped .d.ts).
+    const api = section("API")
+    if (api === null) {
+      fail(`${name}: README.md needs an "## API" section listing the package's exports`)
+    } else if (existsSync(join(pkgDir, distJs))) {
+      const mod = (await import(join(pkgDir, distJs))) as Record<string, unknown>
+      const undocumented = Object.keys(mod).filter((key) => !new RegExp(`\\b${key}\\b`).test(api))
+      if (undocumented.length > 0) {
+        fail(`${name}: README.md "## API" does not mention: ${undocumented.join(", ")}`)
+      }
+    }
+  }
+}
+
 // --- dist homogeneity / portability ---
 // A `portable` public package must not ship Node/Bun-only API usage in its ESM.
 const runtime = pkg.mockingbird?.runtime
@@ -141,11 +180,14 @@ const pack = await $`npm pack --dry-run --json --ignore-scripts`.cwd(pkgDir).qui
 if (pack.exitCode !== 0) {
   fail(`${name}: npm pack --dry-run failed — the package cannot be packed for npm`)
 } else {
-  let entries: Array<{ filename?: string; files?: Array<{ path: string }> }>
+  // npm <= 10 prints `[{ files }]`; npm >= 11 prints `{ "<name>": { files } }`.
+  type PackEntry = { filename?: string; files?: Array<{ path: string }> }
+  let entries: PackEntry[]
   try {
-    const raw = pack.stdout.toString().trim()
-    const jsonStart = raw.indexOf("[")
-    entries = JSON.parse(jsonStart >= 0 ? raw.slice(jsonStart) : raw)
+    const parsed = JSON.parse(pack.stdout.toString().trim()) as
+      | PackEntry[]
+      | Record<string, PackEntry>
+    entries = Array.isArray(parsed) ? parsed : Object.values(parsed)
   } catch (err) {
     fail(
       `${name}: npm pack --dry-run returned invalid JSON (${err instanceof Error ? err.message : String(err)})`,

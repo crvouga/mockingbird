@@ -41,6 +41,17 @@ one active appointment per order, mirroring real provider duplicate-booking prot
 1. Create or resolve the patient user.
 2. Select a collection method supported by the lab test.
 3. Confirm lab account, billing type, physician workflow, and patient information.
+   `lab_account_id` is optional. When present it must name an account that is active, linked
+   to the team, and associated with the ordered lab; anything else is rejected (`400`, or
+   `422` for an empty body value or a malformed query `lab_account_id`). When
+   omitted, the accounts linked to the team for the selected lab decide the branch:
+   none linked → the Junction platform account (rejected when the lab has none); exactly
+   one active → that account; more than one active → `400` asking for `lab_account_id`;
+   linked but none active → `400` with no platform fallback.
+   `billing_type` defaults to `client_bill` and must be a key of the used account's
+   `allowed_billing`, with the patient's state listed for that type. `commercial_insurance`
+   additionally requires a non-empty `icd_codes`. The order echoes the requested
+   `billing_type` and `icd_codes`.
 4. Create the order with an idempotency key.
 5. Persist both `order.id` and `order_transaction.id`.
 6. Treat `labtest.order.updated` as a notification and re-read the order before deciding what to do.
@@ -117,3 +128,18 @@ This mock exposes deterministic delivery records and can add seeded jitter aroun
 - Junction may return 429 or 503 under infrastructure stress; idempotent requests should be retried with backoff.
 - The mock does not emulate a global rate limit, but parity tests may inject provider delay and failure.
 - API and webhook identifiers must be correlated with application identifiers by the consumer.
+
+## Lab accounts and the team
+
+- The mock answers as one team (`teamId` option, `--team-id`, else the team a version-2 corpus
+  recorded, else `MOCK_TEAM_ID`). `team_id_allowlist` is checked against it by `create_order`,
+  the lab-account listing and availability reads that take `lab_account_id`, all against the same
+  live account list.
+- An account whose allowlist names only other teams is refused with
+  `400 {"detail": "Lab account is not linked to your team"}`.
+- **Open question: empty allowlists.** Junction's own platform accounts (Quest, Labcorp,
+  BioReference; `org_id: null`) carry `team_id_allowlist: []` and appear in a real team's listing,
+  so the mock lists them and treats them as linked. Ordering through one — explicitly, or as one of
+  several active accounts for a lab when `lab_account_id` is omitted — has not been observed.
+  `verify --orders` runs both cases whenever the corpus has such an account; record the outcome
+  here when it does.

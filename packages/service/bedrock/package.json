@@ -1,0 +1,98 @@
+{
+  "name": "@crvouga/mockingbird-service-bedrock",
+  "version": "0.0.0-development",
+  "description": "Stateful, scriptable mock of AWS Bedrock Runtime (Converse, ConverseStream, InvokeModel incl. Titan embeddings, Nova Sonic bidirectional streams over h2c) and AgentCore InvokeHarness, with exact event-stream framing.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-bedrock": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/bedrock"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/bedrock#readme",
+  "keywords": [
+    "mockingbird",
+    "service",
+    "bedrock",
+    "aws",
+    "llm",
+    "converse",
+    "eventstream",
+    "nova-sonic",
+    "agentcore",
+    "titan"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "ai",
+    "displayName": "AWS Bedrock",
+    "status": "wip"
+  },
+  "scripts": {
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "parity": "bun scripts/parity.ts",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "hono": "4.11.9"
+  },
+  "devDependencies": {
+    "@ai-sdk/amazon-bedrock": "4.0.176",
+    "@aws-sdk/client-bedrock-agentcore": "3.1074.0",
+    "@aws-sdk/client-bedrock-runtime": "3.1132.0",
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@smithy/eventstream-codec": "4.5.2",
+    "ai": "6.0.283",
+    "fast-check": "4.9.0",
+    "zod": "3.25.76"
+  }
+}

@@ -44,6 +44,18 @@ export const paginate = async <T>(
 ): Promise<Page<unknown>> => {
   const startingAfter = params.starting_after
   const endingBefore = params.ending_before
+  const all = await collection.list({ order: "newest" })
+  const exists = options.exists ?? (() => true)
+  const cursorIndex = (id: string, param: string) => {
+    const index = all.findIndex(
+      (entry: Stored<T> & { id: string }) => entry.id === id && exists(entry.value),
+    )
+    if (index === -1) throw resourceMissing(options.kind, id, param, 400)
+    return index
+  }
+  // Stripe resolves `starting_after` before it objects to receiving both cursors.
+  if (typeof startingAfter === "string" && startingAfter !== "")
+    cursorIndex(startingAfter, "starting_after")
   if (
     typeof startingAfter === "string" &&
     startingAfter !== "" &&
@@ -55,15 +67,6 @@ export const paginate = async <T>(
     )
   }
   const limit = clampLimit(params.limit)
-  const all = await collection.list({ order: "newest" })
-  const exists = options.exists ?? (() => true)
-  const cursorIndex = (id: string, param: string) => {
-    const index = all.findIndex(
-      (entry: Stored<T> & { id: string }) => entry.id === id && exists(entry.value),
-    )
-    if (index === -1) throw resourceMissing(options.kind, id, param, 400)
-    return index
-  }
   const matching = (entries: Array<Stored<T> & { id: string }>) =>
     entries.filter((entry) => options.where(entry.value))
 
