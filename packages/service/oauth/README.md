@@ -78,6 +78,10 @@ The issuer defaults to the incoming origin (and `/ns/<name>` when used). Set `is
 ```ts
 import { createMultiServer } from "@crvouga/mockingbird-service-oauth/server"
 
+const accounts = [{ id: "ada", name: "Ada Lovelace", email: "ada@example.test" }]
+const clients = [
+  { id: "app", name: "Example app", redirectUris: ["http://localhost:3000/callback"] },
+]
 const server = await createMultiServer({
   mounts: [
     { path: "/google", provider: "google", clients, accounts },
