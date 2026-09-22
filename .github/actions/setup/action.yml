@@ -25,7 +25,8 @@ runs:
           node_modules
           packages/*/node_modules
           packages/*/*/node_modules
-        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json') }}
+          sites/*/node_modules
+        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'sites/*/package.json') }}
 
     - if: steps.deps.outputs.cache-hit != 'true'
       shell: bash
