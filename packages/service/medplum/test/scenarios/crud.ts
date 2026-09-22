@@ -21,6 +21,42 @@ const version = (body: { meta?: { versionId?: string } }) => body?.meta?.version
 
 export const crudScenarios: Scenario[] = [
   {
+    name: "super admin expunges a resource and all history",
+    steps: [
+      {
+        method: "POST",
+        path: "/fhir/R4/Patient",
+        body: patient,
+        save: { patient: id },
+      },
+      {
+        method: "PUT",
+        path: (v) => `/fhir/R4/Patient/${v.patient}`,
+        body: (v) => ({ ...patient, id: v.patient, active: false }),
+      },
+      {
+        name: "a project client cannot expunge",
+        method: "POST",
+        path: (v) => `/fhir/R4/Patient/${v.patient}/$expunge`,
+      },
+      {
+        method: "POST",
+        path: (v) => `/fhir/R4/Patient/${v.patient}/$expunge`,
+        auth: "super",
+      },
+      {
+        method: "GET",
+        path: (v) => `/fhir/R4/Patient/${v.patient}`,
+        auth: "super",
+      },
+      {
+        method: "GET",
+        path: (v) => `/fhir/R4/Patient/${v.patient}/_history`,
+        auth: "super",
+      },
+    ],
+  },
+  {
     name: "patient lifecycle: create, read, update, vread, history, delete, gone",
     steps: [
       {

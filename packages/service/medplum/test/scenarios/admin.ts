@@ -266,4 +266,38 @@ export const adminScenarios: Scenario[] = [
       },
     ],
   },
+  {
+    name: "admin: project settings, secrets and sites",
+    steps: [
+      {
+        method: "POST",
+        path: (v) => `/admin/projects/${v.projectId}/settings`,
+        auth: "super",
+        contentType: json,
+        body: [{ name: "theme", valueString: "dark" }],
+      },
+      {
+        method: "POST",
+        path: (v) => `/admin/projects/${v.projectId}/secrets`,
+        auth: "super",
+        contentType: json,
+        body: [{ name: "parity-secret", valueString: "not-a-real-secret" }],
+      },
+      {
+        method: "POST",
+        path: (v) => `/admin/projects/${v.projectId}/sites`,
+        auth: "super",
+        contentType: json,
+        body: [{ name: "Parity", domain: ["parity.example.test"] }],
+      },
+      { method: "GET", path: (v) => `/admin/projects/${v.projectId}`, auth: "super" },
+      {
+        name: "a non-admin client cannot rewrite project settings",
+        method: "POST",
+        path: (v) => `/admin/projects/${v.projectId}/settings`,
+        contentType: json,
+        body: [],
+      },
+    ],
+  },
 ]
