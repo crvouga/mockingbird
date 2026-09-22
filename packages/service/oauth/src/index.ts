@@ -14,6 +14,8 @@ export type {
 } from "./behavior.js"
 export { OAUTH_SCENARIOS } from "./behavior.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
+export type { OAuthMount, OAuthMultiRuntime, OAuthMultiRuntimeOptions } from "./multi.js"
+export { createMultiRuntime } from "./multi.js"
 export type { OAuthRuntime, OAuthRuntimeOptions } from "./runtime.js"
 export { createRuntime, OAUTH_PRESETS } from "./runtime.js"
 export type { Account, Client, Provider } from "./types.js"
@@ -24,6 +26,8 @@ export type OAuthAPIOptions = APIOptions & {
   provider?: Provider
   /** Public issuer including any mount prefix. Defaults to request origin plus namespace prefix. */
   issuer?: string
+  /** Path at which a composed runtime is publicly mounted. */
+  mountPath?: string
   publicNamespace?: string
   accounts?: Account[]
   clients?: Client[]
@@ -199,7 +203,10 @@ export class OAuthAPI {
       this.options.publicNamespace && this.options.publicNamespace !== "default"
         ? `/ns/${encodeURIComponent(this.options.publicNamespace)}`
         : ""
-    return (this.options.issuer ?? `${new URL(request.url).origin}${prefix}`).replace(/\/$/, "")
+    return (
+      this.options.issuer ??
+      `${new URL(request.url).origin}${prefix}${this.options.mountPath ?? ""}`
+    ).replace(/\/$/, "")
   }
   configureBehavior(input: BehaviorInput): OAuthBehavior {
     return this.behavior.configure(input)

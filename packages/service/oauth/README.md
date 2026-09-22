@@ -69,7 +69,31 @@ Override the authorization, token, userinfo and JWKS endpoints in your applicati
 
 For example, an Auth.js-style OIDC provider can use `type: "oidc"`, `issuer: "http://localhost:8810"`, `clientId`, `clientSecret`, and `checks: ["pkce", "state"]`. For existing Google/Apple presets, override **all** remote endpoints and issuer validation; changing the authorization URL alone is insufficient. In-process HTTP clients can route requests to `identity.fetch`. Browser navigation must reach a served mock or a service worker that routes those requests.
 
-The issuer defaults to the incoming origin (and `/ns/<name>` when used). Set `issuer` to the public URL behind a reverse proxy; it may include a mount path. Run a separate runtime for each provider profile. Avoid a fixed issuer shared across namespaces: use the namespace URL and its own discovery/JWKS so each namespace remains an independent issuer.
+The issuer defaults to the incoming origin (and `/ns/<name>` when used). Set `issuer` to the public URL behind a reverse proxy; it may include a mount path. Avoid a fixed issuer shared across namespaces: use the namespace URL and its own discovery/JWKS so each namespace remains an independent issuer.
+
+### Multiple providers on one listener
+
+`createMultiRuntime({ mounts })` and `createMultiServer({ mounts })` mount independent providers at exact paths on one origin. Discovery, endpoint URLs, token issuers, signing keys, clients, grants, sessions, faults, journals, and namespace state remain isolated per mount.
+
+```ts
+import { createMultiServer } from "@crvouga/mockingbird-service-oauth/server"
+
+const accounts = [{ id: "ada", name: "Ada Lovelace", email: "ada@example.test" }]
+const clients = [
+  { id: "app", name: "Example app", redirectUris: ["http://localhost:3000/callback"] },
+]
+const server = await createMultiServer({
+  mounts: [
+    { path: "/google", provider: "google", clients, accounts },
+    { path: "/apple", provider: "apple", clients, accounts },
+    { path: "/oauth2", provider: "microsoft", clients, accounts },
+  ],
+})
+```
+
+Use `/ns/<name>/<mount>/…` for URL-selected namespaces. `GET /health` reports every mount; `POST /__admin/reset?all=1` resets them atomically. Other aggregate admin requests select a runtime with `?mount=/google`, while mount-scoped controls are also available at `/google/__admin/*`. Duplicate or unsafe mount paths, duplicate explicit issuers, and duplicate client/key IDs within a mount fail before the listener starts.
+
+For the CLI, put the same `mounts` array in a JSON file and run `npx mockingbird-oauth serve --mounts oauth-mounts.json --port 8810`.
 
 ### Accounts and signup
 
@@ -160,13 +184,15 @@ The runtime supplies `/health`, `/__admin/reset`, snapshots, mock clock, request
 ## API
 
 - `createRuntime(options?)`: shared service runtime; `fetch`, `instance`, `reset`, `snapshot`, `restore`, clock, faults and journals.
+- `createMultiRuntime({ mounts })`: exact-path dispatcher for isolated provider runtimes on one origin, with aggregate health and admin controls.
 - `OAuthAPI`: standalone portable handler with `fetch`, `reset`, `seedAccount`, `registerClient`, `accounts`, `clients`, `provider`, `configureBehavior`, `behavior`, `revokeConsent`, `rotateSigningKey`.
 - `OAUTH_PRESETS`: named transport fault presets.
 - `OAUTH_SCENARIOS`: named provider-behavior scenarios.
 - `document`, `operationIds`, `supportedOperationIds`: generated OpenAPI metadata.
 - `createServer(options?)` from `./server`: Node HTTP adapter, returning `url`, `close` and `runtime`.
+- `createMultiServer({ mounts })` from `./server`: Node HTTP adapter for a multi-provider runtime.
 - `DEFAULT_PORT`, `serveTarget` from `./server`: CLI defaults and multi-service launcher integration.
-- Types: `Account`, `Client`, `Provider`, `OAuthAPIOptions`, `OAuthRuntimeOptions`, `OAuthRuntime`, `OAuthServerOptions`, `OAuthBehavior`, `BehaviorInput`, `OAuthScenario`, `EdgeCase`, `BehaviorEvent`.
+- Types: `Account`, `Client`, `Provider`, `OAuthAPIOptions`, `OAuthRuntimeOptions`, `OAuthRuntime`, `OAuthServerOptions`, `OAuthMount`, `OAuthMultiRuntimeOptions`, `OAuthMultiRuntime`, `OAuthMultiServerOptions`, `OAuthBehavior`, `BehaviorInput`, `OAuthScenario`, `EdgeCase`, `BehaviorEvent`.
 
 ## Verification
 
