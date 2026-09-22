@@ -3,9 +3,11 @@ import catalog from "virtual:mockingbird/catalog"
 import Icon from "../components/Icon.astro"
 import Install from "../components/Install.astro"
 import Monogram from "../components/Monogram.astro"
+import ServiceCard from "../components/ServiceCard.astro"
 import Base from "../layouts/Base.astro"
 
 const { totals } = catalog
+const ready = catalog.services.filter((s) => s.status === "ready")
 const featured =
   catalog.services.find((s) => s.name === "slack" && s.example) ??
   catalog.services.find((s) => s.example)
@@ -49,9 +51,9 @@ const values = [
   <section class="hero">
     <div class="container hero-grid">
       <div class="hero-copy">
-        <a class="pill" href="/services">
+        <a class="pill" href="/services?tier=ready">
           <span class="emoji" aria-hidden="true">🐦‍⬛</span>
-          {totals.services} mocks · {totals.browser} run in your browser
+          <span class="pill-dot"></span>{totals.ready} ready to use · {totals.wip} in progress
           <Icon name="arrow-right" />
         </a>
         <h1>Mock the APIs you depend on, <span class="accent">with the behavior they really have.</span></h1>
@@ -87,12 +89,27 @@ const values = [
 
   <div class="container">
     <section class="stats" aria-label="By the numbers">
-    <div><strong>{totals.services}</strong><span>services</span></div>
-    <div><strong>{totals.opsSupported}</strong><span>vendor operations mocked</span></div>
-    <div><strong>{catalog.categories.length}</strong><span>categories</span></div>
+    <a href="/services?tier=ready"><strong class="ok">{totals.ready}</strong><span>ready to use</span></a>
+    <a href="/services?tier=wip"><strong class="warn">{totals.wip}</strong><span>in progress</span></a>
+    <a href="/coverage"><strong>{totals.opsSupported}</strong><span>vendor operations mocked</span></a>
     <div><strong>0</strong><span>network calls</span></div>
   </section>
   </div>
+
+  <section class="section container ready-section">
+    <div class="section-head">
+      <span class="eyebrow">Ready to use</span>
+      <h2>Start with the {totals.ready} that are ready.</h2>
+      <p>
+        These are complete and kept stable. The other {totals.wip} are marked work in progress: usable in a suite,
+        but their operations and shapes can still change.
+      </p>
+    </div>
+    <div class="ready-grid">
+      {ready.map((s) => <ServiceCard service={s} />)}
+    </div>
+    <a class="more" href="/services?tier=wip">See the {totals.wip} in progress <Icon name="arrow-right" /></a>
+  </section>
 
   <section class="section container">
     <div class="section-head">
@@ -211,6 +228,56 @@ const values = [
     font-weight: 500;
     box-shadow: var(--shadow-sm);
     transition: border-color 0.15s var(--ease);
+  }
+
+  .pill-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+  }
+
+  .ready-section {
+    padding-bottom: 0;
+  }
+
+  .ready-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .more {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 18px;
+    color: var(--fg-muted);
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .more:hover {
+    color: var(--fg);
+  }
+
+  .more :global(.i) {
+    width: 14px;
+    height: 14px;
+  }
+
+  .stats a:hover strong {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .stats .ok {
+    color: var(--ok);
+  }
+
+  .stats .warn {
+    color: var(--warn);
   }
 
   .pill:hover {
@@ -354,14 +421,14 @@ const values = [
     background: var(--bg-subtle);
   }
 
-  .stats div {
+  .stats > * {
     display: flex;
     flex-direction: column;
     gap: 2px;
     padding: 22px 24px;
   }
 
-  .stats div + div {
+  .stats > * + * {
     border-left: 1px solid var(--border);
   }
 
@@ -571,10 +638,10 @@ const values = [
     .stats {
       grid-template-columns: 1fr 1fr;
     }
-    .stats div:nth-child(3) {
+    .stats > :nth-child(3) {
       border-left: 0;
     }
-    .stats div:nth-child(n + 3) {
+    .stats > :nth-child(n + 3) {
       border-top: 1px solid var(--border);
     }
     .values {

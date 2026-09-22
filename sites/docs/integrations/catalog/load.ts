@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
 import { join } from "node:path"
 import { pathToFileURL } from "node:url"
 import { CATEGORIES, isCategory } from "../../src/lib/categories.ts"
+import { isTier, TIER_ORDER } from "../../src/lib/tiers.ts"
 import { EXPECTED_ERROR_SNIPPETS, SQL_SNIPPETS, splitStatements } from "../../src/lib/sql.ts"
 import type {
   Catalog,
@@ -15,8 +16,6 @@ import { authHint, extractOperations, serverOrigin } from "./openapi.ts"
 
 // biome-ignore lint/suspicious/noExplicitAny: package.json and module shapes are checked at runtime.
 type Json = any
-
-const STATUSES: readonly ServiceStatus[] = ["stable", "wip"]
 
 // Astro evaluates the config through Vite's module runner, which is closed by the time pages
 // load; the built service modules are plain ESM, so import them with Node's own loader.
@@ -70,11 +69,13 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
         )
         return null
       }
-      const status: ServiceStatus = meta.status ?? "stable"
-      if (!STATUSES.includes(status)) {
-        problems.push(`${where}: "mockingbird.status" must be one of ${STATUSES.join(", ")}`)
+      if (!isTier(meta.status)) {
+        problems.push(
+          `${where}: "mockingbird.status" is required: ${TIER_ORDER.map((t) => JSON.stringify(t)).join(" or ")} (got ${JSON.stringify(meta.status)})`,
+        )
         return null
       }
+      const status: ServiceStatus = meta.status
       if (!declared.has(pkg.name)) {
         problems.push(
           `sites/docs/package.json: add "${pkg.name}": "workspace:*" to devDependencies`,
@@ -187,7 +188,11 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
     )
   }
 
-  services.sort((a, b) => a.displayName.localeCompare(b.displayName))
+  services.sort(
+    (a, b) =>
+      TIER_ORDER.indexOf(a.status) - TIER_ORDER.indexOf(b.status) ||
+      a.displayName.localeCompare(b.displayName),
+  )
   const categories = Object.entries(CATEGORIES)
     .map(([slug, c]) => ({ slug, ...c, count: services.filter((s) => s.category === slug).length }))
     .filter((c) => c.count > 0)
@@ -198,6 +203,8 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
     categories,
     totals: {
       services: services.length,
+      ready: services.filter((s) => s.status === "ready").length,
+      wip: services.filter((s) => s.status === "wip").length,
       browser: services.filter((s) => s.surfaces.browser).length,
       opsSupported: services.reduce((n, s) => n + s.opsSupported, 0),
       opsTotal: services.reduce((n, s) => n + s.opsTotal, 0),

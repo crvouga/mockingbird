@@ -5,7 +5,7 @@ const body = table?.tBodies[0]
 if (table && body) {
   const rows = [...body.rows]
   const headers = [...table.querySelectorAll<HTMLButtonElement>("[data-sort-key]")]
-  const numeric = new Set(["coverage", "browser", "inprocess", "server", "cli"])
+  const numeric = new Set(["tier", "coverage", "browser", "inprocess", "server", "cli"])
 
   const sortBy = (key: string, dir: "asc" | "desc") => {
     const factor = dir === "asc" ? 1 : -1

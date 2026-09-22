@@ -5,7 +5,9 @@ import Install from "../../components/Install.astro"
 import Monogram from "../../components/Monogram.astro"
 import Playground from "../../components/Playground.astro"
 import SqlConsole from "../../components/SqlConsole.astro"
+import TierBadge from "../../components/TierBadge.astro"
 import Base from "../../layouts/Base.astro"
+import { TIERS } from "../../lib/tiers.ts"
 import { CATEGORIES, type CategorySlug } from "../../lib/categories.ts"
 import { percent } from "../../lib/format.ts"
 import type { Service } from "../../lib/types.ts"
@@ -68,11 +70,13 @@ const toc = [
       {
         s.status === "wip" && (
           <div class="callout callout-warn">
-            <strong>Work in progress.</strong> This mock is incomplete and its behavior may change between releases.
+            <strong>{TIERS.wip.label}.</strong> {TIERS.wip.blurb} Pin an exact version, and check the README's
+            "Deliberately not modelled" notes before relying on it.
           </div>
         )
       }
       <div class="facts">
+        <TierBadge tier={s.status} long />
         <span class="badge badge-accent">{category.label}</span>
         {s.surfaces.browser ? <span class="badge badge-ok"><Icon name="globe" /> Runs in the browser</span> : <span class="badge"><Icon name="terminal" /> Node only</span>}
         {s.opsTotal > 0 && <span class="badge">{s.opsSupported} of {s.opsTotal} operations</span>}
