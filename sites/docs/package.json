@@ -39,6 +39,7 @@
     "@crvouga/mockingbird-service-healthie": "workspace:*",
     "@crvouga/mockingbird-service-intercom": "workspace:*",
     "@crvouga/mockingbird-service-junction": "workspace:*",
+    "@crvouga/mockingbird-service-kill-bill": "workspace:*",
     "@crvouga/mockingbird-service-klaviyo": "workspace:*",
     "@crvouga/mockingbird-service-livekit": "workspace:*",
     "@crvouga/mockingbird-service-llamacloud": "workspace:*",
