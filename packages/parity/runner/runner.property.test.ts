@@ -295,6 +295,10 @@ const run = (
     },
     mock: { create: () => referenceServer("M", fault, clock) },
     clockSkewSeconds: 0,
+    // Both sides share this process's scheduler, and the real side's 10ms delay is not a
+    // latency budget: on a loaded runner the mock can take longer and raise a latency
+    // failure that masks the injected fault.
+    latencyToleranceMs: 1_000,
     now: clock,
     sleep: async () => {},
     log: (line) => lines.push(line),
