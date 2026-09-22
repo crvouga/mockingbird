@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-41-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-42-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-47 services, each its own npm package. Every service declares a release tier:
+48 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (41): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (42): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -119,6 +119,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [RxVortex](packages/service/rxvortex) | Pharmacy | [`@crvouga/mockingbird-service-rxvortex`](https://www.npmjs.com/package/@crvouga/mockingbird-service-rxvortex) | Stateful mock of the RxVortex (Strive) pharmacy API: OAuth token, order submit, status, cancel, recovery by sender order id, preset catalog, and signed status webhooks. |
 | [VPI](packages/service/vpi) | Pharmacy | [`@crvouga/mockingbird-service-vpi`](https://www.npmjs.com/package/@crvouga/mockingbird-service-vpi) | Stateful mock of the VPI compounding pharmacy API: JWT authentication, products, clinic, patients, providers, saveNewPrescription drafts and the three paged prescription status lists. |
 | [Wholescripts](packages/service/wholescripts) | Pharmacy | [`@crvouga/mockingbird-service-wholescripts`](https://www.npmjs.com/package/@crvouga/mockingbird-service-wholescripts) | Stateful mock of the Wholescripts supplement fulfilment API: product and private-label catalogs, order submit, status polling and cancel, with admin status transitions. |
+| [AWS Step Functions](packages/service/step-functions) | Productivity | [`@crvouga/mockingbird-service-step-functions`](https://www.npmjs.com/package/@crvouga/mockingbird-service-step-functions) | Stateful AWS Step Functions mock with idempotent executions, callbacks, deterministic transitions, and history. |
 | [Formbricks](packages/service/formbricks) | Productivity | [`@crvouga/mockingbird-service-formbricks`](https://www.npmjs.com/package/@crvouga/mockingbird-service-formbricks) | Stateful mock of Formbricks (Geviti fork): client environment state seeded from our production survey clone, response creation with the fork's validation errors, the v1 management API, the widget script, and responseFinished webhooks. |
 | [Google Calendar](packages/service/google-calendar) | Productivity | [`@crvouga/mockingbird-service-google-calendar`](https://www.npmjs.com/package/@crvouga/mockingbird-service-google-calendar) | Stateful mock of the Google Calendar v3 API and Google OAuth our EMR calls: events list/insert/update/delete/watch, channels.stop, calendarList/calendars, token exchange/refresh/revoke and userinfo, with signed-by-header push notifications. |
 | [Payload CMS](packages/service/payload-cms) | Productivity | [`@crvouga/mockingbird-service-payload-cms`](https://www.npmjs.com/package/@crvouga/mockingbird-service-payload-cms) | Stateful mock of the Payload CMS collection REST API: paginated finds with a where-query subset, find by id, a seeded marketing collection and admin-editable documents. |
