@@ -5,14 +5,12 @@ automatically on every green push to `main` (see [RELEASING.md](RELEASING.md)) a
 **npm Trusted Publishing (OIDC)**.
 
 OIDC can only publish to packages that already exist on npm and trust this repo. For brand-new
-packages the release job needs one of:
+packages the release job loads `NPM_TOKEN` from Vault `secret/personal/prd`:
 
-- **`NPM_TOKEN` Actions secret (recommended, fully automated).** A granular npm token with
-  read+write on the `@crvouga` scope. The release job uses it only to create new packages
-  (and as a fallback if an OIDC publish is rejected), then runs `npm trust github` so every later
-  release of that package goes through OIDC. It also deprecates every package no longer
-  published (the former helper packages and the archived legacy packages).
-- **Local seed.** From any checkout: `bun run release:seed` (`-- --dry-run` to preview). It runs
+- **Automatic release.** A granular npm token with read+write on the `@crvouga` scope lives in
+  Vault. CI loads it through GitHub OIDC, creates missing packages, then runs `npm trust github`
+  so later releases use OIDC. A scheduled run every six hours retries interrupted releases.
+- **Local fallback.** From any checkout: `bun run release:seed` (`-- --dry-run` to preview). It runs
   `npm login` if needed, uses npm@11 when yours is too old for `npm trust`, builds `origin/main` in a
   temporary worktree and runs `release:publish --local` there. Publishes without provenance with your npm login, pushes the tags and GitHub Releases, attaches
   the Trusted Publishers and deprecates every package no longer published — i.e. it reconciles
@@ -58,12 +56,8 @@ bun run build && bun run build
 # Full report: which packages exist on npm, Trusted Publishing links, Actions secrets
 bun run secrets:doctor
 
-# Push NPM_TOKEN from Vault (personal/prd) to the NPM_TOKEN Actions secret
-bun run secrets:sync
-
-# Missing NPM_TOKEN? Prompt securely, store + sync it, then rerun and watch failed CI
-bun run release:fix-ci                  # latest failed CI run on main
-bun run release:fix-ci -- 35698422509   # specific run
+# Missing NPM_TOKEN? Prompt securely, store it in Vault, then run and watch current CI
+bun run release:bootstrap
 
 # What the next release would publish
 bun run release:plan
@@ -115,4 +109,4 @@ bun run parity:genebygene
 | `TURBO_*` (remote cache) | Vault `personal/{dev,prd}` → `vault run` locally, OIDC in CI | Yes (else no remote cache) |
 | `GH_PAT` | Optional Vault `personal/prd` | No (local only) |
 | Provider sandbox keys | Vault `personal/prd` | For live parity only |
-| `NPM_TOKEN` | Vault `personal/prd` → Actions secret | Only to create new packages (else `bun run release:seed`) |
+| `NPM_TOKEN` | Vault `personal/prd` → CI through GitHub OIDC | Creates new packages and manages Trusted Publishers |

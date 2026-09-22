@@ -17,6 +17,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -121,7 +124,7 @@ jobs:
   # Nothing is committed to main: versions live in tags. Every step is idempotent — re-run to retry.
   release:
     name: Release
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: [check]
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -159,12 +162,23 @@ jobs:
         timeout-minutes: 6
         run: bun run release:smoke
 
+      # Vault is the source of truth. Reconciliation also repairs missing Trusted
+      # Publishers and deprecations when there are no new package versions.
+      - name: Load npm publish credential
+        uses: hashicorp/vault-action@v4
+        with:
+          url: https://vault.chrisvouga.dev
+          method: jwt
+          path: jwt
+          role: github-actions
+          jwtGithubAudience: https://vault.chrisvouga.dev
+          secrets: |
+            secret/data/personal/prd NPM_TOKEN | NPM_TOKEN
+
       - name: Publish, tag, and create GitHub Releases
         timeout-minutes: 20
-        if: steps.plan.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"

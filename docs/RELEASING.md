@@ -1,8 +1,8 @@
 # Releasing
 
-How packages get from `main` to npm. There is nothing to run by hand.
+How packages get from `main` to npm. Once `NPM_TOKEN` is provisioned in Vault, releases run automatically.
 
-Releases are fully automated on every green push to `main` ([`scripts/release/`](../scripts/release/lib.ts), job `Release` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)). There is nothing to run by hand:
+Releases run on every green push to `main`, on manual dispatch, and every six hours to recover interrupted publishes ([`scripts/release/`](../scripts/release/lib.ts), job `Release` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)):
 
 - **Which packages:** every published service with a releasable Conventional Commit since its last `<name>@<version>` git tag — in its own directory or in any private helper it bundles — every service that has never been released, and every service that depends at runtime on one of those (workspace deps are pinned exactly).
 - **Which version:** `feat!` / `BREAKING CHANGE` → major, `feat` → minor, `fix` / `perf` / `revert` / `refactor` / `build` / `docs` → patch, dependency-only → patch. `test` / `ci` / `chore` / `style` never release a package on their own. First releases start at `0.1.0`.
@@ -10,13 +10,13 @@ Releases are fully automated on every green push to `main` ([`scripts/release/`]
 
 Versions live in tags, so `package.json` keeps `0.0.0-development` and nothing is committed back to `main` (same model as semantic-release). Every step is idempotent — re-running a failed release job finishes it.
 
-OIDC cannot create a package that does not exist on npm yet. With the optional `NPM_TOKEN` Actions secret set, the release job creates new packages with it and attaches their Trusted Publisher automatically (`npm trust github`); without it, seed them once with `bun run release:seed`. The seed reconciles npm with `origin/main` (logs in to npm if needed, builds a clean `origin/main` in a temporary worktree, publishes every missing service, attaches Trusted Publishers, pushes tags and GitHub Releases, and deprecates every package no longer published). See [docs/SECRETS.md](SECRETS.md).
+OIDC cannot create a package that does not exist on npm yet. The release job loads `NPM_TOKEN` from Vault `secret/personal/prd` through GitHub OIDC, creates missing packages with it, and attaches their Trusted Publisher automatically (`npm trust github`). `bun run release:bootstrap` securely prompts for a missing token, stores it in Vault, and starts the current CI workflow on `main`. `bun run release:seed` remains a local fallback using npm login; it reconciles npm with `origin/main` in a temporary worktree. See [docs/SECRETS.md](SECRETS.md).
 
 ```bash
 bun run release:plan                   # what the next push to main would release
 bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
 bun run release:seed                   # reconcile npm with origin/main using your npm login
-bun run release:fix-ci                 # provision NPM_TOKEN and retry the latest failed CI release
+bun run release:bootstrap              # provision NPM_TOKEN in Vault and run current CI on main
 bun run secrets:doctor                 # npm / Trusted Publishing / NPM_TOKEN status
 ```
 

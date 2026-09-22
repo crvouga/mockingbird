@@ -71,6 +71,26 @@ if (plan.releases.length === 0) {
   console.log(`release:publish: ${plan.releases.length} package(s)${dryRun ? " (dry-run)" : ""}`)
 }
 
+// Fail once before touching the workspace when CI cannot create initial packages.
+// Scheduled and manual runs retry the same plan after the credential appears in Vault.
+if (inCi && !local && !dryRun && !npmToken) {
+  const unseeded: string[] = []
+  for (const release of plan.releases) {
+    const published = await npmVersions(release.pkg.name)
+    if (!Array.isArray(published)) {
+      throw new Error(`npm view ${release.pkg.name}: ${published.error}`)
+    }
+    if (published.length === 0) unseeded.push(release.pkg.name)
+  }
+  if (unseeded.length > 0) {
+    console.error(
+      `::error::${unseeded.length} initial npm package(s) need NPM_TOKEN at secret/personal/prd`,
+    )
+    console.error("Run bun run release:bootstrap locally to store the token securely and retry CI.")
+    process.exit(1)
+  }
+}
+
 // Pin every public package for packing: its own version, and its workspace
 // dependencies rewritten to the versions this run resolves them to.
 const originals = new Map<string, string>()
