@@ -236,7 +236,7 @@ last account**. Changing these settings does not clear accounts or existing cons
 **Reset example** (or switching a failure scenario) creates a fresh app and provider.
 Initial values can also be passed to the component:
 
-```ts
+```js
 import { mount } from "./examples/google-login/index.js"
 const dispose = await mount(host, {
   flow: "redirect", // default: "popup"
@@ -250,6 +250,8 @@ endpoint and callback validation. The demo uses `prompt=select_account` to force
 For any integrating app, session reuse can also be disabled on the mock itself:
 
 ```ts
+import { OAuthAPI } from "@crvouga/mockingbird-service-oauth"
+
 const api = new OAuthAPI({
   behavior: { session: { reuseLastAccount: false } },
 })
