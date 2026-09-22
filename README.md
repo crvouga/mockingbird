@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-5-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-36-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-36-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,9 +63,9 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-41 services, each its own npm package. Every service declares a release tier:
+42 services, each its own npm package. Every service declares a release tier:
 
-- **Ready** (5): Complete, checked against the vendor, and kept stable. Use it in your test suite.
+- **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
 - **Work in progress** (36): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
@@ -74,6 +74,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | --- | --- | --- | --- |
 | [Junction](packages/service/junction) | Health & labs | [`@crvouga/mockingbird-service-junction`](https://www.npmjs.com/package/@crvouga/mockingbird-service-junction) | Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox. |
 | [Medplum](packages/service/medplum) | Health & labs | [`@crvouga/mockingbird-service-medplum`](https://www.npmjs.com/package/@crvouga/mockingbird-service-medplum) | Stateful, portable mock of the self-hosted Medplum server (FHIR R4 REST, OAuth2 and admin API) that runs anywhere JavaScript runs, proven at parity with a real self-hosted Medplum used as the oracle. |
+| [OAuth & Social Login](packages/service/oauth) | Identity | [`@crvouga/mockingbird-service-oauth`](https://www.npmjs.com/package/@crvouga/mockingbird-service-oauth) | Portable social-login mock with Google, Apple, Microsoft, GitHub and generic OIDC profiles, private relay identities, reproducible edge cases, signed tokens and an accessible UI. |
 | [PostgreSQL](packages/service/postgres) | Databases | [`@crvouga/mockingbird-service-postgres`](https://www.npmjs.com/package/@crvouga/mockingbird-service-postgres) | Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies |
 | [SQLite](packages/service/sqlite) | Databases | [`@crvouga/mockingbird-service-sqlite`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) | Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies |
 | [Stripe](packages/service/stripe) | Payments | [`@crvouga/mockingbird-service-stripe`](https://www.npmjs.com/package/@crvouga/mockingbird-service-stripe) | Stateful mock of the Stripe API (accounts by key, customers, payments, subscriptions with renewals, invoices, checkout with a hosted page, a Stripe.js stand-in, signed webhooks) at API versions 2024-06-20 and 2025-02-24.acacia, verified by differential property tests against Stripe test mode. |

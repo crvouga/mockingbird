@@ -68,5 +68,6 @@ OpenAPI spec
 | `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `MOCKINGBIRD_JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) or Vault `secret/personal/prd` |
 | `bun run parity:genebygene` | staging auth + API | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` or Vault `secret/personal/prd` |
 | `bun run parity:twilio` | `https://lookups.twilio.com` (free Lookup v2 only) | Vault `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` |
+| `cd packages/service/oauth && bun run parity` | Google, Apple, Microsoft discovery/JWKS plus GitHub REST auth error | None; public, read-only metadata |
 | `bun run parity:service -- <name…> \| --all` | each service's sandbox | `MOCKINGBIRD_<NAME>_*` in env or Vault; reports `parity`, `diverged`, or `no credentials` per service |
 | `bun run verify:junction` | Junction sandbox | `mockingbird-junction verify`: corpus drift plus a stateful scenario; also runs daily in the [Verify workflow](../.github/workflows/verify.yml) |
