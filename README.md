@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-45-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-46-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-51 services, each its own npm package. Every service declares a release tier:
+52 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (6): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (45): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (46): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -117,6 +117,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [OpenTelemetry](packages/service/otel) | Observability | [`@crvouga/mockingbird-service-otel`](https://www.npmjs.com/package/@crvouga/mockingbird-service-otel) | Stateful mock of an OTLP/HTTP collector (JSON and protobuf traces and logs) and the OpenObserve search API over the same store. |
 | [PostHog](packages/service/posthog) | Observability | [`@crvouga/mockingbird-service-posthog`](https://www.npmjs.com/package/@crvouga/mockingbird-service-posthog) | Stateful mock of PostHog: /flags v2 and legacy /decide evaluation with per-test flag, variant and payload control, remote config, gzip/base64 capture (/batch/, /e/, /i/v0/e/), recordings intake, and the feature-flag management and HogQL API slice. |
 | [Flex](packages/service/flex) | Payments | [`@crvouga/mockingbird-service-flex`](https://www.npmjs.com/package/@crvouga/mockingbird-service-flex) | Stateful mock of the Flex HSA/FSA payments API: products (recorded catalog corpus), checkout sessions in payment, off-session and setup modes, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks. |
+| [Kill Bill](packages/service/kill-bill) | Payments | [`@crvouga/mockingbird-service-kill-bill`](https://www.npmjs.com/package/@crvouga/mockingbird-service-kill-bill) | Stateful Kill Bill billing mock with accounts, subscriptions, invoices, payments, credits, retries, catalog, and clock controls. |
 | [Pharmetika](packages/service/pharmetika) | Pharmacy | [`@crvouga/mockingbird-service-pharmetika`](https://www.npmjs.com/package/@crvouga/mockingbird-service-pharmetika) | Stateful mock of the Pharmetika compounding-pharmacy provider portal: clinics, patients, medication-order validate / EPCS prepare / submit / lookup, the v7 cancel, the medication-template catalog, and status webhooks. |
 | [Portal Agent](packages/service/portal-agent) | Pharmacy | [`@crvouga/mockingbird-service-portal-agent`](https://www.npmjs.com/package/@crvouga/mockingbird-service-portal-agent) | Stateful mock of our eRx portal agent (LifeFile/VPI browser runner): the fulfilment job endpoint with strict response rules, a job store, fault presets, and x-internal-key callbacks. |
 | [RxVortex](packages/service/rxvortex) | Pharmacy | [`@crvouga/mockingbird-service-rxvortex`](https://www.npmjs.com/package/@crvouga/mockingbird-service-rxvortex) | Stateful mock of the RxVortex (Strive) pharmacy API: OAuth token, order submit, status, cancel, recovery by sender order id, preset catalog, and signed status webhooks. |

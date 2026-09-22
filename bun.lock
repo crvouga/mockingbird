@@ -760,6 +760,28 @@
         "wrangler": "^4.129.1",
       },
     },
+    "packages/service/kill-bill": {
+      "name": "@crvouga/mockingbird-service-kill-bill",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-kill-bill": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/klaviyo": {
       "name": "@crvouga/mockingbird-service-klaviyo",
       "version": "0.0.0-development",
@@ -1590,6 +1612,7 @@
         "@crvouga/mockingbird-service-healthie": "workspace:*",
         "@crvouga/mockingbird-service-intercom": "workspace:*",
         "@crvouga/mockingbird-service-junction": "workspace:*",
+        "@crvouga/mockingbird-service-kill-bill": "workspace:*",
         "@crvouga/mockingbird-service-klaviyo": "workspace:*",
         "@crvouga/mockingbird-service-livekit": "workspace:*",
         "@crvouga/mockingbird-service-llamacloud": "workspace:*",
@@ -1988,6 +2011,8 @@
     "@crvouga/mockingbird-service-intercom": ["@crvouga/mockingbird-service-intercom@workspace:packages/service/intercom"],
 
     "@crvouga/mockingbird-service-junction": ["@crvouga/mockingbird-service-junction@workspace:packages/service/junction"],
+
+    "@crvouga/mockingbird-service-kill-bill": ["@crvouga/mockingbird-service-kill-bill@workspace:packages/service/kill-bill"],
 
     "@crvouga/mockingbird-service-klaviyo": ["@crvouga/mockingbird-service-klaviyo@workspace:packages/service/klaviyo"],
 
