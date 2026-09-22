@@ -2,9 +2,9 @@
 import { createHash, createPrivateKey, createPublicKey } from "node:crypto"
 import type { AddressInfo } from "node:net"
 import { posix } from "node:path"
-import { type AuthContext, type Connection, type FileEntry, Server, utils } from "ssh2"
-import type { AhaRuntime } from "./runtime.js"
+import ssh2, { type AuthContext, type Connection, type FileEntry } from "ssh2"
 
+const { Server, utils } = ssh2
 const { OPEN_MODE, STATUS_CODE } = utils.sftp
 const seedBytes = createHash("sha256").update("mockingbird-aha-sftp-host-v1").digest()
 const hostKeyObject = createPrivateKey({
@@ -68,11 +68,23 @@ export type AhaSftpJournalEntry = {
   status: "ok" | "error"
 }
 export type AhaSftpServerOptions = {
-  runtime: AhaRuntime
+  runtime: AhaSftpRuntime
   accounts?: AhaSftpAccount[]
   host?: string
   port?: number
   now?: () => number
+}
+/** Structural slice of the portable runtime used by the Node-only SFTP adapter. */
+export type AhaSftpRuntime = {
+  clock: { now(): number }
+  instance(namespace?: string): {
+    state: {
+      findOrder(
+        id: string,
+      ): { partner_order_id: string; order_number: string; status: string } | undefined
+    }
+    transition(id: string, input: { status: string }): unknown
+  }
 }
 export type AhaSftpServer = {
   host: string
