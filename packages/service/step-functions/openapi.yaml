@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: AWS Step Functions (Mockingbird subset)
+  version: "2016-11-23"
+  description: AWS JSON contract used by the pinned SFN client.
+servers:
+  - url: https://states.us-east-1.amazonaws.com
+paths:
+  /:
+    post:
+      operationId: StepFunctionsRpc
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: X-Amz-Target, in: header, required: true, schema: { type: string, pattern: '^AWSStepFunctions\\.[A-Za-z]+$' } }
+      requestBody:
+        required: true
+        content:
+          application/x-amz-json-1.0: { schema: { type: object, additionalProperties: true } }
+          application/json: { schema: { type: object, additionalProperties: true } }
+      responses:
+        "200": { description: Operation response, content: { application/x-amz-json-1.0: { schema: { type: object, additionalProperties: true } } } }
+        "400": { description: SFN exception, content: { application/x-amz-json-1.0: { schema: { type: object, additionalProperties: true } } } }
