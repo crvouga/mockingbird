@@ -126,10 +126,27 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`): `bad_s
 only the path after it), or by API key:
 `PUT /__admin/credentials {"credentials": {"<AHA_API_KEY>": "<namespace>"}}`.
 
+### SFTP result delivery
+
+`createAhaSftpServer` from `./sftp` starts a real SSH/SFTP server on an ephemeral port and shares order state with `createRuntime`. It supports password or public-key authentication, host-key verification, `list`/`stat`, binary upload/download, atomic temp-file rename, delete, nested directories, stable POSIX permissions and mock-clock timestamps. The deterministic Ed25519 host key is stable between runs.
+
+```ts
+import { createRuntime } from "@crvouga/mockingbird-service-aha"
+import { createAhaSftpServer } from "@crvouga/mockingbird-service-aha/sftp"
+
+const runtime = createRuntime()
+const sftp = await createAhaSftpServer({
+  runtime,
+  accounts: [{ username: "aha", password: "local-test-password" }],
+})
+console.log(sftp.host, sftp.port, sftp.hostPublicKey)
+```
+
+Use `seed()` to install arbitrary binary fixtures or `publishResult(orderId, bytes)` to place a stable `AHA-…_result.pdf` in `/outbox`. The first complete download moves the linked HTTP order to `Lab Testing In Progress` and emits its webhook; repeat polling/download does not repeat that transition. `fault()` forces the next operation to disconnect, deny permission, report disk-full, or accept only part of a write. `journal()` exposes paths, operation names, byte counts, and outcomes—never credentials or file contents. `reset(namespace?)` clears deterministic filesystem state. Duplicate destination names fail, so `.tmp` → final rename is atomic.
+
 ### Deliberately not modelled
 
-- **Results.** AHA delivers results as HL7 over SFTP into S3 (`ahaResultFiles` →
-  `aha_results_queue`); none of that is HTTP.
+- Downstream S3 ingestion and `aha_results_queue` processing after the SFTP handoff.
 - Real scheduling: AHA contacts the patient; nothing moves unless a test transitions the order
   or sets `autoSchedule`.
 - The serviceable-ZIP list (our app's own fixture decides eligibility before calling AHA).
@@ -151,5 +168,6 @@ only the path after it), or by API key:
 | `isTimeZone`, `zonedParts`, `zonedToEpoch` | functions | IANA-zone helpers used to fill the local date/time fields. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (autoSchedule ticks every 100 ms); the `serve` CLI target; port 8799. |
+| `createAhaSftpServer` (`./sftp`) | Node | Real SSH/SFTP endpoint with deterministic host key/filesystem, shared order state, transfer controls, and an ephemeral port. |
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).
