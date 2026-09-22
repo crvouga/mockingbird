@@ -174,7 +174,7 @@ Every service README doubles as its integration guide and ships inside the npm t
 | [Service catalog coverage](docs/CATALOG_COVERAGE.md) | Where each section of the geviti "Mockingbird wish list — service catalog" (2026-09-20) lives in this repo, how it is proven, and what the proof turned up. Every package follows [AUTHORING_A_SERVICE.md](AUTHORING_A_SERVICE.md) and ships the same evidence: |
 | [Developing Mockingbird](docs/DEVELOPMENT.md) | Working on this repo: requirements, how the packages are layered, and the quality gates every change passes. |
 | [Reporting issues](docs/REPORTING_ISSUES.md) | How coding agents in other projects file a GitHub issue when a mock diverges from its oracle, lacks a feature they call, or breaks, or when they need a service mocked that the catalog does not have yet. Agents in this repository pick the issues up and resolve them. |
-| [Releasing](docs/RELEASING.md) | How packages get from `main` to npm. There is nothing to run by hand. |
+| [Releasing](docs/RELEASING.md) | How packages get from `main` to npm. Once `NPM_TOKEN` is provisioned in Vault, releases run automatically. |
 | [Secrets runbook (maintainers)](docs/SECRETS.md) | The mock services (`@crvouga/mockingbird-service-*`, the only published packages) are released automatically on every green push to `main` (see [RELEASING.md](RELEASING.md)) and publish with **npm Trusted Publishing (OIDC)**. |
 
 ## License
