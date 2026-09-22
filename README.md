@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-4-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-37-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-5-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-36-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -65,14 +65,15 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 41 services, each its own npm package. Every service declares a release tier:
 
-- **Ready** (4): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (37): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Ready** (5): Complete, checked against the vendor, and kept stable. Use it in your test suite.
+- **Work in progress** (36): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
 | Service | Category | Package | What it mocks |
 | --- | --- | --- | --- |
 | [Junction](packages/service/junction) | Health & labs | [`@crvouga/mockingbird-service-junction`](https://www.npmjs.com/package/@crvouga/mockingbird-service-junction) | Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox. |
+| [Medplum](packages/service/medplum) | Health & labs | [`@crvouga/mockingbird-service-medplum`](https://www.npmjs.com/package/@crvouga/mockingbird-service-medplum) | Stateful, portable mock of the self-hosted Medplum server (FHIR R4 REST, OAuth2 and admin API) that runs anywhere JavaScript runs, proven at parity with a real self-hosted Medplum used as the oracle. |
 | [PostgreSQL](packages/service/postgres) | Databases | [`@crvouga/mockingbird-service-postgres`](https://www.npmjs.com/package/@crvouga/mockingbird-service-postgres) | Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies |
 | [SQLite](packages/service/sqlite) | Databases | [`@crvouga/mockingbird-service-sqlite`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) | Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies |
 | [Stripe](packages/service/stripe) | Payments | [`@crvouga/mockingbird-service-stripe`](https://www.npmjs.com/package/@crvouga/mockingbird-service-stripe) | Stateful mock of the Stripe API (accounts by key, customers, payments, subscriptions with renewals, invoices, checkout with a hosted page, a Stripe.js stand-in, signed webhooks) at API versions 2024-06-20 and 2025-02-24.acacia, verified by differential property tests against Stripe test mode. |
@@ -97,7 +98,6 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [Gene by Gene](packages/service/genebygene) | Health & labs | [`@crvouga/mockingbird-service-genebygene`](https://www.npmjs.com/package/@crvouga/mockingbird-service-genebygene) | Stateful mock of Gene by Gene's Nucleus API v2 and auth host: tokens with credential blocking, catalog, shipping quotes, orders, kits, demographics, three-layer cancel, results with presigned downloads and S3 writes, subscriptions, and GxG-signed webhooks. |
 | [Healthie](packages/service/healthie) | Health & labs | [`@crvouga/mockingbird-service-healthie`](https://www.npmjs.com/package/@crvouga/mockingbird-service-healthie) | Stateful mock of the Healthie GraphQL API (legacy surface): signIn, users, currentUser, updateUser/updateClient (incl. multipart avatar), locations, documents and folders with served downloads, form answers, offerings, billing items, and the IP-allowlisted status webhooks. |
 | [Makor CPG](packages/service/makor-cpg) | Health & labs | [`@crvouga/mockingbird-service-makor-cpg`](https://www.npmjs.com/package/@crvouga/mockingbird-service-makor-cpg) | Stateful mock of the legacy Makor AI (CPG) API: care plans, plus-user, bloodwork webhook, subscriptions, Wholescripts orders, AI patient summaries and async-review scripts (processing → complete on the mock clock), with permissive CORS for browser-direct calls. |
-| [Medplum](packages/service/medplum) | Health & labs | [`@crvouga/mockingbird-service-medplum`](https://www.npmjs.com/package/@crvouga/mockingbird-service-medplum) | Stateful Medplum mock that self-hosts the real Medplum server as a child process on embedded Postgres and Redis, exposed through the Mockingbird FetchAPI contract. |
 | [Optimal DX](packages/service/odx) | Health & labs | [`@crvouga/mockingbird-service-odx`](https://www.npmjs.com/package/@crvouga/mockingbird-service-odx) | Stateful mock of the (retired) Optimal DX partner API: patients, partner links, HL7 and structured lab imports, Functional Health Reports (JSON/PDF), webhook registrations, and signed PatientTest webhooks. |
 | [Prism Labs](packages/service/prism) | Health & labs | [`@crvouga/mockingbird-service-prism`](https://www.npmjs.com/package/@crvouga/mockingbird-service-prism) | Stateful mock of the Prism Labs body-scan API: subjects, scans, presigned capture upload, processing stages to READY, and deterministic body-composition, measurement, health-report and asset results. |
 | [Persona](packages/service/persona) | Identity | [`@crvouga/mockingbird-service-persona`](https://www.npmjs.com/package/@crvouga/mockingbird-service-persona) | Stateful mock of the Persona identity-verification API: inquiry create, list (reusable lookup), get, a hosted flow page, admin lifecycle transitions, and Persona-Signature webhooks. |
@@ -148,11 +148,11 @@ npx mockingbird-junction serve --config mockingbird.json  # every service in the
 }
 ```
 
-`mockingbird.json` names services by their package suffix and takes each one's `serve` flags; any installed service's CLI can serve all of them. Medplum runs a real Medplum server and the database engines are not HTTP APIs, so they are outside this contract.
+`mockingbird.json` names services by their package suffix and takes each one's `serve` flags; any installed service's CLI can serve all of them. The database engines are not HTTP APIs, so they are outside this contract.
 
 ## For coding agents
 
-Every service README doubles as its integration guide and ships inside the npm tarball (`node_modules/<package>/README.md`). [`llms.txt`](llms.txt) indexes them by tier, and the docs site publishes the same content as markdown and JSON, rebuilt from the packages on every build.
+Every service README doubles as its integration guide and ships inside the npm tarball (`node_modules/<package>/README.md`). [`llms.txt`](llms.txt) indexes them by tier, and the docs site publishes the same content as markdown and JSON, rebuilt from the packages on every build. When a mock diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
 
 ## Guides
 
@@ -163,6 +163,7 @@ Every service README doubles as its integration guide and ships inside the npm t
 | [Authoring a Mockingbird service](docs/AUTHORING_A_SERVICE.md) | How to add a vendor mock to this repo. The reference implementation is [`packages/service/rxvortex`](../packages/service/rxvortex): copy its layout and patterns. |
 | [Service catalog coverage](docs/CATALOG_COVERAGE.md) | Where each section of the geviti "Mockingbird wish list — service catalog" (2026-09-20) lives in this repo, how it is proven, and what the proof turned up. Every package follows [AUTHORING_A_SERVICE.md](AUTHORING_A_SERVICE.md) and ships the same evidence: |
 | [Developing Mockingbird](docs/DEVELOPMENT.md) | Working on this repo: requirements, how the packages are layered, and the quality gates every change passes. |
+| [Reporting issues](docs/REPORTING_ISSUES.md) | How coding agents in other projects file a GitHub issue when a mock diverges from its oracle, lacks a feature they call, or breaks, or when they need a service mocked that the catalog does not have yet. Agents in this repository pick the issues up and resolve them. |
 | [Releasing](docs/RELEASING.md) | How packages get from `main` to npm. There is nothing to run by hand. |
 | [Secrets runbook (maintainers)](docs/SECRETS.md) | The mock services (`@crvouga/mockingbird-service-*`, the only published packages) are released automatically on every green push to `main` (see [RELEASING.md](RELEASING.md)) and publish with **npm Trusted Publishing (OIDC)**. |
 
