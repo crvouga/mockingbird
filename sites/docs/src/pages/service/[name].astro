@@ -1,8 +1,8 @@
 ---
 import BaseLayout from "../../layouts/BaseLayout.astro";
 import { getAllServices, getService } from "../../lib/data";
-import ServiceExample from "../../components/ServiceExample.astro";
 import StatusBadge from "../../components/StatusBadge.astro";
+import Playground from "../../components/Playground.astro";
 
 export async function getStaticPaths() {
   const services = await getAllServices();
@@ -250,11 +250,11 @@ bun add -D {service.packageName}</pre>
 
   {service.example && (
     <>
-      <h2>Example</h2>
-      <ServiceExample
-        code={service.example.code}
-        description={service.example.description}
+      <h2>Live Demo</h2>
+      <Playground
         serviceName={service.name}
+        packageName={service.packageName}
+        code={service.example.code}
       />
     </>
   )}
