@@ -52,6 +52,7 @@
     "layer": "service",
     "category": "marketing",
     "displayName": "Klaviyo",
+    "status": "wip",
     "playground": {
       "headers": {
         "authorization": "Klaviyo-API-Key pk_mockingbird",

@@ -54,6 +54,7 @@
     "layer": "service",
     "category": "payments",
     "displayName": "Flex",
+    "status": "wip",
     "playground": {
       "headers": {
         "authorization": "Bearer fsk_test_mockingbird"

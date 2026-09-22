@@ -120,6 +120,7 @@
     "runtime": "portable",
     "layer": "service",
     "category": "databases",
-    "displayName": "SQLite"
+    "displayName": "SQLite",
+    "status": "ready"
   }
 }

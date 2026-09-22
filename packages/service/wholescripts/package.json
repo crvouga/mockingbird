@@ -52,6 +52,7 @@
     "layer": "service",
     "category": "pharmacy",
     "displayName": "Wholescripts",
+    "status": "wip",
     "playground": {
       "headers": {
         "authorization": "Basic bW9ja2luZ2JpcmQ6bW9ja2luZ2JpcmQ="

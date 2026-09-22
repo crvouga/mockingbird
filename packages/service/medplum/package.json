@@ -36,7 +36,8 @@
     "runtime": "node",
     "layer": "service",
     "category": "health",
-    "displayName": "Medplum"
+    "displayName": "Medplum",
+    "status": "wip"
   },
   "engines": {
     "node": ">=22.18.0"

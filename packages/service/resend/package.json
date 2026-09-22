@@ -52,7 +52,8 @@
     },
     "layer": "service",
     "category": "communication",
-    "displayName": "Resend"
+    "displayName": "Resend",
+    "status": "wip"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",
