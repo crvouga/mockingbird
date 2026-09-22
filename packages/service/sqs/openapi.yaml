@@ -1,0 +1,24 @@
+openapi: 3.1.0
+info:
+  title: Amazon SQS (Mockingbird subset)
+  version: "2012-11-05"
+  description: AWS JSON SQS contract used by AWS SDK v3.
+servers:
+  - url: https://sqs.us-east-1.amazonaws.com
+paths:
+  /:
+    post:
+      operationId: SqsRpc
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: X-Amz-Target, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/x-amz-json-1.0: { schema: { type: object, additionalProperties: true } }
+          application/x-amz-json-1.1: { schema: { type: object, additionalProperties: true } }
+          application/json: { schema: { type: object, additionalProperties: true } }
+      responses:
+        "200": { description: Operation response, content: { application/x-amz-json-1.0: { schema: { type: object, additionalProperties: true } } } }
+        "400": { description: SQS exception, content: { application/x-amz-json-1.0: { schema: { type: object, additionalProperties: true } } } }
+        "403": { description: Authentication exception, content: { application/x-amz-json-1.0: { schema: { type: object, additionalProperties: true } } } }

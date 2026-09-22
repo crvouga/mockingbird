@@ -58,6 +58,7 @@
     "@crvouga/mockingbird-service-s3": "workspace:*",
     "@crvouga/mockingbird-service-slack": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-service-sqs": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",
     "@crvouga/mockingbird-service-twilio": "workspace:*",
     "@crvouga/mockingbird-service-vpi": "workspace:*",
