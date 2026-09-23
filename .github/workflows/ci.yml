@@ -164,8 +164,13 @@ jobs:
 
       # Vault is the source of truth. Reconciliation also repairs missing Trusted
       # Publishers and deprecations when there are no new package versions.
+      # NPM_TOKEN is only needed to seed brand-new packages; release:publish already
+      # tolerates it being unset and fails loudly itself when a new package needs it
+      # (docs/SECRETS.md: bun run release:bootstrap). Don't let a missing/renamed Vault
+      # key hard-fail every release run before that check gets a chance to run.
       - name: Load npm publish credential
         uses: hashicorp/vault-action@v4
+        continue-on-error: true
         with:
           url: https://vault.chrisvouga.dev
           method: jwt
