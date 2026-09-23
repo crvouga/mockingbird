@@ -249,6 +249,24 @@ button {
     drop-shadow(0 0 8px rgb(139 128 255 / 0.45));
 }
 
+/* ---------- risk banner ---------- */
+
+.risk-banner {
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.risk-banner .container {
+  padding: 8px 24px;
+  text-align: center;
+}
+
+.risk-banner code {
+  color: inherit;
+}
+
 /* ---------- header ---------- */
 
 .site-header {

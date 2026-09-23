@@ -6,6 +6,15 @@
 
 export const MASCOT = "🐦‍⬛"
 
+/**
+ * Single toggle for the "use at your own risk" banner shown at the top of the README and every
+ * docs site page. Flip `enabled` to `false` once the project is stable enough to drop it.
+ */
+export const RISK_DISCLAIMER = {
+  enabled: true,
+  text: "**Use at your own risk.** Mockingbird is under active development — APIs, behavior and package names may change without notice.",
+}
+
 export const HEADLINE = {
   lead: "Mock the APIs you depend on,",
   accent: "with the behavior they really have.",

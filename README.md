@@ -12,6 +12,8 @@
 
 </div>
 
+> ⚠️ **Use at your own risk.** Mockingbird is under active development — APIs, behavior and package names may change without notice.
+
 Mockingbird is a catalog of stateful test doubles for third-party HTTP APIs and SQL databases. Each one speaks the vendor's real surface, keeps state, and runs in-process.
 
 ## Quick start
