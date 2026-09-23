@@ -183,7 +183,8 @@ const webhookPayload = (events: readonly unknown[]) => JSON.stringify(events)
 const webhookEventNames = (events: readonly unknown[]) =>
   events.map((event) => {
     if (typeof event !== "object" || event === null || Array.isArray(event)) return "unknown"
-    const eventType = (event as Record<string, unknown>).event_type
+    const eventType =
+      (event as Record<string, unknown>).event_type ?? (event as Record<string, unknown>).type
     return typeof eventType === "string" ? eventType : "unknown"
   })
 
@@ -401,18 +402,21 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
 
     let webhookFailure: ParityError | undefined
     let webhookEvents: WalkWebhookEvents | undefined
-    if (options.webhooks) {
-      const realEvents = await options.webhooks.collectReal(args.scope)
+    if (options.webhooks && args.walkError === undefined) {
       const mockEvents = await options.webhooks.collectMock(args.mock, args.scope)
+      const realEvents = await options.webhooks.collectReal(args.scope, mockEvents)
       webhookEvents = { real: realEvents, mock: mockEvents }
       log(
         `  [${String(args.walkNumber).padStart(width, " ")}/${numRuns}] webhook events real=${realEvents.length} mock=${mockEvents.length} real_types=${webhookEventNames(realEvents).join(",") || "none"} mock_types=${webhookEventNames(mockEvents).join(",") || "none"}`,
       )
-      if (webhookPayload(realEvents) !== webhookPayload(mockEvents)) {
-        const firstDifference =
-          realEvents.length !== mockEvents.length
+      const firstDifference = options.webhooks.compare
+        ? options.webhooks.compare(realEvents, mockEvents, args.table)
+        : webhookPayload(realEvents) === webhookPayload(mockEvents)
+          ? undefined
+          : realEvents.length !== mockEvents.length
             ? `event count real=${realEvents.length} mock=${mockEvents.length}`
             : `event payload/order differs at index ${realEvents.findIndex((event, index) => JSON.stringify(event) !== JSON.stringify(mockEvents[index]))}`
+      if (firstDifference !== undefined) {
         webhookFailure = new ParityError(
           {
             provider: options.provider,
@@ -496,6 +500,7 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
       trace: trace ? log : undefined,
       getCache,
     }
+    await options.webhooks?.beforeWalk?.(scope)
     return { table, scope, mock, getCache, realTarget, context }
   }
 

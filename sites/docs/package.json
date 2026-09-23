@@ -12,6 +12,8 @@
     "test": "bun test integrations"
   },
   "dependencies": {
+    "@astrojs/node": "^11.1.6",
+    "@crvouga/mockingbird-webhook-collector": "workspace:*",
     "astro": "7.3.3",
     "github-slugger": "2.0.0",
     "marked": "18.0.13",
