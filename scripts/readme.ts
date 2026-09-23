@@ -17,6 +17,7 @@ import {
   MASCOT,
   PITCH,
   QUICK_START,
+  RISK_DISCLAIMER,
 } from "../sites/docs/src/lib/content.ts"
 import { guideInfo, sortGuides } from "../sites/docs/src/lib/guides.ts"
 import { TIER_ORDER, TIERS } from "../sites/docs/src/lib/tiers.ts"
@@ -121,6 +122,7 @@ const body = [
   "",
   "</div>",
   "",
+  ...(RISK_DISCLAIMER.enabled ? ["> ⚠️ " + RISK_DISCLAIMER.text, ""] : []),
   PITCH,
   "",
   "## Quick start",

@@ -114,7 +114,14 @@ const webhookParity =
     ? undefined
     : {
         collectReal: async (scope: Scope) => {
-          const response = await fetch(`${webhookReceiverUrl}/events/${scope.runId}`)
+          const response = await fetch(
+            `${webhookReceiverUrl}/events/${encodeURIComponent(scope.runId)}?service=junction`,
+            {
+              headers: Bun.env.MOCKINGBIRD_WEBHOOK_READ_TOKEN
+                ? { authorization: `Bearer ${Bun.env.MOCKINGBIRD_WEBHOOK_READ_TOKEN}` }
+                : {},
+            },
+          )
           if (!response.ok) throw new Error(`webhook receiver returned ${response.status}`)
           return (await response.json()) as readonly unknown[]
         },

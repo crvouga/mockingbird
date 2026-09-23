@@ -15,6 +15,11 @@ RUN bun install --frozen-lockfile
 # bunx is a separate symlink; only the bun binary is copied in above.
 RUN bun x turbo run build --filter=@crvouga/mockingbird-docs... --output-logs=errors-only
 
-FROM nginx:1.29-alpine
-COPY --from=build /app/sites/docs/dist /usr/share/nginx/html
+FROM oven/bun:1.4.0-slim
+WORKDIR /app/sites/docs
+ENV HOST=0.0.0.0 PORT=80 WEBHOOK_DB=/data/events.sqlite
+COPY --from=build /app/sites/docs/dist ./dist
+COPY --from=build /app/sites/docs/package.json ./package.json
+COPY --from=build /app/node_modules /app/node_modules
 EXPOSE 80
+CMD ["bun", "./dist/server/entry.mjs"]
