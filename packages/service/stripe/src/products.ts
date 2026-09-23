@@ -123,6 +123,32 @@ const apply = (current: ProductRecord, params: Params, now: number): ProductReco
   return next
 }
 
+export const insertProduct = async (
+  state: StripeState,
+  now: number,
+  fields: { name: string; metadata?: Record<string, string> },
+) => {
+  const id = await state.ids.next("prod_")
+  const product: ProductRecord = {
+    id,
+    active: true,
+    created: now,
+    description: null,
+    images: [],
+    marketing_features: [],
+    metadata: fields.metadata ?? {},
+    name: fields.name,
+    package_dimensions: null,
+    shippable: null,
+    statement_descriptor: null,
+    unit_label: null,
+    updated: now,
+    url: null,
+  }
+  await state.products.insert(id, product)
+  return product
+}
+
 export const requireProduct = async (
   state: StripeState,
   id: string,

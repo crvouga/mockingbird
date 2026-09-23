@@ -1,10 +1,22 @@
 import { HttpError } from "@crvouga/mockingbird-service"
 
+export type StripeErrorType =
+  | "invalid_request_error"
+  | "card_error"
+  | "idempotency_error"
+  | "api_error"
+
 export type StripeErrorInit = {
   status: number
   message: string
   code?: string
   param?: string
+  type?: StripeErrorType
+  decline_code?: string
+  payment_intent?: unknown
+  payment_method?: string
+  charge?: string
+  setup_intent?: unknown
 }
 
 /** Codes that Stripe documents; these carry a `doc_url`. */
@@ -12,15 +24,20 @@ const docUrl = (code: string) => `https://stripe.com/docs/error-codes/${code.rep
 
 /** Stripe serialises error bodies with keys in alphabetical order. */
 export const stripeErrorBody = (init: StripeErrorInit, requestLogUrl: string) => {
-  const error: Record<string, string> = {}
+  const error: Record<string, unknown> = {}
+  if (init.charge !== undefined) error.charge = init.charge
   if (init.code !== undefined) {
     error.code = init.code
     error.doc_url = docUrl(init.code)
   }
+  if (init.decline_code !== undefined) error.decline_code = init.decline_code
   error.message = init.message
   if (init.param !== undefined) error.param = init.param
+  if (init.payment_intent !== undefined) error.payment_intent = init.payment_intent
+  if (init.payment_method !== undefined) error.payment_method = init.payment_method
   error.request_log_url = requestLogUrl
-  error.type = "invalid_request_error"
+  if (init.setup_intent !== undefined) error.setup_intent = init.setup_intent
+  error.type = init.type ?? "invalid_request_error"
   return { error }
 }
 
@@ -57,6 +74,9 @@ export const parameterMissing = (param: string) =>
     message: `Missing required param: ${param}.`,
     param,
   })
+
+export const cardError = (init: Omit<StripeErrorInit, "type" | "status"> & { status?: number }) =>
+  new StripeError({ status: init.status ?? 402, type: "card_error", ...init })
 
 export const parameterInvalidInteger = (param: string, raw: string) =>
   new StripeError({

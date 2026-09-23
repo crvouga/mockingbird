@@ -1,6 +1,8 @@
 import { jsonResponse, type OperationContext, opaqueToken } from "@crvouga/mockingbird-service"
-import { resourceMissing } from "./errors.js"
+import { invalidRequest, resourceMissing } from "./errors.js"
+import { recordEvent } from "./events.js"
 import { mergeMetadata, optionalString, strippedString, validateEmail } from "./fields.js"
+import { recordCustomerBalance } from "./ledger.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams } from "./params.js"
 import {
@@ -26,7 +28,7 @@ const toAddress = (raw: unknown): Address => {
   return out
 }
 
-const renderCustomer = (customer: CustomerRecord) => ({
+export const renderCustomer = (customer: CustomerRecord) => ({
   id: customer.id,
   object: "customer",
   address: customer.address,
@@ -42,14 +44,14 @@ const renderCustomer = (customer: CustomerRecord) => ({
   invoice_prefix: customer.invoice_prefix,
   invoice_settings: {
     custom_fields: customer.invoice_settings.custom_fields,
-    default_payment_method: null,
+    default_payment_method: customer.invoice_settings.default_payment_method,
     footer: customer.invoice_settings.footer,
     rendering_options: null,
   },
   livemode: false,
   metadata: customer.metadata,
   name: customer.name,
-  next_invoice_sequence: 1,
+  next_invoice_sequence: customer.next_invoice_sequence,
   phone: customer.phone,
   preferred_locales: customer.preferred_locales,
   shipping: customer.shipping,
@@ -91,7 +93,11 @@ const apply = (current: CustomerRecord, params: Params): CustomerRecord => {
       params.tax_exempt === "" ? "none" : (params.tax_exempt as CustomerRecord["tax_exempt"])
   }
   if (params.invoice_settings !== undefined) {
-    const settings = params.invoice_settings as { custom_fields?: unknown; footer?: string }
+    const settings = params.invoice_settings as {
+      custom_fields?: unknown
+      default_payment_method?: string
+      footer?: string
+    }
     if (settings.custom_fields !== undefined) {
       next.invoice_settings.custom_fields =
         settings.custom_fields === ""
@@ -100,8 +106,43 @@ const apply = (current: CustomerRecord, params: Params): CustomerRecord => {
     }
     if (settings.footer !== undefined)
       next.invoice_settings.footer = settings.footer === "" ? null : settings.footer
+    if ("default_payment_method" in settings) {
+      const method = settings.default_payment_method
+      next.invoice_settings.default_payment_method =
+        method === "" || method === undefined ? null : method
+    }
   }
   return next
+}
+
+const assertPaymentMethod = async (state: StripeState, customerId: string, methodId: string) => {
+  const method = await state.paymentMethods.get(methodId)
+  if (!method)
+    throw resourceMissing(
+      "payment_method",
+      methodId,
+      "invoice_settings[default_payment_method]",
+      400,
+    )
+  if (method.customer !== null && method.customer !== customerId)
+    throw invalidRequest(
+      "The payment method must be attached to the customer.",
+      "invoice_settings[default_payment_method]",
+    )
+  if (method.customer === null) {
+    method.customer = customerId
+    await state.paymentMethods.update(methodId, method)
+  }
+}
+
+/** Allocate the next invoice number for a customer (`PREFIX-0001`). */
+export const takeInvoiceNumber = async (state: StripeState, customerId: string) => {
+  const entry = await state.customers.get(customerId)
+  if (!entry || entry.kind !== "live") return undefined
+  const sequence = entry.customer.next_invoice_sequence
+  entry.customer.next_invoice_sequence += 1
+  await state.customers.update(customerId, entry)
+  return `${entry.customer.invoice_prefix}-${String(sequence).padStart(4, "0")}`
 }
 
 const live = async (state: StripeState, id: string, missingStatus: number) => {
@@ -123,17 +164,28 @@ export const customerHandlers = (state: StripeState) => ({
       description: null,
       email: null,
       invoice_prefix: opaqueToken(`invoice-prefix:${id}`, 8).toUpperCase(),
-      invoice_settings: { custom_fields: null, footer: null },
+      invoice_settings: { custom_fields: null, default_payment_method: null, footer: null },
       metadata: {},
       name: null,
+      next_invoice_sequence: 1,
       phone: null,
       preferred_locales: [],
       shipping: null,
       tax_exempt: "none",
     }
     const customer = apply(base, params)
+    if (customer.invoice_settings.default_payment_method)
+      await assertPaymentMethod(state, id, customer.invoice_settings.default_payment_method)
+    if (typeof params.payment_method === "string" && params.payment_method !== "") {
+      await assertPaymentMethod(state, id, params.payment_method)
+      customer.invoice_settings.default_payment_method = params.payment_method
+    }
     await state.customers.insert(id, { kind: "live", customer })
-    return jsonResponse(200, renderCustomer(customer))
+    if (customer.balance !== 0 && customer.currency)
+      await recordCustomerBalance(state, customer, customer.balance, seconds(context.now), null)
+    const body = renderCustomer(customer)
+    await recordEvent(state, "customer.created", body, seconds(context.now))
+    return jsonResponse(200, body)
   },
 
   GetCustomers: async (context: OperationContext) => {
@@ -169,14 +221,32 @@ export const customerHandlers = (state: StripeState) => ({
     const entry = await state.customers.get(id)
     const current = await live(state, id, entry?.kind === "deleted" ? 400 : 404)
     const customer = apply(current, params)
+    if (
+      customer.invoice_settings.default_payment_method &&
+      customer.invoice_settings.default_payment_method !==
+        current.invoice_settings.default_payment_method
+    )
+      await assertPaymentMethod(state, id, customer.invoice_settings.default_payment_method)
     await state.customers.update(id, { kind: "live", customer })
-    return jsonResponse(200, renderCustomer(customer))
+    if (customer.balance !== current.balance && customer.currency)
+      await recordCustomerBalance(
+        state,
+        customer,
+        customer.balance - current.balance,
+        seconds(context.now),
+        null,
+      )
+    const body = renderCustomer(customer)
+    await recordEvent(state, "customer.updated", body, seconds(context.now))
+    return jsonResponse(200, body)
   },
 
   DeleteCustomersCustomer: async (context: OperationContext) => {
     const id = context.params.customer ?? ""
     await live(state, id, 404)
     await state.customers.update(id, { kind: "deleted", id })
-    return jsonResponse(200, renderDeleted(id))
+    const body = renderDeleted(id)
+    await recordEvent(state, "customer.deleted", body, seconds(context.now))
+    return jsonResponse(200, body)
   },
 })

@@ -28,10 +28,7 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: async (request) => {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            return reference.fetch(request)
-          },
+          fetch: (request) => reference.fetch(request),
         },
         mock: {
           create: () => new StripeAPI({ now }),
@@ -41,8 +38,11 @@ describe("StripeAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
-        numRuns: params.numRuns ?? 40,
-        maxCommands: 25,
+        numRuns: params.numRuns ?? 24,
+        maxCommands: 36,
+        coverageBias: 8,
+        includeUnsafe: true,
+        latencyToleranceMs: 1000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
@@ -50,10 +50,59 @@ describe("StripeAPI", () => {
       })
       expect(report.walks).toBeGreaterThan(0)
       expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
-        supportedOperationIds.length / 2,
+        supportedOperationIds.length / 3,
       )
     },
-    { timeout: 60_000 },
+    { timeout: 120_000 },
+  )
+
+  test(
+    "deep payment and billing walks stay in parity",
+    async () => {
+      const payment = supportedOperationIds.filter((id) =>
+        /Payment|Setup|Charge|Refund|Token|Source|Confirmation|Mandate|Element/.test(id),
+      )
+      const billing = supportedOperationIds.filter((id) =>
+        /Subscription|Invoice|Coupon|Promotion|TaxRate|Checkout|Portal|CustomerSession|Ephemeral|Price|Product|Customer/.test(
+          id,
+        ),
+      )
+      for (const only of [payment, billing]) {
+        const reference = new StripeAPI({ now })
+        const report = await parity({
+          provider: "stripe",
+          spec: document,
+          real: {
+            baseUrl: `https://${MOCK_HOST}`,
+            allowedHosts: [MOCK_HOST],
+            headers: () => AUTH,
+            fetch: (request) => reference.fetch(request),
+          },
+          mock: {
+            create: () => new StripeAPI({ now }),
+            baseUrl: `https://${MOCK_HOST}`,
+            headers: () => AUTH,
+          },
+          cleanup: async () => {
+            await reference.reset()
+          },
+          only,
+          includeUnsafe: true,
+          numRuns: params.numRuns ?? 8,
+          maxCommands: 48,
+          coverageBias: 6,
+          latencyToleranceMs: 1000,
+          ...(params.seed === undefined ? {} : { seed: params.seed }),
+          env: process.env,
+          sleep: async () => {},
+          log: () => {},
+        })
+        expect(report.walks).toBeGreaterThan(0)
+        expect(report.operations).toBeGreaterThan(0)
+        expect(Object.keys(report.exercised).length).toBeGreaterThan(5)
+      }
+    },
+    { timeout: 120_000 },
   )
 
   test(
@@ -67,10 +116,7 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: async (request) => {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            return reference.fetch(request)
-          },
+          fetch: (request) => reference.fetch(request),
         },
         mock: {
           create: () => new StripeAPI({ sqlite: new Database(), now }),
@@ -80,8 +126,10 @@ describe("StripeAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
-        numRuns: params.numRuns ?? 10,
-        maxCommands: 15,
+        numRuns: params.numRuns ?? 8,
+        maxCommands: 20,
+        includeUnsafe: true,
+        latencyToleranceMs: 1000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},

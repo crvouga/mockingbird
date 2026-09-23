@@ -12,6 +12,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { stringify } from "yaml"
+import { IDENTITIES, MISSING_ID, SURFACE } from "./surface.js"
 
 const UPSTREAM = {
   repository: "stripe/openapi",
@@ -262,6 +263,9 @@ const PATH_REFS: Record<string, Json> = {
   price: ref("price", MISSING.price),
 }
 
+const included = (operationId: string): { safe: boolean } | undefined =>
+  OPERATIONS[operationId] ?? (SURFACE[operationId] ? { safe: false } : undefined)
+
 const OPERATIONS: Record<string, { safe: boolean }> = {
   PostCustomers: { safe: true },
   GetCustomers: { safe: true },
@@ -277,6 +281,292 @@ const OPERATIONS: Record<string, { safe: boolean }> = {
   GetPrices: { safe: true },
   GetPricesPrice: { safe: true },
   PostPricesPrice: { safe: true },
+}
+
+const resourceRef = (type: string) => ref(type, MISSING_ID[type] ?? `${type}_mockingbird_missing`)
+
+const tuneSurfaceQuery = (operationId: string, name: string, schema: Schema) => {
+  const surface = SURFACE[operationId]
+  if (!surface) return
+  if (name === "expand" || name === "page")
+    Object.assign(schema, unsupported("not part of the random walk"))
+  if ((name === "ending_before" || name === "starting_after") && surface.cursor)
+    Object.assign(schema, resourceRef(surface.cursor))
+  const linked = surface.refs?.[name]
+  if (linked) Object.assign(schema, resourceRef(linked))
+  if (name !== "created" || !Array.isArray(schema.anyOf)) return
+  for (const branch of schema.anyOf) {
+    if (!isObject(branch) || !isObject(branch.properties) || !isObject(branch.properties.gte))
+      continue
+    Object.assign(branch.properties.gte as Schema, scope("walk-start-unix"))
+  }
+}
+
+const WALK_SKIP = [
+  "expand",
+  "on_behalf_of",
+  "transfer_data",
+  "application_fee_amount",
+  "radar_options",
+  "payment_method_options",
+  "mandate",
+  "mandate_data",
+  "payment_method_data",
+  "shipping",
+  "price_data",
+  "amount_details",
+  "payment_details",
+  "hooks",
+  "subscription_data",
+  "invoice_creation",
+  "shipping_options",
+  "custom_fields",
+  "custom_text",
+  "consent_collection",
+  "phone_number_collection",
+  "tax_id_collection",
+  "after_expiration",
+  "branding_settings",
+  "optional_items",
+  "name_collection",
+  "saved_payment_method_options",
+  "permissions",
+  "adaptive_pricing",
+  "discounts",
+  "automatic_tax",
+  "invoice_settings",
+  "payment_settings",
+  "trial_settings",
+  "billing_mode",
+  "billing_schedules",
+]
+
+const stubUnsupported = (reason: string): Schema => ({
+  type: "object",
+  additionalProperties: true,
+  ...unsupported(reason),
+})
+
+const isHeavy = (property: Schema) =>
+  property.$ref !== undefined ||
+  property.properties !== undefined ||
+  property.anyOf !== undefined ||
+  property.oneOf !== undefined ||
+  property.items !== undefined
+
+const PM_PARAM_KEEP = new Set([
+  "type",
+  "card",
+  "billing_details",
+  "metadata",
+  "customer",
+  "allow_redisplay",
+  "expand",
+  "payment_method",
+])
+
+const tuneSurfaceBody = (operationId: string, schema: Schema) => {
+  const surface = SURFACE[operationId]
+  if (!surface || !isObject(schema.properties)) return
+  const properties = schema.properties
+  if (isObject(properties.card) && (isObject(properties.affirm) || isObject(properties.klarna))) {
+    for (const name of Object.keys(properties)) {
+      if (PM_PARAM_KEEP.has(name) || !isObject(properties[name])) continue
+      properties[name] = stubUnsupported("accepted by the mock, omitted from random walks")
+    }
+  }
+  for (const name of WALK_SKIP) {
+    const property = properties[name]
+    if (!isObject(property)) continue
+    properties[name] = isHeavy(property)
+      ? stubUnsupported("not part of the random walk")
+      : { ...property, ...unsupported("not part of the random walk") }
+  }
+  for (const [name, type] of Object.entries(surface.refs ?? {})) {
+    if (isObject(properties[name])) Object.assign(properties[name] as Schema, resourceRef(type))
+  }
+  for (const [path, type] of Object.entries(surface.arrayRefs ?? {})) {
+    const [arrayName, field] = path.split(".")
+    const array = properties[arrayName ?? ""]
+    if (!isObject(array) || !isObject(array.items)) continue
+    const items = array.items
+    if (!isObject(items.properties)) continue
+    const target = items.properties[field ?? ""]
+    if (isObject(target)) Object.assign(target, resourceRef(type))
+  }
+}
+
+const TIMESTAMP_FIELDS = new Set([
+  "created",
+  "updated",
+  "canceled_at",
+  "expires_at",
+  "expires",
+  "arrival_date",
+  "available_on",
+  "billing_cycle_anchor",
+  "start_date",
+  "period_start",
+  "period_end",
+  "current_period_start",
+  "current_period_end",
+  "trial_start",
+  "trial_end",
+  "due_date",
+  "date",
+])
+
+const annotateSchemas = (schemas: Record<string, Json>) => {
+  for (const [name, schema] of Object.entries(schemas)) {
+    if (!isObject(schema.properties)) continue
+    const properties = schema.properties as Record<string, Schema>
+    const identities = IDENTITIES[name]
+    if (identities) {
+      for (const [field, type] of Object.entries(identities)) {
+        const property = properties[field]
+        if (!isObject(property)) continue
+        const types = Array.isArray(property.type)
+          ? property.type
+          : property.type
+            ? [property.type]
+            : []
+        const stringy =
+          types.length === 0 ||
+          types.includes("string") ||
+          property.anyOf !== undefined ||
+          property.oneOf !== undefined
+        if (field === "id" || stringy) Object.assign(property, identity(type))
+      }
+    }
+    if (name === "account" && isObject(properties.id))
+      Object.assign(properties.id, volatile("account"))
+    for (const [field, property] of Object.entries(properties)) {
+      if (
+        !isObject(property) ||
+        property["x-mockingbird-volatile"] ||
+        property["x-mockingbird-resource"]
+      )
+        continue
+      const types = Array.isArray(property.type)
+        ? property.type
+        : property.type
+          ? [property.type]
+          : []
+      if (TIMESTAMP_FIELDS.has(field) && (types.length === 0 || types.includes("integer")))
+        Object.assign(property, volatile("timestamp"))
+      if (
+        (field === "client_secret" || field === "secret") &&
+        (types.length === 0 || types.includes("string") || types.includes("null"))
+      )
+        Object.assign(property, volatile("token"))
+    }
+  }
+}
+
+const parityHeaders = () => ({
+  "content-type": {
+    schema: { type: "string", enum: ["application/json"] },
+    "x-mockingbird-parity-header": true,
+  },
+})
+
+const addClientSurfaces = (paths: Record<string, Json>) => {
+  const flagged = { supported: true, parity: { enabled: true, safe: false } }
+  const error = { $ref: "#/components/schemas/error" }
+  const respond = (schema: Json) => ({
+    "200": { content: { "application/json": { schema } }, headers: parityHeaders() },
+    default: { content: { "application/json": { schema: error } }, headers: parityHeaders() },
+  })
+  paths["/v1/elements/sessions"] = {
+    get: {
+      operationId: "GetElementsSessions",
+      parameters: [
+        {
+          in: "query",
+          name: "client_secret",
+          required: false,
+          schema: { type: "string", maxLength: 500 },
+          style: "form",
+        },
+        {
+          in: "query",
+          name: "type",
+          required: false,
+          schema: { type: "string", enum: ["payment_intent", "setup_intent", "deferred_intent"] },
+          style: "form",
+        },
+        {
+          in: "query",
+          name: "locale",
+          required: false,
+          schema: { type: "string", maxLength: 35 },
+          style: "form",
+        },
+      ],
+      responses: respond({
+        type: "object",
+        additionalProperties: true,
+        required: ["object", "livemode", "mode"],
+        properties: {
+          object: { type: "string", enum: ["elements_session"] },
+          livemode: { type: "boolean" },
+          mode: { type: "string" },
+          session_id: { type: "string", ...volatile("token") },
+        },
+      }),
+      "x-mockingbird": flagged,
+    },
+    post: {
+      operationId: "PostElementsSessions",
+      requestBody: {
+        required: false,
+        content: {
+          "application/x-www-form-urlencoded": {
+            schema: { type: "object", additionalProperties: true, properties: {} },
+          },
+        },
+      },
+      responses: respond({
+        type: "object",
+        additionalProperties: true,
+        required: ["object", "livemode", "mode"],
+        properties: {
+          object: { type: "string", enum: ["elements_session"] },
+          livemode: { type: "boolean" },
+          mode: { type: "string" },
+        },
+      }),
+      "x-mockingbird": flagged,
+    },
+  }
+  paths["/v1/confirmation_tokens"] = {
+    post: {
+      operationId: "PostConfirmationTokens",
+      parameters: [],
+      requestBody: {
+        required: false,
+        content: {
+          "application/x-www-form-urlencoded": {
+            schema: {
+              type: "object",
+              additionalProperties: true,
+              properties: {
+                payment_method: {
+                  type: "string",
+                  maxLength: 5000,
+                  ...resourceRef("payment_method"),
+                },
+                return_url: { type: "string", maxLength: 2048 },
+                setup_future_usage: { type: "string", enum: ["off_session", "on_session"] },
+              },
+            },
+          },
+        },
+      },
+      responses: respond({ $ref: "#/components/schemas/confirmation_token" }),
+      "x-mockingbird": flagged,
+    },
+  }
 }
 
 // --- transforms --------------------------------------------------------------------------------
@@ -411,7 +701,7 @@ const main = async () => {
   for (const [path, item] of Object.entries(upstreamPaths)) {
     for (const [method, operation] of Object.entries(item)) {
       if (!isObject(operation) || typeof operation.operationId !== "string") continue
-      const config = OPERATIONS[operation.operationId]
+      const config = included(operation.operationId)
       if (!config) continue
       const cleaned = clean(operation) as Json
       const pathItem = paths[path] ?? {}
@@ -424,7 +714,10 @@ const main = async () => {
       for (const parameter of parameters) {
         const name = String(parameter.name)
         if (parameter.in === "path") {
-          const pathRef = PATH_REFS[name]
+          const surfaceType = SURFACE[operation.operationId]?.path?.[name]
+          const pathRef = surfaceType
+            ? ref(surfaceType, MISSING_ID[surfaceType] ?? `${surfaceType}_mockingbird_missing`)
+            : PATH_REFS[name]
           if (!pathRef)
             throw new Error(
               `${operation.operationId}: no resource ref for path parameter {${name}}`,
@@ -457,6 +750,7 @@ const main = async () => {
           if (edit === null) delete holder[key]
           else holder[key] = { ...(holder[key] as Json), ...edit }
         }
+        tuneSurfaceQuery(operation.operationId, name, schema)
         kept.push({ ...parameter, schema })
       }
       for (const name of Object.keys(queryShape)) {
@@ -473,12 +767,17 @@ const main = async () => {
       cleaned.parameters = kept
 
       const bodyShape = BODY_SHAPES[operation.operationId]
-      if (bodyShape) {
-        const body = cleaned.requestBody as Json
-        const content = body.content as Record<string, Json>
-        const form = content["application/x-www-form-urlencoded"]
-        if (!form) throw new Error(`${operation.operationId}: no form body`)
-        applyShape(form.schema as Schema, bodyShape, operation.operationId)
+      const requestBody = cleaned.requestBody
+      if (isObject(requestBody) && isObject(requestBody.content)) {
+        const form = (requestBody.content as Record<string, Json>)[
+          "application/x-www-form-urlencoded"
+        ]
+        if (bodyShape) {
+          if (!form) throw new Error(`${operation.operationId}: no form body`)
+          applyShape(form.schema as Schema, bodyShape, operation.operationId)
+        }
+        if (form && isObject(form.schema))
+          tuneSurfaceBody(operation.operationId, form.schema as Schema)
       }
 
       // Parity headers: content type is part of the contract.
@@ -495,7 +794,7 @@ const main = async () => {
       pathItem[method] = cleaned
     }
   }
-  const missingOps = Object.keys(OPERATIONS).filter(
+  const missingOps = [...Object.keys(OPERATIONS), ...Object.keys(SURFACE)].filter(
     (id) =>
       !Object.values(paths).some((item) =>
         Object.values(item).some((op) => isObject(op) && op.operationId === id),
@@ -520,6 +819,68 @@ const main = async () => {
   }
   for (const name of Object.keys(RESPONSE_SHAPES))
     if (!schemas[name]) throw new Error(`shape for unused component schema ${name}`)
+
+  annotateSchemas(schemas)
+  // Customer, product and price stay field-exact. Everything else is loosened so the
+  // parity walker does not traverse Stripe's combinatorial $ref graph.
+  const precise = new Set([
+    "address",
+    "api_errors",
+    "custom_unit_amount",
+    "customer",
+    "deleted_customer",
+    "deleted_product",
+    "error",
+    "invoice_setting_custom_field",
+    "invoice_setting_customer_rendering_options",
+    "invoice_setting_customer_setting",
+    "package_dimensions",
+    "price",
+    "product",
+    "product_marketing_feature",
+    "recurring",
+    "shipping",
+    "transform_quantity",
+  ])
+  for (const [name, schema] of Object.entries(schemas)) {
+    if (precise.has(name) || !isObject(schema) || !isObject(schema.properties)) continue
+    const source = schema.properties as Record<string, Schema>
+    const required = Array.isArray(schema.required)
+      ? schema.required.filter((key): key is string => typeof key === "string")
+      : []
+    const properties: Record<string, Schema> = {}
+    for (const key of new Set([...required, "id", "object", "created", "livemode"])) {
+      const property = source[key]
+      if (!isObject(property)) continue
+      const extensions: Json = {}
+      for (const [ext, value] of Object.entries(property)) {
+        if (ext.startsWith("x-mockingbird")) extensions[ext] = value
+      }
+      if (Array.isArray(property.enum))
+        properties[key] = { type: property.type ?? "string", enum: property.enum, ...extensions }
+      else if (property.type !== undefined) properties[key] = { type: property.type, ...extensions }
+      else properties[key] = { ...extensions }
+    }
+    schemas[name] = {
+      type: "object",
+      additionalProperties: true,
+      ...(required.length > 0 ? { required } : {}),
+      properties,
+      ...(typeof schema.title === "string" ? { title: schema.title } : {}),
+    }
+  }
+  const used = new Set<string>()
+  const pending = new Set<string>()
+  collectRefs(paths, pending)
+  for (const name of pending) {
+    if (used.has(name)) continue
+    const schema = schemas[name]
+    if (!schema) continue
+    used.add(name)
+    collectRefs(schema, pending)
+  }
+  for (const name of Object.keys(schemas)) if (!used.has(name)) delete schemas[name]
+  addClientSurfaces(paths)
 
   const document = {
     openapi: "3.1.0",

@@ -68,6 +68,23 @@ try {
       for (const resource of table.all()) {
         const id = resource.ids.real
         if (id === undefined) continue
+        if (resource.type === "payment_intent")
+          await real.fetch(
+            new Request(`${real.baseUrl}/v1/payment_intents/${id}/cancel`, {
+              method: "POST",
+              headers: authHeaders,
+            }),
+          )
+        if (resource.type === "subscription") await del(`/v1/subscriptions/${id}`)
+        if (resource.type === "checkout_session")
+          await real.fetch(
+            new Request(`${real.baseUrl}/v1/checkout/sessions/${id}/expire`, {
+              method: "POST",
+              headers: authHeaders,
+            }),
+          )
+        if (resource.type === "coupon") await del(`/v1/coupons/${id}`)
+        if (resource.type === "webhook_endpoint") await del(`/v1/webhook_endpoints/${id}`)
         if (resource.type === "price") await archive(`/v1/prices/${id}`)
       }
       for (const resource of table.all()) {

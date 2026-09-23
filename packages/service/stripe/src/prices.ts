@@ -1,5 +1,10 @@
 import { jsonResponse, type OperationContext } from "@crvouga/mockingbird-service"
-import { invalidRequest, parameterInvalidEmpty, resourceMissing } from "./errors.js"
+import {
+  invalidRequest,
+  parameterInvalidEmpty,
+  parameterMissing,
+  resourceMissing,
+} from "./errors.js"
 import {
   mergeMetadata,
   optionalBoolean,
@@ -9,7 +14,7 @@ import {
 } from "./fields.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams, SUPPORTED_CURRENCIES } from "./params.js"
-import { requireProduct } from "./products.js"
+import { insertProduct, requireProduct } from "./products.js"
 import { type PriceRecord, type Recurring, type StripeState, seconds } from "./state.js"
 
 /** Stripe caps recurring periods at three years. */
@@ -20,7 +25,7 @@ const MAX_INTERVAL_COUNT: Record<Recurring["interval"], { limit: number; adjecti
   year: { limit: 3, adjective: "yearly" },
 }
 
-const renderPrice = (price: PriceRecord) => ({
+export const renderPrice = (price: PriceRecord) => ({
   id: price.id,
   object: "price",
   active: price.active,
@@ -51,7 +56,7 @@ const renderPrice = (price: PriceRecord) => ({
   unit_amount_decimal: price.unit_amount_decimal,
 })
 
-const normalizeCurrency = (raw: string, param = "currency") => {
+export const normalizeCurrency = (raw: string, param = "currency") => {
   const currency = raw.toLowerCase()
   if (!SUPPORTED_CURRENCIES.includes(currency))
     throw invalidRequest(
@@ -117,12 +122,27 @@ const applyShared = async (
 export const priceHandlers = (state: StripeState) => ({
   PostPrices: async (context: OperationContext) => {
     const params = bodyParams(context)
-    if (params.product === undefined)
+    if (params.product === undefined && params.product_data === undefined)
       throw invalidRequest(
         "You must specify either `product` or `product_data` when creating a price.",
       )
     if (params.product === "") throw parameterInvalidEmpty("product")
-    const product = await requireProduct(state, params.product as string, "product", 400)
+    const now = seconds(context.now)
+    let productId: string
+    if (typeof params.product === "string") {
+      productId = (await requireProduct(state, params.product, "product", 400)).id
+    } else {
+      const data = params.product_data as { name?: string; metadata?: Record<string, string> }
+      if (!data || typeof data.name !== "string" || data.name === "")
+        throw parameterMissing("product_data[name]")
+      productId = (
+        await insertProduct(
+          state,
+          now,
+          data.metadata ? { name: data.name, metadata: data.metadata } : { name: data.name },
+        )
+      ).id
+    }
     const currency = normalizeCurrency(params.currency as string)
     const hasAmount = params.unit_amount !== undefined
     const hasDecimal = params.unit_amount_decimal !== undefined
@@ -154,12 +174,12 @@ export const priceHandlers = (state: StripeState) => ({
     const base: PriceRecord = {
       id,
       active: true,
-      created: seconds(context.now),
+      created: now,
       currency,
       lookup_key: null,
       metadata: {},
       nickname: null,
-      product: product.id,
+      product: productId,
       recurring,
       tax_behavior: "unspecified",
       unit_amount_decimal,
