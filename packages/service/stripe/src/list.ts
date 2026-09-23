@@ -26,6 +26,14 @@ export const matchesCreated = (created: number, filter: unknown) => {
 
 export type Page<T> = { object: "list"; data: T[]; has_more: boolean; url: string }
 
+/** An embedded list Stripe returns on a parent (invoice lines, charge refunds, subscription items). */
+export const embeddedList = (url: string, data: unknown[]): Page<unknown> => ({
+  object: "list",
+  data,
+  has_more: false,
+  url,
+})
+
 /**
  * Cursor pagination over records sorted newest first. `starting_after` continues past a record,
  * `ending_before` yields the records immediately newer than one, both in newest-first order.
