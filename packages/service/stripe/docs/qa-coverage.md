@@ -44,3 +44,8 @@ call. Hosted checkout, the Stripe.js stand-in, test clocks, webhook endpoints, t
 `charge.dispute.created` (admin or `tok_createDispute`) are now modelled.
 
 Re-sweep the consumer whenever a new Stripe call site appears.
+# Stripe CLI webhook parity
+
+`bun run parity:stripe` starts `stripe listen` in test mode and forwards its websocket event stream to a temporary local Hono collector. The runner snapshots that collector before each walk, waits for expected mock events, and compares event types, mapped resource identity, stable object fields, and changed field names. Event IDs, timestamps, request IDs, and delivery order are excluded; repeated delivery of one Stripe event ID counts once.
+
+Use `bun run parity:stripe:webhooks` for a deterministic customer creation check that must observe a real `customer.created` event. It creates and deletes one Stripe test-mode customer. `--no-webhooks` skips the CLI listener during broader API parity. The CLI listener sees account-wide events, so use a dedicated test account when concurrent integrations produce webhooks.
