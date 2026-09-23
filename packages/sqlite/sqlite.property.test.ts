@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
+import { Database } from "@crvouga/mockingbird-service-sqlite"
 import { fcParameters } from "@crvouga/mockingbird-testing"
-import { Database } from "@crvouga/sqlite-mem"
 import fc from "fast-check"
 import {
   CORE_MIGRATIONS,

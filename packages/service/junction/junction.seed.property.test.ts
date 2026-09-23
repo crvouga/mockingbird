@@ -2,15 +2,15 @@ import { describe, expect, test } from "bun:test"
 import { seedParity } from "@crvouga/mockingbird-parity"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import { document, JunctionAPI } from "./src/index.js"
-import { prefetchGevitiQaObservations } from "./src/prefetch-qa.js"
-import { reshapeGevitiQaGeoCommand } from "./src/reshape-qa.js"
+import { prefetchCoverageObservations } from "./src/prefetch.js"
+import { reshapeCoverageGeoCommand } from "./src/reshape.js"
 
 const params = fcParameters(process.env)
 const MOCK_HOST = "mock.junction.local"
 const AUTH = { "x-vital-api-key": "sk_us_mockingbird" }
 const now = () => 1_700_000_000_000
 
-/** Full Geviti-facing Junction surface for offline monkey confidence. */
+/** Full Junction lab-testing surface for offline seedParity confidence. */
 const OFFLINE_OPS = [
   "create_user_v2_user_post",
   "get_user_v2_user__user_id__get",
@@ -51,14 +51,14 @@ const FORCE_INCLUDE = [
 
 describe("JunctionAPI seedFrom", () => {
   test(
-    "mock↔mock dynamic seedParity: full Geviti QA surface",
+    "mock↔mock dynamic seedParity: full lab-testing surface",
     async () => {
       const oracle = new JunctionAPI({ now })
       const report = await seedParity({
         provider: "junction",
         spec: document,
         explore: "dynamic",
-        reshapeCommand: reshapeGevitiQaGeoCommand,
+        reshapeCommand: reshapeCoverageGeoCommand,
         real: {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
@@ -71,7 +71,7 @@ describe("JunctionAPI seedFrom", () => {
           headers: () => AUTH,
         },
         prefetchObservations: async ({ real, getCache }) => {
-          await prefetchGevitiQaObservations({
+          await prefetchCoverageObservations({
             real,
             getCache,
             zips: ["85004", "85234", "11050", "90012", "10006", "96101", "92101"],

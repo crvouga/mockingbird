@@ -1,0 +1,37 @@
+[
+  {
+    "name": "agent-reported",
+    "color": "5319e7",
+    "description": "Filed through docs/REPORTING_ISSUES.md; the /resolve-issues queue"
+  },
+  {
+    "name": "parity",
+    "color": "d93f0b",
+    "description": "The mock and its oracle answer the same requests differently"
+  },
+  {
+    "name": "feature",
+    "color": "0e8a16",
+    "description": "An existing mock lacks an operation, parameter, event or behavior"
+  },
+  {
+    "name": "bug",
+    "color": "d73a4a",
+    "description": "A mock crashes, leaks state, contradicts its README, or does not build"
+  },
+  {
+    "name": "new-service",
+    "color": "1d76db",
+    "description": "Request for a vendor API the catalog does not mock yet"
+  },
+  {
+    "name": "needs-info",
+    "color": "fbca04",
+    "description": "Waiting on the reporter for a version, reproduction or behavior"
+  },
+  {
+    "name": "needs-oracle-check",
+    "color": "c5def5",
+    "description": "The claim could not be confirmed against the oracle yet"
+  }
+]

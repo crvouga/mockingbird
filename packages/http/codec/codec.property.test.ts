@@ -4,6 +4,7 @@ import fc from "fast-check"
 import {
   decodeBody,
   decodeForm,
+  decodeFormPairs,
   encodeBody,
   encodeForm,
   type FormObject,
@@ -32,6 +33,37 @@ test("form encoding round-trips nested objects, arrays and unicode", () => {
     }),
     params,
   )
+})
+
+/** Bracket paths that would traverse the prototype chain if segments were read unguarded. */
+const dangerousKey = fc
+  .tuple(
+    fc.constantFrom("a", "__proto__", "constructor", "prototype", "hasOwnProperty"),
+    fc.array(fc.constantFrom("__proto__", "constructor", "prototype", "0", "1", "polluted"), {
+      maxLength: 3,
+    }),
+  )
+  .map(([head, rest]) =>
+    [head, ...rest].map((segment, index) => (index === 0 ? segment : `[${segment}]`)).join(""),
+  )
+
+test("bracket keys never reach the prototype chain", () => {
+  const objectKeys = Object.getOwnPropertyNames(Object.prototype)
+  const arrayKeys = Object.getOwnPropertyNames(Array.prototype)
+  fc.assert(
+    fc.property(
+      fc.array(fc.tuple(dangerousKey, fc.string()), { minLength: 1, maxLength: 5 }),
+      (pairs) => {
+        const decoded = decodeFormPairs(pairs)
+        expect(Object.getPrototypeOf(decoded)).toBe(Object.prototype)
+        expect(([] as unknown[])[0]).toBeUndefined()
+        expect(({} as Record<string, unknown>).polluted).toBeUndefined()
+      },
+    ),
+    params,
+  )
+  expect(Object.getOwnPropertyNames(Object.prototype)).toEqual(objectKeys)
+  expect(Object.getOwnPropertyNames(Array.prototype)).toEqual(arrayKeys)
 })
 
 test("decodeBody(encodeBody(json)) is identity for JSON values", () => {

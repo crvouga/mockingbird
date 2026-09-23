@@ -2,7 +2,10 @@ import { type FetchLike, OpenBaoClient, OpenBaoError } from "./client.js"
 
 export const DEFAULT_OPENBAO_ADDRESS = "https://vault.chrisvouga.dev"
 export const DEFAULT_JWT_MOUNT = "jwt"
-export const DEFAULT_JWT_ROLE = "mockingbird-parity"
+/** Vault's GitHub Actions OIDC role (policy `ci-read`: read `secret/data/personal/*`). */
+export const DEFAULT_JWT_ROLE = "github-actions"
+/** Shared-infra KV path holding the live-parity sandbox keys, one field per env var name. */
+export const DEFAULT_SECRET_PATH = "secret/data/personal/prd"
 
 export type Env = Record<string, string | undefined>
 
@@ -102,7 +105,7 @@ export const loadCredentials = async <Field extends string>(
   const address =
     first(env, ["MOCKINGBIRD_OPENBAO_ADDR", "BAO_ADDR", "VAULT_ADDR"]) ?? DEFAULT_OPENBAO_ADDRESS
   const client = new OpenBaoClient({ address, ...(options.fetch ? { fetch: options.fetch } : {}) })
-  const path = first(env, [envPathName(spec.provider)]) ?? spec.defaultPath ?? `secret/data/secret`
+  const path = first(env, [envPathName(spec.provider)]) ?? spec.defaultPath ?? DEFAULT_SECRET_PATH
   const url = `${address}/v1/${path}`
   let token = first(env, ["MOCKINGBIRD_OPENBAO_TOKEN", "BAO_TOKEN", "VAULT_TOKEN"])
   let revoke = false

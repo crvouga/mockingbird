@@ -9,10 +9,6 @@ import {
   loadManifest,
   loadVaultConfig,
   localEnvStatus,
-  NPM_PACKAGE,
-  NPM_PACKAGE_URL,
-  NPM_TRUSTED_PUBLISHER_URL,
-  npmViewVersion,
   printCheck,
   printObtain,
   printPopulate,
@@ -20,10 +16,11 @@ import {
   vaultTokenOk,
   which,
 } from "./lib.ts"
+import { discoverPackages, npmVersions } from "../release/lib.ts"
 
-console.log("postgres-mem secrets doctor")
+console.log("mockingbird secrets doctor")
 console.log("=========================")
-console.log("Publish path: npm Trusted Publishing (OIDC) — no NPM_TOKEN.")
+console.log("Publish path: npm Trusted Publishing (OIDC); NPM_TOKEN only creates new packages.")
 console.log("Values are never printed. See docs/SECRETS.md for the full runbook.")
 console.log("")
 
@@ -36,34 +33,33 @@ console.log(`Mount: ${cfg.mount}  project=${cfg.project}  config=${cfg.config}`)
 console.log(`Repo:  ${manifest.repo}`)
 console.log("")
 
-const npmInfo = await npmViewVersion(NPM_PACKAGE)
-if (npmInfo.error) {
-  results.push({
-    id: "npm:registry",
-    status: "warn",
-    message: `Could not query npm for ${NPM_PACKAGE}`,
-    details: [npmInfo.error],
-  })
-} else if (npmInfo.missing) {
-  results.push({
-    id: "npm:registry",
-    status: "fail",
-    message: `${NPM_PACKAGE} is not on the npm registry yet`,
-    details: [
-      "Trusted Publisher can only be configured after the package exists.",
-      "One-time seed from your npm login (no Automation token):",
-      "  bun run npm:seed -- --dry-run",
-      "  bun run npm:seed -- --yes",
-      "Then: npm login if prompted, then enable Trusted Publisher.",
-    ],
-  })
-} else {
-  results.push({
-    id: "npm:registry",
-    status: "pass",
-    message: `${NPM_PACKAGE}@${npmInfo.version} exists on npm`,
-    details: [NPM_PACKAGE_URL, `Trusted Publisher: ${NPM_TRUSTED_PUBLISHER_URL}`],
-  })
+for (const pkg of discoverPackages().filter((p) => p.isPublic)) {
+  const versions = await npmVersions(pkg.name)
+  if (!Array.isArray(versions)) {
+    results.push({
+      id: `npm:${pkg.name}`,
+      status: "warn",
+      message: `Could not query npm for ${pkg.name}`,
+      details: [versions.error],
+    })
+  } else if (versions.length === 0) {
+    results.push({
+      id: `npm:${pkg.name}`,
+      status: "warn",
+      message: `${pkg.name} is not on npm yet — the next release creates it`,
+      details: [
+        "Needs the NPM_TOKEN Actions secret (then Trusted Publisher is attached automatically),",
+        "or seed locally: bun run release:seed",
+      ],
+    })
+  } else {
+    results.push({
+      id: `npm:${pkg.name}`,
+      status: "pass",
+      message: `${pkg.name} exists on npm`,
+      details: [`Trusted Publisher: https://www.npmjs.com/package/${pkg.name}/access`],
+    })
+  }
 }
 
 // --- Tooling ---
@@ -287,11 +283,8 @@ console.log("--- Publish path ---")
 printCheck({
   id: "publish:oidc",
   status: "pass",
-  message: "CI publish uses Trusted Publishing + id-token (no NPM_TOKEN repo secret)",
-  details: [
-    "https://docs.npmjs.com/trusted-publishers",
-    "Do not create a Granular Access Token for CI/CD",
-  ],
+  message: "CI publish uses Trusted Publishing + id-token; NPM_TOKEN only bootstraps new packages",
+  details: ["https://docs.npmjs.com/trusted-publishers"],
 })
 
 // Guidance for failures
@@ -303,11 +296,6 @@ if (failedEntries.length > 0 || requiredChecklists.length > 0) {
   if (requiredChecklists.length > 0) {
     console.log("")
     console.log("# Trusted Publishing (required for CI publish)")
-    if (results.some((r) => r.id === "npm:registry" && r.status === "fail")) {
-      console.log("  Seed the package first (one-time local publish):")
-      console.log("    bun run npm:seed -- --yes")
-      console.log("  Then configure Trusted Publisher:")
-    }
     for (const item of requiredChecklists) {
       printObtain(item)
     }

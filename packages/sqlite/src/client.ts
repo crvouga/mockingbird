@@ -21,7 +21,7 @@ export interface SqliteStatement {
 /**
  * Sync SQLite client port owned by Mockingbird.
  *
- * Duck-typed so `@crvouga/sqlite-mem` `Database`, better-sqlite3, and wrapped
+ * Duck-typed so `@crvouga/mockingbird-service-sqlite` `Database`, better-sqlite3, and wrapped
  * `bun:sqlite` instances all work when they expose this surface.
  */
 export interface SqliteClient {

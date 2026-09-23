@@ -1,0 +1,128 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../../components/Icon.astro"
+import Base from "../../layouts/Base.astro"
+import { APP_EXAMPLES } from "../../lib/appExamples.ts"
+
+const servicesByName = new Map(catalog.services.map((s) => [s.name, s]))
+---
+
+<Base
+  title="Examples"
+  description="Full-stack demo apps built entirely on Mockingbird mocks — client, server and database, one process, no real network."
+>
+  <div class="container">
+    <header class="page-head">
+      <h1>Examples</h1>
+      <p class="lede">
+        Small, real full-stack apps that compose Mockingbird's mocks the way you would in production —
+        client, server, database, and every "vendor" call in one process, with no real network. Each one is
+        a working app you can run locally, not a snippet.
+      </p>
+    </header>
+
+    <div class="grid">
+      {
+        APP_EXAMPLES.map((example) => (
+          <article class="example-card">
+            <h2>{example.title}</h2>
+            <p class="example-desc">{example.description}</p>
+            <div class="example-services">
+              {example.servicesUsed.map((name) => {
+                const service = servicesByName.get(name)
+                return service ? (
+                  <a class="chip" href={`/services/${service.name}`}>
+                    {service.displayName}
+                  </a>
+                ) : (
+                  <span class="chip">{name}</span>
+                )
+              })}
+            </div>
+            <pre class="example-run"><code>{example.runCommand}</code></pre>
+            <div class="example-links">
+              <a class="btn btn-accent btn-sm" href={`/examples/${example.slug}`}>
+                <Icon name="play" /> Live demo
+              </a>
+              <a class="btn btn-secondary btn-sm" href={`${catalog.repo}/tree/main/${example.packagePath}`} target="_blank" rel="noopener">
+                <Icon name="github" /> Source
+              </a>
+            </div>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</Base>
+
+<style>
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+    margin-top: 32px;
+  }
+
+  .example-card {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg);
+  }
+
+  .example-card h2 {
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+
+  .example-desc {
+    color: var(--fg-muted);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .example-services {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--fg-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+
+  a.chip:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+
+  .example-run {
+    margin: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-subtle);
+    color: var(--fg-muted);
+    font-size: 12.5px;
+    overflow-x: auto;
+  }
+
+  .example-links {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+    padding-top: 4px;
+  }
+</style>

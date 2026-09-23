@@ -1,0 +1,518 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../../components/Icon.astro"
+import Install from "../../components/Install.astro"
+import Monogram from "../../components/Monogram.astro"
+import Playground from "../../components/Playground.astro"
+import ServiceExamples from "../../components/ServiceExamples.astro"
+import SqlConsole from "../../components/SqlConsole.astro"
+import TierBadge from "../../components/TierBadge.astro"
+import Base from "../../layouts/Base.astro"
+import { CATEGORIES, type CategorySlug } from "../../lib/categories.ts"
+import { percent } from "../../lib/format.ts"
+import { TIERS } from "../../lib/tiers.ts"
+import type { Service } from "../../lib/types.ts"
+import "../../styles/playground.css"
+
+export function getStaticPaths() {
+  return catalog.services.map((service, i) => ({
+    params: { name: service.name },
+    props: {
+      service,
+      prev: catalog.services[i - 1] ?? null,
+      next: catalog.services[i + 1] ?? null,
+    },
+  }))
+}
+
+interface Props {
+  service: Service
+  prev: Service | null
+  next: Service | null
+}
+
+const { service: s, prev, next } = Astro.props
+const category = CATEGORIES[s.category as CategorySlug]
+const unsupported = s.operations.filter((o) => !o.supported)
+const toc = [
+  ...s.examples.map((e) => ({ depth: 2, slug: `example-${e.id}`, text: e.title })),
+  ...(s.kind !== "node" ? [{ depth: 2, slug: "playground", text: "Playground" }] : []),
+  ...(s.opsTotal > 0 ? [{ depth: 2, slug: "operations", text: "Operations" }] : []),
+  { depth: 2, slug: "docs", text: "Documentation" },
+  ...s.readme.toc.map((t) => ({ ...t, depth: t.depth + 1 })),
+]
+---
+
+<Base title={`${s.displayName} mock`} description={s.description} markdown={`/services/${s.name}.md`}>
+  <script is:inline define:vars={{ name: s.name }}>
+    try {
+      var recent = JSON.parse(localStorage.getItem("mb:recent") || "[]").filter(function (n) { return n !== name })
+      recent.unshift(name)
+      localStorage.setItem("mb:recent", JSON.stringify(recent.slice(0, 5)))
+    } catch (e) {}
+  </script>
+  <div class="container">
+    <nav class="crumbs" aria-label="Breadcrumb">
+      <a href="/services">Services</a>
+      <Icon name="chevron" />
+      <a href={`/services?category=${s.category}`}>{category.label}</a>
+      <Icon name="chevron" />
+      <span aria-current="page">{s.displayName}</span>
+    </nav>
+
+    <header class="svc-head">
+      <div class="svc-id">
+        <Monogram name={s.displayName} hue={s.hue} size={56} />
+        <div>
+          <h1>{s.displayName}</h1>
+          <code class="pkg">{s.packageName}</code>
+        </div>
+      </div>
+      <p class="lede">{s.description}</p>
+      {
+        s.status === "wip" && (
+          <div class="callout callout-warn">
+            <strong>{TIERS.wip.label}.</strong> {TIERS.wip.blurb} Check the README's
+            "Deliberately not modelled" notes before relying on it.
+          </div>
+        )
+      }
+      <div class="facts">
+        <TierBadge tier={s.status} long />
+        <span class="badge badge-accent">{category.label}</span>
+        {s.surfaces.browser ? <span class="badge badge-ok"><Icon name="globe" /> Runs in the browser</span> : <span class="badge"><Icon name="terminal" /> Node only</span>}
+        {s.opsTotal > 0 && <span class="badge">{s.opsSupported} of {s.opsTotal} operations</span>}
+        {s.surfaces.inProcess && <span class="badge">In-process fetch</span>}
+        {s.surfaces.server && <span class="badge">Node server</span>}
+        {s.surfaces.cli && <span class="badge"><code>{s.surfaces.cli}</code></span>}
+      </div>
+      <div class="head-row">
+        <div class="head-install"><Install pkg={s.packageName} /></div>
+        <div class="head-links">
+          <a class="btn btn-secondary btn-sm" href={s.links.source} target="_blank" rel="noopener"><Icon name="github" /> Source</a>
+          <a class="btn btn-secondary btn-sm" href={s.links.npm} target="_blank" rel="noopener"><Icon name="package" /> npm</a>
+          <a class="btn btn-secondary btn-sm" href={`/services/${s.name}.md`}><Icon name="file" /> Markdown</a>
+          {s.links.support && <a class="btn btn-secondary btn-sm" href={s.links.support} target="_blank" rel="noopener">SUPPORT.md</a>}
+        </div>
+      </div>
+    </header>
+
+    <div class="layout">
+      <div class="content">
+        <ServiceExamples service={s} />
+        {
+          s.kind === "http" && (
+            <section id="playground" class="block">
+              <div class="block-head">
+                <h2>Playground</h2>
+                <p>
+                  Requests go to the real mock running in this tab. State persists across requests, and the journal shows what it
+                  received. A green dot marks operations whose sample succeeds as-is; others need ids from earlier responses.
+                </p>
+              </div>
+              <Playground service={s} />
+            </section>
+          )
+        }
+        {
+          s.kind === "sql" && (
+            <section id="playground" class="block">
+              <div class="block-head">
+                <h2>Playground</h2>
+                <p>A SQL console on the real engine, running in this tab. Run the snippets in order, or write your own.</p>
+              </div>
+              <SqlConsole service={s} />
+            </section>
+          )
+        }
+        {
+          s.kind === "node" && (
+            <div class="callout">
+              <strong>No in-browser playground.</strong> This package runs the vendor's real server as a child process, so it needs
+              Node. See the documentation below for setup.
+            </div>
+          )
+        }
+
+        {
+          s.opsTotal > 0 && (
+            <section id="operations" class="block">
+              <div class="block-head">
+                <h2>Operations</h2>
+                <p>
+                  {s.opsSupported} of {s.opsTotal} operations in the vendored contract are mocked.
+                  {s.contract.upstream && <> {s.contract.upstream}</>}
+                </p>
+              </div>
+              <div class="cov-bar" style={`--p:${percent(s.opsSupported, s.opsTotal)}%`}><span /></div>
+              <div class="table-wrap ops-table">
+                <table class="table">
+                  <thead>
+                    <tr><th>Method</th><th>Path</th><th>Operation</th><th><span class="sr-only">Status</span></th></tr>
+                  </thead>
+                  <tbody>
+                    {s.operations.map((o) => (
+                      <tr data-unsupported={String(!o.supported)}>
+                        <td><span class="method" data-m={o.method}>{o.method}</span></td>
+                        <td class="ops-path"><code>{o.path.split(/(?=\/)/).map((seg, i) => (i === 0 ? seg : <><wbr />{seg}</>))}</code></td>
+                        <td>
+                          <span class="op-id">{o.id}</span>
+                          {o.summary && <span class="op-summary">{o.summary}</span>}
+                        </td>
+                        <td class="op-act">
+                          {o.supported ? (
+                            s.kind === "http" && <button type="button" class="btn btn-ghost btn-sm" data-try-op={o.id}>Try</button>
+                          ) : (
+                            <span class="badge">Not mocked</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {unsupported.length > 0 && s.links.support && (
+                <p class="fine">Why each gap exists is recorded in <a href={s.links.support} target="_blank" rel="noopener">SUPPORT.md</a>.</p>
+              )}
+            </section>
+          )
+        }
+
+        <section id="docs" class="block">
+          <div class="block-head">
+            <h2>Documentation</h2>
+            <p>
+              The package README, the same file that ships in the npm tarball.
+              <a href={s.links.readme} target="_blank" rel="noopener">Edit on GitHub</a>
+            </p>
+          </div>
+          <article class="prose" set:html={s.readme.html} />
+        </section>
+
+        <nav class="pager" aria-label="Other services">
+          {prev ? <a href={`/services/${prev.name}`}><span>Previous</span><strong>{prev.displayName}</strong></a> : <span />}
+          {next && <a class="next" href={`/services/${next.name}`}><span>Next</span><strong>{next.displayName}</strong></a>}
+        </nav>
+      </div>
+
+      <aside class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          {toc.map((t) => <li data-depth={t.depth}><a href={`#${t.slug}`}>{t.text}</a></li>)}
+        </ul>
+      </aside>
+    </div>
+  </div>
+</Base>
+
+<script>
+  import "../../client/toc.ts"
+</script>
+
+<style>
+  .crumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding-top: 28px;
+    color: var(--fg-subtle);
+    font-size: 13px;
+  }
+
+  .crumbs a:hover {
+    color: var(--fg);
+  }
+
+  .crumbs :global(.i) {
+    width: 13px;
+    height: 13px;
+    color: var(--fg-faint);
+  }
+
+  .crumbs [aria-current] {
+    color: var(--fg);
+  }
+
+  .svc-head {
+    padding-block: 24px 40px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .svc-id {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .svc-id h1 {
+    font-size: clamp(28px, 4vw, 38px);
+    letter-spacing: -0.03em;
+  }
+
+  .pkg {
+    color: var(--fg-subtle);
+    font-size: 13px;
+  }
+
+  .svc-head .lede {
+    margin-top: 18px;
+    max-width: 820px;
+    font-size: 16px;
+  }
+
+  .facts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 18px;
+  }
+
+  .facts :global(.i) {
+    width: 13px;
+    height: 13px;
+  }
+
+  .facts code {
+    font-size: 11.5px;
+  }
+
+  .head-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+  }
+
+  .head-install {
+    flex: 1 1 420px;
+    max-width: 560px;
+  }
+
+  .head-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 56px;
+  }
+
+  .content {
+    min-width: 0;
+  }
+
+  .block {
+    padding-top: 48px;
+  }
+
+  .block-head {
+    margin-bottom: 18px;
+  }
+
+  .block-head h2 {
+    font-size: 22px;
+  }
+
+  .block-head p {
+    margin-top: 6px;
+    max-width: 760px;
+    color: var(--fg-muted);
+    font-size: 14.5px;
+  }
+
+  .block-head a {
+    color: var(--accent-soft-fg);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .callout {
+    margin-top: 40px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg-subtle);
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+
+  .callout strong {
+    color: var(--fg);
+  }
+
+  .callout-warn {
+    margin-top: 18px;
+    border-color: transparent;
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+
+  .cov-bar {
+    height: 6px;
+    margin-bottom: 14px;
+    border-radius: 999px;
+    background: var(--bg-muted);
+    overflow: hidden;
+  }
+
+  .cov-bar span {
+    display: block;
+    width: var(--p);
+    height: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+  }
+
+  .ops-table {
+    max-height: 520px;
+    overflow: auto;
+  }
+
+  .ops-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .ops-table td {
+    vertical-align: middle;
+  }
+
+  .ops-table code {
+    font-size: 12.5px;
+  }
+
+  /* Paths wrap only at "/" (via <wbr>), never mid-segment. */
+  .ops-path {
+    min-width: 12ch;
+  }
+
+  .op-id {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+    overflow-wrap: anywhere;
+  }
+
+  .op-summary {
+    display: block;
+    color: var(--fg-subtle);
+    font-size: 12.5px;
+  }
+
+  .op-act {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  tr[data-unsupported="true"] td {
+    color: var(--fg-faint);
+  }
+
+  .fine {
+    margin-top: 10px;
+    color: var(--fg-subtle);
+    font-size: 13px;
+  }
+
+  .fine a {
+    text-decoration: underline;
+  }
+
+  #docs .prose {
+    margin-top: 8px;
+  }
+
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 64px;
+  }
+
+  .pager a {
+    display: grid;
+    gap: 2px;
+    padding: 14px 16px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: border-color 0.15s var(--ease);
+  }
+
+  .pager a:hover {
+    border-color: var(--border-strong);
+  }
+
+  .pager .next {
+    text-align: right;
+  }
+
+  .pager span {
+    color: var(--fg-subtle);
+    font-size: 12.5px;
+  }
+
+  .toc {
+    position: sticky;
+    top: calc(var(--header-h) + 24px);
+    align-self: start;
+    max-height: calc(100dvh - var(--header-h) - 48px);
+    overflow-y: auto;
+    padding-top: 48px;
+    font-size: 13px;
+  }
+
+  .toc p {
+    margin-bottom: 10px;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  .toc ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  .toc li a {
+    display: block;
+    margin-left: -1px;
+    padding: 4px 0 4px 12px;
+    border-left: 1px solid transparent;
+    color: var(--fg-subtle);
+    line-height: 1.4;
+    transition: color 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+
+  .toc li[data-depth="3"] a {
+    padding-left: 22px;
+  }
+
+  .toc li[data-depth="4"] a {
+    padding-left: 32px;
+    font-size: 12.5px;
+  }
+
+  .toc li a:hover {
+    color: var(--fg);
+  }
+
+  .toc li a[aria-current="true"] {
+    border-left-color: var(--accent);
+    color: var(--fg);
+  }
+
+  @media (max-width: 1080px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .toc {
+      display: none;
+    }
+  }
+</style>

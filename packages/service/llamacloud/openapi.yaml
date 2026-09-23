@@ -1,0 +1,669 @@
+openapi: 3.1.0
+info:
+  title: LlamaCloud platform API (Mockingbird subset)
+  description: |
+    Stateful mock subset of the LlamaCloud (LlamaIndex managed index) platform API: project and
+    pipeline lookup, pipeline retrieval, and pipeline documents (list, get, create, upsert,
+    delete). Covers both of our consumers: the backend's plain-`fetch` knowledge adapter and the
+    Makor chat service's `llama_cloud_services.LlamaCloudIndex(...).as_retriever().aretrieve()`.
+  version: "1"
+  x-mockingbird-upstream:
+    note: >-
+      Hand-authored from the wire shapes of the official Python client (llama-cloud 0.1.45, the
+      Fern-generated client that llama-cloud-services 0.6.88 drives) and our backend adapter
+      (llamacloud-knowledge.adapter.ts). Response models are trimmed to the fields those
+      clients require or read.
+servers:
+  - url: https://api.cloud.llamaindex.ai
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/projects:
+    get:
+      operationId: ListProjects
+      description: The SDK's project lookup (`resolve_project` by `project_name`).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: project_name
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: Matching projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/projects/{project_id}:
+    parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: project
+            missing: 00000000-0000-4000-8000-00000000dead
+    get:
+      operationId: GetProject
+      description: The retriever's project lookup by id (`as_retriever` passes `project_id`).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: The project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/pipelines:
+    get:
+      operationId: SearchPipelines
+      description: >-
+        Our backend lists by `project_name` and picks `name == LLAMACLOUD_INDEX_NAME`; the SDK
+        searches by `project_id` + `pipeline_name` + `pipeline_type=MANAGED`.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+            x-mockingbird-resource-ref:
+              type: project
+              missing: 00000000-0000-4000-8000-00000000dead
+        - name: project_name
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: pipeline_name
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: pipeline_type
+          in: query
+          schema:
+            type: string
+            enum: [PLAYGROUND, MANAGED]
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: Matching pipelines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pipeline"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/pipelines/{pipeline_id}:
+    parameters:
+      - $ref: "#/components/parameters/PipelineId"
+    get:
+      operationId: GetPipeline
+      description: The retriever's pipeline lookup by id.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The pipeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pipeline"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /api/v1/pipelines/{pipeline_id}/retrieve:
+    parameters:
+      - $ref: "#/components/parameters/PipelineId"
+    post:
+      operationId: RunSearch
+      description: >-
+        Retrieval. Answered from a scripted rule (`PUT /__admin/retrieval`) whose `contains`
+        matches the query, else a deterministic term-overlap ranking over the stored documents.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: project_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: organization_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrieveParams"
+      responses:
+        "200":
+          description: Retrieval results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RetrieveResults"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/v1/pipelines/{pipeline_id}/documents:
+    parameters:
+      - $ref: "#/components/parameters/PipelineId"
+    get:
+      operationId: ListPipelineDocuments
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 1000
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+      responses:
+        "200":
+          description: The pipeline's documents, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CloudDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    post:
+      operationId: CreateBatchPipelineDocuments
+      description: Insert documents (the SDK's `insert`); an id that already exists is replaced.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloudDocumentBatch"
+      responses:
+        "200":
+          description: The stored documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CloudDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+    put:
+      operationId: UpsertBatchPipelineDocuments
+      description: Upsert by id (our backend uses the article slug as the id).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CloudDocumentBatch"
+      responses:
+        "200":
+          description: The stored documents
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CloudDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationFailed"
+  /api/v1/pipelines/{pipeline_id}/documents/{document_id}:
+    parameters:
+      - $ref: "#/components/parameters/PipelineId"
+      - name: document_id
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: document
+            missing: missing-document
+    get:
+      operationId: GetPipelineDocument
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The document
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CloudDocument"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: DeletePipelineDocument
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    PipelineId:
+      name: pipeline_id
+      in: path
+      required: true
+      schema:
+        type: string
+        x-mockingbird-resource-ref:
+          type: pipeline
+          missing: 00000000-0000-4000-8000-0000000beef0
+  responses:
+    Unauthorized:
+      description: Missing or unknown API key
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Detail"
+    NotFound:
+      description: Unknown resource
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Detail"
+    ValidationFailed:
+      description: FastAPI validation error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/HTTPValidationError"
+  schemas:
+    Detail:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+    HTTPValidationError:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            required: [loc, msg, type]
+            properties:
+              loc:
+                type: array
+                items:
+                  type: [string, integer]
+              msg:
+                type: string
+              type:
+                type: string
+    Project:
+      type: object
+      required: [id, name, organization_id]
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: project
+            identity: true
+        name:
+          type: string
+        organization_id:
+          type: string
+        is_default:
+          type: boolean
+        ad_hoc_eval_dataset_id:
+          type: ["string", "null"]
+        created_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updated_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    Pipeline:
+      type: object
+      required: [id, name, project_id, embedding_config]
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: pipeline
+            identity: true
+        name:
+          type: string
+        project_id:
+          type: string
+        pipeline_type:
+          type: string
+          enum: [PLAYGROUND, MANAGED]
+        embedding_config:
+          type: object
+          required: [type]
+          properties:
+            type:
+              type: string
+            component:
+              type: object
+        status:
+          type: string
+          enum: [CREATED, DELETING]
+        created_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updated_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    CloudDocumentCreate:
+      type: object
+      required: [text, metadata]
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 80
+        text:
+          type: string
+          maxLength: 4000
+        metadata:
+          type: object
+          maxProperties: 8
+          additionalProperties: true
+          properties:
+            file_name:
+              type: string
+              maxLength: 120
+            title:
+              type: string
+              maxLength: 200
+            slug:
+              type: string
+              maxLength: 80
+            contentType:
+              type: string
+              maxLength: 40
+            sourceUrl:
+              type: ["string", "null"]
+              maxLength: 400
+            updatedAt:
+              type: string
+              maxLength: 40
+        excluded_embed_metadata_keys:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 40
+        excluded_llm_metadata_keys:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 40
+        page_positions:
+          type: ["array", "null"]
+          maxItems: 8
+          items:
+            type: integer
+    CloudDocumentBatch:
+      type: array
+      minItems: 1
+      maxItems: 5
+      items:
+        $ref: "#/components/schemas/CloudDocumentCreate"
+    CloudDocument:
+      type: object
+      required: [id, text, metadata]
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: document
+            identity: true
+        text:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        excluded_embed_metadata_keys:
+          type: array
+          items:
+            type: string
+        excluded_llm_metadata_keys:
+          type: array
+          items:
+            type: string
+        page_positions:
+          type: ["array", "null"]
+          items:
+            type: integer
+        status_metadata:
+          type: ["object", "null"]
+    RetrieveParams:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 400
+        dense_similarity_top_k:
+          type: integer
+          minimum: 1
+          maximum: 100
+        sparse_similarity_top_k:
+          type: integer
+          minimum: 1
+          maximum: 100
+        enable_reranking:
+          type: boolean
+        rerank_top_n:
+          type: integer
+          minimum: 1
+          maximum: 100
+        alpha:
+          type: number
+          minimum: 0
+          maximum: 1
+        retrieval_mode:
+          type: string
+          enum: [chunks, files_via_metadata, files_via_content, auto_routed]
+        files_top_k:
+          type: integer
+          minimum: 1
+          maximum: 100
+        retrieve_image_nodes:
+          type: boolean
+        retrieve_page_screenshot_nodes:
+          type: boolean
+        retrieve_page_figure_nodes:
+          type: boolean
+        class_name:
+          type: string
+          maxLength: 40
+        dense_similarity_cutoff:
+          type: ["number", "null"]
+        search_filters:
+          type: ["object", "null"]
+        search_filters_inference_schema:
+          type: ["object", "null"]
+    TextNodeWithScore:
+      type: object
+      required: [node, score]
+      properties:
+        node:
+          type: object
+          required: [id_, text, metadata]
+          properties:
+            id_:
+              type: string
+            text:
+              type: string
+            metadata:
+              type: object
+              additionalProperties: true
+            extra_info:
+              type: object
+              additionalProperties: true
+            class_name:
+              type: string
+            mimetype:
+              type: string
+            start_char_idx:
+              type: ["integer", "null"]
+            end_char_idx:
+              type: ["integer", "null"]
+            excluded_embed_metadata_keys:
+              type: array
+              items:
+                type: string
+            excluded_llm_metadata_keys:
+              type: array
+              items:
+                type: string
+            relationships:
+              type: object
+            text_template:
+              type: string
+            metadata_template:
+              type: string
+            metadata_seperator:
+              type: string
+        score:
+          type: ["number", "null"]
+        class_name:
+          type: string
+    RetrieveResults:
+      type: object
+      required: [pipeline_id, retrieval_nodes]
+      properties:
+        pipeline_id:
+          type: string
+        retrieval_nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TextNodeWithScore"
+        image_nodes:
+          type: array
+          items:
+            type: object
+        page_figure_nodes:
+          type: array
+          items:
+            type: object
+        retrieval_latency:
+          type: object
+          additionalProperties:
+            type: number
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+        inferred_search_filters:
+          type: ["object", "null"]
+        class_name:
+          type: string

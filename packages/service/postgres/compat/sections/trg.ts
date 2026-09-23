@@ -1,0 +1,57 @@
+import { type CatalogSection, section } from "../scenario-types.ts";
+
+const D = "documented_divergence" as const;
+const REPORT = ["tests/contract/_reports/session-system.md"];
+
+export const TRG_SECTION: CatalogSection = section("TRG", "Triggers", true, [
+  ["bi-01", "BEFORE INSERT trigger assigns a NEW column"],
+  ["bi-02", "BEFORE INSERT trigger computes from another NEW column"],
+  ["bi-03", "BEFORE INSERT returning NULL suppresses the row"],
+  ["bi-04", "IF ELSIF ELSE chain in a trigger body"],
+  ["when-01", "WHEN clause limits trigger firing"],
+  ["when-02", "WHEN clause comparing OLD and NEW on update"],
+  ["bu-01", "BEFORE UPDATE trigger reads OLD and writes NEW"],
+  ["bu-02", "BEFORE UPDATE returning NULL suppresses the update"],
+  ["bu-03", "BEFORE UPDATE trigger can override the assigned value"],
+  ["bd-01", "BEFORE DELETE returning NULL suppresses the delete"],
+  ["bd-02", "BEFORE DELETE returning OLD allows the delete"],
+  ["ai-01", "AFTER INSERT returning NULL does not suppress the row"],
+  ["multi-01", "one trigger function attached to INSERT and UPDATE"],
+  ["sel-01", "trigger fires for INSERT ... SELECT rows"],
+  ["chain-01", "two BEFORE INSERT triggers chain their effects"],
+  ["raise-01", "RAISE EXCEPTION in BEFORE INSERT blocks the insert"],
+  ["raise-02", "conditional RAISE EXCEPTION only fires for matching rows"],
+  ["raise-03", "rows below the RAISE threshold insert normally"],
+  ["raise-04", "trigger exception recovered with a savepoint"],
+  ["drop-01", "DROP TRIGGER stops the trigger from firing"],
+  ["drop-02", "DROP TRIGGER of a missing trigger fails"],
+  ["drop-03", "DROP TRIGGER IF EXISTS on a missing trigger is a no-op"],
+  ["life-01", "duplicate trigger name on the same table fails"],
+  ["life-02", "same trigger name on different tables is allowed"],
+  ["life-03", "dropping the table removes its triggers implicitly"],
+  ["event-01", "trigger only fires for its declared event"],
+  [
+    "order-01",
+    "multiple-trigger firing order is creation order, not alphabetical",
+    D,
+    "memory fires triggers in creation order; PostgreSQL fires them in name order",
+    REPORT,
+    "trigger-order-creation",
+  ],
+  [
+    "updof-01",
+    "UPDATE OF column lists are ignored",
+    D,
+    "memory fires a BEFORE UPDATE OF a trigger even when the UPDATE only touches other columns",
+    REPORT,
+    "trigger-update-of-ignored",
+  ],
+  [
+    "instead-01",
+    "INSTEAD OF triggers on views are unsupported",
+    D,
+    "CREATE TRIGGER ... INSTEAD OF on a view fails in memory; PostgreSQL supports it",
+    undefined,
+    "instead-of-triggers-unsupported",
+  ],
+]);

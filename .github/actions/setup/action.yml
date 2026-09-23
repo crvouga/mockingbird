@@ -1,0 +1,107 @@
+name: Setup
+description: Bun + cached node_modules + the shared Turborepo remote cache (credentials from Vault via OIDC).
+
+# Shared infra contract: https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
+# The calling job needs `permissions: id-token: write` when remote-cache is on.
+
+inputs:
+  remote-cache:
+    description: Load TURBO_* from Vault (GitHub OIDC) so turbo reads/writes https://turborepo.chrisvouga.dev.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: "1.4.0"
+
+    # node_modules is keyed on the lockfile and manifests. A hit skips `bun install` entirely,
+    # including the slow postinstall (embedded-postgres).
+    - id: deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          node_modules
+          packages/*/node_modules
+          packages/*/*/node_modules
+          sites/*/node_modules
+        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'sites/*/package.json') }}
+
+    - if: steps.deps.outputs.cache-hit != 'true'
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    # Fork PRs get no OIDC token: they run with turbo's local cache only.
+    - id: gate
+      if: inputs.remote-cache == 'true'
+      shell: bash
+      env:
+        FORK: ${{ github.event.pull_request.head.repo.fork }}
+      run: |
+        if [ "$FORK" = "true" ]; then
+          echo "::warning::Fork PR — no Vault OIDC, so no Turborepo remote cache for this run."
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+        fi
+
+    # Vault restarts sealed and auto-unseals on deploy; wait instead of failing on 503.
+    - if: steps.gate.outputs.enabled == 'true'
+      shell: bash
+      run: |
+        addr=https://vault.chrisvouga.dev
+        for i in $(seq 1 60); do
+          code="$(curl -s -o /dev/null -w '%{http_code}' "${addr}/v1/sys/health?standbyok=true&perfstandbyok=true" || true)"
+          case "$code" in
+            200|429|472|473) exit 0 ;;
+            *) echo "Vault not ready (HTTP ${code:-000}) — retry ${i}/60..." ;;
+          esac
+          sleep 5
+        done
+        echo "::error::Vault at ${addr} did not become ready within 5 minutes"
+        exit 1
+
+    - id: vault
+      if: steps.gate.outputs.enabled == 'true'
+      continue-on-error: true
+      uses: hashicorp/vault-action@v4
+      with:
+        url: https://vault.chrisvouga.dev
+        method: jwt
+        path: jwt
+        role: github-actions
+        jwtGithubAudience: https://vault.chrisvouga.dev
+        secrets: |
+          secret/data/personal/prd TURBO_TOKEN | TURBO_TOKEN ;
+          secret/data/personal/prd TURBO_API   | TURBO_API ;
+          secret/data/personal/prd TURBO_TEAM  | TURBO_TEAM ;
+          secret/data/personal/prd TURBO_CACHE | TURBO_CACHE
+
+    - if: steps.vault.outcome == 'failure'
+      shell: bash
+      run: sleep 30
+
+    - id: vault_retry
+      if: steps.vault.outcome == 'failure'
+      uses: hashicorp/vault-action@v4
+      with:
+        url: https://vault.chrisvouga.dev
+        method: jwt
+        path: jwt
+        role: github-actions
+        jwtGithubAudience: https://vault.chrisvouga.dev
+        secrets: |
+          secret/data/personal/prd TURBO_TOKEN | TURBO_TOKEN ;
+          secret/data/personal/prd TURBO_API   | TURBO_API ;
+          secret/data/personal/prd TURBO_TEAM  | TURBO_TEAM ;
+          secret/data/personal/prd TURBO_CACHE | TURBO_CACHE
+
+    - if: steps.gate.outputs.enabled == 'true'
+      shell: bash
+      run: |
+        echo "TURBO_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"
+        curl -fsS "$TURBO_API/health" > /dev/null || {
+          echo "::error::Turborepo remote cache $TURBO_API/health is down — report it (crvouga/workspace); do not disable caching."
+          exit 1
+        }

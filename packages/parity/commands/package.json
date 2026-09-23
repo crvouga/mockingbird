@@ -1,6 +1,7 @@
 {
   "name": "@crvouga/mockingbird-commands",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
+  "private": true,
   "description": "Stateful fast-check command generation for OpenAPI-driven random API walks: operation eligibility, symbolic resource references, shrink-friendly commands.",
   "license": "MIT",
   "type": "module",
@@ -14,10 +15,6 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     }
-  },
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
   },
   "repository": {
     "type": "git",

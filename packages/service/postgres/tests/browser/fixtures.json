@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "oracleVersion": "18.3",
+  "cases": [
+    {
+      "id": "select-1",
+      "setup": [],
+      "sql": "SELECT 1 AS v",
+      "expect": {
+        "columns": ["v"],
+        "values": [["1"]]
+      }
+    },
+    {
+      "id": "typing",
+      "setup": [],
+      "sql": "SELECT pg_typeof(42)::text AS ti, pg_typeof(4.2)::text AS tn, '42'::int AS i, '4.5'::numeric AS n",
+      "expect": {
+        "columns": ["ti", "tn", "i", "n"],
+        "values": [["integer", "numeric", "42", "4.5"]]
+      }
+    },
+    {
+      "id": "join",
+      "setup": [
+        "CREATE TABLE a(id int, n text)",
+        "CREATE TABLE b(id int, a_id int)",
+        "INSERT INTO a VALUES (1,'x'),(2,'y')",
+        "INSERT INTO b VALUES (10,1),(20,2)"
+      ],
+      "sql": "SELECT a.n, b.id FROM a JOIN b ON a.id = b.a_id ORDER BY b.id",
+      "expect": {
+        "columns": ["n", "id"],
+        "values": [["x", "10"], ["y", "20"]]
+      }
+    },
+    {
+      "id": "null-3vl",
+      "setup": [],
+      "sql": "SELECT (NULL = NULL)::text AS eq, (NULL IS NULL)::text AS isn, (1 IN (1, NULL))::text AS inn",
+      "expect": {
+        "columns": ["eq", "isn", "inn"],
+        "values": [[null, "true", "true"]]
+      }
+    },
+    {
+      "id": "bind",
+      "setup": ["CREATE TABLE t(x int)", "INSERT INTO t VALUES (1),(2),(3)"],
+      "sql": "SELECT x FROM t WHERE x > $1 ORDER BY x",
+      "params": [1],
+      "expect": {
+        "columns": ["x"],
+        "values": [["2"], ["3"]]
+      }
+    },
+    {
+      "id": "introspection",
+      "setup": ["CREATE TABLE users(id int PRIMARY KEY, name text NOT NULL)"],
+      "sql": "SELECT table_name FROM information_schema.tables WHERE table_name = 'users'",
+      "expect": {
+        "columns": ["table_name"],
+        "values": [["users"]]
+      }
+    },
+    {
+      "id": "window",
+      "setup": ["CREATE TABLE t(x int)", "INSERT INTO t VALUES (1),(2),(3)"],
+      "sql": "SELECT x, row_number() OVER (ORDER BY x) AS rn FROM t ORDER BY x",
+      "expect": {
+        "columns": ["x", "rn"],
+        "values": [["1", "1"], ["2", "2"], ["3", "3"]]
+      }
+    },
+    {
+      "id": "jsonb",
+      "setup": [],
+      "sql": "SELECT '{\"a\":1}'::jsonb->>'a' AS a",
+      "expect": {
+        "columns": ["a"],
+        "values": [["1"]]
+      }
+    },
+    {
+      "id": "aggregate",
+      "setup": ["CREATE TABLE s(g text, v int)", "INSERT INTO s VALUES ('a',1),('a',2),('b',3)"],
+      "sql": "SELECT g, count(*) AS c, sum(v) AS total FROM s GROUP BY g ORDER BY g",
+      "expect": {
+        "columns": ["g", "c", "total"],
+        "values": [["a", "2", "3"], ["b", "1", "3"]]
+      }
+    },
+    {
+      "id": "tsvector",
+      "setup": [],
+      "sql": "SELECT (to_tsvector('english','hello world') @@ to_tsquery('hello'))::text AS m",
+      "expect": {
+        "columns": ["m"],
+        "values": [["true"]]
+      }
+    }
+  ]
+}

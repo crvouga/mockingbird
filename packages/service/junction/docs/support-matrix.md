@@ -32,7 +32,9 @@ Status meanings:
 | Partial/final structured results | Synthetic | `src/results.ts` | Gated on draw status; simulation flags respected. |
 | Result metadata | Synthetic | `src/results.ts` | `GET /v3/order/{id}/result/metadata`. |
 | Result/requisition PDFs | Synthetic | `src/results.ts` | Minimal deterministic `%PDF-` bytes. |
-| Lab accounts and team configuration | Synthetic | `src/state.ts` | Fixed team identifier fixture. |
+| Team-level lab accounts | Modeled | `src/lab-accounts.ts` | Fixture inventory with the documented `ClientFacingLabAccount` shape, `lab_account_id`/`status` filters and `allowed_billing` maps. |
+| Lab-account order routing + billing | Modeled | `src/orders.ts` | The four documented selection branches when `lab_account_id` is omitted; explicit ids must be active, team-linked and lab-matching; `billing_type` must be supported by the used account with the patient's state listed and `commercial_insurance` needs ICD codes. |
+| Org-level lab-account management + insurance records | Out of scope | — | Requires an Org-scoped key (Get Lab Accounts org-wide, Update Lab Account Teams); insurance records are not modelled, so `commercial_insurance` enforces only the ICD-code requirement. |
 | Webhook envelope | Modeled | `src/state.ts` | Standard top-level fields are preserved. |
 | Webhook persistence | Modeled | `src/state.ts` | Events are retained in SQLite order. |
 | Webhook retries and delivery attempts | Modeled | `src/state.ts` | Seeded schedule with optional jitter. |

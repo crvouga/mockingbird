@@ -154,8 +154,7 @@ export const defaultDynamicWeight: DynamicWeightFn = (ctx) => {
   const isBook = id.includes("appointment_book")
   const isReschedule = id.includes("appointment_reschedule")
   const isCancelAppt = id.includes("appointment_cancel")
-  const isGetAppt =
-    id.includes("phlebotomy_appointment_get") || id.includes("psc_appointment_get")
+  const isGetAppt = id.includes("phlebotomy_appointment_get") || id.includes("psc_appointment_get")
   const appointments = ctx.resourceCounts.appointment ?? 0
   const bookingKeys = ctx.resourceCounts.booking_key ?? 0
 

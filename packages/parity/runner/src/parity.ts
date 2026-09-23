@@ -10,8 +10,8 @@ import {
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import { collectPlaceholders, pickRef, ResourceTable } from "@crvouga/mockingbird-model"
 import type { OpenAPIDocument } from "@crvouga/mockingbird-openapi"
-import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
+import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "./defaults.js"
 import { type ExecutionContext, executeCommand, type FetchLike, type Target } from "./execute.js"
 import { ParityError, type Redactor } from "./report.js"
 
@@ -40,8 +40,16 @@ export type WalkWebhookEvents = {
 }
 
 export type WebhookParityOptions = {
-  collectReal: (scope: Scope) => Promise<readonly unknown[]>
+  /** Snapshot a live receiver's cursor before any operation in this walk. */
+  beforeWalk?: (scope: Scope) => Promise<void>
+  collectReal: (scope: Scope, mockEvents: readonly unknown[]) => Promise<readonly unknown[]>
   collectMock: (mock: FetchAPI, scope: Scope) => Promise<readonly unknown[]>
+  /** Return a description of the first mismatch; default compares exact JSON and order. */
+  compare?: (
+    real: readonly unknown[],
+    mock: readonly unknown[],
+    table: ResourceTable,
+  ) => string | undefined
 }
 
 const webhookPayload = (events: readonly unknown[]) => JSON.stringify(events)
@@ -49,7 +57,8 @@ const webhookPayload = (events: readonly unknown[]) => JSON.stringify(events)
 const webhookEventNames = (events: readonly unknown[]) =>
   events.map((event) => {
     if (typeof event !== "object" || event === null || Array.isArray(event)) return "unknown"
-    const eventType = (event as Record<string, unknown>).event_type
+    const eventType =
+      (event as Record<string, unknown>).event_type ?? (event as Record<string, unknown>).type
     return typeof eventType === "string" ? eventType : "unknown"
   })
 
@@ -259,6 +268,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   let done = 0
   const width = String(numRuns).length
   const coverage: Record<string, number> = {}
+  let lastWalkFailure: ParityError | undefined
 
   const commands = fc.commands(
     [
@@ -268,6 +278,9 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
         ...(options.invalidProbability === undefined
           ? {}
           : { invalidProbability: options.invalidProbability }),
+        ...(options.missingProbability === undefined
+          ? {}
+          : { missingProbability: options.missingProbability }),
         ...(options.weights === undefined ? {} : { weights: options.weights }),
         ...(options.coverageBias === undefined ? {} : { coverageBias: options.coverageBias }),
         coverage,
@@ -277,12 +290,14 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
   )
 
   const property = fc.asyncProperty(commands, async (steps) => {
+    lastWalkFailure = undefined
     const walkNumber = walks + 1
     const gap = lastWalkEnd + (clockSkewSeconds + 1) * 1000 - now()
     if (lastWalkEnd > 0 && gap > 0) await sleep(gap)
     const table = new ResourceTable()
     const scope: Scope = { runId, walkStartUnix: Math.floor(now() / 1000) - clockSkewSeconds }
     const mock = await options.mock.create()
+    await options.webhooks?.beforeWalk?.(scope)
     const context: ExecutionContext = {
       provider: options.provider,
       document: options.spec,
@@ -326,18 +341,23 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
     let webhookEvents: WalkWebhookEvents | undefined
     const firstStep = [...steps][0]
     const firstCommand = firstStep instanceof Step ? firstStep.command : ({} as LogicalCommand)
-    if (options.webhooks) {
-      const realEvents = await options.webhooks.collectReal(scope)
+    // A request mismatch takes precedence: the mock may have emitted an event for a request
+    // Stripe rejected, and comparing that event would hide the original API divergence.
+    if (options.webhooks && walkError === undefined) {
       const mockEvents = await options.webhooks.collectMock(mock, scope)
+      const realEvents = await options.webhooks.collectReal(scope, mockEvents)
       webhookEvents = { real: realEvents, mock: mockEvents }
       log(
         `  [${String(walkNumber).padStart(width, " ")}/${numRuns}] webhook events real=${realEvents.length} mock=${mockEvents.length} real_types=${webhookEventNames(realEvents).join(",") || "none"} mock_types=${webhookEventNames(mockEvents).join(",") || "none"}`,
       )
-      if (webhookPayload(realEvents) !== webhookPayload(mockEvents)) {
-        const firstDifference =
-          realEvents.length !== mockEvents.length
+      const firstDifference = options.webhooks.compare
+        ? options.webhooks.compare(realEvents, mockEvents, table)
+        : webhookPayload(realEvents) === webhookPayload(mockEvents)
+          ? undefined
+          : realEvents.length !== mockEvents.length
             ? `event count real=${realEvents.length} mock=${mockEvents.length}`
             : `event payload/order differs at index ${realEvents.findIndex((event, index) => JSON.stringify(event) !== JSON.stringify(mockEvents[index]))}`
+      if (firstDifference !== undefined) {
         webhookFailure = new ParityError(
           {
             provider: options.provider,
@@ -373,8 +393,14 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
       })
     }
 
-    if (webhookFailure) throw webhookFailure
-    if (walkError !== undefined) throw walkError
+    if (webhookFailure) {
+      lastWalkFailure = webhookFailure
+      throw webhookFailure
+    }
+    if (walkError !== undefined) {
+      if (walkError instanceof ParityError) lastWalkFailure = walkError
+      throw walkError
+    }
     if (ok) {
       done++
       const ops = context.history.length
@@ -399,10 +425,11 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
     })
   } catch (error) {
     const header = `✗ ${options.provider} parity FAILED (seed ${seed}, FC_SEED=${seed} to replay)`
-    if (error instanceof Error && error.cause instanceof ParityError) {
+    const cause =
+      error instanceof Error && error.cause instanceof ParityError ? error.cause : lastWalkFailure
+    if (cause) {
       // Surface the minimal reproduction: fast-check's shrunk counterexample plus the divergence.
-      const cause = error.cause
-      cause.message = `${header}\n${minimalCounterexample(error.message)}\n\n${cause.message}`
+      cause.message = `${header}\n${minimalCounterexample(error instanceof Error ? error.message : String(error))}\n\n${cause.message}`
       throw cause
     }
     if (error instanceof Error) error.message = `${header}\n${error.message}`

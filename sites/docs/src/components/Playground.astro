@@ -1,0 +1,85 @@
+---
+import type { Service } from "../lib/types.ts"
+import Icon from "./Icon.astro"
+
+interface Props {
+  service: Service
+}
+const { service: s } = Astro.props
+const operations = s.operations.filter((o) => o.supported)
+const data = { service: s.name, origin: s.origin, operation: s.playground.operation, operations }
+---
+
+<div class="pg" data-pg>
+  <script is:inline type="application/json" data-pg-data set:html={JSON.stringify(data).replace(/</g, "\\u003c")}></script>
+  <div class="pg-head">
+    <div class="pg-status" data-pg-status data-state="idle">
+      <span class="pulse"></span>
+      <span data-pg-status-text>Loads the real {s.packageName} into this tab on first send</span>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" data-pg-reset disabled><Icon name="reset" /> Reset state</button>
+  </div>
+  <div class="pg-body">
+    <aside class="pg-ops">
+      <input type="search" class="input" placeholder={`Filter ${operations.length} operations`} data-pg-filter aria-label="Filter operations" />
+      <ul data-pg-list>
+        {
+          operations.map((o) => (
+            <li>
+              <button type="button" data-op={o.id} title={o.summary ?? o.id}>
+                <span class="method" data-m={o.method}>{o.method}</span>
+                <span class="op-text">
+                  <span class="op-path">{o.path}</span>
+                  <span class="op-sum">{o.summary ?? o.id}</span>
+                </span>
+                {o.verified && <span class="op-ok" title="The sample request succeeds against a fresh mock" />}
+              </button>
+            </li>
+          ))
+        }
+      </ul>
+    </aside>
+    <div class="pg-main">
+      <form class="pg-line" data-pg-form>
+        <select class="pg-method" data-pg-method aria-label="Method">
+          {["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map((m) => <option>{m}</option>)}
+        </select>
+        <div class="pg-url">
+          <span class="pg-origin">{s.origin}</span>
+          <input type="text" data-pg-path aria-label="Path and query" spellcheck="false" autocomplete="off" />
+        </div>
+        <button type="submit" class="btn btn-accent btn-sm pg-send" data-pg-send><Icon name="play" /> Send <kbd data-mod-enter>⌘↵</kbd></button>
+      </form>
+      <p class="pg-summary" data-pg-summary></p>
+      <div class="pg-fill" data-pg-fill hidden></div>
+      <div class="pg-req">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-req-tab="body" aria-selected="true">Body</button>
+          <button type="button" role="tab" data-req-tab="headers" aria-selected="false">Headers</button>
+        </div>
+        <textarea class="pg-text" data-req-panel="body" data-pg-body spellcheck="false" aria-label="Request body" placeholder="No body"></textarea>
+        <textarea class="pg-text" data-req-panel="headers" data-pg-headers spellcheck="false" aria-label="Request headers, one per line" hidden></textarea>
+        <p class="pg-note" data-pg-note hidden></p>
+        {s.playground.authHint && <p class="pg-hint"><Icon name="key" /> <span>{s.playground.authHint}</span></p>}
+      </div>
+      <div class="pg-res">
+        <div class="tabs" role="tablist">
+          <button type="button" role="tab" data-res-tab="response" aria-selected="true">Response</button>
+          <button type="button" role="tab" data-res-tab="state" aria-selected="false">State</button>
+          <button type="button" role="tab" data-res-tab="journal" aria-selected="false">Journal</button>
+          <span class="pg-meta" data-pg-meta></span>
+        </div>
+        <div class="pg-out" data-res-panel="response">
+          <div class="pg-token" data-pg-token hidden></div>
+          <pre data-pg-response><span class="muted">Send a request to see the mock's response.</span></pre>
+        </div>
+        <div class="pg-out" data-res-panel="state" hidden><pre data-pg-state><span class="muted">Records the mock holds appear here after a request.</span></pre></div>
+        <div class="pg-out" data-res-panel="journal" hidden><pre data-pg-journal><span class="muted">Every request the mock received, from its own /__admin/requests journal.</span></pre></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  import "../client/playground.ts"
+</script>

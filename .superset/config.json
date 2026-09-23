@@ -1,0 +1,26 @@
+{
+  "name": "mockingbird",
+  "description": "Stateful test doubles for 40+ third-party APIs and SQL databases",
+  "setup": [".superset/setup.sh"],
+  "run": ["bun docs"],
+  "teardown": [],
+  "env": {
+    "TURBO_TEAM": "chrisvouga",
+    "TURBO_API": "https://turborepo.chrisvouga.dev",
+    "NODE_OPTIONS": "--max-old-space-size=4096"
+  },
+  "requirements": {
+    "node": ">=22.0.0",
+    "bun": ">=1.2.0"
+  },
+  "commands": {
+    "check": "bun run check",
+    "test": "bun run test",
+    "build": "bun run build",
+    "docs:build": "bun run docs:build",
+    "docs:dev": "bun run docs:dev",
+    "parity": "bun run parity:service",
+    "lint": "bun run lint",
+    "format": "bun run format"
+  }
+}

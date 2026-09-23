@@ -1,6 +1,8 @@
 import { Collection, IdSequence } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 
+export type Metadata = Record<string, string>
+
 export type Address = {
   city: string | null
   country: string | null
@@ -25,14 +27,16 @@ export type CustomerRecord = {
     custom_fields: CustomField[] | null
     default_payment_method: string | null
     footer: string | null
+    rendering_options: Record<string, unknown> | null
   }
-  metadata: Record<string, string>
+  metadata: Metadata
   name: string | null
-  next_invoice_sequence: number
   phone: string | null
   preferred_locales: string[]
   shipping: { address: Address; name: string; phone: string | null } | null
   tax_exempt: "none" | "exempt" | "reverse"
+  /** The test clock this customer (and its subscriptions) runs on. */
+  test_clock?: string | null
 }
 
 /** Deleted customers stay retrievable as tombstones. */
@@ -49,7 +53,7 @@ export type ProductRecord = {
   description: string | null
   images: string[]
   marketing_features: Array<{ name: string }>
-  metadata: Record<string, string>
+  metadata: Metadata
   name: string
   package_dimensions: PackageDimensions | null
   shippable: boolean | null
@@ -57,6 +61,7 @@ export type ProductRecord = {
   unit_label: string | null
   updated: number
   url: string | null
+  default_price?: string | null
 }
 
 export type Recurring = {
@@ -71,7 +76,7 @@ export type PriceRecord = {
   created: number
   currency: string
   lookup_key: string | null
-  metadata: Record<string, string>
+  metadata: Metadata
   nickname: string | null
   product: string
   recurring: Recurring | null
@@ -80,51 +85,37 @@ export type PriceRecord = {
   unit_amount_decimal: string
 }
 
-export type BillingDetails = {
-  address: Address | null
-  email: string | null
-  name: string | null
-  phone: string | null
-}
-
-export type CardOutcome =
-  | { kind: "success" }
-  | { kind: "authenticate" }
-  | { kind: "decline"; code: string; decline_code: string; message: string }
-
-export type CardDetails = {
-  brand: string
-  country: string
-  cvc_check: "pass" | "fail" | "unavailable" | "unchecked" | null
-  exp_month: number
-  exp_year: number
-  fingerprint: string
-  funding: string
-  last4: string
-  outcome: CardOutcome
-}
-
 export type PaymentMethodRecord = {
   id: string
-  allow_redisplay: "always" | "limited" | "unspecified"
-  billing_details: BillingDetails
-  card: CardDetails | null
+  type: string
   created: number
   customer: string | null
-  metadata: Record<string, string>
-  type: string
+  billing_details: Record<string, unknown>
+  card: Record<string, unknown> | null
+  metadata: Metadata
+  /** Present while the object is a card the mock can charge from a test token. */
+  token: string | null
+  /**
+   * Stripe refuses to reuse a card that was charged without being attached to a customer, or that
+   * was detached from one.
+   */
+  consumed?: boolean
 }
 
-export type Shipping = { address: Address; name: string; phone: string | null }
+export type PaymentIntentStatus =
+  | "requires_payment_method"
+  | "requires_confirmation"
+  | "requires_action"
+  | "processing"
+  | "requires_capture"
+  | "canceled"
+  | "succeeded"
 
 export type PaymentIntentRecord = {
   id: string
   amount: number
   amount_capturable: number
   amount_received: number
-  automatic_payment_methods: boolean
-  canceled_at: number | null
-  cancellation_reason: string | null
   capture_method: "automatic" | "automatic_async" | "manual"
   client_secret: string
   confirmation_method: "automatic" | "manual"
@@ -132,49 +123,46 @@ export type PaymentIntentRecord = {
   currency: string
   customer: string | null
   description: string | null
+  invoice: string | null
   last_payment_error: Record<string, unknown> | null
   latest_charge: string | null
-  metadata: Record<string, string>
-  next_action: Record<string, unknown> | null
+  metadata: Metadata
   payment_method: string | null
   payment_method_types: string[]
   receipt_email: string | null
-  setup_future_usage: "off_session" | "on_session" | null
-  shipping: Shipping | null
-  statement_descriptor: string | null
-  statement_descriptor_suffix: string | null
-  status:
-    | "canceled"
-    | "processing"
-    | "requires_action"
-    | "requires_capture"
-    | "requires_confirmation"
-    | "requires_payment_method"
-    | "succeeded"
+  setup_future_usage: string | null
+  status: PaymentIntentStatus
+  canceled_at: number | null
+  cancellation_reason: string | null
+  charge_ids: string[]
+  automatic_payment_methods?: { enabled: boolean; allow_redirects?: string } | null
+  next_action?: Record<string, unknown> | null
 }
+
+export type SetupIntentStatus =
+  | "requires_payment_method"
+  | "requires_confirmation"
+  | "requires_action"
+  | "processing"
+  | "canceled"
+  | "succeeded"
 
 export type SetupIntentRecord = {
   id: string
-  automatic_payment_methods: boolean
-  cancellation_reason: string | null
-  client_secret: string
   created: number
   customer: string | null
   description: string | null
-  last_setup_error: Record<string, unknown> | null
-  mandate: string | null
-  metadata: Record<string, string>
-  next_action: Record<string, unknown> | null
+  metadata: Metadata
   payment_method: string | null
   payment_method_types: string[]
-  status:
-    | "canceled"
-    | "processing"
-    | "requires_action"
-    | "requires_confirmation"
-    | "requires_payment_method"
-    | "succeeded"
-  usage: "off_session" | "on_session"
+  status: SetupIntentStatus
+  usage: string
+  client_secret: string
+  last_setup_error: Record<string, unknown> | null
+  cancellation_reason: string | null
+  canceled_at: number | null
+  automatic_payment_methods?: { enabled: boolean; allow_redirects?: string } | null
+  next_action?: Record<string, unknown> | null
 }
 
 export type ChargeRecord = {
@@ -182,78 +170,347 @@ export type ChargeRecord = {
   amount: number
   amount_captured: number
   amount_refunded: number
-  balance_transaction: string | null
-  billing_details: BillingDetails
   captured: boolean
   created: number
   currency: string
   customer: string | null
   description: string | null
-  failure_code: string | null
-  failure_message: string | null
-  metadata: Record<string, string>
+  disputed: boolean
+  invoice: string | null
+  metadata: Metadata
   paid: boolean
   payment_intent: string | null
   payment_method: string | null
-  receipt_email: string | null
   refunded: boolean
-  shipping: Shipping | null
-  statement_descriptor: string | null
-  statement_descriptor_suffix: string | null
-  status: "failed" | "pending" | "succeeded"
+  status: "succeeded" | "pending" | "failed"
+  refund_ids: string[]
+  failure_code?: string | null
+  failure_message?: string | null
+  outcome?: Record<string, unknown> | null
+  balance_transaction?: string | null
+  /** Rendered `payment_method_details.card` (brand, last4, funding, …), never a card number. */
+  card?: Record<string, unknown> | null
+  dispute?: string | null
 }
+
+export type RefundStatus = "pending" | "requires_action" | "succeeded" | "failed" | "canceled"
 
 export type RefundRecord = {
   id: string
   amount: number
-  balance_transaction: string | null
   charge: string | null
   created: number
   currency: string
-  metadata: Record<string, string>
+  metadata: Metadata
   payment_intent: string | null
   reason: string | null
-  status: "canceled" | "failed" | "pending" | "succeeded"
+  receipt_number: string | null
+  status: RefundStatus
+  failure_reason?: string | null
+  balance_transaction?: string | null
 }
 
-export type TokenRecord = {
+export type DisputeRecord = {
   id: string
-  card: CardDetails | null
-  client_ip: string | null
+  amount: number
+  charge: string
   created: number
-  type: "card"
-  used: boolean
+  currency: string
+  metadata: Metadata
+  payment_intent: string | null
+  reason: string
+  status: string
 }
 
-export type ConfirmationTokenRecord = {
+export type CustomerBalanceTransactionRecord = {
   id: string
+  amount: number
   created: number
-  expires_at: number
-  payment_method: string | null
-  return_url: string | null
-  setup_future_usage: "off_session" | "on_session" | null
-  shipping: Shipping | null
+  credit_note: string | null
+  currency: string
+  customer: string
+  description: string | null
+  ending_balance: number
+  invoice: string | null
+  metadata: Metadata
+  type: string
 }
 
-export type MandateRecord = {
+export type DiscountRecord = {
   id: string
-  created: number
+  coupon: string
+  promotion_code: string | null
   customer: string | null
-  payment_method: string
-  status: "active" | "inactive" | "pending"
-  type: "multi_use" | "single_use"
+  subscription: string | null
+  start: number
+  end: number | null
+  invoice?: string | null
+  checkout_session?: string | null
 }
 
-export type SourceRecord = {
+export type InvoiceLineRecord = {
   id: string
-  client_secret: string
+  amount: number
+  currency: string
+  description: string | null
+  discount_amounts: Array<Record<string, unknown>>
+  invoice_item: string | null
+  metadata: Metadata
+  period: { start: number; end: number }
+  price: string | null
+  quantity: number | null
+  proration: boolean
+  subtotal: number
+  type: "invoiceitem" | "subscription"
+  subscription?: string | null
+  subscription_item?: string | null
+}
+
+export type InvoiceStatus = "draft" | "open" | "paid" | "uncollectible" | "void"
+
+export type InvoiceRecord = {
+  id: string
+  amount_due: number
+  amount_paid: number
+  amount_remaining: number
+  attempt_count: number
+  attempted: boolean
+  auto_advance: boolean
+  billing_reason: string | null
+  charge: string | null
+  collection_method: "charge_automatically" | "send_invoice"
+  created: number
+  currency: string
+  customer: string | null
+  customer_email: string | null
+  customer_name: string | null
+  description: string | null
+  discount_ids: string[]
+  due_date: number | null
+  ending_balance: number | null
+  invoice_pdf: string | null
+  hosted_invoice_url: string | null
+  metadata: Metadata
+  next_payment_attempt: number | null
+  number: string | null
+  paid: boolean
+  payment_intent: string | null
+  period_end: number
+  period_start: number
+  status: InvoiceStatus
+  status_transitions: {
+    finalized_at: number | null
+    marked_uncollectible_at: number | null
+    paid_at: number | null
+    voided_at: number | null
+  }
+  subscription: string | null
+  subtotal: number
+  total: number
+  lines: InvoiceLineRecord[]
+  /** `subscription_details.metadata`: the subscription's metadata when the invoice was made. */
+  subscription_metadata?: Metadata | null
+  default_payment_method?: string | null
+  days_until_due?: number | null
+  paid_out_of_band?: boolean
+  /** Customer credit (negative balance) applied when the invoice was finalized. */
+  starting_balance?: number
+  /** Discount ids spent on this invoice, in line order, with the cents each took off. */
+  discount_amounts?: Array<{ discount: string; amount: number }>
+}
+
+export type InvoiceItemRecord = {
+  id: string
+  amount: number
+  created: number
+  currency: string
+  customer: string | null
+  date: number
+  description: string | null
+  discountable: boolean
+  invoice: string | null
+  metadata: Metadata
+  period: { start: number; end: number }
+  price: string | null
+  proration: boolean
+  quantity: number
+  unit_amount: number | null
+}
+
+export type SubscriptionItemRecord = {
+  id: string
+  created: number
+  metadata: Metadata
+  price: string
+  quantity: number | null
+  subscription: string
+  discount_ids?: string[]
+}
+
+export type SubscriptionStatus =
+  | "incomplete"
+  | "incomplete_expired"
+  | "trialing"
+  | "active"
+  | "past_due"
+  | "canceled"
+  | "unpaid"
+  | "paused"
+
+export type SubscriptionRecord = {
+  id: string
+  cancel_at: number | null
+  cancel_at_period_end: boolean
+  canceled_at: number | null
+  collection_method: "charge_automatically" | "send_invoice"
+  created: number
+  currency: string
+  customer: string
+  days_until_due: number | null
+  default_payment_method: string | null
+  discount_ids: string[]
+  ended_at: number | null
+  item_ids: string[]
+  latest_invoice: string | null
+  metadata: Metadata
+  pause_collection: Record<string, unknown> | null
+  schedule: string | null
+  start_date: number
+  status: SubscriptionStatus
+  trial_end: number | null
+  trial_start: number | null
+  current_period_start: number
+  current_period_end: number
+  billing_cycle_anchor?: number
+  cancellation_details?: { comment: string | null; feedback: string | null; reason: string | null }
+  /** Period end whose `invoice.upcoming` has already been sent. */
+  upcoming_sent_for?: number | null
+  payment_settings?: Record<string, unknown> | null
+}
+
+export type SubscriptionScheduleStatus =
+  | "not_started"
+  | "active"
+  | "completed"
+  | "released"
+  | "canceled"
+
+export type SubscriptionScheduleRecord = {
+  id: string
+  created: number
+  customer: string
+  end_behavior: string
+  metadata: Metadata
+  phases: Array<Record<string, unknown>>
+  released_at: number | null
+  released_subscription: string | null
+  status: SubscriptionScheduleStatus
+  subscription: string | null
+  canceled_at?: number | null
+  completed_at?: number | null
+}
+export type CouponRecord = {
+  id: string
+  amount_off: number | null
+  applies_to_products: string[]
   created: number
   currency: string | null
+  currency_options: Record<string, { amount_off: number }>
+  duration: "forever" | "once" | "repeating"
+  duration_in_months: number | null
+  livemode: false
+  max_redemptions: number | null
+  metadata: Metadata
+  name: string | null
+  percent_off: number | null
+  redeem_by: number | null
+  times_redeemed: number
+  valid: boolean
+}
+
+export type PromotionCodeRecord = {
+  id: string
+  active: boolean
+  code: string
+  coupon: string
+  created: number
   customer: string | null
-  flow: "none" | "redirect" | "code_verification"
-  status: "chargeable" | "consumed" | "canceled" | "failed" | "pending"
+  expires_at: number | null
+  max_redemptions: number | null
+  metadata: Metadata
+  restrictions: {
+    first_time_transaction: boolean
+    minimum_amount: number | null
+    minimum_amount_currency: string | null
+  }
+  times_redeemed: number
+}
+
+export type WebhookEventRecord = {
+  id: string
   type: string
-  card: CardDetails | null
+  created: number
+  /** Partition token of the account whose key produced the event; never rendered. */
+  account: string
+  body: string
+  data: { object: Record<string, unknown>; previous_attributes?: Record<string, unknown> }
+}
+
+export type WebhookDeliveryAttemptRecord = {
+  message_id: string
+  account: string
+  attempt: number
+  scheduled_at: string
+  timeout_ms: number
+  acknowledged: boolean
+}
+
+export type CheckoutSessionLineRecord = {
+  id: string
+  amount_subtotal: number
+  amount_total: number
+  currency: string
+  description: string | null
+  price: string | null
+  quantity: number | null
+  unit_amount: number | null
+  amount_discount?: number
+}
+
+export type CheckoutSessionStatus = "open" | "complete" | "expired"
+
+export type CheckoutSessionRecord = {
+  id: string
+  amount_subtotal: number
+  amount_total: number
+  cancel_url: string | null
+  created: number
+  currency: string
+  customer: string | null
+  customer_creation: string | null
+  expires_at: number
+  line_items: CheckoutSessionLineRecord[]
+  livemode: false
+  metadata: Metadata
+  mode: "payment" | "setup" | "subscription"
+  payment_intent: string | null
+  payment_status: "paid" | "unpaid" | "no_payment_required"
+  setup_intent: string | null
+  status: CheckoutSessionStatus
+  subscription: string | null
+  success_url: string | null
+  url: string
+  amount_discount?: number
+  discount_refs?: Array<{ coupon: string | null; promotion_code: string | null }>
+  payment_intent_data?: {
+    metadata: Metadata
+    setup_future_usage: string | null
+    description: string | null
+  }
+  subscription_data?: { metadata: Metadata; trial_end: number | null }
+  payment_method_types?: string[]
+  invoice?: string | null
+  custom_text?: Record<string, unknown> | null
 }
 
 export type BalanceTransactionRecord = {
@@ -271,201 +528,13 @@ export type BalanceTransactionRecord = {
   type: string
 }
 
-export type CustomerBalanceTransactionRecord = {
-  id: string
-  amount: number
-  created: number
-  currency: string
-  customer: string
-  description: string | null
-  ending_balance: number
-  metadata: Record<string, string>
-  type: string
-}
-
-export type SubscriptionItemRecord = {
+export type TestClockRecord = {
   id: string
   created: number
-  current_period_end: number
-  current_period_start: number
-  metadata: Record<string, string>
-  price: string
-  quantity: number
-  subscription: string
-}
-
-export type SubscriptionRecord = {
-  id: string
-  cancel_at: number | null
-  cancel_at_period_end: boolean
-  canceled_at: number | null
-  collection_method: "charge_automatically" | "send_invoice"
-  created: number
-  currency: string
-  current_period_end: number
-  current_period_start: number
-  customer: string
-  days_until_due: number | null
-  default_payment_method: string | null
-  description: string | null
-  ended_at: number | null
-  items: string[]
-  latest_invoice: string | null
-  metadata: Record<string, string>
-  start_date: number
-  status:
-    | "active"
-    | "canceled"
-    | "incomplete"
-    | "incomplete_expired"
-    | "past_due"
-    | "paused"
-    | "trialing"
-    | "unpaid"
-  trial_end: number | null
-  trial_start: number | null
-}
-
-export type InvoiceLineRecord = {
-  id: string
-  amount: number
-  currency: string
-  description: string | null
-  period: { start: number; end: number }
-  price: string | null
-  quantity: number
-}
-
-export type InvoiceRecord = {
-  id: string
-  amount_paid: number
-  attempt_count: number
-  auto_advance: boolean
-  billing_reason: string
-  collection_method: "charge_automatically" | "send_invoice"
-  created: number
-  currency: string
-  customer: string
-  default_payment_method: string | null
-  description: string | null
-  due_date: number | null
-  ending_balance: number
-  finalized_at: number | null
-  lines: InvoiceLineRecord[]
-  metadata: Record<string, string>
-  number: string | null
-  paid_at: number | null
-  payment_intent: string | null
-  period_end: number
-  period_start: number
-  preview: boolean
-  starting_balance: number
-  status: "draft" | "open" | "paid" | "uncollectible" | "void"
-  subscription: string | null
-  voided_at: number | null
-}
-
-export type InvoiceItemRecord = {
-  id: string
-  amount: number
-  currency: string
-  customer: string
-  date: number
-  description: string | null
-  invoice: string | null
-  metadata: Record<string, string>
-  period: { start: number; end: number }
-  price: string | null
-  quantity: number
-}
-
-export type CouponRecord = {
-  id: string
-  amount_off: number | null
-  created: number
-  currency: string | null
-  duration: "forever" | "once" | "repeating"
-  duration_in_months: number | null
-  max_redemptions: number | null
-  metadata: Record<string, string>
+  deletes_after: number
+  frozen_time: number
   name: string | null
-  percent_off: number | null
-  redeem_by: number | null
-  times_redeemed: number
-  valid: boolean
-}
-
-export type PromotionCodeRecord = {
-  id: string
-  active: boolean
-  code: string
-  coupon: string
-  created: number
-  customer: string | null
-  expires_at: number | null
-  max_redemptions: number | null
-  metadata: Record<string, string>
-  times_redeemed: number
-}
-
-export type TaxRateRecord = {
-  id: string
-  active: boolean
-  country: string | null
-  created: number
-  description: string | null
-  display_name: string
-  inclusive: boolean
-  jurisdiction: string | null
-  metadata: Record<string, string>
-  percentage: number
-}
-
-export type CheckoutSessionRecord = {
-  id: string
-  cancel_url: string | null
-  client_reference_id: string | null
-  created: number
-  currency: string | null
-  customer: string | null
-  customer_email: string | null
-  expires_at: number
-  metadata: Record<string, string>
-  mode: "payment" | "setup" | "subscription"
-  payment_intent: string | null
-  payment_method_types: string[]
-  payment_status: "no_payment_required" | "paid" | "unpaid"
-  setup_intent: string | null
-  status: "complete" | "expired" | "open"
-  submit_type: string | null
-  subscription: string | null
-  success_url: string | null
-  ui_mode: "elements" | "embedded_page" | "hosted_page"
-  url: string | null
-  amount_total: number | null
-}
-
-export type PaymentLinkRecord = {
-  id: string
-  active: boolean
-  allow_promotion_codes: boolean
-  billing_address_collection: "auto" | "required"
-  currency: string
-  customer_creation: "always" | "if_required"
-  line_items: Array<{ price: string; quantity: number }>
-  metadata: Record<string, string>
-  payment_method_collection: "always" | "if_required"
-  submit_type: "auto" | "book" | "donate" | "pay" | "subscribe"
-  url: string
-}
-
-export type PortalSessionRecord = {
-  id: string
-  configuration: string
-  created: number
-  customer: string
-  return_url: string | null
-  url: string
+  status: "ready" | "advancing" | "internal_failure"
 }
 
 export type WebhookEndpointRecord = {
@@ -474,59 +543,15 @@ export type WebhookEndpointRecord = {
   created: number
   description: string | null
   enabled_events: string[]
-  metadata: Record<string, string>
+  metadata: Metadata
   secret: string
-  status: "disabled" | "enabled"
+  status: "enabled" | "disabled"
   url: string
 }
 
-export type EventRecord = {
-  id: string
-  api_version: string
-  created: number
-  data: { object: Record<string, unknown> }
-  pending_webhooks: number
-  request: { id: string | null; idempotency_key: string | null }
-  type: string
-}
-
-export type PayoutRecord = {
-  id: string
-  amount: number
-  arrival_date: number
-  created: number
-  currency: string
-  description: string | null
-  metadata: Record<string, string>
-  method: "instant" | "standard"
-  statement_descriptor: string | null
-  status: "canceled" | "failed" | "in_transit" | "paid" | "pending"
-  type: "bank_account" | "card"
-}
-
-export type IdempotencyRecord = {
-  body: unknown
-  fingerprint: string
-  status: number
-}
-
-export type CustomerSessionRecord = {
-  client_secret: string
-  components: Record<string, { enabled: boolean }>
-  created: number
-  customer: string
-  expires_at: number
-}
-
-export type EphemeralKeyRecord = {
-  id: string
-  created: number
-  expires: number
-  secret: string
-  customer: string | null
-}
-
-export class StripeState {
+/** Every record type the Stripe mock stores, addressed per account. */
+export class AccountState {
+  readonly account: string
   readonly customers: Collection<CustomerEntry>
   readonly products: Collection<ProductRecord>
   readonly prices: Collection<PriceRecord>
@@ -535,63 +560,154 @@ export class StripeState {
   readonly setupIntents: Collection<SetupIntentRecord>
   readonly charges: Collection<ChargeRecord>
   readonly refunds: Collection<RefundRecord>
-  readonly tokens: Collection<TokenRecord>
-  readonly confirmationTokens: Collection<ConfirmationTokenRecord>
-  readonly mandates: Collection<MandateRecord>
-  readonly sources: Collection<SourceRecord>
-  readonly balanceTransactions: Collection<BalanceTransactionRecord>
-  readonly customerBalanceTransactions: Collection<CustomerBalanceTransactionRecord>
-  readonly subscriptions: Collection<SubscriptionRecord>
-  readonly subscriptionItems: Collection<SubscriptionItemRecord>
-  readonly invoices: Collection<InvoiceRecord>
-  readonly invoiceItems: Collection<InvoiceItemRecord>
+  readonly disputes: Collection<DisputeRecord>
+  readonly balanceTransactions: Collection<CustomerBalanceTransactionRecord>
   readonly coupons: Collection<CouponRecord>
   readonly promotionCodes: Collection<PromotionCodeRecord>
-  readonly taxRates: Collection<TaxRateRecord>
+  readonly discounts: Collection<DiscountRecord>
   readonly checkoutSessions: Collection<CheckoutSessionRecord>
-  readonly paymentLinks: Collection<PaymentLinkRecord>
-  readonly portalSessions: Collection<PortalSessionRecord>
+  readonly invoices: Collection<InvoiceRecord>
+  readonly invoiceItems: Collection<InvoiceItemRecord>
+  readonly subscriptions: Collection<SubscriptionRecord>
+  readonly subscriptionItems: Collection<SubscriptionItemRecord>
+  readonly subscriptionSchedules: Collection<SubscriptionScheduleRecord>
+  readonly events: Collection<WebhookEventRecord>
+  readonly ledger: Collection<BalanceTransactionRecord>
+  readonly testClocks: Collection<TestClockRecord>
   readonly webhookEndpoints: Collection<WebhookEndpointRecord>
-  readonly events: Collection<EventRecord>
-  readonly payouts: Collection<PayoutRecord>
-  readonly idempotency: Collection<IdempotencyRecord>
-  readonly customerSessions: Collection<CustomerSessionRecord>
-  readonly ephemeralKeys: Collection<EphemeralKeyRecord>
+  /** Bookkeeping (e.g. whether the recorded catalog was seeded). */
+  readonly meta: Collection<Record<string, unknown>>
+  readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttemptRecord>
+  /** Every collection by name, so state can be copied between partitions generically. */
+  readonly collections: Record<string, Collection<unknown>>
+
+  constructor(sqlite: SqliteClient, namespace: string, account: string) {
+    this.account = account
+    const collection = <T>(base: string) =>
+      new Collection<T>(sqlite, namespace, `${base}@${account}`)
+    this.customers = collection<CustomerEntry>("customers")
+    this.products = collection<ProductRecord>("products")
+    this.prices = collection<PriceRecord>("prices")
+    this.paymentMethods = collection<PaymentMethodRecord>("payment_methods")
+    this.paymentIntents = collection<PaymentIntentRecord>("payment_intents")
+    this.setupIntents = collection<SetupIntentRecord>("setup_intents")
+    this.charges = collection<ChargeRecord>("charges")
+    this.refunds = collection<RefundRecord>("refunds")
+    this.disputes = collection<DisputeRecord>("disputes")
+    this.balanceTransactions = collection<CustomerBalanceTransactionRecord>("balance_transactions")
+    this.coupons = collection<CouponRecord>("coupons")
+    this.promotionCodes = collection<PromotionCodeRecord>("promotion_codes")
+    this.discounts = collection<DiscountRecord>("discounts")
+    this.checkoutSessions = collection<CheckoutSessionRecord>("checkout_sessions")
+    this.invoices = collection<InvoiceRecord>("invoices")
+    this.invoiceItems = collection<InvoiceItemRecord>("invoice_items")
+    this.subscriptions = collection<SubscriptionRecord>("subscriptions")
+    this.subscriptionItems = collection<SubscriptionItemRecord>("subscription_items")
+    this.subscriptionSchedules = collection<SubscriptionScheduleRecord>("subscription_schedules")
+    this.events = collection<WebhookEventRecord>("events")
+    this.ledger = collection<BalanceTransactionRecord>("ledger")
+    this.testClocks = collection<TestClockRecord>("test_clocks")
+    this.webhookEndpoints = collection<WebhookEndpointRecord>("webhook_endpoints")
+    this.meta = collection<Record<string, unknown>>("meta")
+    this.webhookDeliveryAttempts = collection<WebhookDeliveryAttemptRecord>(
+      "webhook_delivery_attempts",
+    )
+    this.collections = {
+      balance_transactions: this.balanceTransactions,
+      charges: this.charges,
+      checkout_sessions: this.checkoutSessions,
+      coupons: this.coupons,
+      customers: this.customers,
+      discounts: this.discounts,
+      disputes: this.disputes,
+      events: this.events,
+      invoice_items: this.invoiceItems,
+      invoices: this.invoices,
+      ledger: this.ledger,
+      meta: this.meta,
+      test_clocks: this.testClocks,
+      webhook_endpoints: this.webhookEndpoints,
+      payment_intents: this.paymentIntents,
+      payment_methods: this.paymentMethods,
+      prices: this.prices,
+      products: this.products,
+      promotion_codes: this.promotionCodes,
+      refunds: this.refunds,
+      setup_intents: this.setupIntents,
+      subscription_items: this.subscriptionItems,
+      subscription_schedules: this.subscriptionSchedules,
+      subscriptions: this.subscriptions,
+      webhook_delivery_attempts: this.webhookDeliveryAttempts,
+    }
+  }
+
+  /**
+   * Copy every record of another partition into this one.
+   *
+   * Used to seed an instance before a lockstep walk: a side that was warmed without this instance
+   * (the oracle in a mock↔mock run) hands over the state its walk produced, without replaying
+   * requests.
+   */
+  importFrom(source: AccountState): void {
+    for (const [name, target] of Object.entries(this.collections)) {
+      const origin = source.collections[name]
+      if (origin === undefined) continue
+      for (const entry of origin.list({ order: "oldest" }))
+        target.insert(entry.id, entry.value as never)
+    }
+  }
+}
+
+export class StripeState {
+  private readonly partitions = new Map<string, AccountState>()
   readonly ids: IdSequence
 
-  constructor(sqlite: SqliteClient, namespace: string) {
-    const collection = <T>(name: string) => new Collection<T>(sqlite, namespace, name)
-    this.customers = collection("customers")
-    this.products = collection("products")
-    this.prices = collection("prices")
-    this.paymentMethods = collection("payment_methods")
-    this.paymentIntents = collection("payment_intents")
-    this.setupIntents = collection("setup_intents")
-    this.charges = collection("charges")
-    this.refunds = collection("refunds")
-    this.tokens = collection("tokens")
-    this.confirmationTokens = collection("confirmation_tokens")
-    this.mandates = collection("mandates")
-    this.sources = collection("sources")
-    this.balanceTransactions = collection("balance_transactions")
-    this.customerBalanceTransactions = collection("customer_balance_transactions")
-    this.subscriptions = collection("subscriptions")
-    this.subscriptionItems = collection("subscription_items")
-    this.invoices = collection("invoices")
-    this.invoiceItems = collection("invoice_items")
-    this.coupons = collection("coupons")
-    this.promotionCodes = collection("promotion_codes")
-    this.taxRates = collection("tax_rates")
-    this.checkoutSessions = collection("checkout_sessions")
-    this.paymentLinks = collection("payment_links")
-    this.portalSessions = collection("portal_sessions")
-    this.webhookEndpoints = collection("webhook_endpoints")
-    this.events = collection("events")
-    this.payouts = collection("payouts")
-    this.idempotency = collection("idempotency")
-    this.customerSessions = collection("customer_sessions")
-    this.ephemeralKeys = collection("ephemeral_keys")
+  constructor(
+    private readonly sqlite: SqliteClient,
+    private readonly namespace: string,
+  ) {
     this.ids = new IdSequence(sqlite, namespace, "stripe")
+  }
+
+  /** Account-scoped collections; the same API key always resolves to the same partition. */
+  for(account: string): AccountState {
+    const cached = this.partitions.get(account)
+    if (cached) return cached
+    const state = new AccountState(this.sqlite, this.namespace, account)
+    this.partitions.set(account, state)
+    return state
+  }
+
+  /**
+   * Account partitions with any state, optionally narrowed to one. Partitions are discovered
+   * from storage too, so admin lookups and clock ticks reach accounts restored from a snapshot.
+   */
+  accounts(account?: string): AccountState[] {
+    if (account !== undefined) return [this.for(account)]
+    const stored = this.sqlite
+      .prepare("SELECT DISTINCT collection FROM mockingbird_records WHERE namespace = ?")
+      .all<{ collection: string }>(this.namespace)
+      .map((row) => row.collection.split("@")[1])
+      .filter((name): name is string => name !== undefined && name !== "")
+    const names = new Set([...this.partitions.keys(), ...stored])
+    return [...names].sort().map((name) => this.for(name))
+  }
+
+  /**
+   * Copy every partition and id counter of `source` into this instance (seeding a lockstep walk).
+   * Counters come along so freshly minted ids cannot collide with the seeded ones.
+   */
+  importFrom(source: StripeState): void {
+    for (const partition of source.accounts()) this.for(partition.account).importFrom(partition)
+    const sequences = source.sqlite
+      .prepare("SELECT name, kind, value FROM mockingbird_sequences WHERE namespace = ?")
+      .all<{ name: string; kind: string; value: number }>(source.namespace)
+    const upsert = this.sqlite.prepare(
+      `INSERT INTO mockingbird_sequences (namespace, name, kind, value) VALUES (?, ?, ?, ?)
+       ON CONFLICT(namespace, name, kind) DO UPDATE SET value = excluded.value`,
+    )
+    for (const sequence of sequences)
+      upsert.run(this.namespace, sequence.name, sequence.kind, sequence.value)
   }
 
   async requestLogUrl() {

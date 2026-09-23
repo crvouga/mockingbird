@@ -1,0 +1,547 @@
+openapi: 3.1.0
+info:
+  title: Formbricks client + management API (Mockingbird subset, Geviti fork)
+  description: |
+    Stateful mock subset of Formbricks as our fork (geviti-formbrick) serves it: the client
+    environment state (surveys) and response creation the member app and backend use, the v1
+    management API for responses and surveys (`x-api-key`), and the widget script the web SDK
+    loads. Errors use the fork's `{code, message, details}` shape
+    (`apps/web/app/lib/api/response.ts`).
+  version: "1"
+  x-mockingbird-upstream:
+    note: >-
+      Hand-authored from the fork's route handlers (v1 client environment, v2 client responses,
+      v1 management responses/surveys) and our consumers: M/lib/dynamic-form/dynamic-form-service/
+      formbricks.ts, B/erx/services/erx-forms.service.ts, B/onboarding-tasks/formbricks-intake.service.ts,
+      tooling/formbricks-cli, and the responseFinished webhook receiver.
+servers:
+  - url: https://forms.gogeviti.com
+paths:
+  /api/v1/client/{environmentId}/environment:
+    parameters:
+      - $ref: "#/components/parameters/EnvironmentId"
+    get:
+      operationId: GetEnvironmentState
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The environment state the SDK caches (surveys, action classes, project)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [data, expiresAt]
+                    properties:
+                      data:
+                        type: object
+                        required: [surveys, actionClasses, project]
+                        properties:
+                          surveys:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/Survey"
+                          actionClasses:
+                            type: array
+                            items:
+                              type: object
+                          project:
+                            type: object
+                      expiresAt:
+                        type: string
+                        x-mockingbird-volatile:
+                          kind: timestamp
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v2/client/{environmentId}/responses:
+    parameters:
+      - $ref: "#/components/parameters/EnvironmentId"
+    post:
+      operationId: CreateClientResponse
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [surveyId, finished, data]
+              properties:
+                surveyId:
+                  type: string
+                  x-mockingbird-resource-ref:
+                    type: survey
+                    missing: czzzzzzzzzzzzzzzzzzzzzzzz
+                finished:
+                  type: boolean
+                data:
+                  $ref: "#/components/schemas/ResponseData"
+                userId:
+                  type: ["string", "null"]
+                  minLength: 1
+                  maxLength: 120
+                contactId:
+                  type: ["string", "null"]
+                displayId:
+                  type: ["string", "null"]
+                singleUseId:
+                  type: ["string", "null"]
+                endingId:
+                  type: ["string", "null"]
+                language:
+                  type: string
+                  maxLength: 10
+                variables:
+                  type: object
+                ttc:
+                  type: object
+                  additionalProperties:
+                    type: number
+                meta:
+                  type: object
+                  properties:
+                    source:
+                      type: string
+                    url:
+                      type: string
+                    action:
+                      type: string
+                    gevitiUserId:
+                      type: string
+                    cognitoSub:
+                      type: string
+      responses:
+        "200":
+          description: The created response's id
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                        x-mockingbird-resource:
+                          type: response
+                          identity: true
+                      quotaFull:
+                        type: boolean
+        "400":
+          $ref: "#/components/responses/Error"
+        "403":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/management/responses:
+    get:
+      operationId: ListResponses
+      security:
+        - apiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: surveyId
+          in: query
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: survey
+              missing: czzzzzzzzzzzzzzzzzzzzzzzz
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: skip
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 100
+      responses:
+        "200":
+          description: Responses, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/management/responses/{responseId}:
+    parameters:
+      - name: responseId
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: response
+            missing: czzzzzzzzzzzzzzzzzzzzzzzy
+    get:
+      operationId: GetResponse
+      security:
+        - apiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: One response
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Response"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/management/surveys:
+    get:
+      operationId: ListSurveys
+      security:
+        - apiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: environmentId
+          in: query
+          schema:
+            type: string
+            enum: [cmlhiza9j0009lj01my5c1g0q, cmlhiza9c0004lj01jbuhp0nz]
+      responses:
+        "200":
+          description: Surveys
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Survey"
+        "401":
+          $ref: "#/components/responses/Error"
+    post:
+      operationId: CreateSurvey
+      security:
+        - apiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [environmentId, name]
+              properties:
+                environmentId:
+                  type: string
+                  enum: [cmlhiza9j0009lj01my5c1g0q, cmlhiza9c0004lj01jbuhp0nz]
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                type:
+                  type: string
+                  enum: [app, link]
+                status:
+                  type: string
+                  enum: [draft, inProgress, paused, completed]
+                questions:
+                  type: array
+                  maxItems: 3
+                  items:
+                    $ref: "#/components/schemas/Element"
+                blocks:
+                  type: array
+                  maxItems: 3
+                  items:
+                    type: object
+                    required: [id, elements]
+                    properties:
+                      id:
+                        type: string
+                        minLength: 1
+                        maxLength: 30
+                      name:
+                        type: string
+                        maxLength: 30
+                      elements:
+                        type: array
+                        maxItems: 3
+                        items:
+                          $ref: "#/components/schemas/Element"
+      responses:
+        "200":
+          description: The created survey
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Survey"
+        "400":
+          $ref: "#/components/responses/Error"
+        "401":
+          $ref: "#/components/responses/Error"
+  /api/v1/management/surveys/{surveyId}:
+    parameters:
+      - name: surveyId
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: survey
+            missing: czzzzzzzzzzzzzzzzzzzzzzzz
+    get:
+      operationId: GetSurvey
+      security:
+        - apiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: One survey
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Survey"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /js/formbricks.umd.cjs:
+    get:
+      operationId: GetWidgetScript
+      description: The widget bundle the web SDK loads; served as a no-op script.
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: A no-op script defining `window.formbricks`
+          content:
+            application/javascript:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+  parameters:
+    EnvironmentId:
+      name: environmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [cmlhiza9j0009lj01my5c1g0q, cmlhiza9c0004lj01jbuhp0nz]
+  responses:
+    Error:
+      description: The fork's `{code, message, details}` error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [code, message, details]
+            properties:
+              code:
+                type: string
+                enum:
+                  - not_found
+                  - gone
+                  - bad_request
+                  - internal_server_error
+                  - unauthorized
+                  - method_not_allowed
+                  - not_authenticated
+                  - forbidden
+                  - too_many_requests
+              message:
+                type: string
+              details:
+                type: object
+  schemas:
+    ResponseData:
+      type: object
+      maxProperties: 5
+      additionalProperties:
+        anyOf:
+          - type: string
+            maxLength: 60
+          - type: number
+          - type: array
+            maxItems: 3
+            items:
+              type: string
+              maxLength: 30
+          - type: object
+            maxProperties: 3
+            additionalProperties:
+              type: string
+              maxLength: 30
+    Element:
+      type: object
+      required: [id, type, headline]
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 30
+        type:
+          type: string
+          enum: [openText, multipleChoiceSingle, multipleChoiceMulti, nps, rating, date, cta, consent]
+        headline:
+          type: object
+          required: [default]
+          properties:
+            default:
+              type: string
+              maxLength: 80
+        required:
+          type: boolean
+        inputType:
+          type: string
+          enum: [text, email, url, number, phone]
+        metadata:
+          type: object
+          properties:
+            intakeField:
+              type: string
+              maxLength: 40
+    Survey:
+      type: object
+      required: [id, name, type, status]
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: survey
+            identity: true
+        name:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+        environmentId:
+          type: string
+        questions:
+          type: ["array", "object"]
+        blocks:
+          type: array
+        createdAt:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updatedAt:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    Response:
+      type: object
+      required: [id, createdAt, updatedAt, surveyId, finished, data]
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: response
+            identity: true
+        createdAt:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updatedAt:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        surveyId:
+          type: string
+        displayId:
+          type: ["string", "null"]
+        contact:
+          type: ["object", "null"]
+          properties:
+            id:
+              type: string
+              x-mockingbird-volatile:
+                kind: id
+            userId:
+              type: string
+        contactAttributes:
+          type: ["object", "null"]
+        finished:
+          type: boolean
+        endingId:
+          type: ["string", "null"]
+        data:
+          description: An object, or (for some deployments) the same object as a JSON string.
+          type: ["object", "string"]
+        variables:
+          type: object
+        ttc:
+          type: object
+        tags:
+          type: array
+        meta:
+          type: object
+        singleUseId:
+          type: ["string", "null"]
+        language:
+          type: ["string", "null"]

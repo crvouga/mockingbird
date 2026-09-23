@@ -1,0 +1,150 @@
+---
+import type { Guide } from "../lib/types.ts"
+import Icon from "./Icon.astro"
+
+interface Props {
+  guide: Guide
+  repo: string
+}
+const { guide, repo } = Astro.props
+---
+
+<div class="guide">
+  <article class="guide-body">
+    <header class="page-head">
+      <nav class="crumbs" aria-label="Breadcrumb">
+        <a href="/docs">Docs</a>
+        <Icon name="chevron" />
+        <span aria-current="page">{guide.title}</span>
+      </nav>
+      <h1>{guide.title}</h1>
+      <p class="guide-source">
+        <code>docs/{guide.file}.md</code> · the same file GitHub renders ·
+        <a href={`${repo}/blob/main/docs/${guide.file}.md`} target="_blank" rel="noopener">Edit on GitHub</a> ·
+        <a href={`/docs/${guide.slug}.md`}>Markdown</a>
+      </p>
+    </header>
+    <div class="prose" set:html={guide.html} />
+    <slot />
+  </article>
+  {
+    guide.toc.length > 0 && (
+      <aside class="toc" aria-label="On this page">
+        <p>On this page</p>
+        <ul>
+          {guide.toc.map((t) => (
+            <li data-depth={t.depth}>
+              <a href={`#${t.slug}`}>{t.text}</a>
+            </li>
+          ))}
+        </ul>
+      </aside>
+    )
+  }
+</div>
+
+<script>
+  import "../client/toc.ts"
+</script>
+
+<style>
+  .guide {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 56px;
+  }
+
+  .guide-body {
+    min-width: 0;
+    max-width: 780px;
+  }
+
+  .crumbs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 16px;
+    color: var(--fg-subtle);
+    font-size: 13px;
+  }
+
+  .crumbs a:hover {
+    color: var(--fg);
+  }
+
+  .crumbs :global(.i) {
+    width: 13px;
+    height: 13px;
+    color: var(--fg-faint);
+  }
+
+  .guide-source {
+    margin-top: 12px;
+    color: var(--fg-subtle);
+    font-size: 13px;
+  }
+
+  .guide-source a {
+    color: var(--fg-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .guide-source code {
+    font-size: 12px;
+  }
+
+  .toc {
+    position: sticky;
+    top: calc(var(--header-h) + 24px);
+    align-self: start;
+    max-height: calc(100dvh - var(--header-h) - 48px);
+    overflow-y: auto;
+    padding-top: 56px;
+    font-size: 13px;
+  }
+
+  .toc p {
+    margin-bottom: 10px;
+    color: var(--fg);
+    font-weight: 600;
+  }
+
+  .toc ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-left: 1px solid var(--border);
+  }
+
+  .toc li a {
+    display: block;
+    margin-left: -1px;
+    padding: 4px 0 4px 12px;
+    border-left: 1px solid transparent;
+    color: var(--fg-subtle);
+    line-height: 1.4;
+  }
+
+  .toc li[data-depth="3"] a {
+    padding-left: 22px;
+  }
+
+  .toc li a:hover {
+    color: var(--fg);
+  }
+
+  .toc li a[aria-current="true"] {
+    border-left-color: var(--accent);
+    color: var(--fg);
+  }
+
+  @media (max-width: 1080px) {
+    .guide {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .toc {
+      display: none;
+    }
+  }
+</style>

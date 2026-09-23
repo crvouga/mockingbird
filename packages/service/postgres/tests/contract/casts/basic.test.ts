@@ -1,0 +1,20 @@
+import { parity, parityTyped } from "../helpers.ts";
+
+parity("int to text", [], "SELECT 42::text AS v, (-7)::text AS w");
+parity("text to int with whitespace", [], "SELECT '  42  '::int AS v, '+7'::int AS w, '-13'::int AS x");
+parity("CAST syntax", [], "SELECT CAST('99' AS int) AS v, CAST(1.99 AS text) AS w");
+parity("bool to text", [], "SELECT true::text AS t, false::text AS f");
+parity("text to bool", [], "SELECT 'true'::bool AS a, 'f'::bool AS b");
+parity("bool to int", [], "SELECT true::int AS t, false::int AS f");
+parity("int to bool", [], "SELECT 1::bool AS a, 0::bool AS b, 5::bool AS c, (-1)::bool AS d");
+parity("numeric to int rounds half away from zero", [], "SELECT 2.5::int AS a, 3.5::int AS b, (-2.5)::int AS c");
+parity("float8 to int rounds half to even", [], "SELECT 2.5::float8::int AS a, 3.5::float8::int AS b");
+parity("negative float8 to int rounds half to even", [], "SELECT (-2.5)::float8::int AS a, (-0.5)::float8::int AS b");
+parity("numeric to int2 and int8", [], "SELECT 2.5::int2 AS a, 2.5::int8 AS b");
+parity("float to numeric", [], "SELECT 1.5::float8::numeric AS v");
+parity("numeric to float8", [], "SELECT 1.5::numeric::float8 AS v");
+parity("int8 to int4 in range", [], "SELECT 123456789::int8::int4 AS v");
+parityTyped("cast result types", [], "SELECT 1::int8 AS a, '2'::numeric AS b, 3::float4 AS c");
+parity("text to numeric", [], "SELECT ' 1.25 '::numeric AS v, '1e2'::numeric AS w");
+parity("chained casts", [], "SELECT '42'::text::int::numeric::float8 AS v");
+parity("numeric text output keeps scale", [], "SELECT 1.500::text AS a, 10.0::text AS b");

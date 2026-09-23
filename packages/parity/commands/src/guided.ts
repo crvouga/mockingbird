@@ -20,7 +20,10 @@ import {
 } from "./explore.js"
 import type { OperationPlan } from "./plan.js"
 
-export type GuidedSampleOptions = Omit<CommandArbitraryOptions, "document" | "plans" | "weights"> & {
+export type GuidedSampleOptions = Omit<
+  CommandArbitraryOptions,
+  "document" | "plans" | "weights"
+> & {
   document: OpenAPIDocument
   plans: readonly OperationPlan[]
   weightFn?: DynamicWeightFn
@@ -60,9 +63,7 @@ export const sampleGuidedCommand = (
     ...(options.optionalProbability === undefined
       ? {}
       : { optionalProbability: options.optionalProbability }),
-    ...(options.bodyProbability === undefined
-      ? {}
-      : { bodyProbability: options.bodyProbability }),
+    ...(options.bodyProbability === undefined ? {} : { bodyProbability: options.bodyProbability }),
     ...(options.coverageBias === undefined ? {} : { coverageBias: options.coverageBias }),
     ...(options.coverage === undefined ? {} : { coverage: options.coverage }),
   }
@@ -78,9 +79,7 @@ export const sampleGuidedCommand = (
       numRuns: 1,
     })
     if (!sampled) continue
-    const command = options.reshapeCommand
-      ? options.reshapeCommand(sampled, state, rng)
-      : sampled
+    const command = options.reshapeCommand ? options.reshapeCommand(sampled, state, rng) : sampled
     if (!isEligible(command, (type) => state.resourceCounts[type] ?? 0)) continue
     return command
   }
@@ -138,9 +137,7 @@ export const generateGuidedWalk = (
       ...state,
       coverage: { ...coverage },
       history: [...history],
-      resourceCounts: hooks.count
-        ? resourceCountsFrom(hooks.count, types)
-        : state.resourceCounts,
+      resourceCounts: hooks.count ? resourceCountsFrom(hooks.count, types) : state.resourceCounts,
       step: step + 1,
     })
   }

@@ -1,77 +1,91 @@
-import { createHmac } from "node:crypto"
-import { document } from "./generated/openapi.js"
-import type { StripeState } from "./state.js"
-
-export const STRIPE_VERSION = document.info.version
-
-export const signWebhook = (secret: string, payload: string, timestamp: number) => {
-  const digest = createHmac("sha256", secret).update(`${timestamp}.${payload}`).digest("hex")
-  return `t=${timestamp},v1=${digest}`
-}
-
-const deliverable = (url: string) => {
-  try {
-    const host = new URL(url).hostname
-    return host === "localhost" || host === "127.0.0.1" || host.endsWith(".local")
-  } catch {
-    return false
-  }
-}
-
-const subscribed = (events: string[], type: string) => events.includes("*") || events.includes(type)
+import { jsonResponse, type OperationHandler } from "@crvouga/mockingbird-service"
+import { invalidRequest, resourceMissing } from "./errors.js"
+import { requestScope, type Services } from "./internal.js"
+import { clampLimit, matchesCreated } from "./list.js"
+import { queryParams } from "./params.js"
+import { renderEvent } from "./render.js"
+import type { WebhookEventRecord } from "./state.js"
 
 /**
- * Record an event and, for loopback webhook endpoints, deliver a signed POST before returning.
- * Delivery stays on loopback so random parity URLs never leave the process.
+ * The event ledger is keyed by insertion sequence, not by `evt_` id, so cursors resolve against
+ * the record's public id rather than its storage key. `list` already returns newest first.
  */
-export const recordEvent = async (
-  state: StripeState,
-  type: string,
-  object: Record<string, unknown>,
-  created: number,
-  idempotencyKey: string | null = null,
-) => {
-  const endpoints = await state.webhookEndpoints.list({
-    where: (endpoint) => endpoint.status === "enabled" && subscribed(endpoint.enabled_events, type),
-  })
-  const id = await state.ids.next("evt_")
-  const event = {
-    id,
-    object: "event",
-    api_version: STRIPE_VERSION,
-    created,
-    data: { object },
-    livemode: false,
-    pending_webhooks: endpoints.length,
-    request: { id: null, idempotency_key: idempotencyKey },
-    type,
+const pageEvents = (records: WebhookEventRecord[], params: Record<string, unknown>) => {
+  const startingAfter = params.starting_after
+  const endingBefore = params.ending_before
+  if (
+    typeof startingAfter === "string" &&
+    startingAfter !== "" &&
+    typeof endingBefore === "string" &&
+    endingBefore !== ""
+  )
+    throw invalidRequest(
+      "Received both starting_after and ending_before parameters. Please pass in only one.",
+    )
+  const type = typeof params.type === "string" ? params.type : undefined
+  const types = Array.isArray(params.types)
+    ? (params.types as unknown[]).filter((entry): entry is string => typeof entry === "string")
+    : []
+  const where = (record: WebhookEventRecord) =>
+    matchesCreated(record.created, params.created) &&
+    (type === undefined || type === "" || record.type === type) &&
+    (types.length === 0 || types.includes(record.type))
+  const cursorIndex = (id: string, param: string) => {
+    const index = records.findIndex((record) => record.id === id)
+    if (index === -1) throw resourceMissing("notification", id, param, 400)
+    return index
   }
-  await state.events.insert(id, {
-    id,
-    api_version: STRIPE_VERSION,
-    created,
-    data: { object },
-    pending_webhooks: endpoints.length,
-    request: { id: null, idempotency_key: idempotencyKey },
-    type,
-  })
-  const payload = JSON.stringify(event)
-  for (const endpoint of endpoints) {
-    if (!deliverable(endpoint.value.url)) continue
-    const header = signWebhook(endpoint.value.secret, payload, created)
-    try {
-      await fetch(endpoint.value.url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "stripe-signature": header,
-        },
-        body: payload,
-        signal: AbortSignal.timeout(1500),
-      })
-    } catch {
-      // The endpoint is optional. A refused loopback delivery must not fail the API call.
-    }
+  const limit = clampLimit(params.limit)
+  let data: WebhookEventRecord[]
+  let hasMore: boolean
+  if (typeof startingAfter === "string" && startingAfter !== "") {
+    const rest = records.slice(cursorIndex(startingAfter, "starting_after") + 1).filter(where)
+    data = rest.slice(0, limit)
+    hasMore = rest.length > limit
+  } else if (typeof endingBefore === "string" && endingBefore !== "") {
+    const before = records.slice(0, cursorIndex(endingBefore, "ending_before")).filter(where)
+    data = before.slice(Math.max(0, before.length - limit))
+    hasMore = before.length > limit
+  } else {
+    const rows = records.filter(where)
+    data = rows.slice(0, limit)
+    hasMore = rows.length > limit
   }
-  return event
+  return {
+    object: "list" as const,
+    data: data.map(renderEvent),
+    has_more: hasMore,
+    url: "/v1/events",
+  }
 }
+
+export const eventHandlers = (services: Services): Record<string, OperationHandler> => ({
+  GetEvents: async (context) => {
+    const scope = requestScope(services, context)
+    const records = scope.account.events.list({ order: "newest" }).map((entry) => entry.value)
+    // Cursors are checked in Stripe's parameter order, before `types`.
+    const cursor = (key: string) => (params: Record<string, unknown>) => {
+      const id = params[key]
+      if (typeof id === "string" && id !== "" && !records.some((record) => record.id === id))
+        throw resourceMissing("notification", id, key, 400)
+    }
+    const params = queryParams(context, {
+      validate: {
+        ending_before: cursor("ending_before"),
+        starting_after: cursor("starting_after"),
+      },
+    })
+    return jsonResponse(200, pageEvents(records, params))
+  },
+
+  GetEventsId: async (context) => {
+    const scope = requestScope(services, context)
+    queryParams(context)
+    const id = context.params.id ?? ""
+    const record = scope.account.events
+      .list({ order: "newest" })
+      .find((entry) => entry.value.id === id)?.value
+    if (!record) throw resourceMissing("event", id, "id")
+    return jsonResponse(200, renderEvent(record))
+  },
+})
