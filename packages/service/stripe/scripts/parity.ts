@@ -5,7 +5,7 @@ import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mocki
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, StripeAPI } from "../src/index.js"
 import { ACCOUNT_GLOBAL_OPS, QA_SURFACE_OPS } from "../src/qa-corpus.js"
-import { reshapeQaCommand } from "../src/reshape-qa.js"
+import { compareStripeWebhooks, startStripeWebhookOracle } from "./webhook-oracle.js"
 
 const STRIPE_HOST = "api.stripe.com"
 const TEST_KEY_PREFIXES = ["sk_test_", "rk_test_"]
@@ -21,7 +21,7 @@ const LIVE_EXCLUDED = [
 
 const USAGE = `stripe parity: differential walk against the real Stripe test API
 
-  bun run parity [-- --mode empty] [--only <operationIds>] [--include-unsafe] [--runs N] [--no-shrink] [--valid-only]
+  bun run parity [-- --mode empty] [--only <operationIds>] [--include-unsafe] [--runs N] [--no-shrink] [--valid-only] [--no-webhooks]
 
 Modes:
   empty   (default) compare a fresh mock against the real API over the QA surface allowlist
@@ -32,6 +32,7 @@ coverage of the same surface lives in stripe.qa.seed.property.test.ts (seeded lo
 two mock instances, no credentials).
 
 Credentials: MOCKINGBIRD_STRIPE_SECRET_KEY (sk_test_* / rk_test_*) or the self-hosted Vault.
+Webhook oracle: stripe-cli listen (test mode), forwarded to a local Hono collector.
 `
 
 type CliOptions = {
@@ -42,6 +43,7 @@ type CliOptions = {
   shrink: boolean
   /** Only well-formed requests (no malformed bodies, no fabricated ids). */
   validOnly: boolean
+  webhooks: boolean
   help: boolean
 }
 
@@ -53,6 +55,7 @@ const parseArgs = (argv: readonly string[]): CliOptions => {
     runs: undefined,
     shrink: true,
     validOnly: false,
+    webhooks: true,
     help: false,
   }
   for (let index = 0; index < argv.length; index += 1) {
@@ -61,6 +64,7 @@ const parseArgs = (argv: readonly string[]): CliOptions => {
     else if (arg === "--include-unsafe") options.includeUnsafe = true
     else if (arg === "--no-shrink") options.shrink = false
     else if (arg === "--valid-only") options.validOnly = true
+    else if (arg === "--no-webhooks") options.webhooks = false
     else if (arg === "--mode") {
       const value = argv[index + 1]
       index += 1
@@ -167,7 +171,7 @@ try {
   throw error
 }
 const secretKey = credentials.values.MOCKINGBIRD_STRIPE_SECRET_KEY
-if (!TEST_KEY_PREFIXES.some((prefix) => secretKey.startsWith(prefix))) {
+if (!secretKey || !TEST_KEY_PREFIXES.some((prefix) => secretKey.startsWith(prefix))) {
   console.error("stripe parity: refusing to run with a key that is not a test-mode key")
   process.exit(2)
 }
@@ -213,6 +217,8 @@ if (withHistory.length > 0) {
   )
 }
 
+const webhookOracle = options.webhooks ? await startStripeWebhookOracle(secretKey) : undefined
+let webhookCursor = 0
 try {
   await parity({
     provider: "stripe",
@@ -242,7 +248,6 @@ try {
       ),
     // The mock runs in-process on a busy machine; Stripe's own latency is not what we compare.
     latencyToleranceMs: 1_000,
-    reshapeCommand: reshapeQaCommand,
     real: {
       baseUrl,
       allowedHosts: [STRIPE_HOST],
@@ -253,6 +258,20 @@ try {
       create: () => new StripeAPI(),
       headers: () => ({ authorization: "Bearer sk_test_mockingbird" }),
     },
+    ...(webhookOracle
+      ? {
+          webhooks: {
+            beforeWalk: async () => {
+              webhookCursor = webhookOracle.cursor()
+            },
+            collectReal: async (_scope: unknown, mockEvents: readonly unknown[]) =>
+              webhookOracle.collect(webhookCursor, mockEvents.length),
+            collectMock: async (mock: unknown) =>
+              (mock as StripeAPI).webhookEvents().map((event) => JSON.parse(event.body) as unknown),
+            compare: compareStripeWebhooks,
+          },
+        }
+      : {}),
     redact: createRedactor(credentials.secrets),
     cleanup: async ({ table, real }) => {
       const del = (path: string) =>
@@ -288,5 +307,7 @@ try {
   })
 } catch (error) {
   console.error(`\n${error instanceof Error ? error.message : String(error)}`)
-  process.exit(1)
+  process.exitCode = 1
+} finally {
+  await webhookOracle?.close()
 }
