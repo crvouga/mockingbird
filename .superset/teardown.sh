@@ -1,61 +1,22 @@
-#!/bin/bash
-# Mockingbird teardown script for superset.sh harness
-# Cleans up build artifacts and temporary resources
+#!/usr/bin/env bash
+# Stop the docs dev server started by run.sh and release its port.
+# Setup itself does not leave a process behind; the server is started on demand
+# by the Run button. Deleting a workspace still has to stop that process and
+# give the port back, or the next workspace cannot reuse the slot.
+set -euo pipefail
 
-set -e
+# shellcheck source=/dev/null
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib.sh"
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
+stop_dev_server
 
-echo "🧹 Cleaning up Mockingbird..."
-
-# Clean build artifacts
-echo "📦 Removing dist/ directories..."
-find "$PROJECT_ROOT/packages" -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
-
-# Clean docs build
-echo "📚 Removing docs build..."
-rm -rf "$PROJECT_ROOT/sites/docs/dist" 2>/dev/null || true
-rm -rf "$PROJECT_ROOT/sites/docs/.astro" 2>/dev/null || true
-
-# Clean test artifacts
-echo "🧪 Removing test coverage..."
-rm -rf "$PROJECT_ROOT/.nyc_output" 2>/dev/null || true
-rm -rf "$PROJECT_ROOT/coverage" 2>/dev/null || true
-
-# Clean Turbo cache (optional - local only)
-if [ "$CLEAN_TURBO_CACHE" = "true" ]; then
-  echo "⚙️  Clearing Turbo cache..."
-  rm -rf "$PROJECT_ROOT/.turbo" 2>/dev/null || true
+if command -v python3 >/dev/null 2>&1; then
+  release_docs_port
+else
+  echo "python3 is not available; left the port allocation in place." >&2
+  exit 1
 fi
 
-# Clean node_modules (optional - full clean)
-if [ "$CLEAN_DEPENDENCIES" = "true" ]; then
-  echo "📦 Removing node_modules (this will require reinstall)..."
-  rm -rf "$PROJECT_ROOT/node_modules" 2>/dev/null || true
-  rm -rf "$PROJECT_ROOT/bun.lock.backup" 2>/dev/null || true
-fi
-
-# Clean temporary files
-echo "🗑️  Removing temporary files..."
-find "$PROJECT_ROOT" -type f -name "*.tmp" -delete 2>/dev/null || true
-find "$PROJECT_ROOT" -type f -name ".DS_Store" -delete 2>/dev/null || true
-
-# Report results
-echo ""
-echo "✅ Cleanup complete!"
-echo ""
-echo "Cleaned directories:"
-echo "  • packages/*/dist/"
-echo "  • sites/docs/dist"
-echo "  • .nyc_output"
-echo "  • coverage"
-echo ""
-if [ "$CLEAN_TURBO_CACHE" = "true" ]; then
-  echo "  • .turbo (cache cleared)"
-fi
-if [ "$CLEAN_DEPENDENCIES" = "true" ]; then
-  echo "  • node_modules (removed - run 'bun install' to restore)"
-fi
-echo ""
-echo "To restore: bun install && bun run build"
+rm -f "$DEV_PORT_FILE" "$PORTS_JSON"
+echo "Teardown complete."
