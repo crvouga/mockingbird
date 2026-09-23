@@ -1,5 +1,6 @@
 /**
- * Local replica of .github/workflows/ci.yml (minus the main-only release job).
+ * Local replica of .github/workflows/pr.yml (the pull-request gate).
+ * Publishing happens only after that gate is green and the PR is merged.
  *
  *   bun run check:full
  *   npm run check:full
@@ -85,7 +86,7 @@ async function commitlintJob(): Promise<void> {
   const base = await resolveBaseRef()
 
   if (onMain) {
-    console.log("On main: CI treats commitlint as a warning on push (enforced on PRs).")
+    console.log("On main: commitlint is a pull-request check. Merge commits are not linted.")
     const proc = Bun.spawn(["bunx", "commitlint", "--last", "--verbose"], {
       cwd: root,
       stdout: "inherit",
@@ -98,7 +99,7 @@ async function commitlintJob(): Promise<void> {
     }
     finished.push({ label: "Commitlint (--last, warning on main)", seconds: 0 })
     notes.push(
-      "commitlint on main is warning-only (matches CI push); PRs still fail on bad messages",
+      "commitlint is enforced on pull requests; a checkout of main only warns on the merge commit",
     )
     return
   }
@@ -136,13 +137,12 @@ async function commitlintJob(): Promise<void> {
 }
 
 console.log("mockingbird check:full")
-console.log("Mirrors .github/workflows/ci.yml — skipped: release/publish (main + OIDC only)")
+console.log(
+  "Mirrors .github/workflows/pr.yml — the pull-request gate. Release publishes after merge.",
+)
 if (process.platform !== "linux") {
   notes.push(`CI runs on ubuntu-latest; this host is ${process.platform}.`)
 }
-notes.push(
-  "Trunk policy (PRs target main) is enforced by the Required job only; not reproducible locally.",
-)
 
 job("install")
 await runStep("Install (frozen lockfile)", ["bun", "install", "--frozen-lockfile"])
@@ -162,6 +162,6 @@ console.log("=".repeat(72))
 for (const step of finished) console.log(`  ${step.seconds.toFixed(1).padStart(6)}s  ${step.label}`)
 console.log(`  ${total.toFixed(1).padStart(6)}s  total`)
 console.log("")
-console.log("Skipped: release (main + OIDC only).")
+console.log("Not a pull-request check: release (publishes on main after these checks pass).")
 for (const note of notes) console.log(`Note: ${note}`)
 console.log("")

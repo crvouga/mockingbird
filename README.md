@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-46-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-6-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-46-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
