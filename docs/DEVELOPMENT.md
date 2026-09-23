@@ -27,14 +27,14 @@ Install with `bun install` (uses [workspaces](https://bun.sh/docs/install/worksp
 
 ## Quality gates
 
-Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + check) without the network-only release job.
+Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates the pull-request gate end-to-end (install + commitlint + check). Passing that gate is the release decision.
 
-CI is one turbo graph: the `Check` job runs `bun run check` with `node_modules` in the GitHub Actions cache and task outputs in the shared self-hosted **Turborepo remote cache** (`https://turborepo.chrisvouga.dev`), so a PR only rebuilds and retests the packages it changed, and the release job replays build/pack results instead of rebuilding. Local runs share the same cache: root turbo scripts run under `vault run` ([`scripts/vault-run.ts`](../scripts/vault-run.ts)), which injects `TURBO_*` from Vault. CI gets them through Vault GitHub OIDC — no stored token. Setup: [docs/SECRETS.md](SECRETS.md).
+CI is one turbo graph: the `Check` job runs `bun run check` with `node_modules` in the GitHub Actions cache and task outputs in the shared self-hosted **Turborepo remote cache** (`https://turborepo.chrisvouga.dev`), so a PR only rebuilds and retests the packages it changed, and the release job replays that build instead of rebuilding. Local runs share the same cache: root turbo scripts run under `vault run` ([`scripts/vault-run.ts`](../scripts/vault-run.ts)), which injects `TURBO_*` from Vault. CI gets them through Vault GitHub OIDC — no stored token. Setup: [docs/SECRETS.md](SECRETS.md).
 
 ```bash
 bun install            # workspaces + generates dist
 bun run check          # every gate below, in parallel, cached by turbo
-bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
+bun run check:full     # mirrors .github/workflows/pr.yml (the pull-request gate)
 ```
 
 | Gate | Command | What it enforces |
@@ -60,13 +60,28 @@ bun run check:full     # mirrors .github/workflows/ci.yml (local CI replica)
 
 Keep the committed hook file in `.husky/commit-msg` — the generated `.husky/_` shims are gitignored and are produced by the `prepare` script (`husky`) on install.
 
-### Trunk & PR workflow
+### Trunk, checks, and release
 
-`main` is the only long-lived branch. Every change lands through a PR that targets `main`, and
-only merge commits are allowed (squash and rebase are disabled). Head branches are deleted on
-merge, and the aggregate `Required` job (Commitlint + Check + the trunk policy) is the required
-status check, with no bypass actors. PRs use the minimal template in
-`.github/pull_request_template.md`. The gate is codified in `scripts/pr-merge.ts`:
+`main` is the only long-lived branch. The ruleset rejects direct pushes and force-pushes, with no
+bypass, so every change lands through a pull request. The only requirement to merge is that every
+pull-request check has passed:
+
+| Check | What it is |
+| --- | --- |
+| Commitlint | Conventional Commits on the PR's commits, and a Conventional Commits title |
+| Check | `bun run check` plus the consumer smoke install |
+| GitGuardian Security Checks | Secret scanning |
+
+There is no required review, no required approval, and an unresolved review thread does not block
+the merge. A green pull request is releasable: merging it to `main` publishes. The Release
+workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds from the cache Check
+already filled and publishes. It does not re-run the pull-request checks. The branch must be up
+to date with `main` before merge, so those checks ran against the code that lands. Only merge
+commits are allowed, because each commit on the pull request is a release input. Head branches
+are deleted on merge. PRs use the template in `.github/pull_request_template.md`.
+
+The gate is codified in `scripts/pr-merge.ts` (`REQUIRED_CHECKS` is the ruleset list — rename a
+job in [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) and update that list together):
 
 ```bash
 bun run pr:merge repo                            # verify merge settings / auto-delete / auto-merge
@@ -85,10 +100,10 @@ canonical file; `bun run agents:sync` creates missing links and `bun run check:a
 
 `/pr-merge` takes the current branch all the way to a merged PR: commit, push, merge `origin/main`,
 resolve conflicts, open the PR, fix every failing check (CI and third-party checks such as
-GitGuardian), then merge automatically once everything is green.
+GitGuardian), then merge. Checks passing is the only merge requirement.
 For a clean, committed branch, `bun run pr:merge advance` performs the mechanical steps in one call
 and returns JSON for the next blocker. `bun run pr:merge comments` lists review threads and recent
-comments; the command has `reply` and `resolve` actions after feedback is addressed.
+comments when you want to read them; reviews do not block the merge.
 
 `/resolve-issues` works the queue of GitHub issues that agents in other projects file through
 [REPORTING_ISSUES.md](REPORTING_ISSUES.md) (label `agent-reported`): claim one, confirm the

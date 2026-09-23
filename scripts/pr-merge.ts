@@ -9,9 +9,11 @@
  * Every command except `logs` prints exactly one JSON object on stdout.
  * `logs` prints a plain-text excerpt. Human/child noise never reaches stdout.
  *
- * Every check that runs on a PR is required. The contexts mirror the job names in
- * .github/workflows/ci.yml (rename a job there and REQUIRED_CHECKS must follow) plus the
- * GitGuardian app's check; each is pinned to the app that reports it.
+ * Every check that runs on a PR is a required status check, and those checks are the
+ * only merge requirement. The contexts are the job names in .github/workflows/pr.yml
+ * (rename a job there and REQUIRED_CHECKS must follow) plus the GitGuardian app's check;
+ * each is pinned to the app that reports it. Release (.github/workflows/ci.yml) is not a
+ * PR check: a green PR merged to main is the release.
  */
 import { unlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -27,9 +29,8 @@ const RULESET_NAME = "Protect main"
 const LEGACY_RULESET_NAMES = ["Require CI on main"]
 const ACTIONS_INTEGRATION_ID = 15368
 const GITGUARDIAN_INTEGRATION_ID = 46505
-/** Release is left out: it only runs on pushes to main, never on a PR. */
+/** Release is not here: it runs on main after merge, never as a PR check. */
 const REQUIRED_CHECKS: RequiredStatusCheck[] = [
-  { context: "Required", integration_id: ACTIONS_INTEGRATION_ID },
   { context: "Commitlint", integration_id: ACTIONS_INTEGRATION_ID },
   { context: "Check", integration_id: ACTIONS_INTEGRATION_ID },
   { context: "GitGuardian Security Checks", integration_id: GITGUARDIAN_INTEGRATION_ID },
@@ -42,8 +43,8 @@ const EXIT = { ok: 0, fail: 1, usage: 2, conflicts: 3, pending: 4 } as const
 const USAGE = `bun scripts/pr-merge.ts <command> [flags]
 
 commands:
-  advance   sync, publish, upsert PR, check, review comments, merge
-            (--title, --body-file, --timeout, --comments-reviewed)
+  advance   sync, publish, upsert PR, wait for checks, merge
+            (--title, --body-file, --timeout)
   status    snapshot: worktree, upstream, base, PR, checks
   context   compact commit/diff context for message generation
   commit    validate + stage + commit   (-m|--message-file, --amend, --path)
@@ -230,6 +231,7 @@ type RulesetRuleParameters = {
   require_last_push_approval?: boolean
   required_approving_review_count?: number
   required_review_thread_resolution?: boolean
+  require_extra_approval_for_unattributed_changes?: boolean
 }
 
 type RulesetRule = { type: string; parameters?: RulesetRuleParameters }
@@ -302,11 +304,12 @@ function canonicalRuleset(base: string): CanonicalRuleset {
         type: "pull_request",
         parameters: {
           allowed_merge_methods: ALLOWED_MERGE_METHODS,
-          dismiss_stale_reviews_on_push: true,
+          dismiss_stale_reviews_on_push: false,
           require_code_owner_review: false,
           require_last_push_approval: false,
           required_approving_review_count: 0,
-          required_review_thread_resolution: true,
+          required_review_thread_resolution: false,
+          require_extra_approval_for_unattributed_changes: false,
         },
       },
       {
@@ -355,9 +358,11 @@ function ruleDrift(found: RulesetRule, want: CanonicalRule): string[] {
       "require_code_owner_review",
       "require_last_push_approval",
       "required_review_thread_resolution",
+      "require_extra_approval_for_unattributed_changes",
     ] as const
     for (const field of booleanFields) {
-      if (live[field] !== expected[field]) {
+      // The API omits a boolean it stores as false. Missing and false are the same gate.
+      if ((live[field] === true) !== expected[field]) {
         drift.push(`${field}=${live[field] ?? "missing"}`)
       }
     }
@@ -563,7 +568,11 @@ function summarize(checks: Check[], required: string[]): ChecksSummary {
         break
     }
   }
-  summary.notRequired = checks.map((c) => c.name).filter((name) => !required.includes(name))
+  // Skipped jobs are not pull-request checks (release runs only after merge).
+  summary.notRequired = checks
+    .filter((check) => check.bucket !== "skipping")
+    .map((check) => check.name)
+    .filter((name) => !required.includes(name))
   return summary
 }
 
@@ -802,19 +811,8 @@ async function cmdAdvance(): Promise<void> {
   }
 
   await step("checks", ["--timeout", opt("--timeout") ?? "1800"])
-  const comments = await step("comments")
-  const unresolved = comments.unresolvedThreads as unknown[]
-  const recent = comments.recentComments as unknown[]
-  if (unresolved.length > 0 || (recent.length > 0 && !flag("--comments-reviewed"))) {
-    die(EXIT.fail, {
-      step: "comments",
-      error:
-        "address review threads and review recent comments; then rerun with --comments-reviewed",
-      ...comments,
-    })
-  }
   const merged = await step("merge")
-  emit({ ok: true, branch, base, pr: comments.url, ...merged })
+  emit({ ok: true, branch, base, ...merged })
 }
 
 // ---------------------------------------------------------------------------
@@ -1197,6 +1195,14 @@ async function cmdChecks(): Promise<void> {
 
     if (fetched.reported && summary.pending === 0) {
       if (summary.fail + summary.cancel === 0) {
+        if (summary.notRequired.length > 0) {
+          die(EXIT.fail, {
+            step: "checks",
+            error: "a pull-request check is not a required status check on main",
+            notRequired: summary.notRequired,
+            hint: "add each name to REQUIRED_CHECKS in scripts/pr-merge.ts, then run: bun run pr:merge ruleset --apply",
+          })
+        }
         emit({
           ok: true,
           total: summary.total,
@@ -1497,8 +1503,8 @@ const MERGEABLE_STATES = ["CLEAN", "HAS_HOOKS"]
 
 /**
  * Everything that keeps the PR from landing. `pending` means wait (checks still running, or
- * GitHub still computing mergeability); `blockers` need work first. Every reported check counts,
- * required or not: a failing third-party check (GitGuardian, …) blocks just like CI does.
+ * GitHub still computing mergeability); `blockers` need work first. The only requirement is
+ * that every check on the PR passed, and that each of those checks is required on main.
  */
 async function mergeReadiness(branch: string, base: string, pr: PrView) {
   const blockers: string[] = []
@@ -1506,10 +1512,6 @@ async function mergeReadiness(branch: string, base: string, pr: PrView) {
 
   if (pr.state !== "OPEN") blockers.push(`PR is ${pr.state}`)
   if (pr.isDraft) blockers.push("PR is a draft (run `pr --ready`)")
-  if (pr.reviewDecision === "CHANGES_REQUESTED") blockers.push("review requests changes")
-  const threads = await unresolvedThreads(await repoSlug(), pr.number)
-  if (threads.length > 0)
-    blockers.push(`${threads.length} unresolved review thread(s) (run comments)`)
   const worktree = await worktreeStatus()
   if (worktree.dirty) blockers.push("worktree not clean (commit, then publish)")
   const counts = await git(["rev-list", "--left-right", "--count", "@{u}...HEAD"])
@@ -1529,10 +1531,16 @@ async function mergeReadiness(branch: string, base: string, pr: PrView) {
     pending.push({ name: "(no checks reported yet)", bucket: "pending", link: "" })
   else {
     pending.push(...pendingList(fetched.checks))
+    const required = await requiredContexts()
     for (const check of fetched.checks) {
       if (check.bucket === "fail" || check.bucket === "cancel") {
         blockers.push(`check "${check.name}" is ${check.bucket} (${check.link})`)
       }
+    }
+    for (const name of summarize(fetched.checks, required).notRequired) {
+      blockers.push(
+        `check "${name}" is not a required status check (add it to REQUIRED_CHECKS, then \`ruleset --apply\`)`,
+      )
     }
   }
 

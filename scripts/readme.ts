@@ -114,7 +114,7 @@ const body = [
   [
     `[![${TIERS.ready.label}](${badge(TIERS.ready.label, count("ready"), "2ea44f")})](#ready)`,
     `[![${TIERS.wip.label}](${badge(TIERS.wip.short, count("wip"), "e36209")})](#work-in-progress)`,
-    `[![CI](https://github.com/${REPO}/actions/workflows/ci.yml/badge.svg)](https://github.com/${REPO}/actions/workflows/ci.yml)`,
+    `[![CI](https://github.com/${REPO}/actions/workflows/pr.yml/badge.svg)](https://github.com/${REPO}/actions/workflows/pr.yml)`,
     `[![License](${badge("license", license, "5b4fe0")})](#license)`,
   ].join(" "),
   "",

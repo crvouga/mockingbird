@@ -12,9 +12,10 @@ Drive the current branch from local work-in-progress to a PR **merged into `main
 git/GitHub work is done by `bun scripts/pr-merge.ts`; your job is the judgment: commit message,
 conflict resolution, PR title/body, and root-cause fixes for every failing check.
 
-The job is done only when the PR is merged. Do not stop at "CI is green" or "only a non-required
-check is failing", and do not ask the user before merging: once the branch is pushed, synced with
-`main`, and **every** check on the PR has passed (required or not), merge it.
+The job is done only when the PR is merged. Do not ask the user before merging: once the branch is
+pushed, synced with `main`, and **every** check on the PR has passed, merge it. Those checks are
+the only merge requirement. There is no review approval and no review-thread gate. A green PR is
+releasable; merging it to `main` publishes.
 
 Run it as `bun run pr:merge <command>` (or `bun scripts/pr-merge.ts <command>`). Every command except
 `logs` prints exactly one JSON object on stdout — parse that; never scrape raw `git`/`gh` text.
@@ -35,12 +36,10 @@ bun run pr:merge advance --timeout 1800
 ```
 
 It syncs both the remote head and `origin/main`, publishes, creates a PR if needed using the
-non-merge commit subjects, marks a draft ready, waits for every check, inspects review feedback,
-and merges. It stops with one JSON object at the first blocker. Fix the reported conflict, check,
-or review concern and rerun. Pass `--title` and `--body-file` to control a new PR's text. If the
-output contains general PR comments, read and address them, then rerun with
-`--comments-reviewed`. Confirm `merged: true`; a pending merge is not completion. The detailed
-commands below are for investigating and fixing blockers.
+non-merge commit subjects, marks a draft ready, waits for every check, and merges. It stops with
+one JSON object at the first blocker. Fix the reported conflict or check and rerun. Pass `--title`
+and `--body-file` to control a new PR's text. Confirm `merged: true`; a pending merge is not
+completion. The detailed commands below are for investigating and fixing blockers.
 
 ## 1. Preflight
 
@@ -163,9 +162,11 @@ bun run pr:merge pr --ready
 bun run pr:merge checks
 ```
 
-`checks` covers **every** check on the PR — the required `Required` job, the rest of CI, and
-third-party apps such as GitGuardian. A failing non-required check still blocks this command: fix it
-like any other.
+`checks` covers **every** check on the PR: Commitlint, Check, and GitGuardian Security Checks.
+Each one is a required status check on `main`. A check that ran and is not in that list fails
+this command — add its name to `REQUIRED_CHECKS` in `scripts/pr-merge.ts` and run
+`bun run pr:merge ruleset --apply`. A skipped check is not a pull-request check (Release runs
+only after merge). A failing check blocks this command: fix it like any other.
 
 - exit 4 (`pending`/`timedOut`) → not done; run `checks` again.
 - exit 1 (`failing`) → for each failing check:
@@ -234,24 +235,25 @@ real credential.
 
 ## Review feedback
 
+Reviews, approvals, and unresolved threads do not block a merge. To read them anyway:
+
 ```
 bun run pr:merge comments
 ```
 
-The JSON lists unresolved review threads and recent general comments. Read each concern, make a
-code change or explain why no change is needed, and reply to the thread with
-`bun run pr:merge reply --thread <id> --body-file <file>`. Then run
-`bun run pr:merge resolve --thread <id>` only after its concern is addressed. Reply to a general
-comment with `gh pr comment <number> --body-file <file>` when appropriate. Rerun `comments` until
-threads are resolved. The merge gate checks unresolved threads and changes-requested reviews.
+The JSON lists unresolved review threads and recent general comments. Reply to a thread with
+`bun run pr:merge reply --thread <id> --body-file <file>`, and
+`bun run pr:merge resolve --thread <id>` after its concern is addressed. Neither is required
+before `merge`.
 
 ## 7. Merge
 
-When `checks` exits 0, merge. `merge` re-verifies everything first:
+When `checks` exits 0, merge. `merge` re-verifies the gate first:
 - the PR is open and not a draft;
 - the worktree is clean and pushed;
 - the branch is not behind `origin/main`;
-- every check on the PR passed or was skipped;
+- every check on the PR passed;
+- every check that ran is a required status check;
 - GitHub reports the PR mergeable.
 
 Only then does it land the PR as a merge commit.
@@ -264,8 +266,8 @@ bun run pr:merge merge
 - exit 4 (`pending`) → checks or GitHub's mergeability are still settling; run `checks`, then `merge`
   again.
 - exit 1 (`step: "merge-gate"`) → each entry in `blockers` says what to do: commit/publish, `sync`
-  (then `publish` and `checks` again), fix a failing check (step 6), or `pr --ready`. Handle it and
-  come back here.
+  (then `publish` and `checks` again), fix a failing check (step 6), add a missing required check
+  and `ruleset --apply`, or `pr --ready`. Handle it and come back here.
 
 `bun run pr:merge merge --dry-run` runs the same gate without merging.
 
@@ -284,7 +286,7 @@ passed — never report success on an open PR, or on a partial, queued, or filte
 - Never `git push --force`; only `--force-with-lease`, and only to fix an unpushed-tip message via `--amend`.
 - Never push the base branch.
 - Never `git reset --hard` or `git checkout .` to discard work.
-- Never disable or bypass a check, and never merge around one — including non-required checks.
+- Never disable or bypass a check, and never merge around one. A check that ran is required.
 - Keep each fix minimal and focused on the failing check's root cause.
 - Use the script's JSON instead of raw `git`/`gh` output.
 - Do not paste full diffs or full CI logs into chat — quote only the failing lines.
