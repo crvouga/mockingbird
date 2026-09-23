@@ -24,6 +24,7 @@ const fullTitle = title
 const path = Astro.url.pathname.replace(/\/$/, "") || "/"
 const nav = [
   { href: "/services", label: "Services" },
+  { href: "/examples", label: "Examples" },
   { href: "/coverage", label: "Coverage" },
   { href: "/docs", label: "Docs" },
   { href: "/why", label: "Why" },
@@ -113,6 +114,7 @@ const favicon = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www
             <h2>Docs</h2>
             <ul>
               <li><a href="/services">Services</a></li>
+              <li><a href="/examples">Examples</a></li>
               <li><a href="/coverage">Coverage</a></li>
               <li><a href="/docs">Guides</a></li>
               <li><a href="/why">Why Mockingbird</a></li>

@@ -1,0 +1,43 @@
+{
+  "name": "@crvouga/mockingbird-example-medical-testing",
+  "version": "0.0.0-development",
+  "private": true,
+  "description": "Cove: a branded, full-stack consumer demo. Patients sign in with a Google/Apple OAuth mock, shop lab tests, pay with a Stripe Checkout mock, and the paid order is fulfilled as a Junction lab order, all persisted to an in-process Postgres engine, in one process.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "exports": {
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    }
+  },
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "example"
+  },
+  "scripts": {
+    "dev": "bun src/server/index.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "build": "bun ../../../scripts/bundle-service.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-junction": "workspace:*",
+    "@crvouga/mockingbird-service-oauth": "workspace:*",
+    "@crvouga/mockingbird-service-postgres": "workspace:*",
+    "@crvouga/mockingbird-service-stripe": "workspace:*",
+    "hono": "4.11.9",
+    "htm": "3.1.1",
+    "oauth4webapi": "3.8.8",
+    "preact": "10.24.3"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0"
+  }
+}

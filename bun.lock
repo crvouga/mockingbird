@@ -65,6 +65,23 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/examples/medical-testing": {
+      "name": "@crvouga/mockingbird-example-medical-testing",
+      "version": "0.0.0-development",
+      "dependencies": {
+        "@crvouga/mockingbird-service-junction": "workspace:*",
+        "@crvouga/mockingbird-service-oauth": "workspace:*",
+        "@crvouga/mockingbird-service-postgres": "workspace:*",
+        "@crvouga/mockingbird-service-stripe": "workspace:*",
+        "hono": "4.11.9",
+        "htm": "3.1.1",
+        "oauth4webapi": "3.8.8",
+        "preact": "10.24.3",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.0",
+      },
+    },
     "packages/http/codec": {
       "name": "@crvouga/mockingbird-http-codec",
       "version": "0.0.0-development",
@@ -1600,6 +1617,7 @@
         "shiki": "4.4.3",
       },
       "devDependencies": {
+        "@crvouga/mockingbird-example-medical-testing": "workspace:*",
         "@crvouga/mockingbird-service-aha": "workspace:*",
         "@crvouga/mockingbird-service-aws-secrets": "workspace:*",
         "@crvouga/mockingbird-service-aws-speech": "workspace:*",
@@ -1962,6 +1980,8 @@
     "@crvouga/mockingbird-core": ["@crvouga/mockingbird-core@workspace:packages/core"],
 
     "@crvouga/mockingbird-docs": ["@crvouga/mockingbird-docs@workspace:sites/docs"],
+
+    "@crvouga/mockingbird-example-medical-testing": ["@crvouga/mockingbird-example-medical-testing@workspace:packages/examples/medical-testing"],
 
     "@crvouga/mockingbird-http-codec": ["@crvouga/mockingbird-http-codec@workspace:packages/http/codec"],
 
@@ -2953,6 +2973,8 @@
 
     "hono": ["hono@4.11.9", "", {}, "sha512-Eaw2YTGM6WOxA6CXbckaEvslr2Ne4NFsKrvc0v97JD5awbmeBLO5w9Ho9L9kmKonrwF9RJlW6BxT1PVv/agBHQ=="],
 
+    "htm": ["htm@3.1.1", "", {}, "sha512-983Vyg8NwUE7JkZ6NmOqpCZ+sh1bKv2iYTlUkzlWmA5JD2acKoxd4KVxbMmxX/85mtfdnDmTFoNKcg5DGAvxNQ=="],
+
     "html-escaper": ["html-escaper@3.0.3", "", {}, "sha512-RuMffC89BOWQoY0WKGpIhn5gX3iI54O6nRA0yC124NYVtzjmFWBIiFd8M0x+ZdX0P9R4lADg1mgP8C7PxGOWuQ=="],
 
     "html-to-text": ["html-to-text@9.0.5", "", { "dependencies": { "@selderee/plugin-htmlparser2": "^0.11.0", "deepmerge": "^4.3.1", "dom-serializer": "^2.0.0", "htmlparser2": "^8.0.2", "selderee": "^0.11.0" } }, "sha512-qY60FjREgVZL03vJU6IfMV4GDjGBIoOyvuFdpBDIX9yTlDw0TjxVBQp+P8NvpdIXNJvfWBTNul7fsAQJq2FNpg=="],
@@ -3341,7 +3363,7 @@
 
     "posthog-node": ["posthog-node@5.52.2", "", { "dependencies": { "@posthog/core": "^1.53.3" }, "peerDependencies": { "rxjs": "^7.0.0" }, "optionalPeers": ["rxjs"] }, "sha512-era2ptMcl8nQBT1apUMeoagLSgU1IfR5IwW4v0gudjzkV7IZbr+slG7I4IPiEG0WmsqrLjKnYz/t75vdveTbFA=="],
 
-    "preact": ["preact@10.29.8", "", { "peerDependencies": { "preact-render-to-string": ">=5" }, "optionalPeers": ["preact-render-to-string"] }, "sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q=="],
+    "preact": ["preact@10.24.3", "", {}, "sha512-Z2dPnBnMUfyQfSQ+GBdsGa16hz35YmLmtTLhM169uW944hYL6xzTYkJjC07j+Wosz733pMWx0fgON3JNw1jJQA=="],
 
     "prettier": ["prettier@3.9.8", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-WRFq3Wn3WId7LLROfMLdH7xaFr2jR62wU8nLO6rQUOLOxNZUviyJQs1M0iIhLexSFy+L+w0ch66wtoO2jRjG0A=="],
 
@@ -4018,6 +4040,8 @@
     "parse-json/@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 
     "parse5-htmlparser2-tree-adapter/parse5": ["parse5@6.0.1", "", {}, "sha512-Ofn/CTFzRGTTxwpNEs9PP93gXShHcTq255nzRYSKe8AkVpZY7e1fpmTfOyoIvjP5HG7Z2ZM7VS9PPhQGW2pOpw=="],
+
+    "posthog-js/preact": ["preact@10.29.8", "", { "peerDependencies": { "preact-render-to-string": ">=5" }, "optionalPeers": ["preact-render-to-string"] }, "sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q=="],
 
     "pretty-format/ansi-styles": ["ansi-styles@5.2.0", "", {}, "sha512-Cxwpt2SfTzTtXcfOlzGEee8O+c+MmUgGrNiBcXnuWxuFJHe6a5Hz7qwhwe5OgaSYI0IJvkLqWX1ASG+cJOkEiA=="],
 

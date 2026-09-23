@@ -16,6 +16,7 @@
     "packages/openapi/*",
     "packages/parity/*",
     "packages/service/*",
+    "packages/examples/*",
     "packages/adapters/*",
     "packages/auth/*",
     "sites/docs"

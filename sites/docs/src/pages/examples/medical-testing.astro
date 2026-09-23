@@ -1,0 +1,169 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../../components/Icon.astro"
+import Base from "../../layouts/Base.astro"
+import { APP_EXAMPLES } from "../../lib/appExamples.ts"
+
+const example = APP_EXAMPLES.find((e) => e.slug === "medical-testing")
+if (!example) throw new Error("medical-testing is missing from APP_EXAMPLES")
+
+const servicesByName = new Map(catalog.services.map((s) => [s.name, s]))
+---
+
+<Base title={example.title} description={example.description}>
+  <div class="container">
+    <header class="page-head">
+      <p class="eyebrow"><a href="/examples">Examples</a></p>
+      <h1>{example.title}</h1>
+      <p class="lede">{example.description}</p>
+      <div class="example-services">
+        {
+          example.servicesUsed.map((name) => {
+            const service = servicesByName.get(name)
+            return service ? (
+              <a class="chip" href={`/services/${service.name}`}>{service.displayName}</a>
+            ) : (
+              <span class="chip">{name}</span>
+            )
+          })
+        }
+      </div>
+    </header>
+
+    <section class="live-app">
+      <p data-example-status role="status" class="live-note">
+        Everything below — the Google/Apple OAuth sign-in, the shop, the Stripe checkout, the Junction fulfillment,
+        and the Postgres-backed order history — runs entirely in this browser tab, as a fully branded Cove
+        product UI. No server to start, no real network call to Google, Apple, Stripe, or Junction.
+      </p>
+      <app-example data-app={example.slug}>
+        <div data-example-placeholder>
+          <button type="button" class="btn btn-accent" data-example-start>Launch the app</button>
+          <p data-example-status role="status">Loads on demand. All requests stay in this tab.</p>
+        </div>
+        <div data-example-host></div>
+      </app-example>
+    </section>
+
+    <section class="run-locally">
+      <h2>Run it locally instead</h2>
+      <p>
+        This is the exact same code as a standalone app you can clone and run with a real dev server, if you'd
+        rather poke at it outside the browser:
+      </p>
+      <pre class="example-run"><code>{example.runCommand}</code></pre>
+      <a class="btn btn-secondary btn-sm" href={`${catalog.repo}/tree/main/${example.packagePath}`} target="_blank" rel="noopener">
+        <Icon name="github" /> Source
+      </a>
+    </section>
+  </div>
+</Base>
+
+<script>
+  import "../../client/appExamples.ts"
+</script>
+
+<style>
+  .page-head {
+    max-width: 720px;
+  }
+  .eyebrow {
+    font-size: 13px;
+    color: var(--fg-muted);
+  }
+  .example-services {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--fg-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+  a.chip:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+  .live-app {
+    margin-top: 40px;
+  }
+  .live-note {
+    font-size: 13.5px;
+    color: var(--fg-muted);
+    max-width: 720px;
+    margin-bottom: 16px;
+  }
+  app-example {
+    display: block;
+    min-width: 0;
+  }
+  /* A fixed-size "device window": full width, constant height, regardless
+     of which page of the demo app is showing inside — the demo scrolls
+     internally instead of growing/shrinking the surrounding docs page. */
+  [data-example-placeholder],
+  [data-example-host] {
+    width: 100%;
+    height: 820px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: var(--bg-subtle);
+  }
+  [data-example-placeholder] {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    text-align: center;
+    padding: 28px;
+  }
+  [data-example-host] {
+    padding: 0;
+  }
+  [data-example-host] [data-example-status] {
+    font-size: 13px;
+    color: var(--fg-muted);
+    margin-top: 12px;
+  }
+  @media (max-width: 640px) {
+    [data-example-placeholder],
+    [data-example-host] {
+      height: 640px;
+    }
+  }
+  .run-locally {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    max-width: 720px;
+  }
+  .run-locally h2 {
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+  .run-locally p {
+    margin-top: 8px;
+    color: var(--fg-muted);
+    font-size: 13.5px;
+  }
+  .example-run {
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-subtle);
+    color: var(--fg-muted);
+    font-size: 12.5px;
+    overflow-x: auto;
+  }
+</style>
