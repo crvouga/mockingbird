@@ -2,6 +2,8 @@
 import catalog from "virtual:mockingbird/catalog"
 import Icon from "../components/Icon.astro"
 import Sprite from "../components/Sprite.astro"
+import { RISK_DISCLAIMER } from "../lib/content.ts"
+import { inline } from "../lib/inline.ts"
 import "../styles/global.css"
 
 interface Props {
@@ -57,6 +59,13 @@ const favicon = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www
   <body>
     <Sprite />
     <a class="skip" href="#main">Skip to content</a>
+    {
+      RISK_DISCLAIMER.enabled && (
+        <div class="risk-banner" role="note">
+          <div class="container" set:html={`⚠️ ${inline(RISK_DISCLAIMER.text)}`} />
+        </div>
+      )
+    }
     <header class="site-header" data-header>
       <div class="container">
         <a class="brand" href="/" aria-label="Mockingbird home">
