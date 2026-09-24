@@ -427,12 +427,14 @@ const enumKey = (value: string) => value.replace(/\s+/g, "").toLowerCase()
 
 /** The enum filters staging validates, with the names it accepts (recorded live). */
 const QUERY_ENUMS = {
-  status: { label: "Status", names: ["Pending", ...KIT_STATUSES] },
+  // `trimmed`: the error echoes the value trimmed (`"a "` → 'a'); otherwise as sent.
+  status: { label: "Status", names: ["Pending", ...KIT_STATUSES], trimmed: true },
   productType: {
     label: "Product Type",
     names: ["Materials", "Bundle", "DigitalProduct", "LabServices"],
+    trimmed: true,
   },
-  entityType: { label: "Entity Type", names: ["Kit"] },
+  entityType: { label: "Entity Type", names: ["Kit"], trimmed: false },
 } as const
 const enumNames = (name: keyof typeof QUERY_ENUMS): ReadonlySet<string> =>
   new Set(QUERY_ENUMS[name].names.map(enumKey))
@@ -508,9 +510,9 @@ const queryProblem = (
       } else if (rule in QUERY_ENUMS && present) {
         const known = enumNames(rule as keyof typeof QUERY_ENUMS)
         if (/^\d+$/.test(raw.trim()) || !known.has(enumKey(raw))) {
-          const { label } = QUERY_ENUMS[rule as keyof typeof QUERY_ENUMS]
-          // Staging echoes the value without its leading spaces (`" a"` → 'a', `"a "` → 'a ').
-          add(name, `'${label}' has a range of values which does not include '${raw.trimStart()}'.`)
+          const { label, trimmed } = QUERY_ENUMS[rule as keyof typeof QUERY_ENUMS]
+          const shown = trimmed ? raw.trim() : raw
+          add(name, `'${label}' has a range of values which does not include '${shown}'.`)
         }
       }
     }
