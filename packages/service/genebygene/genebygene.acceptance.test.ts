@@ -1604,7 +1604,10 @@ describe("issue #122: the address parity corpus (corpus/address-parity.json)", (
         const { status, data } = await quote(address, addressParity.productId)
         expect(status).toBe(c.status)
         expect((data as { errorMessages: string[] }).errorMessages).toEqual(c.errorMessages ?? [])
-        if (c.courierServiceCodes) expect(codesOf(data)).toEqual(c.courierServiceCodes)
+        // Live parity records the courier codes as a set (sorted), never the menu order.
+        if (c.courierServiceCodes) {
+          expect(codesOf(data).sort()).toEqual([...c.courierServiceCodes].sort())
+        }
       } else {
         const { status, error } = await placeShipped(address, c.courierServiceCode)
         expect(status).toBe(c.status)

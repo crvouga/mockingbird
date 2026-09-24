@@ -14,7 +14,10 @@
         "postalCode": "85004"
       },
       "status": 200,
-      "errorMessages": ["Address line exceeds 35 characters."]
+      "errorMessages": [
+        "Address line exceeds 35 characters."
+      ],
+      "courierServiceCodes": []
     },
     {
       "name": "PO Box",
@@ -26,7 +29,10 @@
         "postalCode": "85004"
       },
       "status": 200,
-      "errorMessages": ["PO Box addresses are not supported for this product."]
+      "errorMessages": [
+        "PO Box addresses are not supported for this product."
+      ],
+      "courierServiceCodes": []
     },
     {
       "name": "non-US country",
@@ -39,7 +45,10 @@
         "countryCode": "CA"
       },
       "status": 200,
-      "errorMessages": ["Only US destinations are available for this product."]
+      "errorMessages": [
+        "Only US destinations are available for this product."
+      ],
+      "courierServiceCodes": []
     },
     {
       "name": "quote-ok, place-not-found street: the quote",
@@ -54,8 +63,299 @@
       "errorMessages": [],
       "courierServiceCodes": [
         "DHL_PARCEL_EXPEDITED",
-        "FEDEX_EXPRESS_SAVER_ONE_RATE",
         "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ]
+    },
+    {
+      "name": "line2 longer than 35 characters",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "addressLine2": "Suite 900 North Example Tower Annex B"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Address line exceeds 35 characters."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "P.O. Box spelling",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "P.O. Box 100",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [
+        "PO Box addresses are not supported for this product."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "Post Office Box spelling",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "Post Office Box 100",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [
+        "PO Box addresses are not supported for this product."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "countryCode USA",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004",
+        "countryCode": "USA"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Only US destinations are available for this product."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "military APO",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "Unit 2050 Box 4190",
+        "city": "APO",
+        "stateOrRegion": "AE",
+        "postalCode": "09012"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Military addresses are not supported for this product."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "Puerto Rico ZIP3 009",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "100 Calle Fortaleza",
+        "city": "San Juan",
+        "stateOrRegion": "PR",
+        "postalCode": "00901"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Shipping to this destination is not available for this product."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "full state name",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "Arizona",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Domestic orders must use a 2 character state code."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "4-digit ZIP",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "8500"
+      },
+      "status": 200,
+      "errorMessages": [
+        "postalCode is not a valid US ZIP code."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "ZIP+4",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008-1351"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ]
+    },
+    {
+      "name": "missing recipientName",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "recipientName": null
+      },
+      "status": 200,
+      "errorMessages": [
+        "recipientName is required."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "missing phone",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "phone": null
+      },
+      "status": 200,
+      "errorMessages": [
+        "phone is required."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "missing city",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": null,
+        "stateOrRegion": "TX",
+        "postalCode": "77008"
+      },
+      "status": 200,
+      "errorMessages": [
+        "city is required."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "blank countryCode",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "countryCode": ""
+      },
+      "status": 200,
+      "errorMessages": [
+        "countryCode is required."
+      ],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "state does not match ZIP3 (90210 TX)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "9336 Civic Center Dr",
+        "city": "Beverly Hills",
+        "stateOrRegion": "TX",
+        "postalCode": "90210"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ]
+    },
+    {
+      "name": "undeliverable ZIP3 590",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1 Unlisted County Road 9",
+        "city": "Nowhere",
+        "stateOrRegion": "MT",
+        "postalCode": "59001"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ]
+    },
+    {
+      "name": "rural place-not-found street (MO)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "4440 County Road 000",
+        "city": "Valles Mines",
+        "stateOrRegion": "MO",
+        "postalCode": "63087"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ]
+    },
+    {
+      "name": "zone 8 (Honolulu)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "2335 Kalakaua Ave",
+        "city": "Honolulu",
+        "stateOrRegion": "HI",
+        "postalCode": "96815"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE"
+      ]
+    },
+    {
+      "name": "zone 7 (Mountain View)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1600 Amphitheatre Pkwy",
+        "city": "Mountain View",
+        "stateOrRegion": "CA",
+        "postalCode": "94043"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
         "FEDEX_PRIORITY_OVERNIGHT"
       ]
     },
