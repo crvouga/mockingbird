@@ -722,8 +722,9 @@ export class GeneByGeneAPI implements FetchAPI {
     if (form.grant_type !== undefined && form.grant_type !== "client_credentials") {
       return jsonRes(400, { error: "unsupported_grant_type" })
     }
-    if (!form.grant_type || !form.client_id || !form.client_secret) {
-      return jsonRes(400, { error: form.client_id ? "invalid_client" : "invalid_request" })
+    // A whitespace-only client_id is a missing one on the auth host (invalid_request).
+    if (!form.grant_type || !form.client_id?.trim() || !form.client_secret) {
+      return jsonRes(400, { error: form.client_id?.trim() ? "invalid_client" : "invalid_request" })
     }
     const settings = this.state.current()
     const blocked = settings.blockedClients[form.client_id]
