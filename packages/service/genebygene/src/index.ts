@@ -1937,7 +1937,12 @@ export class GeneByGeneAPI implements FetchAPI {
           (!resultType || r.resultType === resultType),
       )
     const result = resultId || kitNumber ? candidates[0] : undefined
-    if (!result) return notFoundDto("There is no report assoicated with that result")
+    // By id, staging names the id; by kit and type, it spells "associated" its own way.
+    if (!result) {
+      return notFoundDto(
+        hasId ? `Invalid kit result ID ${id}` : "There is no report assoicated with that result",
+      )
+    }
     const date = Math.floor(this.now() / 1000)
     const expires = this.state.current().presignedUrlTtlSeconds
     const params = new URLSearchParams({

@@ -411,7 +411,7 @@ const probe = async (method: string, path: string, token = realToken) => {
 }
 const catalogs = {
   source: new URL(baseUrl).host,
-  note: "Recorded by scripts/parity.ts from the live tenant: the event types and attribute definitions it lists. Vendor catalog metadata only, no tenant data.",
+  note: "Recorded by scripts/parity.ts from the live tenant: the event types, attribute definitions and product catalog it lists. Vendor catalog metadata only, no tenant data.",
   eventTypes: (await probe("GET", "/api/v2/eventTypes")).body,
   // The tenant's product catalog (vendor catalog data: ids, names, prices, components).
   stagingProducts: (await probe("GET", "/api/v2/products")).body,

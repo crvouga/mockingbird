@@ -1,6 +1,6 @@
 {
   "source": "staging-api.genebygene.com",
-  "note": "Recorded by scripts/parity.ts from the live tenant: the event types and attribute definitions it lists. Vendor catalog metadata only, no tenant data.",
+  "note": "Recorded by scripts/parity.ts from the live tenant: the event types, attribute definitions and product catalog it lists. Vendor catalog metadata only, no tenant data.",
   "eventTypes": [
     {
       "payloadStructure": "{\"OrderGuid\":\"Guid\",\"OrderType\":\"OrderType\",\"OrderItems\":\"IEnumerable<OrderItem>\",\"TenantGuid\":\"Guid\",\"UserId\":\"String\"}",
@@ -89,6 +89,251 @@
       "name": "GxG.Nucleus.Kit.ReadyForMonogenicPipeline",
       "subscriptionTypes": [
         "Webhook"
+      ]
+    }
+  ],
+  "stagingProducts": [
+    {
+      "id": "a5190f53-01c8-4966-aead-adbf20f0dbf6",
+      "name": "Standard Swab Domestic Kit - DHL Return - Collection Bundle",
+      "description": "Standard Swab Domestic Kit - DHL Return - Collection Bundle",
+      "price": 19.5,
+      "productType": "Bundle",
+      "isInsurable": false,
+      "shippingQualified": null,
+      "maxOrderingQuantity": null,
+      "preassembly": false,
+      "components": [
+        {
+          "name": "Standard Swab Domestic Kit with DHL Return Label",
+          "quantity": 1,
+          "productType": "Materials",
+          "product": {
+            "id": "49f9c987-ba0e-4801-a3b3-b446a2d4835a",
+            "name": "Standard Swab Domestic Kit with DHL Return Label",
+            "description": "Standard Collection Kit With Vial & Swab & 6” x 9” Poly Mailer & Kit Instructions & Barcode & DHL Domestic Return Label",
+            "price": 5.5,
+            "productType": "Materials",
+            "isInsurable": false,
+            "shippingQualified": true,
+            "maxOrderingQuantity": 2000,
+            "preassembly": true,
+            "components": []
+          }
+        },
+        {
+          "name": "DHL Domestic Parcel Return Label Fee",
+          "quantity": 1,
+          "productType": "Materials",
+          "product": {
+            "id": "04b17b3d-7976-4b27-acb8-bb677fd9846d",
+            "name": "DHL Domestic Parcel Return Label Fee",
+            "description": "DHL Domestic Return Label Fee (Parcel Light)",
+            "price": 8,
+            "productType": "Materials",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "Fulfillment Fee",
+          "quantity": 1,
+          "productType": "Materials",
+          "product": {
+            "id": "56915a43-f03e-4219-b0af-d12d2ebe1a82",
+            "name": "Fulfillment Fee",
+            "description": "Fulfillment Fee",
+            "price": 6,
+            "productType": "Materials",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "16c26d93-f4f4-4ea1-8f2e-9991d0ef938a",
+      "name": "B2B Comprehensive Wellness JSON Report and Raw Data Bundle",
+      "description": null,
+      "price": 0,
+      "productType": "Bundle",
+      "isInsurable": false,
+      "shippingQualified": null,
+      "maxOrderingQuantity": null,
+      "preassembly": false,
+      "components": [
+        {
+          "name": "B2B Comprehensive Wellness JSON Report",
+          "quantity": 1,
+          "productType": "Digital Product",
+          "product": {
+            "id": "8dee4da8-5103-4209-bb91-b8beba6ee7e5",
+            "name": "B2B Comprehensive Wellness JSON Report",
+            "description": null,
+            "price": 0,
+            "productType": "Digital Product",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "Nutrigenomics Raw Data",
+          "quantity": 1,
+          "productType": "Digital Product",
+          "product": {
+            "id": "6780b983-d346-47bf-a93f-88a9d0a346b6",
+            "name": "Nutrigenomics Raw Data",
+            "description": null,
+            "price": 0,
+            "productType": "Digital Product",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "NT Custom Agena SNP Panel",
+          "quantity": 1,
+          "productType": "Lab Services",
+          "product": {
+            "id": "a7c9c265-6d31-4391-8e93-342d9617fef5",
+            "name": "NT Custom Agena SNP Panel",
+            "description": null,
+            "price": 0,
+            "productType": "Lab Services",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        }
+      ]
+    },
+    {
+      "id": "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5",
+      "name": "Standard Swab Domestic Kit - DHL Return - Comprehensive Wellness JSON Report and Raw Data Bundle",
+      "description": null,
+      "price": 19.5,
+      "productType": "Bundle",
+      "isInsurable": false,
+      "shippingQualified": null,
+      "maxOrderingQuantity": null,
+      "preassembly": false,
+      "components": [
+        {
+          "name": "NT Custom Agena SNP Panel",
+          "quantity": 1,
+          "productType": "Lab Services",
+          "product": {
+            "id": "a7c9c265-6d31-4391-8e93-342d9617fef5",
+            "name": "NT Custom Agena SNP Panel",
+            "description": null,
+            "price": 0,
+            "productType": "Lab Services",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "B2B Comprehensive Wellness JSON Report",
+          "quantity": 1,
+          "productType": "Digital Product",
+          "product": {
+            "id": "8dee4da8-5103-4209-bb91-b8beba6ee7e5",
+            "name": "B2B Comprehensive Wellness JSON Report",
+            "description": null,
+            "price": 0,
+            "productType": "Digital Product",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "DHL Domestic Parcel Return Label Fee",
+          "quantity": 1,
+          "productType": "Materials",
+          "product": {
+            "id": "04b17b3d-7976-4b27-acb8-bb677fd9846d",
+            "name": "DHL Domestic Parcel Return Label Fee",
+            "description": "DHL Domestic Return Label Fee (Parcel Light)",
+            "price": 8,
+            "productType": "Materials",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "Nutrigenomics Raw Data",
+          "quantity": 1,
+          "productType": "Digital Product",
+          "product": {
+            "id": "6780b983-d346-47bf-a93f-88a9d0a346b6",
+            "name": "Nutrigenomics Raw Data",
+            "description": null,
+            "price": 0,
+            "productType": "Digital Product",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "Fulfillment Fee",
+          "quantity": 1,
+          "productType": "Materials",
+          "product": {
+            "id": "56915a43-f03e-4219-b0af-d12d2ebe1a82",
+            "name": "Fulfillment Fee",
+            "description": "Fulfillment Fee",
+            "price": 6,
+            "productType": "Materials",
+            "isInsurable": false,
+            "shippingQualified": null,
+            "maxOrderingQuantity": null,
+            "preassembly": false,
+            "components": []
+          }
+        },
+        {
+          "name": "Standard Swab Domestic Kit with DHL Return Label",
+          "quantity": 1,
+          "productType": "Materials",
+          "product": {
+            "id": "49f9c987-ba0e-4801-a3b3-b446a2d4835a",
+            "name": "Standard Swab Domestic Kit with DHL Return Label",
+            "description": "Standard Collection Kit With Vial & Swab & 6” x 9” Poly Mailer & Kit Instructions & Barcode & DHL Domestic Return Label",
+            "price": 5.5,
+            "productType": "Materials",
+            "isInsurable": false,
+            "shippingQualified": true,
+            "maxOrderingQuantity": 2000,
+            "preassembly": true,
+            "components": []
+          }
+        }
       ]
     }
   ],

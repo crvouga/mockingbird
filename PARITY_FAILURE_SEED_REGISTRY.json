@@ -114,6 +114,12 @@
       "seed": 1394162303,
       "status": "fixed",
       "failure": "GetNotificationSubscription unknown id: real 404 ErrorDto \"Invalid Id <id>\", mock 400 (only the empty GUID is a 400)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1394856319,
+      "status": "fixed",
+      "failure": "ListProducts: staging's catalog drifted (two bundle components now report preassembly: true), the mock's staging catalog said false"
     }
   ]
 }
