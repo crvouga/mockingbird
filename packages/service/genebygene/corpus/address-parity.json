@@ -1,0 +1,977 @@
+{
+  "source": "staging-api.genebygene.com",
+  "recorded": true,
+  "note": "Recorded by `bun run parity` (scripts/parity.ts) against the host in `source`: each synthetic address quoted live, with its status, errorMessages, courier menu (codes and names, never prices or dates) and, for a refusal, the body. The acceptance suite replays it. Synthetic streets only: no personal data.",
+  "productId": "789af544-270c-40ff-9677-c492a87262cd",
+  "cases": [
+    {
+      "name": "line1 longer than 35 characters",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1234 North Example Boulevard Extension",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Address Lines cannot be longer than 35 characters."
+      ],
+      "courierServiceCodes": [],
+      "options": []
+    },
+    {
+      "name": "PO Box",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "PO Box 100",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        }
+      ]
+    },
+    {
+      "name": "non-US country",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "100 Queen St W",
+        "city": "Toronto",
+        "stateOrRegion": "ON",
+        "postalCode": "M5H 2N2",
+        "countryCode": "CA"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "FEDEX_INTERNATIONAL_CONNECT_PLUS",
+        "FEDEX_INTERNATIONAL_ECONOMY",
+        "FEDEX_INTERNATIONAL_PRIORITY"
+      ],
+      "options": [
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_INTERNATIONAL_PRIORITY",
+          "courierServiceDisplayName": "FedEx International Priority"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_INTERNATIONAL_CONNECT_PLUS",
+          "courierServiceDisplayName": "FedEx International Connect Plus"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_INTERNATIONAL_ECONOMY",
+          "courierServiceDisplayName": "FedEx International Economy"
+        }
+      ]
+    },
+    {
+      "name": "quote-ok, place-not-found street: the quote",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "line2 longer than 35 characters",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "addressLine2": "Suite 900 North Example Tower Annex B"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Address Lines cannot be longer than 35 characters."
+      ],
+      "courierServiceCodes": [],
+      "options": []
+    },
+    {
+      "name": "P.O. Box spelling",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "P.O. Box 100",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        }
+      ]
+    },
+    {
+      "name": "Post Office Box spelling",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "Post Office Box 100",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "countryCode USA",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004",
+        "countryCode": "USA"
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.CountryCode": [
+            "'Shipping Address Country Code' must be 2 characters in length. You entered 3 characters."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "military APO",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "Unit 2050 Box 4190",
+        "city": "APO",
+        "stateOrRegion": "AE",
+        "postalCode": "09012"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Invalid state or region for US domestic address."
+      ],
+      "courierServiceCodes": [],
+      "options": []
+    },
+    {
+      "name": "Puerto Rico ZIP3 009",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "100 Calle Fortaleza",
+        "city": "San Juan",
+        "stateOrRegion": "PR",
+        "postalCode": "00901"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        }
+      ]
+    },
+    {
+      "name": "full state name",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "Arizona",
+        "postalCode": "85004"
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.StateOrRegion": [
+            "'Shipping Address State Or Region' must be 2 characters in length. You entered 7 characters."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "4-digit ZIP",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "8500"
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.PostalCode": [
+            "The length of 'Shipping Address Postal Code' must be at least 5 characters. You entered 4 characters."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "ZIP+4",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008-1351"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "missing recipientName",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "recipientName": null
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.RecipientName": [
+            "'Shipping Address Recipient Name' must not be empty."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "missing phone",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "phone": null
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "missing city",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": null,
+        "stateOrRegion": "TX",
+        "postalCode": "77008"
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.City": [
+            "'Shipping Address City' must not be empty."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "blank countryCode",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "countryCode": ""
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.CountryCode": [
+            "'Shipping Address Country Code' must be 2 characters in length. You entered 0 characters."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "state does not match ZIP3 (90210 TX)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "9336 Civic Center Dr",
+        "city": "Beverly Hills",
+        "stateOrRegion": "TX",
+        "postalCode": "90210"
+      },
+      "status": 500,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "statusCode": 500,
+        "message": "Code: CRSVZIP.CODE.INVALID,Message: edEx service is not currently available to this ZIP/postal code. Enter new information or contact FedEx Customer Service (U.S. and Canada, please dial 1.800.GoFedEx 1.800.463.3339).",
+        "payload": null,
+        "errorType": null
+      }
+    },
+    {
+      "name": "undeliverable ZIP3 590",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1 Unlisted County Road 9",
+        "city": "Nowhere",
+        "stateOrRegion": "MT",
+        "postalCode": "59001"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "rural place-not-found street (MO)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "4440 County Road 000",
+        "city": "Valles Mines",
+        "stateOrRegion": "MO",
+        "postalCode": "63087"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "zone 8 (Honolulu)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "2335 Kalakaua Ave",
+        "city": "Honolulu",
+        "stateOrRegion": "HI",
+        "postalCode": "96815"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        }
+      ]
+    },
+    {
+      "name": "zone 7 (Mountain View)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1600 Amphitheatre Pkwy",
+        "city": "Mountain View",
+        "stateOrRegion": "CA",
+        "postalCode": "94043"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "missing addressLine1",
+      "operation": "quote",
+      "address": {
+        "addressLine1": null,
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008"
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.AddressLine1": [
+            "'Shipping Address Address Line1' must not be empty."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "blank postalCode",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": ""
+      },
+      "status": 500,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "statusCode": 500,
+        "message": "Code: DESTINATION.POSTALCODE.MISSING.ORINVALID,Message: Destination postal code missing or invalid.",
+        "payload": null,
+        "errorType": null
+      }
+    },
+    {
+      "name": "blank stateOrRegion",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "",
+        "postalCode": "77008"
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.StateOrRegion": [
+            "'Shipping Address State Or Region' must not be empty.",
+            "'Shipping Address State Or Region' must be 2 characters in length. You entered 0 characters."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "non-digit ZIP",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "ABCDE"
+      },
+      "status": 500,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "statusCode": 500,
+        "message": "Code: DESTINATION.POSTALCODE.MISSING.ORINVALID,Message: Destination postal code missing or invalid.",
+        "payload": null,
+        "errorType": null
+      }
+    },
+    {
+      "name": "line1 and line2 longer than 35",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1234 North Example Boulevard Extension",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004",
+        "addressLine2": "1234 North Example Boulevard Extension"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Address Lines cannot be longer than 35 characters."
+      ],
+      "courierServiceCodes": [],
+      "options": []
+    },
+    {
+      "name": "missing recipientName and city",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": null,
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "recipientName": null
+      },
+      "status": 400,
+      "errorMessages": [],
+      "courierServiceCodes": [],
+      "error": {
+        "errors": {
+          "shippingAddress.City": [
+            "'Shipping Address City' must not be empty."
+          ],
+          "shippingAddress.RecipientName": [
+            "'Shipping Address Recipient Name' must not be empty."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "name": "unknown US state ZZ",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "ZZ",
+        "postalCode": "77008"
+      },
+      "status": 200,
+      "errorMessages": [
+        "Invalid state or region for US domestic address."
+      ],
+      "courierServiceCodes": [],
+      "options": []
+    },
+    {
+      "name": "line1 exactly 35 characters",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W Building Twelve Rm 10",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "zone 8 (Anchorage)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "632 W 6th Ave",
+        "city": "Anchorage",
+        "stateOrRegion": "AK",
+        "postalCode": "99501"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        }
+      ]
+    },
+    {
+      "name": "Beverly Hills with its own state",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "9336 Civic Center Dr",
+        "city": "Beverly Hills",
+        "stateOrRegion": "CA",
+        "postalCode": "90210"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "PO Box in zone 7",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "PO Box 100",
+        "city": "Mountain View",
+        "stateOrRegion": "CA",
+        "postalCode": "94043"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        }
+      ]
+    },
+    {
+      "name": "blank phone",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "phone": ""
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ],
+      "options": [
+        {
+          "courierName": "DHL",
+          "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+          "courierServiceDisplayName": "DHL Expedited"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_PRIORITY_OVERNIGHT",
+          "courierServiceDisplayName": "FedEx Priority Overnight"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_2_DAY_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Standard 2Day One Rate"
+        },
+        {
+          "courierName": "FedEx",
+          "courierServiceCode": "FEDEX_EXPRESS_SAVER_ONE_RATE",
+          "courierServiceDisplayName": "FedEx Express Saver One Rate"
+        }
+      ]
+    },
+    {
+      "name": "quote-ok, place-not-found street: the place",
+      "operation": "place",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+      "status": 400,
+      "message": "Shipping address(es) not validated: 501 N 5th St : Address Not Found"
+    }
+  ]
+}

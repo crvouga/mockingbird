@@ -11,17 +11,17 @@ import {
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import { CORPUS_VERSION } from "./corpus.js"
+import { CATALOGS, type Catalog, CORPUS_VERSION } from "./corpus.js"
 import { type CustomResults, RESULT_FIXTURES, type ResultFixture } from "./fixtures/index.js"
 import { document } from "./generated/openapi.js"
 import { GENEBYGENE_NAMESPACE, GeneByGeneAPI, tokenCredential } from "./index.js"
-import type { BlockMode, ProductDto, Settings } from "./types.js"
+import type { AddressDto, BlockMode, ProductDto, Settings } from "./types.js"
 import { gxgSigner } from "./webhooks.js"
 
 const NUCLEUS_ERROR = (status: number, message: string, errorType: string) => ({
   statusCode: status,
   message,
-  payload: null,
+  payload: {},
   errorType,
 })
 
@@ -75,6 +75,11 @@ export const GENEBYGENE_PRESETS: Record<string, FaultPreset> = {
       { operationId: "CreateOrder", effect: "address_not_validated" },
       { operationId: "UpdateShipmentAddress", effect: "address_not_validated" },
     ],
+  },
+  address_not_found: {
+    description:
+      'The next shipped place answers 400 "Shipping address(es) not validated: <line1> : Address Not Found", even for a street that would pass',
+    rules: [{ operationId: "CreateOrder", effect: "address_not_found", count: 1 }],
   },
   slow_orders: {
     description: "POST /api/v2/orders takes 5 s (override with latencyMs)",
@@ -203,7 +208,43 @@ const parseSettings = (body: Record<string, unknown>): Partial<Settings> | strin
     if (typeof body.resultsBucket !== "string") return "resultsBucket: string"
     patch.resultsBucket = body.resultsBucket
   }
+  if (body.catalog !== undefined) {
+    if (!CATALOGS.includes(body.catalog as Catalog)) {
+      return `catalog must be one of ${CATALOGS.join(", ")}`
+    }
+    patch.catalog = body.catalog as Catalog
+  }
+  if (body.kitAssociation !== undefined) {
+    if (body.kitAssociation !== "immediate" && body.kitAssociation !== "deferred") {
+      return "kitAssociation must be immediate or deferred"
+    }
+    patch.kitAssociation = body.kitAssociation
+  }
   return patch
+}
+
+const CORPUS_KINDS = ["quote-ok-place-not-found", "quote-ok-place-ok"] as const
+
+/** `PUT /__admin/addresses/corpus` rows: synthetic streets only, never a real member's. */
+const parseCorpusRow = (
+  body: Record<string, unknown>,
+): Settings["addressCorpus"][number] | string => {
+  const kind = body.kind as (typeof CORPUS_KINDS)[number]
+  if (!CORPUS_KINDS.includes(kind)) return `kind must be one of ${CORPUS_KINDS.join(", ")}`
+  const fields = ["addressLine1", "city", "stateOrRegion", "postalCode"] as const
+  for (const field of fields) {
+    if (typeof body[field] !== "string" || (body[field] as string).trim() === "") {
+      return `${field}: non-empty string`
+    }
+  }
+  return {
+    kind,
+    addressLine1: body.addressLine1 as string,
+    city: body.city as string,
+    stateOrRegion: body.stateOrRegion as string,
+    postalCode: body.postalCode as string,
+    note: typeof body.note === "string" ? body.note : "added through PUT /__admin/addresses/corpus",
+  }
 }
 
 const adminRoutes = (runtime: ServiceRuntime<GeneByGeneAPI>): AdminRoutes => ({
@@ -242,6 +283,7 @@ const adminRoutes = (runtime: ServiceRuntime<GeneByGeneAPI>): AdminRoutes => ({
       ...(typeof body.errorCode === "number" ? { errorCode: body.errorCode } : {}),
       ...(typeof body.errorMessage === "string" ? { errorMessage: body.errorMessage } : {}),
       ...(typeof body.fixture === "string" ? { fixture: body.fixture as ResultFixture } : {}),
+      ...(body.pdf === true ? { pdf: true } : {}),
     })
     if (typeof kit === "string") {
       return adminError(
@@ -285,6 +327,52 @@ const adminRoutes = (runtime: ServiceRuntime<GeneByGeneAPI>): AdminRoutes => ({
     const patch = parseSettings(body)
     if (typeof patch === "string") return adminError(400, patch)
     return json(200, runtime.instance(namespace).state.update(patch))
+  },
+  "POST /addresses/classify": ({ body, namespace }) => {
+    if (!isRecord(body)) {
+      return adminError(
+        400,
+        "expected an AddressDto, or {address, productId?, courierServiceCode?}",
+      )
+    }
+    const { courierServiceCode, productId, ...rest } = body
+    const address = (isRecord(body.address) ? body.address : rest) as AddressDto
+    return json(
+      200,
+      runtime.instance(namespace).classify({
+        address,
+        ...(typeof productId === "string" ? { productId } : {}),
+        ...(typeof courierServiceCode === "string" ? { courierServiceCode } : {}),
+      }),
+    )
+  },
+  "GET /addresses/corpus": ({ namespace }) =>
+    json(200, { rows: runtime.instance(namespace).state.current().addressCorpus }),
+  "PUT /addresses/corpus": ({ body, namespace }) => {
+    if (!isRecord(body)) {
+      return adminError(
+        400,
+        "expected {kind, addressLine1, city, stateOrRegion, postalCode, note?}",
+      )
+    }
+    const row = parseCorpusRow(body)
+    if (typeof row === "string") return adminError(400, row)
+    const state = runtime.instance(namespace).state
+    const next = state.update({ addressCorpus: [...state.current().addressCorpus, row] })
+    return json(200, { rows: next.addressCorpus })
+  },
+  "POST /scenario/happy-path": async ({ body, namespace }) => {
+    if (!isRecord(body) || typeof body.orderId !== "string") {
+      return adminError(400, 'expected {"orderId": "<uuid>", "stepDelayMs"?: number}')
+    }
+    if (body.stepDelayMs !== undefined && typeof body.stepDelayMs !== "number") {
+      return adminError(400, "stepDelayMs: number")
+    }
+    const scenario = await runtime
+      .instance(namespace)
+      .startHappyPath(body.orderId, (body.stepDelayMs as number | undefined) ?? 0)
+    if (typeof scenario === "string") return adminError(404, scenario)
+    return json(200, scenario)
   },
   "POST /tokens/revoke": ({ namespace }) => {
     const state = runtime.instance(namespace).state

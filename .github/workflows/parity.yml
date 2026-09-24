@@ -31,7 +31,7 @@ jobs:
   parity:
     name: Live parity
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v5
 
@@ -41,27 +41,36 @@ jobs:
         timeout-minutes: 20
         run: bunx turbo run build --output-logs=errors-only
 
-      # Every MOCKINGBIRD_* repo secret becomes an env var for the steps below, so a newly
-      # added service's keys work without editing this file.
-      - name: Load MOCKINGBIRD_* repo secrets
-        env:
-          SECRETS: ${{ toJSON(secrets) }}
-        run: |
-          echo "$SECRETS" | jq -r '
-            to_entries[]
-            | select(.key | startswith("MOCKINGBIRD_"))
-            | "\(.key)<<__MOCKINGBIRD_EOF__\n\(.value)\n__MOCKINGBIRD_EOF__"
-          ' >> "$GITHUB_ENV"
-
+      # Sandbox keys, mapped one by one. Dumping the whole secrets context (toJSON(secrets))
+      # makes GitHub hold every run as "may be malicious" until someone approves it by hand.
+      # A service's parity script reads MOCKINGBIRD_<SERVICE>_*; add its secrets here.
       - name: Live parity (${{ inputs.services }})
-        timeout-minutes: 35
+        # A full default walk against a rate-limited vendor (Gene by Gene: 25 walks at 2 rps with
+        # ~1.6 s median latency, plus its recorded probes) needs most of this.
+        timeout-minutes: 55
         env:
           PARITY_SERVICES: ${{ inputs.services }}
+          MOCKINGBIRD_GENEBYGENE_CLIENT_ID: ${{ secrets.MOCKINGBIRD_GENEBYGENE_CLIENT_ID }}
+          MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET: ${{ secrets.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET }}
+          MOCKINGBIRD_JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
+          MOCKINGBIRD_STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         # One argument per service; parity-service.ts rejects anything that is not a
         # service with a parity script.
         run: |
           read -ra services <<< "$PARITY_SERVICES"
           bun run parity:service -- "${services[@]}"
+
+      # What a parity script recorded from the live vendor (e.g. genebygene's
+      # corpus/address-parity.json and src/corpus/live-catalogs.json), so it can be downloaded
+      # and committed.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-corpus
+          path: |
+            packages/service/*/corpus/
+            packages/service/*/src/corpus/
+          if-no-files-found: ignore
 
       - if: always()
         uses: ./.github/actions/turbo-cache-save

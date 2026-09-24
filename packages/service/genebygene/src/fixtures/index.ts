@@ -12,7 +12,7 @@ export type CustomResults = {
   json?: unknown
   /** The raw-data CSV text. */
   csv?: string
-  /** The PDF, base64. Default: a generated one-page PDF. */
+  /** The PDF, base64. Without it a PDF is published only when the transition asks (`pdf: true`). */
   pdfBase64?: string
 }
 
@@ -61,13 +61,16 @@ const reportFor = (fixture: ResultFixture): Record<string, unknown> =>
   fixture === "pgx" ? PGX_REPORT : fixture === "ancestry" ? ANCESTRY_REPORT : NORMAL_REPORT
 
 /**
- * The files a completed kit publishes: the comprehensive JSON report, its PDF, and the raw-data
- * CSV. The JSON's `barcode` / `lab_identifier` are the kit number, as the vendor's are.
+ * The files a completed kit publishes: the comprehensive JSON report and the raw-data CSV
+ * (`RSID,CHROMOSOME,POSITION,RESULT`), plus a one-page PDF only when asked for (`pdf: true`, or
+ * a custom `pdfBase64`). The JSON's `barcode` / `lab_identifier` are the kit number, as the
+ * vendor's are.
  */
 export const resultFiles = (
   kitNumber: string,
   source: { fixture: ResultFixture } | { custom: CustomResults },
   reportDate: string,
+  options: { pdf?: boolean } = {},
 ): ResultFile[] => {
   const custom = "custom" in source ? source.custom : undefined
   const report =
@@ -80,7 +83,8 @@ export const resultFiles = (
           report_date: reportDate,
         }
   const name = "fixture" in source ? source.fixture : "custom"
-  return [
+  const withPdf = options.pdf === true || custom?.pdfBase64 !== undefined
+  const files: ResultFile[] = [
     {
       resultType: "nutrigenomics_comprehensive_report_json",
       resultTypeName: "Comprehensive JSON Report",
@@ -88,7 +92,9 @@ export const resultFiles = (
       contentType: "application/json",
       bytes: encoder.encode(JSON.stringify(report)),
     },
-    {
+  ]
+  if (withPdf) {
+    files.push({
       resultType: "nutrigenomics_comprehensive_report_pdf",
       resultTypeName: "Comprehensive PDF Report",
       extension: "pdf",
@@ -101,13 +107,14 @@ export const resultFiles = (
             `Report date ${reportDate}`,
             `Fixture: ${name} (Mockingbird)`,
           ]),
-    },
-    {
-      resultType: "nt_custom_agena_panel_data",
-      resultTypeName: "NT Custom Agena Data File",
-      extension: "csv",
-      contentType: "text/csv",
-      bytes: encoder.encode(custom?.csv ?? RAW_DATA_CSV),
-    },
-  ]
+    })
+  }
+  files.push({
+    resultType: "nt_custom_agena_panel_data",
+    resultTypeName: "NT Custom Agena Data File",
+    extension: "csv",
+    contentType: "text/csv",
+    bytes: encoder.encode(custom?.csv ?? RAW_DATA_CSV),
+  })
+  return files
 }

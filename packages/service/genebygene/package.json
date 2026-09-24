@@ -54,7 +54,7 @@
     "layer": "service",
     "category": "health",
     "displayName": "Gene by Gene",
-    "status": "wip"
+    "status": "ready"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",

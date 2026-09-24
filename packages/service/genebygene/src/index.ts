@@ -22,12 +22,15 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import {
   ATTRIBUTE_DEFINITIONS,
+  attributeDefinition,
+  type Catalog,
+  catalogProducts,
+  DELUXE_BUNDLE_ID,
   EVENT_TYPES,
-  EXTRA_COURIER_CODES,
   LAB_RETURN_ADDRESS,
   PRODUCT_CODES,
-  SHIPPING_OPTIONS,
-  STAGING_PRODUCTS,
+  STAGING_ONLY_IDS,
+  SUBSCRIBABLE_EVENTS,
   TENANT_ID,
 } from "./corpus.js"
 import {
@@ -37,6 +40,19 @@ import {
   resultFiles,
 } from "./fixtures/index.js"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
+import {
+  type CorpusAddress,
+  closeoutDate,
+  courierServiceName,
+  MESSAGES,
+  notValidatedMessage,
+  placeCheck,
+  quoteMenu,
+  quoteVerdict,
+  RETURN_COURIER,
+  type ShippingOption,
+  trackingNumberFor,
+} from "./shipping.js"
 import { GeneByGeneState, netIso } from "./state.js"
 import type {
   AddressDto,
@@ -46,6 +62,7 @@ import type {
   OrderRecord,
   ProductDto,
   ResultRecord,
+  ScenarioRecord,
   Settings,
   ShipmentRecord,
   SubscriptionRecord,
@@ -67,12 +84,16 @@ import {
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { S3Target } from "@crvouga/mockingbird-service"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+export type { Catalog } from "./corpus.js"
 export {
   ATTRIBUTE_DEFINITIONS,
+  CATALOGS,
   CORPUS_VERSION,
+  catalogProducts,
+  DELUXE_BUNDLE_ID,
   EVENT_TYPES,
   PRODUCT_CODES,
-  SHIPPING_OPTIONS,
+  PRODUCTION_PRODUCTS,
   STAGING_PRODUCTS,
 } from "./corpus.js"
 export type { CustomResults, ResultFile, ResultFixture } from "./fixtures/index.js"
@@ -87,6 +108,27 @@ export {
 } from "./fixtures/index.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
+export type { CorpusAddress, CorpusKind, CourierService, ShippingOption } from "./shipping.js"
+export {
+  ADDRESS_CORPUS,
+  addressValidationErrors,
+  COURIER_SERVICES,
+  INTERNATIONAL_SERVICES,
+  MAX_ADDRESS_LINE,
+  menuFor,
+  placeCheck,
+  priceFor,
+  QUOTE_OK_PLACE_NOT_FOUND,
+  QUOTE_OK_PLACE_OK,
+  quoteMenu,
+  quoteVerdict,
+  RETURN_COURIER,
+  stateForZip3,
+  trackingNumberFor,
+  UNDELIVERABLE_ZIP3,
+  ZONE_FACTORS,
+  zoneFor,
+} from "./shipping.js"
 export { netIso } from "./state.js"
 export type {
   AddressDto,
@@ -126,6 +168,20 @@ export const KIT_STATUSES = [
 ] as const
 
 /** Kits past this point are with the lab: their order lines are no longer cancellable. */
+/** `POST /__admin/scenario/happy-path`, step by step. */
+const HAPPY_PATH = [
+  "associate",
+  "ship",
+  "Received",
+  "In Lab",
+  "In QC Analysis",
+  "QC Analysis Complete",
+  "Results Completed",
+] as const
+
+/** Fulfillment states whose shipment address can no longer change. */
+const LOCKED_FULFILLMENT = new Set<string>(["Shipped", "Canceled", "Error"])
+
 const WITH_LAB = new Set<string>([
   "Received",
   "In Lab",
@@ -135,11 +191,8 @@ const WITH_LAB = new Set<string>([
   "Completed",
 ])
 
-/** Every order request's address line is capped at 35 characters by GxG's carriers. */
-export const MAX_ADDRESS_LINE = 35
-
 export type GeneByGeneAPIOptions = APIOptions & {
-  /** Catalog every namespace starts with. Default: {@link STAGING_PRODUCTS}. */
+  /** A custom catalog. Default: the recorded catalogs, picked by `settings.catalog`. */
   products?: readonly ProductDto[]
   /** Initial per-namespace settings. */
   settings?: Partial<Settings>
@@ -158,6 +211,8 @@ export type TransitionInput = {
   errorMessage?: string
   /** Result fixture at `Completed`; default: `PUT /__admin/results/:kitNumber`, else `normal`. */
   fixture?: ResultFixture
+  /** Also publish the one-page PDF report. */
+  pdf?: boolean
 }
 
 export type ShipInput = { trackingNumber?: string; returnTrackingNumber?: string }
@@ -210,9 +265,37 @@ const PROBLEM_TYPES: Record<number, string> = {
   422: "https://tools.ietf.org/html/rfc4918#section-11.2",
 }
 
-/** Nucleus handler errors: `ErrorDto` (`GXG/shared/gxg-zod-schemas.ts` reads `message`). */
-const errorDto = (status: number, message: string, errorType?: string) =>
-  jsonRes(status, { statusCode: status, message, payload: null, errorType: errorType ?? null })
+/**
+ * Nucleus handler errors: `ErrorDto` (`{"statusCode":400,"message":…,"payload":{},
+ * "errorType":"ValidationError"}`). Our consumer branches on the status and on substrings of
+ * `message`, never on `errorType`.
+ */
+const errorDto = (status: number, message: string, errorType = "ValidationError") =>
+  jsonRes(status, { statusCode: status, message, payload: {}, errorType })
+
+/**
+ * A missing resource, as staging answers it: `ErrorDto` with a null payload and type
+ * (`{"statusCode":404,"message":"Resource not found.","payload":null,"errorType":null}`).
+ */
+const notFoundDto = (message = "Resource not found.") =>
+  jsonRes(404, { statusCode: 404, message, payload: null, errorType: null })
+
+/**
+ * A subscription that does not exist, as staging answers it: the empty GUID is a 400 problem
+ * ("Valid Notification Subscription Id required."), any other id a 404 `Invalid Id <id>`.
+ */
+const missingSubscription = (id: string) =>
+  EMPTY_GUID.test(id)
+    ? problem(400, "One or more validation errors occurred.", {
+        errors: { id: ["Valid Notification Subscription Id required."] },
+      })
+    : notFoundDto(`Invalid Id ${id}`)
+
+/** `getShippingOptions` for a product with nothing to ship, or an id the catalog lacks. */
+const NOT_VALID_FOR_SHIPPING = "This product Id is not valid for shipping options."
+
+/** The address-edit refusal once a shipment has tracking or has shipped (`can not`: two words). */
+const ADDRESS_LOCKED = "The shipment address can not be updated"
 
 /** ASP.NET problem details, with `errors` for model-binding validation failures. */
 const problem = (
@@ -229,12 +312,11 @@ const problem = (
     traceId: `00-${opaqueToken(`${title}:${extra.detail ?? ""}`, 32).toLowerCase()}-00`,
   })
 
-const unauthorized = (error?: string) =>
+/** An empty 401 (a JSON body here is a failure: our client only invalidates and retries). */
+const unauthorized = () =>
   new Response(null, {
     status: 401,
-    headers: {
-      "www-authenticate": error ? `Bearer error="${error}"` : "Bearer",
-    },
+    headers: { "www-authenticate": 'Bearer error="invalid_token"' },
   })
 
 /** Model-binding style errors, keyed like ASP.NET does (`items[0].productId`). */
@@ -268,11 +350,16 @@ const record = (context: OperationContext): Record<string, unknown> | undefined 
     ? (context.body.value as Record<string, unknown>)
     : undefined
 
+/** A query value; blank or whitespace-only is no value on staging (`?productType=%20` lists all). */
 const query = (context: OperationContext, name: string): string | undefined => {
-  const value = context.query[name]
-  if (typeof value === "string") return value
-  if (Array.isArray(value) && typeof value[0] === "string") return value[0]
-  return undefined
+  const raw = context.query[name]
+  const value =
+    typeof raw === "string"
+      ? raw
+      : Array.isArray(raw) && typeof raw[0] === "string"
+        ? raw[0]
+        : undefined
+  return value?.trim() ? value : undefined
 }
 
 const str = (value: unknown): string | null =>
@@ -294,27 +381,22 @@ const fullAddress = (address: AddressDto | undefined): Required<AddressDto> => (
   referenceId: address?.referenceId ?? null,
 })
 
-/** Why GxG would refuse to ship to `address`, or undefined. */
-const addressProblem = (address: AddressDto | undefined): string | undefined => {
-  const line1 = address?.addressLine1?.trim() ?? ""
-  if (line1.length === 0) return "address not found: AddressLine1 is required"
-  if (line1.length > MAX_ADDRESS_LINE)
-    return `AddressLine1 must be ${MAX_ADDRESS_LINE} characters or fewer`
-  if ((address?.addressLine2?.length ?? 0) > MAX_ADDRESS_LINE)
-    return `AddressLine2 must be ${MAX_ADDRESS_LINE} characters or fewer`
-  if (!address?.city?.trim() || !address.stateOrRegion?.trim() || !address.postalCode?.trim())
-    return "address not found: City, StateOrRegion and PostalCode are required"
-  return undefined
-}
-
 const isDomestic = (address: AddressDto | undefined) =>
   (address?.countryCode ?? "US").toUpperCase() === "US"
 
-const courierNames: Record<string, string> = {
-  ...Object.fromEntries(
-    SHIPPING_OPTIONS.map((o) => [o.courierServiceCode, o.courierServiceDisplayName]),
-  ),
-  ...EXTRA_COURIER_CODES,
+type QuoteOutcome =
+  | { kind: "http500" }
+  | { kind: "http400" }
+  | { kind: "validation"; errors: Record<string, string[]> }
+  | { kind: "errorMessages"; errorMessages: string[] }
+  | { kind: "carrier"; message: string }
+  | { kind: "options"; zone: number; options: ShippingOption[] }
+
+/** Address fields that decide where a kit goes (everything but the instruction). */
+const sameDestination = (a: AddressDto, b: AddressDto) => {
+  const { shippingInstruction: _a, ...left } = fullAddress(a)
+  const { shippingInstruction: _b, ...right } = fullAddress(b)
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 const slug = (name: string | null) =>
@@ -340,25 +422,147 @@ const kitStatusName = (value: string): string | undefined => {
   return KIT_STATUSES.find((status) => status.toLowerCase() === wanted)
 }
 
-const pageOf = (context: OperationContext): { offset: number; pageSize: number } | Response => {
+/** Case and spaces do not matter to an enum filter (`Lab Services` is `LabServices`). */
+const enumKey = (value: string) => value.replace(/\s+/g, "").toLowerCase()
+
+/** The enum filters staging validates, with the names it accepts (recorded live). */
+const QUERY_ENUMS = {
+  // `compact`: the error echoes the value without whitespace (`"a a"` → 'aa'); else as sent.
+  status: { label: "Status", names: ["Pending", ...KIT_STATUSES], compact: true },
+  productType: {
+    label: "Product Type",
+    names: ["Materials", "Bundle", "DigitalProduct", "LabServices"],
+    compact: true,
+  },
+  entityType: { label: "Entity Type", names: ["Kit"], compact: false },
+} as const
+const enumNames = (name: keyof typeof QUERY_ENUMS): ReadonlySet<string> =>
+  new Set(QUERY_ENUMS[name].names.map(enumKey))
+
+/** Character formats staging enforces on kit filters (recorded: `{`, `_`, `.`, spaces refused). */
+const QUERY_FORMATS = {
+  /** `kitNumbers` on the kit-order-line lists: letters, digits and commas. */
+  kitList: /^[A-Za-z0-9,]+$/,
+  /** `kitNumber` on `GET /api/v2/kits`: letters, digits, commas and hyphens. */
+  kitNumber: /^[A-Za-z0-9,-]+$/,
+} as const
+
+type QueryRule =
+  | "int"
+  | "bool"
+  | "date"
+  | "guid"
+  | "required"
+  | keyof typeof QUERY_ENUMS
+  | keyof typeof QUERY_FORMATS
+
+const pascal = (name: string) => `${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`
+const spaced = (name: string) => pascal(name).replace(/([a-z])([A-Z])/g, "$1 $2")
+const GUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+const EMPTY_GUID = /^0{8}-?0{4}-?0{4}-?0{4}-?0{12}$/
+
+/**
+ * Staging's query validation, as one problem-details 400 (recorded in corpus/live-errors.json):
+ * a value that does not bind (`The value 'a' is not valid for Offset.`) falls back to its
+ * default, then the validators run over the bound values (`'Status' has a range of values which
+ * does not include 'a'.`, `'Page Size' must be between 1 and 100000.`, `'Offset' must be
+ * greater than or equal to '0'.`, `'Result Id' must not be empty.`), and every message is
+ * reported together. `paged` adds the offset and pageSize rules.
+ */
+const queryProblem = (
+  context: OperationContext,
+  rules: Record<string, QueryRule | readonly QueryRule[]>,
+  paged = false,
+): Response | undefined => {
   const errors: Record<string, string[]> = {}
-  const read = (name: string, fallback: number) => {
-    const raw = query(context, name)
-    if (raw === undefined || raw === "") return fallback
-    const value = Number(raw)
-    if (!Number.isInteger(value)) {
-      errors[name] = [`The value '${raw}' is not valid.`]
-      return fallback
-    }
-    return value
+  const add = (name: string, message: string) => {
+    errors[name] = [...(errors[name] ?? []), message]
   }
-  const offset = read("offset", 0)
-  const pageSize = read("pageSize", 50)
-  if (Object.keys(errors).length > 0)
-    return problem(400, "One or more validation errors occurred.", { errors })
-  if (offset < 0) return errorDto(400, "Offset must be greater than or equal to 0.")
-  // GxG caps a page at 500 rows.
-  return { offset, pageSize: Math.min(Math.max(pageSize, 1), 500) }
+  const all: Record<string, readonly QueryRule[]> = {
+    ...(paged ? { offset: ["int"], pageSize: ["int"] } : {}),
+    ...Object.fromEntries(
+      Object.entries(rules).map(([k, v]) => [k, typeof v === "string" ? [v] : v]),
+    ),
+  }
+  for (const [name, list] of Object.entries(all)) {
+    const raw = query(context, name)
+    const present = raw !== undefined && raw !== ""
+    const notBound = `The value '${raw}' is not valid for ${pascal(name)}.`
+    let bound = present
+    for (const rule of list) {
+      if (!present) continue
+      if (rule === "int" && !/^[+-]?\d+$/.test(raw.trim())) add(name, notBound)
+      if (rule === "bool" && !/^(true|false)$/i.test(raw.trim())) add(name, notBound)
+      if (rule === "date" && Number.isNaN(Date.parse(raw))) add(name, notBound)
+      if (rule === "guid" && !GUID.test(raw.trim())) {
+        add(name, notBound)
+        bound = false
+      }
+    }
+    for (const rule of list) {
+      if (rule === "required") {
+        const empty = !bound || (list.includes("guid") && EMPTY_GUID.test(String(raw).trim()))
+        if (empty) add(name, `'${spaced(name)}' must not be empty.`)
+      } else if (rule in QUERY_FORMATS && present) {
+        // Checked trimmed: `" a"` passes, `"WB 1"` does not.
+        if (!QUERY_FORMATS[rule as keyof typeof QUERY_FORMATS].test(raw.trim())) {
+          add(name, `'${spaced(name)}' is not in the correct format.`)
+        }
+      } else if (rule in QUERY_ENUMS && present) {
+        const known = enumNames(rule as keyof typeof QUERY_ENUMS)
+        if (/^\d+$/.test(raw.trim()) || !known.has(enumKey(raw))) {
+          const { label, compact } = QUERY_ENUMS[rule as keyof typeof QUERY_ENUMS]
+          const shown = compact ? raw.replace(/\s+/g, "") : raw
+          add(name, `'${label}' has a range of values which does not include '${shown}'.`)
+        }
+      }
+    }
+  }
+  if (paged) {
+    const number = (name: string, fallback: number) => {
+      const raw = query(context, name)
+      return raw !== undefined && /^[+-]?\d+$/.test(raw.trim()) ? Number(raw) : fallback
+    }
+    const pageSize = number("pageSize", DEFAULT_PAGE_SIZE)
+    if (pageSize < 1 || pageSize > 100_000) {
+      add("pageSize", `'Page Size' must be between 1 and 100000. You entered ${pageSize}.`)
+    }
+    if (number("offset", 0) < 0) add("offset", "'Offset' must be greater than or equal to '0'.")
+  }
+  return Object.keys(errors).length > 0
+    ? problem(400, "One or more validation errors occurred.", { errors })
+    : undefined
+}
+
+/** A `{id}` route segment that is not a GUID: `The value 'x' is not valid.` (no field name). */
+const routeGuidProblem = (context: OperationContext): Response | undefined => {
+  const id = context.params.id ?? ""
+  return GUID.test(id)
+    ? undefined
+    : problem(400, "One or more validation errors occurred.", {
+        errors: { id: [`The value '${id}' is not valid.`] },
+      })
+}
+
+/**
+ * An id filter; staging ignores one that is not a GUID (`?orderId=⁇` lists every order) and the
+ * all-zero GUID, which is the parameter's default.
+ */
+const guidFilter = (context: OperationContext, name: string): string | undefined => {
+  const value = query(context, name)?.trim()
+  return value && GUID.test(value) && !EMPTY_GUID.test(value) ? value : undefined
+}
+
+/** Staging pages 100 rows when no pageSize is sent. */
+const DEFAULT_PAGE_SIZE = 100
+
+/** The page a list asks for; call `queryProblem(…, true)` first, which rejects bad values. */
+const pageOf = (context: OperationContext): { offset: number; pageSize: number } => {
+  const number = (name: string, fallback: number) => {
+    const raw = query(context, name)
+    return raw !== undefined && /^[+-]?\d+$/.test(raw.trim()) ? Number(raw) : fallback
+  }
+  return { offset: number("offset", 0), pageSize: number("pageSize", DEFAULT_PAGE_SIZE) }
 }
 
 const paginate = <T>(items: readonly T[], page: { offset: number; pageSize: number }) => ({
@@ -367,6 +571,15 @@ const paginate = <T>(items: readonly T[], page: { offset: number; pageSize: numb
   totalCount: items.length,
   items: items.slice(page.offset, page.offset + page.pageSize),
 })
+
+const isJson = (value: string) => {
+  try {
+    JSON.parse(value)
+    return true
+  } catch {
+    return false
+  }
+}
 
 const csv = (value: string | undefined) =>
   (value ?? "")
@@ -401,7 +614,7 @@ export class GeneByGeneAPI implements FetchAPI {
     this.resultsS3 = options.resultsS3
     this.publicNamespace = options.publicNamespace
     this.state = new GeneByGeneState(sqlite, namespace, {
-      products: options.products ?? STAGING_PRODUCTS,
+      products: options.products ?? [],
       settings: {
         ...(options.resultsS3 ? { resultsBucket: options.resultsS3.bucket } : {}),
         ...options.settings,
@@ -431,9 +644,11 @@ export class GeneByGeneAPI implements FetchAPI {
       SearchResults: (c) => this.searchResults(c),
       GetResultPresignedUrl: (c) => this.presignedUrl(c),
       GetResultBlob: (c) => this.blob(c),
-      ListAttributeDefinitions: () => jsonRes(200, ATTRIBUTE_DEFINITIONS),
+      ListAttributeDefinitions: (c) =>
+        queryProblem(c, { entityType: "entityType" }) ?? jsonRes(200, ATTRIBUTE_DEFINITIONS),
       ListEventTypes: (c) => {
-        const name = query(c, "name")
+        // A blank name is no filter on staging.
+        const name = query(c, "name")?.trim()
         return jsonRes(
           200,
           EVENT_TYPES.filter((e) => !name || e.name.toLowerCase().includes(name.toLowerCase())),
@@ -461,21 +676,18 @@ export class GeneByGeneAPI implements FetchAPI {
         if (id === "PostConnectToken" || id === "GetResultBlob") return undefined
         const token = bearerToken(context.request)
         if (!token) return unauthorized()
-        if (faultEffect(context.request, "token_revoked") !== undefined) {
-          return unauthorized("invalid_token")
-        }
+        if (faultEffect(context.request, "token_revoked") !== undefined) return unauthorized()
         const claims = tokenClaims(token)
-        if (!claims) return unauthorized("invalid_token")
+        if (!claims) return unauthorized()
         const settings = this.state.current()
+        // The token dies at issuedAt + expires_in on the mock clock.
         const nowSeconds = Math.floor(this.now() / 1000)
-        if (nowSeconds >= claims.issuedAt + settings.tokenTtlSeconds) {
-          return unauthorized("invalid_token")
-        }
+        if (nowSeconds >= claims.issuedAt + settings.tokenTtlSeconds) return unauthorized()
         if (
           claims.generation !== settings.tokenGeneration ||
           settings.blockedClients[claims.clientId]
         ) {
-          return unauthorized("invalid_token")
+          return unauthorized()
         }
         return undefined
       },
@@ -484,7 +696,8 @@ export class GeneByGeneAPI implements FetchAPI {
     this.sqlite = this.service.sqlite
   }
 
-  fetch(request: Request): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
+    await this.runDueScenarios()
     return this.service.fetch(request)
   }
 
@@ -515,8 +728,9 @@ export class GeneByGeneAPI implements FetchAPI {
     if (form.grant_type !== undefined && form.grant_type !== "client_credentials") {
       return jsonRes(400, { error: "unsupported_grant_type" })
     }
-    if (!form.grant_type || !form.client_id || !form.client_secret) {
-      return jsonRes(400, { error: form.client_id ? "invalid_client" : "invalid_request" })
+    // A whitespace-only client_id is a missing one on the auth host (invalid_request).
+    if (!form.grant_type || !form.client_id?.trim() || !form.client_secret) {
+      return jsonRes(400, { error: form.client_id?.trim() ? "invalid_client" : "invalid_request" })
     }
     const settings = this.state.current()
     const blocked = settings.blockedClients[form.client_id]
@@ -542,8 +756,15 @@ export class GeneByGeneAPI implements FetchAPI {
 
   // --- catalog -------------------------------------------------------------------------------
 
-  private products(): ProductDto[] {
-    return this.state.products.list({ order: "oldest" }).map((row) => row.value)
+  private products(): readonly ProductDto[] {
+    if (this.state.products.count() > 0) {
+      return this.state.products.list({ order: "oldest" }).map((row) => row.value)
+    }
+    return catalogProducts(this.catalog())
+  }
+
+  private catalog(): Catalog {
+    return this.state.current().catalog ?? "both"
   }
 
   /** A catalog product, or a bundle component, by id. */
@@ -564,57 +785,140 @@ export class GeneByGeneAPI implements FetchAPI {
     const productId = query(context, "productId")
     const productCode = query(context, "productCode")
     const productType = query(context, "productType")
-    if (productId) {
-      const product = this.findProduct(productId)
-      return product
-        ? jsonRes(200, [product])
-        : problem(404, "Not Found", { detail: `Product ${productId} not found.` })
-    }
+    // Staging ignores a productId that is not a GUID, and matches a GUID against each listed
+    // product's own id or any of its components' ids (a component id lists its bundles).
+    const byId =
+      productId && GUID.test(productId.trim()) ? productId.trim().toLowerCase() : undefined
     return jsonRes(
       200,
       this.products().filter(
         (p) =>
+          (!byId ||
+            p.id.toLowerCase() === byId ||
+            p.components.some((c) => c.product.id.toLowerCase() === byId)) &&
           (!productCode || this.productCode(p) === productCode) &&
-          (!productType || p.productType?.toLowerCase() === productType.toLowerCase()),
+          // Staging matches the type with SQL LIKE '%…%' (not modelled beyond a substring).
+          (!productType ||
+            (p.productType ?? "").toLowerCase().includes(productType.trim().toLowerCase())),
       ),
     )
+  }
+
+  /** Namespace corpus rows added through `PUT /__admin/addresses/corpus`. */
+  private extraCorpus(): readonly CorpusAddress[] {
+    return this.state.current().addressCorpus ?? []
+  }
+
+  /**
+   * Whether a product can be quoted: the product, an empty 500 (a staging-only id against the
+   * production catalog), or the 400 "not valid for shipping options" (unknown id, or nothing
+   * to ship).
+   */
+  private quotable(productId: string): ProductDto | "http500" | "http400" {
+    if (this.catalog() === "production" && STAGING_ONLY_IDS.has(productId)) return "http500"
+    const product = this.findProduct(productId)
+    if (!product || !expand(product).some((e) => isShippable(e.product))) return "http400"
+    return product
+  }
+
+  /**
+   * The quote (`quoteVerdict`): request validation, the address rules, the carrier's refusals,
+   * then the destination's menu. Never the USPS deliverability check, so an address the place
+   * check will reject still gets its zone's menu.
+   */
+  quote(productId: string, address: AddressDto | undefined, quantity = 1): QuoteOutcome {
+    const quotable = this.quotable(productId)
+    if (quotable === "http500") return { kind: "http500" }
+    if (quotable === "http400") return { kind: "http400" }
+    const verdict = quoteVerdict(address)
+    if (verdict.kind !== "ok") return verdict
+    if (quantity < 1)
+      return { kind: "errorMessages", errorMessages: ["Quantity must be at least 1."] }
+    const menu = quoteMenu(address as AddressDto, this.now()) as {
+      zone: number
+      options: ShippingOption[]
+    }
+    return { kind: "options", zone: menu.zone, options: menu.options }
   }
 
   private shippingOptions(context: OperationContext): Response {
     const invalid = validationErrors(context)
     if (invalid) return invalid
     const body = record(context) ?? {}
-    const product = this.findProduct(String(body.productId))
-    if (!product) return errorDto(400, `Product ${String(body.productId)} not found.`, "NotFound")
-    if (!expand(product).some((e) => isShippable(e.product))) {
-      return errorDto(400, `Product ${product.name} is not valid for shipping options.`)
-    }
+    const productId = String(body.productId)
     const address = body.shippingAddress as AddressDto | undefined
-    const refuse = (message: string) =>
-      jsonRes(200, { dutiesAndTaxesIncluded: false, errorMessages: [message], shippingOptions: [] })
-    if (faultEffect(context.request, "address_not_validated") !== undefined) {
-      return refuse("Address not found")
+    const refuse = (errorMessages: string[]) =>
+      jsonRes(200, { dutiesAndTaxesIncluded: false, errorMessages, shippingOptions: [] })
+    if (
+      faultEffect(context.request, "address_not_validated") !== undefined &&
+      typeof this.quotable(productId) === "object"
+    ) {
+      return refuse([MESSAGES.addressNotFound])
     }
-    const why = addressProblem(address)
-    if (why) return refuse(why)
-    if (!isDomestic(address))
-      return refuse("International shipping is not available for this product.")
     const quantity = typeof body.quantity === "number" ? body.quantity : 1
-    if (quantity < 1) return refuse("Quantity must be at least 1.")
-    const day = 86_400_000
+    const quote = this.quote(productId, address, quantity)
+    if (quote.kind === "http500" || quote.kind === "http400") {
+      // A staging-only id against the production tenant: an empty 500, as recorded.
+      return quote.kind === "http500"
+        ? new Response(null, { status: 500 })
+        : errorDto(400, NOT_VALID_FOR_SHIPPING)
+    }
+    if (quote.kind === "validation") {
+      return problem(400, "One or more validation errors occurred.", { errors: quote.errors })
+    }
+    if (quote.kind === "carrier") {
+      return jsonRes(500, {
+        statusCode: 500,
+        message: quote.message,
+        payload: null,
+        errorType: null,
+      })
+    }
+    if (quote.kind === "errorMessages") return refuse(quote.errorMessages)
     return jsonRes(200, {
-      dutiesAndTaxesIncluded: false,
+      dutiesAndTaxesIncluded: true,
       errorMessages: [],
-      shippingOptions: SHIPPING_OPTIONS.map((option) => ({
-        courierName: option.courierName,
-        courierServiceCode: option.courierServiceCode,
-        courierServiceDisplayName: option.courierServiceDisplayName,
-        estimatedShipDate: netIso(this.now() + day),
-        estimatedPrice: Math.round(option.estimatedPrice * quantity * 100) / 100,
-        estimatedDeliveryDate: netIso(this.now() + day * (1 + option.transitDays)),
-        attributes: { ...option.attributes },
-      })),
+      shippingOptions: quote.options,
     })
+  }
+
+  /**
+   * Classify an address without placing anything (`POST /__admin/addresses/classify`): what the
+   * quote answers, what a shipped place answers, and the zone's codes and prices.
+   */
+  classify(input: { address: AddressDto; productId?: string; courierServiceCode?: string }) {
+    const quote = this.quote(input.productId ?? DELUXE_BUNDLE_ID, input.address)
+    const place = placeCheck(input.address, this.extraCorpus())
+    const menu = quote.kind === "options" ? quote.options : []
+    const code = input.courierServiceCode
+    const badCourier = code !== undefined && !this.courierAllowed(code, menu)
+    return {
+      quote: quote.kind,
+      place: place.ok ? (badCourier ? "bad-courier" : "ok") : place.kind,
+      ...(place.ok ? {} : { reason: place.reason }),
+      ...(quote.kind === "errorMessages" ? { errorMessages: quote.errorMessages } : {}),
+      zone: quote.kind === "options" ? quote.zone : null,
+      codes: menu.map((o) => o.courierServiceCode),
+      prices: Object.fromEntries(menu.map((o) => [o.courierServiceCode, o.estimatedPrice])),
+    }
+  }
+
+  /**
+   * The place-time check's 400 (`Shipping address(es) not validated: <line1> : <reason>`), or
+   * undefined when the address would ship. `forceNotFound` is the `address_not_found` preset.
+   */
+  private placeRefusal(address: AddressDto | undefined, forceNotFound = false) {
+    const check = placeCheck(address, this.extraCorpus())
+    if (!check.ok) return errorDto(400, notValidatedMessage(address, check.reason))
+    if (forceNotFound) return errorDto(400, notValidatedMessage(address, MESSAGES.addressNotFound))
+    return undefined
+  }
+
+  /** A code the zone's menu offers, or the bundle's return leg (`DHL_DOMESTIC_RETURN`). */
+  private courierAllowed(code: string, menu: readonly ShippingOption[]): boolean {
+    return (
+      code === RETURN_COURIER.courierServiceCode || menu.some((o) => o.courierServiceCode === code)
+    )
   }
 
   // --- orders --------------------------------------------------------------------------------
@@ -743,25 +1047,18 @@ export class GeneByGeneAPI implements FetchAPI {
         if (!expand(product).some((e) => isShippable(e.product))) {
           return errorDto(400, `Product ${product.name} is not valid for shipping options.`)
         }
+        const forceNotFound =
+          faultEffect(context.request, "address_not_validated") !== undefined ||
+          faultEffect(context.request, "address_not_found") !== undefined
         for (const shipment of shipments) {
-          if (faultEffect(context.request, "address_not_validated") !== undefined) {
-            return errorDto(
-              400,
-              "One or more shipping address(es) not validated: address not found.",
-              "Validation",
-            )
-          }
-          const why = addressProblem(shipment.address as AddressDto | undefined)
-          if (why) {
-            return errorDto(
-              400,
-              `One or more shipping address(es) not validated: ${why}.`,
-              "Validation",
-            )
-          }
+          const address = shipment.address as AddressDto | undefined
+          // The place-time USPS check: structure, then Address Not Found.
+          const refused = this.placeRefusal(address, forceNotFound)
+          if (refused) return refused
           const code = str(shipment.courierServiceCode)
           if (!code) return errorDto(400, "A courier service code is required for each shipment.")
-          if (!courierNames[code]) {
+          const menu = quoteMenu(address as AddressDto, this.now())?.options ?? []
+          if (!this.courierAllowed(code, menu)) {
             return errorDto(
               400,
               `The courier service code '${code}' is not valid for shipping options.`,
@@ -784,10 +1081,13 @@ export class GeneByGeneAPI implements FetchAPI {
       lineIds: [],
     }
     const withKits: LineRecord[] = []
-    const skipKits =
-      !this.state.current().generateKitNumbers ||
-      faultEffect(context.request, "no_kit_numbers") !== undefined
+    const settings = this.state.current()
+    const noKits = faultEffect(context.request, "no_kit_numbers") !== undefined
+    // Shipped-form places wait for the shipping desk when association is deferred (the
+    // production shape); quantity-only places always get their kit numbers in the same turn.
+    const deferShipped = settings.kitAssociation === "deferred" || !settings.generateKitNumbers
     for (const { item, product, shipments, quantity } of plans) {
+      const skipKits = noKits || (shipments.length > 0 && deferShipped)
       const lines: LineRecord[] = expand(product).map(
         ({ product: part, quantity: each, bundle }) => ({
           id: this.state.uuid("orderLine"),
@@ -814,15 +1114,18 @@ export class GeneByGeneAPI implements FetchAPI {
       const shipping = lines.find((line) => line.ships)
       if (shipping) {
         for (const shipment of shipments) {
+          // Echoed field for field, including the nulls the caller sent.
           const address = fullAddress(shipment.address as AddressDto)
           const code = String(shipment.courierServiceCode)
-          const option = SHIPPING_OPTIONS.find((o) => o.courierServiceCode === code)
+          const option = quoteMenu(address, this.now())?.options.find(
+            (o) => o.courierServiceCode === code,
+          )
           const fulfillment: FulfillmentRecord = {
             id: this.state.uuid("fulfillment"),
             orderId: order.id,
             orderLineId: shipping.id,
             quantity: shipment.quantity as number,
-            currentStatus: "Pending",
+            currentStatus: "Ordered",
             kitCount: shipment.quantity as number,
             isInternational: !isDomestic(address),
             closeoutDate: null,
@@ -837,7 +1140,7 @@ export class GeneByGeneAPI implements FetchAPI {
                 reference1: null,
                 price: option?.estimatedPrice ?? null,
                 courierServiceCode: code,
-                courierServiceName: courierNames[code] ?? null,
+                courierServiceName: courierServiceName(code),
                 referenceId: str(shipment.referenceId),
               },
               {
@@ -970,9 +1273,10 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listOrders(context: OperationContext): Response {
+    const invalid = queryProblem(context, { orderDateMin: "date", orderDateMax: "date" }, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
-    const orderId = query(context, "orderId")
+    const orderId = guidFilter(context, "orderId")
     const min = query(context, "orderDateMin")
     const max = query(context, "orderDateMax")
     const productName = query(context, "productName")?.toLowerCase()
@@ -999,16 +1303,18 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private getOrder(context: OperationContext): Response {
+    const unbound = routeGuidProblem(context)
+    if (unbound) return unbound
     const order = this.state.orders.get(context.params.id ?? "")
-    if (!order)
-      return problem(404, "Not Found", { detail: `Order ${context.params.id} not found.` })
+    if (!order) return notFoundDto()
     return annotateResponse(jsonRes(200, this.orderDto(order)), { ids: { orderId: order.id } })
   }
 
   private getOrderLine(context: OperationContext): Response {
+    const unbound = routeGuidProblem(context)
+    if (unbound) return unbound
     const line = this.state.lines.get(context.params.id ?? "")
-    if (!line)
-      return problem(404, "Not Found", { detail: `Order line ${context.params.id} not found.` })
+    if (!line) return notFoundDto()
     const order = this.state.orders.get(line.orderId) as OrderRecord
     const kits = line.kitNumbers.flatMap((k) => {
       const kit = this.state.kits.get(k)
@@ -1062,18 +1368,24 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private cancelFulfillment(context: OperationContext): Response {
     const fulfillment = this.state.fulfillments.get(context.params.id ?? "")
-    if (!fulfillment)
-      return problem(404, "Not Found", { detail: `Fulfillment ${context.params.id} not found.` })
+    if (!fulfillment) return notFoundDto()
     const conflict = this.cancelConflict(context)
     if (conflict) return conflict
     // Already shipped, or already canceled by an earlier partial cancel: both refuse.
-    if (fulfillment.currentStatus !== "Pending") {
+    if (fulfillment.currentStatus !== "Ordered") {
       return errorDto(
         400,
         `Fulfillment ${fulfillment.id} is not in a cancellable status (${fulfillment.currentStatus}).`,
       )
     }
     this.state.fulfillments.update(fulfillment.id, { ...fulfillment, currentStatus: "Canceled" })
+    // The kit it would have mailed is canceled with it (Kit.KitOrderLine.Canceled).
+    const line = this.state.lines.get(fulfillment.orderLineId)
+    for (const kitNumber of line?.kitNumbers ?? []) {
+      const kit = this.state.kits.get(kitNumber)
+      if (kit && !kit.canceled && !WITH_LAB.has(kit.status))
+        this.cancelKit(kit, 1, "Canceled via API")
+    }
     return annotateResponse(new Response(null, { status: 204 }), {
       ids: { fulfillmentId: fulfillment.id },
     })
@@ -1082,8 +1394,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private cancelKitOrderLines(context: OperationContext): Response {
     const kit = this.state.kits.get(context.params.kitNumber ?? "")
     // An already-canceled kit is gone from the vendor's point of view: 404 (idempotent success).
-    if (!kit || kit.canceled)
-      return problem(404, "Not Found", { detail: `Kit ${context.params.kitNumber} not found.` })
+    if (!kit || kit.canceled) return notFoundDto(`Kit ${context.params.kitNumber} not found`)
     const conflict = this.cancelConflict(context)
     if (conflict) return conflict
     if (WITH_LAB.has(kit.status)) {
@@ -1118,7 +1429,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private cancelOrderLine(context: OperationContext): Response {
     const line = this.state.lines.get(context.params.id ?? "")
     if (!line || line.currentStatus === "Canceled") {
-      return problem(404, "Not Found", { detail: `Order line ${context.params.id} not found.` })
+      return notFoundDto()
     }
     const conflict = this.cancelConflict(context)
     if (conflict) return conflict
@@ -1134,7 +1445,7 @@ export class GeneByGeneAPI implements FetchAPI {
     }
     for (const id of line.fulfillmentIds) {
       const f = this.state.fulfillments.get(id)
-      if (f && f.currentStatus === "Pending")
+      if (f && f.currentStatus === "Ordered")
         this.state.fulfillments.update(id, { ...f, currentStatus: "Canceled" })
     }
     this.state.lines.update(line.id, {
@@ -1149,11 +1460,14 @@ export class GeneByGeneAPI implements FetchAPI {
   // --- fulfillments --------------------------------------------------------------------------
 
   private listFulfillments(context: OperationContext): Response {
+    const invalid = queryProblem(context, {}, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
-    const orderId = query(context, "orderId")
-    const orderLineId = query(context, "orderLineId")
-    const fulfillmentId = query(context, "fulfillmentId")
+    // Staging filters by orderLineId instead of orderId whenever orderLineId is sent, even one
+    // it then ignores (`?orderId=<id>&orderLineId=a` lists every fulfillment).
+    const orderId = query(context, "orderLineId") ? undefined : guidFilter(context, "orderId")
+    const orderLineId = guidFilter(context, "orderLineId")
+    const fulfillmentId = guidFilter(context, "fulfillmentId")
     const items = this.state.fulfillments
       .list()
       .map((row) => row.value)
@@ -1172,6 +1486,12 @@ export class GeneByGeneAPI implements FetchAPI {
     )
   }
 
+  /**
+   * `EditAddressCommand`: replaces the shipment's address (no merge; the caller sends it whole)
+   * and re-runs the place check. An edit that changes only the instruction always goes through
+   * (our consumer's fallback when a field edit is refused). Once the shipment has tracking, or
+   * its fulfillment is Shipped / Canceled / Error, the address is locked.
+   */
   private updateShipmentAddress(context: OperationContext): Response {
     const invalid = validationErrors(context)
     if (invalid) return invalid
@@ -1181,38 +1501,31 @@ export class GeneByGeneAPI implements FetchAPI {
       .list()
       .map((row) => row.value)
       .find((f) => f.shipments.some((s) => s.id === shipmentId))
-    if (!fulfillment)
-      return problem(404, "Not Found", { detail: `Shipment ${shipmentId} not found.` })
+    if (!fulfillment) return notFoundDto()
     const shipment = fulfillment.shipments.find((s) => s.id === shipmentId) as ShipmentRecord
-    if (shipment.trackingNumber || fulfillment.currentStatus !== "Pending") {
-      return errorDto(
-        400,
-        `Shipment ${shipmentId} has already shipped or been canceled; its address can no longer be changed.`,
-      )
+    if (shipment.trackingNumber || LOCKED_FULFILLMENT.has(fulfillment.currentStatus)) {
+      return errorDto(400, ADDRESS_LOCKED)
     }
-    if (faultEffect(context.request, "address_not_validated") !== undefined) {
-      return errorDto(
-        400,
-        "One or more shipping address(es) not validated: address not found.",
-        "Validation",
-      )
+    const sent = body.address as AddressDto | undefined
+    const address = fullAddress(sent)
+    const instruction = str(body.shippingInstruction) ?? address.shippingInstruction
+    if (!sameDestination(address, shipment.address)) {
+      const forceNotFound = faultEffect(context.request, "address_not_validated") !== undefined
+      const refused = this.placeRefusal(sent, forceNotFound)
+      if (refused) return refused
     }
-    const address = fullAddress(body.address as AddressDto | undefined)
-    const why = addressProblem(address)
-    if (why)
-      return errorDto(400, `One or more shipping address(es) not validated: ${why}.`, "Validation")
-    const instruction = str(body.shippingInstruction)
+    const nextInstruction = instruction ?? shipment.shippingInstruction
     const updated: ShipmentRecord = {
       ...shipment,
-      address,
-      shippingInstruction:
-        instruction ?? address.shippingInstruction ?? shipment.shippingInstruction,
+      address: { ...address, shippingInstruction: nextInstruction },
+      shippingInstruction: nextInstruction,
     }
     this.state.fulfillments.update(fulfillment.id, {
       ...fulfillment,
       shipments: fulfillment.shipments.map((s) => (s.id === shipmentId ? updated : s)),
     })
-    return annotateResponse(jsonRes(200, this.shipmentDto(updated)), {
+    // 200 echoes the command.
+    return annotateResponse(jsonRes(200, body), {
       ids: { shipmentId, fulfillmentId: fulfillment.id },
     })
   }
@@ -1239,7 +1552,7 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private attributeDto(attribute: { name: string; value: string }) {
-    const definition = ATTRIBUTE_DEFINITIONS.find((d) => d.name === attribute.name)
+    const definition = attributeDefinition(attribute.name)
     return {
       name: attribute.name,
       displayName: definition?.displayName ?? attribute.name,
@@ -1322,11 +1635,12 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKits(context: OperationContext): Response {
+    const invalid = queryProblem(context, { status: "status", kitNumber: "kitNumber" }, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const kitNumber = query(context, "kitNumber")
     const orderNumber = query(context, "orderNumber")
-    const status = query(context, "status")?.toLowerCase()
+    const status = query(context, "status")
     const kits = this.state.kits
       .list()
       .map((row) => row.value)
@@ -1334,7 +1648,7 @@ export class GeneByGeneAPI implements FetchAPI {
         (k) =>
           (!kitNumber || k.kitNumber === kitNumber) &&
           (!orderNumber || k.orderIds.includes(orderNumber)) &&
-          (!status || k.status.toLowerCase() === status),
+          (!status || enumKey(k.status) === enumKey(status)),
       )
     return jsonRes(
       200,
@@ -1354,8 +1668,7 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private getKit(context: OperationContext): Response {
     const kit = this.state.kits.get(context.params.kitNumber ?? "")
-    if (!kit)
-      return problem(404, "Not Found", { detail: `Kit ${context.params.kitNumber} not found.` })
+    if (!kit) return notFoundDto(`Kit ${context.params.kitNumber} not found`)
     return annotateResponse(jsonRes(200, this.kitDto(kit)), { ids: { kitNumber: kit.kitNumber } })
   }
 
@@ -1374,7 +1687,7 @@ export class GeneByGeneAPI implements FetchAPI {
     if (invalid) return invalid
     const kitNumber = context.params.kitNumber ?? ""
     const kit = this.state.kits.get(kitNumber)
-    if (!kit) return problem(404, "Not Found", { detail: `Kit ${kitNumber} not found.` })
+    if (!kit) return notFoundDto(`Kit ${kitNumber} not found`)
     const body = record(context) ?? {}
     if (typeof body.kitNumber === "string" && body.kitNumber !== kitNumber) {
       return errorDto(400, `Kit number ${body.kitNumber} in the body does not match ${kitNumber}.`)
@@ -1385,7 +1698,7 @@ export class GeneByGeneAPI implements FetchAPI {
     const pairs: { name: string; value: string }[] = []
     for (const [index, attribute] of attributes.entries()) {
       const name = typeof attribute.name === "string" ? attribute.name.trim().toLowerCase() : ""
-      if (!ATTRIBUTE_DEFINITIONS.some((d) => d.name === name)) {
+      if (!attributeDefinition(name)) {
         return errorDto(400, `Attribute '${String(attribute.name)}' is not defined.`, "Validation")
       }
       const value = typeof attribute.value === "string" ? attribute.value.trim() : ""
@@ -1417,8 +1730,7 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private getKitResults(context: OperationContext): Response {
     const kit = this.state.kits.get(context.params.kitNumber ?? "")
-    if (!kit)
-      return problem(404, "Not Found", { detail: `Kit ${context.params.kitNumber} not found.` })
+    if (!kit) return notFoundDto()
     return jsonRes(200, {
       kitNumber: kit.kitNumber,
       gender: kit.gender,
@@ -1436,10 +1748,10 @@ export class GeneByGeneAPI implements FetchAPI {
   /** (kit, line) rows, newest kit first, filtered like `GET /api/v2/kitorderlines`. */
   private kitOrderLineRows(context: OperationContext): { kit: KitRecord; line: LineRecord }[] {
     const kitNumbers = csv(query(context, "kitNumbers"))
-    const orderId = query(context, "orderId")
-    const orderLineId = query(context, "orderLineId")
-    const status = query(context, "status")?.toLowerCase()
-    const productType = query(context, "productType")?.toLowerCase()
+    const orderId = guidFilter(context, "orderId")
+    const orderLineId = guidFilter(context, "orderLineId")
+    const status = query(context, "status")
+    const productType = query(context, "productType")
     const term = query(context, "attributeTerm")?.toLowerCase()
     const searched = csv(query(context, "attributesToSearch") ?? "FirstName,LastName").map((s) =>
       s.toLowerCase(),
@@ -1458,8 +1770,8 @@ export class GeneByGeneAPI implements FetchAPI {
       for (const line of this.kitLines(kit)) {
         if (orderId && line.orderId !== orderId) continue
         if (orderLineId && line.id !== orderLineId) continue
-        if (status && this.lineKitStatus(kit, line).toLowerCase() !== status) continue
-        if (productType && line.productType?.toLowerCase() !== productType) continue
+        if (status && enumKey(this.lineKitStatus(kit, line)) !== enumKey(status)) continue
+        if (productType && enumKey(line.productType ?? "") !== enumKey(productType)) continue
         rows.push({ kit, line })
       }
     }
@@ -1467,20 +1779,66 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKitOrderLines(context: OperationContext): Response {
+    const invalid = queryProblem(
+      context,
+      { status: "status", orderByAsc: "bool", kitNumbers: "kitList" },
+      true,
+    )
+    if (invalid) return invalid
+    // Staging fails with an empty 500 on a productType it cannot parse (kitorderlines/kits
+    // validates it as a 400 instead), and on an attributesFilter that is not JSON, but the
+    // latter only when rows remain to apply it to.
+    const rows = this.kitOrderLineRows(context)
+    const productType = query(context, "productType")
+    const filter = query(context, "attributesFilter")
+    if (productType && queryProblem(context, { productType: "productType" })) {
+      return new Response(null, { status: 500 })
+    }
+    if (filter && !isJson(filter) && rows.length > 0) {
+      return new Response(null, { status: 500 })
+    }
     const page = pageOf(context)
-    if (page instanceof Response) return page
     return jsonRes(
       200,
       paginate(
-        this.kitOrderLineRows(context).map(({ kit, line }) => this.kitOrderLineDto(kit, line)),
+        rows.map(({ kit, line }) => this.kitOrderLineDto(kit, line)),
         page,
       ),
     )
   }
 
   private listKitOrderLineKits(context: OperationContext): Response {
+    const invalid = queryProblem(
+      context,
+      {
+        status: "status",
+        productType: "productType",
+        orderByAsc: "bool",
+        kitNumbers: "kitList",
+      },
+      true,
+    )
+    if (invalid) return invalid
+    // After query validation, kitorderlines/kits wants a JSON array: anything else is a 400
+    // ErrorDto, and a non-empty array fails with an empty 500 (recorded for
+    // `[{"name":…,"value":…}]`; its element shape is not known).
+    const filter = query(context, "attributesFilter")
+    if (filter) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(filter)
+      } catch {}
+      if (!Array.isArray(parsed)) {
+        return jsonRes(400, {
+          statusCode: 400,
+          message: "Invalid search filter value",
+          payload: null,
+          errorType: null,
+        })
+      }
+      if (parsed.length > 0) return new Response(null, { status: 500 })
+    }
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const byKit = new Map<string, { kit: KitRecord; lines: LineRecord[] }>()
     for (const { kit, line } of this.kitOrderLineRows(context)) {
       const entry = byKit.get(kit.kitNumber) ?? { kit, lines: [] }
@@ -1515,12 +1873,11 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listResults(context: OperationContext): Response {
+    const invalid = queryProblem(context, {}, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
+    // An unknown kit is an empty page on staging, not a 404.
     const kitNumber = query(context, "kitNumber")
-    if (kitNumber && !this.state.kits.has(kitNumber)) {
-      return problem(404, "Not Found", { detail: `Kit ${kitNumber} not found.` })
-    }
     const results = this.state.results
       .list()
       .map((row) => row.value)
@@ -1535,8 +1892,21 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private searchResults(context: OperationContext): Response {
+    const invalid = queryProblem(
+      context,
+      {
+        dateOfBirth: "date",
+        orderByAsc: "bool",
+        resultDateYear: "int",
+        resultDateDayOfYear: "int",
+        collectionDateRangeStart: "date",
+        collectionDateRangeEnd: "date",
+        resultDate: "date",
+      },
+      true,
+    )
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const kits = [...csv(query(context, "kitNumbers")), ...csv(query(context, "kitList"))]
     const firstName = query(context, "firstName")?.trim().toLowerCase()
     const lastName = query(context, "lastName")?.trim().toLowerCase()
@@ -1580,6 +1950,24 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private presignedUrl(context: OperationContext): Response {
+    // Staging needs a resultId, or a kitNumber and a resultType: each is required when the
+    // other way of naming the result is incomplete (a resultId that does not bind is empty).
+    const given = (name: string) => (query(context, name) ?? "").trim().length > 0
+    const id = query(context, "resultId") ?? ""
+    const hasId = GUID.test(id.trim()) && !EMPTY_GUID.test(id.trim())
+    const byKit = given("kitNumber") && given("resultType")
+    const errors: Record<string, string[]> = {}
+    if (given("resultId") && !GUID.test(id.trim())) {
+      errors.resultId = [`The value '${id}' is not valid for ResultId.`]
+    }
+    if (!hasId && !byKit) {
+      errors.resultId = [...(errors.resultId ?? []), "'Result Id' must not be empty."]
+    }
+    if (!hasId && !given("kitNumber")) errors.kitNumber = ["'Kit Number' must not be empty."]
+    if (!hasId && !given("resultType")) errors.resultType = ["'Result Type' must not be empty."]
+    if (Object.keys(errors).length > 0) {
+      return problem(400, "One or more validation errors occurred.", { errors })
+    }
     const resultId = query(context, "resultId")
     const kitNumber = query(context, "kitNumber")
     const resultType = query(context, "resultType")
@@ -1593,7 +1981,12 @@ export class GeneByGeneAPI implements FetchAPI {
           (!resultType || r.resultType === resultType),
       )
     const result = resultId || kitNumber ? candidates[0] : undefined
-    if (!result) return problem(404, "Not Found", { detail: "No result matches the request." })
+    // By id, staging names the id; by kit and type, it spells "associated" its own way.
+    if (!result) {
+      return notFoundDto(
+        hasId ? `Invalid kit result ID ${id}` : "There is no report assoicated with that result",
+      )
+    }
     const date = Math.floor(this.now() / 1000)
     const expires = this.state.current().presignedUrlTtlSeconds
     const params = new URLSearchParams({
@@ -1662,10 +2055,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private eventsProblem(events: unknown): Response | undefined {
     if (!Array.isArray(events) || events.length === 0)
       return errorDto(400, "Valid event type is required.")
-    const subscribable = new Set<string>(
-      EVENT_TYPES.filter((e) => e.isSubscribable).map((e) => e.name),
-    )
-    return events.every((e) => typeof e === "string" && subscribable.has(e))
+    return events.every((e) => typeof e === "string" && SUBSCRIBABLE_EVENTS.has(e))
       ? undefined
       : errorDto(400, "Valid event type is required.")
   }
@@ -1735,15 +2125,13 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private getSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
-    if (!sub)
-      return problem(404, "Not Found", { detail: `Subscription ${context.params.id} not found.` })
+    if (!sub) return missingSubscription(context.params.id ?? "")
     return jsonRes(200, this.subscriptionDto(sub))
   }
 
   private updateSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
-    if (!sub)
-      return problem(404, "Not Found", { detail: `Subscription ${context.params.id} not found.` })
+    if (!sub) return missingSubscription(context.params.id ?? "")
     const invalid = validationErrors(context)
     if (invalid) return invalid
     const body = record(context) ?? {}
@@ -1769,8 +2157,7 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private deleteSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
-    if (!sub)
-      return problem(404, "Not Found", { detail: `Subscription ${context.params.id} not found.` })
+    if (!sub) return missingSubscription(context.params.id ?? "")
     this.state.subscriptions.delete(sub.id)
     return new Response(null, { status: 204 })
   }
@@ -1802,8 +2189,11 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   /**
-   * Ship an order: every pending fulfillment (one is created at a default address for a
-   * quantity-only order) gets tracking numbers and a closeout date; emits `Order.Shipped`.
+   * Ship an order: every open fulfillment (one is created at a default address for a
+   * quantity-only order) gets tracking numbers and a closeout date (`M/D/YYYY`, Houston time),
+   * the kit-material line reads `Shipped` (sibling lines stay as they are, as the recorded
+   * production orders show), and `Order.Shipped` goes out. Tracking numbers are minted from the
+   * shipment ids ({@link trackingNumberFor}) unless the admin call overrides them.
    */
   ship(
     orderId: string,
@@ -1812,8 +2202,7 @@ export class GeneByGeneAPI implements FetchAPI {
     const order = this.state.orders.get(orderId)
     if (!order) return `no order ${orderId}`
     const now = this.now()
-    const closeout = new Date(now)
-    const closeoutDate = `${closeout.getUTCMonth() + 1}/${closeout.getUTCDate()}/${closeout.getUTCFullYear()}`
+    const closeout = closeoutDate(now)
     const entries: ShippedEntry[] = []
     for (const line of this.state.linesOf(order)) {
       if (!line.ships || line.currentStatus === "Canceled") continue
@@ -1823,7 +2212,7 @@ export class GeneByGeneAPI implements FetchAPI {
           orderId: order.id,
           orderLineId: line.id,
           quantity: line.quantity,
-          currentStatus: "Pending",
+          currentStatus: "Ordered",
           kitCount: line.quantity,
           isInternational: false,
           closeoutDate: null,
@@ -1840,7 +2229,7 @@ export class GeneByGeneAPI implements FetchAPI {
               reference1: null,
               price: null,
               courierServiceCode: "DHL_PARCEL_EXPEDITED",
-              courierServiceName: courierNames.DHL_PARCEL_EXPEDITED ?? null,
+              courierServiceName: courierServiceName("DHL_PARCEL_EXPEDITED"),
               referenceId: null,
             },
             ...line.kitNumbers.map(() => ({
@@ -1862,31 +2251,34 @@ export class GeneByGeneAPI implements FetchAPI {
       }
       for (const id of line.fulfillmentIds) {
         const fulfillment = this.state.fulfillments.get(id)
-        if (fulfillment?.currentStatus !== "Pending") continue
+        if (fulfillment?.currentStatus !== "Ordered") continue
         const hhmmss = new Date(now).toISOString().slice(11, 19).replace(/:/g, "")
+        const outboundCode =
+          fulfillment.shipments.find((s) => !s.isReturnShipment)?.courierServiceCode ?? null
+        const minted = (s: ShipmentRecord) =>
+          trackingNumberFor({
+            shipmentId: s.id,
+            isReturnShipment: s.isReturnShipment,
+            courierServiceCode: s.isReturnShipment ? null : outboundCode,
+            postalCode: s.address.postalCode,
+          })
         const shipments = fulfillment.shipments.map((s, index) =>
           s.isReturnShipment
             ? {
                 ...s,
-                trackingNumber:
-                  s.trackingNumber ??
-                  input.returnTrackingNumber ??
-                  `4207700892020903${this.state.digits("return", 18)}`,
+                trackingNumber: s.trackingNumber ?? input.returnTrackingNumber ?? minted(s),
                 reference1: line.kitNumbers[Math.max(0, index - 1)] ?? line.kitNumbers[0] ?? null,
               }
             : {
                 ...s,
-                trackingNumber:
-                  s.trackingNumber ??
-                  input.trackingNumber ??
-                  `42085004936121101530${this.state.digits("outbound", 10)}`,
+                trackingNumber: s.trackingNumber ?? input.trackingNumber ?? minted(s),
                 reference1: `${line.kitNumbers[0] ?? "WB"}T${hhmmss}`,
               },
         )
         const shipped: FulfillmentRecord = {
           ...fulfillment,
           currentStatus: "Shipped",
-          closeoutDate,
+          closeoutDate: closeout,
           shipments,
         }
         this.state.fulfillments.update(id, shipped)
@@ -1907,11 +2299,6 @@ export class GeneByGeneAPI implements FetchAPI {
       })
     }
     if (entries.length === 0) return `order ${orderId} has nothing left to ship`
-    for (const line of this.state.linesOf(order)) {
-      if (!line.ships && line.currentStatus === "Pending") {
-        this.state.lines.update(line.id, { ...line, currentStatus: "Processing" })
-      }
-    }
     this.emit(GXG_EVENTS.orderShipped, orderShippedBody(order, entries))
     return { order: this.orderDto(order) }
   }
@@ -1928,6 +2315,78 @@ export class GeneByGeneAPI implements FetchAPI {
       ...("custom" in source ? { custom: source.custom } : {}),
     })
     return true
+  }
+
+  /**
+   * The one automatic motion: associate kit numbers (when deferred) → ship → `Received` →
+   * `In Lab` → `In QC Analysis` → `QC Analysis Complete` → `Results Completed`, emitting each
+   * step's webhooks. Step `i` runs once the mock clock reaches start + `i * stepDelayMs`
+   * (default 0: every step runs now); later steps run on the next request after the clock
+   * passes them.
+   */
+  async startHappyPath(orderId: string, stepDelayMs = 0): Promise<ScenarioRecord | string> {
+    if (!this.state.orders.has(orderId)) return `no order ${orderId}`
+    const scenario: ScenarioRecord = {
+      orderId,
+      startedAtMs: this.now(),
+      stepDelayMs: Math.max(0, stepDelayMs),
+      next: 0,
+      log: [],
+    }
+    this.state.scenarios.insert(orderId, scenario)
+    await this.runDueScenarios()
+    return this.state.scenarios.get(orderId) ?? scenario
+  }
+
+  private scenarioRunning = false
+
+  /** Run every happy-path step whose time has come on the mock clock. */
+  async runDueScenarios(): Promise<void> {
+    if (this.scenarioRunning || this.state.scenarios.count() === 0) return
+    this.scenarioRunning = true
+    try {
+      for (const { value } of this.state.scenarios.list({ order: "oldest" })) {
+        const scenario = { ...value, log: [...value.log] }
+        while (
+          scenario.next < HAPPY_PATH.length &&
+          scenario.startedAtMs + scenario.next * scenario.stepDelayMs <= this.now()
+        ) {
+          const step = HAPPY_PATH[scenario.next] as string
+          scenario.log.push(`${step}: ${await this.happyPathStep(scenario.orderId, step)}`)
+          scenario.next++
+        }
+        this.state.scenarios.update(scenario.orderId, scenario)
+      }
+    } finally {
+      this.scenarioRunning = false
+    }
+  }
+
+  private async happyPathStep(orderId: string, step: string): Promise<string> {
+    if (step === "associate") {
+      const order = this.state.orders.get(orderId)
+      const hasKits = order && this.state.linesOf(order).some((l) => l.kitNumbers.length > 0)
+      if (hasKits) return "kit numbers already associated"
+      this.generateKitNumbers(orderId)
+      return "kit numbers associated"
+    }
+    if (step === "ship") {
+      const shipped = this.ship(orderId)
+      return typeof shipped === "string" ? shipped : "shipped"
+    }
+    const order = this.state.orders.get(orderId)
+    const kits = order
+      ? this.state
+          .linesOf(order)
+          .flatMap((l) => l.kitNumbers)
+          .filter(unique)
+      : []
+    const outcomes: string[] = []
+    for (const kitNumber of kits) {
+      const kit = await this.transition(kitNumber, { to: step })
+      outcomes.push(typeof kit === "string" ? kit : `${kitNumber} ${step}`)
+    }
+    return outcomes.join("; ") || "no kits"
   }
 
   /**
@@ -1986,7 +2445,7 @@ export class GeneByGeneAPI implements FetchAPI {
                 ? (fixture as ResultFixture)
                 : "normal",
             }
-      const published = await this.publishResults(next, lines, source)
+      const published = await this.publishResults(next, lines, source, input.pdf === true)
       if (typeof published === "string") return published
       for (const line of lines) {
         if (!line.ships && line.currentStatus !== "Canceled") {
@@ -2019,9 +2478,10 @@ export class GeneByGeneAPI implements FetchAPI {
     kit: KitRecord,
     lines: readonly LineRecord[],
     source: { fixture: ResultFixture } | { custom: CustomResults },
+    pdf: boolean,
   ): Promise<ResultRecord[] | string> {
     const reportDate = this.iso()
-    const files = resultFiles(kit.kitNumber, source, reportDate)
+    const files = resultFiles(kit.kitNumber, source, reportDate, { pdf })
     const live = lines.filter((l) => l.currentStatus !== "Canceled")
     const reportLine =
       live.find((l) => l.productCode === "ngx_report_comprehensive_json") ??
@@ -2033,7 +2493,8 @@ export class GeneByGeneAPI implements FetchAPI {
     const bucket = this.resultsS3?.bucket ?? this.state.current().resultsBucket
     const published: ResultRecord[] = []
     for (const file of files) {
-      const key = `${kit.kitNumber}.${file.extension}`
+      // `s3://<bucket>/<namespace>/<kitNumber>.<ext>`: parallel workers share one bucket.
+      const key = `${this.publicNamespace ?? "default"}/${kit.kitNumber}.${file.extension}`
       const line = file.extension === "csv" ? rawLine : reportLine
       let resultPayload = `s3://${bucket}/${key}`
       if (this.resultsS3) {

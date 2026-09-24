@@ -23,6 +23,13 @@
 import { readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import {
+  ADDRESS_CORPUS,
+  COURIER_SERVICES,
+  INTERNATIONAL_SERVICES,
+  MAX_ADDRESS_LINE,
+  RETURN_COURIER,
+} from "../src/shipping.js"
 
 type Json = Record<string, unknown>
 
@@ -57,7 +64,9 @@ type Overlay = {
 }
 
 const NOT_CALLED = "Our consumer never calls this endpoint (GXG/transport/gxg-client.ts)."
-const notFound = { "404": { description: "Not Found", content: json(ref(PROBLEM)) } }
+// Staging answers a missing resource with ErrorDto (`"message": "Resource not found."`, null
+// payload and errorType), not problem details (recorded in corpus/live-errors.json).
+const notFound = { "404": { description: "Not Found", content: json(ref(ERROR)) } }
 const conflict = {
   "409": { description: "Not in a cancellable state (some tenants)", content: json(ref(ERROR)) },
 }
@@ -93,7 +102,17 @@ const OPERATIONS: Record<string, Overlay> = {
     unsafe: "cancels a real fulfillment",
     add: { ...notFound, ...conflict },
   },
-  "post /api/v2/fulfillments/actions/getShippingOptions": { id: "GetShippingOptions" },
+  "post /api/v2/fulfillments/actions/getShippingOptions": {
+    id: "GetShippingOptions",
+    // The carrier's refusal (a postal code that is not a ZIP, a ZIP3 in another state) is a 500
+    // ErrorDto on staging; a staging-only product on the production tenant is an empty 500.
+    add: {
+      "500": {
+        description: "Internal Server Error: the carrier's refusal (ErrorDto), or an empty body",
+        content: json(ref(ERROR)),
+      },
+    },
+  },
   "get /api/v2/kitorderlines": { id: "ListKitOrderLines", add: notFound },
   "delete /api/v2/kitorderlines": {
     id: "CancelKitOrderLinesBulk",
@@ -264,6 +283,28 @@ const parameter = (path: string, method: string, name: string, extension: Json) 
 const refTo = (type: string, missing = MISSING_UUID) => ({
   "x-mockingbird-resource-ref": { type, missing },
 })
+// Staging matches productCode with SQL LIKE (`a` and `%` list every product) against codes no
+// response carries, so the walk cannot know a code; our consumer never filters by it.
+parameter("/api/v2/products", "get", "productCode", {
+  "x-mockingbird-unsupported": {
+    reason: "Staging matches product codes with SQL LIKE, and no response carries a code.",
+  },
+})
+// eventTypes' name is the same kind of LIKE (`ჷ` lists all 12); our consumer never filters.
+parameter("/api/v2/eventTypes", "get", "name", {
+  "x-mockingbird-unsupported": {
+    reason:
+      "Staging matches event-type names with SQL LIKE under a collation that ignores some characters.",
+  },
+})
+// productType is a SQL LIKE too, under a collation that ignores some characters (`㏞` lists
+// every product); our consumer never filters by it.
+parameter("/api/v2/products", "get", "productType", {
+  "x-mockingbird-unsupported": {
+    reason:
+      "Staging matches product types with SQL LIKE under a collation that ignores some characters.",
+  },
+})
 parameter("/api/v2/orders/{id}", "get", "id", refTo("order"))
 parameter("/api/v2/orderLines/{id}", "get", "id", refTo("orderLine"))
 parameter("/api/v2/orderLines/{id}", "delete", "id", refTo("orderLine"))
@@ -401,10 +442,14 @@ annotate(
   "estimatedDeliveryDate",
   volatile("timestamp"),
 )
-annotate(".GetAvailableShippingOptions.ShippingOptionDto", "estimatedPrice", volatile("opaque"))
+// `estimatedPrice` is not volatile: the mock's zone table is deterministic, so self-parity
+// compares it. Live parity (scripts/parity.ts) compares code sets, never prices.
 annotate("EditAddressCommand", "id", {
   "x-mockingbird-resource-ref": { type: "shipment", missing: MISSING_UUID },
 })
+// The shipment id is how the vendor finds what to edit; our consumer always sends it and the
+// full address (the edit replaces, never merges).
+schemaNamed("EditAddressCommand").required = ["id", "address"]
 
 // The live API answers `null` for these object refs (docs/gxg-list-orders-prod.json).
 for (const name of [".ShipmentDto", "EditAddressCommand"]) {
@@ -460,9 +505,77 @@ annotate("CreateOrder", "items", { minItems: 1, maxItems: 2, nullable: false })
 annotate("CreateOrder_Item", "quantity", { minimum: 1, maximum: 5 })
 schemaNamed("CreateOrder_Shipment").required = ["address", "quantity", "courierServiceCode"]
 annotate("CreateOrder_Shipment", "quantity", { minimum: 1, maximum: 3 })
-annotate("CreateOrder_Shipment", "courierServiceCode", {
-  enum: ["DHL_PARCEL_EXPEDITED", "FEDEX_GROUND", "FEDEX_2_DAY_ONE_RATE", "DHL_DOMESTIC_RETURN"],
+// Generation hints that accept exactly what the vendor accepts. Each is `anyOf: [<the known
+// values>, <the permissive schema>]`: validation passes any value the permissive branch takes
+// (an unknown courier code is the handler's 400 "… not valid for shipping options", never a
+// model-binding error; any AddressDto is judged by the handler's address checks), while the
+// walks send the known values half the time, so they reach every address class.
+const COURIER_CODES = [
+  ...COURIER_SERVICES.map((s) => s.courierServiceCode),
+  ...INTERNATIONAL_SERVICES.map((s) => s.courierServiceCode),
+  RETURN_COURIER.courierServiceCode,
+]
+const courierCode = props("CreateOrder_Shipment").courierServiceCode as Json
+props("CreateOrder_Shipment").courierServiceCode = {
+  description: courierCode.description,
+  anyOf: [
+    { type: "string", enum: COURIER_CODES },
+    { type: "string", nullable: true },
+  ],
+}
+// Addresses the walks send besides random ones: quote-ok/place-ok, quote-ok/place-not-found
+// (the production split), zone 8, and the structural refusals.
+const corpusAddress = (row: (typeof ADDRESS_CORPUS)[number], isCommercial = false) => ({
+  isCommercial,
+  recipientName: "Mockingbird Test",
+  addressLine1: row.addressLine1,
+  addressLine2: null,
+  city: row.city,
+  stateOrRegion: row.stateOrRegion,
+  postalCode: row.postalCode,
+  countryCode: "US",
+  email: "test@example.com",
+  phone: "+15555550100",
 })
+// Interleaved (place-ok, place-not-found, …): fast-check's constantFrom favours early entries.
+const placeOk = ADDRESS_CORPUS.filter((row) => row.kind === "quote-ok-place-ok")
+const placeNotFound = ADDRESS_CORPUS.filter((row) => row.kind === "quote-ok-place-not-found")
+const addressExamples = [
+  ...placeOk.flatMap((row, i) => {
+    const miss = placeNotFound[i % placeNotFound.length] as (typeof ADDRESS_CORPUS)[number]
+    return [corpusAddress(row, i % 2 === 1), corpusAddress(miss, i % 2 === 0)]
+  }),
+  {
+    ...corpusAddress(ADDRESS_CORPUS[0] as (typeof ADDRESS_CORPUS)[number]),
+    addressLine1: "825 Fort Street",
+    city: "Honolulu",
+    stateOrRegion: "HI",
+    postalCode: "96813",
+  },
+  {
+    ...corpusAddress(ADDRESS_CORPUS[0] as (typeof ADDRESS_CORPUS)[number]),
+    addressLine1: "x".repeat(MAX_ADDRESS_LINE + 1),
+  },
+  {
+    ...corpusAddress(ADDRESS_CORPUS[0] as (typeof ADDRESS_CORPUS)[number]),
+    addressLine1: "PO Box 100",
+  },
+]
+const addressHint = {
+  anyOf: [{ type: "object", enum: addressExamples }, ref(".AddressDto")],
+}
+props("CreateOrder_Shipment").address = addressHint
+// A shipped place (one shipment, as our consumer sends) half the time; any list otherwise.
+const shipments = props("CreateOrder_Item").shipments as Json
+props("CreateOrder_Item").shipments = {
+  description: shipments.description,
+  anyOf: [
+    { type: "array", minItems: 1, maxItems: 1, items: ref("CreateOrder_Shipment") },
+    { type: "array", nullable: true, items: ref("CreateOrder_Shipment") },
+  ],
+}
+props(".GetAvailableShippingOptions.Query").shippingAddress = addressHint
+props("EditAddressCommand").address = addressHint
 annotate("CreateOrderForExistingKits", "items", { minItems: 1, maxItems: 2, nullable: false })
 annotate("CreateOrderForExistingKits_Item", "kitNumbers", {
   minItems: 1,
@@ -477,7 +590,9 @@ for (const name of [
   annotate(name, "endPoint", { format: "uri", ...(create ? { nullable: false } : {}) })
   annotate(name, "events", {
     minItems: 1,
-    items: { type: "string", enum: SUBSCRIBABLE_EVENTS },
+    // Any string binds; an unknown or unsubscribable name (`Kit.KitOrderLine.Canceled`) is the
+    // handler's 400 ErrorDto "Valid event type is required.". Walks mostly send real names.
+    items: { anyOf: [{ type: "string", enum: SUBSCRIBABLE_EVENTS }, { type: "string" }] },
     ...(create ? { nullable: false } : {}),
   })
   annotate(name, "type", { enum: ["webhook", "email", null] })
@@ -506,10 +621,9 @@ schemas.EventTypeDto = {
   type: "object",
   additionalProperties: false,
   properties: {
-    id: { type: "integer", format: "int32" },
     name: { type: "string" },
-    description: { type: "string", nullable: true },
-    isSubscribable: { type: "boolean" },
+    payloadStructure: { type: "string", nullable: true },
+    subscriptionTypes: { type: "array", items: { type: "string" } },
   },
 }
 schemas.KitOrderLineKitsPaginatedList = paginated(ref(".KitOrderLineDto"))
