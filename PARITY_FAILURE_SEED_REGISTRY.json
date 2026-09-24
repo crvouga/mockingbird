@@ -141,9 +141,15 @@
     },
     {
       "provider": "genebygene",
-      "seed": 0,
+      "seed": 1400369508,
       "status": "fixed",
-      "failure": "ListKitOrderLineKits attributesFilter that is not a JSON array: real 400 ErrorDto \"Invalid search filter value\", mock 200 (walks 12:53 and 13:03 UTC, 2026-09-24)"
+      "failure": "ListKitOrderLineKits attributesFilter=!: real 400 ErrorDto \"Invalid search filter value\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1400974216,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits attributesFilter=a: real 400 ErrorDto \"Invalid search filter value\", mock 200"
     }
   ]
 }
