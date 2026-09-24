@@ -44,6 +44,13 @@ const fail = (error: string, description: string, status = 400) =>
 const scopes = (value: string) => new Set(value.split(/\s+/).filter(Boolean))
 const validEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 254
 const WEB_SCHEMES = new Set(["http:", "https:"])
+// Browsers apply form-action to the redirect that follows a submit, so interaction pages must
+// also allow the client's redirect target or the final hop back to the app is blocked.
+const formTarget = (redirectUri: string) => {
+  const u = new URL(redirectUri)
+  return WEB_SCHEMES.has(u.protocol) ? u.origin : u.protocol
+}
+const formAction = (redirectUri: string) => `'self' ${formTarget(redirectUri)}`
 const FORBIDDEN_REDIRECT_SCHEMES = new Set(["blob:", "data:", "file:", "javascript:", "vbscript:"])
 const safeRedirect = (s: string) => {
   try {
@@ -409,6 +416,44 @@ export class OAuthAPI {
         ? url.pathname.slice(mount.length)
         : url.pathname
     const paths = this.paths()
+    // Browser clients (SPA + PKCE) call these directly, so they answer CORS like real providers.
+    const cors = [
+      "/.well-known/openid-configuration",
+      paths.jwks,
+      "/jwks",
+      paths.token,
+      "/token",
+      paths.userinfo,
+      "/userinfo",
+      "/oauth2/v3/userinfo",
+      "/user/emails",
+      paths.revoke,
+      "/revoke",
+    ].includes(path)
+    if (!cors) return this.route(request, url, issuer, path)
+    const origin = request.headers.get("origin")
+    const response =
+      request.method === "OPTIONS"
+        ? new Response(null, {
+            status: 204,
+            headers: {
+              "access-control-allow-methods": "GET, POST, OPTIONS",
+              "access-control-allow-headers":
+                request.headers.get("access-control-request-headers") ??
+                "authorization, content-type",
+              "access-control-max-age": "600",
+            },
+          })
+        : await this.route(request, url, issuer, path)
+    if (origin) {
+      response.headers.set("access-control-allow-origin", origin)
+      response.headers.set("access-control-expose-headers", "www-authenticate")
+      response.headers.append("vary", "Origin")
+    }
+    return response
+  }
+  private async route(request: Request, url: URL, issuer: string, path: string): Promise<Response> {
+    const paths = this.paths()
     if (
       request.method === "GET" &&
       path === "/.well-known/openid-configuration" &&
@@ -741,7 +786,7 @@ export class OAuthAPI {
         (a, b) =>
           Number(b.email === hint || b.id === hint) - Number(a.email === hint || a.id === hint),
       )
-    return loginPage(id, client.name, accounts, issuer)
+    return loginPage(id, client.name, accounts, issuer, formAction(auth.redirectUri))
   }
   private consent(
     id: string,
@@ -759,6 +804,7 @@ export class OAuthAPI {
       account,
       allowed,
       issuer,
+      formAction(auth.redirectUri),
       this.provider === "apple" && scopes(auth.scope).has("email") && !existing
         ? {
             hideEmail:
@@ -793,7 +839,14 @@ export class OAuthAPI {
     const accounts = () =>
       this.accounts.list({ order: "oldest", where: (a) => !a.disabled }).map((a) => a.value)
     if (request.method === "GET")
-      return loginPage(id, client.name, accounts(), issuer, p.get("screen") === "signup")
+      return loginPage(
+        id,
+        client.name,
+        accounts(),
+        issuer,
+        formAction(auth.redirectUri),
+        p.get("screen") === "signup",
+      )
     const action = p.get("action")
     if (action === "deny") {
       this.transactions.delete(id)
@@ -811,6 +864,7 @@ export class OAuthAPI {
           client.name,
           [],
           issuer,
+          formAction(auth.redirectUri),
           true,
           "Enter a full name and a valid email address.",
         )
@@ -823,6 +877,7 @@ export class OAuthAPI {
           client.name,
           [],
           issuer,
+          formAction(auth.redirectUri),
           true,
           "This email already has an account. Go back to choose it.",
         )
@@ -835,7 +890,15 @@ export class OAuthAPI {
     if (action === "select") {
       const account = this.accounts.get(p.get("account") ?? "")
       if (!account || account.disabled)
-        return loginPage(id, client.name, accounts(), issuer, false, "Choose an available account.")
+        return loginPage(
+          id,
+          client.name,
+          accounts(),
+          issuer,
+          formAction(auth.redirectUri),
+          false,
+          "Choose an available account.",
+        )
       auth.accountId = account.id
       auth.authTime = this.now()
       this.transactions.update(id, auth)
@@ -965,7 +1028,7 @@ export class OAuthAPI {
             "",
           )}<button class="primary">Continue</button></form><script nonce="${nonce}">document.getElementById('callback').submit()</script>`,
         200,
-        WEB_SCHEMES.has(redirect.protocol) ? redirect.origin : redirect.protocol,
+        formTarget(auth.redirectUri),
         nonce,
       )
       return result
