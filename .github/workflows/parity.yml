@@ -42,14 +42,15 @@ jobs:
         run: bunx turbo run build --output-logs=errors-only
 
       # Every MOCKINGBIRD_* repo secret becomes an env var for the steps below, so a newly
-      # added service's keys work without editing this file.
+      # added service's keys work without editing this file. GENE_BY_GENE_* are the Gene by
+      # Gene staging credentials under the vendor's own names (genebygene/scripts/parity.ts).
       - name: Load MOCKINGBIRD_* repo secrets
         env:
           SECRETS: ${{ toJSON(secrets) }}
         run: |
           echo "$SECRETS" | jq -r '
             to_entries[]
-            | select(.key | startswith("MOCKINGBIRD_"))
+            | select(.key | startswith("MOCKINGBIRD_") or startswith("GENE_BY_GENE_"))
             | "\(.key)<<__MOCKINGBIRD_EOF__\n\(.value)\n__MOCKINGBIRD_EOF__"
           ' >> "$GITHUB_ENV"
 
@@ -62,6 +63,15 @@ jobs:
         run: |
           read -ra services <<< "$PARITY_SERVICES"
           bun run parity:service -- "${services[@]}"
+
+      # What a parity script recorded from the live vendor (e.g. genebygene's
+      # corpus/address-parity.json), so it can be downloaded and committed.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-corpus
+          path: packages/service/*/corpus/
+          if-no-files-found: ignore
 
       - if: always()
         uses: ./.github/actions/turbo-cache-save

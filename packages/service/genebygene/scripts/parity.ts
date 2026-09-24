@@ -2,8 +2,8 @@
  * Live parity against Gene by Gene (Nucleus API v2), staging by default. Credentials come from
  * the environment (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_GENEBYGENE_CLIENT_ID
- *   MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET
+ *   MOCKINGBIRD_GENEBYGENE_CLIENT_ID      (or GENE_BY_GENE_CLIENT_ID, the repo secret's name)
+ *   MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET  (or GENE_BY_GENE_CLIENT_SECRET)
  *   MOCKINGBIRD_GENEBYGENE_API_URL    optional, default https://staging-api.genebygene.com
  *                                     (MOCKINGBIRD_GENEBYGENE_BASE_URL is the older name)
  *   MOCKINGBIRD_GENEBYGENE_TOKEN_URL  optional, default https://staging-auth.genebygene.com/connect/token
@@ -47,11 +47,21 @@ try {
         MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET: "MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET",
       },
     },
-    { env: process.env },
+    {
+      env: {
+        MOCKINGBIRD_GENEBYGENE_CLIENT_ID:
+          process.env.MOCKINGBIRD_GENEBYGENE_CLIENT_ID || process.env.GENE_BY_GENE_CLIENT_ID,
+        MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET:
+          process.env.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET ||
+          process.env.GENE_BY_GENE_CLIENT_SECRET,
+      },
+    },
   )
 } catch (error) {
   if (error instanceof CredentialError) {
-    console.error(`genebygene parity: no credentials. ${error.message}`)
+    console.error(
+      `genebygene parity: no credentials. ${error.message} (or GENE_BY_GENE_CLIENT_ID / GENE_BY_GENE_CLIENT_SECRET)`,
+    )
     process.exit(2)
   }
   throw error
