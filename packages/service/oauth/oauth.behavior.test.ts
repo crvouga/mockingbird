@@ -761,3 +761,83 @@ test("query, fragment and form_post callbacks encode the same state safely", asy
     }
   }
 })
+
+test("interaction pages let the browser follow the redirect back to the client's origin or scheme", async () => {
+  const native = "com.example.app:/callback"
+  const api = new OAuthAPI({
+    accounts: [account],
+    clients: [{ ...client, redirectUris: [callback, native] }],
+  })
+  for (const [redirect, target] of [
+    [callback, "https://app.test"],
+    [native, "com.example.app:"],
+  ] as const) {
+    const query = new URLSearchParams({
+      client_id: "app",
+      redirect_uri: redirect,
+      response_type: "code",
+      scope: "openid email",
+    })
+    const start = await api.fetch(req(`/authorize?${query}`))
+    const tx = field(await start.text(), "transaction")
+    const consent = await api.fetch(
+      req("/interaction", { transaction: tx, action: "select", account: "ada" }),
+    )
+    for (const response of [start, consent]) {
+      const csp = response.headers.get("content-security-policy") ?? ""
+      expect(csp).toContain(`form-action 'self' ${target};`)
+    }
+    const done = await api.fetch(req("/interaction", { transaction: tx, action: "allow" }))
+    expect(done.status).toBe(302)
+    expect(done.headers.get("location")?.startsWith(redirect)).toBe(true)
+  }
+})
+
+test("token, JWKS, userinfo, revoke and discovery answer CORS preflights and reflect the origin", async () => {
+  const api = make()
+  const app = "http://localhost:3000"
+  for (const path of [
+    "/token",
+    "/jwks",
+    "/userinfo",
+    "/revoke",
+    "/.well-known/openid-configuration",
+  ]) {
+    const preflight = await api.fetch(
+      new Request(origin + path, {
+        method: "OPTIONS",
+        headers: {
+          origin: app,
+          "access-control-request-method": "POST",
+          "access-control-request-headers": "content-type, traceparent",
+        },
+      }),
+    )
+    expect(preflight.status).toBe(204)
+    expect(preflight.headers.get("access-control-allow-origin")).toBe(app)
+    expect(preflight.headers.get("access-control-allow-methods")).toContain("POST")
+    expect(preflight.headers.get("access-control-allow-headers")).toBe("content-type, traceparent")
+  }
+  const { code } = await login(api)
+  const tokens = await api.fetch(
+    new Request(`${origin}/token`, {
+      method: "POST",
+      headers: { origin: app },
+      body: new URLSearchParams({
+        grant_type: "authorization_code",
+        client_id: "app",
+        client_secret: "fixture",
+        redirect_uri: callback,
+        code,
+      }),
+    }),
+  )
+  expect(tokens.status).toBe(200)
+  expect(tokens.headers.get("access-control-allow-origin")).toBe(app)
+  const denied = await api.fetch(new Request(`${origin}/userinfo`, { headers: { origin: app } }))
+  expect(denied.status).toBe(401)
+  expect(denied.headers.get("access-control-allow-origin")).toBe(app)
+  expect(denied.headers.get("access-control-expose-headers")).toContain("www-authenticate")
+  const page = await api.fetch(new Request(`${origin}/`, { headers: { origin: app } }))
+  expect(page.headers.get("access-control-allow-origin")).toBeNull()
+})
