@@ -374,25 +374,27 @@ if (unsafe) {
 console.log("genebygene parity: catalogs and error shapes")
 const ZERO = "00000000-0000-0000-0000-000000000000"
 /** A filter per list that matches nothing on the shared tenant (see `emptyTenantView`). */
+/** A GUID no record has: the all-zero GUID is a GUID filter's default, which staging ignores. */
+const NOTHING = "00000000-0000-4000-8000-000000000000"
 const NARROW: Readonly<Record<string, readonly (readonly [string, string])[]>> = {
   "/api/v2/orders": [
-    ["orderId", ZERO],
+    ["orderId", NOTHING],
     ["orderDateMin", "9999-01-01T00:00:00Z"],
     ["orderDateMax", "2000-01-01T00:00:00Z"],
   ],
   "/api/v2/kits": [["kitNumber", "WB000000"]],
   "/api/v2/fulfillments": [
-    ["orderId", ZERO],
-    ["orderLineId", ZERO],
-    ["fulfillmentId", ZERO],
+    ["orderId", NOTHING],
+    ["orderLineId", NOTHING],
+    ["fulfillmentId", NOTHING],
   ],
   "/api/v2/kitorderlines": [
-    ["orderId", ZERO],
-    ["orderLineId", ZERO],
+    ["orderId", NOTHING],
+    ["orderLineId", NOTHING],
   ],
   "/api/v2/kitorderlines/kits": [
-    ["orderId", ZERO],
-    ["orderLineId", ZERO],
+    ["orderId", NOTHING],
+    ["orderLineId", NOTHING],
   ],
   "/api/v2/results": [["kitNumber", "WB000000"]],
   "/api/v2/results/search": [["kitNumbers", "WB000000"]],
@@ -540,18 +542,21 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
     "0",
     "1",
   ].flatMap((productType) => [
-    ["/api/v2/kitorderlines/kits", { productType, orderId: ZERO }] as [
+    ["/api/v2/kitorderlines/kits", { productType, orderId: NOTHING }] as [
       string,
       Record<string, string>,
     ],
     ["/api/v2/products", { productType }] as [string, Record<string, string>],
   ]),
   ...["Shipped", "Canceled", "Received", "Completed", "Pending", "1"].flatMap((status) => [
-    ["/api/v2/kitorderlines/kits", { status, orderId: ZERO }] as [string, Record<string, string>],
+    ["/api/v2/kitorderlines/kits", { status, orderId: NOTHING }] as [
+      string,
+      Record<string, string>,
+    ],
     ["/api/v2/kits", { status, kitNumber: "WB000000" }] as [string, Record<string, string>],
   ]),
-  ["/api/v2/kitorderlines/kits", { orderBy: "kitNumber", orderId: ZERO }],
-  ["/api/v2/kitorderlines/kits", { orderBy: "KitNumber", orderId: ZERO }],
+  ["/api/v2/kitorderlines/kits", { orderBy: "kitNumber", orderId: NOTHING }],
+  ["/api/v2/kitorderlines/kits", { orderBy: "KitNumber", orderId: NOTHING }],
   ["/api/v2/notificationSubscriptions", { type: "Webhook" }],
   ["/api/v2/notificationSubscriptions", { type: "webhook" }],
   ["/api/v2/attributes", { entityType: "Kit" }],
@@ -561,7 +566,7 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
   ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "501" }],
   ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "100000" }],
   ["/api/v2/kits", { kitNumber: "WB000000" }],
-  ["/api/v2/orders", { orderId: ZERO, pageSize: "2000" }],
+  ["/api/v2/orders", { orderId: NOTHING, pageSize: "2000" }],
   // Character-format rules on the free-text filters.
   ...(
     [
@@ -587,8 +592,8 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
     ),
   ),
   ["/api/v2/kits", { kitNumber: "WB000000", offset: "-1" }],
-  ["/api/v2/orders", { orderId: ZERO, pageSize: "0" }],
-  ["/api/v2/orders", { orderId: ZERO, offset: "-1" }],
+  ["/api/v2/orders", { orderId: NOTHING, pageSize: "0" }],
+  ["/api/v2/orders", { orderId: NOTHING, offset: "-1" }],
 ]
 const queries: Json[] = []
 for (const [path, probed] of QUERY_PROBES) {

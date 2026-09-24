@@ -543,10 +543,13 @@ const routeGuidProblem = (context: OperationContext): Response | undefined => {
       })
 }
 
-/** An id filter; staging ignores one that is not a GUID (`?orderId=⁇` lists every order). */
+/**
+ * An id filter; staging ignores one that is not a GUID (`?orderId=⁇` lists every order) and the
+ * all-zero GUID, which is the parameter's default.
+ */
 const guidFilter = (context: OperationContext, name: string): string | undefined => {
   const value = query(context, name)?.trim()
-  return value && GUID.test(value) ? value : undefined
+  return value && GUID.test(value) && !EMPTY_GUID.test(value) ? value : undefined
 }
 
 /** Staging pages 100 rows when no pageSize is sent. */
