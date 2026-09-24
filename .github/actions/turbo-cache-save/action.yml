@@ -1,5 +1,5 @@
 name: Save Turborepo cache
-description: Save .turbo/cache under the key ./.github/actions/setup restores. Run it with `if: always()`.
+description: "Save .turbo/cache under the key ./.github/actions/setup restores. Run it with `if: always()`."
 
 runs:
   using: composite
