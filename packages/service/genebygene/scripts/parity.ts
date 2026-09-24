@@ -476,6 +476,20 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
     names.map((name) => [path, { [name]: "a" }] as [string, Record<string, string>]),
   ),
   ...[
+    { productId: "a5190f53-01c8-4966-aead-adbf20f0dbf6" },
+    { productId: "b1949749-19b0-4f72-a5c5-8f2414656607" },
+    { productId: "49f9c987-ba0e-4801-a3b3-b446a2d4835a" },
+    { productId: ZERO },
+    { productCode: "standard_swab_dhl_return_collection_bundle" },
+    { productCode: "STANDARD_SWAB_DHL_RETURN_COLLECTION_BUNDLE" },
+  ].map((params) => ["/api/v2/products", params] as [string, Record<string, string>]),
+  ...["!", "a", "[]", "{}", '{"FirstName":"a"}', '[{"name":"firstname","value":"a"}]'].flatMap(
+    (attributesFilter) => [
+      ["/api/v2/kitorderlines/kits", { attributesFilter }] as [string, Record<string, string>],
+      ["/api/v2/kitorderlines", { attributesFilter }] as [string, Record<string, string>],
+    ],
+  ),
+  ...[
     "Materials",
     "materials",
     "Bundle",
@@ -555,6 +569,10 @@ for (const [path, probed] of QUERY_PROBES) {
     path,
     params,
     status: answer.status,
+    // The product catalog is vendor data: keep which ids a products filter answers.
+    ...(answer.status === 200 && path === "/api/v2/products" && Array.isArray(body)
+      ? { ids: (body as Json[]).map((p) => p.id) }
+      : {}),
     // A 200 page keeps only its paging (never rows: the tenant is shared).
     ...(answer.status === 200
       ? body && !Array.isArray(body) && "pageSize" in body
