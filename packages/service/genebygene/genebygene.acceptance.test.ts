@@ -1728,7 +1728,8 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
     (q) =>
       typeof q.status === "number" &&
       !("productCode" in q.params) &&
-      !(q.path === "/api/v2/products" && "productType" in q.params),
+      !(q.path === "/api/v2/products" && "productType" in q.params) &&
+      !(q.path === "/api/v2/eventTypes" && "name" in q.params),
   )
   for (const q of replayed) {
     test(`GET ${q.path}?${new URLSearchParams(q.params)} → ${q.status}`, async () => {

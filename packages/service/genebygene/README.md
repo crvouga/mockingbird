@@ -255,6 +255,8 @@ namespace, so parallel workers never collide in the shared results bucket.
 - `productCode` and `productType` on `GET /api/v2/products`: staging matches them with SQL `LIKE`
   (`a` and `%` list every product code; `㏞` every type, under a collation that ignores it), and
   no response carries a code. The mock matches `productType` as a substring.
+  `name` on `GET /api/v2/eventTypes` is the same kind of match (`ჷ` lists all 12); the mock
+  matches a substring.
 - The element shape of a non-empty `attributesFilter` array on `/api/v2/kitorderlines/kits`:
   staging answers anything that is not a JSON array with 400 "Invalid search filter value", and
   the one array shape recorded with an empty 500, which the mock returns for every non-empty

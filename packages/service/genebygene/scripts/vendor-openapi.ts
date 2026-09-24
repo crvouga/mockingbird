@@ -290,6 +290,13 @@ parameter("/api/v2/products", "get", "productCode", {
     reason: "Staging matches product codes with SQL LIKE, and no response carries a code.",
   },
 })
+// eventTypes' name is the same kind of LIKE (`ჷ` lists all 12); our consumer never filters.
+parameter("/api/v2/eventTypes", "get", "name", {
+  "x-mockingbird-unsupported": {
+    reason:
+      "Staging matches event-type names with SQL LIKE under a collation that ignores some characters.",
+  },
+})
 // productType is a SQL LIKE too, under a collation that ignores some characters (`㏞` lists
 // every product); our consumer never filters by it.
 parameter("/api/v2/products", "get", "productType", {

@@ -239,6 +239,8 @@ paths:
           in: query
           schema:
             type: string
+            x-mockingbird-unsupported:
+              reason: Staging matches event-type names with SQL LIKE under a collation that ignores some characters.
       responses:
         "200":
           description: Success
