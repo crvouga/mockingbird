@@ -135,7 +135,8 @@
     {
       "path": "/api/v2/fulfillments",
       "params": {
-        "orderLineId": "a"
+        "orderLineId": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -153,7 +154,8 @@
     {
       "path": "/api/v2/fulfillments",
       "params": {
-        "fulfillmentId": "a"
+        "fulfillmentId": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -162,7 +164,8 @@
     {
       "path": "/api/v2/fulfillments",
       "params": {
-        "offset": "a"
+        "offset": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -174,7 +177,8 @@
     {
       "path": "/api/v2/fulfillments",
       "params": {
-        "pageSize": "a"
+        "pageSize": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -186,7 +190,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "a"
+        "kitNumbers": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -197,14 +202,13 @@
       "params": {
         "orderId": "a"
       },
-      "status": 200,
-      "offset": 0,
-      "pageSize": 100
+      "status": "timeout"
     },
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "orderLineId": "a"
+        "orderLineId": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -213,7 +217,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "status": "a"
+        "status": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -225,7 +230,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "attributeTerm": "a"
+        "attributeTerm": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -234,7 +240,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "attributesToSearch": "a"
+        "attributesToSearch": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -243,14 +250,18 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "attributesFilter": "a"
+        "attributesFilter": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
-      "status": 500
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
     },
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "offset": "a"
+        "offset": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -262,7 +273,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "pageSize": "a"
+        "pageSize": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -274,7 +286,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "orderBy": "a"
+        "orderBy": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -283,14 +296,16 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "productType": "a"
+        "productType": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 500
     },
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "orderByAsc": "a"
+        "orderByAsc": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -311,7 +326,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "status": "a"
+        "status": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -323,7 +339,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderBy": "a"
+        "orderBy": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -332,7 +349,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "productType": "a"
+        "productType": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -344,7 +362,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderByAsc": "a"
+        "orderByAsc": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -365,7 +384,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "a"
+        "orderNumber": "a",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -374,7 +394,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "status": "a"
+        "status": "a",
+        "kitNumber": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -386,7 +407,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "offset": "a"
+        "offset": "a",
+        "kitNumber": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -398,7 +420,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "pageSize": "a"
+        "pageSize": "a",
+        "kitNumber": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -426,7 +449,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "orderDateMin": "a"
+        "orderDateMin": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -438,7 +462,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "orderDateMax": "a"
+        "orderDateMax": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -450,7 +475,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "a"
+        "productName": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -459,7 +485,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "offset": "a"
+        "offset": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -471,7 +498,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "pageSize": "a"
+        "pageSize": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -513,7 +541,8 @@
     {
       "path": "/api/v2/results",
       "params": {
-        "offset": "a"
+        "offset": "a",
+        "kitNumber": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -525,7 +554,8 @@
     {
       "path": "/api/v2/results",
       "params": {
-        "pageSize": "a"
+        "pageSize": "a",
+        "kitNumber": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -546,7 +576,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "dateOfBirth": "a"
+        "dateOfBirth": "a",
+        "kitNumbers": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -558,7 +589,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "a"
+        "resultTypeName": "a",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -567,7 +599,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "orderBy": "a"
+        "orderBy": "a",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -576,7 +609,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "orderByAsc": "a"
+        "orderByAsc": "a",
+        "kitNumbers": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -588,7 +622,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultDateYear": "a"
+        "resultDateYear": "a",
+        "kitNumbers": "WB000000"
       },
       "status": 400,
       "errors": {
@@ -1058,7 +1093,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "{"
+        "kitNumbers": "{",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1070,7 +1106,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "WB1,WB2"
+        "kitNumbers": "WB1,WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1079,7 +1116,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "WB-1"
+        "kitNumbers": "WB-1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1091,7 +1129,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "WB_1"
+        "kitNumbers": "WB_1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1103,7 +1142,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "WB 1"
+        "kitNumbers": "WB 1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1115,7 +1155,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "WB.1"
+        "kitNumbers": "WB.1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1127,7 +1168,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "WB1;WB2"
+        "kitNumbers": "WB1;WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1139,7 +1181,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "é"
+        "kitNumbers": "é",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1151,7 +1194,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "a'b"
+        "kitNumbers": "a'b",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1163,7 +1207,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "<b>"
+        "kitNumbers": "<b>",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1175,7 +1220,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "%"
+        "kitNumbers": "%",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1187,7 +1233,8 @@
     {
       "path": "/api/v2/kitorderlines",
       "params": {
-        "kitNumbers": "*"
+        "kitNumbers": "*",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1199,7 +1246,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "{"
+        "kitNumbers": "{",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1211,7 +1259,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "WB1,WB2"
+        "kitNumbers": "WB1,WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1220,7 +1269,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "WB-1"
+        "kitNumbers": "WB-1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1232,7 +1282,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "WB_1"
+        "kitNumbers": "WB_1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1244,7 +1295,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "WB 1"
+        "kitNumbers": "WB 1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1256,7 +1308,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "WB.1"
+        "kitNumbers": "WB.1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1268,7 +1321,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "WB1;WB2"
+        "kitNumbers": "WB1;WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1280,7 +1334,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "é"
+        "kitNumbers": "é",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1292,7 +1347,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "a'b"
+        "kitNumbers": "a'b",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1304,7 +1360,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "<b>"
+        "kitNumbers": "<b>",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1316,7 +1373,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "%"
+        "kitNumbers": "%",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1328,7 +1386,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "kitNumbers": "*"
+        "kitNumbers": "*",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -1586,7 +1645,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "{"
+        "orderNumber": "{",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1595,7 +1655,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "WB1,WB2"
+        "orderNumber": "WB1,WB2",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1604,7 +1665,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "WB-1"
+        "orderNumber": "WB-1",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1613,7 +1675,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "WB_1"
+        "orderNumber": "WB_1",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1622,7 +1685,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "WB 1"
+        "orderNumber": "WB 1",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1631,7 +1695,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "WB.1"
+        "orderNumber": "WB.1",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1640,7 +1705,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "WB1;WB2"
+        "orderNumber": "WB1;WB2",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1649,7 +1715,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "é"
+        "orderNumber": "é",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1658,7 +1725,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "a'b"
+        "orderNumber": "a'b",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1667,7 +1735,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "<b>"
+        "orderNumber": "<b>",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1676,7 +1745,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "%"
+        "orderNumber": "%",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1685,7 +1755,8 @@
     {
       "path": "/api/v2/kits",
       "params": {
-        "orderNumber": "*"
+        "orderNumber": "*",
+        "kitNumber": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -1802,7 +1873,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "{"
+        "attributeTerm": "{",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1811,7 +1883,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "WB1,WB2"
+        "attributeTerm": "WB1,WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1820,7 +1893,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "WB-1"
+        "attributeTerm": "WB-1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1829,7 +1903,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "WB_1"
+        "attributeTerm": "WB_1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1838,7 +1913,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "WB 1"
+        "attributeTerm": "WB 1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1847,7 +1923,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "WB.1"
+        "attributeTerm": "WB.1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1856,7 +1933,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "WB1;WB2"
+        "attributeTerm": "WB1;WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1865,7 +1943,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "é"
+        "attributeTerm": "é",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1874,7 +1953,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "a'b"
+        "attributeTerm": "a'b",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1883,7 +1963,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "<b>"
+        "attributeTerm": "<b>",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1892,7 +1973,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "%"
+        "attributeTerm": "%",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1901,7 +1983,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributeTerm": "*"
+        "attributeTerm": "*",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1910,7 +1993,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "{"
+        "attributesToSearch": "{",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1919,7 +2003,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "WB1,WB2"
+        "attributesToSearch": "WB1,WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1928,7 +2013,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "WB-1"
+        "attributesToSearch": "WB-1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1937,7 +2023,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "WB_1"
+        "attributesToSearch": "WB_1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1946,7 +2033,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "WB 1"
+        "attributesToSearch": "WB 1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1955,7 +2043,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "WB.1"
+        "attributesToSearch": "WB.1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1964,7 +2053,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "WB1;WB2"
+        "attributesToSearch": "WB1;WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1973,7 +2063,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "é"
+        "attributesToSearch": "é",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1982,7 +2073,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "a'b"
+        "attributesToSearch": "a'b",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -1991,7 +2083,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "<b>"
+        "attributesToSearch": "<b>",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2000,7 +2093,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "%"
+        "attributesToSearch": "%",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2009,7 +2103,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "attributesToSearch": "*"
+        "attributesToSearch": "*",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2018,7 +2113,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "{"
+        "orderLineId": "{",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2027,7 +2123,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "WB1,WB2"
+        "orderLineId": "WB1,WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2036,7 +2133,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "WB-1"
+        "orderLineId": "WB-1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2045,7 +2143,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "WB_1"
+        "orderLineId": "WB_1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2054,7 +2153,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "WB 1"
+        "orderLineId": "WB 1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2063,7 +2163,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "WB.1"
+        "orderLineId": "WB.1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2072,7 +2173,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "WB1;WB2"
+        "orderLineId": "WB1;WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2081,7 +2183,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "é"
+        "orderLineId": "é",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2090,7 +2193,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "a'b"
+        "orderLineId": "a'b",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2099,7 +2203,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "<b>"
+        "orderLineId": "<b>",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2108,7 +2213,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "%"
+        "orderLineId": "%",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2117,7 +2223,8 @@
     {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
-        "orderLineId": "*"
+        "orderLineId": "*",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2126,7 +2233,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "{"
+        "productName": "{",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2135,7 +2243,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "WB1,WB2"
+        "productName": "WB1,WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2144,7 +2253,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "WB-1"
+        "productName": "WB-1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2153,7 +2263,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "WB_1"
+        "productName": "WB_1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2162,7 +2273,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "WB 1"
+        "productName": "WB 1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2171,7 +2283,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "WB.1"
+        "productName": "WB.1",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2180,7 +2293,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "WB1;WB2"
+        "productName": "WB1;WB2",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2189,7 +2303,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "é"
+        "productName": "é",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2198,7 +2313,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "a'b"
+        "productName": "a'b",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2207,7 +2323,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "<b>"
+        "productName": "<b>",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2216,7 +2333,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "%"
+        "productName": "%",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2225,7 +2343,8 @@
     {
       "path": "/api/v2/orders",
       "params": {
-        "productName": "*"
+        "productName": "*",
+        "orderId": "00000000-0000-0000-0000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -2486,7 +2605,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "{"
+        "resultTypeName": "{",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2495,7 +2615,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "WB1,WB2"
+        "resultTypeName": "WB1,WB2",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2504,7 +2625,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "WB-1"
+        "resultTypeName": "WB-1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2513,7 +2635,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "WB_1"
+        "resultTypeName": "WB_1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2522,7 +2645,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "WB 1"
+        "resultTypeName": "WB 1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2531,7 +2655,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "WB.1"
+        "resultTypeName": "WB.1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2540,7 +2665,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "WB1;WB2"
+        "resultTypeName": "WB1;WB2",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2549,7 +2675,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "é"
+        "resultTypeName": "é",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2558,7 +2685,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "a'b"
+        "resultTypeName": "a'b",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2567,7 +2695,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "<b>"
+        "resultTypeName": "<b>",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2576,7 +2705,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "%"
+        "resultTypeName": "%",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2585,7 +2715,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "resultTypeName": "*"
+        "resultTypeName": "*",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2594,7 +2725,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "{"
+        "firstName": "{",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2603,7 +2735,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "WB1,WB2"
+        "firstName": "WB1,WB2",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2612,7 +2745,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "WB-1"
+        "firstName": "WB-1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2621,7 +2755,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "WB_1"
+        "firstName": "WB_1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2630,7 +2765,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "WB 1"
+        "firstName": "WB 1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2639,7 +2775,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "WB.1"
+        "firstName": "WB.1",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2648,7 +2785,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "WB1;WB2"
+        "firstName": "WB1;WB2",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2657,7 +2795,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "é"
+        "firstName": "é",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2666,7 +2805,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "a'b"
+        "firstName": "a'b",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2675,7 +2815,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "<b>"
+        "firstName": "<b>",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2684,7 +2825,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "%"
+        "firstName": "%",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,
@@ -2693,7 +2835,8 @@
     {
       "path": "/api/v2/results/search",
       "params": {
-        "firstName": "*"
+        "firstName": "*",
+        "kitNumbers": "WB000000"
       },
       "status": 200,
       "offset": 0,

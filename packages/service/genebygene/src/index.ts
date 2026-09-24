@@ -280,8 +280,16 @@ const errorDto = (status: number, message: string, errorType = "ValidationError"
 const notFoundDto = (message = "Resource not found.") =>
   jsonRes(404, { statusCode: 404, message, payload: null, errorType: null })
 
-/** An unknown subscription id is a 400 on staging, not a 404. */
-const SUBSCRIPTION_ID_REQUIRED = { id: ["Valid Notification Subscription Id required."] }
+/**
+ * A subscription that does not exist, as staging answers it: the empty GUID is a 400 problem
+ * ("Valid Notification Subscription Id required."), any other id a 404 `Invalid Id <id>`.
+ */
+const missingSubscription = (id: string) =>
+  EMPTY_GUID.test(id)
+    ? problem(400, "One or more validation errors occurred.", {
+        errors: { id: ["Valid Notification Subscription Id required."] },
+      })
+    : notFoundDto(`Invalid Id ${id}`)
 
 /** `getShippingOptions` for a product with nothing to ship, or an id the catalog lacks. */
 const NOT_VALID_FOR_SHIPPING = "This product Id is not valid for shipping options."
@@ -2071,19 +2079,13 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private getSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
-    if (!sub)
-      return problem(400, "One or more validation errors occurred.", {
-        errors: SUBSCRIPTION_ID_REQUIRED,
-      })
+    if (!sub) return missingSubscription(context.params.id ?? "")
     return jsonRes(200, this.subscriptionDto(sub))
   }
 
   private updateSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
-    if (!sub)
-      return problem(400, "One or more validation errors occurred.", {
-        errors: SUBSCRIPTION_ID_REQUIRED,
-      })
+    if (!sub) return missingSubscription(context.params.id ?? "")
     const invalid = validationErrors(context)
     if (invalid) return invalid
     const body = record(context) ?? {}
@@ -2109,10 +2111,7 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private deleteSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
-    if (!sub)
-      return problem(400, "One or more validation errors occurred.", {
-        errors: SUBSCRIPTION_ID_REQUIRED,
-      })
+    if (!sub) return missingSubscription(context.params.id ?? "")
     this.state.subscriptions.delete(sub.id)
     return new Response(null, { status: 204 })
   }

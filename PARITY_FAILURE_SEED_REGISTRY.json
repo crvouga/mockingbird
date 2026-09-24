@@ -108,6 +108,12 @@
       "seed": 1390261398,
       "status": "fixed",
       "failure": "ListKits kitNumber=\"\": the blank filter was not narrowed, so staging listed the shared tenant's 3831 kits against the mock's 0"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1394162303,
+      "status": "open",
+      "failure": "GetNotificationSubscription unknown id: real 404 ErrorDto \"Invalid Id <id>\", mock 400 (only the empty GUID is a 400)"
     }
   ]
 }
