@@ -118,5 +118,7 @@ describe("AWS SDK v3 against S3 mock", () => {
       client.destroy()
       await server.close()
     }
-  })
+    // S3 parts must be >= 5 MiB, so this streams and checksums 6 MiB through the SDK: well
+    // under a second alone, several on a CI runner running every package's tests at once.
+  }, 30_000)
 })
