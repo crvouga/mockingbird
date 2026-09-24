@@ -1799,9 +1799,20 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKitOrderLineKits(context: OperationContext): Response {
-    // kitorderlines/kits wants a JSON array: anything else is a 400 ErrorDto, and a non-empty
-    // array fails with an empty 500 (recorded for `[{"name":…,"value":…}]`; its element shape
-    // is not known).
+    const invalid = queryProblem(
+      context,
+      {
+        status: "status",
+        productType: "productType",
+        orderByAsc: "bool",
+        kitNumbers: "kitList",
+      },
+      true,
+    )
+    if (invalid) return invalid
+    // After query validation, kitorderlines/kits wants a JSON array: anything else is a 400
+    // ErrorDto, and a non-empty array fails with an empty 500 (recorded for
+    // `[{"name":…,"value":…}]`; its element shape is not known).
     const filter = query(context, "attributesFilter")
     if (filter) {
       let parsed: unknown
@@ -1818,17 +1829,6 @@ export class GeneByGeneAPI implements FetchAPI {
       }
       if (parsed.length > 0) return new Response(null, { status: 500 })
     }
-    const invalid = queryProblem(
-      context,
-      {
-        status: "status",
-        productType: "productType",
-        orderByAsc: "bool",
-        kitNumbers: "kitList",
-      },
-      true,
-    )
-    if (invalid) return invalid
     const page = pageOf(context)
     const byKit = new Map<string, { kit: KitRecord; lines: LineRecord[] }>()
     for (const { kit, line } of this.kitOrderLineRows(context)) {
