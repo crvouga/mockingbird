@@ -132,6 +132,12 @@
       "seed": 1396808717,
       "status": "fixed",
       "failure": "ListKits status=\" a\": real message echoes the trimmed value 'a', mock echoed ' a'"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1398886294,
+      "status": "open",
+      "failure": "ListProducts productCode=a: real lists all 3 products, mock 0"
     }
   ]
 }
