@@ -39,6 +39,7 @@ export function loginPage(
   client: string,
   accounts: Account[],
   base: string,
+  action: string,
   signup = false,
   error = "",
 ): Response {
@@ -52,6 +53,7 @@ export function loginPage(
     signup ? "Create account" : "Choose an account",
     `${intro}${body}<div class="divider"></div><form method="post" action="${endpoint}">${hidden}<button class="secondary" name="action" value="deny">Cancel sign-in</button></form>`,
     error ? 400 : 200,
+    action,
   )
 }
 export function consentPage(
@@ -60,6 +62,7 @@ export function consentPage(
   account: Account,
   scopes: string,
   base: string,
+  action: string,
   privacy?: { hideEmail: boolean; choice: boolean },
 ): Response {
   const labels: Record<string, string> = {
@@ -86,5 +89,7 @@ export function consentPage(
       .join(
         "",
       )}</ul><p>You can cancel now without sharing anything.</p><form method="post" action="${escapeHtml(base)}/interaction"><input type="hidden" name="transaction" value="${escapeHtml(transaction)}">${privacyFields}<button class="primary" name="action" value="allow">Allow &amp; continue</button><button class="secondary" name="action" value="deny">Cancel</button></form>`,
+    200,
+    action,
   )
 }
