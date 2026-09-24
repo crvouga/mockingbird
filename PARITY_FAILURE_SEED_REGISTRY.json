@@ -216,6 +216,12 @@
       "seed": 1421396226,
       "status": "fixed",
       "failure": "ListKits kitNumber=\" a\": real 200 (the format is checked on the trimmed value), mock 400"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1422048242,
+      "status": "fixed",
+      "failure": "ListFulfillments orderLineId=a: a sent orderLineId replaces staging's orderId filter even when it is ignored, so the orderId narrowing leaked 12936 fulfillments; the mock and the narrowing now follow that precedence"
     }
   ]
 }

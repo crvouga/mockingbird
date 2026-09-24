@@ -383,10 +383,11 @@ const NARROW: Readonly<Record<string, readonly (readonly [string, string])[]>> =
     ["orderDateMax", "2000-01-01T00:00:00Z"],
   ],
   "/api/v2/kits": [["kitNumber", "WB000000"]],
+  // fulfillmentId first: a sent orderLineId (even an ignored one) replaces the orderId filter.
   "/api/v2/fulfillments": [
+    ["fulfillmentId", NOTHING],
     ["orderId", NOTHING],
     ["orderLineId", NOTHING],
-    ["fulfillmentId", NOTHING],
   ],
   "/api/v2/kitorderlines": [
     ["orderId", NOTHING],
@@ -644,7 +645,7 @@ for (const [path, probed] of QUERY_PROBES) {
     // A 200 page keeps only its paging (never rows: the tenant is shared).
     ...(answer.status === 200
       ? body && !Array.isArray(body) && "pageSize" in body
-        ? { offset: body.offset, pageSize: body.pageSize, totalCount: body.totalCount }
+        ? { offset: body.offset, pageSize: body.pageSize }
         : {}
       : { errors: body?.errors, message: body && "message" in body ? body.message : undefined }),
   })

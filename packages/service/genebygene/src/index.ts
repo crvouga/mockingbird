@@ -1463,7 +1463,9 @@ export class GeneByGeneAPI implements FetchAPI {
     const invalid = queryProblem(context, {}, true)
     if (invalid) return invalid
     const page = pageOf(context)
-    const orderId = guidFilter(context, "orderId")
+    // Staging filters by orderLineId instead of orderId whenever orderLineId is sent, even one
+    // it then ignores (`?orderId=<id>&orderLineId=a` lists every fulfillment).
+    const orderId = query(context, "orderLineId") ? undefined : guidFilter(context, "orderId")
     const orderLineId = guidFilter(context, "orderLineId")
     const fulfillmentId = guidFilter(context, "fulfillmentId")
     const items = this.state.fulfillments
