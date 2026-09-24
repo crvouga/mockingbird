@@ -541,6 +541,12 @@ const routeGuidProblem = (context: OperationContext): Response | undefined => {
       })
 }
 
+/** An id filter; staging ignores one that is not a GUID (`?orderId=⁇` lists every order). */
+const guidFilter = (context: OperationContext, name: string): string | undefined => {
+  const value = query(context, name)?.trim()
+  return value && GUID.test(value) ? value : undefined
+}
+
 /** Staging pages 100 rows when no pageSize is sent. */
 const DEFAULT_PAGE_SIZE = 100
 
@@ -1263,7 +1269,7 @@ export class GeneByGeneAPI implements FetchAPI {
     const invalid = queryProblem(context, { orderDateMin: "date", orderDateMax: "date" }, true)
     if (invalid) return invalid
     const page = pageOf(context)
-    const orderId = query(context, "orderId")
+    const orderId = guidFilter(context, "orderId")
     const min = query(context, "orderDateMin")
     const max = query(context, "orderDateMax")
     const productName = query(context, "productName")?.toLowerCase()
@@ -1450,9 +1456,9 @@ export class GeneByGeneAPI implements FetchAPI {
     const invalid = queryProblem(context, {}, true)
     if (invalid) return invalid
     const page = pageOf(context)
-    const orderId = query(context, "orderId")
-    const orderLineId = query(context, "orderLineId")
-    const fulfillmentId = query(context, "fulfillmentId")
+    const orderId = guidFilter(context, "orderId")
+    const orderLineId = guidFilter(context, "orderLineId")
+    const fulfillmentId = guidFilter(context, "fulfillmentId")
     const items = this.state.fulfillments
       .list()
       .map((row) => row.value)
@@ -1733,8 +1739,8 @@ export class GeneByGeneAPI implements FetchAPI {
   /** (kit, line) rows, newest kit first, filtered like `GET /api/v2/kitorderlines`. */
   private kitOrderLineRows(context: OperationContext): { kit: KitRecord; line: LineRecord }[] {
     const kitNumbers = csv(query(context, "kitNumbers"))
-    const orderId = query(context, "orderId")
-    const orderLineId = query(context, "orderLineId")
+    const orderId = guidFilter(context, "orderId")
+    const orderLineId = guidFilter(context, "orderLineId")
     const status = query(context, "status")
     const productType = query(context, "productType")
     const term = query(context, "attributeTerm")?.toLowerCase()

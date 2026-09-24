@@ -403,8 +403,11 @@ const blank = (value: string | null | undefined) =>
 const tooLong = (value: string | null | undefined) =>
   typeof value === "string" && value.length > MAX_ADDRESS_LINE
 
-/** `PO Box` and `P.O. Box` (staging quotes a spelled-out `Post Office Box` like a street). */
-const PO_BOX = /\bp\s*\.?\s*o\s*\.?\s*box\b/i
+/**
+ * `PO Box` and `P.O. Box` (staging quotes a spelled-out `Post Office Box` like a street). Each
+ * run of spaces has one place to go, so a long line cannot make the match backtrack.
+ */
+const PO_BOX = /\bp\s*(?:\.\s*)?o\s*(?:\.\s*)?box\b/i
 
 /** The state codes staging quotes as a US domestic address; anything else (AE, ZZ) is refused. */
 const US_STATES: ReadonlySet<string> = new Set(

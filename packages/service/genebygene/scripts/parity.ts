@@ -374,14 +374,50 @@ if (unsafe) {
 console.log("genebygene parity: catalogs and error shapes")
 const ZERO = "00000000-0000-0000-0000-000000000000"
 /** A filter per list that matches nothing on the shared tenant (see `emptyTenantView`). */
-const NARROW: Readonly<Record<string, readonly [string, string]>> = {
-  "/api/v2/orders": ["orderId", ZERO],
-  "/api/v2/kits": ["kitNumber", "WB000000"],
-  "/api/v2/fulfillments": ["orderId", ZERO],
-  "/api/v2/kitorderlines": ["orderId", ZERO],
-  "/api/v2/kitorderlines/kits": ["orderId", ZERO],
-  "/api/v2/results": ["kitNumber", "WB000000"],
-  "/api/v2/results/search": ["kitNumbers", "WB000000"],
+const NARROW: Readonly<Record<string, readonly (readonly [string, string])[]>> = {
+  "/api/v2/orders": [
+    ["orderId", ZERO],
+    ["orderDateMax", "2000-01-01T00:00:00Z"],
+  ],
+  "/api/v2/kits": [["kitNumber", "WB000000"]],
+  "/api/v2/fulfillments": [
+    ["orderId", ZERO],
+    ["orderLineId", ZERO],
+    ["fulfillmentId", ZERO],
+  ],
+  "/api/v2/kitorderlines": [
+    ["orderId", ZERO],
+    ["orderLineId", ZERO],
+  ],
+  "/api/v2/kitorderlines/kits": [
+    ["orderId", ZERO],
+    ["orderLineId", ZERO],
+  ],
+  "/api/v2/results": [["kitNumber", "WB000000"]],
+  "/api/v2/results/search": [["kitNumbers", "WB000000"]],
+}
+/** A GUID filter staging ignores when it is not a GUID (`?orderId=⁇` lists every order). */
+const GUID_FILTERS = new Set(["orderId", "orderLineId", "fulfillmentId"])
+const GUID_RE = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+/**
+ * The first narrowing parameter the request leaves free: one it does not set, skipping any it
+ * sets to a value staging ignores (a blank, or a non-GUID id). Undefined when the request
+ * already narrows the list itself.
+ */
+const narrowingFor = (
+  path: string,
+  params: URLSearchParams,
+): readonly [string, string] | undefined => {
+  const candidates = NARROW[path]
+  if (!candidates) return undefined
+  const ignored = (name: string, value: string) =>
+    !value.trim() || (GUID_FILTERS.has(name) && !GUID_RE.test(value.trim()))
+  const narrowed = candidates.some(([name]) => {
+    const value = params.get(name)
+    return value !== null && !ignored(name, value)
+  })
+  if (narrowed) return undefined
+  return candidates.find(([name]) => !params.get(name)?.trim())
 }
 
 const probe = async (method: string, path: string, token = realToken) => {
@@ -553,9 +589,8 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
 const queries: Json[] = []
 for (const [path, probed] of QUERY_PROBES) {
   // Narrowed like the walk: an unfiltered list scans the whole shared tenant (minutes, at times).
-  const narrow = NARROW[path]
-  const params =
-    narrow && !probed[narrow[0]]?.trim() ? { ...probed, [narrow[0]]: narrow[1] } : probed
+  const narrow = narrowingFor(path, new URLSearchParams(probed))
+  const params = narrow ? { ...probed, [narrow[0]]: narrow[1] } : probed
   let answer: Awaited<ReturnType<typeof probe>>
   try {
     answer = await probe("GET", `${path}?${new URLSearchParams(params)}`)
@@ -602,9 +637,8 @@ console.log("  wrote src/corpus/live-catalogs.json and corpus/live-errors.json")
  */
 const emptyTenantView = async (request: Request): Promise<Response> => {
   const url = new URL(request.url)
-  const narrow = request.method === "GET" ? NARROW[url.pathname] : undefined
-  // A blank value is no filter on staging, so it is narrowed like a missing one.
-  if (narrow && !url.searchParams.get(narrow[0])?.trim()) {
+  const narrow = request.method === "GET" ? narrowingFor(url.pathname, url.searchParams) : undefined
+  if (narrow) {
     url.searchParams.set(narrow[0], narrow[1])
     return live(new Request(url, request))
   }

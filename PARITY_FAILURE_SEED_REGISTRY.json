@@ -156,6 +156,12 @@
       "seed": 1402714997,
       "status": "fixed",
       "failure": "ListProducts productType=㏞: real lists all 3 (SQL LIKE under a collation that ignores the character); productType on products is now marked unsupported"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1405240703,
+      "status": "fixed",
+      "failure": "ListOrders orderId=⁇: staging ignores a non-GUID id filter and listed the shared tenant's 14381 orders; the mock filtered to none"
     }
   ]
 }

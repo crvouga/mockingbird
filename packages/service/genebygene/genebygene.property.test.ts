@@ -113,7 +113,9 @@ const selfParity = async (
       await reference.reset()
     },
     includeUnsafe: true,
-    latencyToleranceMs: 1_000,
+    // Both sides are this same in-process mock: only a GC or scheduler pause can make one slower,
+    // and a spurious latency failure then shrinks a 2000-walk property for many minutes.
+    latencyToleranceMs: 10_000,
     ...(params.seed === undefined ? {} : { seed: params.seed }),
     env: process.env,
     sleep: async () => {},
@@ -368,6 +370,25 @@ describe("shipping model", () => {
         },
       ),
       params,
+    )
+  })
+
+  // The PO Box pattern once backtracked cubically on runs of spaces (6 s for one 6 KB line),
+  // which the random walks generate.
+  test("a quote stays fast on long runs of spaces in any address line", () => {
+    fc.assert(
+      fc.property(
+        validAddress,
+        fc.integer({ min: 1_000, max: 5_000 }),
+        fc.constantFrom("p", "p o", "p. o.", "po box"),
+        (address, spaces, head) => {
+          const line = `${head}${" ".repeat(spaces)}o${" ".repeat(spaces)}x`
+          const started = performance.now()
+          quoteVerdict({ ...address, addressLine1: line, addressLine2: line })
+          expect(performance.now() - started).toBeLessThan(50)
+        },
+      ),
+      { ...params, numRuns: 20 },
     )
   })
 
