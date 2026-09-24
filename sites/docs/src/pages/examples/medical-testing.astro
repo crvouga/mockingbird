@@ -1,5 +1,6 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
+import ExampleLauncher from "../../components/ExampleLauncher.astro"
 import Icon from "../../components/Icon.astro"
 import Base from "../../layouts/Base.astro"
 import { APP_EXAMPLES } from "../../lib/appExamples.ts"
@@ -31,18 +32,12 @@ const servicesByName = new Map(catalog.services.map((s) => [s.name, s]))
     </header>
 
     <section class="live-app">
-      <p data-example-status role="status" class="live-note">
-        Everything below — the Google/Apple OAuth sign-in, the shop, the Stripe checkout, the Junction fulfillment,
-        and the Postgres-backed order history — runs entirely in this browser tab, as a fully branded Cove
-        product UI. No server to start, no real network call to Google, Apple, Stripe, or Junction.
+      <p class="live-note">
+        Everything in the app — the Google/Apple OAuth sign-in, the shop, the Stripe checkout, the Junction
+        fulfillment, and the Postgres-backed order history — runs entirely in this browser tab, as a fully branded
+        Cove product UI. No server to start, no real network call to Google, Apple, Stripe, or Junction.
       </p>
-      <app-example data-app={example.slug}>
-        <div data-example-placeholder>
-          <button type="button" class="btn btn-accent" data-example-start>Launch the app</button>
-          <p data-example-status role="status">Loads on demand. All requests stay in this tab.</p>
-        </div>
-        <div data-example-host></div>
-      </app-example>
+      <ExampleLauncher element="app-example" example={example.slug} title={example.title} launchLabel="Launch the app" fit="app" />
     </section>
 
     <section class="run-locally">
@@ -105,41 +100,6 @@ const servicesByName = new Map(catalog.services.map((s) => [s.name, s]))
   app-example {
     display: block;
     min-width: 0;
-  }
-  /* A fixed-size "device window": full width, constant height, regardless
-     of which page of the demo app is showing inside — the demo scrolls
-     internally instead of growing/shrinking the surrounding docs page. */
-  [data-example-placeholder],
-  [data-example-host] {
-    width: 100%;
-    height: 820px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    background: var(--bg-subtle);
-  }
-  [data-example-placeholder] {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    text-align: center;
-    padding: 28px;
-  }
-  [data-example-host] {
-    padding: 0;
-  }
-  [data-example-host] [data-example-status] {
-    font-size: 13px;
-    color: var(--fg-muted);
-    margin-top: 12px;
-  }
-  @media (max-width: 640px) {
-    [data-example-placeholder],
-    [data-example-host] {
-      height: 640px;
-    }
   }
   .run-locally {
     margin-top: 48px;

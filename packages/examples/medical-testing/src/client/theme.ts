@@ -278,8 +278,11 @@ export const STYLES = `
 .cove-account-label { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--cove-muted); width: 90px; flex-shrink: 0; }
 
 /* ---- OAuth modal ---- */
+/* Sized against the backdrop, not the viewport: embedded (the docs site mounts
+   this app inside its own modal window, which is the containing block for
+   position: fixed), the backdrop covers only the app, not the whole screen. */
 .cove-modal-backdrop { position: fixed; inset: 0; background: rgba(11, 30, 28, 0.5); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 100; }
-.cove-modal { background: var(--cove-surface); border-radius: var(--cove-radius-lg); box-shadow: 0 24px 60px -20px rgba(0,0,0,0.45); width: 100%; max-width: 480px; height: min(760px, 90vh); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.cove-modal { background: var(--cove-surface); border-radius: var(--cove-radius-lg); box-shadow: 0 24px 60px -20px rgba(0,0,0,0.45); width: 100%; max-width: 480px; height: min(760px, 100%); display: flex; flex-direction: column; overflow: hidden; }
 .cove-modal-header { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--cove-border); background: var(--cove-panel); flex-shrink: 0; }
 .cove-modal-header-text { font-size: 0.82rem; font-weight: 700; color: var(--cove-brand); flex: 1; }
 .cove-modal-close { background: none; border: none; cursor: pointer; color: var(--cove-muted); font-size: 1.1rem; line-height: 1; padding: 0.25rem; }
@@ -297,5 +300,7 @@ export const STYLES = `
   .cove-nav-links { gap: 0; }
   .cove-main { padding: 1.5rem 1rem 3rem; }
   .cove-card { padding: 1.25rem; }
+  .cove-modal-backdrop { padding: 0; }
+  .cove-modal { max-width: none; height: 100%; border-radius: 0; }
 }
 `

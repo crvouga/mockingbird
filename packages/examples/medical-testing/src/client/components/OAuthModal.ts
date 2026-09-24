@@ -2,6 +2,7 @@ import { html } from "htm/preact"
 import { useCallback, useEffect, useRef, useState } from "preact/hooks"
 import { api, type OAuthProvider, type OAuthStepResponse, type User } from "../api.js"
 import { attachFormInterceptor } from "./hostedFrame.js"
+import { useEscapeKey } from "./useEscapeKey.js"
 
 type Props = {
   provider: OAuthProvider
@@ -24,6 +25,7 @@ export const OAuthModal = ({ provider, onDone, onClose }: Props) => {
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(true)
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  useEscapeKey(onClose)
 
   const applyResult = useCallback(
     (result: OAuthStepResponse) => {

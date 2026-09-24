@@ -105,7 +105,9 @@ document.addEventListener("keydown", (event) => {
   } else if (
     event.key === "/" &&
     !typing(event.target) &&
-    !document.querySelector("[data-local-search]")
+    !document.querySelector("[data-local-search]") &&
+    // A live example owns the keyboard while its window is open.
+    !document.querySelector("dialog[data-example-modal][open]")
   ) {
     event.preventDefault()
     void openPalette()
