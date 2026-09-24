@@ -82,8 +82,14 @@
     {
       "provider": "genebygene",
       "seed": 1385623469,
-      "status": "open",
+      "status": "fixed",
       "failure": "PostConnectToken with an unknown client: real 400 {\"error\":\"invalid_client\"}, mock 200 (the parity mock did not pin the tenant's client)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1386508987,
+      "status": "open",
+      "failure": "ListEventTypes name=\" \": real lists all 12 (blank name is no filter), mock 0"
     }
   ]
 }

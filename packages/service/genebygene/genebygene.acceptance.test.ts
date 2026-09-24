@@ -1183,7 +1183,7 @@ describe("issue #122: place", () => {
 })
 
 describe("issue #122: read, demographics, edit, cancel", () => {
-  test("B36/B37: pages carry the true totalCount, pageSize caps at 500, unknown ids are 404", async () => {
+  test("B36/B37: pages carry the true totalCount, pageSize is echoed, unknown ids are 404", async () => {
     const { placeShipped, raw } = await dropIn({ subscribe: false })
     for (const n of [1, 2, 3]) await placeShipped(MOUNTAIN_VIEW, "DHL_PARCEL_EXPEDITED", `p:${n}`)
     const first = (await raw("GET", "/api/v2/orders?offset=0&pageSize=2")).data as Json
@@ -1193,7 +1193,8 @@ describe("issue #122: read, demographics, edit, cancel", () => {
     expect(last.items).toHaveLength(1)
     const past = (await raw("GET", "/api/v2/orders?offset=10&pageSize=2")).data as Json
     expect(past).toMatchObject({ totalCount: 3, items: [] })
-    expect(((await raw("GET", "/api/v2/orders?pageSize=5000")).data as Json).pageSize).toBe(500)
+    // Staging echoes any pageSize from 1 to 100000 (corpus/live-errors.json): no 500 cap.
+    expect(((await raw("GET", "/api/v2/orders?pageSize=5000")).data as Json).pageSize).toBe(5000)
     expect((await raw("GET", `/api/v2/orders/${MISSING_ID}`)).status).toBe(404)
   })
 
@@ -1715,9 +1716,10 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
   for (const q of liveErrors.queries) {
     test(`GET ${q.path}?${new URLSearchParams(q.params)} → ${q.status}`, async () => {
       const { raw } = await dropIn({ subscribe: false })
-      const { status, error } = await raw("GET", `${q.path}?${new URLSearchParams(q.params)}`)
+      const { status, data, error } = await raw("GET", `${q.path}?${new URLSearchParams(q.params)}`)
       expect(status).toBe(q.status)
       if ("errors" in q && q.errors) expect((error as Json).errors).toEqual(q.errors)
+      if ("pageSize" in q) expect(data).toMatchObject({ offset: q.offset, pageSize: q.pageSize })
     })
   }
 })

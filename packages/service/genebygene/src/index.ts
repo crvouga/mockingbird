@@ -602,7 +602,8 @@ export class GeneByGeneAPI implements FetchAPI {
       ListAttributeDefinitions: (c) =>
         queryProblem(c, { entityType: "entityType" }) ?? jsonRes(200, ATTRIBUTE_DEFINITIONS),
       ListEventTypes: (c) => {
-        const name = query(c, "name")
+        // A blank name is no filter on staging.
+        const name = query(c, "name")?.trim()
         return jsonRes(
           200,
           EVENT_TYPES.filter((e) => !name || e.name.toLowerCase().includes(name.toLowerCase())),
