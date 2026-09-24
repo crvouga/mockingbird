@@ -509,7 +509,8 @@ const queryProblem = (
         const known = enumNames(rule as keyof typeof QUERY_ENUMS)
         if (/^\d+$/.test(raw.trim()) || !known.has(enumKey(raw))) {
           const { label } = QUERY_ENUMS[rule as keyof typeof QUERY_ENUMS]
-          add(name, `'${label}' has a range of values which does not include '${raw}'.`)
+          // Staging trims the value before it validates, and echoes the trimmed value.
+          add(name, `'${label}' has a range of values which does not include '${raw.trim()}'.`)
         }
       }
     }
