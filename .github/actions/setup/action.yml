@@ -35,8 +35,11 @@ runs:
     # Turbo's own content hashes decide what replays, so a stale restore is harmless. Each run
     # saves under its commit; restore-keys picks the newest entry this ref can see (its own
     # earlier runs, else main's). GitHub evicts old entries past the repo's cache quota.
+    # Restore only: the job saves with ./.github/actions/turbo-cache-save under `if: always()`,
+    # because actions/cache's post step skips the save when the job fails, and a failed run is
+    # exactly the one whose retry should replay the tasks that already passed.
     - if: inputs.turbo-cache == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: .turbo/cache
         key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
