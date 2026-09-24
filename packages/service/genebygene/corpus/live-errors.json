@@ -136,7 +136,7 @@
       "path": "/api/v2/fulfillments",
       "params": {
         "orderLineId": "a",
-        "orderId": "00000000-0000-4000-8000-000000000000"
+        "fulfillmentId": "00000000-0000-4000-8000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -146,7 +146,7 @@
       "path": "/api/v2/fulfillments",
       "params": {
         "orderId": "a",
-        "orderLineId": "00000000-0000-4000-8000-000000000000"
+        "fulfillmentId": "00000000-0000-4000-8000-000000000000"
       },
       "status": 200,
       "offset": 0,
@@ -166,7 +166,7 @@
       "path": "/api/v2/fulfillments",
       "params": {
         "offset": "a",
-        "orderId": "00000000-0000-4000-8000-000000000000"
+        "fulfillmentId": "00000000-0000-4000-8000-000000000000"
       },
       "status": 400,
       "errors": {
@@ -179,7 +179,7 @@
       "path": "/api/v2/fulfillments",
       "params": {
         "pageSize": "a",
-        "orderId": "00000000-0000-4000-8000-000000000000"
+        "fulfillmentId": "00000000-0000-4000-8000-000000000000"
       },
       "status": 400,
       "errors": {

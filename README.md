@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-7-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-45-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-8-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-44-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -67,14 +67,15 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 52 services, each its own npm package. Every service declares a release tier:
 
-- **Ready** (7): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (45): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Ready** (8): Complete, checked against the vendor, and kept stable. Use it in your test suite.
+- **Work in progress** (44): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
 | Service | Category | Package | What it mocks |
 | --- | --- | --- | --- |
 | [Flex](packages/service/flex) | Payments | [`@crvouga/mockingbird-service-flex`](https://www.npmjs.com/package/@crvouga/mockingbird-service-flex) | Stateful mock of the Flex HSA/FSA payments API: products (recorded catalog corpus), checkout sessions in payment, subscription, off-session and setup modes, subscriptions, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks. |
+| [Gene by Gene](packages/service/genebygene) | Health & labs | [`@crvouga/mockingbird-service-genebygene`](https://www.npmjs.com/package/@crvouga/mockingbird-service-genebygene) | Stateful mock of Gene by Gene's Nucleus API v2 and auth host: tokens with credential blocking, catalog, shipping quotes, orders, kits, demographics, three-layer cancel, results with presigned downloads and S3 writes, subscriptions, and GxG-signed webhooks. |
 | [Junction](packages/service/junction) | Health & labs | [`@crvouga/mockingbird-service-junction`](https://www.npmjs.com/package/@crvouga/mockingbird-service-junction) | Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox. |
 | [Medplum](packages/service/medplum) | Health & labs | [`@crvouga/mockingbird-service-medplum`](https://www.npmjs.com/package/@crvouga/mockingbird-service-medplum) | Stateful, portable mock of the self-hosted Medplum server (FHIR R4 REST, OAuth2 and admin API) that runs anywhere JavaScript runs, proven at parity with a real self-hosted Medplum used as the oracle. |
 | [OAuth & Social Login](packages/service/oauth) | Identity | [`@crvouga/mockingbird-service-oauth`](https://www.npmjs.com/package/@crvouga/mockingbird-service-oauth) | Portable social-login mock with Google, Apple, Microsoft, GitHub and generic OIDC profiles, private relay identities, reproducible edge cases, signed tokens and an accessible UI. |
@@ -104,7 +105,6 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [CareTalk](packages/service/caretalk) | Health & labs | [`@crvouga/mockingbird-service-caretalk`](https://www.npmjs.com/package/@crvouga/mockingbird-service-caretalk) | Stateful mock of CareTalk's external API: client-login tokens, GetForm definitions, SavePatientForm rounds, patient search/insert, states, free slots and appointments. |
 | [Edamam](packages/service/edamam) | Health & labs | [`@crvouga/mockingbird-service-edamam`](https://www.npmjs.com/package/@crvouga/mockingbird-service-edamam) | Stateful mock of the Edamam APIs our apps call: food-database parser, nutrients and image analysis, nutrition analysis, recipe search v2, meal-planner select and shopping lists, over a built-in food and recipe corpus. |
 | [Fullscript](packages/service/fullscript) | Health & labs | [`@crvouga/mockingbird-service-fullscript`](https://www.npmjs.com/package/@crvouga/mockingbird-service-fullscript) | Stateful mock of the Fullscript lab-ordering API: per-practitioner OAuth, clinic, session grants, forward-only lab orders with results, lab-order events, expiring result PDFs, and Fullscript-Signature webhooks. |
-| [Gene by Gene](packages/service/genebygene) | Health & labs | [`@crvouga/mockingbird-service-genebygene`](https://www.npmjs.com/package/@crvouga/mockingbird-service-genebygene) | Stateful mock of Gene by Gene's Nucleus API v2 and auth host: tokens with credential blocking, catalog, shipping quotes, orders, kits, demographics, three-layer cancel, results with presigned downloads and S3 writes, subscriptions, and GxG-signed webhooks. |
 | [Healthie](packages/service/healthie) | Health & labs | [`@crvouga/mockingbird-service-healthie`](https://www.npmjs.com/package/@crvouga/mockingbird-service-healthie) | Stateful mock of the Healthie GraphQL API (legacy surface): signIn, users, currentUser, updateUser/updateClient (incl. multipart avatar), locations, documents and folders with served downloads, form answers, offerings, billing items, and the IP-allowlisted status webhooks. |
 | [Makor CPG](packages/service/makor-cpg) | Health & labs | [`@crvouga/mockingbird-service-makor-cpg`](https://www.npmjs.com/package/@crvouga/mockingbird-service-makor-cpg) | Stateful mock of the legacy Makor AI (CPG) API: care plans, plus-user, bloodwork webhook, subscriptions, Wholescripts orders, AI patient summaries and async-review scripts (processing → complete on the mock clock), with permissive CORS for browser-direct calls. |
 | [Optimal DX](packages/service/odx) | Health & labs | [`@crvouga/mockingbird-service-odx`](https://www.npmjs.com/package/@crvouga/mockingbird-service-odx) | Stateful mock of the (retired) Optimal DX partner API: patients, partner links, HL7 and structured lab imports, Functional Health Reports (JSON/PDF), webhook registrations, and signed PatientTest webhooks. |

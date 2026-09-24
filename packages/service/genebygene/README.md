@@ -22,9 +22,12 @@ slot with 15 s sleeps and 300 s waits resolve in milliseconds.
   `OrderLineDto.placerOrderNumber`/`kitNumbers`, `CreateOrder_Item.placerOrderNumber`, `null`
   courier objects), schemas for the bodies Swagger leaves out (`eventTypes`,
   `kitorderlines/kits`, `results/search`, `presignedUrl`), and the auth host's `/connect/token`.
-- Status: **work in progress** until `bun run parity` has run once with staging credentials and
-  its recording of `corpus/address-parity.json` is committed (today that file carries the strings
-  issue #122 documents, marked `recorded: false`).
+- Status: **ready**. Live parity (`bun run parity`, or `bun run parity:remote -- genebygene`) passes
+  against `staging-api.genebygene.com`: the catalog, the 35-address corpus
+  (`corpus/address-parity.json`), the recorded error shapes and query validation
+  (`corpus/live-errors.json`), the recorded catalogs (`src/corpus/live-catalogs.json`), and 25
+  random walks over the safe operations. The acceptance suite replays those recordings, so CI
+  holds the mock to them without credentials.
 
 ## Install
 
