@@ -120,6 +120,12 @@
       "seed": 1394856319,
       "status": "fixed",
       "failure": "ListProducts: staging's catalog drifted (two bundle components now report preassembly: true), the mock's staging catalog said false"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1395812853,
+      "status": "fixed",
+      "failure": "ListProducts productType=\" \": real lists all 3 (a whitespace-only filter is no filter), mock 0"
     }
   ]
 }

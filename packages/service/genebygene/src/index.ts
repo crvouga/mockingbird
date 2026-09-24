@@ -350,11 +350,16 @@ const record = (context: OperationContext): Record<string, unknown> | undefined 
     ? (context.body.value as Record<string, unknown>)
     : undefined
 
+/** A query value; blank or whitespace-only is no value on staging (`?productType=%20` lists all). */
 const query = (context: OperationContext, name: string): string | undefined => {
-  const value = context.query[name]
-  if (typeof value === "string") return value
-  if (Array.isArray(value) && typeof value[0] === "string") return value[0]
-  return undefined
+  const raw = context.query[name]
+  const value =
+    typeof raw === "string"
+      ? raw
+      : Array.isArray(raw) && typeof raw[0] === "string"
+        ? raw[0]
+        : undefined
+  return value?.trim() ? value : undefined
 }
 
 const str = (value: unknown): string | null =>
