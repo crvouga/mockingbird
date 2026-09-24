@@ -192,6 +192,12 @@
       "seed": 1418840073,
       "status": "fixed",
       "failure": "ListAttributeDefinitions entityType=\"a \": real echoes 'a ' (only leading spaces are dropped), mock echoed 'a'"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1419478373,
+      "status": "fixed",
+      "failure": "ListKits status=\"a \": real echoes 'a' (status is trimmed; entityType is echoed as sent)"
     }
   ]
 }
