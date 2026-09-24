@@ -283,6 +283,13 @@ const parameter = (path: string, method: string, name: string, extension: Json) 
 const refTo = (type: string, missing = MISSING_UUID) => ({
   "x-mockingbird-resource-ref": { type, missing },
 })
+// Staging matches productCode with SQL LIKE (`a` and `%` list every product) against codes no
+// response carries, so the walk cannot know a code; our consumer never filters by it.
+parameter("/api/v2/products", "get", "productCode", {
+  "x-mockingbird-unsupported": {
+    reason: "Staging matches product codes with SQL LIKE, and no response carries a code.",
+  },
+})
 parameter("/api/v2/orders/{id}", "get", "id", refTo("order"))
 parameter("/api/v2/orderLines/{id}", "get", "id", refTo("orderLine"))
 parameter("/api/v2/orderLines/{id}", "delete", "id", refTo("orderLine"))

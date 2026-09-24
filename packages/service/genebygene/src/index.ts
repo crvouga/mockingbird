@@ -772,17 +772,19 @@ export class GeneByGeneAPI implements FetchAPI {
     const productId = query(context, "productId")
     const productCode = query(context, "productCode")
     const productType = query(context, "productType")
-    if (productId) {
-      const product = this.findProduct(productId)
-      // An unknown id is an empty list on staging, not a 404.
-      return jsonRes(200, product ? [product] : [])
-    }
+    // Staging ignores a productId that is not a GUID, and matches a GUID against each listed
+    // product's own id or any of its components' ids (a component id lists its bundles).
+    const byId =
+      productId && GUID.test(productId.trim()) ? productId.trim().toLowerCase() : undefined
     return jsonRes(
       200,
       this.products().filter(
         (p) =>
+          (!byId ||
+            p.id.toLowerCase() === byId ||
+            p.components.some((c) => c.product.id.toLowerCase() === byId)) &&
           (!productCode || this.productCode(p) === productCode) &&
-          (!productType || p.productType?.toLowerCase() === productType.toLowerCase()),
+          (!productType || enumKey(p.productType ?? "") === enumKey(productType)),
       ),
     )
   }
@@ -1789,6 +1791,25 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKitOrderLineKits(context: OperationContext): Response {
+    // kitorderlines/kits wants a JSON array: anything else is a 400 ErrorDto, and a non-empty
+    // array fails with an empty 500 (recorded for `[{"name":…,"value":…}]`; its element shape
+    // is not known).
+    const filter = query(context, "attributesFilter")
+    if (filter) {
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(filter)
+      } catch {}
+      if (!Array.isArray(parsed)) {
+        return jsonRes(400, {
+          statusCode: 400,
+          message: "Invalid search filter value",
+          payload: null,
+          errorType: null,
+        })
+      }
+      if (parsed.length > 0) return new Response(null, { status: 500 })
+    }
     const invalid = queryProblem(
       context,
       {

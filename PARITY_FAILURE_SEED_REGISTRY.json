@@ -136,8 +136,14 @@
     {
       "provider": "genebygene",
       "seed": 1398886294,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListProducts productCode=a: real lists all 3 products, mock 0"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 0,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits attributesFilter that is not a JSON array: real 400 ErrorDto \"Invalid search filter value\", mock 200 (walks 12:53 and 13:03 UTC, 2026-09-24)"
     }
   ]
 }

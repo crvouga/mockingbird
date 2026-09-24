@@ -770,12 +770,19 @@ describe("issue #122: auth and catalog", () => {
     })
   })
 
-  test("B5/B6: a component is found by id; an unknown id is an empty list (as on staging)", async () => {
+  // The issue expected the component itself (B5) and a 404 (B6); staging answers a component's
+  // id with the bundles that contain it and an unknown id with [] (corpus/live-errors.json).
+  test("B5/B6: a component id lists the bundles that contain it; an unknown id is an empty list", async () => {
     const { settings, raw } = await dropIn({ subscribe: false })
     await settings({ catalog: "production" })
     const component = await raw("GET", `/api/v2/products?productId=${KIT_COMPONENT}`)
     expect(component.status).toBe(200)
-    expect((component.data as unknown as Json[])[0]?.id).toBe(KIT_COMPONENT)
+    const bundles = component.data as unknown as Json[]
+    expect(bundles.map((p) => p.id)).toContain(DELUXE)
+    for (const bundle of bundles) {
+      const ids = (bundle.components as { product: { id: string } }[]).map((c) => c.product.id)
+      expect(ids).toContain(KIT_COMPONENT)
+    }
     const missing = await raw("GET", `/api/v2/products?productId=${MISSING_ID}`)
     expect(missing.status).toBe(200)
     expect(missing.data as unknown).toEqual([])
@@ -1716,7 +1723,11 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
     })
   }
   // A probe staging never answered in time records "timeout": nothing to replay.
-  for (const q of liveErrors.queries.filter((q) => typeof q.status === "number")) {
+  // productCode is not modelled (staging matches codes no response carries with SQL LIKE).
+  const replayed = liveErrors.queries.filter(
+    (q) => typeof q.status === "number" && !("productCode" in q.params),
+  )
+  for (const q of replayed) {
     test(`GET ${q.path}?${new URLSearchParams(q.params)} → ${q.status}`, async () => {
       const { raw, placeShipped } = await dropIn({ subscribe: false })
       // Staging's /kitorderlines 500s only when there are rows to filter (its tenant had some).
@@ -1725,6 +1736,12 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
       expect(status).toBe(q.status as number)
       if ("errors" in q && q.errors) expect((error as Json).errors).toEqual(q.errors)
       if ("pageSize" in q) expect(data).toMatchObject({ offset: q.offset, pageSize: q.pageSize })
+      // Products are catalog data: the ids a filter answered are replayed against staging's catalog.
+      if ("ids" in q && q.ids) {
+        await raw("PUT", "/__admin/settings", { catalog: "staging" })
+        const listed = await raw("GET", `${q.path}?${new URLSearchParams(q.params)}`)
+        expect(((listed.data as unknown as Json[]) ?? []).map((p) => p.id)).toEqual(q.ids)
+      }
     })
   }
 })

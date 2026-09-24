@@ -202,7 +202,9 @@
       "params": {
         "orderId": "a"
       },
-      "status": "timeout"
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
     },
     {
       "path": "/api/v2/kitorderlines",
@@ -513,21 +515,32 @@
       "params": {
         "productCode": "a"
       },
-      "status": 200
+      "status": 200,
+      "ids": [
+        "a5190f53-01c8-4966-aead-adbf20f0dbf6",
+        "16c26d93-f4f4-4ea1-8f2e-9991d0ef938a",
+        "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
+      ]
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productId": "a"
       },
-      "status": 200
+      "status": 200,
+      "ids": [
+        "a5190f53-01c8-4966-aead-adbf20f0dbf6",
+        "16c26d93-f4f4-4ea1-8f2e-9991d0ef938a",
+        "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
+      ]
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productType": "a"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/results",
@@ -682,6 +695,173 @@
       }
     },
     {
+      "path": "/api/v2/products",
+      "params": {
+        "productId": "a5190f53-01c8-4966-aead-adbf20f0dbf6"
+      },
+      "status": 200,
+      "ids": [
+        "a5190f53-01c8-4966-aead-adbf20f0dbf6"
+      ]
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productId": "b1949749-19b0-4f72-a5c5-8f2414656607"
+      },
+      "status": 200,
+      "ids": []
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productId": "49f9c987-ba0e-4801-a3b3-b446a2d4835a"
+      },
+      "status": 200,
+      "ids": [
+        "a5190f53-01c8-4966-aead-adbf20f0dbf6",
+        "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
+      ]
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "ids": []
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "standard_swab_dhl_return_collection_bundle"
+      },
+      "status": 200,
+      "ids": []
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "STANDARD_SWAB_DHL_RETURN_COLLECTION_BUNDLE"
+      },
+      "status": 200,
+      "ids": []
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesFilter": "!",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 400,
+      "message": "Invalid search filter value"
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "attributesFilter": "!",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesFilter": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 400,
+      "message": "Invalid search filter value"
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "attributesFilter": "a",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesFilter": "[]",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "attributesFilter": "[]",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesFilter": "{}",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 400,
+      "message": "Invalid search filter value"
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "attributesFilter": "{}",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesFilter": "{\"FirstName\":\"a\"}",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 400,
+      "message": "Invalid search filter value"
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "attributesFilter": "{\"FirstName\":\"a\"}",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesFilter": "[{\"name\":\"firstname\",\"value\":\"a\"}]",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 500
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "attributesFilter": "[{\"name\":\"firstname\",\"value\":\"a\"}]",
+        "orderId": "00000000-0000-0000-0000-000000000000"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
       "path": "/api/v2/kitorderlines/kits",
       "params": {
         "productType": "Materials",
@@ -696,7 +876,8 @@
       "params": {
         "productType": "Materials"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -713,7 +894,8 @@
       "params": {
         "productType": "materials"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -730,7 +912,12 @@
       "params": {
         "productType": "Bundle"
       },
-      "status": 200
+      "status": 200,
+      "ids": [
+        "a5190f53-01c8-4966-aead-adbf20f0dbf6",
+        "16c26d93-f4f4-4ea1-8f2e-9991d0ef938a",
+        "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
+      ]
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -747,7 +934,8 @@
       "params": {
         "productType": "DigitalProduct"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -764,7 +952,8 @@
       "params": {
         "productType": "Digital Product"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -781,7 +970,8 @@
       "params": {
         "productType": "LabServices"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -798,7 +988,8 @@
       "params": {
         "productType": "Lab Services"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -818,7 +1009,8 @@
       "params": {
         "productType": "0"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -838,7 +1030,8 @@
       "params": {
         "productType": "1"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/kitorderlines/kits",
@@ -2355,84 +2548,100 @@
       "params": {
         "productCode": "{"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "WB1,WB2"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "WB-1"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "WB_1"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "WB 1"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "WB.1"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "WB1;WB2"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "é"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "a'b"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "<b>"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "%"
       },
-      "status": 200
+      "status": 200,
+      "ids": [
+        "a5190f53-01c8-4966-aead-adbf20f0dbf6",
+        "16c26d93-f4f4-4ea1-8f2e-9991d0ef938a",
+        "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
+      ]
     },
     {
       "path": "/api/v2/products",
       "params": {
         "productCode": "*"
       },
-      "status": 200
+      "status": 200,
+      "ids": []
     },
     {
       "path": "/api/v2/eventTypes",

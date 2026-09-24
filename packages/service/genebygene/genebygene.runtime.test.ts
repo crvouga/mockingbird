@@ -78,10 +78,15 @@ describe("service contract", () => {
       )
       expect(await raw()).toBe(JSON.stringify(rows))
     }
-    expect(await client.fetchProduct("49f9c987-ba0e-4801-a3b3-b446a2d4835a")).toMatchObject({
-      name: "Standard Swab Domestic Kit with DHL Return Label",
-      shippingQualified: true,
-    })
+    // Staging answers a component's id with the bundles that contain it; our lookup takes the
+    // first row when none has the id (corpus/live-errors.json).
+    const bundle = await client.fetchProduct("49f9c987-ba0e-4801-a3b3-b446a2d4835a")
+    expect(bundle).toMatchObject({ productType: "Bundle" })
+    expect(
+      ((bundle?.components ?? []) as { product: { id: string; name: string } }[]).find(
+        (c) => c.product.id === "49f9c987-ba0e-4801-a3b3-b446a2d4835a",
+      )?.product.name,
+    ).toBe("Standard Swab Domestic Kit with DHL Return Label")
   })
 
   test("namespaces isolate orders: by header, by /ns/ prefix (API and token URL), and by client id", async () => {
