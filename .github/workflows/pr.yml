@@ -1,7 +1,7 @@
 # Pull-request gate. A green run of this workflow is the release decision:
 # merging to main publishes (see ci.yml). Do not add a second quality bar there.
 #
-# Every job below is a required status check on main (scripts/pr-merge.ts
+# Every job below is a required status check on main (scripts/pr-ready.ts
 # REQUIRED_CHECKS). Rename a job here and update that list in the same change.
 # GitGuardian Security Checks is the other required check; it is reported by
 # the GitGuardian app, not by a job in this file.

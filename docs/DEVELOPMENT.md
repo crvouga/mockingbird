@@ -86,14 +86,14 @@ to date with `main` before merge, so those checks ran against the code that land
 commits are allowed, because each commit on the pull request is a release input. Head branches
 are deleted on merge. PRs use the template in `.github/pull_request_template.md`.
 
-The gate is codified in `scripts/pr-merge.ts` (`REQUIRED_CHECKS` is the ruleset list — rename a
+The gate is codified in `scripts/pr-ready.ts` (`REQUIRED_CHECKS` is the ruleset list — rename a
 job in [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) and update that list together):
 
 ```bash
-bun run pr:merge repo                            # verify merge settings / auto-delete / auto-merge
-bun run pr:merge repo --apply
-bun run pr:merge ruleset                         # verify the `Protect main` ruleset
-bun run pr:merge ruleset --apply
+bun run pr:ready repo                            # verify merge settings / auto-delete / auto-merge
+bun run pr:ready repo --apply
+bun run pr:ready ruleset                         # verify the `Protect main` ruleset
+bun run pr:ready ruleset --apply
 ```
 
 ### Agent commands
@@ -104,17 +104,17 @@ harness — `.claude/commands`, `.cursor/commands`, `.opencode/command`, `.winds
 canonical file; `bun run agents:sync` creates missing links and `bun run check:agents` (part of
 `bun run check`) fails CI on drift.
 
-`/pr-merge` takes the current branch all the way to a merged PR: commit, push, merge `origin/main`,
-resolve conflicts, open the PR, fix every failing check (CI and third-party checks such as
-GitGuardian), then merge. Checks passing is the only merge requirement.
-For a clean, committed branch, `bun run pr:merge advance` performs the mechanical steps in one call
-and returns JSON for the next blocker. `bun run pr:merge comments` lists review threads and recent
-comments when you want to read them; reviews do not block the merge.
+`/pr-ready` takes the current branch to a merge-ready PR: commit, push, merge `origin/main`,
+resolve conflicts, open the PR, and fix every failing check (CI and third-party checks such as
+GitGuardian). It never merges; a human lands the PR once `bun run pr:ready ready` reports it green.
+For a clean, committed branch, `bun run pr:ready advance` performs the mechanical steps in one call
+and returns JSON for the next blocker. `bun run pr:ready comments` lists review threads and recent
+comments when you want to read them.
 
 `/resolve-issues` works the queue of GitHub issues that agents in other projects file through
 [REPORTING_ISSUES.md](REPORTING_ISSUES.md) (label `agent-reported`): claim one, confirm the
 reported behavior against the oracle, add a regression test, fix the mock, and ship it through
-`/pr-merge` with `Fixes #<n>`. `feature` requests become acceptance tests plus contract changes;
+`/pr-ready` with `Fixes #<n>`. `feature` requests become acceptance tests plus contract changes;
 `new-service` requests become new packages built through
 [AUTHORING_A_SERVICE.md](AUTHORING_A_SERVICE.md).
 

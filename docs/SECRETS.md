@@ -120,7 +120,7 @@ GitHub Actions cache, so pull requests replay what `main` already built. No toke
 | `GITHUB_TOKEN` | built into GitHub Actions | automatic |
 | `NPM_TOKEN` | repo secret | creating new packages, deprecations |
 | `MOCKINGBIRD_*` sandbox keys | repo secrets (+ optionally your `.env.local`) | live parity only |
-| `GITGUARDIAN_API_KEY` | your `.env.local` | optional: `pr:merge guardian ignore` |
+| `GITGUARDIAN_API_KEY` | your `.env.local` | optional: `pr:ready guardian ignore` |
 
 Inventory: [`secrets.manifest.yaml`](../secrets.manifest.yaml) (non-parity secrets and the
 Trusted Publishing checklist) and [`.env.example`](../.env.example) (every local name).

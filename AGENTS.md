@@ -18,7 +18,7 @@ account, or any self-hosted service.
   https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt (re-fetch it, don't trust a
   cached copy).
 
-Agent commands (`/ci`, `/pr-merge`, `/parity-loop`, `/resolve-issues`) live in `.agents/commands/`;
+Agent commands (`/ci`, `/pr-ready`, `/parity-loop`, `/resolve-issues`) live in `.agents/commands/`;
 see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#agent-commands).
 
 Agents in other projects report parity mismatches, missing features and bugs, and request new

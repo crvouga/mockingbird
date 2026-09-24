@@ -1,1 +1,0 @@
-../../commands/pr-merge.md

@@ -43,7 +43,7 @@
     "check:full": "bun scripts/ci-local.ts",
     "pack:check": "turbo run pack:check",
     "portability": "turbo run portability",
-    "pr:merge": "bun scripts/pr-merge.ts",
+    "pr:ready": "bun scripts/pr-ready.ts",
     "parity": "turbo run parity --filter=@crvouga/mockingbird-service-junction --concurrency=1",
     "parity:stripe": "turbo run parity --filter=@crvouga/mockingbird-service-stripe",
     "parity:stripe:webhooks": "bun packages/service/stripe/scripts/webhook-smoke.ts",

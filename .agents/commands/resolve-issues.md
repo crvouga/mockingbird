@@ -92,7 +92,7 @@ For `parity` and `bug` issues:
 
 Commit with a Conventional Commit, `fix(<service>): <what now matches the oracle>` (`feat(<service>): …`
 for `feature` and `new-service`), and a
-`Fixes #<n>` line in the body. Then run `/pr-merge`. Its PR body must include `Fixes #<n>` and the
+`Fixes #<n>` line in the body. Then run `/pr-ready`. Its PR body must include `Fixes #<n>` and the
 oracle evidence from step 3, so the issue closes when the PR merges.
 
 Continue with the next issue only if the user asked for the whole queue. Report every issue you
