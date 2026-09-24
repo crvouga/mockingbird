@@ -204,6 +204,12 @@
       "seed": 1420005841,
       "status": "fixed",
       "failure": "ListFulfillments orderLineId=ໞ: the narrowing orderId was the all-zero GUID, which staging reads as no filter, so the shared tenant's 14466 fulfillments were listed"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1420835929,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits productType=\"a a\": real echoes 'aa' (status and productType drop all whitespace)"
     }
   ]
 }
