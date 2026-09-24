@@ -7,7 +7,7 @@ import {
   document,
   GeneByGeneAPI,
   placeCheck,
-  structuralProblems,
+  quoteVerdict,
   supportedOperationIds,
 } from "./src/index.js"
 import {
@@ -288,13 +288,13 @@ const validAddress = fc
   )
 
 describe("shipping model", () => {
-  test("every zone's prices scale the zone-6 anchor, rounded to cents; zone 8 drops two services", () => {
+  test("every zone's prices scale the zone-6 anchor, rounded to cents; zone 8 drops Express Saver", () => {
     fc.assert(
       fc.property(zip5, fc.boolean(), (zip, residential) => {
         const zone = zoneFor(zip.slice(0, 3))
         if (zone === undefined) return
         const menu = menuFor(zone)
-        expect(menu.length).toBe(zone === 8 ? 2 : 4)
+        expect(menu.length).toBe(zone === 8 ? 3 : 4)
         for (const service of menu) {
           const price = priceFor(service, zone, { residential, zip5: zip })
           const base = roundCents(service.anchorPrice * (ZONE_FACTORS[zone] as number))
@@ -310,17 +310,17 @@ describe("shipping model", () => {
     )
   })
 
-  test("zone 6 is the recorded anchor: 6, 14.91, 14.91, 62.23 for 73938", () => {
+  test("zone 6 is the recorded anchor: 6, 62.23, 14.91, 14.91 for 73938 (staging's menu order)", () => {
     expect(zoneFor("739")).toBe(6)
     expect(
       COURIER_SERVICES.map((s) => priceFor(s, 6, { residential: true, zip5: "73938" })),
-    ).toEqual([6, 14.91, 14.91, 62.23])
+    ).toEqual([6, 62.23, 14.91, 14.91])
   })
 
   test("a structurally valid address always quotes; place never reports a structural problem for it", () => {
     fc.assert(
       fc.property(validAddress, (address) => {
-        expect(structuralProblems(address)).toEqual([])
+        expect(quoteVerdict(address).kind).toBe("ok")
         const place = placeCheck(address)
         expect(place.ok || (!place.ok && place.kind === "address-not-found")).toBe(true)
       }),
@@ -328,12 +328,15 @@ describe("shipping model", () => {
     )
   })
 
-  test("a state that disagrees with the ZIP3 table is Address Not Found at place, never at quote", () => {
+  // Staging: the quote is already the carrier's 500 (90210 in "TX", corpus/address-parity.json).
+  test("a state that disagrees with the ZIP3 table is the carrier's 500 at quote, Address Not Found at place", () => {
     fc.assert(
       fc.property(validAddress, fc.constantFrom("TX", "CA", "NY", "MT", "HI"), (address, state) => {
         fc.pre(state !== address.stateOrRegion)
+        // Territories quote DHL only, and the carrier's ZIP check is FedEx's.
+        fc.pre(!["PR", "VI", "GU"].includes(address.stateOrRegion as string))
         const moved = { ...address, stateOrRegion: state }
-        expect(structuralProblems(moved)).toEqual([])
+        expect(quoteVerdict(moved).kind).toBe("carrier")
         expect(placeCheck(moved)).toMatchObject({ ok: false, kind: "address-not-found" })
       }),
       params,
@@ -353,8 +356,15 @@ describe("shipping model", () => {
           // An emoji is two code units, as String#length in the caller counts it.
           const text = `${unit.repeat(Math.floor(length / unit.length))}${"a".repeat(length % unit.length)}`
           expect(text.length).toBe(length)
-          const problems = structuralProblems({ ...address, [line]: text })
-          expect(problems.includes("Address line exceeds 35 characters.")).toBe(length > 35)
+          const verdict = quoteVerdict({ ...address, [line]: text })
+          expect(verdict).toEqual(
+            length > 35
+              ? {
+                  kind: "errorMessages",
+                  errorMessages: ["Address Lines cannot be longer than 35 characters."],
+                }
+              : expect.objectContaining({ kind: "ok" }),
+          )
         },
       ),
       params,

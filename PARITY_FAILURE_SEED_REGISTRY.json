@@ -66,6 +66,12 @@
       "seed": 1383771939,
       "status": "open",
       "failure": "ListEventTypes: real rows carry payloadStructure and subscriptionTypes [\"Webhook\",\"Email\"], mock rows carry id, description and isSubscribable"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1384192777,
+      "status": "open",
+      "failure": "ListKits: the shared staging tenant lists 3831 pre-existing kits (a fresh mock has none), and staging pages 100 rows by default where the mock paged 50"
     }
   ]
 }

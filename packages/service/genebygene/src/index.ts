@@ -22,6 +22,7 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import {
   ATTRIBUTE_DEFINITIONS,
+  attributeDefinition,
   type Catalog,
   catalogProducts,
   DELUXE_BUNDLE_ID,
@@ -29,6 +30,7 @@ import {
   LAB_RETURN_ADDRESS,
   PRODUCT_CODES,
   STAGING_ONLY_IDS,
+  SUBSCRIBABLE_EVENTS,
   TENANT_ID,
 } from "./corpus.js"
 import {
@@ -46,9 +48,9 @@ import {
   notValidatedMessage,
   placeCheck,
   quoteMenu,
+  quoteVerdict,
   RETURN_COURIER,
   type ShippingOption,
-  structuralProblems,
   trackingNumberFor,
 } from "./shipping.js"
 import { GeneByGeneState, netIso } from "./state.js"
@@ -109,7 +111,9 @@ export { document, operationIds, supportedOperationIds } from "./generated/opena
 export type { CorpusAddress, CorpusKind, CourierService, ShippingOption } from "./shipping.js"
 export {
   ADDRESS_CORPUS,
+  addressValidationErrors,
   COURIER_SERVICES,
+  INTERNATIONAL_SERVICES,
   MAX_ADDRESS_LINE,
   menuFor,
   placeCheck,
@@ -117,9 +121,9 @@ export {
   QUOTE_OK_PLACE_NOT_FOUND,
   QUOTE_OK_PLACE_OK,
   quoteMenu,
+  quoteVerdict,
   RETURN_COURIER,
   stateForZip3,
-  structuralProblems,
   trackingNumberFor,
   UNDELIVERABLE_ZIP3,
   ZONE_FACTORS,
@@ -269,6 +273,16 @@ const PROBLEM_TYPES: Record<number, string> = {
 const errorDto = (status: number, message: string, errorType = "ValidationError") =>
   jsonRes(status, { statusCode: status, message, payload: {}, errorType })
 
+/**
+ * A missing resource, as staging answers it: `ErrorDto` with a null payload and type
+ * (`{"statusCode":404,"message":"Resource not found.","payload":null,"errorType":null}`).
+ */
+const notFoundDto = (message = "Resource not found.") =>
+  jsonRes(404, { statusCode: 404, message, payload: null, errorType: null })
+
+/** An unknown subscription id is a 400 on staging, not a 404. */
+const SUBSCRIPTION_ID_REQUIRED = { id: ["Valid Notification Subscription Id required."] }
+
 /** `getShippingOptions` for a product with nothing to ship, or an id the catalog lacks. */
 const NOT_VALID_FOR_SHIPPING = "This product Id is not valid for shipping options."
 
@@ -360,7 +374,9 @@ const isDomestic = (address: AddressDto | undefined) =>
 type QuoteOutcome =
   | { kind: "http500" }
   | { kind: "http400" }
+  | { kind: "validation"; errors: Record<string, string[]> }
   | { kind: "errorMessages"; errorMessages: string[] }
+  | { kind: "carrier"; message: string }
   | { kind: "options"; zone: number; options: ShippingOption[] }
 
 /** Address fields that decide where a kit goes (everything but the instruction). */
@@ -406,7 +422,8 @@ const pageOf = (context: OperationContext): { offset: number; pageSize: number }
     return value
   }
   const offset = read("offset", 0)
-  const pageSize = read("pageSize", 50)
+  // Staging pages 100 rows when no pageSize is sent.
+  const pageSize = read("pageSize", 100)
   if (Object.keys(errors).length > 0)
     return problem(400, "One or more validation errors occurred.", { errors })
   if (offset < 0) return errorDto(400, "Offset must be greater than or equal to 0.")
@@ -624,9 +641,7 @@ export class GeneByGeneAPI implements FetchAPI {
     const productType = query(context, "productType")
     if (productId) {
       const product = this.findProduct(productId)
-      return product
-        ? jsonRes(200, [product])
-        : problem(404, "Not Found", { detail: `Product ${productId} not found.` })
+      return product ? jsonRes(200, [product]) : notFoundDto()
     }
     return jsonRes(
       200,
@@ -656,19 +671,22 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   /**
-   * The quote: structure and destination class only (never the USPS deliverability check), so
-   * an address the place check will reject still gets its zone's menu.
+   * The quote (`quoteVerdict`): request validation, the address rules, the carrier's refusals,
+   * then the destination's menu. Never the USPS deliverability check, so an address the place
+   * check will reject still gets its zone's menu.
    */
   quote(productId: string, address: AddressDto | undefined, quantity = 1): QuoteOutcome {
     const quotable = this.quotable(productId)
     if (quotable === "http500") return { kind: "http500" }
     if (quotable === "http400") return { kind: "http400" }
-    const problems = structuralProblems(address)
-    if (problems.length > 0) return { kind: "errorMessages", errorMessages: problems }
+    const verdict = quoteVerdict(address)
+    if (verdict.kind !== "ok") return verdict
     if (quantity < 1)
       return { kind: "errorMessages", errorMessages: ["Quantity must be at least 1."] }
-    const menu = quoteMenu(address as AddressDto, this.now())
-    if (!menu) return { kind: "errorMessages", errorMessages: [MESSAGES.territory] }
+    const menu = quoteMenu(address as AddressDto, this.now()) as {
+      zone: number
+      options: ShippingOption[]
+    }
     return { kind: "options", zone: menu.zone, options: menu.options }
   }
 
@@ -693,6 +711,17 @@ export class GeneByGeneAPI implements FetchAPI {
       return quote.kind === "http500"
         ? new Response(null, { status: 500 })
         : errorDto(400, NOT_VALID_FOR_SHIPPING)
+    }
+    if (quote.kind === "validation") {
+      return problem(400, "One or more validation errors occurred.", { errors: quote.errors })
+    }
+    if (quote.kind === "carrier") {
+      return jsonRes(500, {
+        statusCode: 500,
+        message: quote.message,
+        payload: null,
+        errorType: null,
+      })
     }
     if (quote.kind === "errorMessages") return refuse(quote.errorMessages)
     return jsonRes(200, {
@@ -1123,15 +1152,13 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private getOrder(context: OperationContext): Response {
     const order = this.state.orders.get(context.params.id ?? "")
-    if (!order)
-      return problem(404, "Not Found", { detail: `Order ${context.params.id} not found.` })
+    if (!order) return notFoundDto()
     return annotateResponse(jsonRes(200, this.orderDto(order)), { ids: { orderId: order.id } })
   }
 
   private getOrderLine(context: OperationContext): Response {
     const line = this.state.lines.get(context.params.id ?? "")
-    if (!line)
-      return problem(404, "Not Found", { detail: `Order line ${context.params.id} not found.` })
+    if (!line) return notFoundDto()
     const order = this.state.orders.get(line.orderId) as OrderRecord
     const kits = line.kitNumbers.flatMap((k) => {
       const kit = this.state.kits.get(k)
@@ -1185,8 +1212,7 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private cancelFulfillment(context: OperationContext): Response {
     const fulfillment = this.state.fulfillments.get(context.params.id ?? "")
-    if (!fulfillment)
-      return problem(404, "Not Found", { detail: `Fulfillment ${context.params.id} not found.` })
+    if (!fulfillment) return notFoundDto()
     const conflict = this.cancelConflict(context)
     if (conflict) return conflict
     // Already shipped, or already canceled by an earlier partial cancel: both refuse.
@@ -1212,8 +1238,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private cancelKitOrderLines(context: OperationContext): Response {
     const kit = this.state.kits.get(context.params.kitNumber ?? "")
     // An already-canceled kit is gone from the vendor's point of view: 404 (idempotent success).
-    if (!kit || kit.canceled)
-      return problem(404, "Not Found", { detail: `Kit ${context.params.kitNumber} not found.` })
+    if (!kit || kit.canceled) return notFoundDto(`Kit ${context.params.kitNumber} not found`)
     const conflict = this.cancelConflict(context)
     if (conflict) return conflict
     if (WITH_LAB.has(kit.status)) {
@@ -1248,7 +1273,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private cancelOrderLine(context: OperationContext): Response {
     const line = this.state.lines.get(context.params.id ?? "")
     if (!line || line.currentStatus === "Canceled") {
-      return problem(404, "Not Found", { detail: `Order line ${context.params.id} not found.` })
+      return notFoundDto()
     }
     const conflict = this.cancelConflict(context)
     if (conflict) return conflict
@@ -1317,8 +1342,7 @@ export class GeneByGeneAPI implements FetchAPI {
       .list()
       .map((row) => row.value)
       .find((f) => f.shipments.some((s) => s.id === shipmentId))
-    if (!fulfillment)
-      return problem(404, "Not Found", { detail: `Shipment ${shipmentId} not found.` })
+    if (!fulfillment) return notFoundDto()
     const shipment = fulfillment.shipments.find((s) => s.id === shipmentId) as ShipmentRecord
     if (shipment.trackingNumber || LOCKED_FULFILLMENT.has(fulfillment.currentStatus)) {
       return errorDto(400, ADDRESS_LOCKED)
@@ -1369,7 +1393,7 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private attributeDto(attribute: { name: string; value: string }) {
-    const definition = ATTRIBUTE_DEFINITIONS.find((d) => d.name === attribute.name)
+    const definition = attributeDefinition(attribute.name)
     return {
       name: attribute.name,
       displayName: definition?.displayName ?? attribute.name,
@@ -1484,8 +1508,7 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private getKit(context: OperationContext): Response {
     const kit = this.state.kits.get(context.params.kitNumber ?? "")
-    if (!kit)
-      return problem(404, "Not Found", { detail: `Kit ${context.params.kitNumber} not found.` })
+    if (!kit) return notFoundDto(`Kit ${context.params.kitNumber} not found`)
     return annotateResponse(jsonRes(200, this.kitDto(kit)), { ids: { kitNumber: kit.kitNumber } })
   }
 
@@ -1504,7 +1527,7 @@ export class GeneByGeneAPI implements FetchAPI {
     if (invalid) return invalid
     const kitNumber = context.params.kitNumber ?? ""
     const kit = this.state.kits.get(kitNumber)
-    if (!kit) return problem(404, "Not Found", { detail: `Kit ${kitNumber} not found.` })
+    if (!kit) return notFoundDto(`Kit ${kitNumber} not found`)
     const body = record(context) ?? {}
     if (typeof body.kitNumber === "string" && body.kitNumber !== kitNumber) {
       return errorDto(400, `Kit number ${body.kitNumber} in the body does not match ${kitNumber}.`)
@@ -1515,7 +1538,7 @@ export class GeneByGeneAPI implements FetchAPI {
     const pairs: { name: string; value: string }[] = []
     for (const [index, attribute] of attributes.entries()) {
       const name = typeof attribute.name === "string" ? attribute.name.trim().toLowerCase() : ""
-      if (!ATTRIBUTE_DEFINITIONS.some((d) => d.name === name)) {
+      if (!attributeDefinition(name)) {
         return errorDto(400, `Attribute '${String(attribute.name)}' is not defined.`, "Validation")
       }
       const value = typeof attribute.value === "string" ? attribute.value.trim() : ""
@@ -1547,8 +1570,7 @@ export class GeneByGeneAPI implements FetchAPI {
 
   private getKitResults(context: OperationContext): Response {
     const kit = this.state.kits.get(context.params.kitNumber ?? "")
-    if (!kit)
-      return problem(404, "Not Found", { detail: `Kit ${context.params.kitNumber} not found.` })
+    if (!kit) return notFoundDto()
     return jsonRes(200, {
       kitNumber: kit.kitNumber,
       gender: kit.gender,
@@ -1649,7 +1671,7 @@ export class GeneByGeneAPI implements FetchAPI {
     if (page instanceof Response) return page
     const kitNumber = query(context, "kitNumber")
     if (kitNumber && !this.state.kits.has(kitNumber)) {
-      return problem(404, "Not Found", { detail: `Kit ${kitNumber} not found.` })
+      return notFoundDto()
     }
     const results = this.state.results
       .list()
@@ -1723,7 +1745,7 @@ export class GeneByGeneAPI implements FetchAPI {
           (!resultType || r.resultType === resultType),
       )
     const result = resultId || kitNumber ? candidates[0] : undefined
-    if (!result) return problem(404, "Not Found", { detail: "No result matches the request." })
+    if (!result) return notFoundDto("There is no report assoicated with that result")
     const date = Math.floor(this.now() / 1000)
     const expires = this.state.current().presignedUrlTtlSeconds
     const params = new URLSearchParams({
@@ -1792,10 +1814,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private eventsProblem(events: unknown): Response | undefined {
     if (!Array.isArray(events) || events.length === 0)
       return errorDto(400, "Valid event type is required.")
-    const subscribable = new Set<string>(
-      EVENT_TYPES.filter((e) => e.isSubscribable).map((e) => e.name),
-    )
-    return events.every((e) => typeof e === "string" && subscribable.has(e))
+    return events.every((e) => typeof e === "string" && SUBSCRIBABLE_EVENTS.has(e))
       ? undefined
       : errorDto(400, "Valid event type is required.")
   }
@@ -1866,14 +1885,18 @@ export class GeneByGeneAPI implements FetchAPI {
   private getSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
     if (!sub)
-      return problem(404, "Not Found", { detail: `Subscription ${context.params.id} not found.` })
+      return problem(400, "One or more validation errors occurred.", {
+        errors: SUBSCRIPTION_ID_REQUIRED,
+      })
     return jsonRes(200, this.subscriptionDto(sub))
   }
 
   private updateSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
     if (!sub)
-      return problem(404, "Not Found", { detail: `Subscription ${context.params.id} not found.` })
+      return problem(400, "One or more validation errors occurred.", {
+        errors: SUBSCRIPTION_ID_REQUIRED,
+      })
     const invalid = validationErrors(context)
     if (invalid) return invalid
     const body = record(context) ?? {}
@@ -1900,7 +1923,9 @@ export class GeneByGeneAPI implements FetchAPI {
   private deleteSubscription(context: OperationContext): Response {
     const sub = this.state.subscriptions.get(context.params.id ?? "")
     if (!sub)
-      return problem(404, "Not Found", { detail: `Subscription ${context.params.id} not found.` })
+      return problem(400, "One or more validation errors occurred.", {
+        errors: SUBSCRIPTION_ID_REQUIRED,
+      })
     this.state.subscriptions.delete(sub.id)
     return new Response(null, { status: 204 })
   }

@@ -592,11 +592,12 @@ const KIT_COMPONENT = "b1949749-19b0-4f72-a5c5-8f2414656607"
 const REPORT_PRODUCT = "8dee4da8-5103-4209-bb91-b8beba6ee7e5"
 const LAB_SERVICE = "a7c9c265-6d31-4391-8e93-342d9617fef5"
 const MISSING_ID = "00000000-0000-4000-8000-000000000000"
+/** The domestic menu in the order staging lists it (corpus/address-parity.json). */
 const CODES = [
   "DHL_PARCEL_EXPEDITED",
-  "FEDEX_EXPRESS_SAVER_ONE_RATE",
-  "FEDEX_2_DAY_ONE_RATE",
   "FEDEX_PRIORITY_OVERNIGHT",
+  "FEDEX_2_DAY_ONE_RATE",
+  "FEDEX_EXPRESS_SAVER_ONE_RATE",
 ]
 const cents = (value: number) => Math.round(value * 100) / 100
 
@@ -803,9 +804,9 @@ describe("issue #122: quotes", () => {
     expect(codesOf(data)).toEqual(CODES)
     expect(pricesOf(data)).toEqual({
       DHL_PARCEL_EXPEDITED: cents(cents(6 * 1.12) + 0.5),
-      FEDEX_EXPRESS_SAVER_ONE_RATE: cents(14.91 * 1.12),
-      FEDEX_2_DAY_ONE_RATE: cents(14.91 * 1.12),
       FEDEX_PRIORITY_OVERNIGHT: cents(62.23 * 1.12),
+      FEDEX_2_DAY_ONE_RATE: cents(14.91 * 1.12),
+      FEDEX_EXPRESS_SAVER_ONE_RATE: cents(14.91 * 1.12),
     })
     const [dhl] = (data as { shippingOptions: Json[] }).shippingOptions
     expect(dhl).toMatchObject({
@@ -833,7 +834,7 @@ describe("issue #122: quotes", () => {
       }),
     )
     expect(codesOf(data)).toEqual(CODES)
-    expect(Object.values(pricesOf(data))).toEqual([6, 14.91, 14.91, 62.23])
+    expect(Object.values(pricesOf(data))).toEqual([6, 62.23, 14.91, 14.91])
   })
 
   test("B11: commercial addresses carry no DHL surcharge", async () => {
@@ -843,13 +844,18 @@ describe("issue #122: quotes", () => {
     expect(pricesOf(data).DHL_PARCEL_EXPEDITED).toBe(cents(6 * 1.12))
   })
 
-  test("B12: Honolulu is zone 8: DHL and Express Saver only", async () => {
+  test("B12: Honolulu is zone 8: no FedEx Express Saver (as staging quotes HI and AK)", async () => {
     const { quote } = await dropIn({ subscribe: false })
     const { data } = await quote(HONOLULU)
-    expect(codesOf(data)).toEqual(["DHL_PARCEL_EXPEDITED", "FEDEX_EXPRESS_SAVER_ONE_RATE"])
+    expect(codesOf(data)).toEqual([
+      "DHL_PARCEL_EXPEDITED",
+      "FEDEX_PRIORITY_OVERNIGHT",
+      "FEDEX_2_DAY_ONE_RATE",
+    ])
     expect(pricesOf(data)).toEqual({
       DHL_PARCEL_EXPEDITED: cents(cents(6 * 1.35) + 0.5),
-      FEDEX_EXPRESS_SAVER_ONE_RATE: cents(14.91 * 1.35),
+      FEDEX_PRIORITY_OVERNIGHT: cents(62.23 * 1.35),
+      FEDEX_2_DAY_ONE_RATE: cents(14.91 * 1.35),
     })
   })
 
@@ -861,7 +867,7 @@ describe("issue #122: quotes", () => {
     expect(refused.status).toBe(200)
     expect(refused.data).toMatchObject({
       shippingOptions: [],
-      errorMessages: ["Address line exceeds 35 characters."],
+      errorMessages: ["Address Lines cannot be longer than 35 characters."],
     })
     const line1 = "1600 Amphitheatre Pkwy".padEnd(35, "X")
     const line2 = "Building 40 Mail Stop".padEnd(35, "Y")
@@ -869,44 +875,72 @@ describe("issue #122: quotes", () => {
     expect(codesOf(fits.data).length).toBeGreaterThan(0)
   })
 
-  test("B15–B18: non-US, PO Box, military and missing fields are 200 errorMessages", async () => {
+  // The issue listed every refusal as HTTP 200 errorMessages; staging answers three classes
+  // (corpus/address-parity.json), and the recording wins.
+  test("B15–B18: staging's refusals: request validation 400, address rules 200, carrier 500", async () => {
     const { quote } = await dropIn({ subscribe: false })
-    const cases: [Json, string[]][] = [
-      [
-        addr({
-          addressLine1: "100 Queen St W",
-          city: "Toronto",
-          stateOrRegion: "ON",
-          postalCode: "M5H 2N2",
-          countryCode: "CA",
-        }),
-        ["Only US destinations are available for this product."],
-      ],
-      [
-        { ...PHOENIX_NOT_FOUND, addressLine1: "PO Box 100" },
-        ["PO Box addresses are not supported for this product."],
-      ],
-      [
-        addr({ addressLine1: "Unit 1000", city: "APO", stateOrRegion: "AE", postalCode: "09012" }),
-        ["Military addresses are not supported for this product."],
-      ],
-      [addr({ city: null, phone: null }), ["city is required.", "phone is required."]],
-    ]
-    for (const [address, messages] of cases) {
-      const { status, data } = await quote(address)
-      expect(status).toBe(200)
-      expect((data as { shippingOptions: unknown[] }).shippingOptions).toEqual([])
-      for (const message of messages) {
-        expect((data as { errorMessages: string[] }).errorMessages).toContain(message)
-      }
-    }
+    const refused = await quote(
+      addr({ addressLine1: "Unit 1000", city: "APO", stateOrRegion: "AE", postalCode: "09012" }),
+    )
+    expect(refused.status).toBe(200)
+    expect(refused.data).toMatchObject({
+      shippingOptions: [],
+      errorMessages: ["Invalid state or region for US domestic address."],
+    })
+    const invalid = await quote(addr({ city: null, recipientName: "" }))
+    expect(invalid.status).toBe(400)
+    expect(invalid.error).toMatchObject({
+      title: "One or more validation errors occurred.",
+      status: 400,
+      errors: {
+        "shippingAddress.City": ["'Shipping Address City' must not be empty."],
+        "shippingAddress.RecipientName": ["'Shipping Address Recipient Name' must not be empty."],
+      },
+    })
+    const carrier = await quote(addr({ postalCode: "ABCDE" }))
+    expect(carrier.status).toBe(500)
+    expect(carrier.error).toEqual({
+      statusCode: 500,
+      message:
+        "Code: DESTINATION.POSTALCODE.MISSING.ORINVALID,Message: Destination postal code missing or invalid.",
+      payload: null,
+      errorType: null,
+    })
     // Our consumer reads a non-empty errorMessages on HTTP 200 as a validation failure.
     const consumer = await fetchShippingOptions(
       (await dropIn({ subscribe: false })).client,
       DELUXE,
-      { ...PHOENIX_NOT_FOUND, addressLine1: "PO Box 100" },
+      { ...PHOENIX_NOT_FOUND, addressLine1: "1234 North Example Boulevard Extension" },
     )
     expect(consumer).toMatchObject({ ok: false, code: "validation" })
+  })
+
+  test("B15–B18: PO Boxes and territories quote DHL only; outside the US is FedEx international", async () => {
+    const { quote } = await dropIn({ subscribe: false })
+    for (const line1 of ["PO Box 100", "P.O. Box 100"]) {
+      expect(codesOf((await quote({ ...PHOENIX_NOT_FOUND, addressLine1: line1 })).data)).toEqual([
+        "DHL_PARCEL_EXPEDITED",
+      ])
+    }
+    // Spelled out, staging quotes it like a street.
+    const spelled = await quote({ ...PHOENIX_NOT_FOUND, addressLine1: "Post Office Box 100" })
+    expect(codesOf(spelled.data)).toEqual(CODES)
+    const sanJuan = addr({ city: "San Juan", stateOrRegion: "PR", postalCode: "00901" })
+    expect(codesOf((await quote(sanJuan)).data)).toEqual(["DHL_PARCEL_EXPEDITED"])
+    const toronto = addr({
+      addressLine1: "100 Queen St W",
+      city: "Toronto",
+      stateOrRegion: "ON",
+      postalCode: "M5H 2N2",
+      countryCode: "CA",
+    })
+    expect(codesOf((await quote(toronto)).data)).toEqual([
+      "FEDEX_INTERNATIONAL_PRIORITY",
+      "FEDEX_INTERNATIONAL_CONNECT_PLUS",
+      "FEDEX_INTERNATIONAL_ECONOMY",
+    ])
+    // Phone is not checked.
+    expect(codesOf((await quote(addr({ phone: null }))).data)).toEqual(CODES)
   })
 
   test("B19/B20: nothing to ship, or an unknown product, is a 400 ErrorDto", async () => {
@@ -1027,14 +1061,15 @@ describe("issue #122: place", () => {
         errorType: "ValidationError",
       })
     }
-    // A state the ZIP3 table disagrees with (Beverly Hills in "TX") is the same class.
+    // A state the ZIP3 table disagrees with (Beverly Hills in "TX"): staging's quote is already
+    // the carrier's 500, and the place is Address Not Found.
     const mismatch = addr({
       addressLine1: "9336 Civic Center Dr",
       city: "Beverly Hills",
       stateOrRegion: "TX",
       postalCode: "90210",
     })
-    expect((await quote(mismatch)).status).toBe(200)
+    expect((await quote(mismatch)).status).toBe(500)
     expect((await placeShipped(mismatch)).error.message).toMatch(/: Address Not Found$/)
     expect((await orders()).totalCount).toBe(0)
   })
@@ -1045,7 +1080,7 @@ describe("issue #122: place", () => {
     const { status, error } = await placeShipped({ ...PHOENIX_NOT_FOUND, addressLine1: line })
     expect(status).toBe(400)
     expect(error.message).toBe(
-      `Shipping address(es) not validated: ${line} : Address line exceeds 35 characters.`,
+      `Shipping address(es) not validated: ${line} : Address Lines cannot be longer than 35 characters.`,
     )
   })
 
@@ -1053,7 +1088,7 @@ describe("issue #122: place", () => {
     const { placeShipped, orders } = await dropIn({ subscribe: false })
     for (const [address, code] of [
       [MOUNTAIN_VIEW, "NOT_A_COURIER"],
-      [HONOLULU, "FEDEX_PRIORITY_OVERNIGHT"],
+      [HONOLULU, "FEDEX_EXPRESS_SAVER_ONE_RATE"],
     ] as const) {
       const { status, error } = await placeShipped(address, code)
       expect(status).toBe(400)
@@ -1497,12 +1532,14 @@ describe("issue #122: test controls", () => {
       place: "address-not-found",
       zone: 5,
     })
+    const long = { ...PHOENIX_NOT_FOUND, addressLine1: "1234 North Example Boulevard Extension" }
+    expect(await classify(long)).toMatchObject({ quote: "errorMessages", place: "structural" })
     expect(await classify({ ...PHOENIX_NOT_FOUND, addressLine1: "PO Box 100" })).toMatchObject({
-      quote: "errorMessages",
-      place: "structural",
+      quote: "options",
+      codes: ["DHL_PARCEL_EXPEDITED"],
     })
     expect(
-      await classify({ address: HONOLULU, courierServiceCode: "FEDEX_PRIORITY_OVERNIGHT" }),
+      await classify({ address: HONOLULU, courierServiceCode: "FEDEX_EXPRESS_SAVER_ONE_RATE" }),
     ).toMatchObject({ quote: "options", place: "bad-courier", zone: 8 })
     expect(await classify({ address: MOUNTAIN_VIEW, productId: REPORT_PRODUCT })).toMatchObject({
       quote: "http400",
@@ -1601,12 +1638,40 @@ describe("issue #122: the address parity corpus (corpus/address-parity.json)", (
       const { quote, placeShipped } = await dropIn({ subscribe: false })
       const address = addr({ countryCode: "US", ...c.address })
       if (c.operation === "quote") {
-        const { status, data } = await quote(address, addressParity.productId)
+        const { status, data, error } = await quote(address, addressParity.productId)
         expect(status).toBe(c.status)
-        expect((data as { errorMessages: string[] }).errorMessages).toEqual(c.errorMessages ?? [])
-        // Live parity records the courier codes as a set (sorted), never the menu order.
-        if (c.courierServiceCodes) {
-          expect(codesOf(data).sort()).toEqual([...c.courierServiceCodes].sort())
+        const body = (data ?? error) as {
+          errorMessages?: string[]
+          shippingOptions?: Record<string, unknown>[]
+          errors?: unknown
+          message?: string
+        }
+        const recorded = c as {
+          errorMessages?: string[]
+          courierServiceCodes?: string[]
+          options?: {
+            courierName: unknown
+            courierServiceCode: unknown
+            courierServiceDisplayName: unknown
+          }[]
+          error?: { errors?: unknown; message?: string } | null
+        }
+        if (status === 200) {
+          expect(body.errorMessages).toEqual(recorded.errorMessages ?? [])
+          // Live parity records the menu in the vendor's order, without prices or dates.
+          if (recorded.options) {
+            expect(
+              (body.shippingOptions ?? []).map((o) => ({
+                courierName: o.courierName,
+                courierServiceCode: o.courierServiceCode,
+                courierServiceDisplayName: o.courierServiceDisplayName,
+              })),
+            ).toEqual(recorded.options)
+          }
+        } else if (recorded.error?.errors) {
+          expect(body.errors).toEqual(recorded.error.errors)
+        } else if (recorded.error) {
+          expect(body.message).toBe(recorded.error.message)
         }
       } else {
         const { status, error } = await placeShipped(address, c.courierServiceCode)

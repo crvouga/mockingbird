@@ -1,0 +1,115 @@
+{
+  "source": "staging-api.genebygene.com",
+  "note": "Recorded by scripts/parity.ts: the live answers for ids that cannot exist. No tenant data.",
+  "errors": [
+    {
+      "method": "GET",
+      "path": "/api/v2/products",
+      "status": 401,
+      "contentType": null,
+      "wwwAuthenticate": null,
+      "body": null
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/kits/WB000000",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "wwwAuthenticate": null,
+      "body": {
+        "statusCode": 404,
+        "message": "Kit WB000000 not found",
+        "payload": null,
+        "errorType": null
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/kits/WB000000/results",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "wwwAuthenticate": null,
+      "body": {
+        "statusCode": 404,
+        "message": "Resource not found.",
+        "payload": null,
+        "errorType": null
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/orders/00000000-0000-0000-0000-000000000000",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "wwwAuthenticate": null,
+      "body": {
+        "statusCode": 404,
+        "message": "Resource not found.",
+        "payload": null,
+        "errorType": null
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/orders/not-a-guid",
+      "status": 400,
+      "contentType": "application/json; charset=utf-8",
+      "wwwAuthenticate": null,
+      "body": {
+        "errors": {
+          "id": [
+            "The value 'not-a-guid' is not valid."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "00-dd66f9b27d49c8f52d1ec21f33739b7a-ca0b91c02b9b4578-00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/orderLines/00000000-0000-0000-0000-000000000000",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "wwwAuthenticate": null,
+      "body": {
+        "statusCode": 404,
+        "message": "Resource not found.",
+        "payload": null,
+        "errorType": null
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/notificationSubscriptions/00000000-0000-0000-0000-000000000000",
+      "status": 400,
+      "contentType": "application/json; charset=utf-8",
+      "wwwAuthenticate": null,
+      "body": {
+        "errors": {
+          "id": [
+            "Valid Notification Subscription Id required."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "00-3e7948282d331e821639146bd62c6261-c7eb46810eff6c50-00"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v2/results/results/presignedUrl?kitNumber=WB000000&resultType=x",
+      "status": 404,
+      "contentType": "application/json; charset=utf-8",
+      "wwwAuthenticate": null,
+      "body": {
+        "statusCode": 404,
+        "message": "There is no report assoicated with that result",
+        "payload": null,
+        "errorType": null
+      }
+    }
+  ]
+}

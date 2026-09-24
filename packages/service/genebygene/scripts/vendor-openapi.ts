@@ -26,6 +26,7 @@ import { join } from "node:path"
 import {
   ADDRESS_CORPUS,
   COURIER_SERVICES,
+  INTERNATIONAL_SERVICES,
   MAX_ADDRESS_LINE,
   RETURN_COURIER,
 } from "../src/shipping.js"
@@ -63,7 +64,9 @@ type Overlay = {
 }
 
 const NOT_CALLED = "Our consumer never calls this endpoint (GXG/transport/gxg-client.ts)."
-const notFound = { "404": { description: "Not Found", content: json(ref(PROBLEM)) } }
+// Staging answers a missing resource with ErrorDto (`"message": "Resource not found."`, null
+// payload and errorType), not problem details (recorded in corpus/live-errors.json).
+const notFound = { "404": { description: "Not Found", content: json(ref(ERROR)) } }
 const conflict = {
   "409": { description: "Not in a cancellable state (some tenants)", content: json(ref(ERROR)) },
 }
@@ -99,7 +102,17 @@ const OPERATIONS: Record<string, Overlay> = {
     unsafe: "cancels a real fulfillment",
     add: { ...notFound, ...conflict },
   },
-  "post /api/v2/fulfillments/actions/getShippingOptions": { id: "GetShippingOptions" },
+  "post /api/v2/fulfillments/actions/getShippingOptions": {
+    id: "GetShippingOptions",
+    // The carrier's refusal (a postal code that is not a ZIP, a ZIP3 in another state) is a 500
+    // ErrorDto on staging; a staging-only product on the production tenant is an empty 500.
+    add: {
+      "500": {
+        description: "Internal Server Error: the carrier's refusal (ErrorDto), or an empty body",
+        content: json(ref(ERROR)),
+      },
+    },
+  },
   "get /api/v2/kitorderlines": { id: "ListKitOrderLines", add: notFound },
   "delete /api/v2/kitorderlines": {
     id: "CancelKitOrderLinesBulk",
@@ -477,6 +490,7 @@ annotate("CreateOrder_Shipment", "quantity", { minimum: 1, maximum: 3 })
 // walks send the known values half the time, so they reach every address class.
 const COURIER_CODES = [
   ...COURIER_SERVICES.map((s) => s.courierServiceCode),
+  ...INTERNATIONAL_SERVICES.map((s) => s.courierServiceCode),
   RETURN_COURIER.courierServiceCode,
 ]
 const courierCode = props("CreateOrder_Shipment").courierServiceCode as Json
@@ -585,10 +599,9 @@ schemas.EventTypeDto = {
   type: "object",
   additionalProperties: false,
   properties: {
-    id: { type: "integer", format: "int32" },
     name: { type: "string" },
-    description: { type: "string", nullable: true },
-    isSubscribable: { type: "boolean" },
+    payloadStructure: { type: "string", nullable: true },
+    subscriptionTypes: { type: "array", items: { type: "string" } },
   },
 }
 schemas.KitOrderLineKitsPaginatedList = paginated(ref(".KitOrderLineDto"))

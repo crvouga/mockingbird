@@ -248,6 +248,20 @@ for (const c of recording.cases) {
   }
   if (c.operation === "quote") {
     const live = await quote("live", address(c.address))
+    // The mock must answer what staging answers: status, errorMessages, the menu in order (codes
+    // and names, never prices or dates), and a refusal's validation errors or message.
+    const [liveClass, mockClass] = [live, await quote("mock", address(c.address))].map((r) =>
+      JSON.stringify({
+        status: r.status,
+        errorMessages: errorMessages(r.json),
+        menu: ((r.json as { shippingOptions?: Json[] } | undefined)?.shippingOptions ?? []).map(
+          (o) => `${o.courierServiceCode}:${o.courierServiceDisplayName}`,
+        ),
+        errors: (r.json as Json | undefined)?.errors,
+        message: r.status >= 400 ? (r.json as Json | undefined)?.message : undefined,
+      }),
+    )
+    if (liveClass !== mockClass) fail(`quote "${c.name}": live ${liveClass}, mock ${mockClass}`)
     const next: Case = { ...c, status: live.status, errorMessages: errorMessages(live.json) }
     // A refusal's body is the vendor's validation text about a synthetic street: keep it so the
     // mock can answer the same bytes. A 200's body carries prices and dates, which drift.
@@ -261,7 +275,11 @@ for (const c of recording.cases) {
         courierServiceCode: o.courierServiceCode,
         courierServiceDisplayName: o.courierServiceDisplayName,
       }))
-    } else next.error = JSON.parse(redact(JSON.stringify(live.json ?? null)))
+    } else {
+      const error = JSON.parse(redact(JSON.stringify(live.json ?? null))) as Json | null
+      // A problem-details traceId differs on every request.
+      next.error = error && "traceId" in error ? { ...error, traceId: "<volatile>" } : error
+    }
     if (c.courierServiceCodes) next.courierServiceCodes = codes(live.json)
     recorded.push(next)
     continue
@@ -353,11 +371,15 @@ const probe = async (method: string, path: string, token = realToken) => {
     body: JSON.parse(redact(JSON.stringify(body))),
   }
 }
-const shapes = {
+const catalogs = {
   source: new URL(baseUrl).host,
-  note: "Written by scripts/parity.ts: the live catalogs and the live answers for ids that cannot exist. No tenant data.",
+  note: "Recorded by scripts/parity.ts from the live tenant: the event types and attribute definitions it lists. Vendor catalog metadata only, no tenant data.",
   eventTypes: (await probe("GET", "/api/v2/eventTypes")).body,
   attributes: (await probe("GET", "/api/v2/attributes")).body,
+}
+const shapes = {
+  source: new URL(baseUrl).host,
+  note: "Recorded by scripts/parity.ts: the live answers for ids that cannot exist. No tenant data.",
   errors: [
     await probe("GET", "/api/v2/products", "not-a-token"),
     await probe("GET", "/api/v2/kits/WB000000"),
@@ -369,8 +391,39 @@ const shapes = {
     await probe("GET", "/api/v2/results/results/presignedUrl?kitNumber=WB000000&resultType=x"),
   ],
 }
-await writeFile(join(CORPUS_DIR, "live-shapes.json"), `${JSON.stringify(shapes, null, 2)}\n`)
-console.log("  wrote corpus/live-shapes.json")
+// The mock serves these catalogs (src/corpus/live-catalogs.json); the walk compares them.
+await writeFile(
+  join(import.meta.dir, "..", "src", "corpus", "live-catalogs.json"),
+  `${JSON.stringify(catalogs, null, 2)}\n`,
+)
+await writeFile(join(CORPUS_DIR, "live-errors.json"), `${JSON.stringify(shapes, null, 2)}\n`)
+console.log("  wrote src/corpus/live-catalogs.json and corpus/live-errors.json")
+
+/**
+ * The staging tenant is shared: its list pages hold thousands of kits and orders no walk
+ * created, which a fresh mock can never have. A safe walk creates nothing, so the tenant view it
+ * should see is empty: drop the rows of a live 200 list page (and zero its count) before the
+ * comparison. Status, page metadata, validation errors and every other body stay exact.
+ */
+const withoutTenantRows = async (request: Request, response: Response): Promise<Response> => {
+  const path = new URL(request.url).pathname
+  if (request.method !== "GET" || response.status !== 200 || !LIST_PATHS.has(path)) return response
+  const body = (await response.json()) as unknown
+  const emptied = Array.isArray(body)
+    ? []
+    : { ...(body as Json), items: [], ...("totalCount" in (body as Json) ? { totalCount: 0 } : {}) }
+  return new Response(JSON.stringify(emptied), { status: 200, headers: response.headers })
+}
+const LIST_PATHS: ReadonlySet<string> = new Set([
+  "/api/v2/orders",
+  "/api/v2/kits",
+  "/api/v2/fulfillments",
+  "/api/v2/kitorderlines",
+  "/api/v2/kitorderlines/kits",
+  "/api/v2/results",
+  "/api/v2/results/search",
+  "/api/v2/notificationSubscriptions",
+])
 
 // 4. the random walk over the remaining safe operations ------------------------------------------
 const walked = supportedOperationIds.filter(
@@ -388,11 +441,12 @@ try {
       allowedHosts: [new URL(baseUrl).host, new URL(tokenUrl).host],
       headers: () => ({ authorization: `Bearer ${realToken}`, accept: "application/json" }),
       minIntervalMs: 500,
-      fetch: (request) => {
+      fetch: async (request) => {
         // The token operation lives on the auth host.
         const url = new URL(request.url)
         if (url.pathname.endsWith("/connect/token")) return fetch(new Request(tokenUrl, request))
-        return fetch(request)
+        const response = await fetch(request)
+        return unsafe ? response : withoutTenantRows(request, response)
       },
     },
     mock: {

@@ -1,10 +1,13 @@
 /**
  * Gene by Gene's two address checks, and the deterministic courier menu behind them.
  *
- * 1. **Quote** (`getShippingOptions`): structure and destination class only. A quote that
- *    passes structure returns the zone's menu, even for an address the place check rejects.
- * 2. **Place** (`POST /api/v2/orders` with `shipments`, and `updateShipmentAddress`): the same
- *    structure rules, then the USPS deliverability class (`Address Not Found`).
+ * 1. **Quote** (`getShippingOptions`), as recorded against staging (`corpus/address-parity.json`):
+ *    request validation (HTTP 400 problem details), then two address rules (HTTP 200
+ *    `errorMessages`), then the carrier's own refusals (HTTP 500 `ErrorDto`), then the menu for the
+ *    destination class. A quote that passes returns a menu even for an address the place check
+ *    rejects.
+ * 2. **Place** (`POST /api/v2/orders` with `shipments`, and `updateShipmentAddress`): the quote's
+ *    refusals, then the USPS deliverability class (`Address Not Found`).
  *
  * The split between the two is the production behaviour this mock exists to reproduce (a rural
  * street quotes fine and the order then fails). Nothing here calls a carrier or USPS: the zone
@@ -39,23 +42,25 @@ export type CourierService = {
   transitDays: (zone: number) => number
 }
 
-/** The outbound menu, in the order the vendor lists it. */
+const DHL_EXPEDITED: CourierService = {
+  courierName: "DHL",
+  courierServiceCode: "DHL_PARCEL_EXPEDITED",
+  courierServiceDisplayName: "DHL Expedited",
+  anchorPrice: 6,
+  isOneRate: false,
+  transitDays: (zone) => 2 + Math.ceil(zone / 2),
+}
+
+/** The domestic outbound menu, in the order staging lists it. */
 export const COURIER_SERVICES: readonly CourierService[] = [
-  {
-    courierName: "DHL",
-    courierServiceCode: "DHL_PARCEL_EXPEDITED",
-    courierServiceDisplayName: "DHL Expedited",
-    anchorPrice: 6,
-    isOneRate: false,
-    transitDays: (zone) => 2 + Math.ceil(zone / 2),
-  },
+  DHL_EXPEDITED,
   {
     courierName: "FedEx",
-    courierServiceCode: "FEDEX_EXPRESS_SAVER_ONE_RATE",
-    courierServiceDisplayName: "FedEx Express Saver One Rate",
-    anchorPrice: 14.91,
-    isOneRate: true,
-    transitDays: () => 3,
+    courierServiceCode: "FEDEX_PRIORITY_OVERNIGHT",
+    courierServiceDisplayName: "FedEx Priority Overnight",
+    anchorPrice: 62.23,
+    isOneRate: false,
+    transitDays: () => 1,
   },
   {
     courierName: "FedEx",
@@ -67,11 +72,42 @@ export const COURIER_SERVICES: readonly CourierService[] = [
   },
   {
     courierName: "FedEx",
-    courierServiceCode: "FEDEX_PRIORITY_OVERNIGHT",
-    courierServiceDisplayName: "FedEx Priority Overnight",
-    anchorPrice: 62.23,
+    courierServiceCode: "FEDEX_EXPRESS_SAVER_ONE_RATE",
+    courierServiceDisplayName: "FedEx Express Saver One Rate",
+    anchorPrice: 14.91,
+    isOneRate: true,
+    transitDays: () => 3,
+  },
+]
+
+/**
+ * The menu for a destination outside the US, in the order staging lists it. The codes and names
+ * are recorded; the prices are synthetic (no international quote has been recorded with prices).
+ */
+export const INTERNATIONAL_SERVICES: readonly CourierService[] = [
+  {
+    courierName: "FedEx",
+    courierServiceCode: "FEDEX_INTERNATIONAL_PRIORITY",
+    courierServiceDisplayName: "FedEx International Priority",
+    anchorPrice: 96.4,
     isOneRate: false,
-    transitDays: () => 1,
+    transitDays: () => 3,
+  },
+  {
+    courierName: "FedEx",
+    courierServiceCode: "FEDEX_INTERNATIONAL_CONNECT_PLUS",
+    courierServiceDisplayName: "FedEx International Connect Plus",
+    anchorPrice: 58.75,
+    isOneRate: false,
+    transitDays: () => 5,
+  },
+  {
+    courierName: "FedEx",
+    courierServiceCode: "FEDEX_INTERNATIONAL_ECONOMY",
+    courierServiceDisplayName: "FedEx International Economy",
+    anchorPrice: 71.2,
+    isOneRate: false,
+    transitDays: () => 6,
   },
 ]
 
@@ -88,8 +124,8 @@ export const RETURN_COURIER = {
 export const courierServiceName = (code: string): string | null =>
   code === RETURN_COURIER.courierServiceCode
     ? RETURN_COURIER.courierServiceDisplayName
-    : (COURIER_SERVICES.find((s) => s.courierServiceCode === code)?.courierServiceDisplayName ??
-      null)
+    : ([...COURIER_SERVICES, ...INTERNATIONAL_SERVICES].find((s) => s.courierServiceCode === code)
+        ?.courierServiceDisplayName ?? null)
 
 // --- zones -------------------------------------------------------------------------------------
 
@@ -102,19 +138,27 @@ export const ZONE_FACTORS: Readonly<Record<number, number>> = {
   6: 1,
   7: 1.12,
   8: 1.35,
+  /** Outside the US: the international menu's own anchor prices. */
+  9: 1,
 }
 
 const inRange = (zip3: number, ranges: readonly (readonly [number, number])[]) =>
   ranges.some(([lo, hi]) => zip3 >= lo && zip3 <= hi)
 
-/** ZIP3 prefixes (Puerto Rico and the US Virgin Islands) the domestic kit cannot serve. */
-const TERRITORY_ZIP3: readonly (readonly [number, number])[] = [[6, 9]]
+/** ZIP3 prefixes of the territories (Puerto Rico, the Virgin Islands, Guam): DHL only. */
+const TERRITORY_ZIP3: readonly (readonly [number, number])[] = [
+  [6, 9],
+  [969, 969],
+]
 
-/** Destination zone from Houston (ZIP3 770), or undefined when the product cannot go there. */
+/** The zone international destinations price in. */
+export const INTERNATIONAL_ZONE = 9
+
+/** Destination zone from Houston (ZIP3 770), or undefined for a ZIP3 that is not digits. */
 export const zoneFor = (zip3: string): number | undefined => {
   const n = Number(zip3)
   if (!/^\d{3}$/.test(zip3)) return undefined
-  if (inRange(n, TERRITORY_ZIP3)) return undefined
+  if (inRange(n, TERRITORY_ZIP3)) return 8
   if (inRange(n, [[770, 778]])) return 2
   if (
     inRange(n, [
@@ -149,15 +193,13 @@ export const zoneFor = (zip3: string): number | undefined => {
   return 4
 }
 
-/** Zone 8 (Hawaii, Alaska) drops the overnight and the 2-day services. */
+/** Zone 8 (Hawaii, Alaska) drops FedEx Express Saver, as staging quotes it. */
 export const menuFor = (zone: number): readonly CourierService[] =>
-  zone === 8
-    ? COURIER_SERVICES.filter(
-        (s) =>
-          s.courierServiceCode !== "FEDEX_PRIORITY_OVERNIGHT" &&
-          s.courierServiceCode !== "FEDEX_2_DAY_ONE_RATE",
-      )
-    : COURIER_SERVICES
+  zone === INTERNATIONAL_ZONE
+    ? INTERNATIONAL_SERVICES
+    : zone === 8
+      ? COURIER_SERVICES.filter((s) => s.courierServiceCode !== "FEDEX_EXPRESS_SAVER_ONE_RATE")
+      : COURIER_SERVICES
 
 /** Round half away from zero to cents. */
 export const roundCents = (value: number): number =>
@@ -361,67 +403,124 @@ const blank = (value: string | null | undefined) =>
 const tooLong = (value: string | null | undefined) =>
   typeof value === "string" && value.length > MAX_ADDRESS_LINE
 
-const PO_BOX = /\b(p\s*\.?\s*o\s*\.?\s*box|post\s+office\s+box)\b/i
-const MILITARY_CITIES = new Set(["APO", "FPO", "DPO"])
-const MILITARY_STATES = new Set(["AA", "AE", "AP"])
+/** `PO Box` and `P.O. Box` (staging quotes a spelled-out `Post Office Box` like a street). */
+const PO_BOX = /\bp\s*\.?\s*o\s*\.?\s*box\b/i
+
+/** The state codes staging quotes as a US domestic address; anything else (AE, ZZ) is refused. */
+const US_STATES: ReadonlySet<string> = new Set(
+  (
+    "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH " +
+    "NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR VI GU AS MP"
+  ).split(" "),
+)
+const TERRITORY_STATES: ReadonlySet<string> = new Set(["PR", "VI", "GU", "AS", "MP"])
 
 export const MESSAGES = {
-  recipient: "recipientName is required.",
-  line1: "addressLine1 is required.",
-  lineLength: "Address line exceeds 35 characters.",
-  city: "city is required.",
-  state: "stateOrRegion is required.",
-  stateCode: "Domestic orders must use a 2 character state code.",
-  postal: "postalCode is required.",
-  zip: "postalCode is not a valid US ZIP code.",
-  country: "countryCode is required.",
-  phone: "phone is required.",
-  international: "Only US destinations are available for this product.",
-  military: "Military addresses are not supported for this product.",
-  poBox: "PO Box addresses are not supported for this product.",
-  territory: "Shipping to this destination is not available for this product.",
+  lineLength: "Address Lines cannot be longer than 35 characters.",
+  state: "Invalid state or region for US domestic address.",
+  postal:
+    "Code: DESTINATION.POSTALCODE.MISSING.ORINVALID,Message: Destination postal code missing or invalid.",
+  /** The carrier's text, typo (`edEx`) included, as staging returns it. */
+  zipState:
+    "Code: CRSVZIP.CODE.INVALID,Message: edEx service is not currently available to this ZIP/postal code. Enter new information or contact FedEx Customer Service (U.S. and Canada, please dial 1.800.GoFedEx 1.800.463.3339).",
   addressNotFound: "Address Not Found",
 } as const
 
+/** FluentValidation's labels for the address fields it checks, as staging words them. */
+const LABELS = {
+  RecipientName: "Recipient Name",
+  AddressLine1: "Address Line1",
+  City: "City",
+  StateOrRegion: "State Or Region",
+  CountryCode: "Country Code",
+  PostalCode: "Postal Code",
+} as const
+
 /**
- * The quote's structural problems, one string per problem, in the vendor's order: recipient,
- * line1, line2, line3, city, state, postal, country, phone, then the destination class.
- * `email`, `shippingInstruction` and `referenceId` never matter. Values are judged as sent:
- * nothing is trimmed, abbreviated or coerced (`USA` is not `US`, `Texas` is not `TX`).
+ * The request validation staging runs before looking at the address (HTTP 400 problem details),
+ * keyed `<prefix>.<Field>` in key order. Recorded rules: recipient, line1, city and state must not
+ * be empty; state and country must be exactly 2 characters (a blank state fails both rules); a
+ * non-empty postal code needs at least 5 characters. Phone is not checked.
  */
-export const structuralProblems = (address: AddressDto | undefined): string[] => {
+export const addressValidationErrors = (
+  address: AddressDto | undefined,
+  prefix = "shippingAddress",
+): Record<string, string[]> => {
   const a = address ?? {}
-  const problems: string[] = []
-  const us = a.countryCode === "US"
-  if (blank(a.recipientName)) problems.push(MESSAGES.recipient)
-  if (blank(a.addressLine1)) problems.push(MESSAGES.line1)
-  else if (tooLong(a.addressLine1)) problems.push(MESSAGES.lineLength)
-  if (tooLong(a.addressLine2)) problems.push(MESSAGES.lineLength)
-  if (tooLong(a.addressLine3)) problems.push(MESSAGES.lineLength)
-  if (blank(a.city)) problems.push(MESSAGES.city)
-  if (blank(a.stateOrRegion)) problems.push(MESSAGES.state)
-  else if (us && !/^[A-Za-z]{2}$/.test(a.stateOrRegion as string)) problems.push(MESSAGES.stateCode)
-  if (blank(a.postalCode)) problems.push(MESSAGES.postal)
-  else if (us && !/^\d{5}(-\d{4})?$/.test(a.postalCode as string)) problems.push(MESSAGES.zip)
-  if (blank(a.countryCode)) problems.push(MESSAGES.country)
-  if (blank(a.phone)) problems.push(MESSAGES.phone)
-  const destination = destinationProblem(a)
-  if (destination) problems.push(destination)
-  return problems
+  const errors: Record<string, string[]> = {}
+  const add = (field: keyof typeof LABELS, message: string) => {
+    const key = `${prefix}.${field}`
+    errors[key] = [...(errors[key] ?? []), message]
+  }
+  const label = (field: keyof typeof LABELS) => `'Shipping Address ${LABELS[field]}'`
+  const notEmpty = (field: keyof typeof LABELS, value: string | null | undefined) => {
+    if (blank(value)) add(field, `${label(field)} must not be empty.`)
+  }
+  const exactly2 = (field: keyof typeof LABELS, value: string | null | undefined) => {
+    if (typeof value === "string" && value.length !== 2) {
+      add(
+        field,
+        `${label(field)} must be 2 characters in length. You entered ${value.length} characters.`,
+      )
+    }
+  }
+  notEmpty("RecipientName", a.recipientName)
+  notEmpty("AddressLine1", a.addressLine1)
+  notEmpty("City", a.city)
+  notEmpty("StateOrRegion", a.stateOrRegion)
+  exactly2("StateOrRegion", a.stateOrRegion)
+  exactly2("CountryCode", a.countryCode)
+  if (typeof a.postalCode === "string" && a.postalCode.length > 0 && a.postalCode.length < 5) {
+    add(
+      "PostalCode",
+      `The length of ${label("PostalCode")} must be at least 5 characters. You entered ${a.postalCode.length} characters.`,
+    )
+  }
+  return Object.fromEntries(Object.entries(errors).sort(([x], [y]) => x.localeCompare(y)))
 }
 
-const destinationProblem = (a: AddressDto): string | undefined => {
-  if (blank(a.countryCode)) return undefined
-  if (a.countryCode !== "US") return MESSAGES.international
-  const city = a.city?.trim().toUpperCase() ?? ""
-  const state = a.stateOrRegion?.trim().toUpperCase() ?? ""
-  if (MILITARY_CITIES.has(city) || MILITARY_STATES.has(state)) return MESSAGES.military
-  if (typeof a.addressLine1 === "string" && PO_BOX.test(a.addressLine1)) return MESSAGES.poBox
-  const zip3 = a.postalCode?.slice(0, 3) ?? ""
-  if (/^\d{5}(-\d{4})?$/.test(a.postalCode ?? "") && inRange(Number(zip3), TERRITORY_ZIP3)) {
-    return MESSAGES.territory
+export type QuoteVerdict =
+  /** HTTP 400 problem details. */
+  | { kind: "validation"; errors: Record<string, string[]> }
+  /** HTTP 200 with `errorMessages` and no options. */
+  | { kind: "errorMessages"; errorMessages: string[] }
+  /** HTTP 500 `ErrorDto`: the carrier refused the destination. */
+  | { kind: "carrier"; message: string }
+  | { kind: "ok"; zone: number; services: readonly CourierService[] }
+
+/**
+ * What staging's quote answers for an address, in the order it decides: request validation, the
+ * two address rules (any line over 35 characters, a state that is not a US state or territory),
+ * the carrier's refusals (a US postal code that is not a ZIP, a state that disagrees with the
+ * ZIP3), then the menu: DHL only for a PO Box or a territory, no Express Saver in zone 8, the
+ * international FedEx menu outside the US. Values are judged as sent: nothing is trimmed,
+ * abbreviated or coerced.
+ */
+export const quoteVerdict = (address: AddressDto | undefined): QuoteVerdict => {
+  const errors = addressValidationErrors(address)
+  if (Object.keys(errors).length > 0) return { kind: "validation", errors }
+  const a = address as AddressDto
+  const us = a.countryCode === "US"
+  const state = (a.stateOrRegion as string).toUpperCase()
+  const errorMessages: string[] = []
+  if (tooLong(a.addressLine1) || tooLong(a.addressLine2) || tooLong(a.addressLine3)) {
+    errorMessages.push(MESSAGES.lineLength)
   }
-  return undefined
+  if (us && !US_STATES.has(state)) errorMessages.push(MESSAGES.state)
+  if (errorMessages.length > 0) return { kind: "errorMessages", errorMessages }
+  if (!us) return { kind: "ok", zone: INTERNATIONAL_ZONE, services: INTERNATIONAL_SERVICES }
+  const postal = a.postalCode ?? ""
+  if (!/^\d{5}(-\d{4})?$/.test(postal)) return { kind: "carrier", message: MESSAGES.postal }
+  const zip3 = postal.slice(0, 3)
+  const zone = zoneFor(zip3) as number
+  const dhlOnly =
+    TERRITORY_STATES.has(state) ||
+    inRange(Number(zip3), TERRITORY_ZIP3) ||
+    (typeof a.addressLine1 === "string" && PO_BOX.test(a.addressLine1))
+  if (dhlOnly) return { kind: "ok", zone, services: [DHL_EXPEDITED] }
+  const assigned = stateForZip3(zip3)
+  if (assigned && assigned !== state) return { kind: "carrier", message: MESSAGES.zipState }
+  return { kind: "ok", zone, services: menuFor(zone) }
 }
 
 export type PlaceClass =
@@ -429,17 +528,33 @@ export type PlaceClass =
   | { ok: false; kind: "structural" | "address-not-found"; reason: string }
 
 /**
- * The place-time check: structure first, then the USPS deliverability class. `extra` are
- * namespace corpus rows (`PUT /__admin/addresses/corpus`); a `quote-ok-place-ok` row for the
- * same line1 and ZIP5 wins over every Address Not Found rule.
+ * The place-time check: whatever the quote would refuse, then the USPS deliverability class.
+ * Only the Address Not Found answer is recorded live (`corpus/address-parity.json`); a quote
+ * refusal at place answers the same `not validated` template with the quote's first message, and
+ * a carrier refusal (not a ZIP, ZIP3 in another state) is Address Not Found. `extra` are
+ * namespace corpus rows (`PUT /__admin/addresses/corpus`); a `quote-ok-place-ok` row for the same
+ * line1 and ZIP5 wins over every Address Not Found rule.
  */
 export const placeCheck = (
   address: AddressDto | undefined,
   extra: readonly CorpusAddress[] = [],
 ): PlaceClass => {
-  const [first] = structuralProblems(address)
-  if (first) return { ok: false, kind: "structural", reason: first }
+  const verdict = quoteVerdict(address)
+  if (verdict.kind === "validation") {
+    const [first] = Object.values(verdict.errors).flat()
+    return { ok: false, kind: "structural", reason: first as string }
+  }
+  if (verdict.kind === "errorMessages") {
+    return { ok: false, kind: "structural", reason: verdict.errorMessages[0] as string }
+  }
+  const notFound = {
+    ok: false,
+    kind: "address-not-found",
+    reason: MESSAGES.addressNotFound,
+  } as const
+  if (verdict.kind === "carrier") return notFound
   const a = address as AddressDto
+  if (a.countryCode !== "US") return { ok: true }
   const line = normalizeLine(a.addressLine1 as string)
   const zip5 = (a.postalCode as string).slice(0, 5)
   const zip3 = zip5.slice(0, 3)
@@ -452,14 +567,7 @@ export const placeCheck = (
         (kind === "quote-ok-place-not-found" || row.postalCode.slice(0, 5) === zip5),
     )
   if (listed("quote-ok-place-ok")) return { ok: true }
-  const notFound = {
-    ok: false,
-    kind: "address-not-found",
-    reason: MESSAGES.addressNotFound,
-  } as const
   if (UNDELIVERABLE_ZIP3.includes(zip3)) return notFound
-  const state = stateForZip3(zip3)
-  if (!state || state !== (a.stateOrRegion as string).toUpperCase()) return notFound
   if (listed("quote-ok-place-not-found")) return notFound
   return { ok: true }
 }
@@ -480,19 +588,20 @@ export type ShippingOption = {
   attributes: Record<string, string>
 }
 
-/** The zone and menu for a structurally valid US address. */
+/** The priced menu for an address the quote accepts, or undefined when it refuses it. */
 export const quoteMenu = (
   address: AddressDto,
   nowMs: number,
 ): { zone: number; options: ShippingOption[] } | undefined => {
+  const verdict = quoteVerdict(address)
+  if (verdict.kind !== "ok") return undefined
+  const { zone } = verdict
   const zip5 = (address.postalCode ?? "").slice(0, 5)
-  const zone = zoneFor(zip5.slice(0, 3))
-  if (zone === undefined) return undefined
   const ship = nextBusinessMorning(nowMs)
   const residential = address.isCommercial !== true
   return {
     zone,
-    options: menuFor(zone).map((service) => {
+    options: verdict.services.map((service) => {
       const transit = service.transitDays(zone) + (zone === 8 ? 2 : 0)
       return {
         courierName: service.courierName,

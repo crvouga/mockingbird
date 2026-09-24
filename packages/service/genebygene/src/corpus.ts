@@ -11,7 +11,8 @@
  * Product codes are not in `ProductDto`; they come from the recorded webhook samples
  * (`GXG/docs/webhook-events.json`, `Order.Created` `OrderItems[].Product`).
  */
-import type { ProductDto } from "./types.js"
+import liveCatalogs from "./corpus/live-catalogs.json" with { type: "json" }
+import type { AttributeDefinitionDto, EventTypeDto, ProductDto } from "./types.js"
 
 export const CORPUS_VERSION = "gxg-2026-06"
 
@@ -534,79 +535,23 @@ export const PRODUCT_CODES: Readonly<Record<string, string>> = {
 }
 
 /**
- * `GET /api/v2/eventTypes`. Swagger declares no body; the names are the events our consumer
- * subscribes to (`GXG/webhooks/gxg-webhook-events.ts`). `Kit.KitOrderLine.Canceled` is not
- * subscribable: the vendor answers 400 "Valid event type is required." when it is in `events[]`.
+ * `GET /api/v2/eventTypes` and `GET /api/v2/attributes`, as live parity recorded them
+ * (`live-catalogs.json`). Swagger declares neither body.
  */
-export const EVENT_TYPES = [
-  {
-    id: 1,
-    name: "GxG.Nucleus.Order.Created",
-    description: "An order was created.",
-    isSubscribable: true,
-  },
-  {
-    id: 2,
-    name: "GxG.Nucleus.Order.KitNumbersGenerated",
-    description: "Kit numbers were generated for an order.",
-    isSubscribable: true,
-  },
-  {
-    id: 3,
-    name: "GxG.Nucleus.Order.Shipped",
-    description: "An order shipped and tracking numbers are available.",
-    isSubscribable: true,
-  },
-  {
-    id: 4,
-    name: "GxG.Nucleus.Kit.Received",
-    description: "A kit arrived at the lab.",
-    isSubscribable: true,
-  },
-  {
-    id: 5,
-    name: "GxG.Nucleus.Kit.Completed",
-    description: "Kit results were published.",
-    isSubscribable: true,
-  },
-  {
-    id: 6,
-    name: "GxG.Nucleus.Kit.Error",
-    description: "A kit has an error (delay, new collection needed, ...).",
-    isSubscribable: true,
-  },
-  {
-    id: 7,
-    name: "GxG.Nucleus.Kit.KitOrderLine.Canceled",
-    description: "A kit order line was canceled.",
-    isSubscribable: false,
-  },
-] as const
+export const EVENT_TYPES: readonly EventTypeDto[] = liveCatalogs.eventTypes
 
-/** `GET /api/v2/attributes`: the kit demographics attributes (`GXG/patients/gxg-kit-attributes.ts`). */
-export const ATTRIBUTE_DEFINITIONS = [
-  ["firstname", "First Name", 1],
-  ["lastname", "Last Name", 1],
-  ["dateofbirth", "Date of Birth", 3],
-  ["gender", "Gender", 1],
-  ["race", "Race", 1],
-  ["ethnicity", "Ethnicity", 1],
-  ["email", "Email", 1],
-  ["phone", "Phone", 1],
-].map(([name, displayName, attributeTypeId], index) => ({
-  id: index + 1,
-  name: name as string,
-  alternateName: null,
-  displayName: displayName as string,
-  description: null,
-  attributeTypeId: attributeTypeId as number,
-  attributeTypeDescription: attributeTypeId === 3 ? "Date" : "Text",
-  data: null,
-  isReadOnly: false,
-  allowsMultipleValues: false,
-  sendToPipeLine: true,
-  entityTypeId: 1,
-}))
+/**
+ * What `POST /api/v2/notificationSubscriptions` accepts in `events[]`: the listed event types.
+ * `Kit.KitOrderLine.Canceled` is sent but not listed, so the vendor answers 400 "Valid event type
+ * is required." when it is subscribed to.
+ */
+export const SUBSCRIBABLE_EVENTS: ReadonlySet<string> = new Set(EVENT_TYPES.map((e) => e.name))
+
+export const ATTRIBUTE_DEFINITIONS: readonly AttributeDefinitionDto[] = liveCatalogs.attributes
+
+/** The definition for an attribute name, matched without case (`firstname` is `firstName`). */
+export const attributeDefinition = (name: string): AttributeDefinitionDto | undefined =>
+  ATTRIBUTE_DEFINITIONS.find((d) => d.name.toLowerCase() === name.toLowerCase())
 
 /** Where return labels send kits: the Gene by Gene lab. */
 export const LAB_RETURN_ADDRESS = {

@@ -212,3 +212,27 @@ export const DEFAULT_SETTINGS: Settings = {
   kitAssociation: "immediate",
   addressCorpus: [],
 }
+
+/** `GET /api/v2/eventTypes` row (recorded live; Swagger declares no body). */
+export type EventTypeDto = {
+  name: string
+  /** The payload's field → .NET type map, as a JSON string, or null. */
+  payloadStructure: string | null
+  subscriptionTypes: string[]
+}
+
+/** `GET /api/v2/attributes` row. */
+export type AttributeDefinitionDto = {
+  id: number
+  name: string
+  alternateName: string | null
+  displayName: string | null
+  description: string | null
+  attributeTypeId: number
+  attributeTypeDescription: string | null
+  data: string | null
+  isReadOnly: boolean
+  allowsMultipleValues: boolean
+  sendToPipeLine: boolean | null
+  entityTypeId: number
+}

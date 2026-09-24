@@ -373,7 +373,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/.ProblemDetails"
+                $ref: "#/components/schemas/.ErrorDto"
         "429":
           description: Too Many Requests
           content:
@@ -481,7 +481,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/.ErrorDto"
         "500":
-          description: Internal Server Error - An internal server error occurred.
+          description: "Internal Server Error: the carrier's refusal (ErrorDto), or an empty body"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/.ErrorDto"
       operationId: GetShippingOptions
       x-mockingbird:
         parity:
@@ -5570,9 +5574,12 @@ components:
             - type: string
               enum:
                 - DHL_PARCEL_EXPEDITED
-                - FEDEX_EXPRESS_SAVER_ONE_RATE
-                - FEDEX_2_DAY_ONE_RATE
                 - FEDEX_PRIORITY_OVERNIGHT
+                - FEDEX_2_DAY_ONE_RATE
+                - FEDEX_EXPRESS_SAVER_ONE_RATE
+                - FEDEX_INTERNATIONAL_PRIORITY
+                - FEDEX_INTERNATIONAL_CONNECT_PLUS
+                - FEDEX_INTERNATIONAL_ECONOMY
                 - DHL_DOMESTIC_RETURN
             - type: string
               nullable: true
@@ -5839,16 +5846,15 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id:
-          type: integer
-          format: int32
         name:
           type: string
-        description:
+        payloadStructure:
           type: string
           nullable: true
-        isSubscribable:
-          type: boolean
+        subscriptionTypes:
+          type: array
+          items:
+            type: string
     KitOrderLineKitsPaginatedList:
       type: object
       required:
