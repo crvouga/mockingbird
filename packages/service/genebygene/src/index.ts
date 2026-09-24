@@ -504,7 +504,8 @@ const queryProblem = (
         const empty = !bound || (list.includes("guid") && EMPTY_GUID.test(String(raw).trim()))
         if (empty) add(name, `'${spaced(name)}' must not be empty.`)
       } else if (rule in QUERY_FORMATS && present) {
-        if (!QUERY_FORMATS[rule as keyof typeof QUERY_FORMATS].test(raw)) {
+        // Checked trimmed: `" a"` passes, `"WB 1"` does not.
+        if (!QUERY_FORMATS[rule as keyof typeof QUERY_FORMATS].test(raw.trim())) {
           add(name, `'${spaced(name)}' is not in the correct format.`)
         }
       } else if (rule in QUERY_ENUMS && present) {

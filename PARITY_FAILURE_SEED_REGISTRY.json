@@ -210,6 +210,12 @@
       "seed": 1420835929,
       "status": "fixed",
       "failure": "ListKitOrderLineKits productType=\"a a\": real echoes 'aa' (status and productType drop all whitespace)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1421396226,
+      "status": "fixed",
+      "failure": "ListKits kitNumber=\" a\": real 200 (the format is checked on the trimmed value), mock 400"
     }
   ]
 }
