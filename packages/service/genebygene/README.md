@@ -86,49 +86,67 @@ await admin("/kits/WB3K9Q2X/transition", { to: "Error", errorCode: 19 }) // Kit.
 | Route | Behaviour |
 | --- | --- |
 | `POST /connect/token` | Form `grant_type=client_credentials, client_id, client_secret` → `{access_token, expires_in: 3600, token_type: "Bearer"}`. Blocked clients (`PUT /__admin/settings {blockedClients}`) get 400 `{"error":"invalid_client"}`, 401 or 403; a mismatch against pinned `clients` is 400 `invalid_client`. |
-| `GET /api/v2/products[?productId\|productCode\|productType]` | The recorded catalog `settings.catalog` selects, byte for byte (`preassembly`, null `shippingQualified`, nested `components`). `productId` also finds component products; unknown → 404. |
-| `POST /api/v2/fulfillments/actions/getShippingOptions` | `{shippingAddress, quantity, productId}` → `{dutiesAndTaxesIncluded, errorMessages, shippingOptions[…]}`: the zone menu, or structural problems as HTTP **200** `errorMessages` (see [Shipping and addresses](#shipping-and-addresses)). Nothing to ship or an unknown id → 400 "This product Id is not valid for shipping options."; a staging-only id against the production catalog → empty 500. |
+| `GET /api/v2/products[?productId\|productCode\|productType]` | The recorded catalog `settings.catalog` selects, byte for byte (`preassembly`, null `shippingQualified`, nested `components`). `productId` also finds component products; unknown → `[]`. |
+| `POST /api/v2/fulfillments/actions/getShippingOptions` | `{shippingAddress, quantity, productId}` → `{dutiesAndTaxesIncluded, errorMessages, shippingOptions[…]}`: the destination's menu, a 400 problem-details refusal, HTTP **200** `errorMessages`, or the carrier's 500 (see [Shipping and addresses](#shipping-and-addresses)). Nothing to ship or an unknown id → 400 "This product Id is not valid for shipping options."; a staging-only id against the production catalog → empty 500. |
 | `POST /api/v2/orders` | Shipped form `{items:[{productId, placerOrderNumber, shipments:[{quantity, address, courierServiceCode, referenceId}]}], notes}` runs the place-time USPS check; quantity-only `{items:[{productId, placerOrderNumber, quantity}]}` skips it and never creates a fulfillment. Bundles expand into one order line per component (same `placerOrderNumber`, `bundleProductId`); the kit-material line carries one fulfillment (`Ordered`) with an outbound shipment and a return label, `courier`/`courierService`/`trackingNumber` null until ship; every line carries the kit number (`WB` + 6). `placerOrderNumber` is never deduped. |
 | `POST /api/v2/orders/actions/createOrderForExistingKits` | `{items:[{productId, kitNumbers, samples[{kitNumber, attributes}]}]}`: a lab order on existing kits (`Order.Created` with `OrderType: 3`, no new kit, no `KitNumbersGenerated`); unknown kits → 400. |
-| `GET /api/v2/orders[?orderId…&offset&pageSize]`, `/api/v2/orders/{id}` | `OrderDto{id, orderDate, orderLines[…]}`; pages are `{offset, pageSize, totalCount, items}` (pageSize capped at 500, an offset past the end is an empty page with the true total). |
+| `GET /api/v2/orders[?orderId…&offset&pageSize]`, `/api/v2/orders/{id}` | `OrderDto{id, orderDate, orderLines[…]}`; pages are `{offset, pageSize, totalCount, items}` (pageSize defaults to 100 and is echoed from 1 to 100000; an offset past the end is an empty page with the true total). A non-GUID `{id}` is a 400. |
 | `GET /api/v2/orderLines/{id}` | The order-line detail with `kitStatusSummary` and sibling lines. |
 | `GET /api/v2/kits`, `/api/v2/kits/{kitNumber}`, `/api/v2/kitorderlines[?kitNumbers\|orderId\|attributeTerm…]`, `/api/v2/kitorderlines/kits` | `KitDto{kitNumber, gender, currentStatuses[{status, errors, errorMessage, orderLineId, orderId, fulfillment, results, history}], attributes}` and the kit-order-line rows (`currentStatus, currentErrorMessage, cancelCodeId, kitReceivedDate, kitEffectiveDate`). |
 | `GET /api/v2/fulfillments[?orderId]`, `POST …/actions/updateShipmentAddress` | Shipments with `isReturnShipment, address, trackingNumber, reference1, courier: null, courierService: null`. The edit replaces the address (no merge), re-runs the place check, echoes the command, and is visible on the next GET; an instruction-only edit always goes through; after tracking (or once `Shipped`/`Canceled`/`Error`) it is 400 "The shipment address can not be updated". |
-| `PATCH /api/v2/kits/{kitNumber}/attributes` | `{kitNumber, attributes:[{name, value}]}` (names case-insensitive, stored lowercase: `firstname, lastname, dateofbirth, gender, race, ethnicity, email, phone`). Unknown name → 400; bad `dateofbirth` (not `YYYYMMDD`) or `gender` (not `M/F/Unknown`) → 422; returns every attribute. |
-| `DELETE /api/v2/fulfillments/{id}`, `/api/v2/kits/{kit}/orderLines`, `/api/v2/orderLines/{id}` | The three cancel layers: 204; a shipped or already-canceled fulfillment, or a kit/line already with the lab, is 400 "… not in a cancellable status"; unknown or already-canceled kits/lines are 404. Canceling a fulfillment or a kit sends `Kit.KitOrderLine.Canceled`. |
-| `GET /api/v2/results[?kitNumber]`, `/api/v2/kits/{kit}/results`, `/api/v2/results/search` | `{resultPayload: "s3://<bucket>/<namespace>/<kit>.<json\|csv\|pdf>", resultType, resultDisplayName, resultDate, orderLineId, orderId, kitNumber, resultId}`. |
-| `GET /api/v2/results/results/presignedUrl?resultId&kitNumber&resultType` | `{presignedUrl, resultId, kitNumber, resultType, expiresAt}`; the URL is `GET {mock}/__blob/<key>?X-Amz-…` and answers the bytes, or 403 `AccessDenied` (bad signature, expired on the mock clock, or the `presigned_access_denied` preset). |
-| `GET /api/v2/attributes`, `/api/v2/eventTypes` | The attribute definitions and event types. |
-| `GET/POST /api/v2/notificationSubscriptions`, `GET/PATCH/DELETE …/{id}` | `{id, endPoint, events, secret, active, …}`. `secret` is returned **only** by POST. Accepts `application/json-patch+json`. `Kit.KitOrderLine.Canceled` (or any unknown name) in `events` is 400 "Valid event type is required."; a second subscription for the same endpoint is 400. |
+| `PATCH /api/v2/kits/{kitNumber}/attributes` | `{kitNumber, attributes:[{name, value}]}` (names matched case-insensitively against the recorded attribute catalog, stored lowercase: our consumer sends `firstname, lastname, dateofbirth, gender, race, ethnicity`). Unknown name → 400; bad `dateofbirth` (not `YYYYMMDD`) or `gender` (not `M/F/Unknown`) → 422; returns every attribute. |
+| `DELETE /api/v2/fulfillments/{id}`, `/api/v2/kits/{kit}/orderLines`, `/api/v2/orderLines/{id}` | The three cancel layers: 204; a shipped or already-canceled fulfillment, or a kit/line already with the lab, is 400 "… not in a cancellable status"; unknown or already-canceled kits/lines are 404 `Resource not found.` (`Kit <kit> not found` for a kit). Canceling a fulfillment or a kit sends `Kit.KitOrderLine.Canceled`. |
+| `GET /api/v2/results[?kitNumber]`, `/api/v2/kits/{kit}/results`, `/api/v2/results/search` | An unknown `kitNumber` filter is an empty page. `{resultPayload: "s3://<bucket>/<namespace>/<kit>.<json\|csv\|pdf>", resultType, resultDisplayName, resultDate, orderLineId, orderId, kitNumber, resultId}`. |
+| `GET /api/v2/results/results/presignedUrl?resultId&kitNumber&resultType` | Needs a `resultId`, or a `kitNumber` with a `resultType` (400 `'Result Id' must not be empty.` …); none matching is 404 "There is no report assoicated with that result" (staging's spelling). `{presignedUrl, resultId, kitNumber, resultType, expiresAt}`; the URL is `GET {mock}/__blob/<key>?X-Amz-…` and answers the bytes, or 403 `AccessDenied` (bad signature, expired on the mock clock, or the `presigned_access_denied` preset). |
+| `GET /api/v2/attributes[?entityType]`, `/api/v2/eventTypes[?name]` | The recorded live catalogs (`src/corpus/live-catalogs.json`): 240 attribute definitions and 12 event types `{name, payloadStructure, subscriptionTypes}`. A blank `name` lists them all. |
+| `GET/POST /api/v2/notificationSubscriptions`, `GET/PATCH/DELETE …/{id}` | `{id, endPoint, events, secret, active, …}`. `secret` is returned **only** by POST. Accepts `application/json-patch+json`. `Kit.KitOrderLine.Canceled` (or any name the event-type list lacks) in `events` is 400 "Valid event type is required."; a second subscription for the same endpoint is 400; an unknown id is 400 `Valid Notification Subscription Id required.` |
 
 Every API route needs `Authorization: Bearer <token>`; a missing, expired (on the mock clock),
 revoked (`POST /__admin/tokens/revoke`) or blocked-client token is an empty 401 with
 `WWW-Authenticate: Bearer error="invalid_token"`, so our client invalidates and retries once.
-Handler errors are `ErrorDto{statusCode, message, payload: {}, errorType: "ValidationError"}`;
-model-binding failures are ASP.NET problem details with `errors`.
+Handler errors are `ErrorDto{statusCode, message, payload: {}, errorType: "ValidationError"}`; a
+missing resource is `ErrorDto{statusCode: 404, message: "Resource not found.", payload: null,
+errorType: null}`. Query and body validation is ASP.NET problem details with `errors`, binding and
+validator messages together, as staging words them (`The value 'a' is not valid for Offset.`,
+`'Page Size' must be between 1 and 100000. You entered 0.`, `'Offset' must be greater than or
+equal to '0'.`, `'Status' has a range of values which does not include 'a'.`). `status`,
+`productType` and `entityType` filters are enums (case and spaces ignored, digits refused).
+`/api/v2/kitorderlines` answers an empty 500 for a `productType` or `attributesFilter` it cannot
+parse, but only when rows remain to filter.
 
 ### Shipping and addresses
 
-Two checks exist, and they do not agree — on purpose, because production does not:
+Two checks exist, and they do not agree — on purpose, because production does not. The quote is
+what live parity recorded against staging (`corpus/address-parity.json`, 35 synthetic addresses,
+replayed by the acceptance suite); where issue #122 listed different rules, the recording won.
 
-1. **Quote** (`getShippingOptions`): structure and destination class only. Problems come back as
-   HTTP 200 with `shippingOptions: []` and one `errorMessages` entry per problem, in this order:
-   `recipientName is required.`, `addressLine1 is required.`, `Address line exceeds 35
-   characters.` (lines 1, 2, 3; UTF-16 length, 35 passes, 36 fails), `city is required.`,
-   `stateOrRegion is required.` / `Domestic orders must use a 2 character state code.`,
-   `postalCode is required.` / `postalCode is not a valid US ZIP code.`, `countryCode is
-   required.`, `phone is required.`, then the destination class: `Only US destinations are
-   available for this product.` (anything but `US`; no coercion), `Military addresses are not
-   supported for this product.` (APO/FPO/DPO, AA/AE/AP), `PO Box addresses are not supported for
-   this product.`, `Shipping to this destination is not available for this product.` (ZIP3
-   006–009). A quote that passes structure returns its zone's menu **even when place will say
-   Address Not Found**.
-2. **Place** (`POST /orders` with `shipments`, and `updateShipmentAddress`): the same structure
-   rules, then USPS deliverability. Failures are 400 `ErrorDto` with `message` exactly
+1. **Quote** (`getShippingOptions`, `quoteVerdict`), in the order staging decides:
+   - **Request validation**, HTTP 400 problem details keyed `shippingAddress.<Field>`: recipient,
+     line1, city and state must not be empty (`'Shipping Address City' must not be empty.`);
+     state and country must be exactly 2 characters (`'Shipping Address Country Code' must be 2
+     characters in length. You entered 3 characters.`; a blank state fails both rules); a
+     non-empty postal code needs 5 characters. Phone is not checked.
+   - **Address rules**, HTTP 200 with `shippingOptions: []`: any of lines 1–3 over 35 UTF-16
+     code units → `Address Lines cannot be longer than 35 characters.` (once); a US state that
+     is not a state, DC or a territory (AE, ZZ) → `Invalid state or region for US domestic
+     address.`
+   - **The carrier's refusal**, HTTP 500 `ErrorDto` (null payload and type): a US postal code
+     that is not `NNNNN` / `NNNNN-NNNN` → `Code: DESTINATION.POSTALCODE.MISSING.ORINVALID,…`; a
+     state the ZIP3 → state table disagrees with (Beverly Hills `90210` in `TX`) →
+     `Code: CRSVZIP.CODE.INVALID,Message: edEx service is not currently available…` (staging's
+     typo kept).
+   - **The menu**: DHL Expedited only for `PO Box` / `P.O. Box` (a spelled-out `Post Office Box`
+     quotes like a street) and for territories (PR, VI, GU, AS, MP, ZIP3 006–009, 969); the FedEx
+     international menu outside the US (`FEDEX_INTERNATIONAL_PRIORITY`, `…_CONNECT_PLUS`,
+     `…_ECONOMY`); otherwise the zone's menu. A quote that passes returns its menu **even when
+     place will say Address Not Found**.
+2. **Place** (`POST /orders` with `shipments`, and `updateShipmentAddress`): what the quote would
+   refuse, then USPS deliverability. Failures are 400 `ErrorDto` with `message` exactly
    `Shipping address(es) not validated: <addressLine1 as sent> : <reason>`, where the reason is
-   the structural string or `Address Not Found`. Address Not Found when the ZIP3 is in
-   `UNDELIVERABLE_ZIP3` (`000`, `590`), the state disagrees with the USPS ZIP3 → state table
-   (Beverly Hills `90210` in `TX`), or line1 is a `quote-ok-place-not-found` corpus row. A
+   the quote's first message or `Address Not Found`. Address Not Found when the quote's carrier
+   refused the address, the ZIP3 is in `UNDELIVERABLE_ZIP3` (`000`, `590`), or line1 is a
+   `quote-ok-place-not-found` corpus row. Live parity recorded the Address Not Found answer for
+   `501 N 5th St`; the other place answers follow from the quote (placing is unsafe live). A
    courier code outside the address's menu (other than `DHL_DOMESTIC_RETURN`, the bundle's return
    leg, always accepted) is 400 "… not valid for shipping options".
 
@@ -138,15 +156,17 @@ Zones (from Houston, ZIP3 770) and deterministic prices:
 | --- | --- | --- |
 | 770–778 | 2 | all four |
 | 750–769, 779–799 | 3 | all four |
-| 730–749 | 6 | all four (73938 is the recorded anchor: 6, 14.91, 14.91, 62.23) |
+| 730–749 | 6 | all four (73938 is the recorded anchor: 6, 62.23, 14.91, 14.91) |
 | 800–847, 850–865 | 5 | all four |
 | 900–961, 100–149, 980–994 | 7 | all four |
-| 967–968 (HI), 995–999 (AK) | 8 | DHL Expedited and Express Saver only |
-| 006–009 (PR, USVI) | — | quote error, no options |
+| 967–968 (HI), 995–999 (AK) | 8 | all but Express Saver (as staging quotes Honolulu and Anchorage) |
+| 006–009, 969 (territories) | 8 | DHL Expedited only |
+| outside the US | 9 | the FedEx international menu (synthetic prices) |
 | any other | 4 | all four |
 
-The four codes are `DHL_PARCEL_EXPEDITED` (6), `FEDEX_EXPRESS_SAVER_ONE_RATE` (14.91),
-`FEDEX_2_DAY_ONE_RATE` (14.91) and `FEDEX_PRIORITY_OVERNIGHT` (62.23), each
+The four domestic codes, in staging's order, are `DHL_PARCEL_EXPEDITED` (6),
+`FEDEX_PRIORITY_OVERNIGHT` (62.23), `FEDEX_2_DAY_ONE_RATE` (14.91) and
+`FEDEX_EXPRESS_SAVER_ONE_RATE` (14.91), each
 `round(anchor × factor(zone), 2)` with factors 0.72, 0.80, 0.88, 0.94, 1.00, 1.12, 1.35 for zones
 2–8, plus 0.50 on DHL for residential addresses (except the anchor ZIP). `estimatedShipDate` is
 the next business morning, 08:00 America/Chicago; `estimatedDeliveryDate` adds the service's
@@ -202,7 +222,7 @@ secret, and to `--webhook-url` (all events) signed with `--webhook-secret`:
 | `POST /__admin/orders/:id/ship` | `{trackingNumber?, returnTrackingNumber?}`: tracking numbers, closeout date, fulfillment `Shipped`, kit-material line `Shipped`, `Order.Shipped`. |
 | `POST /__admin/orders/:id/kit-numbers` | Associate kit numbers for an order placed without them (`KitNumbersGenerated`). |
 | `POST /__admin/scenario/happy-path` | `{orderId, stepDelayMs?}`: associate (if deferred) → ship → `Received` → `In Lab` → `In QC Analysis` → `QC Analysis Complete` → `Results Completed`, with each step's webhooks. Step `i` runs once the mock clock reaches start + `i × stepDelayMs` (default 0: all now); later steps run on the next request after the clock passes them. The only automatic motion. |
-| `POST /__admin/addresses/classify` | An `AddressDto` (or `{address, productId?, courierServiceCode?}`) → `{quote: "options" \| "errorMessages" \| "http400" \| "http500", place: "ok" \| "address-not-found" \| "structural" \| "bad-courier", zone, codes, prices}`, without creating anything. |
+| `POST /__admin/addresses/classify` | An `AddressDto` (or `{address, productId?, courierServiceCode?}`) → `{quote: "options" \| "validation" \| "errorMessages" \| "carrier" \| "http400" \| "http500", place: "ok" \| "address-not-found" \| "structural" \| "bad-courier", zone, codes, prices}`, without creating anything. |
 | `PUT /__admin/addresses/corpus`, `GET …` | Append a synthetic `{kind: "quote-ok-place-not-found" \| "quote-ok-place-ok", addressLine1, city, stateOrRegion, postalCode}` row for this namespace. |
 | `PUT /__admin/settings` | `{catalog?, kitAssociation?, tokenTtlSeconds?, clients?, blockedClients?: {"<client_id>": "invalid_client" \| "unauthorized" \| "forbidden"}, generateKitNumbers?, presignedUrlTtlSeconds?, resultsBucket?}`. |
 | `POST /__admin/tokens/revoke` | Every token issued so far answers 401. |
@@ -237,8 +257,10 @@ namespace, so parallel workers never collide in the shared results bucket.
   address classes, never prices or dates, which drift on the live host.
 - Courier objects after ship: `courier` / `courierService` stay `null` (no recording shows
   their shipped shape).
-- Attribute definitions and event types are synthesised from the consumer's code (no recording
-  exists).
+- International prices and delivery dates: the codes and names are recorded, the prices are
+  synthetic (live parity compares menus, never prices).
+- Place-time answers other than Address Not Found are derived from the quote, not recorded:
+  placing an order is unsafe against the live tenant.
 - Nothing moves on its own except token and presigned-URL expiry (mock clock) and the
   happy-path scenario: every other lab step is an admin transition.
 
@@ -255,8 +277,8 @@ namespace, so parallel workers never collide in the shared results bucket.
 | `GXG_EVENTS`, `KIT_ERROR_MESSAGES` | values | Notification event names; the `Kit.Error` messages for codes 4 and 19. |
 | `gxgSigner`, `signGxgWebhookBody` | functions | The GxG webhook signer and `sha512=<hex>` signature. |
 | `PRODUCTION_PRODUCTS`, `STAGING_PRODUCTS`, `catalogProducts`, `CATALOGS`, `DELUXE_BUNDLE_ID`, `PRODUCT_CODES`, `CORPUS_VERSION`, `ATTRIBUTE_DEFINITIONS`, `EVENT_TYPES` | values | The catalog corpus (`catalogProducts(catalog)` is what a `catalog` setting answers). |
-| `COURIER_SERVICES`, `RETURN_COURIER`, `ZONE_FACTORS`, `zoneFor`, `menuFor`, `priceFor`, `quoteMenu`, `stateForZip3` | values / functions | The courier menu, zone table and deterministic pricing. |
-| `structuralProblems`, `placeCheck`, `ADDRESS_CORPUS`, `QUOTE_OK_PLACE_NOT_FOUND`, `QUOTE_OK_PLACE_OK`, `UNDELIVERABLE_ZIP3`, `trackingNumberFor` | values / functions | The two address checks, the committed address corpus, and tracking-number minting. |
+| `COURIER_SERVICES`, `INTERNATIONAL_SERVICES`, `RETURN_COURIER`, `ZONE_FACTORS`, `zoneFor`, `menuFor`, `priceFor`, `quoteMenu`, `stateForZip3` | values / functions | The courier menus, zone table and deterministic pricing. |
+| `quoteVerdict`, `addressValidationErrors`, `placeCheck`, `ADDRESS_CORPUS`, `QUOTE_OK_PLACE_NOT_FOUND`, `QUOTE_OK_PLACE_OK`, `UNDELIVERABLE_ZIP3`, `trackingNumberFor` | values / functions | The two address checks, the committed address corpus, and tracking-number minting. |
 | `RESULT_FIXTURES`, `NORMAL_REPORT`, `PGX_REPORT`, `ANCESTRY_REPORT`, `RAW_DATA_CSV`, `resultFiles`, `minimalPdf` | values | Result fixtures and the files a completed kit publishes. |
 | `DEFAULT_SETTINGS`, `netIso` | values | Default per-namespace settings; .NET-style instant formatting. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
@@ -270,8 +292,11 @@ bun test                           # self-parity (incl. the address walk), accep
 bun scripts/vendor-openapi.ts      # re-vendor openapi.yaml from ~/geviti-monorepo, then bun run generate
 bun run parity                     # live parity against GxG staging; exits 2 without
                                    # MOCKINGBIRD_GENEBYGENE_CLIENT_ID / _CLIENT_SECRET (env / .env.local);
-                                   # records corpus/address-parity.json; MOCKINGBIRD_GENEBYGENE_UNSAFE=1
+                                   # compares and records corpus/address-parity.json, corpus/live-errors.json
+                                   # and src/corpus/live-catalogs.json; MOCKINGBIRD_GENEBYGENE_UNSAFE=1
                                    # also places (and cancels) one real order on demo/staging
+bun run parity:remote -- genebygene  # the same on GitHub Actions with the repo's secrets; download the
+                                   # recordings with gh run download <run-id> -n parity-corpus
 ```
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -480,6 +480,30 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
   ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "100000" }],
   ["/api/v2/kits", { kitNumber: "WB000000" }],
   ["/api/v2/orders", { orderId: ZERO, pageSize: "2000" }],
+  // Character-format rules on the free-text filters.
+  ...(
+    [
+      ["/api/v2/kitorderlines", "kitNumbers"],
+      ["/api/v2/kitorderlines/kits", "kitNumbers"],
+      ["/api/v2/results/search", "kitNumbers"],
+      ["/api/v2/kits", "kitNumber"],
+      ["/api/v2/kits", "orderNumber"],
+      ["/api/v2/results", "kitNumber"],
+      ["/api/v2/kitorderlines/kits", "attributeTerm"],
+      ["/api/v2/kitorderlines/kits", "attributesToSearch"],
+      ["/api/v2/kitorderlines/kits", "orderLineId"],
+      ["/api/v2/orders", "productName"],
+      ["/api/v2/products", "productCode"],
+      ["/api/v2/eventTypes", "name"],
+      ["/api/v2/notificationSubscriptions", "type"],
+      ["/api/v2/results/search", "resultTypeName"],
+      ["/api/v2/results/search", "firstName"],
+    ] as const
+  ).flatMap(([path, name]) =>
+    ["{", "WB1,WB2", "WB-1", "WB_1", "WB 1", "WB.1", "WB1;WB2", "é", "a'b", "<b>", "%", "*"].map(
+      (value) => [path, { [name]: value }] as [string, Record<string, string>],
+    ),
+  ),
   ["/api/v2/kits", { kitNumber: "WB000000", offset: "-1" }],
   ["/api/v2/orders", { orderId: ZERO, pageSize: "0" }],
   ["/api/v2/orders", { orderId: ZERO, offset: "-1" }],

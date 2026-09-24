@@ -94,8 +94,14 @@
     {
       "provider": "genebygene",
       "seed": 1387183420,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListKitOrderLines attributesFilter=a narrowed to no rows: real 200 empty page, mock empty 500 (staging's parse failure only happens when there are rows)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1388373597,
+      "status": "open",
+      "failure": "ListKitOrderLineKits kitNumbers={: real 400 \"'Kit Numbers' is not in the correct format.\", mock 200"
     }
   ]
 }
