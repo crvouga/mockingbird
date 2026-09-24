@@ -12,6 +12,7 @@ import {
   ghAuthOk,
   ghSecretNames,
   loadManifest,
+  readSecret,
   redactSecrets,
   root,
   run,
@@ -27,47 +28,6 @@ async function inherited(cmd: string[], env?: Record<string, string | undefined>
     stdio: ["inherit", "inherit", "inherit"],
   }).exited
   if (code !== 0) throw new Error(`${cmd.join(" ")} exited ${code}`)
-}
-
-async function readSecret(label: string): Promise<string> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("A terminal is required to enter NPM_TOKEN securely")
-  }
-
-  process.stdout.write(label)
-  process.stdin.setRawMode(true)
-  process.stdin.resume()
-
-  return await new Promise<string>((resolve, reject) => {
-    let value = ""
-    const cleanup = () => {
-      process.stdin.setRawMode(false)
-      process.stdin.pause()
-      process.stdin.off("data", onData)
-    }
-    const onData = (chunk: Buffer) => {
-      for (const byte of chunk) {
-        if (byte === 3) {
-          cleanup()
-          process.stdout.write("\n")
-          reject(new Error("Cancelled"))
-          return
-        }
-        if (byte === 10 || byte === 13) {
-          cleanup()
-          process.stdout.write("\n")
-          resolve(value)
-          return
-        }
-        if (byte === 8 || byte === 127) {
-          value = value.slice(0, -1)
-          continue
-        }
-        value += String.fromCharCode(byte)
-      }
-    }
-    process.stdin.on("data", onData)
-  })
 }
 
 async function ensureGitHubAuth(): Promise<void> {

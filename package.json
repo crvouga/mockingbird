@@ -75,6 +75,7 @@
     "release:bootstrap": "bun scripts/release/bootstrap.ts",
     "release:fix-ci": "bun scripts/release/fix-ci.ts",
     "npm": "open https://www.npmjs.com/package/@crvouga/mockingbird",
+    "secrets": "bun scripts/secrets/cli.ts",
     "secrets:doctor": "bun scripts/secrets/doctor.ts",
     "secrets:push": "bun scripts/secrets/push-env.ts"
   },

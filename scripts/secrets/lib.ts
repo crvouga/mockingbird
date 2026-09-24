@@ -186,6 +186,48 @@ export function redactSecrets(text: string): string {
     .replace(/github_pat_[A-Za-z0-9_]{20,}/g, "[REDACTED_GH_TOKEN]")
 }
 
+/** Read one line from the terminal without echoing it. Rejects when stdin is not a TTY. */
+export async function readSecret(label: string): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("A terminal is required to enter a secret without echo")
+  }
+
+  process.stdout.write(label)
+  process.stdin.setRawMode(true)
+  process.stdin.resume()
+
+  return await new Promise<string>((resolve, reject) => {
+    let value = ""
+    const cleanup = () => {
+      process.stdin.setRawMode(false)
+      process.stdin.pause()
+      process.stdin.off("data", onData)
+    }
+    const onData = (chunk: Buffer) => {
+      for (const byte of chunk) {
+        if (byte === 3) {
+          cleanup()
+          process.stdout.write("\n")
+          reject(new Error("Cancelled"))
+          return
+        }
+        if (byte === 10 || byte === 13) {
+          cleanup()
+          process.stdout.write("\n")
+          resolve(value)
+          return
+        }
+        if (byte === 8 || byte === 127) {
+          value = value.slice(0, -1)
+          continue
+        }
+        value += String.fromCharCode(byte)
+      }
+    }
+    process.stdin.on("data", onData)
+  })
+}
+
 export function printCheck(result: CheckResult): void {
   const tag =
     result.status === "pass"

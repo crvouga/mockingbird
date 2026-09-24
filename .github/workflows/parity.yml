@@ -41,23 +41,17 @@ jobs:
         timeout-minutes: 20
         run: bunx turbo run build --output-logs=errors-only
 
-      # Every MOCKINGBIRD_* repo secret becomes an env var for the steps below, so a newly
-      # added service's keys work without editing this file. GENE_BY_GENE_* are the Gene by
-      # Gene staging credentials under the vendor's own names (genebygene/scripts/parity.ts).
-      - name: Load MOCKINGBIRD_* repo secrets
-        env:
-          SECRETS: ${{ toJSON(secrets) }}
-        run: |
-          echo "$SECRETS" | jq -r '
-            to_entries[]
-            | select(.key | startswith("MOCKINGBIRD_") or startswith("GENE_BY_GENE_"))
-            | "\(.key)<<__MOCKINGBIRD_EOF__\n\(.value)\n__MOCKINGBIRD_EOF__"
-          ' >> "$GITHUB_ENV"
-
+      # Sandbox keys, mapped one by one. Dumping the whole secrets context (toJSON(secrets))
+      # makes GitHub hold every run as "may be malicious" until someone approves it by hand.
+      # A service's parity script reads MOCKINGBIRD_<SERVICE>_*; add its secrets here.
       - name: Live parity (${{ inputs.services }})
         timeout-minutes: 35
         env:
           PARITY_SERVICES: ${{ inputs.services }}
+          MOCKINGBIRD_GENEBYGENE_CLIENT_ID: ${{ secrets.MOCKINGBIRD_GENEBYGENE_CLIENT_ID }}
+          MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET: ${{ secrets.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET }}
+          MOCKINGBIRD_JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
+          MOCKINGBIRD_STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         # One argument per service; parity-service.ts rejects anything that is not a
         # service with a parity script.
         run: |

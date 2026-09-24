@@ -5,6 +5,8 @@
  *
  *   bun run secrets:doctor
  */
+
+import { discoverPackages, npmVersions } from "../release/lib.ts"
 import {
   type CheckResult,
   ghAuthOk,
@@ -18,7 +20,6 @@ import {
   readEnvLocal,
   which,
 } from "./lib.ts"
-import { discoverPackages, npmVersions } from "../release/lib.ts"
 
 console.log("mockingbird secrets doctor")
 console.log("==========================")

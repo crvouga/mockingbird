@@ -17,7 +17,7 @@ seeing a value (GitHub never returns a secret's value, to anyone):
 
 | Workflow | Secrets it reads | How to run it |
 | --- | --- | --- |
-| [Parity](../.github/workflows/parity.yml) | every `MOCKINGBIRD_*` repo secret | `bun run parity:remote -- <service…>` or `-- --all` |
+| [Parity](../.github/workflows/parity.yml) | the `MOCKINGBIRD_*` keys its live-parity step maps | `bun run parity:remote -- <service…>` or `-- --all` |
 | [Verify](../.github/workflows/verify.yml) | `MOCKINGBIRD_JUNCTION_API_KEY` | daily, or `gh workflow run verify.yml` |
 | [Release](../.github/workflows/ci.yml) | `NPM_TOKEN` (new packages only) | automatic on merge to `main` |
 
@@ -34,8 +34,10 @@ bun run parity:remote -- stripe            # one or more services
 bun run parity:remote -- --all             # every service with a parity script
 ```
 
-This dispatches the Parity workflow on your branch, which exposes every `MOCKINGBIRD_*` repo
-secret to the run, and streams the log to your terminal. Needs `gh auth login`.
+This dispatches the Parity workflow on your branch, which passes the sandbox keys its live-parity
+step maps to the run, and streams the log to your terminal. Needs `gh auth login`. The workflow
+also uploads each service's `corpus/` directory as the `parity-corpus` artifact
+(`gh run download <run-id> -n parity-corpus`), so a live recording can be committed.
 
 **Locally (your own keys).** Put sandbox keys in `.env.local` (gitignored, loaded by Bun
 automatically; `.env.example` lists every name, grouped by service), then:
@@ -59,16 +61,30 @@ This prints, per service, whether every key it needs is set as a repo secret (ru
 
 ### Adding or rotating a sandbox key
 
-Set it in `.env.local`, then upload everything you have set:
+`bun run secrets` is a small CLI over the repo secrets. It sends values to `gh secret set` over
+stdin, so they never appear in output or on a command line:
 
 ```bash
-bun run secrets:push -- --dry-run          # which secrets would be set
-bun run secrets:push -- --yes
+bun run secrets                            # status: set / missing per service, on GitHub and locally
+bun run secrets fill stripe                # prompt (hidden) for each missing key; Enter skips one
+bun run secrets fill                       # ...for every service
+bun run secrets set MOCKINGBIRD_STRIPE_SECRET_KEY          # prompt for one value (rotate)
+bun run secrets set MOCKINGBIRD_STRIPE_SECRET_KEY --from-env   # take it from .env.local
+bun run secrets rm MOCKINGBIRD_OLD_KEY --yes
 ```
 
-Or one at a time: `gh secret set MOCKINGBIRD_STRIPE_SECRET_KEY --repo crvouga/mockingbird`.
-A new service needs no workflow change: once its parity script loads a `MOCKINGBIRD_*` field,
-`secrets:doctor`, `secrets:push`, `.env.example` and the Parity workflow all pick it up.
+To upload everything you have set in `.env.local` at once:
+
+```bash
+bun run secrets push -- --dry-run          # which secrets would be set (= secrets:push)
+bun run secrets push -- --yes
+```
+
+Once a service's parity script loads a `MOCKINGBIRD_*` field, `secrets:doctor`, `secrets:push` and
+`.env.example` pick it up. The Parity workflow needs one line per secret in the `env:` of its
+live-parity step (`MOCKINGBIRD_X: ${{ secrets.MOCKINGBIRD_X }}`). It maps each secret by name
+because GitHub holds a run that dumps the whole `secrets` context as "may be malicious" until
+someone approves it by hand.
 
 ## Releasing
 
