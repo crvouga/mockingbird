@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-flex",
   "version": "0.0.0-development",
-  "description": "Stateful mock of the Flex HSA/FSA payments API: products (recorded catalog corpus), checkout sessions in payment, off-session and setup modes, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks.",
+  "description": "Stateful mock of the Flex HSA/FSA payments API: products (recorded catalog corpus), checkout sessions in payment, subscription, off-session and setup modes, subscriptions, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -54,7 +54,7 @@
     "layer": "service",
     "category": "payments",
     "displayName": "Flex",
-    "status": "wip",
+    "status": "ready",
     "playground": {
       "headers": {
         "authorization": "Bearer fsk_test_mockingbird"

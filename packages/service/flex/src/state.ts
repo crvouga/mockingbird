@@ -83,13 +83,56 @@ export type SetupIntentRecord = {
 
 export type NextAction = { type: NextActionType } & Record<string, unknown>
 
+/** How often a recurring price bills (`price_data.recurring`). */
+export type Recurring = {
+  interval: "day" | "week" | "month" | "year"
+  interval_count?: number
+}
+
 export type LineItemRecord = {
-  price_data: { product: string; unit_amount: number }
+  price_data: { product: string; unit_amount: number; recurring?: Recurring | null }
   quantity: number
   amount_total: number
 }
 
-export type SessionMode = "payment" | "off_session" | "setup"
+/** What a subscription-mode session was created with (`subscription_data`). */
+export type SubscriptionData = {
+  cancel_at_period_end?: boolean
+  metadata?: Record<string, string>
+}
+
+export type SessionMode = "payment" | "subscription" | "off_session" | "setup"
+
+export const SUBSCRIPTION_STATUSES = [
+  "incomplete",
+  "incomplete_expired",
+  "trialing",
+  "active",
+  "past_due",
+  "canceled",
+  "unpaid",
+  "paused",
+] as const
+export type SubscriptionStatus = (typeof SUBSCRIPTION_STATUSES)[number]
+
+/** A subscription a paid subscription-mode checkout session created. */
+export type SubscriptionRecord = {
+  subscription_id: string
+  status: SubscriptionStatus
+  items: {
+    price_data: { product: string; unit_amount: number; recurring: Recurring }
+    quantity: number
+  }[]
+  customer: string | null
+  default_payment_method: string | null
+  cancel_at_period_end: boolean
+  current_period_start: string
+  current_period_end: string
+  canceled_at: string | null
+  metadata: Record<string, string> | null
+  test_mode: boolean
+  created_at: string
+}
 export type SessionStatus = "open" | "paid" | "complete" | "canceled" | "expired"
 
 export type SessionRecord = {
@@ -101,6 +144,9 @@ export type SessionRecord = {
   customer: string | null
   payment_intent: string | null
   setup_intent: string | null
+  /** The subscription a paid subscription-mode session created. */
+  subscription: string | null
+  subscription_data: SubscriptionData | null
   mode: SessionMode
   status: SessionStatus
   /** The hosted page (`redirect_url` and `url`). */
@@ -227,6 +273,7 @@ export class FlexState {
   readonly paymentIntents: Collection<PaymentIntentRecord>
   readonly setupIntents: Collection<SetupIntentRecord>
   readonly refunds: Collection<RefundRecord>
+  readonly subscriptions: Collection<SubscriptionRecord>
   readonly settings: Collection<Settings>
   readonly ids: IdSequence
 
@@ -243,6 +290,7 @@ export class FlexState {
     this.paymentIntents = new Collection(sqlite, namespace, "payment_intents")
     this.setupIntents = new Collection(sqlite, namespace, "setup_intents")
     this.refunds = new Collection(sqlite, namespace, "refunds")
+    this.subscriptions = new Collection(sqlite, namespace, "subscriptions")
     this.settings = new Collection(sqlite, namespace, "settings")
     this.ids = new IdSequence(sqlite, namespace, "flex")
   }

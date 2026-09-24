@@ -96,14 +96,24 @@ const cancelLink = (session: SessionRecord) =>
     ? `<p><a data-testid="flex-mock-cancel" href="./${encodeURIComponent(session.checkout_session_id)}/cancel">Cancel and return</a></p>`
     : ""
 
+/** "month", "3 months": how often the session's first recurring line item bills. */
+const cadence = (session: SessionRecord) => {
+  const recurring = session.line_items.find((item) => item.price_data.recurring)?.price_data
+    .recurring
+  if (!recurring) return ""
+  const count = recurring.interval_count ?? 1
+  const every = count === 1 ? recurring.interval : `${count} ${recurring.interval}s`
+  return ` <span data-testid="flex-mock-interval">per ${escapeHtml(every)}</span>`
+}
+
 const summary = (input: PageInput) => {
   const { session } = input
   const items = input.productNames
     .map((name) => `<li data-testid="flex-mock-line-item">${escapeHtml(name)}</li>`)
     .join("")
-  return `<h1>Pay with HSA/FSA</h1>
-<p data-testid="flex-mock-session" data-session-id="${escapeHtml(session.checkout_session_id)}">
-${session.mode === "setup" ? "Save a card for future payments" : `Total <strong data-testid="flex-mock-amount">${dollars(session.amount_total)}</strong>`}
+  return `<h1>${session.mode === "subscription" ? "Subscribe with HSA/FSA" : "Pay with HSA/FSA"}</h1>
+<p data-testid="flex-mock-session" data-session-id="${escapeHtml(session.checkout_session_id)}" data-mode="${escapeHtml(session.mode)}">
+${session.mode === "setup" ? "Save a card for future payments" : `Total <strong data-testid="flex-mock-amount">${dollars(session.amount_total)}</strong>${session.mode === "subscription" ? cadence(session) : ""}`}
 </p>
 ${items ? `<ul>${items}</ul>` : ""}`
 }

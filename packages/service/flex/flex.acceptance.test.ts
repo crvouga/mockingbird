@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import { Webhook } from "svix"
-import { createRuntime, FLEX_PRESETS, type FlexRuntime } from "./src/index.js"
+import { createRuntime, FLEX_PRESETS, type FlexRuntime, periodEnd } from "./src/index.js"
 import {
   type Attempt,
   type AttemptStatus,
@@ -893,5 +893,322 @@ describe("S4.9 corpus", () => {
     const active = h.catalog.mappings.filter((m) => m.active).slice(0, 25)
     for (const mapping of active) await h.catalog.refreshProduct(mapping.flexProductId)
     expect(active.every((m) => m.active)).toBe(true)
+  })
+})
+
+/**
+ * Subscription and one-time hosted checkout, as the Flex API reference describes it (no
+ * sandbox access: the oracle is the documentation).
+ * - create: https://docs.withflex.com/api-reference/checkout-sessions/create-checkout-session
+ *   (`mode` payment | subscription | off_session | setup; `line_items[].price_data.recurring`)
+ * - recurring: https://docs.withflex.com/api-reference/prices/create-price
+ *   (`interval` day | week | month | year, `interval_count`)
+ * - subscription: https://docs.withflex.com/api-reference/subscriptions/get-subscription
+ * - events: https://docs.withflex.com/developer-guides/webhooks/events and
+ *   https://docs.withflex.com/developer-guides/subscriptions/getting-started (a completed
+ *   subscription checkout sends customer.subscription.created and payment_intent.succeeded;
+ *   provisioning starts on checkout.session.completed)
+ */
+describe("hosted checkout: subscription and one-time modes (Flex API reference)", () => {
+  type Seen = { type: string; body: string; headers: Headers }
+  type Json = Record<string, unknown>
+  /** The corpus's Flex product for the membership merchant product (auto_substantiation). */
+  const MEMBERSHIP_FLEX_PRODUCT = "fprod_01kxj2bg0rvmwdejnpm6jmendp"
+  const SUCCESS = "https://app.test/membership/success?session_id={CHECKOUT_SESSION_ID}"
+  const CANCEL = "https://app.test/membership"
+
+  const docsHarness = () => {
+    const seen: Seen[] = []
+    const runtime = createRuntime({
+      webhooks: {
+        url: "http://backend.local/billing/webhooks/flex",
+        secret: SECRET,
+        fetch: async (request) => {
+          const body = await request.text()
+          const { event } = JSON.parse(body) as { event: { event_type: string } }
+          seen.push({ type: event.event_type, body, headers: request.headers })
+          return new Response(null, { status: 200 })
+        },
+      },
+    })
+    const call = async (method: string, path: string, body?: unknown, key = KEY) => {
+      const response = await runtime.fetch(
+        new Request(`${API}${path}`, {
+          method,
+          headers: {
+            "content-type": "application/json",
+            ...(key ? { authorization: `Bearer ${key}` } : {}),
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      )
+      return { status: response.status, body: (await response.json()) as Json }
+    }
+    return { runtime, seen, call }
+  }
+
+  /** An independent period-end oracle: calendar arithmetic on the ISO date's own fields. */
+  const expectedPeriodEnd = (startIso: string, interval: string, count: number): string => {
+    const start = new Date(startIso)
+    if (interval === "day" || interval === "week") {
+      const days = interval === "day" ? count : count * 7
+      return new Date(start.getTime() + days * 24 * 3600 * 1000).toISOString()
+    }
+    const months = interval === "month" ? count : 12 * count
+    const month = start.getUTCMonth() + months
+    const year = start.getUTCFullYear() + Math.floor(month / 12)
+    const target = month % 12
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+    const lengths = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    const day = Math.min(start.getUTCDate(), lengths[target] as number)
+    const pad = (n: number, width = 2) => String(n).padStart(width, "0")
+    return `${pad(year, 4)}-${pad(target + 1)}-${pad(day)}${startIso.slice(10)}`
+  }
+
+  const recurringLine = (unit_amount: number) => ({
+    price_data: { product: MEMBERSHIP_FLEX_PRODUCT, unit_amount, recurring: { interval: "month" } },
+    quantity: 1,
+  })
+
+  test("paying the hosted page settles either mode: redirect, signed events in order, a subscription only in subscription mode", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.constantFrom("payment" as const, "subscription" as const),
+        fc.constantFrom("day", "week", "month", "year"),
+        fc.integer({ min: 1, max: 12 }),
+        fc.array(
+          fc.record({
+            unit_amount: fc.integer({ min: 0, max: 50_000 }),
+            quantity: fc.integer({ min: 1, max: 5 }),
+            recurring: fc.boolean(),
+          }),
+          { minLength: 1, maxLength: 4 },
+        ),
+        fc.constantFrom(HSA, REGULAR),
+        async (mode, interval, count, rawLines, card) => {
+          // Subscription mode needs a recurring line item; payment mode buys one-time items.
+          const lines = rawLines.map((line, index) => ({
+            ...line,
+            recurring: mode === "subscription" && (index === 0 || line.recurring),
+          }))
+          const h = docsHarness()
+          const created = await h.call("POST", "/v1/checkout/sessions", {
+            checkout_session: {
+              mode,
+              success_url: SUCCESS,
+              cancel_url: CANCEL,
+              client_reference_id: `ref-${mode}`,
+              line_items: lines.map((line) => ({
+                price_data: {
+                  product: MEMBERSHIP_FLEX_PRODUCT,
+                  unit_amount: line.unit_amount,
+                  ...(line.recurring ? { recurring: { interval, interval_count: count } } : {}),
+                },
+                quantity: line.quantity,
+              })),
+              ...(mode === "subscription"
+                ? { subscription_data: { cancel_at_period_end: false, metadata: { plan: "p" } } }
+                : {}),
+            },
+          })
+          expect(created.status).toBe(200)
+          const session = created.body.checkout_session as Json
+          const id = session.checkout_session_id as string
+          const total = lines.reduce((sum, line) => sum + line.unit_amount * line.quantity, 0)
+          expect(session).toMatchObject({ mode, status: "open", amount_total: total })
+          expect(session.subscription).toBeNull()
+          expect(session.redirect_url).toBe(`${API}/pay/${id}`)
+          const page = await (await h.runtime.fetch(new Request(`${API}/pay/${id}`))).text()
+          if (mode === "subscription") {
+            expect(page).toContain('data-mode="subscription"')
+            expect(page).toContain(`per ${count === 1 ? interval : `${count} ${interval}s`}</span>`)
+          }
+
+          const paid = await payOnHostedPage((r) => h.runtime.fetch(r), `${API}/pay/${id}`, card)
+          expect(paid.response.status).toBe(302)
+          expect(paid.response.headers.get("location")).toBe(
+            `https://app.test/membership/success?session_id=${id}`,
+          )
+          await h.runtime.webhooks.idle()
+          const svix = new Webhook(SECRET.replace(/^fwhsec_/, ""))
+          for (const delivery of h.seen) {
+            svix.verify(delivery.body, Object.fromEntries(delivery.headers.entries()))
+          }
+          // Deliveries run concurrently; the hub keeps them in emission order.
+          expect(h.runtime.webhooks.deliveries().map((d) => d.type)).toEqual(
+            mode === "subscription"
+              ? [
+                  "customer.subscription.created",
+                  "payment_intent.succeeded",
+                  "checkout.session.completed",
+                ]
+              : ["payment_intent.succeeded", "checkout.session.completed"],
+          )
+
+          const after = (
+            await h.call("GET", `/v1/checkout/sessions/${id}?expand_payment_intent=true`)
+          ).body.checkout_session as Json
+          const intent = after.payment_intent as Json
+          expect(after.status).toBe("complete")
+          expect(after.amount_received).toBe(total)
+          expect(intent.status).toBe("succeeded")
+          expect(after.customer).toMatch(/^fcus_/)
+          const eventObject = (type: string) =>
+            JSON.parse(h.seen.find((s) => s.type === type)?.body ?? "{}").event.object as Json
+          const completed = eventObject("checkout.session.completed")
+          expect(completed.subscription).toBe(after.subscription)
+          if (mode === "payment") {
+            expect(after.subscription).toBeNull()
+            return
+          }
+
+          expect(after.subscription).toMatch(/^fsub_/)
+          const got = await h.call("GET", `/v1/subscriptions/${after.subscription}`)
+          expect(got.status).toBe(200)
+          const subscription = got.body.subscription as Json
+          const announced = eventObject("customer.subscription.created")
+          expect(announced).toEqual(subscription)
+          expect(subscription).toMatchObject({
+            subscription_id: after.subscription,
+            status: "active",
+            customer: after.customer,
+            default_payment_method: intent.payment_method,
+            cancel_at_period_end: false,
+            canceled_at: null,
+            metadata: { plan: "p" },
+            test_mode: true,
+          })
+          // Only the recurring line items become subscription items.
+          expect(subscription.items).toEqual(
+            lines
+              .filter((line) => line.recurring)
+              .map((line) => ({
+                price_data: {
+                  product: MEMBERSHIP_FLEX_PRODUCT,
+                  unit_amount: line.unit_amount,
+                  recurring: { interval, interval_count: count },
+                },
+                quantity: line.quantity,
+              })),
+          )
+          expect(subscription.current_period_end).toBe(
+            expectedPeriodEnd(subscription.current_period_start as string, interval, count),
+          )
+        },
+      ),
+      { ...params, numRuns: Math.min(params.numRuns ?? 25, 25) },
+    )
+  })
+
+  test("month and year periods clamp to the target month's last day", () => {
+    const at = (iso: string, interval: "month" | "year", n = 1) =>
+      new Date(periodEnd(Date.parse(iso), { interval, interval_count: n })).toISOString()
+    expect(at("2028-01-31T10:00:00.000Z", "month")).toBe("2028-02-29T10:00:00.000Z")
+    expect(at("2027-01-31T10:00:00.000Z", "month")).toBe("2027-02-28T10:00:00.000Z")
+    expect(at("2028-02-29T00:00:00.000Z", "year")).toBe("2029-02-28T00:00:00.000Z")
+    expect(at("2026-11-15T00:00:00.000Z", "month", 3)).toBe("2027-02-15T00:00:00.000Z")
+  })
+
+  test("subscription mode needs a recurring line item; unknown subscriptions are 404; auth applies", async () => {
+    const h = docsHarness()
+    const oneTime = await h.call("POST", "/v1/checkout/sessions", {
+      checkout_session: {
+        mode: "subscription",
+        success_url: SUCCESS,
+        line_items: [
+          { price_data: { product: MEMBERSHIP_FLEX_PRODUCT, unit_amount: 100 }, quantity: 1 },
+        ],
+      },
+    })
+    expect(oneTime.status).toBe(400)
+    expect(oneTime.body).toMatchObject({
+      error: { type: "invalid_request_error", param: "line_items" },
+    })
+    const empty = await h.call("POST", "/v1/checkout/sessions", {
+      checkout_session: { mode: "subscription", success_url: SUCCESS, line_items: [] },
+    })
+    expect(empty.status).toBe(400)
+    // The quickstart's `"interval": "monthly"` is not in the reference's enum
+    // (day | week | month | year); the mock follows the reference.
+    const monthly = await h.call("POST", "/v1/checkout/sessions", {
+      checkout_session: {
+        mode: "subscription",
+        success_url: SUCCESS,
+        line_items: [
+          {
+            price_data: {
+              product: MEMBERSHIP_FLEX_PRODUCT,
+              unit_amount: 100,
+              recurring: { interval: "monthly" },
+            },
+            quantity: 1,
+          },
+        ],
+      },
+    })
+    expect(monthly.status).toBe(400)
+    const missing = await h.call("GET", "/v1/subscriptions/fsub_00000000000000000000000000")
+    expect(missing.status).toBe(404)
+    expect(missing.body).toMatchObject({ error: { type: "invalid_request_error" } })
+    const anonymous = await h.call("GET", "/v1/subscriptions/fsub_x", undefined, "")
+    expect(anonymous.status).toBe(401)
+    expect(h.runtime.instance().subscriptions()).toEqual([])
+  })
+
+  test("a declined subscription checkout starts nothing; paying again starts exactly one subscription", async () => {
+    const h = docsHarness()
+    const created = await h.call("POST", "/v1/checkout/sessions", {
+      checkout_session: {
+        mode: "subscription",
+        success_url: SUCCESS,
+        cancel_url: CANCEL,
+        line_items: [recurringLine(19_900)],
+      },
+    })
+    const id = (created.body.checkout_session as Json).checkout_session_id as string
+    const declined = await payOnHostedPage((r) => h.runtime.fetch(r), `${API}/pay/${id}`, DECLINE)
+    expect(declined.response.status).toBe(402)
+    expect(declined.body).toContain('role="alert"')
+    expect(declined.body).toContain("Your card was declined.")
+    await h.runtime.webhooks.idle()
+    expect(h.seen.map((s) => s.type)).toEqual(["checkout.session.async_payment_failed"])
+    const open = (await h.call("GET", `/v1/checkout/sessions/${id}`)).body.checkout_session as Json
+    expect(open.subscription).toBeNull()
+
+    const paid = await payOnHostedPage((r) => h.runtime.fetch(r), `${API}/pay/${id}`, HSA)
+    expect(paid.response.status).toBe(302)
+    // A second submit on the now-complete session is refused and starts nothing new.
+    const again = await payOnHostedPage((r) => h.runtime.fetch(r), `${API}/pay/${id}`, HSA)
+    expect(again.response.status).toBe(409)
+    await h.runtime.webhooks.idle()
+    expect(h.seen.filter((s) => s.type === "customer.subscription.created")).toHaveLength(1)
+    const subscriptions = h.runtime.instance().subscriptions()
+    expect(subscriptions).toHaveLength(1)
+    expect(subscriptions[0]?.status).toBe("active")
+  })
+
+  test("a publicUrl on a *.localhost name keeps checkout.withflex.com in the page URL", async () => {
+    // Chromium resolves every *.localhost name to loopback, so a browser suite that finds the
+    // Flex tab by /\bcheckout\.withflex\.com\b/ (do-flex-hosted-checkout.ts) matches the
+    // mock's page unchanged when publicUrl is http://checkout.withflex.com.localhost:<port>.
+    const runtime = createRuntime({
+      settings: { publicUrl: "http://checkout.withflex.com.localhost:8792" },
+    })
+    const response = await runtime.fetch(
+      new Request(`${API}/v1/checkout/sessions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${KEY}` },
+        body: JSON.stringify({
+          checkout_session: { success_url: SUCCESS, line_items: [recurringLine(4_500)] },
+        }),
+      }),
+    )
+    const { checkout_session } = (await response.json()) as {
+      checkout_session: { checkout_session_id: string; redirect_url: string }
+    }
+    expect(checkout_session.redirect_url).toBe(
+      `http://checkout.withflex.com.localhost:8792/pay/${checkout_session.checkout_session_id}`,
+    )
+    expect(/\bcheckout\.withflex\.com\b/iu.test(checkout_session.redirect_url)).toBe(true)
   })
 })

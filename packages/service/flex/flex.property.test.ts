@@ -50,6 +50,7 @@ describe("FlexAPI", () => {
           GetCheckoutSession: 2,
           RefundCheckoutSession: 2,
           GetSetupIntent: 3,
+          GetSubscription: 2,
         },
         // Both sides share one scheduler; a GC pause on a loaded machine is not a divergence.
         latencyToleranceMs: 5_000,
@@ -59,7 +60,7 @@ describe("FlexAPI", () => {
         log: () => {},
       })
       expect(report.walks).toBeGreaterThan(0)
-      expect(parityOperations).toHaveLength(10)
+      expect(parityOperations).toHaveLength(11)
       // Every JSON operation, including session create and refund, is reached by the walks.
       expect(Object.keys(report.exercised).sort()).toEqual(parityOperations)
     },
