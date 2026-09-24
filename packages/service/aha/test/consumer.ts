@@ -2,7 +2,7 @@
  * A port of our backend's AHA consumers: `AhaService.requestAha` (raw envelope, used by the
  * bloodwork checkout), `AhaLabProvider.ahaJson` (wrapped envelope, X-Idempotency-Key, the
  * lab-provider port), their zod schemas, the `AhaWebhookGuard`, and
- * `BloodworkService.processAhaWebhook` (GV-(\d+) parsing, status normalisation, the
+ * `BloodworkService.processAhaWebhook` (AC-(\d+) parsing, status normalisation, the
  * `scheduleServiceTime` / `scheduleServiceTimeZone` extraction and each handler's effect).
  * The acceptance tests drive the mock through it, so "the mock works" means "our consumer's
  * own logic reaches the right outcome".
@@ -89,7 +89,7 @@ export class AhaServiceConsumer {
   ) {}
 
   formatPartnerOrderId(sequence: number): string {
-    return `GV-${sequence}`
+    return `AC-${sequence}`
   }
 
   private async requestAha<T>(path: string, body: unknown, parse: (v: unknown) => T | null) {
@@ -102,7 +102,7 @@ export class AhaServiceConsumer {
     }
     let authHeaders: Record<string, string>
     if (useLegacyAuth) {
-      authHeaders = { "X-Geviti-Auth-Key": apiKey, "X-API-Version": "1.0" }
+      authHeaders = { "X-Acme-Auth-Key": apiKey, "X-API-Version": "1.0" }
     } else {
       const timestamp = this.now().toString()
       const signature = createHmac("sha256", apiSecret as string)
@@ -154,7 +154,7 @@ export class AhaServiceConsumer {
 
   async createOrUpdateOrder(orderData: CreateOrderRequest) {
     const response = await this.requestAha(
-      "/v1/geviti/create-order",
+      "/v1/acme/create-order",
       orderData,
       parseCreateOrderResponse,
     )
@@ -172,9 +172,9 @@ export class AhaServiceConsumer {
 
   async cancelOrder(partnerOrderSequence: number, reason?: string) {
     const response = await this.requestAha(
-      "/v1/geviti/cancel",
+      "/v1/acme/cancel",
       {
-        partner_order_id: `GV-${partnerOrderSequence.toString()}`,
+        partner_order_id: `AC-${partnerOrderSequence.toString()}`,
         notes: [{ note_type: "CANCELLATION", notes: reason ?? "Order cancelled via API" }],
       },
       parseCancelOrderResponse,
@@ -208,7 +208,7 @@ export const bloodworkOrderRequest = (
 ): CreateOrderRequest => {
   const sex = user.sex.toLowerCase()
   return {
-    partner_order_id: `GV-${sequence}`,
+    partner_order_id: `AC-${sequence}`,
     patient_first_name: user.firstName,
     patient_id: `${user.id}`,
     patient_middle_initial: "",
@@ -266,7 +266,7 @@ export class AhaLabProviderConsumer {
     }
     let authHeaders: Record<string, string>
     if (useLegacyAuth) {
-      authHeaders = { "X-Geviti-Auth-Key": apiKey, "X-API-Version": "1.0" }
+      authHeaders = { "X-Acme-Auth-Key": apiKey, "X-API-Version": "1.0" }
     } else {
       const timestamp = this.now().toString()
       const signature = createHmac("sha256", apiSecret as string)
@@ -319,7 +319,7 @@ export class AhaLabProviderConsumer {
         error: labError("patient.dob is required for AHA in YYYY-MM-DD format", "validation"),
       }
     }
-    const partnerOrderId = `GV-${partnerSequenceFromIdempotencyKey(req.idempotencyKey)}`
+    const partnerOrderId = `AC-${partnerSequenceFromIdempotencyKey(req.idempotencyKey)}`
     const body: CreateOrderRequest = {
       partner_order_id: partnerOrderId,
       patient_first_name: req.patient.firstName,
@@ -344,7 +344,7 @@ export class AhaLabProviderConsumer {
       ordering_physician: req.orderingPhysician.fullName,
       test_codes: req.providerProductIds.map((id) => ({ test_code: id, test_description: id })),
     }
-    const res = await this.ahaJson("/v1/geviti/create-order", body, req.idempotencyKey)
+    const res = await this.ahaJson("/v1/acme/create-order", body, req.idempotencyKey)
     if (!res.ok) return { ok: false as const, error: res.error }
     const wrapped = parseWrapped(res.json, parseCreateOrderResponse)
     if (!wrapped?.success) {
@@ -369,7 +369,7 @@ export class AhaLabProviderConsumer {
     // Faithful to the code: the lab provider sends its providerOrderId (AHA's order_number)
     // in the partner_order_id field (G-A1).
     const res = await this.ahaJson(
-      "/v1/geviti/cancel",
+      "/v1/acme/cancel",
       {
         partner_order_id: req.providerOrderId,
         notes: [{ note_type: "CANCELLATION", notes: req.reason ?? "Cancelled via lab-provider" }],
@@ -530,7 +530,7 @@ export class AhaWebhookReceiver {
       this.log.push("Missing partnerOrderId")
       return false
     }
-    const match = partnerOrderIdStr.match(/^GV-(\d+)$/)
+    const match = partnerOrderIdStr.match(/^AC-(\d+)$/)
     const sequence = match ? Number.parseInt(match[1] as string, 10) : null
     if (!sequence) {
       this.log.push(`Invalid partner order ID format: ${partnerOrderIdStr}`)

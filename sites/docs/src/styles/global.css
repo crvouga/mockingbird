@@ -658,6 +658,20 @@ kbd {
   box-shadow: inset 0 0 0 1px oklch(0.34 0.06 var(--h));
 }
 
+/* Vendor logos are drawn for light backgrounds, so the tile stays white in both themes. */
+.monogram.monogram-logo,
+[data-theme="dark"] .monogram.monogram-logo {
+  padding: calc(var(--size) * 0.16);
+  background: #fff;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.monogram-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .method {
   display: inline-block;
   min-width: 52px;

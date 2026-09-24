@@ -326,7 +326,7 @@ export const LAB_RETURN_ADDRESS = {
   referenceId: null,
 } as const
 
-/** The tenant (Geviti) id the vendor reports on kits and subscriptions. */
+/** The tenant (the consumer app's account) id the vendor reports on kits and subscriptions. */
 export const TENANT_ID = "5c1f5d0e-7b1a-4c52-9a4e-2f0b6f3d1a77"
 
 export type Catalog = "production" | "staging" | "both"

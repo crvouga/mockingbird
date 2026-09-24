@@ -210,7 +210,7 @@ describe("service contract", () => {
     })
     try {
       const runtime = createRuntime({
-        resultsS3: { endpoint: `http://127.0.0.1:${s3.port}`, bucket: "geviti-gxg-results-dev" },
+        resultsS3: { endpoint: `http://127.0.0.1:${s3.port}`, bucket: "acme-gxg-results-dev" },
       })
       const c = consumer("http://mock.local", (r) => runtime.fetch(r))
       const placed = await placeOrder(c, {
@@ -229,14 +229,14 @@ describe("service contract", () => {
       expect(done.status).toBe(200)
       expect(puts.map((p) => p.path).sort()).toEqual(
         [
-          `/geviti-gxg-results-dev/default/${kit}.csv`,
-          `/geviti-gxg-results-dev/default/${kit}.json`,
+          `/acme-gxg-results-dev/default/${kit}.csv`,
+          `/acme-gxg-results-dev/default/${kit}.json`,
         ].sort(),
       )
       expect(puts.every((p) => p.auth?.startsWith("AWS4-HMAC-SHA256") && p.bytes > 0)).toBe(true)
       const results = await c.fetchResultsByKitNumber({ kitNumber: kit, offset: 0, pageSize: 10 })
       expect(results.items.map((r) => r.resultPayload)).toContain(
-        `s3://geviti-gxg-results-dev/default/${kit}.json`,
+        `s3://acme-gxg-results-dev/default/${kit}.json`,
       )
     } finally {
       s3.stop(true)

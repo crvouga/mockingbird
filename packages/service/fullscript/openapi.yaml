@@ -9,7 +9,7 @@ info:
     '
   version: '1'
   x-mockingbird-upstream:
-    note: Wire shapes from apps/geviti-emr-backend/src/services/fullscript-*.ts and routers/v1/fullscript/*;
+    note: Wire shapes from the consumer app's EMR backend (its Fullscript services and routers);
       the vendor's API reference is behind a partner login.
 servers:
 - url: https://api-us-snd.fullscript.io

@@ -10,7 +10,7 @@ tests without Edamam keys, quotas or network.
 - Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/edamam/SUPPORT.md)
 - The contract (`openapi.yaml`) is hand-authored from Edamam's per-API docs and our consumers:
   `metrics/adapters/outbound/edamam-nutrition.adapter.ts`,
-  `meal-planning/adapters/outbound/edamam-meal-planning.adapter.ts`, and the Makor chat
+  `meal-planning/adapters/outbound/edamam-meal-planning.adapter.ts`, and the Python chat
   service's `tools/nutrition/client.py`.
 
 ## Install
@@ -26,9 +26,9 @@ any Fetch server.
 ## Usage
 
 Both backend adapters hardcode `https://api.edamam.com` (seam: a base-URL env for
-`EDAMAM_BASE_URL` / `EDAMAM_MEAL_BASE_URL`, and the Makor client's `EDAMAM_BASE_URL`). Keys can be
-any values (`EDAMAM_FOOD_APP_ID/KEY` or `EDAMAM_APP_ID/KEY`, `EDAMAM_MEAL_APP_ID/KEY`, the Makor
-`edamam_*` settings); without them our adapters report `unavailable` and never call out.
+`EDAMAM_BASE_URL` / `EDAMAM_MEAL_BASE_URL`, and the Python client's `EDAMAM_BASE_URL`). Keys can be
+any values (`EDAMAM_FOOD_APP_ID/KEY` or `EDAMAM_APP_ID/KEY`, `EDAMAM_MEAL_APP_ID/KEY`, the Python
+client's `edamam_*` settings); without them our adapters report `unavailable` and never call out.
 
 ```bash
 npx mockingbird-edamam serve --port 8824
@@ -90,7 +90,7 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`): `rate_
 ### Namespaces
 
 `x-mockingbird-namespace`, a `/ns/<name>` prefix on the base URL (works for the nutrition adapter
-and the Makor client, which concatenate paths; the meal adapter resolves paths with
+and the Python client, which concatenate paths; the meal adapter resolves paths with
 `new URL(endpoint, base)`, which drops a prefix), or by application id:
 `PUT /__admin/credentials {"credentials": {"<app_id>": "<namespace>"}}`.
 

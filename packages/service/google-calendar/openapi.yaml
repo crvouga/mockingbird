@@ -10,7 +10,7 @@ info:
   version: v3
   x-mockingbird-upstream:
     note: 'Shapes from https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest and https://developers.google.com/identity/protocols/oauth2;
-      consumer: apps/geviti-emr-backend/src/services/google-calendar-service.ts, business/authorize/authorize.business.ts,
+      consumer (the EMR backend): services/google-calendar-service.ts, business/authorize/authorize.business.ts,
       routers/v1/webhooks/controller.ts.'
 servers:
 - url: https://www.googleapis.com

@@ -121,6 +121,11 @@
     "layer": "service",
     "category": "databases",
     "displayName": "SQLite",
+    "vendor": {
+      "website": "https://sqlite.org",
+      "docs": "https://sqlite.org/docs.html",
+      "description": "SQLite is a small, fast, self-contained, public-domain SQL database engine, the most widely deployed database in the world."
+    },
     "status": "ready"
   }
 }

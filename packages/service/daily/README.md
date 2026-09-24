@@ -36,7 +36,7 @@ Point the apps at the mock (the G-D1 seams):
 
 ```bash
 npx mockingbird-daily serve --port 8800 \
-  --room-url-base https://geviti-mock.daily.test/ \
+  --room-url-base https://acme-mock.daily.test/ \
   --domain-id "$DAILY_API_DOMAIN_ID" \
   --webhook-url http://127.0.0.1:4000/v1/webhooks/daily \
   --webhook-secret "$DAILY_WEBHOOK_SECRET" \
@@ -47,7 +47,7 @@ npx mockingbird-daily serve --port 8800 \
 import { createRuntime } from "@crvouga/mockingbird-service-daily"
 
 const daily = createRuntime({
-  settings: { roomUrlBase: "https://geviti-mock.daily.test/" },
+  settings: { roomUrlBase: "https://acme-mock.daily.test/" },
   webhooks: { url: "http://127.0.0.1:4000/v1/webhooks/daily", secret: "whsec-daily" },
   transcripts: { endpoint: "http://127.0.0.1:4569", bucket: "emr-transcripts" },
 })

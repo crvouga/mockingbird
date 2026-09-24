@@ -211,7 +211,7 @@ const parsePatient = (value: unknown, id: number): PatientRecord | string => {
   return {
     patient_id: typeof value.patient_id === "number" ? value.patient_id : id,
     clinic_identifier:
-      typeof value.clinic_identifier === "string" ? value.clinic_identifier : "clinic-geviti-0001",
+      typeof value.clinic_identifier === "string" ? value.clinic_identifier : "clinic-acme-0001",
     demographics: {
       first_name: text("first_name"),
       last_name: text("last_name"),

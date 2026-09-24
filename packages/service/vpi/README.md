@@ -69,7 +69,7 @@ await post("/__admin/prescriptions/66b200000000000000000001/transition", {
 
 Every namespace starts with: user `65a1c0de00000000000000a1` (every login resolves to it unless
 `accounts` is set), clinic `65a1c0de00000000000000c1`, clinic location
-`65a1c0de00000000000000d1` ("Geviti Main"), providers Grace Hopper (NPI `1234567893`, id
+`65a1c0de00000000000000d1` ("Acme Main"), providers Grace Hopper (NPI `1234567893`, id
 `65a1c0de00000000000000e1`) and Alan Turing (NPI `1987654320`), patient Ada Lovelace
 (`65a1c0de00000000000000f1`, DOB 1985-02-14, 1 Main St, Phoenix AZ 85004), and four products:
 Testosterone Cypionate (`64f1c2a9e4b0a1b2c3d4e5f6` / `2185_INJ`, sterile, 10% clinic discount),

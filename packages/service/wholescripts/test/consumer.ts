@@ -7,7 +7,7 @@
  *   responses (a mismatch logs and yields `data: null`), the private-label restructure, and
  *   `supplements.service.ts`'s "place, then read the status back".
  * - {@link fetchEmrProductList}: the EMR's `getAllProducts` (`ProductList?instockonly=true&limit=1000`).
- * - {@link MakorWholescriptsAdapter}: the Makor Python client, adapter and mappers
+ * - {@link SchedulerWholescriptsAdapter}: the supplement scheduler's Python client, adapter and mappers
  *   (`supplement_management/app/adapters/wholescripts/{client,adapter,mappers}.py`).
  */
 import z from "zod"
@@ -267,7 +267,7 @@ export const fetchEmrProductList = async (
   return parsed.data
 }
 
-// --- Makor (Python) client + adapter + mappers ----------------------------------------------
+// --- Supplement scheduler (Python) client + adapter + mappers----------------------------------------
 
 export class VendorPermanentError extends Error {}
 export class VendorTemporaryError extends Error {}
@@ -276,7 +276,7 @@ export class VendorTimeoutError extends Error {}
 type Json = Record<string, unknown>
 
 /** `WholeScriptsClient`: httpx Basic auth; 4xx never retried, 5xx and connect errors retried. */
-export class MakorWholescriptsClient {
+export class SchedulerWholescriptsClient {
   constructor(
     private readonly baseUrl: string,
     private readonly credentials: { username: string; password: string },
@@ -417,10 +417,10 @@ export const buildSubmitPayload = (
   }
 }
 
-export type MakorOrderStatus = "failed" | "cancelled" | "shipped" | "placed" | "unknown"
+export type SchedulerOrderStatus = "failed" | "cancelled" | "shipped" | "placed" | "unknown"
 
 /** `mappers._map_ws_status`. */
-export const mapWsStatus = (wsStatus: string, tracking: unknown[]): MakorOrderStatus => {
+export const mapWsStatus = (wsStatus: string, tracking: unknown[]): SchedulerOrderStatus => {
   const lower = wsStatus.toLowerCase().trim()
   if (lower.includes("error")) return "failed"
   if (lower.includes("cancel")) return "cancelled"
@@ -453,7 +453,7 @@ export const parseStatusResponse = (vendorOrderId: string, raw: Json) => {
   return {
     vendor_order_id: vendorOrderId,
     status: mapWsStatus(wsStatus, tracking),
-    // Makor's VendorOrderStatus types these as list[str] but passes the vendor's tracking
+    // The scheduler's VendorOrderStatus types these as list[str] but passes the vendor's tracking
     // objects through unchanged.
     tracking_numbers: tracking,
     raw_status: wsStatus,
@@ -462,9 +462,9 @@ export const parseStatusResponse = (vendorOrderId: string, raw: Json) => {
 }
 
 /** `WholeScriptsVendorAdapter`. */
-export class MakorWholescriptsAdapter {
+export class SchedulerWholescriptsAdapter {
   constructor(
-    private readonly client: MakorWholescriptsClient,
+    private readonly client: SchedulerWholescriptsClient,
     private readonly medpaxBoxSku = "000000000200095263",
   ) {}
 
@@ -538,8 +538,8 @@ export class MakorWholescriptsAdapter {
   }
 }
 
-/** A Makor order the way the supplement scheduler builds one. */
-export const sampleMakorOrder = (): VendorOrderRequest => ({
+/** An order the way the supplement scheduler builds one. */
+export const sampleSchedulerOrder = (): VendorOrderRequest => ({
   shipping_address: {
     first_name: "Ada",
     last_name: "Lovelace",

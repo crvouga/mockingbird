@@ -54,6 +54,11 @@
     "layer": "service",
     "category": "health",
     "displayName": "Medplum",
+    "vendor": {
+      "website": "https://www.medplum.com",
+      "docs": "https://www.medplum.com/docs",
+      "description": "Medplum is an open-source, FHIR-native healthcare developer platform: a headless EHR backend, auth and SDKs."
+    },
     "status": "ready"
   },
   "scripts": {

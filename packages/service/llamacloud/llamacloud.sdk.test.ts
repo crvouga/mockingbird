@@ -1,8 +1,7 @@
 /**
- * SDK drop-in: the official Python SDK our Makor chat service pins (llama-cloud-services
- * 0.6.88 over llama-cloud 0.1.45 and llama-index-core 0.14.10, from
- * apps/makor-ecosystem/uv.lock), driven through the real Makor `LlamaCloudClient` file,
- * against the served mock.
+ * SDK drop-in: the official Python SDK the consumer app's Python chat service pins
+ * (llama-cloud-services 0.6.88 over llama-cloud 0.1.45 and llama-index-core 0.14.10), driven
+ * through that service's real `LlamaCloudClient` file, against the served mock.
  *
  * Python is not part of this repo's toolchain, so the test runs only when
  * `MOCKINGBIRD_LLAMACLOUD_PYTHON` points at an interpreter with those packages installed:
@@ -11,23 +10,18 @@
  *     llama-cloud-services==0.6.88 llama-cloud==0.1.45 llama-index-core==0.14.10
  *   MOCKINGBIRD_LLAMACLOUD_PYTHON=/tmp/llama/bin/python bun test llamacloud.sdk
  *
- * `MOCKINGBIRD_MAKOR_LLAMACLOUD_CLIENT` overrides the path to `llamacloud_client.py`
- * (default: the geviti-monorepo checkout in the home directory).
+ * `MOCKINGBIRD_LLAMACLOUD_PY_CLIENT` must also point at that service's `llamacloud_client.py`
+ * (the consumer app's own source; it is not in this repo).
  */
 import { describe, expect, test } from "bun:test"
 import { existsSync } from "node:fs"
-import { homedir } from "node:os"
 import { join } from "node:path"
 import { createServer } from "./src/server.js"
 
 const PYTHON = process.env.MOCKINGBIRD_LLAMACLOUD_PYTHON
-const CLIENT =
-  process.env.MOCKINGBIRD_MAKOR_LLAMACLOUD_CLIENT ??
-  join(
-    homedir(),
-    "geviti-monorepo/apps/makor-ecosystem/services/chat/app/core/rag/llamacloud_client.py",
-  )
-const enabled = PYTHON !== undefined && existsSync(PYTHON) && existsSync(CLIENT)
+const CLIENT = process.env.MOCKINGBIRD_LLAMACLOUD_PY_CLIENT
+const enabled =
+  PYTHON !== undefined && existsSync(PYTHON) && CLIENT !== undefined && existsSync(CLIENT)
 
 type Outcome = {
   error: string | null
@@ -46,10 +40,10 @@ const run = async (base: string, index: string, project: string, query: string) 
   const child = Bun.spawn(
     [
       PYTHON as string,
-      join(import.meta.dir, "test/makor_sdk_check.py"),
-      CLIENT,
+      join(import.meta.dir, "test/sdk_check.py"),
+      CLIENT as string,
       base,
-      "llx-makor",
+      "llx-python",
       index,
       project,
       query,
@@ -65,12 +59,12 @@ const run = async (base: string, index: string, project: string, query: string) 
   return JSON.parse(out.trim().split("\n").at(-1) as string) as Outcome
 }
 
-describe.skipIf(!enabled)("llama_cloud_services SDK (via the Makor chat client)", () => {
+describe.skipIf(!enabled)("llama_cloud_services SDK (via the Python chat client)", () => {
   test(
     "LlamaCloudIndex(name, project_name).as_retriever().aretrieve() resolves the index and retrieves",
     async () => {
       const server = await createServer({
-        pipelines: [{ name: "makor-kb", projectName: "Default" }],
+        pipelines: [{ name: "python-kb", projectName: "Default" }],
       })
       try {
         const put = await fetch(`${server.url}/__admin/retrieval`, {
@@ -82,7 +76,7 @@ describe.skipIf(!enabled)("llama_cloud_services SDK (via the Makor chat client)"
           }),
         })
         expect(put.status).toBe(200)
-        const hit = await run(server.url, "makor-kb", "Default", "What does vitamin D do?")
+        const hit = await run(server.url, "python-kb", "Default", "What does vitamin D do?")
         expect(hit.error).toBeNull()
         expect(hit.available).toBe(true)
         expect(hit.sources).toEqual([
@@ -106,9 +100,9 @@ describe.skipIf(!enabled)("llama_cloud_services SDK (via the Makor chat client)"
           "RunSearch",
         ])
 
-        // Makor's default project name is "default" (lowercase), the backend's is "Default":
+        // The Python client's default project name is "default" (lowercase), the backend's is "Default":
         // with no such project the SDK raises and the client degrades to empty results.
-        const miss = await run(server.url, "makor-kb", "default", "vitamin d")
+        const miss = await run(server.url, "python-kb", "default", "vitamin d")
         expect(miss.available).toBe(false)
         expect(miss.error).toContain("No project found with name default")
         expect(miss.total).toBe(0)
@@ -117,12 +111,12 @@ describe.skipIf(!enabled)("llama_cloud_services SDK (via the Makor chat client)"
         await fetch(`${server.url}/__admin/retrieval`, { method: "DELETE" })
         const pipelines = (await (
           await fetch(`${server.url}/api/v1/pipelines?project_name=Default`, {
-            headers: { authorization: "Bearer llx-makor" },
+            headers: { authorization: "Bearer llx-python" },
           })
         ).json()) as { id: string }[]
         await fetch(`${server.url}/api/v1/pipelines/${pipelines[0]?.id}/documents`, {
           method: "PUT",
-          headers: { authorization: "Bearer llx-makor", "content-type": "application/json" },
+          headers: { authorization: "Bearer llx-python", "content-type": "application/json" },
           body: JSON.stringify([
             {
               id: "magnesium-sleep",
@@ -131,7 +125,7 @@ describe.skipIf(!enabled)("llama_cloud_services SDK (via the Makor chat client)"
             },
           ]),
         })
-        const ranked = await run(server.url, "makor-kb", "Default", "magnesium for sleep")
+        const ranked = await run(server.url, "python-kb", "Default", "magnesium for sleep")
         expect(ranked.sources.map((s) => [s.title, s.document_id, s.score])).toEqual([
           ["Magnesium and sleep", "magnesium-sleep", 1],
         ])

@@ -6,7 +6,7 @@ import { serveTarget } from "./server.js"
 const code = await runCli(
   {
     bin: "mockingbird-formbricks",
-    description: "stateful Formbricks (Geviti fork) mock",
+    description: "stateful Formbricks mock",
     commands: { serve: serveCommand(serveTarget) },
   },
   process.argv.slice(2),

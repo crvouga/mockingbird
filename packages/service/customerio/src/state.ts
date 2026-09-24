@@ -118,16 +118,16 @@ export const TRANSACTIONAL_EMAIL_KEYS = [
 const CATALOG_EPOCH = 1_735_689_600
 
 /**
- * The seeded workspace: one message per legacy trigger name (`geviti_<key>`), plus the inbox
+ * The seeded workspace: one message per legacy trigger name (`acme_<key>`), plus the inbox
  * and playground notifications, ids from 1.
  */
 export const DEFAULT_TRANSACTIONAL_MESSAGES: TransactionalMessage[] = [
-  ...TRANSACTIONAL_EMAIL_KEYS.map((key) => `geviti_${key}`),
-  "geviti_inbox_message",
-  "geviti_playground_notification",
+  ...TRANSACTIONAL_EMAIL_KEYS.map((key) => `acme_${key}`),
+  "acme_inbox_message",
+  "acme_playground_notification",
 ].map((trigger, index) => ({
   id: index + 1,
-  name: trigger.replace(/^geviti_/, "Geviti ").replace(/_/g, " "),
+  name: trigger.replace(/^acme_/, "Acme ").replace(/_/g, " "),
   trigger_name: trigger,
   description: "",
   send_to_unsubscribed: true,

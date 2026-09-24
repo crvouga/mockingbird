@@ -46,7 +46,7 @@ export function isCompletedFullscriptState(state: FullscriptLabOrderState) {
   return TERMINAL_STATE_SET.has(state)
 }
 
-// Fullscript collection descriptors must not use the Geviti-specific Walk-In type.
+// Fullscript collection descriptors must not use the consumer-app-specific Walk-In type.
 // Defaults to Test-Kit (the fallback per the W0-A addendum §1) for unknown/absent values.
 export function mapFullscriptCollectionType(
   value: string | null | undefined,

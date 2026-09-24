@@ -276,7 +276,7 @@ components:
                   enum: [patient-1, patient-2, patient-3]
                 redirect-uri:
                   type: string
-                  enum: ["http://localhost:3000/verify/done", "gevitiapp://verify"]
+                  enum: ["http://localhost:3000/verify/done", "acmeapp://verify"]
                 note:
                   type: string
                   maxLength: 40

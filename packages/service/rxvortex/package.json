@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "pharmacy",
     "displayName": "RxVortex",
+    "vendor": {
+      "website": "https://www.rxvortex.com",
+      "description": "RxVortex is a pharmacy order platform whose API lets telehealth partners submit, track and cancel prescription orders with pharmacies such as Strive."
+    },
     "status": "wip"
   },
   "scripts": {

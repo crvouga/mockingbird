@@ -4,7 +4,7 @@ info:
   description: 'Stateful mock subset of Edamam''s Food Database v2 (parser, nutrients, image), Nutrition
     Analysis (nutrition-data, nutrition-details), Recipe Search v2 (search, by-uri, by id), Meal Planner
     v1 (select) and Shopping List v2, over a built-in corpus. Hand-authored from Edamam''s docs and the
-    consumers (edamam-nutrition.adapter.ts, edamam-meal-planning.adapter.ts, makor chat tools/nutrition/client.py).
+    consumers (edamam-nutrition.adapter.ts, edamam-meal-planning.adapter.ts, the Python chat client''s tools/nutrition/client.py).
 
     '
   version: '2'

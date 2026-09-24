@@ -41,6 +41,18 @@ export interface ExampleModule {
   mount(host: HTMLElement): void | (() => void) | Promise<undefined | (() => void)>
 }
 
+/** The vendor a service mocks, from sites/docs/src/data/brands.json (`bun run brands:sync`). */
+export interface Brand {
+  vendor: string
+  website: string
+  /** The vendor's API reference, when it publishes one. */
+  docs: string | null
+  description: string | null
+  color: string | null
+  /** Logo path on the docs site. */
+  logo: string
+}
+
 export interface Service {
   name: string
   packageName: string
@@ -79,6 +91,7 @@ export interface Service {
   example: { code: string; html: string } | null
   examples: ServiceExample[]
   hue: number
+  brand: Brand
 }
 
 export interface CategorySummary {

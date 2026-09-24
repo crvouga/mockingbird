@@ -61,7 +61,7 @@ const payload = (userId: number, email: string): IntercomContactPayload => ({
   phone: "+15125550142",
   signed_up_at: 1_700_000_000,
   custom_attributes: {
-    geviti_user_id: userId,
+    acme_user_id: userId,
     medplum_user_id: "mp-1",
     membership_tier: "plus",
     payment_status: "paid",
@@ -211,7 +211,7 @@ describe("S16 acceptance: the sync adapter against the mock", () => {
 
   test("undefined custom attributes are rejected when the workspace defines its own", async () => {
     const { sync, admin } = harness()
-    await admin("/settings", { customAttributes: ["geviti_user_id"] }, "PUT")
+    await admin("/settings", { customAttributes: ["acme_user_id"] }, "PUT")
     await expect(sync.createContact(payload(5, "five@example.com"))).rejects.toThrow(
       "does not exist",
     )

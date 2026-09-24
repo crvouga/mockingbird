@@ -39,7 +39,7 @@ export const serveTarget: ServeTarget = {
       type: "string",
       value: "<name[,name…]>",
       description:
-        "Pipelines (indexes) to create in the Default project (the app's LLAMACLOUD_INDEX_NAME); default geviti-member-kb-v1",
+        "Pipelines (indexes) to create in the Default project (the app's LLAMACLOUD_INDEX_NAME); default acme-member-kb-v1",
     },
     project: {
       type: "string",
@@ -67,7 +67,7 @@ export const serveTarget: ServeTarget = {
               .map((name) => ({ name, ...(project ? { projectName: project } : {}) })),
           }
         : project
-          ? { pipelines: [{ name: "geviti-member-kb-v1", projectName: project }] }
+          ? { pipelines: [{ name: "acme-member-kb-v1", projectName: project }] }
           : {}),
       ...(key ? { settings: { apiKeys: [key] } } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
@@ -77,7 +77,7 @@ export const serveTarget: ServeTarget = {
   },
   banner: () => [
     "auth: Authorization: Bearer <LLAMACLOUD_API_KEY>",
-    "backend: LLAMACLOUD_BASE_URL=<this>/api/v1; Makor chat SDK: LLAMA_CLOUD_BASE_URL=<this>",
+    "backend: LLAMACLOUD_BASE_URL=<this>/api/v1; Python chat SDK: LLAMA_CLOUD_BASE_URL=<this>",
     "namespaces: x-mockingbird-namespace, /ns/<name>/…, or PUT /__admin/credentials {<api key>: <ns>}",
   ],
 }

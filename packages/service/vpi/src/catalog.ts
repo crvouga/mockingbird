@@ -184,7 +184,7 @@ export const DEFAULT_PRODUCTS: readonly Product[] = [
 export const DEFAULT_CLINIC_LOCATION: ClinicLocation = {
   id: DEFAULT_CLINIC_LOCATION_ID,
   clinicId: DEFAULT_CLINIC_ID,
-  locationName: "Geviti Main",
+  locationName: "Acme Main",
   email: "pharmacy@example.com",
   fax: "5555550100",
   addressLine1: "100 Clinic Way",

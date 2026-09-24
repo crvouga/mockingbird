@@ -50,7 +50,7 @@ describe("service contract", () => {
     expect(await health.json()).toMatchObject({
       status: "ok",
       service: "stripe",
-      corpus: "geviti-2026-09-20",
+      corpus: "acme-2026-09-20",
     })
     const vendor = await call("/v1/customers", { headers: { authorization: `Bearer ${KEY}` } })
     expect(vendor.headers.get("x-mockingbird")).toMatch(/^stripe@.+; ns=default$/)

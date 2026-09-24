@@ -52,6 +52,12 @@
     "layer": "service",
     "category": "ai",
     "displayName": "LlamaCloud",
+    "vendor": {
+      "website": "https://www.llamaindex.ai",
+      "docs": "https://docs.cloud.llamaindex.ai",
+      "name": "LlamaIndex",
+      "description": "LlamaIndex builds LlamaCloud, a managed platform for document parsing, extraction and retrieval pipelines for LLM apps."
+    },
     "status": "wip"
   },
   "scripts": {

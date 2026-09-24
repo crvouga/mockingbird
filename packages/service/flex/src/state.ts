@@ -206,8 +206,8 @@ export const corpusProduct = (row: (typeof CORPUS_ROWS)[number]): ProductRecord 
   const [product_id, purpose, merchant, eligibility, visit_type, reference, created_at] = row
   return {
     product_id,
-    name: `Geviti ${purpose} ${merchant}`,
-    description: `Geviti ${purpose} product ${merchant}`,
+    name: `Acme ${purpose} ${merchant}`,
+    description: `Acme ${purpose} product ${merchant}`,
     url: null,
     client_reference_id: reference,
     hsa_fsa_eligibility: eligibility,
@@ -215,9 +215,9 @@ export const corpusProduct = (row: (typeof CORPUS_ROWS)[number]): ProductRecord 
     active: true,
     test_mode: true,
     metadata: {
-      geviti_purpose: purpose,
-      geviti_merchant_product_id: merchant,
-      geviti_client_reference_id: reference,
+      acme_purpose: purpose,
+      acme_merchant_product_id: merchant,
+      acme_client_reference_id: reference,
     },
     created_at,
   }

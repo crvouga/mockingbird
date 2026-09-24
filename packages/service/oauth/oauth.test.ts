@@ -170,7 +170,7 @@ describe("OAuth protocol", () => {
     expect(r.status).toBe(200)
   })
   test("native public clients use exact registered private-scheme callbacks with S256 PKCE", async () => {
-    const nativeCallback = "geviti://Callback/expo%2Freturn?channel=native"
+    const nativeCallback = "acme://Callback/expo%2Freturn?channel=native"
     const service = new OAuthAPI({
       provider: "google",
       accounts: [account],
@@ -218,7 +218,7 @@ describe("OAuth protocol", () => {
     ).toThrow()
   })
   test("Apple form_post exposes a deterministic private-scheme continuation", async () => {
-    const nativeCallback = "com.geviti.app:/oauth2redirect"
+    const nativeCallback = "com.acme.app:/oauth2redirect"
     const service = new OAuthAPI({
       provider: "apple",
       accounts: [account],
@@ -237,7 +237,7 @@ describe("OAuth protocol", () => {
     expect(html).toContain(`method="post" action="${nativeCallback}"`)
     expect(html).toContain('name="code"')
     expect(html).toContain('name="state" value="round-trip"')
-    expect(response.headers.get("content-security-policy")).toContain("form-action com.geviti.app:")
+    expect(response.headers.get("content-security-policy")).toContain("form-action com.acme.app:")
   })
   test("refresh scope restriction and token-family revocation", async () => {
     const service = api()
@@ -402,7 +402,7 @@ describe("service integration", () => {
         body: JSON.stringify({
           id: "native-app",
           name: "Native app",
-          redirectUris: ["geviti://callback"],
+          redirectUris: ["acme://callback"],
         }),
       }),
     )
@@ -417,7 +417,7 @@ describe("service integration", () => {
     ).toEqual({
       id: "native-app",
       name: "Native app",
-      redirectUris: ["geviti://callback"],
+      redirectUris: ["acme://callback"],
       requirePkce: true,
     })
     const defaultClients = await (

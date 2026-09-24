@@ -1,0 +1,662 @@
+{
+  "aha": {
+    "vendor": "mobileAHA",
+    "website": "https://www.mobileaha.com",
+    "docs": null,
+    "description": "mobileAHA provides mobile phlebotomy: at-home and workplace blood draws for lab orders.",
+    "input": {
+      "website": "https://www.mobileaha.com",
+      "name": "mobileAHA",
+      "description": "mobileAHA provides mobile phlebotomy: at-home and workplace blood draws for lab orders."
+    },
+    "color": null,
+    "logo": "/brands/aha.png",
+    "logoSource": "site"
+  },
+  "aws-secrets": {
+    "vendor": "AWS Secrets Manager & SSM",
+    "website": "https://aws.amazon.com/secrets-manager/",
+    "docs": "https://docs.aws.amazon.com/secretsmanager/latest/apireference/",
+    "description": "AWS Secrets Manager allows you to rotate, manage, and retrieve database credentials, API keys, and other secrets through their lifecycle.",
+    "input": {
+      "website": "https://aws.amazon.com/secrets-manager/",
+      "docs": "https://docs.aws.amazon.com/secretsmanager/latest/apireference/"
+    },
+    "color": null,
+    "logo": "/brands/aws-secrets.png",
+    "logoSource": "site"
+  },
+  "aws-speech": {
+    "vendor": "AWS Polly & Transcribe",
+    "website": "https://aws.amazon.com/polly/",
+    "docs": "https://docs.aws.amazon.com/polly/latest/dg/API_Reference.html",
+    "description": "Amazon Polly turns text into lifelike speech, allowing you to create applications that talk and build entirely new categories of speech-activated applications.",
+    "input": {
+      "website": "https://aws.amazon.com/polly/",
+      "docs": "https://docs.aws.amazon.com/polly/latest/dg/API_Reference.html"
+    },
+    "color": null,
+    "logo": "/brands/aws-speech.png",
+    "logoSource": "site"
+  },
+  "bedrock": {
+    "vendor": "AWS Bedrock",
+    "website": "https://aws.amazon.com/bedrock/",
+    "docs": "https://docs.aws.amazon.com/bedrock/latest/APIReference/",
+    "description": "Amazon Bedrock: The platform for building generative AI applications and agents at production scale",
+    "input": {
+      "website": "https://aws.amazon.com/bedrock/",
+      "docs": "https://docs.aws.amazon.com/bedrock/latest/APIReference/"
+    },
+    "color": null,
+    "logo": "/brands/bedrock.png",
+    "logoSource": "site"
+  },
+  "caretalk": {
+    "vendor": "CareTalk Health",
+    "website": "https://caretalkhealth.com",
+    "docs": null,
+    "description": "CareTalk Health is a nationwide virtual medical practice serving patients in all 50 states.",
+    "input": {
+      "website": "https://caretalkhealth.com",
+      "name": "CareTalk Health"
+    },
+    "color": null,
+    "logo": "/brands/caretalk.png",
+    "logoSource": "site"
+  },
+  "cognito": {
+    "vendor": "Amazon Cognito",
+    "website": "https://aws.amazon.com/cognito/",
+    "docs": "https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/",
+    "description": "Implement customer identity and access management (CIAM) that scales to millions of users with Amazon Cognito, fully managed authentication service.",
+    "input": {
+      "website": "https://aws.amazon.com/cognito/",
+      "docs": "https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/"
+    },
+    "color": null,
+    "logo": "/brands/cognito.png",
+    "logoSource": "site"
+  },
+  "customerio": {
+    "vendor": "Customer.io",
+    "website": "https://customer.io",
+    "docs": "https://docs.customer.io/api/",
+    "description": "Customer.io is a customer engagement platform for creating personalized journeys and better business outcomes across email, push, SMS, and in-app messaging.",
+    "input": {
+      "website": "https://customer.io",
+      "docs": "https://docs.customer.io/api/"
+    },
+    "color": null,
+    "logo": "/brands/customerio.svg",
+    "logoSource": "site"
+  },
+  "daily": {
+    "vendor": "Daily",
+    "website": "https://www.daily.co",
+    "docs": "https://docs.daily.co/reference/rest-api",
+    "description": "Daily provides real-time video and audio APIs for embedding calls, plus the open-source Pipecat voice-agent framework.",
+    "input": {
+      "website": "https://www.daily.co",
+      "docs": "https://docs.daily.co/reference/rest-api",
+      "description": "Daily provides real-time video and audio APIs for embedding calls, plus the open-source Pipecat voice-agent framework."
+    },
+    "color": null,
+    "logo": "/brands/daily.png",
+    "logoSource": "site"
+  },
+  "dynamodb": {
+    "vendor": "Amazon DynamoDB",
+    "website": "https://aws.amazon.com/dynamodb/",
+    "docs": "https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/",
+    "description": "Amazon DynamoDB is a fully managed, serverless, key-value NoSQL database that runs high-performance applications at any scale, with built-in security, continuous backups, and automated multi-region replication.",
+    "input": {
+      "website": "https://aws.amazon.com/dynamodb/",
+      "docs": "https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/"
+    },
+    "color": null,
+    "logo": "/brands/dynamodb.png",
+    "logoSource": "site"
+  },
+  "easypost": {
+    "vendor": "EasyPost",
+    "website": "https://www.easypost.com",
+    "docs": "https://docs.easypost.com/docs/trackers",
+    "description": "EasyPost's best-in-class Shipping APIs provide end-to-end flexibility and more control over parcel shipping and logistics processes.",
+    "input": {
+      "website": "https://www.easypost.com",
+      "docs": "https://docs.easypost.com/docs/trackers"
+    },
+    "color": null,
+    "logo": "/brands/easypost.svg",
+    "logoSource": "site"
+  },
+  "edamam": {
+    "vendor": "Edamam",
+    "website": "https://www.edamam.com",
+    "docs": "https://developer.edamam.com",
+    "description": "Food database and nutrition data provider to wellness and health applications. Try our Food Database API, Nutrition Analysis API and Recipe Search API.",
+    "input": {
+      "website": "https://www.edamam.com",
+      "docs": "https://developer.edamam.com"
+    },
+    "color": null,
+    "logo": "/brands/edamam.png",
+    "logoSource": "site"
+  },
+  "firstpromoter": {
+    "vendor": "FirstPromoter",
+    "website": "https://firstpromoter.com",
+    "docs": "https://docs.firstpromoter.com",
+    "description": "Launch your affiliate management software in minutes and run affiliate, referral and influencer programs from one platform, trusted by 3,000+ SaaS companies.",
+    "input": {
+      "website": "https://firstpromoter.com",
+      "docs": "https://docs.firstpromoter.com"
+    },
+    "color": null,
+    "logo": "/brands/firstpromoter.png",
+    "logoSource": "site"
+  },
+  "flex": {
+    "vendor": "Flex",
+    "website": "https://www.withflex.com",
+    "docs": "https://docs.withflex.com",
+    "description": "Flex lets merchants accept HSA/FSA funds at checkout for eligible health and wellness products.",
+    "input": {
+      "website": "https://www.withflex.com",
+      "docs": "https://docs.withflex.com",
+      "description": "Flex lets merchants accept HSA/FSA funds at checkout for eligible health and wellness products."
+    },
+    "color": null,
+    "logo": "/brands/flex.svg",
+    "logoSource": "site"
+  },
+  "formbricks": {
+    "vendor": "Formbricks",
+    "website": "https://formbricks.com",
+    "docs": "https://formbricks.com/docs",
+    "description": "Formbricks is an open-source experience management platform for surveys, in-app feedback, and customer insights. Own your data with full privacy.",
+    "input": {
+      "website": "https://formbricks.com",
+      "docs": "https://formbricks.com/docs"
+    },
+    "color": "#00C4B8",
+    "logo": "/brands/formbricks.svg",
+    "logoSource": "simple-icons"
+  },
+  "fullscript": {
+    "vendor": "Fullscript",
+    "website": "https://fullscript.com",
+    "docs": "https://fullscript.dev",
+    "description": "Empowering providers and patients with clinical insights. Use Fullscript to order lab tests, manage supplement plans, and track health progress together.",
+    "input": {
+      "website": "https://fullscript.com",
+      "docs": "https://fullscript.dev"
+    },
+    "color": null,
+    "logo": "/brands/fullscript.svg",
+    "logoSource": "site"
+  },
+  "genebygene": {
+    "vendor": "Gene by Gene",
+    "website": "https://www.genebygene.com",
+    "docs": null,
+    "description": "Tailored, affordable genetic testing and lab services. Our cutting-edge, robotic technology offers Next-Generation Sequencing (NGS) at scale. Learn more.",
+    "input": {
+      "website": "https://www.genebygene.com"
+    },
+    "color": null,
+    "logo": "/brands/genebygene.png",
+    "logoSource": "site"
+  },
+  "google-calendar": {
+    "vendor": "Google Calendar",
+    "website": "https://workspace.google.com/products/calendar/",
+    "docs": "https://developers.google.com/calendar/api/v3/reference",
+    "description": "Use Google Calendar to share meetings and schedule appointments, for managing what matters in your business and personal life, with Google Workspace.",
+    "input": {
+      "website": "https://workspace.google.com/products/calendar/",
+      "docs": "https://developers.google.com/calendar/api/v3/reference"
+    },
+    "color": "#4285F4",
+    "logo": "/brands/google-calendar.svg",
+    "logoSource": "simple-icons"
+  },
+  "google-maps": {
+    "vendor": "Google Maps",
+    "website": "https://mapsplatform.google.com",
+    "docs": "https://developers.google.com/maps/documentation/places/web-service",
+    "description": "Empower your location solutions with Google Maps Platform. Explore robust APIs & SDKs for asset tracking, route optimization, geospatial analytics, 3D maps & more.",
+    "input": {
+      "website": "https://mapsplatform.google.com",
+      "docs": "https://developers.google.com/maps/documentation/places/web-service"
+    },
+    "color": "#4285F4",
+    "logo": "/brands/google-maps.svg",
+    "logoSource": "simple-icons"
+  },
+  "healthie": {
+    "vendor": "Healthie",
+    "website": "https://www.gethealthie.com",
+    "docs": "https://docs.gethealthie.com",
+    "description": "Streamline EHR management with Healthie's suite of tools. Experience advanced electronic health record services.",
+    "input": {
+      "website": "https://www.gethealthie.com",
+      "docs": "https://docs.gethealthie.com"
+    },
+    "color": null,
+    "logo": "/brands/healthie.png",
+    "logoSource": "site"
+  },
+  "intercom": {
+    "vendor": "Intercom",
+    "website": "https://www.intercom.com",
+    "docs": "https://developers.intercom.com/docs/references/rest-api/api.intercom.io",
+    "description": "Intercom is the only helpdesk with a natively integrated AI Agent, Fin, meaning every customer conversation improves the next one, enabling perfect experiences that were never possible before.",
+    "input": {
+      "website": "https://www.intercom.com",
+      "docs": "https://developers.intercom.com/docs/references/rest-api/api.intercom.io"
+    },
+    "color": "#6AFDEF",
+    "logo": "/brands/intercom.svg",
+    "logoSource": "simple-icons"
+  },
+  "junction": {
+    "vendor": "Junction",
+    "website": "https://www.junction.com",
+    "docs": "https://docs.junction.com",
+    "description": "Junction provides seamless lab testing and wearable device data in a single integration to help healthcare providers scale personalized, predictive care. One API, nationwide lab networks, and built-in operational…",
+    "input": {
+      "website": "https://www.junction.com",
+      "docs": "https://docs.junction.com"
+    },
+    "color": null,
+    "logo": "/brands/junction.ico",
+    "logoSource": "site"
+  },
+  "kill-bill": {
+    "vendor": "Kill Bill",
+    "website": "https://killbill.io",
+    "docs": "https://killbill.github.io/slate/",
+    "description": "Open-source billing and payments infrastructure you run yourself. Scale subscriptions, usage, and payments at a fixed cost, not a percentage of your revenue.",
+    "input": {
+      "website": "https://killbill.io",
+      "docs": "https://killbill.github.io/slate/"
+    },
+    "color": null,
+    "logo": "/brands/kill-bill.png",
+    "logoSource": "site"
+  },
+  "klaviyo": {
+    "vendor": "Klaviyo",
+    "website": "https://www.klaviyo.com",
+    "docs": "https://developers.klaviyo.com/en/reference/api_overview",
+    "description": "Klaviyo unifies AI-powered email marketing and SMS to drive growth, retention, and measurable results. Build personalized, omnichannel experiences across WhatsApp, ecommerce, and more with K:AI Agents.",
+    "input": {
+      "website": "https://www.klaviyo.com",
+      "docs": "https://developers.klaviyo.com/en/reference/api_overview"
+    },
+    "color": null,
+    "logo": "/brands/klaviyo.png",
+    "logoSource": "site"
+  },
+  "livekit": {
+    "vendor": "LiveKit",
+    "website": "https://livekit.io",
+    "docs": "https://docs.livekit.io",
+    "description": "An open source framework and developer platform for building, testing, deploying, scaling, and observing agents in production.",
+    "input": {
+      "website": "https://livekit.io",
+      "docs": "https://docs.livekit.io"
+    },
+    "color": "#FFFFFF",
+    "logo": "/brands/livekit.svg",
+    "logoSource": "simple-icons"
+  },
+  "llamacloud": {
+    "vendor": "LlamaIndex",
+    "website": "https://www.llamaindex.ai",
+    "docs": "https://docs.cloud.llamaindex.ai",
+    "description": "LlamaIndex builds LlamaCloud, a managed platform for document parsing, extraction and retrieval pipelines for LLM apps.",
+    "input": {
+      "website": "https://www.llamaindex.ai",
+      "docs": "https://docs.cloud.llamaindex.ai",
+      "name": "LlamaIndex",
+      "description": "LlamaIndex builds LlamaCloud, a managed platform for document parsing, extraction and retrieval pipelines for LLM apps."
+    },
+    "color": null,
+    "logo": "/brands/llamacloud.jpg",
+    "logoSource": "favicon-service"
+  },
+  "mailosaur": {
+    "vendor": "Mailosaur",
+    "website": "https://mailosaur.com",
+    "docs": "https://mailosaur.com/docs/api",
+    "description": "Instant, secure inboxes, test numbers, and email previews to test every sign-up, password reset, and authentication flow automatically.",
+    "input": {
+      "website": "https://mailosaur.com",
+      "docs": "https://mailosaur.com/docs/api"
+    },
+    "color": "#3CAB38",
+    "logo": "/brands/mailosaur.png",
+    "logoSource": "site"
+  },
+  "mediaconvert": {
+    "vendor": "AWS Elemental MediaConvert",
+    "website": "https://aws.amazon.com/mediaconvert/",
+    "docs": "https://docs.aws.amazon.com/mediaconvert/latest/apireference/",
+    "description": "AWS Elemental MediaConvert is a file-based video processing service that transcodes content for broadcast and multi-screen delivery at scale.",
+    "input": {
+      "website": "https://aws.amazon.com/mediaconvert/",
+      "docs": "https://docs.aws.amazon.com/mediaconvert/latest/apireference/"
+    },
+    "color": null,
+    "logo": "/brands/mediaconvert.png",
+    "logoSource": "site"
+  },
+  "medplum": {
+    "vendor": "Medplum",
+    "website": "https://www.medplum.com",
+    "docs": "https://www.medplum.com/docs",
+    "description": "Medplum is an open-source, FHIR-native healthcare developer platform: a headless EHR backend, auth and SDKs.",
+    "input": {
+      "website": "https://www.medplum.com",
+      "docs": "https://www.medplum.com/docs",
+      "description": "Medplum is an open-source, FHIR-native healthcare developer platform: a headless EHR backend, auth and SDKs."
+    },
+    "color": null,
+    "logo": "/brands/medplum.png",
+    "logoSource": "site"
+  },
+  "oauth": {
+    "vendor": "OpenID Foundation",
+    "website": "https://openid.net",
+    "docs": "https://openid.net/specs/openid-connect-core-1_0.html",
+    "description": "The OpenID Foundation maintains OpenID Connect, the identity layer on OAuth 2.0 used by Google, Apple, Microsoft and other sign-in providers.",
+    "input": {
+      "website": "https://openid.net",
+      "docs": "https://openid.net/specs/openid-connect-core-1_0.html",
+      "name": "OpenID Foundation",
+      "description": "The OpenID Foundation maintains OpenID Connect, the identity layer on OAuth 2.0 used by Google, Apple, Microsoft and other sign-in providers."
+    },
+    "color": null,
+    "logo": "/brands/oauth.jpg",
+    "logoSource": "site"
+  },
+  "odx": {
+    "vendor": "OptimalDX",
+    "website": "https://www.optimaldx.com",
+    "docs": null,
+    "description": "Use Optimal DX’s blood chemistry analysis software to identify dysfunction, track change and guide your patients to optimal health.",
+    "input": {
+      "website": "https://www.optimaldx.com",
+      "name": "OptimalDX"
+    },
+    "color": null,
+    "logo": "/brands/odx.jpg",
+    "logoSource": "site"
+  },
+  "otel": {
+    "vendor": "OpenTelemetry",
+    "website": "https://opentelemetry.io",
+    "docs": "https://opentelemetry.io/docs/specs/otlp/",
+    "description": "The open standard for telemetry",
+    "input": {
+      "website": "https://opentelemetry.io",
+      "docs": "https://opentelemetry.io/docs/specs/otlp/"
+    },
+    "color": "#000000",
+    "logo": "/brands/otel.svg",
+    "logoSource": "simple-icons"
+  },
+  "payload-cms": {
+    "vendor": "Payload CMS",
+    "website": "https://payloadcms.com",
+    "docs": "https://payloadcms.com/docs/rest-api/overview",
+    "description": "Built with TypeScript and React, Payload is an open-source headless CMS and application framework. Build anything.",
+    "input": {
+      "website": "https://payloadcms.com",
+      "docs": "https://payloadcms.com/docs/rest-api/overview"
+    },
+    "color": "#000000",
+    "logo": "/brands/payload-cms.svg",
+    "logoSource": "simple-icons"
+  },
+  "persona": {
+    "vendor": "Persona",
+    "website": "https://withpersona.com",
+    "docs": "https://docs.withpersona.com",
+    "description": "Persona is an identity verification platform for KYC, document and selfie checks, and fraud prevention.",
+    "input": {
+      "website": "https://withpersona.com",
+      "docs": "https://docs.withpersona.com",
+      "description": "Persona is an identity verification platform for KYC, document and selfie checks, and fraud prevention."
+    },
+    "color": null,
+    "logo": "/brands/persona.png",
+    "logoSource": "favicon-service"
+  },
+  "pharmetika": {
+    "vendor": "Pharmetika",
+    "website": "https://pharmetika.com",
+    "docs": null,
+    "description": "Cloud-based compounding pharmacy software for intake, formulation, compliance, fulfillment, and patient delivery.",
+    "input": {
+      "website": "https://pharmetika.com"
+    },
+    "color": null,
+    "logo": "/brands/pharmetika.png",
+    "logoSource": "site"
+  },
+  "plane": {
+    "vendor": "Plane",
+    "website": "https://plane.so",
+    "docs": "https://developers.plane.so/api-reference/introduction",
+    "description": "Project management for teams and AI agents. Plan, track, and ship with Projects, Wiki, and AI. Available on cloud, self-hosted, and air-gapped.",
+    "input": {
+      "website": "https://plane.so",
+      "docs": "https://developers.plane.so/api-reference/introduction"
+    },
+    "color": null,
+    "logo": "/brands/plane.png",
+    "logoSource": "site"
+  },
+  "postgres": {
+    "vendor": "PostgreSQL",
+    "website": "https://www.postgresql.org",
+    "docs": "https://www.postgresql.org/docs/current/",
+    "description": "The official site for PostgreSQL, the world's most advanced open source database",
+    "input": {
+      "website": "https://www.postgresql.org",
+      "docs": "https://www.postgresql.org/docs/current/"
+    },
+    "color": "#4169E1",
+    "logo": "/brands/postgres.svg",
+    "logoSource": "simple-icons"
+  },
+  "posthog": {
+    "vendor": "PostHog",
+    "website": "https://posthog.com",
+    "docs": "https://posthog.com/docs/api",
+    "description": "PostHog is an open-source product analytics platform with feature flags, session replay, experiments and surveys.",
+    "input": {
+      "website": "https://posthog.com",
+      "docs": "https://posthog.com/docs/api",
+      "description": "PostHog is an open-source product analytics platform with feature flags, session replay, experiments and surveys."
+    },
+    "color": "#000000",
+    "logo": "/brands/posthog.svg",
+    "logoSource": "simple-icons"
+  },
+  "prism": {
+    "vendor": "Prism Labs",
+    "website": "https://www.prismlabs.tech",
+    "docs": null,
+    "description": "Prism Labs provides the most accurate 3D body scans from a mobile phone camera. iOS and Android supported. Accuracy and precision validated by independent research laboratory.",
+    "input": {
+      "website": "https://www.prismlabs.tech"
+    },
+    "color": null,
+    "logo": "/brands/prism.png",
+    "logoSource": "site"
+  },
+  "resend": {
+    "vendor": "Resend",
+    "website": "https://resend.com",
+    "docs": "https://resend.com/docs/api-reference/introduction",
+    "description": "The best way to reach humans instead of spam folders. Deliver transactional and marketing emails at scale.",
+    "input": {
+      "website": "https://resend.com",
+      "docs": "https://resend.com/docs/api-reference/introduction"
+    },
+    "color": "#000000",
+    "logo": "/brands/resend.svg",
+    "logoSource": "simple-icons"
+  },
+  "rxvortex": {
+    "vendor": "RxVortex",
+    "website": "https://www.rxvortex.com",
+    "docs": null,
+    "description": "RxVortex is a pharmacy order platform whose API lets telehealth partners submit, track and cancel prescription orders with pharmacies such as Strive.",
+    "input": {
+      "website": "https://www.rxvortex.com",
+      "description": "RxVortex is a pharmacy order platform whose API lets telehealth partners submit, track and cancel prescription orders with pharmacies such as Strive."
+    },
+    "color": null,
+    "logo": "/brands/rxvortex.png",
+    "logoSource": "site"
+  },
+  "s3": {
+    "vendor": "Amazon S3",
+    "website": "https://aws.amazon.com/s3/",
+    "docs": "https://docs.aws.amazon.com/AmazonS3/latest/API/",
+    "description": "Amazon S3 is cloud object storage with industry-leading scalability, data availability, security, and performance. S3 is ideal for data lakes, mobile applications, backup and restore, archival, IoT devices, ML, AI, and…",
+    "input": {
+      "website": "https://aws.amazon.com/s3/",
+      "docs": "https://docs.aws.amazon.com/AmazonS3/latest/API/"
+    },
+    "color": null,
+    "logo": "/brands/s3.png",
+    "logoSource": "site"
+  },
+  "slack": {
+    "vendor": "Slack",
+    "website": "https://slack.com",
+    "docs": "https://docs.slack.dev/reference/methods",
+    "description": "Boost productivity and save time with Slack — the AI work platform for managing projects, automating workflows, and connecting teams securely. Start working smarter today.",
+    "input": {
+      "website": "https://slack.com",
+      "docs": "https://docs.slack.dev/reference/methods"
+    },
+    "color": "#4A154B",
+    "logo": "/brands/slack.svg",
+    "logoSource": "simple-icons"
+  },
+  "sqlite": {
+    "vendor": "SQLite",
+    "website": "https://sqlite.org",
+    "docs": "https://sqlite.org/docs.html",
+    "description": "SQLite is a small, fast, self-contained, public-domain SQL database engine, the most widely deployed database in the world.",
+    "input": {
+      "website": "https://sqlite.org",
+      "docs": "https://sqlite.org/docs.html",
+      "description": "SQLite is a small, fast, self-contained, public-domain SQL database engine, the most widely deployed database in the world."
+    },
+    "color": "#003B57",
+    "logo": "/brands/sqlite.svg",
+    "logoSource": "simple-icons"
+  },
+  "sqs": {
+    "vendor": "Amazon SQS",
+    "website": "https://aws.amazon.com/sqs/",
+    "docs": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/",
+    "description": "Amazon SQS fully managed message queuing makes it easy to decouple and scale microservices, distributed systems, and serverless applications.",
+    "input": {
+      "website": "https://aws.amazon.com/sqs/",
+      "docs": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/"
+    },
+    "color": null,
+    "logo": "/brands/sqs.png",
+    "logoSource": "site"
+  },
+  "step-functions": {
+    "vendor": "AWS Step Functions",
+    "website": "https://aws.amazon.com/step-functions/",
+    "docs": "https://docs.aws.amazon.com/step-functions/latest/apireference/",
+    "description": "AWS Step Functions lets you orchestrate multiple AWS services into serverless workflows so that you can build and update applications quickly.",
+    "input": {
+      "website": "https://aws.amazon.com/step-functions/",
+      "docs": "https://docs.aws.amazon.com/step-functions/latest/apireference/"
+    },
+    "color": null,
+    "logo": "/brands/step-functions.png",
+    "logoSource": "site"
+  },
+  "stripe": {
+    "vendor": "Stripe",
+    "website": "https://stripe.com",
+    "docs": "https://docs.stripe.com/api",
+    "description": "Stripe is a financial services platform that helps all types of businesses accept payments, build flexible billing models, and manage money movement.",
+    "input": {
+      "website": "https://stripe.com",
+      "docs": "https://docs.stripe.com/api"
+    },
+    "color": "#635BFF",
+    "logo": "/brands/stripe.svg",
+    "logoSource": "simple-icons"
+  },
+  "textract": {
+    "vendor": "Amazon Textract",
+    "website": "https://aws.amazon.com/textract/",
+    "docs": "https://docs.aws.amazon.com/textract/latest/dg/API_Reference.html",
+    "description": "Amazon Textract is a machine learning (ML) service that uses optical character recognition (OCR) to automatically extract text, handwriting, and data from scanned PDF documents, forms, and tables.",
+    "input": {
+      "website": "https://aws.amazon.com/textract/",
+      "docs": "https://docs.aws.amazon.com/textract/latest/dg/API_Reference.html"
+    },
+    "color": null,
+    "logo": "/brands/textract.png",
+    "logoSource": "site"
+  },
+  "twilio": {
+    "vendor": "Twilio",
+    "website": "https://www.twilio.com",
+    "docs": "https://www.twilio.com/docs",
+    "description": "Build amazing customer experiences on the Twilio platform with APIs for SMS, RCS, voice, and email, plus conversational AI for smarter engagement, and identity verification for trust.",
+    "input": {
+      "website": "https://www.twilio.com",
+      "docs": "https://www.twilio.com/docs"
+    },
+    "color": "#F22F46",
+    "logo": "/brands/twilio.svg",
+    "logoSource": "simple-icons"
+  },
+  "vpi": {
+    "vendor": "VPI Compounding",
+    "website": "https://www.vpicompounding.net",
+    "docs": null,
+    "description": "VPI (Valescent Pharmaceuticals) is a compounding pharmacy with an API for clinics to submit and track prescriptions.",
+    "input": {
+      "website": "https://www.vpicompounding.net",
+      "name": "VPI Compounding",
+      "description": "VPI (Valescent Pharmaceuticals) is a compounding pharmacy with an API for clinics to submit and track prescriptions."
+    },
+    "color": null,
+    "logo": "/brands/vpi.png",
+    "logoSource": "site"
+  },
+  "wholescripts": {
+    "vendor": "Wholescripts",
+    "website": "https://www.wholescripts.com",
+    "docs": "https://www.wholescripts.com/api",
+    "description": "Wholescripts is a practitioner supplement dispensary that fulfils professional-grade and private-label supplement orders.",
+    "input": {
+      "website": "https://www.wholescripts.com",
+      "docs": "https://www.wholescripts.com/api",
+      "description": "Wholescripts is a practitioner supplement dispensary that fulfils professional-grade and private-label supplement orders."
+    },
+    "color": null,
+    "logo": "/brands/wholescripts.png",
+    "logoSource": "site"
+  }
+}

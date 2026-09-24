@@ -49,7 +49,7 @@ export type Catalog = {
   privateLabelCartons: PrivateLabelCarton[]
 }
 
-/** The MedPax box SKU Makor orders every pack under (`longeviti_blend_sku` in its config). */
+/** The MedPax box SKU the supplement scheduler orders every pack under (`acme_blend_sku` in its config). */
 export const MEDPAX_BOX_SKU = "000000000200095263"
 
 const product = (
@@ -65,10 +65,10 @@ const product = (
 
 /**
  * The catalog every namespace starts with. The rows are the ones our consumers' own tests use
- * (`geviti-emr-backend/tests/unit/services/wholescripts-service.test.ts`: Test Product 1/2,
+ * (the consumer app's `wholescripts-service.test.ts`: Test Product 1/2,
  * Vitamin D3, Vitamin D Complex, Calcium, Protein Powder, PL001, PLC001), with the fixture's
- * repeated `medPaxSku`s made unique, plus the Makor MedPax box and `medPaxDetails` rows the
- * Makor catalog sync reads. `Protein Powder` is out of stock (`instockonly` drops it).
+ * repeated `medPaxSku`s made unique, plus the scheduler's MedPax box and `medPaxDetails` rows the
+ * scheduler's catalog sync reads. `Protein Powder` is out of stock (`instockonly` drops it).
  */
 export const DEFAULT_CATALOG: Catalog = {
   products: [
@@ -163,7 +163,7 @@ export const DEFAULT_CATALOG: Catalog = {
       defaultDosing: [{ time: "AM", qty: 1 }],
     }),
     product({
-      productName: "Longeviti Blend MedPax Box",
+      productName: "Acme Longevity Blend MedPax Box",
       sku: MEDPAX_BOX_SKU,
       medPaxSku: "",
       categories: "MedPax",

@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "marketing",
     "displayName": "Customer.io",
+    "vendor": {
+      "website": "https://customer.io",
+      "docs": "https://docs.customer.io/api/"
+    },
     "status": "wip"
   },
   "scripts": {

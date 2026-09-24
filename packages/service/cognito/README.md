@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-cognito
 
-Stateful local mock of Amazon Cognito User Pools for the AWS SDK and `amazon-cognito-identity-js`. It implements the authentication, user administration, group, federation, recovery, JWT, discovery, and JWKS surface used by Geviti without contacting AWS.
+Stateful local mock of Amazon Cognito User Pools for the AWS SDK and `amazon-cognito-identity-js`. It implements the authentication, user administration, group, federation, recovery, JWT, discovery, and JWKS surface the consumer app uses without contacting AWS.
 
 ## Install
 

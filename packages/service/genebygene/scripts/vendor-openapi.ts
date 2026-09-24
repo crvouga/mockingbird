@@ -17,11 +17,10 @@
  * - every status the mock can answer (401 without a body, 404/422 problem details, 429),
  * - the auth host's `POST /connect/token` and the mock's own `GET /__blob/{key}`.
  *
- *   bun scripts/vendor-openapi.ts [path/to/gxg-openapi.json]
+ *   bun scripts/vendor-openapi.ts <path/to/gxg-openapi.json>
  *   bun run generate
  */
 import { readFile, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join } from "node:path"
 import {
   ADDRESS_CORPUS,
@@ -33,11 +32,11 @@ import {
 
 type Json = Record<string, unknown>
 
-const DEFAULT_SOURCE = join(
-  homedir(),
-  "geviti-monorepo/apps/backend/src/modules/lab-provider/lab-providers/gene-by-gene/transport/spec/gxg-openapi.json",
-)
-const source = process.argv[2] ?? DEFAULT_SOURCE
+const source = process.argv[2]
+if (source === undefined) {
+  console.error("usage: bun scripts/vendor-openapi.ts <path to the vendor's gxg-openapi.json>")
+  process.exit(2)
+}
 const spec = JSON.parse(await readFile(source, "utf8")) as Json
 const paths = spec.paths as Record<string, Record<string, Json>>
 const schemas = (spec.components as { schemas: Record<string, Json> }).schemas
@@ -466,8 +465,7 @@ annotate("CreateOrder_Item", "productId", productRef)
 props("CreateOrder_Item").placerOrderNumber = {
   type: "string",
   nullable: true,
-  description:
-    "Our correlation id (`geviti:<userId>:<nonce>`), echoed on order lines and webhooks.",
+  description: "Our correlation id (`acme:<userId>:<nonce>`), echoed on order lines and webhooks.",
 }
 schemaNamed("CreateOrder_Item").required = ["productId"]
 schemaNamed("CreateOrder").required = ["items"]

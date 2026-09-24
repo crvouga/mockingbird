@@ -98,7 +98,7 @@ export class GeneByGeneState {
     return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`
   }
 
-  /** `WB` + 6 characters, the Geviti tenant's kit prefix (`WBM824L3`, `WBGB6866`). */
+  /** `WB` + 6 characters, the consumer tenant's kit prefix (`WBM824L3`, `WBGB6866`). */
   kitNumber(): string {
     for (;;) {
       const raw = this.ids.next("kit:", 6).slice(4)

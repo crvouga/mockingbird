@@ -51,6 +51,9 @@
     "layer": "service",
     "category": "health",
     "displayName": "Prism Labs",
+    "vendor": {
+      "website": "https://www.prismlabs.tech"
+    },
     "status": "wip"
   },
   "scripts": {

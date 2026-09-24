@@ -21,7 +21,7 @@ import {
 const API = "http://daily.mock"
 const API_KEY = "daily-api-key-for-tests"
 const DOMAIN_ID = "8f0c7c9e-2b5a-4c1e-9d3e-6a7b8c9d0e1f"
-const ROOM_BASE = "https://geviti-mock.daily.test/"
+const ROOM_BASE = "https://acme-mock.daily.test/"
 const WEBHOOK_SECRET = "daily-webhook-secret"
 const BUCKET = "emr-transcripts"
 

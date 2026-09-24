@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "identity",
     "displayName": "AWS Secrets Manager & SSM",
+    "vendor": {
+      "website": "https://aws.amazon.com/secrets-manager/",
+      "docs": "https://docs.aws.amazon.com/secretsmanager/latest/apireference/"
+    },
     "status": "wip"
   },
   "scripts": {

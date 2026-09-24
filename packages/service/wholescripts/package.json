@@ -52,6 +52,11 @@
     "layer": "service",
     "category": "pharmacy",
     "displayName": "Wholescripts",
+    "vendor": {
+      "website": "https://www.wholescripts.com",
+      "docs": "https://www.wholescripts.com/api",
+      "description": "Wholescripts is a practitioner supplement dispensary that fulfils professional-grade and private-label supplement orders."
+    },
     "status": "wip",
     "playground": {
       "basicAuth": "mockingbird:mockingbird"

@@ -48,7 +48,7 @@ const post = (path: string, body: unknown, headers: Record<string, string> = {})
   )
 
 const { access_token } = (await (
-  await post("/api/v1/generate-access-token", { client_id: "geviti", client_secret: "s" })
+  await post("/api/v1/generate-access-token", { client_id: "acme", client_secret: "s" })
 ).json()) as { access_token: string }
 // …the app submits POST /api/v1/orders with Authorization: Bearer <access_token>…
 

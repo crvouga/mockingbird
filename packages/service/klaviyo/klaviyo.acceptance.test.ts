@@ -11,7 +11,7 @@ const KLAVIYO_URL = `${API}/api/events/`
 
 const harness = () => {
   const runtime = createRuntime()
-  const consumer = (key = "pk_test_geviti", url = KLAVIYO_URL) =>
+  const consumer = (key = "pk_test_acme", url = KLAVIYO_URL) =>
     new KlaviyoConsumer(url, key, (request) => runtime.fetch(request))
   const admin = async <T>(path: string, init: RequestInit = {}): Promise<T> =>
     (await (await runtime.fetch(new Request(`${API}/__admin${path}`, init))).json()) as T
@@ -26,7 +26,7 @@ const order = (overrides: Partial<Parameters<typeof checkoutPayload>[0]> = {}) =
     email: "ada@example.com",
     phoneNumber: "+16025550142",
     stripeProductId: "prod_Membership",
-    productName: "Geviti Membership",
+    productName: "Acme Membership",
     amount: "19900",
     orderSourceReference: "ord_1001",
     now: new Date("2026-09-20T12:00:00.000Z"),
@@ -47,7 +47,7 @@ describe("S19 Klaviyo acceptance: our consumer's logic against the mock", () => 
       Items: [
         {
           ProductID: "prod_Membership",
-          ProductName: "Geviti Membership",
+          ProductName: "Acme Membership",
           Quantity: 1,
           ItemPrice: 19900,
         },
@@ -55,7 +55,7 @@ describe("S19 Klaviyo acceptance: our consumer's logic against the mock", () => 
     })
     expect(placed.properties).toEqual({
       ProductId: "prod_Membership",
-      ProductName: "Geviti Membership",
+      ProductName: "Acme Membership",
       Quantity: 1,
     })
     for (const event of events) {
@@ -184,7 +184,7 @@ describe("S19 Klaviyo acceptance: our consumer's logic against the mock", () => 
     expect(journal.requests.map((r) => r.operationId)).toEqual(["CreateEvent", "CreateEvent"])
     // The journal holds metadata only: no email, no product names.
     expect(JSON.stringify(journal)).not.toContain("ada@example.com")
-    expect(JSON.stringify(journal)).not.toContain("Geviti Membership")
+    expect(JSON.stringify(journal)).not.toContain("Acme Membership")
   })
 
   test("events read back through GET /api/events and /api/events/{id}", async () => {

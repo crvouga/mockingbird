@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "observability",
     "displayName": "OpenTelemetry",
+    "vendor": {
+      "website": "https://opentelemetry.io",
+      "docs": "https://opentelemetry.io/docs/specs/otlp/"
+    },
     "status": "wip"
   },
   "scripts": {

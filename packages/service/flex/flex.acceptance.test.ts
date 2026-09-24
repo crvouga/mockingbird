@@ -134,8 +134,8 @@ const command = (
       quantity: 1,
     },
   ],
-  successUrl: "https://app.gogeviti.com/shop/success?ref=x&session_id=%7BCHECKOUT_SESSION_ID%7D",
-  cancelUrl: "https://app.gogeviti.com/shop/cancel?session={CHECKOUT_SESSION_ID}",
+  successUrl: "https://app.acme.example/shop/success?ref=x&session_id=%7BCHECKOUT_SESSION_ID%7D",
+  cancelUrl: "https://app.acme.example/shop/cancel?session={CHECKOUT_SESSION_ID}",
   metadata: { source: "acceptance" },
   ...extra,
 })
@@ -164,7 +164,7 @@ describe("S4.10 acceptance: our consumer's logic against the mock", () => {
       expect(paid.response.status).toBe(302)
       // {CHECKOUT_SESSION_ID} is substituted in its %7B…%7D form.
       expect(paid.response.headers.get("location")).toBe(
-        `https://app.gogeviti.com/shop/success?ref=x&session_id=${result.providerReference}`,
+        `https://app.acme.example/shop/success?ref=x&session_id=${result.providerReference}`,
       )
       await h.settle()
       expect(h.responses.every((status) => status === 200)).toBe(true)
@@ -291,8 +291,8 @@ describe("S4.10 acceptance: our consumer's logic against the mock", () => {
       purpose: "membership",
       businessReference: "switch-7",
       successUrl:
-        "geviti://settings?flexMembershipSwitch=success&flexSwitchSessionId={CHECKOUT_SESSION_ID}",
-      cancelUrl: "geviti://settings?flexMembershipSwitch=cancel",
+        "acme://settings?flexMembershipSwitch=success&flexSwitchSessionId={CHECKOUT_SESSION_ID}",
+      cancelUrl: "acme://settings?flexMembershipSwitch=cancel",
       customer: {
         firstName: "Ada",
         lastName: "Lovelace",
@@ -304,7 +304,7 @@ describe("S4.10 acceptance: our consumer's logic against the mock", () => {
     expect(result.status).toBe("pending")
     const paid = await payOnHostedPage((r) => h.runtime.fetch(r), result.redirectUrl, HSA)
     expect(paid.response.headers.get("location")).toBe(
-      `geviti://settings?flexMembershipSwitch=success&flexSwitchSessionId=${result.providerReference}`,
+      `acme://settings?flexMembershipSwitch=success&flexSwitchSessionId=${result.providerReference}`,
     )
     await h.settle()
     const settled = h.attempt(attempt.id)
@@ -317,8 +317,8 @@ describe("S4.10 acceptance: our consumer's logic against the mock", () => {
         userId: 8,
         purpose: "membership",
         businessReference: "switch-8",
-        successUrl: "https://app.gogeviti.com/ok",
-        cancelUrl: "https://app.gogeviti.com/no",
+        successUrl: "https://app.acme.example/ok",
+        cancelUrl: "https://app.acme.example/no",
         customer: { firstName: "Ada", lastName: "L", email: "a@example.com", phone: null },
         metadata: {},
       }),
@@ -550,8 +550,8 @@ describe("S4.6 hosted page", () => {
         clientReferenceId: "lmn-1",
         mode: "payment",
         lineItems: [{ flexProductId: LMN_PRODUCT, unitAmountCents: 9_900, quantity: 1 }],
-        successUrl: "https://app.gogeviti.com/ok?s={CHECKOUT_SESSION_ID}",
-        cancelUrl: "https://app.gogeviti.com/no",
+        successUrl: "https://app.acme.example/ok?s={CHECKOUT_SESSION_ID}",
+        cancelUrl: "https://app.acme.example/no",
         metadata: {},
       },
       "lmn-key-1",
@@ -574,7 +574,7 @@ describe("S4.6 hosted page", () => {
       }),
     )
     expect(done.headers.get("location")).toBe(
-      `https://app.gogeviti.com/ok?s=${session.checkout_session_id}`,
+      `https://app.acme.example/ok?s=${session.checkout_session_id}`,
     )
     expect(resolveStatus(await h.api.getCheckoutSession(session.checkout_session_id), null)).toBe(
       "succeeded",
@@ -586,8 +586,8 @@ describe("S4.6 hosted page", () => {
         clientReferenceId: "lmn-2",
         mode: "payment",
         lineItems: [{ flexProductId: LMN_PRODUCT, unitAmountCents: 9_900, quantity: 1 }],
-        successUrl: "https://app.gogeviti.com/ok",
-        cancelUrl: "https://app.gogeviti.com/no",
+        successUrl: "https://app.acme.example/ok",
+        cancelUrl: "https://app.acme.example/no",
         metadata: {},
       },
       "lmn-key-2",
@@ -621,7 +621,7 @@ describe("S4.6 hosted page", () => {
     )
     expect(cancel.status).toBe(302)
     expect(cancel.headers.get("location")).toBe(
-      `https://app.gogeviti.com/shop/cancel?session=${result.providerReference}`,
+      `https://app.acme.example/shop/cancel?session=${result.providerReference}`,
     )
     expect((await h.api.getCheckoutSession(result.providerReference)).status).toBe("open")
     const page = await h.runtime.fetch(new Request(result.redirectUrl))
@@ -658,8 +658,8 @@ describe("S4.6 hosted page", () => {
         lineItems: [
           { flexProductId: "fprod_01m0tgysj4ahvf8fas60c2ef2d", unitAmountCents: 100, quantity: 1 },
         ],
-        successUrl: "https://app.gogeviti.com/ok",
-        cancelUrl: "https://app.gogeviti.com/no",
+        successUrl: "https://app.acme.example/ok",
+        cancelUrl: "https://app.acme.example/no",
         metadata: {},
       },
       "ns-key",
@@ -800,8 +800,8 @@ describe("S4.3 auth, envelopes, idempotency", () => {
     const created = await live.createProduct({
       name: "Live product",
       description: "d",
-      client_reference_id: "geviti:prod:marketplace:x",
-      metadata: { geviti_purpose: "marketplace" },
+      client_reference_id: "acme:prod:marketplace:x",
+      metadata: { acme_purpose: "marketplace" },
     })
     expect(created.test_mode).toBe(false)
     expect(created.hsa_fsa_eligibility).toBeNull()
@@ -823,8 +823,8 @@ describe("S4.3 auth, envelopes, idempotency", () => {
       clientReferenceId: "idem-1",
       mode: "payment" as const,
       lineItems: [{ flexProductId: LMN_PRODUCT, unitAmountCents: 100, quantity: 1 }],
-      successUrl: "https://app.gogeviti.com/ok",
-      cancelUrl: "https://app.gogeviti.com/no",
+      successUrl: "https://app.acme.example/ok",
+      cancelUrl: "https://app.acme.example/no",
       metadata: {},
     }
     const a = await h.api.createCheckoutSession(input, "attempt-1")

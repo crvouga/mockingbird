@@ -13,7 +13,7 @@ import {
 
 const MOCK = "http://persona.mock"
 const SECRET = "wbhsec_persona_test"
-const API_KEY = "persona_sandbox_geviti"
+const API_KEY = "persona_sandbox_acme"
 const config = (base = MOCK): PersonaConfig => ({
   PERSONA_API_URL: base,
   PERSONA_API_KEY: API_KEY,
@@ -23,7 +23,7 @@ const config = (base = MOCK): PersonaConfig => ({
   PERSONA_PHONE_INQUIRY_TEMPLATE_ID: "itmpl_phone",
   PERSONA_WEBHOOK_SECRET: SECRET,
 })
-const REDIRECT = "https://app.geviti.local/rx/verify/done"
+const REDIRECT = "https://app.acme.local/rx/verify/done"
 
 type Delivery = { headers: Headers; raw: string }
 

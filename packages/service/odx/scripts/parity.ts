@@ -3,7 +3,7 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_ODX_API_URL        e.g. https://odxinstanceresource.azure-api.net/geviti
+ *   MOCKINGBIRD_ODX_API_URL        e.g. https://odxinstanceresource.azure-api.net/<partner>   (the partner segment is your account's slug)
  *   MOCKINGBIRD_ODX_API_KEY        the ApiKey header value
  *   MOCKINGBIRD_ODX_PRACTICE_ID    OPTIMAL_PRACTICE_ID
  *

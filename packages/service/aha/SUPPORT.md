@@ -8,5 +8,5 @@ Generated from `openapi.yaml`; do not edit by hand.
 
 | operationId | route | mock | parity | notes |
 | --- | --- | --- | --- | --- |
-| `CreateOrder` | `POST /v1/geviti/create-order` | ✅ supported | ⚠️ unsafe (opt-in) |  |
-| `CancelOrder` | `POST /v1/geviti/cancel` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `CreateOrder` | `POST /v1/{partner}/create-order` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `CancelOrder` | `POST /v1/{partner}/cancel` | ✅ supported | ⚠️ unsafe (opt-in) |  |

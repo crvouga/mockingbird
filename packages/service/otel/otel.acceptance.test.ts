@@ -20,7 +20,7 @@ import {
 const params = fcParameters(process.env)
 const HOST = "http://otel.mock"
 const INGEST_TOKEN = "otel-ingest-token"
-const O2_AUTH = btoa("agent@gogeviti.com:o2-password")
+const O2_AUTH = btoa("agent@acme.example:o2-password")
 const DEV_ORG = DEFAULT_ORGANIZATIONS.find((o) => o.name === "development")?.identifier as string
 const PROD_ORG = DEFAULT_ORGANIZATIONS.find((o) => o.name === "production")?.identifier as string
 
@@ -638,7 +638,7 @@ describe("S18.4 admin", () => {
             resource: { attributes: [{ key: "service.name", value: { stringValue: "backend" } }] },
             scopeSpans: [
               {
-                scope: { name: "@geviti/telemetry" },
+                scope: { name: "@acme/telemetry" },
                 spans: [
                   {
                     traceId: "0af7651916cd43dd8448eb211c80319c",
@@ -647,9 +647,7 @@ describe("S18.4 admin", () => {
                     kind: 1,
                     startTimeUnixNano: "1700000000000000000",
                     endTimeUnixNano: "1700000000250000000",
-                    attributes: [
-                      { key: "geviti.reconcile_run_id", value: { stringValue: "run-1" } },
-                    ],
+                    attributes: [{ key: "acme.reconcile_run_id", value: { stringValue: "run-1" } }],
                     status: { code: 2, message: "boom" },
                   },
                 ],
@@ -669,7 +667,7 @@ describe("S18.4 admin", () => {
       trace_id: "0af7651916cd43dd8448eb211c80319c",
       duration: 250_000,
       span_status: "ERROR",
-      geviti_reconcile_run_id: "run-1",
+      acme_reconcile_run_id: "run-1",
       _timestamp: 1_700_000_000_000_000,
     })
   })

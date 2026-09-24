@@ -3,13 +3,13 @@ import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import { createRuntime, LLAMACLOUD_PRESETS, rank } from "./src/index.js"
 import { createServer } from "./src/server.js"
-import { LlamaCloudKnowledgeAdapter, MakorLlamaCloudClient } from "./test/consumer.js"
+import { LlamaCloudKnowledgeAdapter, PythonLlamaCloudClient } from "./test/consumer.js"
 
 const params = fcParameters(process.env)
 const HOST = "http://llamacloud.mock"
 /** The backend's `LLAMACLOUD_BASE_URL` (seam G-L1) includes `/api/v1`. */
 const API = `${HOST}/api/v1`
-const INDEX = "geviti-member-kb-v1"
+const INDEX = "acme-member-kb-v1"
 
 const harness = (options: Parameters<typeof createRuntime>[0] = {}) => {
   const runtime = createRuntime(options)
@@ -277,18 +277,18 @@ describe("S14 acceptance: the backend knowledge adapter against the mock", () =>
   })
 })
 
-describe("S14 acceptance: the Makor chat SDK path (llama_cloud_services wire sequence)", () => {
+describe("S14 acceptance: the Python chat SDK path (llama_cloud_services wire sequence)", () => {
   test("LlamaCloudIndex + as_retriever + aretrieve: project lookup, pipeline lookup, re-resolve by id, retrieve", async () => {
     const { adapter, send } = harness()
     await seedArticles(adapter())
-    const makor = new MakorLlamaCloudClient(
+    const python = new PythonLlamaCloudClient(
       HOST,
-      { indexName: INDEX, apiKey: "llx-makor", projectName: "Default", denseTopK: 2 },
+      { indexName: INDEX, apiKey: "llx-python", projectName: "Default", denseTopK: 2 },
       send,
     )
-    const result = await makor.retrieve("ApoB cardiovascular risk")
-    expect(makor.initializationError).toBeNull()
-    expect(makor.calls).toEqual([
+    const result = await python.retrieve("ApoB cardiovascular risk")
+    expect(python.initializationError).toBeNull()
+    expect(python.calls).toEqual([
       "GET /api/v1/projects",
       "GET /api/v1/pipelines",
       `GET /api/v1/pipelines/${await adapter().resolvePipelineId()}`,
@@ -303,15 +303,15 @@ describe("S14 acceptance: the Makor chat SDK path (llama_cloud_services wire seq
     expect(result.total_retrieved).toBeLessThanOrEqual(2)
   })
 
-  test("Makor's default project name 'default' does not match 'Default': retrieval degrades to empty", async () => {
+  test("the Python client's default project name 'default' does not match 'Default': retrieval degrades to empty", async () => {
     const { send } = harness()
-    const makor = new MakorLlamaCloudClient(HOST, { indexName: INDEX, apiKey: "k" }, send)
-    expect(await makor.retrieve("anything")).toEqual({
+    const python = new PythonLlamaCloudClient(HOST, { indexName: INDEX, apiKey: "k" }, send)
+    expect(await python.retrieve("anything")).toEqual({
       query: "anything",
       sources: [],
       total_retrieved: 0,
     })
-    expect(makor.initializationError).toBe("No project found with name default")
+    expect(python.initializationError).toBe("No project found with name default")
   })
 })
 

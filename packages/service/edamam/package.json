@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "health",
     "displayName": "Edamam",
+    "vendor": {
+      "website": "https://www.edamam.com",
+      "docs": "https://developer.edamam.com"
+    },
     "status": "wip"
   },
   "scripts": {

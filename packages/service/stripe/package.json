@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "payments",
     "displayName": "Stripe",
+    "vendor": {
+      "website": "https://stripe.com",
+      "docs": "https://docs.stripe.com/api"
+    },
     "status": "ready",
     "playground": {
       "operation": "PostCustomers",

@@ -666,16 +666,18 @@ describe("S1.9 hosted Checkout page and Stripe.js", () => {
     expect(paid.headers.get("location")).toBe(
       `http://localhost:3000/done?raw=${session.id}&enc=${session.id}`,
     )
-    const deadline = started + 100
+    // Delivered right away rather than on a delayed schedule. The bound is wall-clock, so it
+    // leaves room for a loaded CI runner (163 ms seen when every package's tests run at once).
+    const within = 500
     while (
       !deliveries.some((d) => d.type === "checkout.session.completed") &&
-      performance.now() < deadline + 400
+      performance.now() < started + within
     )
       await Bun.sleep(2)
     const completedAt =
       deliveries.find((d) => d.type === "checkout.session.completed")?.at ??
       Number.POSITIVE_INFINITY
-    expect(completedAt - started).toBeLessThan(100)
+    expect(completedAt - started).toBeLessThan(within)
     await settle()
     const completed = await mso.checkout.sessions.retrieve(session.id, {
       expand: ["payment_intent"],

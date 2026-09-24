@@ -62,9 +62,9 @@ const request = (transactionId: string): NotificationRequest => ({
 const config = (ns: string) => ({
   appApiHost: server.url,
   appApiKey: `app_${ns}`,
-  inboxTransactionalMessageId: "geviti_inbox_message",
+  inboxTransactionalMessageId: "acme_inbox_message",
   inboxEnabled: true,
-  deploymentUrl: "https://app.gogeviti.com",
+  deploymentUrl: "https://app.acme.example",
 })
 
 describe("SDK drop-in: @customerio/cdp-analytics-node against the mock", () => {
@@ -80,17 +80,17 @@ describe("SDK drop-in: @customerio/cdp-analytics-node against the mock", () => {
     expect(result).toEqual({
       provider: "customerio",
       userId: "42",
-      inboxMessage: { status: "sent", transactionalMessageId: "geviti_inbox_message" },
+      inboxMessage: { status: "sent", transactionalMessageId: "acme_inbox_message" },
     })
     const { events } = await admin<{ events: CdpEvent[] }>("/cdp/events?userId=42")
     expect(events.map((e) => [e.type, e.event])).toEqual([
       ["identify", null],
-      ["track", "geviti.notification.requested"],
+      ["track", "acme.notification.requested"],
     ])
     expect(events[1]?.messageId).toBe("txn_1")
     expect(events[1]?.properties).toMatchObject({
       notificationType: "labs.results_ready",
-      redirectUrl: "https://app.gogeviti.com/labs/results",
+      redirectUrl: "https://app.acme.example/labs/results",
       inboxTitle: "Your results are ready",
     })
     const profile = await admin<Profile>("/profiles/42")
@@ -102,7 +102,7 @@ describe("SDK drop-in: @customerio/cdp-analytics-node against the mock", () => {
     expect(messages).toHaveLength(1)
     expect(messages[0]).toMatchObject({
       to: "42",
-      transactionalMessageId: "geviti_inbox_message",
+      transactionalMessageId: "acme_inbox_message",
       messageData: { title: "Your results are ready", transactionId: "txn_1" },
     })
     await client.closeAndFlush({ timeout: 2000 })

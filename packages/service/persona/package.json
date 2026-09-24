@@ -51,6 +51,11 @@
     "layer": "service",
     "category": "identity",
     "displayName": "Persona",
+    "vendor": {
+      "website": "https://withpersona.com",
+      "docs": "https://docs.withpersona.com",
+      "description": "Persona is an identity verification platform for KYC, document and selfie checks, and fraud prevention."
+    },
     "status": "wip"
   },
   "scripts": {

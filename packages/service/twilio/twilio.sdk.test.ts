@@ -20,7 +20,7 @@ const ACCOUNT = "AC44444444444444444444444444444444"
 const TOKEN = "sdk-auth-token"
 const VERIFY_SERVICE = "VA0123456789abcdef0123456789abcdef"
 const CALLER_ID = "+13105550100"
-const PUBLIC_BASE = "https://api.geviti.example"
+const PUBLIC_BASE = "https://api.acme.example"
 const PHONE = "+12025550123"
 
 let server: TwilioServer

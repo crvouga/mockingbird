@@ -243,7 +243,7 @@ export class HealthieState {
       role: "provider",
       email: SEED.adminEmail,
       password: "Admin123!",
-      first_name: "Geviti",
+      first_name: "Acme",
       last_name: "Admin",
       qualifications: "Organization admin",
     })
@@ -267,7 +267,7 @@ export class HealthieState {
       metadata: JSON.stringify({ has_scheduled_bloodwork: false }),
     })
     this.addOffering({
-      name: "Geviti Membership",
+      name: "Acme Membership",
       description: null,
       billing_frequency: "Monthly",
       currency: "usd",

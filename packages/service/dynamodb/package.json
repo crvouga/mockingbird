@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "databases",
     "displayName": "Amazon DynamoDB",
+    "vendor": {
+      "website": "https://aws.amazon.com/dynamodb/",
+      "docs": "https://docs.aws.amazon.com/amazondynamodb/latest/APIReference/"
+    },
     "status": "wip"
   },
   "scripts": {

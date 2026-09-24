@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "AWS Elemental MediaConvert",
+    "vendor": {
+      "website": "https://aws.amazon.com/mediaconvert/",
+      "docs": "https://docs.aws.amazon.com/mediaconvert/latest/apireference/"
+    },
     "status": "wip"
   },
   "scripts": {

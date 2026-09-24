@@ -9,11 +9,11 @@ import {
   evaluatePostHogFlag,
   type Fetcher,
   fetchProjectFlags,
-  MakorPostHogClient,
   MemberAppFlagsAdapter,
   PostHogHogqlClient,
   PostHogServerAdapter,
   PostHogTrackingService,
+  PythonPostHogClient,
   ReactNativeLikeClient,
   resetServerFlagCache,
   SERVER_FLAG_SENTINEL_DISTINCT_ID,
@@ -148,7 +148,7 @@ describe("S6.6 acceptance: posthog-node through the backend adapter", () => {
       default: false,
       overrides: [
         { distinct_id: "42", value: true, payload: { tier: "vip" } },
-        { email: "Ops@Geviti.test", value: "beta" },
+        { email: "Ops@Acme.test", value: "beta" },
       ],
     })
     const adapter = backend(fetcher)
@@ -161,7 +161,7 @@ describe("S6.6 acceptance: posthog-node through the backend adapter", () => {
       await evaluatePostHogFlag(
         env,
         "advanced-hormone-pdfs",
-        { distinctId: "practitioner-9", personProperties: { email: "ops@geviti.test" } },
+        { distinctId: "practitioner-9", personProperties: { email: "ops@acme.test" } },
         fetcher,
       ),
     ).toBe(true)
@@ -221,7 +221,7 @@ describe("S6.4 semantics across every consumer", () => {
     await adapter.init()
     expect(adapter.getValue("checkout-copy")).toBe("post")
     expect(
-      await new MakorPostHogClient(TOKEN, HOST, fetcher).getEvaluation("checkout-copy", "x"),
+      await new PythonPostHogClient(TOKEN, HOST, fetcher).getEvaluation("checkout-copy", "x"),
     ).toBe(true)
     expect(
       await evaluatePostHogFlag(
@@ -263,12 +263,12 @@ describe("S6.4 semantics across every consumer", () => {
     expect(await emr.isMemberTaggingProgramEnabled("staff-1")).toBe(false)
   })
 
-  test("makor /decide/?v=3 answers the legacy maps with JSON-string payloads", async () => {
+  test("Python client /decide/?v=3 answers the legacy maps with JSON-string payloads", async () => {
     const { admin, runtime, fetcher } = harness()
     await admin("/flags/supplements", { default: true, payload: { max: 3 } })
-    const makor = new MakorPostHogClient(TOKEN, HOST, fetcher)
-    expect(await makor.isEnabled("supplements", "u")).toBe(true)
-    expect(await makor.isEnabled("missing", "u", true)).toBe(true)
+    const python = new PythonPostHogClient(TOKEN, HOST, fetcher)
+    expect(await python.isEnabled("supplements", "u")).toBe(true)
+    expect(await python.isEnabled("missing", "u", true)).toBe(true)
     const raw = (await (
       await runtime.fetch(
         new Request(`${HOST}/decide/?v=3`, {
@@ -299,7 +299,10 @@ describe("S6.4 semantics across every consumer", () => {
         const adapter = backend(fetcher)
         expect(await adapter.getEvaluation("prop-flag", distinctId)).toBe(expected)
         expect(
-          await new MakorPostHogClient(TOKEN, HOST, fetcher).getEvaluation("prop-flag", distinctId),
+          await new PythonPostHogClient(TOKEN, HOST, fetcher).getEvaluation(
+            "prop-flag",
+            distinctId,
+          ),
         ).toBe(expected ?? null)
         expect(
           await evaluatePostHogFlag(
@@ -503,7 +506,7 @@ describe("fault presets", () => {
         ),
       ).toBeUndefined()
       expect(
-        await new MakorPostHogClient(TOKEN, HOST, fetcher).getEvaluation("shop-coupons", "4"),
+        await new PythonPostHogClient(TOKEN, HOST, fetcher).getEvaluation("shop-coupons", "4"),
       ).toBeNull()
     }
   })

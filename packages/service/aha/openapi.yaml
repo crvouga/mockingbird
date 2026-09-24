@@ -20,7 +20,7 @@ security:
     hmacSignature: []
   - legacyKey: []
 paths:
-  /v1/geviti/create-order:
+  /v1/{partner}/create-order:
     post:
       operationId: CreateOrder
       description: >-
@@ -32,6 +32,7 @@ paths:
           enabled: true
           safe: false
       parameters:
+        - $ref: "#/components/parameters/Partner"
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
@@ -78,7 +79,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorBody"
-  /v1/geviti/cancel:
+  /v1/{partner}/cancel:
     post:
       operationId: CancelOrder
       description: >-
@@ -90,6 +91,7 @@ paths:
           enabled: true
           safe: false
       parameters:
+        - $ref: "#/components/parameters/Partner"
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
@@ -161,9 +163,20 @@ components:
     legacyKey:
       type: apiKey
       in: header
-      name: X-Geviti-Auth-Key
-      description: Legacy mode (AHA_USE_LEGACY_AUTH=true), sent with X-API-Version 1.0.
+      name: X-Acme-Auth-Key
+      description: >-
+        Legacy mode (AHA_USE_LEGACY_AUTH=true), sent with X-API-Version 1.0. The real header
+        embeds the partner's name (`X-<Partner>-Auth-Key`); the mock accepts any partner name.
   parameters:
+    Partner:
+      name: partner
+      in: path
+      required: true
+      description: The partner segment AHA assigns your account (its slug), e.g. `acme`.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{1,64}$"
+        examples: [acme]
     IdempotencyKey:
       name: X-Idempotency-Key
       in: header
@@ -293,7 +306,7 @@ components:
           maxLength: 64
           x-mockingbird-resource-ref:
             type: order
-            missing: GV-999999999
+            missing: AC-999999999
         notes:
           type: array
           maxItems: 5

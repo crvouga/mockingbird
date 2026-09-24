@@ -55,7 +55,7 @@ export type PatientRecord = {
  */
 export const SANDBOX_PATIENT: PatientRecord = {
   patient_id: 1,
-  clinic_identifier: "clinic-geviti-0001",
+  clinic_identifier: "clinic-acme-0001",
   demographics: {
     first_name: "Sandbox",
     last_name: "Patient",

@@ -13,7 +13,7 @@ const now = () => 1_700_000_000_000
  * and the timestamp window only, so both instances accept the same headers.
  */
 const auth = () => ({
-  "x-api-key": "geviti_aha_parity",
+  "x-api-key": "acme_aha_parity",
   "x-timestamp": String(Date.now()),
   "x-signature": Buffer.alloc(32, 7).toString("base64"),
 })

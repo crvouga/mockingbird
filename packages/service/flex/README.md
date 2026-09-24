@@ -190,8 +190,8 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /_
 
 `src/corpus/products.ts` is the product side of every row of the consumer's
 `flexCatalogMappings` reference fixture (663 rows, regenerated with
-`bun scripts/corpus.ts <fixture.json>`): product id, client reference, the `geviti_purpose` /
-`geviti_merchant_product_id` / `geviti_client_reference_id` metadata our catalog validation
+`bun scripts/corpus.ts <fixture.json>`): product id, client reference, the `acme_purpose` /
+`acme_merchant_product_id` / `acme_client_reference_id` metadata our catalog validation
 compares, eligibility and visit type. Every product is active and test-mode, so our validation
 reproduces each mapping row's own `active` flag. No sandbox recording exists (no credentials),
 so product names are synthesised.

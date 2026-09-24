@@ -85,12 +85,12 @@ would echo back.
    must agree after every command, with every mock response conforming to the spec. Assert that
    the walks exercised **every** parity-enabled operation. Add a "deliberately divergent instance
    is caught" test.
-2. **Acceptance** (`<name>.acceptance.test.ts`): every acceptance bullet in the catalog section,
-   driven through `test/consumer.ts` — a faithful port of **our** consumer's client code from
-   `~/geviti-monorepo` (read-only): the same requests, headers, field fallbacks, error extraction
-   and status interpretation, and for webhooks the receiver's verification (signature scheme,
-   tolerance) and field reads. Where the catalog and the consumer code disagree, follow the code
-   and note the discrepancy in a test comment.
+2. **Acceptance** (`<name>.acceptance.test.ts`): every behaviour the service request asks for,
+   driven through `test/consumer.ts` — a faithful port of the consuming app's client code: the
+   same requests, headers, field fallbacks, error extraction and status interpretation, and for
+   webhooks the receiver's verification (signature scheme, tolerance) and field reads. Where the
+   request and the consumer code disagree, follow the code and note the discrepancy in a test
+   comment.
 3. **SDK drop-in** (`<name>.sdk.test.ts`), when the consumer uses an official SDK: install the
    exact version our consumer pins and point it at the mock (base URL / endpoint override /
    custom fetch). Signature verification with the vendor's own verifier (`stripe.webhooks
@@ -125,10 +125,20 @@ its build fails when they are missing or stale:
 | --- | --- | --- |
 | `category` | yes | A slug from `sites/docs/src/lib/categories.ts`, e.g. `"payments"` |
 | `displayName` | yes | The vendor's name as people write it, e.g. `"Customer.io"` |
+| `vendor.website` | yes | The vendor's homepage, e.g. `"https://stripe.com"` |
+| `vendor.docs` | no | The vendor API reference the mock follows |
+| `vendor.name` | no | The vendor's name when it differs from `displayName` (LlamaCloud is made by LlamaIndex) |
+| `vendor.description` | no | One line about the vendor; overrides the description fetched from its homepage |
+| `vendor.icon` / `vendor.logo` / `vendor.color` | no | Force a [Simple Icons](https://simpleicons.org) slug (`false` skips it), a logo URL, or a brand color, when the fetched ones are wrong |
 | `status` | yes | Release tier: `"wip"` until the mock is complete and verified, then `"ready"`. The site badges, filters and counts services by it |
 | `playground.headers` | no | Credentials in the format the mock accepts (e.g. `sk_test_…`), sent with every playground request. The build sends every sample request to a fresh mock and fails if none succeed with them |
 | `playground.basicAuth` | no | `"user:pass"` for mocks that take HTTP Basic auth; the build sends it as `authorization: Basic <base64>`. Use it instead of a literal `Basic …` header, which secret scanners flag |
 | `playground.operation` | no | The operation the playground opens on; it must succeed with its sample request |
+
+After adding or editing `vendor`, run `bun run brands:sync`. It fetches the vendor's logo, brand
+color and description into `sites/docs/src/data/brands.json` and `sites/docs/public/brands/`, which
+the site reads; `bun run check:brands` fails while they are stale. `bun run brands:sync -- --all
+--links` refreshes every vendor and checks that each website and docs link still answers.
 
 Also add the package to `sites/docs/package.json` `devDependencies` (`"workspace:*"`) so turbo
 builds it before the site.

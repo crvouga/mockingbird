@@ -115,7 +115,7 @@ how many calls it answers.
   (`true` or `{text, trace}`: `guardrail_intervened` with Bedrock's refusal text and a trace),
   `toolResult` (harness), `userTranscript` (Nova Sonic), `stopReason`, `usage`, `fault`.
 - **Structured output** (`json`) goes out as text JSON for
-  `outputConfig.textFormat.structure.jsonSchema` (Makor) and
+  `outputConfig.textFormat.structure.jsonSchema` (Python boto3 clients) and
   `additionalModelRequestFields.output_config.format` (AI SDK native), and as a `toolUse` of the
   forced tool for `toolChoice: {tool}` or `{any}` (the AI SDK's synthetic `json` tool, insight
   reports' `record_chat_*`).

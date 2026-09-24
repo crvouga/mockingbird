@@ -101,8 +101,8 @@ export const serveTarget: ServeTarget = {
     })
   },
   banner: () => [
-    "auth: X-API-KEY + X-TIMESTAMP + X-SIGNATURE (HMAC), or legacy X-Geviti-Auth-Key",
-    "webhooks: POST /__admin/orders/<GV-n>/transition {status, drawStatus?, scheduledAt?, timeZone?}",
+    "auth: X-API-KEY + X-TIMESTAMP + X-SIGNATURE (HMAC), or legacy X-<Partner>-Auth-Key",
+    "webhooks: POST /__admin/orders/<AC-n>/transition {status, drawStatus?, scheduledAt?, timeZone?}",
     "namespaces: x-mockingbird-namespace, /ns/<name>/…, or PUT /__admin/credentials {<AHA_API_KEY>: <ns>}",
   ],
 }
