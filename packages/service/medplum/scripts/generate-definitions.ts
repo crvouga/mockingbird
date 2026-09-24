@@ -175,7 +175,7 @@ if (process.argv.includes("--check")) {
   })()
   // gzip output differs between zlib builds (macOS vs Linux), so compare the decompressed
   // payload and the text around it rather than the compressed bytes.
-  const currentGzip = current?.[0].match(/^export const DEFINITIONS_GZIP_BASE64 = (".*")$/m)?.[1]
+  const currentGzip = current?.[0]?.match(/^export const DEFINITIONS_GZIP_BASE64 = (".*")$/m)?.[1]
   const currentPayload =
     currentGzip === undefined
       ? undefined
