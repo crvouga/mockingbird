@@ -355,7 +355,9 @@ describe("S2.9 acceptance: our consumer's logic against the mock", () => {
         "TrackingNumber",
       ].sort(),
     )
-    const item = (events[0]?.body.OrderItems as Record<string, unknown>[] | undefined)?.[0]
+    // Deliveries can land in any order: find the event by type, not by position.
+    const created = events.find((e) => e.eventType === "GxG.Nucleus.Order.Created")
+    const item = (created?.body.OrderItems as Record<string, unknown>[] | undefined)?.[0]
     expect(Object.keys(item ?? {}).sort()).toEqual([
       "Id",
       "KitNumbers",
@@ -1715,7 +1717,9 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
   }
   for (const q of liveErrors.queries) {
     test(`GET ${q.path}?${new URLSearchParams(q.params)} → ${q.status}`, async () => {
-      const { raw } = await dropIn({ subscribe: false })
+      const { raw, placeShipped } = await dropIn({ subscribe: false })
+      // Staging's /kitorderlines 500s only when there are rows to filter (its tenant had some).
+      if (q.status === 500) await placeShipped(MOUNTAIN_VIEW)
       const { status, data, error } = await raw("GET", `${q.path}?${new URLSearchParams(q.params)}`)
       expect(status).toBe(q.status)
       if ("errors" in q && q.errors) expect((error as Json).errors).toEqual(q.errors)

@@ -88,8 +88,14 @@
     {
       "provider": "genebygene",
       "seed": 1386508987,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListEventTypes name=\" \": real lists all 12 (blank name is no filter), mock 0"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1387183420,
+      "status": "open",
+      "failure": "ListKitOrderLines attributesFilter=a narrowed to no rows: real 200 empty page, mock empty 500 (staging's parse failure only happens when there are rows)"
     }
   ]
 }

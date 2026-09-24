@@ -511,30 +511,41 @@ await writeFile(join(CORPUS_DIR, "live-errors.json"), `${JSON.stringify(shapes, 
 console.log("  wrote src/corpus/live-catalogs.json and corpus/live-errors.json")
 
 /**
- * The staging tenant is shared: its list pages hold thousands of kits and orders no walk
- * created, which a fresh mock can never have. A safe walk creates nothing, so the tenant view it
- * should see is empty: drop the rows of a live 200 list page (and zero its count) before the
- * comparison. Status, page metadata, validation errors and every other body stay exact.
+ * The staging tenant is shared: its lists hold thousands of kits and orders no walk created, and
+ * a fresh mock can never have them. A safe walk creates nothing, so the answer to compare is
+ * staging's own answer for a view with no rows: each live list request also carries a filter
+ * that matches nothing (unless the walk set that parameter itself), which keeps staging's
+ * validation and its row-dependent failures (an attributesFilter it cannot parse is a 500 only
+ * when there are rows) exactly as they are. Subscriptions have no such filter; their rows are
+ * dropped from the live page instead.
  */
-const withoutTenantRows = async (request: Request, response: Response): Promise<Response> => {
-  const path = new URL(request.url).pathname
-  if (request.method !== "GET" || response.status !== 200 || !LIST_PATHS.has(path)) return response
-  const body = (await response.json()) as unknown
-  const emptied = Array.isArray(body)
-    ? []
-    : { ...(body as Json), items: [], ...("totalCount" in (body as Json) ? { totalCount: 0 } : {}) }
-  return new Response(JSON.stringify(emptied), { status: 200, headers: response.headers })
+const NARROW: Readonly<Record<string, readonly [string, string]>> = {
+  "/api/v2/orders": ["orderId", ZERO],
+  "/api/v2/kits": ["kitNumber", "WB000000"],
+  "/api/v2/fulfillments": ["orderId", ZERO],
+  "/api/v2/kitorderlines": ["orderId", ZERO],
+  "/api/v2/kitorderlines/kits": ["orderId", ZERO],
+  "/api/v2/results": ["kitNumber", "WB000000"],
+  "/api/v2/results/search": ["kitNumbers", "WB000000"],
 }
-const LIST_PATHS: ReadonlySet<string> = new Set([
-  "/api/v2/orders",
-  "/api/v2/kits",
-  "/api/v2/fulfillments",
-  "/api/v2/kitorderlines",
-  "/api/v2/kitorderlines/kits",
-  "/api/v2/results",
-  "/api/v2/results/search",
-  "/api/v2/notificationSubscriptions",
-])
+const emptyTenantView = async (request: Request): Promise<Response> => {
+  const url = new URL(request.url)
+  const narrow = request.method === "GET" ? NARROW[url.pathname] : undefined
+  if (narrow && !url.searchParams.has(narrow[0])) {
+    url.searchParams.set(narrow[0], narrow[1])
+    return fetch(new Request(url, request))
+  }
+  const response = await fetch(request)
+  if (
+    request.method !== "GET" ||
+    url.pathname !== "/api/v2/notificationSubscriptions" ||
+    response.status !== 200
+  ) {
+    return response
+  }
+  await response.body?.cancel()
+  return new Response("[]", { status: 200, headers: response.headers })
+}
 
 // 4. the random walk over the remaining safe operations ------------------------------------------
 const walked = supportedOperationIds.filter(
@@ -552,12 +563,11 @@ try {
       allowedHosts: [new URL(baseUrl).host, new URL(tokenUrl).host],
       headers: () => ({ authorization: `Bearer ${realToken}`, accept: "application/json" }),
       minIntervalMs: 500,
-      fetch: async (request) => {
+      fetch: (request) => {
         // The token operation lives on the auth host.
         const url = new URL(request.url)
         if (url.pathname.endsWith("/connect/token")) return fetch(new Request(tokenUrl, request))
-        const response = await fetch(request)
-        return unsafe ? response : withoutTenantRows(request, response)
+        return unsafe ? fetch(request) : emptyTenantView(request)
       },
     },
     mock: {

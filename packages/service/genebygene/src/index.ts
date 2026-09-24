@@ -1694,12 +1694,15 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   /** (kit, line) rows, newest kit first, filtered like `GET /api/v2/kitorderlines`. */
-  private kitOrderLineRows(context: OperationContext): { kit: KitRecord; line: LineRecord }[] {
+  private kitOrderLineRows(
+    context: OperationContext,
+    options: { productType?: boolean } = {},
+  ): { kit: KitRecord; line: LineRecord }[] {
     const kitNumbers = csv(query(context, "kitNumbers"))
     const orderId = query(context, "orderId")
     const orderLineId = query(context, "orderLineId")
     const status = query(context, "status")
-    const productType = query(context, "productType")
+    const productType = options.productType === false ? undefined : query(context, "productType")
     const term = query(context, "attributeTerm")?.toLowerCase()
     const searched = csv(query(context, "attributesToSearch") ?? "FirstName,LastName").map((s) =>
       s.toLowerCase(),
@@ -1730,20 +1733,22 @@ export class GeneByGeneAPI implements FetchAPI {
     const invalid = queryProblem(context, { status: "status", orderByAsc: "bool" }, true)
     if (invalid) return invalid
     // Staging fails with an empty 500 on a productType it cannot parse, or an attributesFilter
-    // that is not JSON (kitorderlines/kits validates productType as a 400 instead).
+    // that is not JSON, but only when there are rows to apply it to (kitorderlines/kits
+    // validates productType as a 400 instead).
+    const rows = this.kitOrderLineRows(context)
     const productType = query(context, "productType")
     const filter = query(context, "attributesFilter")
-    if (
+    const unparsable =
       (productType && queryProblem(context, { productType: "productType" })) ||
       (filter && !isJson(filter))
-    ) {
+    if (unparsable && this.kitOrderLineRows(context, { productType: false }).length > 0) {
       return new Response(null, { status: 500 })
     }
     const page = pageOf(context)
     return jsonRes(
       200,
       paginate(
-        this.kitOrderLineRows(context).map(({ kit, line }) => this.kitOrderLineDto(kit, line)),
+        rows.map(({ kit, line }) => this.kitOrderLineDto(kit, line)),
         page,
       ),
     )
