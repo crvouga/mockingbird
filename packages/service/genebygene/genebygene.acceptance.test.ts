@@ -3,6 +3,7 @@ import { createHmac } from "node:crypto"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import addressParity from "./corpus/address-parity.json" with { type: "json" }
+import liveErrors from "./corpus/live-errors.json" with { type: "json" }
 import { createRuntime, GENEBYGENE_PRESETS, type GeneByGeneRuntime } from "./src/index.js"
 import {
   buildQuantityOnlyCreateOrderBody,
@@ -207,10 +208,12 @@ describe("S2.9 acceptance: our consumer's logic against the mock", () => {
     expect(pdf.ok && new TextDecoder().decode(pdf.bytes.slice(0, 5))).toBe("%PDF-")
 
     runtime.applyPreset("presigned_access_denied", "default", { count: 1 })
-    const denied = await fetchResultPayload(client, { kitNumber: kit }, plainGet)
+    // Our fetcher always sends kitNumber with resultType (staging 400s a kitNumber alone).
+    const json = { kitNumber: kit, resultType: "nutrigenomics_comprehensive_report_json" }
+    const denied = await fetchResultPayload(client, json, plainGet)
     expect(denied).toMatchObject({ ok: false, statusCode: 403, isAccessDenied: true })
     // An expired URL is denied too (the mock clock runs past X-Amz-Expires).
-    const { presignedUrl } = await client.fetchResultPresignedUrl({ kitNumber: kit })
+    const { presignedUrl } = await client.fetchResultPresignedUrl(json)
     runtime.clock.advance(3_601_000)
     const expired = await plainGet(new Request(presignedUrl))
     expect(expired.status).toBe(403)
@@ -765,13 +768,15 @@ describe("issue #122: auth and catalog", () => {
     })
   })
 
-  test("B5/B6: a component is found by id; an unknown id is 404", async () => {
+  test("B5/B6: a component is found by id; an unknown id is an empty list (as on staging)", async () => {
     const { settings, raw } = await dropIn({ subscribe: false })
     await settings({ catalog: "production" })
     const component = await raw("GET", `/api/v2/products?productId=${KIT_COMPONENT}`)
     expect(component.status).toBe(200)
     expect((component.data as unknown as Json[])[0]?.id).toBe(KIT_COMPONENT)
-    expect((await raw("GET", `/api/v2/products?productId=${MISSING_ID}`)).status).toBe(404)
+    const missing = await raw("GET", `/api/v2/products?productId=${MISSING_ID}`)
+    expect(missing.status).toBe(200)
+    expect(missing.data).toEqual([])
   })
 
   test("B7/B8: the staging bundle quotes an empty 500 on production, and quotes on both", async () => {
@@ -1678,6 +1683,41 @@ describe("issue #122: the address parity corpus (corpus/address-parity.json)", (
         expect(status).toBe(c.status)
         expect(error.message).toBe(c.message)
       }
+    })
+  }
+})
+
+describe("staging's error shapes and query validation (corpus/live-errors.json)", () => {
+  // Replays what live parity recorded for ids that cannot exist and for each list parameter.
+  for (const probe of liveErrors.errors) {
+    test(`${probe.method} ${probe.path} → ${probe.status}`, async () => {
+      const { raw } = await dropIn({ subscribe: false })
+      const bad = probe.path === "/api/v2/products" && probe.status === 401
+      if (bad) {
+        const h = await harness({ subscribe: false })
+        const response = await h.runtime.fetch(
+          new Request(`https://mock.genebygene.local${probe.path}`, {
+            headers: { authorization: "Bearer not-a-token" },
+          }),
+        )
+        expect(response.status).toBe(401)
+        expect(await response.text()).toBe("")
+        return
+      }
+      const { status, data, error } = await raw(probe.method, probe.path)
+      expect(status).toBe(probe.status)
+      const body = (data ?? error) as Json
+      const recorded = probe.body as Json
+      if (recorded && "errors" in recorded) expect(body.errors).toEqual(recorded.errors)
+      else expect(body).toEqual(recorded)
+    })
+  }
+  for (const q of liveErrors.queries) {
+    test(`GET ${q.path}?${new URLSearchParams(q.params)} → ${q.status}`, async () => {
+      const { raw } = await dropIn({ subscribe: false })
+      const { status, error } = await raw("GET", `${q.path}?${new URLSearchParams(q.params)}`)
+      expect(status).toBe(q.status)
+      if ("errors" in q && q.errors) expect((error as Json).errors).toEqual(q.errors)
     })
   }
 })

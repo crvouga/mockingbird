@@ -368,7 +368,10 @@ const probe = async (method: string, path: string, token = realToken) => {
     status: response.status,
     contentType: response.headers.get("content-type"),
     wwwAuthenticate: response.headers.get("www-authenticate"),
-    body: JSON.parse(redact(JSON.stringify(body))),
+    body: ((b: unknown) =>
+      b !== null && typeof b === "object" && "traceId" in b ? { ...b, traceId: "<volatile>" } : b)(
+      JSON.parse(redact(JSON.stringify(body))),
+    ),
   }
 }
 const catalogs = {
@@ -379,7 +382,7 @@ const catalogs = {
 }
 const shapes = {
   source: new URL(baseUrl).host,
-  note: "Recorded by scripts/parity.ts: the live answers for ids that cannot exist. No tenant data.",
+  note: "Recorded by scripts/parity.ts: the live answers for ids that cannot exist, and the query validation of the list endpoints (status and validation errors only; a 200 page on the shared tenant is never written). The acceptance suite replays it.",
   errors: [
     await probe("GET", "/api/v2/products", "not-a-token"),
     await probe("GET", "/api/v2/kits/WB000000"),
@@ -465,6 +468,9 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
   ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "0" }],
   ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "-1" }],
   ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "501" }],
+  ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "100000" }],
+  ["/api/v2/kits", { kitNumber: "WB000000" }],
+  ["/api/v2/orders", { orderId: ZERO, pageSize: "2000" }],
   ["/api/v2/kits", { kitNumber: "WB000000", offset: "-1" }],
   ["/api/v2/orders", { orderId: ZERO, pageSize: "0" }],
   ["/api/v2/orders", { orderId: ZERO, offset: "-1" }],
@@ -477,8 +483,11 @@ for (const [path, params] of QUERY_PROBES) {
     path,
     params,
     status: answer.status,
+    // A 200 page keeps only its paging (never rows: the tenant is shared).
     ...(answer.status === 200
-      ? {}
+      ? body && !Array.isArray(body) && "pageSize" in body
+        ? { offset: body.offset, pageSize: body.pageSize }
+        : {}
       : { errors: body?.errors, message: body && "message" in body ? body.message : undefined }),
   })
 }

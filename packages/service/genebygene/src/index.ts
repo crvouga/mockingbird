@@ -409,26 +409,115 @@ const kitStatusName = (value: string): string | undefined => {
   return KIT_STATUSES.find((status) => status.toLowerCase() === wanted)
 }
 
-const pageOf = (context: OperationContext): { offset: number; pageSize: number } | Response => {
+/** Case and spaces do not matter to an enum filter (`Lab Services` is `LabServices`). */
+const enumKey = (value: string) => value.replace(/\s+/g, "").toLowerCase()
+
+/** The enum filters staging validates, with the names it accepts (recorded live). */
+const QUERY_ENUMS = {
+  status: { label: "Status", names: ["Pending", ...KIT_STATUSES] },
+  productType: {
+    label: "Product Type",
+    names: ["Materials", "Bundle", "DigitalProduct", "LabServices"],
+  },
+  entityType: { label: "Entity Type", names: ["Kit"] },
+} as const
+const enumNames = (name: keyof typeof QUERY_ENUMS): ReadonlySet<string> =>
+  new Set(QUERY_ENUMS[name].names.map(enumKey))
+
+type QueryRule = "int" | "bool" | "date" | "guid" | "required" | keyof typeof QUERY_ENUMS
+
+const pascal = (name: string) => `${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`
+const spaced = (name: string) => pascal(name).replace(/([a-z])([A-Z])/g, "$1 $2")
+const GUID = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+const EMPTY_GUID = /^0{8}-?0{4}-?0{4}-?0{4}-?0{12}$/
+
+/**
+ * Staging's query validation, as one problem-details 400 (recorded in corpus/live-errors.json):
+ * a value that does not bind (`The value 'a' is not valid for Offset.`) falls back to its
+ * default, then the validators run over the bound values (`'Status' has a range of values which
+ * does not include 'a'.`, `'Page Size' must be between 1 and 100000.`, `'Offset' must be
+ * greater than or equal to '0'.`, `'Result Id' must not be empty.`), and every message is
+ * reported together. `paged` adds the offset and pageSize rules.
+ */
+const queryProblem = (
+  context: OperationContext,
+  rules: Record<string, QueryRule | readonly QueryRule[]>,
+  paged = false,
+): Response | undefined => {
   const errors: Record<string, string[]> = {}
-  const read = (name: string, fallback: number) => {
-    const raw = query(context, name)
-    if (raw === undefined || raw === "") return fallback
-    const value = Number(raw)
-    if (!Number.isInteger(value)) {
-      errors[name] = [`The value '${raw}' is not valid.`]
-      return fallback
-    }
-    return value
+  const add = (name: string, message: string) => {
+    errors[name] = [...(errors[name] ?? []), message]
   }
-  const offset = read("offset", 0)
-  // Staging pages 100 rows when no pageSize is sent.
-  const pageSize = read("pageSize", 100)
-  if (Object.keys(errors).length > 0)
-    return problem(400, "One or more validation errors occurred.", { errors })
-  if (offset < 0) return errorDto(400, "Offset must be greater than or equal to 0.")
-  // GxG caps a page at 500 rows.
-  return { offset, pageSize: Math.min(Math.max(pageSize, 1), 500) }
+  const all: Record<string, readonly QueryRule[]> = {
+    ...(paged ? { offset: ["int"], pageSize: ["int"] } : {}),
+    ...Object.fromEntries(
+      Object.entries(rules).map(([k, v]) => [k, typeof v === "string" ? [v] : v]),
+    ),
+  }
+  for (const [name, list] of Object.entries(all)) {
+    const raw = query(context, name)
+    const present = raw !== undefined && raw !== ""
+    const notBound = `The value '${raw}' is not valid for ${pascal(name)}.`
+    let bound = present
+    for (const rule of list) {
+      if (!present) continue
+      if (rule === "int" && !/^[+-]?\d+$/.test(raw.trim())) add(name, notBound)
+      if (rule === "bool" && !/^(true|false)$/i.test(raw.trim())) add(name, notBound)
+      if (rule === "date" && Number.isNaN(Date.parse(raw))) add(name, notBound)
+      if (rule === "guid" && !GUID.test(raw.trim())) {
+        add(name, notBound)
+        bound = false
+      }
+    }
+    for (const rule of list) {
+      if (rule === "required") {
+        const empty = !bound || (list.includes("guid") && EMPTY_GUID.test(String(raw).trim()))
+        if (empty) add(name, `'${spaced(name)}' must not be empty.`)
+      } else if (rule in QUERY_ENUMS && present) {
+        const known = enumNames(rule as keyof typeof QUERY_ENUMS)
+        if (/^\d+$/.test(raw.trim()) || !known.has(enumKey(raw))) {
+          const { label } = QUERY_ENUMS[rule as keyof typeof QUERY_ENUMS]
+          add(name, `'${label}' has a range of values which does not include '${raw}'.`)
+        }
+      }
+    }
+  }
+  if (paged) {
+    const number = (name: string, fallback: number) => {
+      const raw = query(context, name)
+      return raw !== undefined && /^[+-]?\d+$/.test(raw.trim()) ? Number(raw) : fallback
+    }
+    const pageSize = number("pageSize", DEFAULT_PAGE_SIZE)
+    if (pageSize < 1 || pageSize > 100_000) {
+      add("pageSize", `'Page Size' must be between 1 and 100000. You entered ${pageSize}.`)
+    }
+    if (number("offset", 0) < 0) add("offset", "'Offset' must be greater than or equal to '0'.")
+  }
+  return Object.keys(errors).length > 0
+    ? problem(400, "One or more validation errors occurred.", { errors })
+    : undefined
+}
+
+/** A `{id}` route segment that is not a GUID: `The value 'x' is not valid.` (no field name). */
+const routeGuidProblem = (context: OperationContext): Response | undefined => {
+  const id = context.params.id ?? ""
+  return GUID.test(id)
+    ? undefined
+    : problem(400, "One or more validation errors occurred.", {
+        errors: { id: [`The value '${id}' is not valid.`] },
+      })
+}
+
+/** Staging pages 100 rows when no pageSize is sent. */
+const DEFAULT_PAGE_SIZE = 100
+
+/** The page a list asks for; call `queryProblem(…, true)` first, which rejects bad values. */
+const pageOf = (context: OperationContext): { offset: number; pageSize: number } => {
+  const number = (name: string, fallback: number) => {
+    const raw = query(context, name)
+    return raw !== undefined && /^[+-]?\d+$/.test(raw.trim()) ? Number(raw) : fallback
+  }
+  return { offset: number("offset", 0), pageSize: number("pageSize", DEFAULT_PAGE_SIZE) }
 }
 
 const paginate = <T>(items: readonly T[], page: { offset: number; pageSize: number }) => ({
@@ -437,6 +526,15 @@ const paginate = <T>(items: readonly T[], page: { offset: number; pageSize: numb
   totalCount: items.length,
   items: items.slice(page.offset, page.offset + page.pageSize),
 })
+
+const isJson = (value: string) => {
+  try {
+    JSON.parse(value)
+    return true
+  } catch {
+    return false
+  }
+}
 
 const csv = (value: string | undefined) =>
   (value ?? "")
@@ -501,7 +599,8 @@ export class GeneByGeneAPI implements FetchAPI {
       SearchResults: (c) => this.searchResults(c),
       GetResultPresignedUrl: (c) => this.presignedUrl(c),
       GetResultBlob: (c) => this.blob(c),
-      ListAttributeDefinitions: () => jsonRes(200, ATTRIBUTE_DEFINITIONS),
+      ListAttributeDefinitions: (c) =>
+        queryProblem(c, { entityType: "entityType" }) ?? jsonRes(200, ATTRIBUTE_DEFINITIONS),
       ListEventTypes: (c) => {
         const name = query(c, "name")
         return jsonRes(
@@ -641,7 +740,8 @@ export class GeneByGeneAPI implements FetchAPI {
     const productType = query(context, "productType")
     if (productId) {
       const product = this.findProduct(productId)
-      return product ? jsonRes(200, [product]) : notFoundDto()
+      // An unknown id is an empty list on staging, not a 404.
+      return jsonRes(200, product ? [product] : [])
     }
     return jsonRes(
       200,
@@ -1122,8 +1222,9 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listOrders(context: OperationContext): Response {
+    const invalid = queryProblem(context, { orderDateMin: "date", orderDateMax: "date" }, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const orderId = query(context, "orderId")
     const min = query(context, "orderDateMin")
     const max = query(context, "orderDateMax")
@@ -1151,12 +1252,16 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private getOrder(context: OperationContext): Response {
+    const unbound = routeGuidProblem(context)
+    if (unbound) return unbound
     const order = this.state.orders.get(context.params.id ?? "")
     if (!order) return notFoundDto()
     return annotateResponse(jsonRes(200, this.orderDto(order)), { ids: { orderId: order.id } })
   }
 
   private getOrderLine(context: OperationContext): Response {
+    const unbound = routeGuidProblem(context)
+    if (unbound) return unbound
     const line = this.state.lines.get(context.params.id ?? "")
     if (!line) return notFoundDto()
     const order = this.state.orders.get(line.orderId) as OrderRecord
@@ -1304,8 +1409,9 @@ export class GeneByGeneAPI implements FetchAPI {
   // --- fulfillments --------------------------------------------------------------------------
 
   private listFulfillments(context: OperationContext): Response {
+    const invalid = queryProblem(context, {}, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const orderId = query(context, "orderId")
     const orderLineId = query(context, "orderLineId")
     const fulfillmentId = query(context, "fulfillmentId")
@@ -1476,11 +1582,12 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKits(context: OperationContext): Response {
+    const invalid = queryProblem(context, { status: "status" }, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const kitNumber = query(context, "kitNumber")
     const orderNumber = query(context, "orderNumber")
-    const status = query(context, "status")?.toLowerCase()
+    const status = query(context, "status")
     const kits = this.state.kits
       .list()
       .map((row) => row.value)
@@ -1488,7 +1595,7 @@ export class GeneByGeneAPI implements FetchAPI {
         (k) =>
           (!kitNumber || k.kitNumber === kitNumber) &&
           (!orderNumber || k.orderIds.includes(orderNumber)) &&
-          (!status || k.status.toLowerCase() === status),
+          (!status || enumKey(k.status) === enumKey(status)),
       )
     return jsonRes(
       200,
@@ -1590,8 +1697,8 @@ export class GeneByGeneAPI implements FetchAPI {
     const kitNumbers = csv(query(context, "kitNumbers"))
     const orderId = query(context, "orderId")
     const orderLineId = query(context, "orderLineId")
-    const status = query(context, "status")?.toLowerCase()
-    const productType = query(context, "productType")?.toLowerCase()
+    const status = query(context, "status")
+    const productType = query(context, "productType")
     const term = query(context, "attributeTerm")?.toLowerCase()
     const searched = csv(query(context, "attributesToSearch") ?? "FirstName,LastName").map((s) =>
       s.toLowerCase(),
@@ -1610,8 +1717,8 @@ export class GeneByGeneAPI implements FetchAPI {
       for (const line of this.kitLines(kit)) {
         if (orderId && line.orderId !== orderId) continue
         if (orderLineId && line.id !== orderLineId) continue
-        if (status && this.lineKitStatus(kit, line).toLowerCase() !== status) continue
-        if (productType && line.productType?.toLowerCase() !== productType) continue
+        if (status && enumKey(this.lineKitStatus(kit, line)) !== enumKey(status)) continue
+        if (productType && enumKey(line.productType ?? "") !== enumKey(productType)) continue
         rows.push({ kit, line })
       }
     }
@@ -1619,8 +1726,19 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKitOrderLines(context: OperationContext): Response {
+    const invalid = queryProblem(context, { status: "status", orderByAsc: "bool" }, true)
+    if (invalid) return invalid
+    // Staging fails with an empty 500 on a productType it cannot parse, or an attributesFilter
+    // that is not JSON (kitorderlines/kits validates productType as a 400 instead).
+    const productType = query(context, "productType")
+    const filter = query(context, "attributesFilter")
+    if (
+      (productType && queryProblem(context, { productType: "productType" })) ||
+      (filter && !isJson(filter))
+    ) {
+      return new Response(null, { status: 500 })
+    }
     const page = pageOf(context)
-    if (page instanceof Response) return page
     return jsonRes(
       200,
       paginate(
@@ -1631,8 +1749,13 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKitOrderLineKits(context: OperationContext): Response {
+    const invalid = queryProblem(
+      context,
+      { status: "status", productType: "productType", orderByAsc: "bool" },
+      true,
+    )
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const byKit = new Map<string, { kit: KitRecord; lines: LineRecord[] }>()
     for (const { kit, line } of this.kitOrderLineRows(context)) {
       const entry = byKit.get(kit.kitNumber) ?? { kit, lines: [] }
@@ -1667,12 +1790,11 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listResults(context: OperationContext): Response {
+    const invalid = queryProblem(context, {}, true)
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
+    // An unknown kit is an empty page on staging, not a 404.
     const kitNumber = query(context, "kitNumber")
-    if (kitNumber && !this.state.kits.has(kitNumber)) {
-      return notFoundDto()
-    }
     const results = this.state.results
       .list()
       .map((row) => row.value)
@@ -1687,8 +1809,21 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private searchResults(context: OperationContext): Response {
+    const invalid = queryProblem(
+      context,
+      {
+        dateOfBirth: "date",
+        orderByAsc: "bool",
+        resultDateYear: "int",
+        resultDateDayOfYear: "int",
+        collectionDateRangeStart: "date",
+        collectionDateRangeEnd: "date",
+        resultDate: "date",
+      },
+      true,
+    )
+    if (invalid) return invalid
     const page = pageOf(context)
-    if (page instanceof Response) return page
     const kits = [...csv(query(context, "kitNumbers")), ...csv(query(context, "kitList"))]
     const firstName = query(context, "firstName")?.trim().toLowerCase()
     const lastName = query(context, "lastName")?.trim().toLowerCase()
@@ -1732,6 +1867,24 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private presignedUrl(context: OperationContext): Response {
+    // Staging needs a resultId, or a kitNumber and a resultType: each is required when the
+    // other way of naming the result is incomplete (a resultId that does not bind is empty).
+    const given = (name: string) => (query(context, name) ?? "").trim().length > 0
+    const id = query(context, "resultId") ?? ""
+    const hasId = GUID.test(id.trim()) && !EMPTY_GUID.test(id.trim())
+    const byKit = given("kitNumber") && given("resultType")
+    const errors: Record<string, string[]> = {}
+    if (given("resultId") && !GUID.test(id.trim())) {
+      errors.resultId = [`The value '${id}' is not valid for ResultId.`]
+    }
+    if (!hasId && !byKit) {
+      errors.resultId = [...(errors.resultId ?? []), "'Result Id' must not be empty."]
+    }
+    if (!hasId && !given("kitNumber")) errors.kitNumber = ["'Kit Number' must not be empty."]
+    if (!hasId && !given("resultType")) errors.resultType = ["'Result Type' must not be empty."]
+    if (Object.keys(errors).length > 0) {
+      return problem(400, "One or more validation errors occurred.", { errors })
+    }
     const resultId = query(context, "resultId")
     const kitNumber = query(context, "kitNumber")
     const resultType = query(context, "resultType")
