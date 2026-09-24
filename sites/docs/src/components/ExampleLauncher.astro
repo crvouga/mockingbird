@@ -1,0 +1,46 @@
+---
+import Icon from "./Icon.astro"
+
+interface Props {
+  /** Custom element that owns the loader lookup: `service-example` or `app-example`. */
+  element: "service-example" | "app-example"
+  /** Key the element resolves to a loader. */
+  example: string
+  title: string
+  launchLabel?: string
+  /** `app` fills the window edge to edge; `panel` insets a self-framed widget. */
+  fit?: "app" | "panel"
+}
+const {
+  element: Element,
+  example,
+  title,
+  launchLabel = "Launch example",
+  fit = "panel",
+} = Astro.props
+const titleId = `example-modal-${example}`
+---
+
+<Element data-example={example}>
+  <div class="example-launch">
+    <button type="button" class="btn btn-accent" data-example-open aria-haspopup="dialog">
+      <Icon name="play" />
+      {launchLabel}
+    </button>
+    <p>Opens in a window. Every request stays in this tab.</p>
+  </div>
+  <dialog class="example-modal" data-example-modal data-fit={fit} aria-labelledby={titleId}>
+    <header class="example-modal-bar">
+      <span class="example-modal-dot" aria-hidden="true"></span>
+      <strong id={titleId}>{title}</strong>
+      <span class="example-modal-note">Running in this tab · no network</span>
+      <button type="button" class="icon-btn" data-example-close aria-label="Close example">
+        <Icon name="x" />
+      </button>
+    </header>
+    <div class="example-modal-body">
+      <p class="example-modal-status" data-example-status role="status"></p>
+      <div class="example-modal-host" data-example-host></div>
+    </div>
+  </dialog>
+</Element>

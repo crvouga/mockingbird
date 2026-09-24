@@ -16,14 +16,16 @@ export async function mount(host: HTMLElement, options: ExampleOptions = {}) {
   const root = host.shadowRoot ?? host.attachShadow({ mode: "open" })
   root.innerHTML = `<style>
   :host{display:block;color:var(--fg,#242c29);font:14px/1.5 system-ui,sans-serif}*{box-sizing:border-box}.shell{border:1px solid var(--border,#d6ddd8);border-radius:14px;overflow:hidden;background:var(--bg,#fff)}.toolbar{display:flex;gap:16px;align-items:end;justify-content:space-between;padding:18px;flex-wrap:wrap}label{display:grid;gap:5px;font-size:12px;font-weight:600}select,button{font:inherit;color:inherit;background:var(--bg,#fff);border:1px solid var(--border,#c8d0ca);border-radius:7px;padding:9px 12px}button{cursor:pointer}button:hover{border-color:currentColor}:focus-visible{outline:3px solid var(--accent,#268462);outline-offset:3px}.route{padding:10px 18px;border-block:1px solid var(--border,#d6ddd8);font-size:12px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}.route span{opacity:.7}.address{padding:10px 18px;font:11px ui-monospace,monospace;overflow-wrap:anywhere;border-bottom:1px solid var(--border,#d6ddd8)}iframe{display:block;border:0;width:100%;height:700px;color-scheme:inherit}.status{padding:10px 18px;margin:0;font-size:12px;border-top:1px solid var(--border,#d6ddd8)}details{border-top:1px solid var(--border,#d6ddd8);padding:14px 18px}summary{cursor:pointer;font-weight:600}.trace{max-height:260px;overflow:auto;padding:0;list-style:none;font:11px/1.7 ui-monospace,monospace}.trace li{padding:6px 0;border-bottom:1px solid var(--border,#d6ddd8);overflow-wrap:anywhere}.trace b{display:inline-block;min-width:92px}.hint{font-size:12px;opacity:.7;margin:8px 0 0}
-  dialog{padding:0;border:1px solid var(--border,#d6ddd8);border-radius:16px;width:min(540px,calc(100vw - 32px));max-height:calc(100dvh - 40px);background:var(--bg,#fff);color:inherit;box-shadow:0 24px 100px #0005;overflow:hidden}dialog::backdrop{background:#0b141969;backdrop-filter:blur(3px)}.popup-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border,#d6ddd8)}.popup-bar strong{display:block;font-size:13px}.popup-bar small{font:11px ui-monospace,monospace;opacity:.7}.popup-bar button{${closeButtonStyle}}.popup-bar button:hover{background:light-dark(#f4f4f5,#242428);border-color:transparent}.popup-bar button svg{display:block}dialog iframe{height:min(740px,calc(100dvh - 112px))}.provider-status{padding:14px;margin:0;font-size:13px}@media(max-width:500px){iframe{height:750px}.toolbar label{width:100%}select{width:100%}}
-  </style><div class="shell"><div class="toolbar"><label>Provider profile<select class="profile" aria-label="Provider profile"><option value="google">Google-style OIDC</option><option value="apple">Apple-style OIDC</option><option value="microsoft">Microsoft-style OIDC</option><option value="github">GitHub-style OAuth</option></select></label><label>Provider behavior<select aria-label="Provider behavior"></select></label><label>Sign-in flow<select class="flow" aria-label="Sign-in flow"><option value="popup">Popup</option><option value="redirect">Redirect</option></select></label><label>Appearance<select class="theme-choice" aria-label="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label>Account selection<select class="account-choice" aria-label="Account selection"><option value="choose">Always choose</option><option value="reuse">Reuse last account</option></select></label><button type="button" class="reset">Reset example</button></div><div class="route"><strong>App → OAuth Mock</strong><span>In process · no network</span></div><div class="address" aria-label="Virtual browser address"></div><iframe class="app-frame" title="Side A listening journal" sandbox="allow-same-origin allow-forms"></iframe><p class="status" role="status" aria-live="polite">Starting the app…</p><details><summary>Request trace <span class="count">(0)</span></summary><p class="hint">Real Request / Response objects. Credentials and query strings are omitted.</p><ol class="trace"></ol></details></div><dialog aria-label="OAuth Mock sign-in"><div class="popup-bar"><div><strong>OAuth Mock</strong><small class="provider-address">accounts.example.test</small></div><button type="button" class="close-provider" aria-label="Close sign-in popup">${closeIcon}</button></div><p class="provider-status" role="status">Connecting to the identity provider…</p><iframe class="provider-frame" title="OAuth Mock account selection and consent" sandbox="allow-same-origin allow-forms"></iframe></dialog>`
+  .provider-layer{position:fixed;inset:0;z-index:1;display:grid;place-items:center;padding:16px;background:#0b141969;backdrop-filter:blur(3px)}.provider-layer[hidden]{display:none}dialog{position:static;display:flex;flex-direction:column;margin:0;padding:0;border:1px solid var(--border,#d6ddd8);border-radius:16px;width:min(540px,100%);height:min(820px,100%);background:var(--bg,#fff);color:inherit;box-shadow:0 24px 100px #0005;overflow:hidden}dialog:not([open]){display:none}.popup-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border,#d6ddd8)}.popup-bar strong{display:block;font-size:13px}.popup-bar small{font:11px ui-monospace,monospace;opacity:.7}.popup-bar button{${closeButtonStyle}}.popup-bar button:hover{background:light-dark(#f4f4f5,#242428);border-color:transparent}.popup-bar button svg{display:block}dialog iframe{flex:1;min-height:0;height:auto}.provider-status{padding:14px;margin:0;font-size:13px}@media(max-width:500px){iframe{height:750px}.toolbar label{width:100%}select{width:100%}}
+  </style><div class="shell"><div class="toolbar"><label>Provider profile<select class="profile" aria-label="Provider profile"><option value="google">Google-style OIDC</option><option value="apple">Apple-style OIDC</option><option value="microsoft">Microsoft-style OIDC</option><option value="github">GitHub-style OAuth</option></select></label><label>Provider behavior<select aria-label="Provider behavior"></select></label><label>Sign-in flow<select class="flow" aria-label="Sign-in flow"><option value="popup">Popup</option><option value="redirect">Redirect</option></select></label><label>Appearance<select class="theme-choice" aria-label="Appearance"><option value="system">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label><label>Account selection<select class="account-choice" aria-label="Account selection"><option value="choose">Always choose</option><option value="reuse">Reuse last account</option></select></label><button type="button" class="reset">Reset example</button></div><div class="route"><strong>App → OAuth Mock</strong><span>In process · no network</span></div><div class="address" aria-label="Virtual browser address"></div><iframe class="app-frame" title="Side A listening journal" sandbox="allow-same-origin allow-forms"></iframe><p class="status" role="status" aria-live="polite">Starting the app…</p><details><summary>Request trace <span class="count">(0)</span></summary><p class="hint">Real Request / Response objects. Credentials and query strings are omitted.</p><ol class="trace"></ol></details></div><div class="provider-layer" hidden><dialog aria-label="OAuth Mock sign-in" aria-modal="true"><div class="popup-bar"><div><strong>OAuth Mock</strong><small class="provider-address">accounts.example.test</small></div><button type="button" class="close-provider" aria-label="Close sign-in popup">${closeIcon}</button></div><p class="provider-status" role="status">Connecting to the identity provider…</p><iframe class="provider-frame" title="OAuth Mock account selection and consent" sandbox="allow-same-origin allow-forms"></iframe></dialog></div>`
   function element<T extends Element>(selector: string): T {
     const value = root.querySelector<T>(selector)
     if (!value) throw new Error(`Missing example element: ${selector}`)
     return value
   }
   const frame = element<HTMLIFrameElement>(".app-frame")
+  const shell = element<HTMLElement>(".shell")
+  const layer = element<HTMLElement>(".provider-layer")
   const dialog = element<HTMLDialogElement>("dialog")
   const dialogFrame = element<HTMLIFrameElement>(".provider-frame")
   let popup: Window | null = null
@@ -131,6 +133,8 @@ export async function mount(host: HTMLElement, options: ExampleOptions = {}) {
     popup?.close()
     popup = null
     if (dialog.open) dialog.close()
+    layer.hidden = true
+    shell.inert = false
     providerFrame.srcdoc = ""
     providerFrame = dialogFrame
   }
@@ -208,7 +212,12 @@ export async function mount(host: HTMLElement, options: ExampleOptions = {}) {
     providerStatus = element<HTMLElement>(".provider-status")
     providerStatus.hidden = false
     providerStatus.textContent = "Connecting to the identity provider…"
-    dialog.showModal()
+    // Modal to the example, not to the page: the layer covers only this example's
+    // own box (its host's containing block when embedded), and the app behind it
+    // is inert while it is open — the same rules as showModal(), scoped.
+    layer.hidden = false
+    shell.inert = true
+    dialog.show()
   }
   function render(target: HTMLIFrameElement, url: string, html: string) {
     // Each surface gets its own document. The provider always renders its real response HTML.
@@ -372,7 +381,9 @@ export async function mount(host: HTMLElement, options: ExampleOptions = {}) {
   const providerLoaded = () => loaded(dialogFrame)
   frame.addEventListener("load", appLoaded)
   dialogFrame.addEventListener("load", providerLoaded)
-  dialog.addEventListener("cancel", (event) => {
+  layer.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape") return
+    // Claimed, so an embedding modal treats this close request as handled.
     event.preventDefault()
     cancelProvider()
   })

@@ -37,9 +37,12 @@ import {
   type PaymentIntentRecord,
   type PaymentMethodRecord,
   type ProductRecord,
+  type Recurring,
   type SessionMode,
   type SessionRecord,
   type Settings,
+  type SubscriptionData,
+  type SubscriptionRecord,
 } from "./state.js"
 
 export type { FetchAPI } from "@crvouga/mockingbird-core"
@@ -60,12 +63,16 @@ export type {
   PaymentIntentStatus,
   PaymentMethodRecord,
   ProductRecord,
+  Recurring,
   RefundRecord,
   SessionMode,
   SessionRecord,
   SessionStatus,
   Settings,
   SetupIntentRecord,
+  SubscriptionData,
+  SubscriptionRecord,
+  SubscriptionStatus,
 } from "./state.js"
 export {
   corpusProduct,
@@ -73,6 +80,7 @@ export {
   ELIGIBILITIES,
   NEXT_ACTION_TYPES,
   PAYMENT_INTENT_STATUSES,
+  SUBSCRIPTION_STATUSES,
 } from "./state.js"
 
 export const FLEX_NAMESPACE = "flex"
@@ -88,6 +96,7 @@ export const FLEX_EVENT_TYPES = [
   "checkout.session.expired",
   "checkout_session.expired",
   "payment_intent.succeeded",
+  "customer.subscription.created",
   "refund.created",
   "refund.updated",
   "charge.refunded",
@@ -155,6 +164,35 @@ const sleep = (ms: number, signal: AbortSignal) =>
 
 type SessionView = { expandCustomer: boolean; expandPaymentIntent: boolean }
 
+const daysInMonth = (year: number, month: number) =>
+  new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
+
+/**
+ * The end of a billing period that starts at `startMs`: `interval_count` intervals later.
+ * Month and year steps keep the day of month, clamped to the target month's length
+ * (Jan 31 + 1 month = Feb 28/29), the way card-network billing anchors do.
+ */
+export const periodEnd = (startMs: number, recurring: Recurring): number => {
+  const count = recurring.interval_count ?? 1
+  const start = new Date(startMs)
+  if (recurring.interval === "day") return startMs + count * 86_400_000
+  if (recurring.interval === "week") return startMs + count * 7 * 86_400_000
+  const months = recurring.interval === "month" ? count : count * 12
+  const total = start.getUTCMonth() + months
+  const year = start.getUTCFullYear() + Math.floor(total / 12)
+  const month = total % 12
+  const day = Math.min(start.getUTCDate(), daysInMonth(year, month))
+  return Date.UTC(
+    year,
+    month,
+    day,
+    start.getUTCHours(),
+    start.getUTCMinutes(),
+    start.getUTCSeconds(),
+    start.getUTCMilliseconds(),
+  )
+}
+
 /**
  * Stateful mock of the Flex HSA/FSA payments API.
  *
@@ -195,6 +233,7 @@ export class FlexAPI implements FetchAPI {
       RefundCheckoutSession: (context) => this.idempotent(context, () => this.refund(context)),
       CreateCustomer: (context) => this.idempotent(context, () => this.createCustomer(context)),
       GetSetupIntent: (context) => this.getSetupIntent(context),
+      GetSubscription: (context) => this.getSubscription(context),
       HostedCheckoutPage: (context) => this.hostedPage(context),
       SubmitHostedCheckout: (context) => this.submitHosted(context),
       CancelHostedCheckout: (context) => this.cancelHosted(context),
@@ -378,7 +417,7 @@ export class FlexAPI implements FetchAPI {
     const input = envelope(context, "checkout_session")
     const mode = (input.mode ?? "payment") as SessionMode
     const lines = (input.line_items ?? []) as {
-      price_data: { product: string; unit_amount: number }
+      price_data: { product: string; unit_amount: number; recurring?: Recurring }
       quantity: number
     }[]
     const customerId = typeof input.customer === "string" ? input.customer : null
@@ -388,6 +427,12 @@ export class FlexAPI implements FetchAPI {
     }
     if (mode !== "setup" && lines.length === 0) {
       return invalid("At least one line item is required.", "line_items")
+    }
+    if (mode === "subscription" && !lines.some((line) => line.price_data.recurring)) {
+      return invalid(
+        "Subscription mode requires at least one line item with a recurring price.",
+        "line_items",
+      )
     }
     if (mode === "off_session" && (!customerId || !paymentMethodId)) {
       return invalid("Off-session mode requires a customer and a payment method.", "mode")
@@ -420,7 +465,16 @@ export class FlexAPI implements FetchAPI {
       products.push(product)
     }
     const items: LineItemRecord[] = lines.map((line) => ({
-      price_data: { product: line.price_data.product, unit_amount: line.price_data.unit_amount },
+      price_data: {
+        product: line.price_data.product,
+        unit_amount: line.price_data.unit_amount,
+        recurring: line.price_data.recurring
+          ? {
+              interval: line.price_data.recurring.interval,
+              interval_count: line.price_data.recurring.interval_count ?? 1,
+            }
+          : null,
+      },
       quantity: line.quantity,
       amount_total: line.price_data.unit_amount * line.quantity,
     }))
@@ -484,6 +538,13 @@ export class FlexAPI implements FetchAPI {
       customer: customerId,
       payment_intent: null,
       setup_intent: setupIntent,
+      subscription: null,
+      subscription_data:
+        mode === "subscription"
+          ? isRecord(input.subscription_data)
+            ? (input.subscription_data as SubscriptionData)
+            : {}
+          : null,
       mode,
       status: "open",
       url: `${this.pageBase(context)}/pay/${encodeURIComponent(id)}`,
@@ -713,6 +774,54 @@ export class FlexAPI implements FetchAPI {
     )
   }
 
+  private getSubscription(context: OperationContext): Response {
+    const id = context.params.subscriptionId ?? ""
+    const subscription = this.state.subscriptions.get(id)
+    if (!subscription) return error(404, "invalid_request_error", `No such subscription: '${id}'`)
+    return annotateResponse(jsonRes(200, { subscription }), { ids: { subscriptionId: id } })
+  }
+
+  /**
+   * Start the subscription a paid subscription-mode session buys: active, billed from now
+   * for one period of its first recurring line item, charged to the card just used.
+   */
+  private startSubscription(session: SessionRecord, paymentMethod: string): SubscriptionRecord {
+    const recurring = session.line_items.flatMap((item) =>
+      item.price_data.recurring
+        ? [
+            {
+              price_data: { ...item.price_data, recurring: item.price_data.recurring },
+              quantity: item.quantity,
+            },
+          ]
+        : [],
+    )
+    const first = recurring[0]?.price_data.recurring ?? { interval: "month" as const }
+    const data = session.subscription_data ?? {}
+    const subscription: SubscriptionRecord = {
+      subscription_id: this.state.nextId("fsub_"),
+      status: "active",
+      items: recurring,
+      customer: session.customer,
+      default_payment_method: paymentMethod,
+      cancel_at_period_end: data.cancel_at_period_end === true,
+      current_period_start: this.iso(),
+      current_period_end: new Date(periodEnd(this.now(), first)).toISOString(),
+      canceled_at: null,
+      metadata: data.metadata ?? null,
+      test_mode: session.test_mode,
+      created_at: this.iso(),
+    }
+    this.state.subscriptions.insert(subscription.subscription_id, subscription)
+    this.emit("customer.subscription.created", { ...subscription }, session.test_mode)
+    return subscription
+  }
+
+  /** The subscriptions paid subscription-mode sessions created in this namespace. */
+  subscriptions(): SubscriptionRecord[] {
+    return this.state.subscriptions.list().map((row) => row.value)
+  }
+
   // --- lifecycle (hosted page, admin, off-session) ----------------------------------------
 
   private paymentIntentFor(session: SessionRecord): PaymentIntentRecord {
@@ -810,11 +919,18 @@ export class FlexAPI implements FetchAPI {
     const before = this.paymentIntentFor(session)
     const wasProcessing = before.status === "processing"
     session = this.state.sessions.get(id) as SessionRecord
+    // A subscription starts as the first period is paid: `customer.subscription.created`
+    // goes out before `payment_intent.succeeded` and `checkout.session.completed`.
+    const subscription =
+      session.mode === "subscription"
+        ? this.startSubscription(session, method.payment_method_id)
+        : undefined
     this.state.sessions.update(id, {
       ...session,
       status: "complete",
       amount_received: session.amount_total,
       next_action: null,
+      ...(subscription ? { subscription: subscription.subscription_id } : {}),
     })
     this.setPaymentIntent(id, {
       status: "succeeded",

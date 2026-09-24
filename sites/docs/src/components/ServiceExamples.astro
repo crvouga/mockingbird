@@ -1,5 +1,6 @@
 ---
 import type { Service } from "../lib/types.ts"
+import ExampleLauncher from "./ExampleLauncher.astro"
 
 interface Props {
   service: Service
@@ -9,13 +10,7 @@ const { service } = Astro.props
 {service.examples.map(example => (
   <section id={`example-${example.id}`} class="service-example">
     <header><span class="example-label">Interactive example</span><h2>{example.title}</h2><p>{example.description}</p></header>
-    <service-example data-example={example.key}>
-      <div data-example-placeholder>
-        <button type="button" class="btn btn-accent" data-example-start>Launch example</button>
-        <p data-example-status role="status">Loads on demand. All example requests stay in this tab.</p>
-      </div>
-      <div data-example-host></div>
-    </service-example>
+    <ExampleLauncher element="service-example" example={example.key} title={example.title} />
     <details class="example-source"><summary>Explore the example source</summary>
       {example.sources.map(source => (<details><summary><code>{source.path}</code></summary><div class="prose" set:html={source.html} /></details>))}
     </details>
@@ -30,8 +25,6 @@ const { service } = Astro.props
   h2{margin-top:8px;font-size:24px;letter-spacing:-.03em}
   header p{margin-top:8px;margin-bottom:20px;color:var(--fg-muted);font-size:14.5px;max-width:720px}
   service-example{display:block;min-width:0}
-  [data-example-placeholder]{padding:28px;border:1px solid var(--border);border-radius:var(--radius-lg);background:var(--bg-subtle)}
-  [data-example-status]{font-size:13px;color:var(--fg-muted);margin-top:12px}
   .example-source{margin-top:16px;border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;font-size:13px}
   summary{cursor:pointer;min-height:24px}
   .example-source details{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
