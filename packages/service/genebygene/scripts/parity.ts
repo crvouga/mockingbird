@@ -235,6 +235,7 @@ type Case = {
   errorMessages?: string[]
   courierServiceCodes?: string[]
   message?: string
+  error?: unknown
 }
 const file = join(CORPUS_DIR, "address-parity.json")
 const recording = JSON.parse(await readFile(file, "utf8")) as { cases: Case[] } & Json
@@ -247,6 +248,10 @@ for (const c of recording.cases) {
   if (c.operation === "quote") {
     const live = await quote("live", address(c.address))
     const next: Case = { ...c, status: live.status, errorMessages: errorMessages(live.json) }
+    // A refusal's body is the vendor's validation text about a synthetic street: keep it so the
+    // mock can answer the same bytes. A 200's body carries prices and dates, which drift.
+    if (live.status === 200) delete next.error
+    else next.error = JSON.parse(redact(JSON.stringify(live.json ?? null)))
     if (c.courierServiceCodes) next.courierServiceCodes = codes(live.json)
     recorded.push(next)
     continue
@@ -310,6 +315,52 @@ if (unsafe) {
   }
   console.log(`  placed and canceled an order (id ${order?.id ? "uuid" : "missing"})`)
 }
+
+// 3b. vendor catalogs and error shapes ------------------------------------------------------------
+// Only the tenant-independent catalogs and the answers for ids that cannot exist: list
+// endpoints on the shared tenant can hold other callers' orders, so they are never written.
+console.log("genebygene parity: catalogs and error shapes")
+const ZERO = "00000000-0000-0000-0000-000000000000"
+const probe = async (method: string, path: string, token = realToken) => {
+  const response = await fetch(
+    new Request(`${baseUrl}${path}`, {
+      method,
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+    }),
+  )
+  const text = await response.text()
+  await Bun.sleep(500)
+  let body: unknown = text
+  try {
+    body = text.length > 0 ? JSON.parse(text) : null
+  } catch {}
+  return {
+    method,
+    path,
+    status: response.status,
+    contentType: response.headers.get("content-type"),
+    wwwAuthenticate: response.headers.get("www-authenticate"),
+    body: JSON.parse(redact(JSON.stringify(body))),
+  }
+}
+const shapes = {
+  source: new URL(baseUrl).host,
+  note: "Written by scripts/parity.ts: the live catalogs and the live answers for ids that cannot exist. No tenant data.",
+  eventTypes: (await probe("GET", "/api/v2/eventTypes")).body,
+  attributes: (await probe("GET", "/api/v2/attributes")).body,
+  errors: [
+    await probe("GET", "/api/v2/products", "not-a-token"),
+    await probe("GET", "/api/v2/kits/WB000000"),
+    await probe("GET", "/api/v2/kits/WB000000/results"),
+    await probe("GET", `/api/v2/orders/${ZERO}`),
+    await probe("GET", "/api/v2/orders/not-a-guid"),
+    await probe("GET", `/api/v2/orderLines/${ZERO}`),
+    await probe("GET", `/api/v2/notificationSubscriptions/${ZERO}`),
+    await probe("GET", "/api/v2/results/results/presignedUrl?kitNumber=WB000000&resultType=x"),
+  ],
+}
+await writeFile(join(CORPUS_DIR, "live-shapes.json"), `${JSON.stringify(shapes, null, 2)}\n`)
+console.log("  wrote corpus/live-shapes.json")
 
 // 4. the random walk over the remaining safe operations ------------------------------------------
 const walked = supportedOperationIds.filter(

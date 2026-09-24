@@ -54,6 +54,18 @@
       "seed": 10416389,
       "status": "fixed",
       "failure": "get_teams_users polluted by leftover sandbox users: real total/users=2 mock=1 after single create; cleanup only deleted table-tracked users"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1383450894,
+      "status": "open",
+      "failure": "GetKitResults unknown kit: real 404 body is ErrorDto {message: \"Resource not found.\", errorType: null, payload: null, statusCode: 404}, mock answers RFC 9110 ProblemDetails"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1383771939,
+      "status": "open",
+      "failure": "ListEventTypes: real rows carry payloadStructure and subscriptionTypes [\"Webhook\",\"Email\"], mock rows carry id, description and isSubscribable"
     }
   ]
 }
