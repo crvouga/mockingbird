@@ -186,6 +186,12 @@
       "seed": 1418403559,
       "status": "fixed",
       "failure": "PostConnectToken client_id=\" \": real 400 invalid_request (a blank client_id is missing), mock invalid_client"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1418840073,
+      "status": "fixed",
+      "failure": "ListAttributeDefinitions entityType=\"a \": real echoes 'a ' (only leading spaces are dropped), mock echoed 'a'"
     }
   ]
 }
