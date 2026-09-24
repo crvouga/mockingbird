@@ -236,6 +236,7 @@ type Case = {
   courierServiceCodes?: string[]
   message?: string
   error?: unknown
+  options?: Json[]
 }
 const file = join(CORPUS_DIR, "address-parity.json")
 const recording = JSON.parse(await readFile(file, "utf8")) as { cases: Case[] } & Json
@@ -250,8 +251,17 @@ for (const c of recording.cases) {
     const next: Case = { ...c, status: live.status, errorMessages: errorMessages(live.json) }
     // A refusal's body is the vendor's validation text about a synthetic street: keep it so the
     // mock can answer the same bytes. A 200's body carries prices and dates, which drift.
-    if (live.status === 200) delete next.error
-    else next.error = JSON.parse(redact(JSON.stringify(live.json ?? null)))
+    if (live.status === 200) {
+      delete next.error
+      // The menu without prices and dates (volatile live, deterministic only in the mock).
+      next.options = (
+        (live.json as { shippingOptions?: Json[] } | undefined)?.shippingOptions ?? []
+      ).map((o) => ({
+        courierName: o.courierName,
+        courierServiceCode: o.courierServiceCode,
+        courierServiceDisplayName: o.courierServiceDisplayName,
+      }))
+    } else next.error = JSON.parse(redact(JSON.stringify(live.json ?? null)))
     if (c.courierServiceCodes) next.courierServiceCodes = codes(live.json)
     recorded.push(next)
     continue

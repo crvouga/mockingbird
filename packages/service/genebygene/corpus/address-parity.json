@@ -360,6 +360,165 @@
       ]
     },
     {
+      "name": "missing addressLine1",
+      "operation": "quote",
+      "address": {
+        "addressLine1": null,
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "blank postalCode",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": ""
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "blank stateOrRegion",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "",
+        "postalCode": "77008"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "non-digit ZIP",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "ABCDE"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "line1 and line2 longer than 35",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1234 North Example Boulevard Extension",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004",
+        "addressLine2": "1234 North Example Boulevard Extension"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "missing recipientName and city",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": null,
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "recipientName": null
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "unknown US state ZZ",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "ZZ",
+        "postalCode": "77008"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "line1 exactly 35 characters",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W Building Twelve Rm 10",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "zone 8 (Anchorage)",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "632 W 6th Ave",
+        "city": "Anchorage",
+        "stateOrRegion": "AK",
+        "postalCode": "99501"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "Beverly Hills with its own state",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "9336 Civic Center Dr",
+        "city": "Beverly Hills",
+        "stateOrRegion": "CA",
+        "postalCode": "90210"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "PO Box in zone 7",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "PO Box 100",
+        "city": "Mountain View",
+        "stateOrRegion": "CA",
+        "postalCode": "94043"
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
+      "name": "blank phone",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1445 N Loop W",
+        "city": "Houston",
+        "stateOrRegion": "TX",
+        "postalCode": "77008",
+        "phone": ""
+      },
+      "status": 0,
+      "errorMessages": [],
+      "courierServiceCodes": []
+    },
+    {
       "name": "quote-ok, place-not-found street: the place",
       "operation": "place",
       "address": {
