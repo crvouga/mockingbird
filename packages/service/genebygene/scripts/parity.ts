@@ -377,6 +377,7 @@ const ZERO = "00000000-0000-0000-0000-000000000000"
 const NARROW: Readonly<Record<string, readonly (readonly [string, string])[]>> = {
   "/api/v2/orders": [
     ["orderId", ZERO],
+    ["orderDateMin", "9999-01-01T00:00:00Z"],
     ["orderDateMax", "2000-01-01T00:00:00Z"],
   ],
   "/api/v2/kits": [["kitNumber", "WB000000"]],
@@ -398,6 +399,7 @@ const NARROW: Readonly<Record<string, readonly (readonly [string, string])[]>> =
 }
 /** A GUID filter staging ignores when it is not a GUID (`?orderId=⁇` lists every order). */
 const GUID_FILTERS = new Set(["orderId", "orderLineId", "fulfillmentId"])
+const EXACT_FILTERS = new Set([...GUID_FILTERS, "kitNumber", "kitNumbers"])
 const GUID_RE = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
 /**
  * The first narrowing parameter the request leaves free: one it does not set, skipping any it
@@ -412,9 +414,11 @@ const narrowingFor = (
   if (!candidates) return undefined
   const ignored = (name: string, value: string) =>
     !value.trim() || (GUID_FILTERS.has(name) && !GUID_RE.test(value.trim()))
+  // Only an exact filter the walk sets itself (a GUID id, a kit number) matches nothing on the
+  // tenant; a date range the walk picks can still match real orders.
   const narrowed = candidates.some(([name]) => {
     const value = params.get(name)
-    return value !== null && !ignored(name, value)
+    return value !== null && EXACT_FILTERS.has(name) && !ignored(name, value)
   })
   if (narrowed) return undefined
   return candidates.find(([name]) => !params.get(name)?.trim())

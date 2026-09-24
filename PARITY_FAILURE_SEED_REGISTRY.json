@@ -168,6 +168,12 @@
       "seed": 1416601298,
       "status": "fixed",
       "failure": "ListKitOrderLineKits attributesFilter=aaa… pageSize=0: staging validates the query (pageSize) before the filter; the mock answered the filter's 400 first"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1417154522,
+      "status": "fixed",
+      "failure": "ListOrders orderDateMax=2026-03-09: the walk's date range was taken as narrowing, so staging listed a real tenant order; only exact filters now count as narrowing"
     }
   ]
 }
