@@ -1056,6 +1056,1650 @@
       "pageSize": 2000
     },
     {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "{"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "WB-1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "WB_1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "WB 1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "WB.1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "WB1;WB2"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "é"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "a'b"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "<b>"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "%"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines",
+      "params": {
+        "kitNumbers": "*"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "{"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "WB-1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "WB_1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "WB 1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "WB.1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "WB1;WB2"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "é"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "a'b"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "<b>"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "%"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "kitNumbers": "*"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumbers": [
+          "'Kit Numbers' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "kitNumbers": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "{"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "WB_1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "WB 1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "WB.1"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "WB1;WB2"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "é"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "a'b"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "<b>"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "%"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "kitNumber": "*"
+      },
+      "status": 400,
+      "errors": {
+        "kitNumber": [
+          "'Kit Number' is not in the correct format."
+        ]
+      }
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kits",
+      "params": {
+        "orderNumber": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results",
+      "params": {
+        "kitNumber": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributeTerm": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "attributesToSearch": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/kitorderlines/kits",
+      "params": {
+        "orderLineId": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/orders",
+      "params": {
+        "productName": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "{"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "WB1,WB2"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "WB-1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "WB_1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "WB 1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "WB.1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "WB1;WB2"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "é"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "a'b"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "<b>"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "%"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/products",
+      "params": {
+        "productCode": "*"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "{"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "WB1,WB2"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "WB-1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "WB_1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "WB 1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "WB.1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "WB1;WB2"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "é"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "a'b"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "<b>"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "%"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/eventTypes",
+      "params": {
+        "name": "*"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "{"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "WB1,WB2"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "WB-1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "WB_1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "WB 1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "WB.1"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "WB1;WB2"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "é"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "a'b"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "<b>"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "%"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/notificationSubscriptions",
+      "params": {
+        "type": "*"
+      },
+      "status": 200
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "resultTypeName": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "{"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "WB1,WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "WB-1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "WB_1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "WB 1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "WB.1"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "WB1;WB2"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "é"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "a'b"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "<b>"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "%"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
+      "path": "/api/v2/results/search",
+      "params": {
+        "firstName": "*"
+      },
+      "status": 200,
+      "offset": 0,
+      "pageSize": 100
+    },
+    {
       "path": "/api/v2/kits",
       "params": {
         "kitNumber": "WB000000",

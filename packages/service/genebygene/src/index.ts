@@ -424,7 +424,22 @@ const QUERY_ENUMS = {
 const enumNames = (name: keyof typeof QUERY_ENUMS): ReadonlySet<string> =>
   new Set(QUERY_ENUMS[name].names.map(enumKey))
 
-type QueryRule = "int" | "bool" | "date" | "guid" | "required" | keyof typeof QUERY_ENUMS
+/** Character formats staging enforces on kit filters (recorded: `{`, `_`, `.`, spaces refused). */
+const QUERY_FORMATS = {
+  /** `kitNumbers` on the kit-order-line lists: letters, digits and commas. */
+  kitList: /^[A-Za-z0-9,]+$/,
+  /** `kitNumber` on `GET /api/v2/kits`: letters, digits, commas and hyphens. */
+  kitNumber: /^[A-Za-z0-9,-]+$/,
+} as const
+
+type QueryRule =
+  | "int"
+  | "bool"
+  | "date"
+  | "guid"
+  | "required"
+  | keyof typeof QUERY_ENUMS
+  | keyof typeof QUERY_FORMATS
 
 const pascal = (name: string) => `${name[0]?.toUpperCase() ?? ""}${name.slice(1)}`
 const spaced = (name: string) => pascal(name).replace(/([a-z])([A-Z])/g, "$1 $2")
@@ -473,6 +488,10 @@ const queryProblem = (
       if (rule === "required") {
         const empty = !bound || (list.includes("guid") && EMPTY_GUID.test(String(raw).trim()))
         if (empty) add(name, `'${spaced(name)}' must not be empty.`)
+      } else if (rule in QUERY_FORMATS && present) {
+        if (!QUERY_FORMATS[rule as keyof typeof QUERY_FORMATS].test(raw)) {
+          add(name, `'${spaced(name)}' is not in the correct format.`)
+        }
       } else if (rule in QUERY_ENUMS && present) {
         const known = enumNames(rule as keyof typeof QUERY_ENUMS)
         if (/^\d+$/.test(raw.trim()) || !known.has(enumKey(raw))) {
@@ -1583,7 +1602,7 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKits(context: OperationContext): Response {
-    const invalid = queryProblem(context, { status: "status" }, true)
+    const invalid = queryProblem(context, { status: "status", kitNumber: "kitNumber" }, true)
     if (invalid) return invalid
     const page = pageOf(context)
     const kitNumber = query(context, "kitNumber")
@@ -1730,7 +1749,11 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private listKitOrderLines(context: OperationContext): Response {
-    const invalid = queryProblem(context, { status: "status", orderByAsc: "bool" }, true)
+    const invalid = queryProblem(
+      context,
+      { status: "status", orderByAsc: "bool", kitNumbers: "kitList" },
+      true,
+    )
     if (invalid) return invalid
     // Staging fails with an empty 500 on a productType it cannot parse, or an attributesFilter
     // that is not JSON, but only when there are rows to apply it to (kitorderlines/kits
@@ -1757,7 +1780,12 @@ export class GeneByGeneAPI implements FetchAPI {
   private listKitOrderLineKits(context: OperationContext): Response {
     const invalid = queryProblem(
       context,
-      { status: "status", productType: "productType", orderByAsc: "bool" },
+      {
+        status: "status",
+        productType: "productType",
+        orderByAsc: "bool",
+        kitNumbers: "kitList",
+      },
       true,
     )
     if (invalid) return invalid

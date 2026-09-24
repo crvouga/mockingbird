@@ -59,12 +59,15 @@ jobs:
           bun run parity:service -- "${services[@]}"
 
       # What a parity script recorded from the live vendor (e.g. genebygene's
-      # corpus/address-parity.json), so it can be downloaded and committed.
+      # corpus/address-parity.json and src/corpus/live-catalogs.json), so it can be downloaded
+      # and committed.
       - if: always()
         uses: actions/upload-artifact@v4
         with:
           name: parity-corpus
-          path: packages/service/*/corpus/
+          path: |
+            packages/service/*/corpus/
+            packages/service/*/src/corpus/
           if-no-files-found: ignore
 
       - if: always()

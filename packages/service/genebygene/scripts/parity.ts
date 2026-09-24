@@ -555,7 +555,8 @@ const NARROW: Readonly<Record<string, readonly [string, string]>> = {
 const emptyTenantView = async (request: Request): Promise<Response> => {
   const url = new URL(request.url)
   const narrow = request.method === "GET" ? NARROW[url.pathname] : undefined
-  if (narrow && !url.searchParams.has(narrow[0])) {
+  // A blank value is no filter on staging, so it is narrowed like a missing one.
+  if (narrow && !url.searchParams.get(narrow[0])?.trim()) {
     url.searchParams.set(narrow[0], narrow[1])
     return fetch(new Request(url, request))
   }

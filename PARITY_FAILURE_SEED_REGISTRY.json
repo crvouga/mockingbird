@@ -100,8 +100,14 @@
     {
       "provider": "genebygene",
       "seed": 1388373597,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListKitOrderLineKits kitNumbers={: real 400 \"'Kit Numbers' is not in the correct format.\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1390261398,
+      "status": "open",
+      "failure": "ListKits kitNumber=\"\": the blank filter was not narrowed, so staging listed the shared tenant's 3831 kits against the mock's 0"
     }
   ]
 }
