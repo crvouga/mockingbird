@@ -81,6 +81,21 @@ if (unsafe && /(^|\/\/)api\.genebygene\.com/.test(baseUrl)) {
   process.exit(2)
 }
 
+/**
+ * Every live request gives up after a minute: a staging request that never answers once hung a
+ * run for the job's whole budget. A GET that times out is retried once (it has no side effect).
+ */
+const LIVE_TIMEOUT_MS = 60_000
+const live = async (request: Request): Promise<Response> => {
+  const attempt = () => fetch(request.clone(), { signal: AbortSignal.timeout(LIVE_TIMEOUT_MS) })
+  try {
+    return await attempt()
+  } catch (error) {
+    if (request.method !== "GET" || !(error instanceof DOMException)) throw error
+    return attempt()
+  }
+}
+
 const requestToken = (
   target: (request: Request) => Promise<Response>,
   clientId: string,
@@ -99,7 +114,7 @@ const requestToken = (
   )
 
 const tokenResponse = await requestToken(
-  (r) => fetch(r),
+  (r) => live(r),
   credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_ID ?? "",
   credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET ?? "",
 )
@@ -140,7 +155,7 @@ const call = async (target: "live" | "mock", method: string, path: string, body?
   }
   const response =
     target === "live"
-      ? await fetch(new Request(`${baseUrl}${path}`, init))
+      ? await live(new Request(`${baseUrl}${path}`, init))
       : await mockApi.fetch(new Request(`https://mock.genebygene.local${path}`, init))
   const text = await response.text()
   let json: unknown
@@ -359,7 +374,7 @@ if (unsafe) {
 console.log("genebygene parity: catalogs and error shapes")
 const ZERO = "00000000-0000-0000-0000-000000000000"
 const probe = async (method: string, path: string, token = realToken) => {
-  const response = await fetch(
+  const response = await live(
     new Request(`${baseUrl}${path}`, {
       method,
       headers: { authorization: `Bearer ${token}`, accept: "application/json" },
@@ -558,9 +573,9 @@ const emptyTenantView = async (request: Request): Promise<Response> => {
   // A blank value is no filter on staging, so it is narrowed like a missing one.
   if (narrow && !url.searchParams.get(narrow[0])?.trim()) {
     url.searchParams.set(narrow[0], narrow[1])
-    return fetch(new Request(url, request))
+    return live(new Request(url, request))
   }
-  const response = await fetch(request)
+  const response = await live(request)
   if (
     request.method !== "GET" ||
     url.pathname !== "/api/v2/notificationSubscriptions" ||
@@ -591,8 +606,8 @@ try {
       fetch: (request) => {
         // The token operation lives on the auth host.
         const url = new URL(request.url)
-        if (url.pathname.endsWith("/connect/token")) return fetch(new Request(tokenUrl, request))
-        return unsafe ? fetch(request) : emptyTenantView(request)
+        if (url.pathname.endsWith("/connect/token")) return live(new Request(tokenUrl, request))
+        return unsafe ? live(request) : emptyTenantView(request)
       },
     },
     mock: {

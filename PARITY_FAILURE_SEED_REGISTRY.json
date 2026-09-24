@@ -106,7 +106,7 @@
     {
       "provider": "genebygene",
       "seed": 1390261398,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListKits kitNumber=\"\": the blank filter was not narrowed, so staging listed the shared tenant's 3831 kits against the mock's 0"
     }
   ]
