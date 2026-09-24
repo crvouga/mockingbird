@@ -1,6 +1,7 @@
 /**
  * Live parity: the same random walk against a real Slack workspace and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_SLACK_BOT_TOKEN     a bot token (xoxb-…) in a sandbox workspace
  *
@@ -9,20 +10,9 @@
  * so they need `--include-unsafe` (point the token at a throwaway workspace first). Incoming
  * webhooks are never walked live: a webhook URL posts to a real channel.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, SlackAPI, supportedOperationIds } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -31,7 +21,7 @@ try {
       provider: "slack",
       fields: { MOCKINGBIRD_SLACK_BOT_TOKEN: "MOCKINGBIRD_SLACK_BOT_TOKEN" },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

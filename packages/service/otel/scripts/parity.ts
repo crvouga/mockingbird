@@ -1,6 +1,7 @@
 /**
  * Live parity: the same random walk against a real OpenObserve instance and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_OTEL_O2_BASE_URL     e.g. https://observe.example.com (a sandbox org, never prod)
  *   MOCKINGBIRD_OTEL_O2_BASIC_AUTH   base64 "user:password" (the shape of O2_BASIC_AUTH)
@@ -8,20 +9,9 @@
  * Only the read-only O2 routes run (organizations, streams, schema, _search). The OTLP
  * receiver routes write telemetry into the real org, so they are never walked live.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, OtelAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -33,7 +23,7 @@ try {
         MOCKINGBIRD_OTEL_O2_BASIC_AUTH: "MOCKINGBIRD_OTEL_O2_BASIC_AUTH",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

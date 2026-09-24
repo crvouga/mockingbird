@@ -155,7 +155,7 @@ namespace, so parallel workers never collide in the shared results bucket.
 - Real carrier behaviour: shipping prices and tracking numbers are fixed-format synthetics.
 - A live `corpus pull`: the catalog is the consumer's recorded `gxg-list-products-dev.json`;
   attribute definitions and event types are synthesised from the consumer's code (no recording
-  exists), because staging credentials are not in Vault.
+  exists), because no staging credentials are configured.
 - Nothing moves on its own: every lab step is an admin transition.
 
 ## API
@@ -182,7 +182,7 @@ namespace, so parallel workers never collide in the shared results bucket.
 bun test                           # self-parity, acceptance through test/consumer.ts, contract, served-over-HTTP
 bun scripts/vendor-openapi.ts      # re-vendor openapi.yaml from ~/geviti-monorepo, then bun run generate
 bun run parity                     # live parity against GxG staging; exits 2 without
-                                   # MOCKINGBIRD_GENEBYGENE_CLIENT_ID / _CLIENT_SECRET (env or Vault)
+                                   # MOCKINGBIRD_GENEBYGENE_CLIENT_ID / _CLIENT_SECRET (env / .env.local)
 ```
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).

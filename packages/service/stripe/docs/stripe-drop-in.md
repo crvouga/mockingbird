@@ -30,8 +30,8 @@ bun run client-parity                   # stripe-node smoke with webhook signatu
 - **SDK drop-in** walks every S1.4 operation with stripe-node pointed at the mock by
   `host`/`port`/`protocol` only, and checks the mock's request journal saw each one answer 2xx.
 
-Live differential parity (`bun run parity`, `MOCKINGBIRD_STRIPE_SECRET_KEY` from the environment or
-Vault) walks the safe operations against Stripe test mode; `--include-unsafe` adds money movement.
+Live differential parity (`bun run parity`, `MOCKINGBIRD_STRIPE_SECRET_KEY` from the
+environment) walks the safe operations against Stripe test mode; `--include-unsafe` adds money movement.
 
 ## Serving it for a suite
 

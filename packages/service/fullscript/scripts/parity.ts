@@ -1,7 +1,7 @@
 /**
  * Live parity: the same random walk against Fullscript's sandbox and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_FULLSCRIPT_API_URL        e.g. https://api-us-snd.fullscript.io
  *   MOCKINGBIRD_FULLSCRIPT_ACCESS_TOKEN   a sandbox practitioner's access token
@@ -11,20 +11,9 @@
  * seed, so order bodies are expected to differ until a corpus is recorded; envelopes, status
  * codes and error shapes are what this run checks first.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, FullscriptAPI, issueAccessToken } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -36,7 +25,7 @@ try {
         MOCKINGBIRD_FULLSCRIPT_ACCESS_TOKEN: "MOCKINGBIRD_FULLSCRIPT_ACCESS_TOKEN",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

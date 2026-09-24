@@ -1,7 +1,7 @@
 /**
  * Live parity: the same random walk against CareTalk's beta API and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_CARETALK_API_URL     e.g. https://api.caretalkbeta.com
  *   MOCKINGBIRD_CARETALK_USERNAME
@@ -12,20 +12,9 @@
  * ever target the beta environment. The mock is seeded with the live definitions of the forms
  * the walk asks for, so form bodies compare like for like.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { CareTalkAPI, document, type FullFormDto } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -38,7 +27,7 @@ try {
         MOCKINGBIRD_CARETALK_PASSWORD: "MOCKINGBIRD_CARETALK_PASSWORD",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

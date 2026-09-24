@@ -373,6 +373,10 @@ describe("served over HTTP", () => {
   test("OAuth and signed webhooks against the node server, received on a Bun.serve sink", async () => {
     const emr = new FakeEmr()
     emr.treatmentPlans.add("tp_http")
+    // Resolved by the delivery that brings an order to results_ready, so the test waits on the
+    // webhook itself rather than a wall-clock deadline a loaded CI runner can overrun.
+    const resultsReady = Promise.withResolvers<void>()
+    let orderId: string | undefined
     const sink = Bun.serve({
       port: 0,
       fetch: async (request) => {
@@ -383,6 +387,7 @@ describe("served over HTTP", () => {
           challengeKey: CHALLENGE,
           emr,
         })
+        if (orderId && emr.stateOf(orderId) === "results_ready") resultsReady.resolve()
         return Response.json(result.body, { status: result.status })
       },
     })
@@ -414,19 +419,18 @@ describe("served over HTTP", () => {
           body: JSON.stringify({ patientId: "pat_http", treatmentPlanId: "tp_http" }),
         })
       ).json()) as { id: string }
+      orderId = created.id
       await fetch(`${server.url}/__admin/lab-orders/${created.id}/transition`, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ to: "results_ready" }),
       })
-      const deadline = Date.now() + 3_000
-      while (emr.stateOf(created.id) !== "results_ready" && Date.now() < deadline)
-        await Bun.sleep(25)
+      await resultsReady.promise
       expect(emr.stateOf(created.id)).toBe("results_ready")
       expect((await client.getLabOrder(token.accessToken, created.id)).state).toBe("results_ready")
     } finally {
       await server.close()
       sink.stop(true)
     }
-  })
+  }, 30_000)
 })

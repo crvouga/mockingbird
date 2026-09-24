@@ -4,7 +4,7 @@
 
 | When | Script | What it does |
 | --- | --- | --- |
-| Workspace created | `./.superset/setup.sh` | Copies untracked files and `.env*` from `$SUPERSET_ROOT_PATH` (without overwriting), reserves a docs port, then `bun install --frozen-lockfile` |
+| Workspace created | `./.superset/setup.sh` | Copies untracked files and `.env*` from `$SUPERSET_ROOT_PATH` (without overwriting), reserves a docs port, then `bun run setup` (install, build, create `.env.local`) |
 | Run button | `./.superset/run.sh` | Builds the docs site's dependencies and starts `bun docs` on that port |
 | Workspace deleted | `./.superset/teardown.sh` | Stops the dev server and releases the port |
 
@@ -20,4 +20,4 @@ Run the same scripts from a checkout without Superset:
 ./.superset/teardown.sh
 ```
 
-Outside a workspace, `SUPERSET_ROOT_PATH` is unset, so setup skips the copy and only installs dependencies and reserves a port.
+Outside a workspace, `SUPERSET_ROOT_PATH` is unset, so setup skips the copy, reserves a port and runs `bun run setup`.

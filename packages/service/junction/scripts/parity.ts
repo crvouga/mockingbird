@@ -1,9 +1,8 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join } from "node:path"
 import type { ExploreRng, ExploreState, LogicalCommand, Scope } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
-import { createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import {
   DEFAULT_PROPERTY_RUNS,
   parity,
@@ -86,20 +85,12 @@ const parseCLIOptions = (args: readonly string[]): ParityCLIOptions => {
 
 const cliOptions = parseCLIOptions(Bun.argv.slice(2))
 
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
-
 const credentials = await loadCredentials(
   {
     provider: "junction",
     fields: { MOCKINGBIRD_JUNCTION_API_KEY: "MOCKINGBIRD_JUNCTION_API_KEY" },
   },
-  { env: Bun.env, readTokenFile },
+  { env: Bun.env },
 )
 const apiKey = credentials.values.MOCKINGBIRD_JUNCTION_API_KEY
 if (!TEST_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))) {

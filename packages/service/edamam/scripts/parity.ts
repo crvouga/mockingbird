@@ -1,6 +1,7 @@
 /**
  * Live parity: the same random walk against api.edamam.com and a fresh mock, canonicalized
- * and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ * and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_EDAMAM_APP_ID    an application with the Food Database, Nutrition Analysis,
  *   MOCKINGBIRD_EDAMAM_APP_KEY   Recipe Search and Meal Planner APIs enabled
@@ -12,20 +13,9 @@
  * content are expected until a corpus is recorded; status codes, envelopes and error shapes
  * are what this run checks first.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, EdamamAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -37,7 +27,7 @@ try {
         MOCKINGBIRD_EDAMAM_APP_KEY: "MOCKINGBIRD_EDAMAM_APP_KEY",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

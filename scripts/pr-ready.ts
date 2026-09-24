@@ -1,10 +1,11 @@
 #!/usr/bin/env bun
 /**
- * Agentic PR-merge engine. Mechanical git/GitHub work for the /pr-merge command
- * (see .agents/commands/pr-merge.md); the agent only supplies judgment: commit
- * message, conflict resolution, PR title/body, and CI root-cause fixes.
+ * Agentic PR-ready engine. Mechanical git/GitHub work for the /pr-ready command
+ * (see .agents/commands/pr-ready.md); the agent only supplies judgment: commit
+ * message, conflict resolution, PR title/body, and CI root-cause fixes. It never
+ * merges: a human lands the PR once `ready` reports it green.
  *
- *   bun scripts/pr-merge.ts <command> [flags]   # or: bun run pr:merge <command>
+ *   bun scripts/pr-ready.ts <command> [flags]   # or: bun run pr:ready <command>
  *
  * Every command except `logs` prints exactly one JSON object on stdout.
  * `logs` prints a plain-text excerpt. Human/child noise never reaches stdout.
@@ -19,8 +20,8 @@ import { unlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-// Operate on the repository of the current working directory: `bun run pr:merge`
-// and `bun scripts/pr-merge.ts` both run from the repo root, and this keeps the
+// Operate on the repository of the current working directory: `bun run pr:ready`
+// and `bun scripts/pr-ready.ts` both run from the repo root, and this keeps the
 // engine usable against any checkout (e.g. a throwaway sandbox repo).
 const root = process.cwd()
 
@@ -40,10 +41,10 @@ const ALLOWED_MERGE_METHODS = ["merge"]
 
 const EXIT = { ok: 0, fail: 1, usage: 2, conflicts: 3, pending: 4 } as const
 
-const USAGE = `bun scripts/pr-merge.ts <command> [flags]
+const USAGE = `bun scripts/pr-ready.ts <command> [flags]
 
 commands:
-  advance   sync, publish, upsert PR, wait for checks, merge
+  advance   sync, publish, upsert PR, wait for checks, verify ready
             (--title, --body-file, --timeout)
   status    snapshot: worktree, upstream, base, PR, checks
   context   compact commit/diff context for message generation
@@ -62,7 +63,7 @@ commands:
             --reason test_credential|false_positive|low_risk; needs GITGUARDIAN_API_KEY)
   ruleset   verify/apply merge gate     (--apply)
   repo      verify/apply repo settings  (--apply)
-  merge     land the PR once pushed, synced and every check green (--auto, --dry-run)
+  ready     verify the PR is pushed, synced, every check green and mergeable (never merges)
 
 common flags:
   --base <branch>   trunk branch (${TRUNK_BRANCH}); any other value is rejected`
@@ -776,7 +777,7 @@ async function cmdAdvance(): Promise<void> {
   }
 
   async function step(name: string, args: string[] = []): Promise<Record<string, unknown>> {
-    const result = await run(["bun", join(import.meta.dir, "pr-merge.ts"), name, ...args])
+    const result = await run(["bun", join(import.meta.dir, "pr-ready.ts"), name, ...args])
     let data: Record<string, unknown>
     try {
       data = JSON.parse(result.stdout) as Record<string, unknown>
@@ -811,8 +812,8 @@ async function cmdAdvance(): Promise<void> {
   }
 
   await step("checks", ["--timeout", opt("--timeout") ?? "1800"])
-  const merged = await step("merge")
-  emit({ ok: true, branch, base, ...merged })
+  const ready = await step("ready")
+  emit({ ok: true, branch, base, ...ready })
 }
 
 // ---------------------------------------------------------------------------
@@ -921,7 +922,7 @@ async function cmdCommit(): Promise<void> {
     messageFile !== undefined ? (await Bun.file(messageFile).text()).trim() : (message ?? "")
   if (!text) die(EXIT.usage, { error: "empty commit message", usage: USAGE })
 
-  const msgPath = join(tmpdir(), `pr-merge-commit-msg-${process.pid}.txt`)
+  const msgPath = join(tmpdir(), `pr-ready-commit-msg-${process.pid}.txt`)
   await Bun.write(msgPath, `${text}\n`)
 
   const lint = await run(["bunx", "--no", "--", "commitlint", "--edit", msgPath])
@@ -1031,7 +1032,7 @@ async function cmdSync(): Promise<void> {
   }
   if (worktree.dirty) {
     die(EXIT.usage, {
-      error: "worktree not clean; commit first (bun scripts/pr-merge.ts commit …)",
+      error: "worktree not clean; commit first (bun scripts/pr-ready.ts commit …)",
     })
   }
 
@@ -1139,7 +1140,7 @@ async function cmdPr(): Promise<void> {
   let bodyPath = bodyFile
   let tempBody: string | null = null
   if (bodyPath === undefined) {
-    tempBody = join(tmpdir(), `pr-merge-pr-body-${process.pid}.md`)
+    tempBody = join(tmpdir(), `pr-ready-pr-body-${process.pid}.md`)
     await Bun.write(tempBody, body ?? "")
     bodyPath = tempBody
   }
@@ -1200,7 +1201,7 @@ async function cmdChecks(): Promise<void> {
             step: "checks",
             error: "a pull-request check is not a required status check on main",
             notRequired: summary.notRequired,
-            hint: "add each name to REQUIRED_CHECKS in scripts/pr-merge.ts, then run: bun run pr:merge ruleset --apply",
+            hint: "add each name to REQUIRED_CHECKS in scripts/pr-ready.ts, then run: bun run pr:ready ruleset --apply",
           })
         }
         emit({
@@ -1426,8 +1427,8 @@ async function guardianIgnore(): Promise<void> {
     die(EXIT.fail, {
       step: "guardian-auth",
       error: `${GITGUARDIAN_KEY_ENV} is not set`,
-      vault: `secret/personal/dev key ${GITGUARDIAN_KEY_ENV} (a GitGuardian API token with incidents:write)`,
-      run: "bun scripts/vault-run.ts -- bun scripts/pr-merge.ts guardian ignore --incident <id> --reason <reason>",
+      fix: `add ${GITGUARDIAN_KEY_ENV} (a GitGuardian API token with incidents:write) to .env.local`,
+      run: "bun run pr:ready guardian ignore --incident <id> --reason <reason>",
     })
   }
   const api = "https://api.gitguardian.com"
@@ -1552,7 +1553,7 @@ async function mergeReadiness(branch: string, base: string, pr: PrView) {
   return { blockers, pending, mergeStateStatus: state }
 }
 
-async function cmdMerge(): Promise<void> {
+async function cmdReady(): Promise<void> {
   if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
   const branch = await currentBranch()
   const base = await baseBranch()
@@ -1562,39 +1563,9 @@ async function cmdMerge(): Promise<void> {
 
   const { blockers, pending, mergeStateStatus } = await mergeReadiness(branch, base, existing)
   if (blockers.length > 0)
-    die(EXIT.fail, { step: "merge-gate", blockers, pending, mergeStateStatus })
-  if (pending.length > 0) die(EXIT.pending, { step: "merge-gate", pending, mergeStateStatus })
-  if (flag("--dry-run")) {
-    emit({ ok: true, ready: true, number: existing.number, url: existing.url, mergeStateStatus })
-    return
-  }
-
-  const auto = flag("--auto")
-  const args = ["pr", "merge", branch, "--merge"]
-  if (auto) args.push("--auto")
-  const merged = await gh(args)
-  if (merged.code !== 0) {
-    die(EXIT.fail, { step: "merge", output: merged.stderr || merged.stdout })
-  }
-
-  // Merging is asynchronous on GitHub's side; wait briefly for the PR to report MERGED.
-  let pr = await readPr(branch)
-  for (let i = 0; i < 15 && pr?.state !== "MERGED"; i++) {
-    await Bun.sleep(2000)
-    pr = await readPr(branch)
-  }
-  const state = pr?.state ?? existing.state
-  emit({
-    ok: state === "MERGED",
-    merged: state === "MERGED",
-    method: "merge",
-    auto,
-    number: pr?.number ?? existing.number,
-    url: pr?.url ?? existing.url,
-    state,
-    mergeStateStatus: pr?.mergeStateStatus ?? null,
-  })
-  process.exit(state === "MERGED" ? EXIT.ok : EXIT.pending)
+    die(EXIT.fail, { step: "ready-gate", blockers, pending, mergeStateStatus })
+  if (pending.length > 0) die(EXIT.pending, { step: "ready-gate", pending, mergeStateStatus })
+  emit({ ok: true, ready: true, number: existing.number, url: existing.url, mergeStateStatus })
 }
 
 // ---------------------------------------------------------------------------
@@ -1637,8 +1608,8 @@ async function main(): Promise<void> {
       return cmdRuleset()
     case "repo":
       return cmdRepo()
-    case "merge":
-      return cmdMerge()
+    case "ready":
+      return cmdReady()
     default:
       die(EXIT.usage, { error: `unknown command: ${command}`, usage: USAGE })
   }

@@ -1,26 +1,15 @@
 /**
  * Live parity: the same random walk against the real EasyPost API (test mode) and a fresh
- * mock, canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * mock, canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_EASYPOST_API_KEY    a **test** key (EZTK…); production keys are refused
  *
  * Trackers created in test mode are free and never reach a carrier.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, EasyPostAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -29,7 +18,7 @@ try {
       provider: "easypost",
       fields: { MOCKINGBIRD_EASYPOST_API_KEY: "MOCKINGBIRD_EASYPOST_API_KEY" },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

@@ -2,9 +2,9 @@
 #
 # This workflow does not decide whether a commit is releasable. A pull request
 # whose checks passed (pr.yml: Commitlint, Check, plus GitGuardian) is releasable
-# by definition; merging it to main is what starts a publish. The job builds from
-# the Turborepo cache the PR already filled and publishes. It does not re-run
-# those checks.
+# by definition; merging it to main is what starts a publish. The job builds
+# (replaying main's Turborepo cache where it can) and publishes. It does not
+# re-run those checks.
 #
 # Schedule and manual dispatch only retry an interrupted publish. They are not
 # a second gate.
@@ -57,35 +57,24 @@ jobs:
         run: bun run release:plan -- --github-output
 
       # Dist is an input to publish, not a second quality gate. Check already
-      # built, packed, and smoke-tested this tree; turbo replays that cache.
+      # built, packed, and smoke-tested this tree.
       - name: Build
         if: steps.plan.outputs.has_changes == 'true'
         timeout-minutes: 15
         run: bunx turbo run build --output-logs=errors-only
 
-      # Vault is the source of truth. Reconciliation also repairs missing Trusted
-      # Publishers and deprecations when there are no new package versions.
-      # NPM_TOKEN is only needed to seed brand-new packages; release:publish already
-      # tolerates it being unset and fails loudly itself when a new package needs it
-      # (docs/SECRETS.md: bun run release:bootstrap). Don't let a missing/renamed Vault
-      # key hard-fail every release run before that check gets a chance to run.
-      - name: Load npm publish credential
-        uses: hashicorp/vault-action@v4
-        continue-on-error: true
-        with:
-          url: https://vault.chrisvouga.dev
-          method: jwt
-          path: jwt
-          role: github-actions
-          jwtGithubAudience: https://vault.chrisvouga.dev
-          secrets: |
-            secret/data/personal/prd NPM_TOKEN | NPM_TOKEN
-
       - name: Publish, tag, and create GitHub Releases
         timeout-minutes: 20
+        # NPM_TOKEN only seeds brand-new packages and deprecations; release:publish tolerates
+        # it being unset and fails loudly itself when a new package needs it
+        # (docs/SECRETS.md: bun run release:bootstrap).
         env:
           GH_TOKEN: ${{ github.token }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           bun run release:publish
+
+      - if: always()
+        uses: ./.github/actions/turbo-cache-save

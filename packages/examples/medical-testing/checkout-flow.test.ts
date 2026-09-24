@@ -213,7 +213,9 @@ describe("Cove checkout flow", () => {
       const order = body.orders.find((o) => o.id === orderId)
       return order?.status === "results_ready" && Boolean(order.interpretation)
     }, 8_000)
-  })
+    // The lab adapter holds results for RESULTS_READY_DELAY_MS (4s), so bun's 5s default
+    // leaves no room; budget for both waitUntil calls instead.
+  }, 15_000)
 
   test("checkout requires signing in first", async () => {
     const { app, cookie } = await setup()

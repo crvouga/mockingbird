@@ -76,18 +76,22 @@ structural-diffs them. Any divergence is a failure.
 
 ### Credentials
 
-Credentials come from env or the self-hosted Vault (see `docs/SECRETS.md`). `VAULT_ADDR` is
-usually already set; the token lives in `~/.vault-token`.
+Sandbox keys are GitHub Actions repo secrets named `MOCKINGBIRD_*` (see `docs/SECRETS.md`). Without
+any keys on this machine, run parity on GitHub for the pushed branch:
 
 ```bash
-bun run secrets:doctor
+bun run secrets:doctor                     # which services have keys, on GitHub and locally
+bun run parity:remote -- junction          # dispatches the Parity workflow and streams its log
 ```
 
-Fetch a key from Vault — **never truncate it** (the value is long; `head -c` clips it and you'll
-get `401 invalid token`):
+To run locally, put keys in `.env.local` (`bun run setup` creates it from `.env.example`). Bun
+auto-loads it, so no manual `export` is needed once it's filled in.
+
+Read a key straight from `.env.local` — **never truncate it** (the value is long; `head -c`
+clips it and you'll get `401 invalid token`):
 
 ```bash
-API_KEY=$(vault kv get -mount=secret -field=MOCKINGBIRD_JUNCTION_API_KEY secret)
+API_KEY=$(grep '^MOCKINGBIRD_JUNCTION_API_KEY=' .env.local | cut -d= -f2-)
 # others: MOCKINGBIRD_STRIPE_SECRET_KEY, MOCKINGBIRD_GENEBYGENE_CLIENT_ID, _CLIENT_SECRET
 ```
 
@@ -124,7 +128,7 @@ real provider. When a mismatch shows a status/body the spec doesn't declare, or 
 the real API does, probe it directly with `curl` using the sandbox key.
 
 ```bash
-API_KEY=$(vault kv get -mount=secret -field=MOCKINGBIRD_JUNCTION_API_KEY secret)
+API_KEY=$(grep '^MOCKINGBIRD_JUNCTION_API_KEY=' .env.local | cut -d= -f2-)
 BASE=https://api.sandbox.us.junction.com
 # create a resource, then exercise the failing operation with edge-case bodies
 uid=$(curl -s -X POST "$BASE/v2/user" -H "x-vital-api-key: $API_KEY" \

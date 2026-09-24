@@ -51,8 +51,8 @@ Check the report before you change any code:
 Before changing the mock to match a claim, confirm what the oracle really does. A reporter can be
 wrong about the vendor.
 
-- HTTP services: send the same requests to the provider sandbox (`curl` using the keys from
-  `vault run --config prd`, or `bun run parity:service -- <service>`). A parity seed in the report
+- HTTP services: send the same requests to the provider sandbox (`bun run parity:remote -- <service>`
+  on GitHub, or `curl` / `bun run parity:service -- <service>` with keys from `.env.local`). A parity seed in the report
   reproduces with `FC_SEED=<seed>`, and `MOCKINGBIRD_TRACE=1` prints the walk. Never print key values.
 - SQLite and PostgreSQL: run the statements against the real engine through the package's oracle
   tests.
@@ -92,7 +92,7 @@ For `parity` and `bug` issues:
 
 Commit with a Conventional Commit, `fix(<service>): <what now matches the oracle>` (`feat(<service>): …`
 for `feature` and `new-service`), and a
-`Fixes #<n>` line in the body. Then run `/pr-merge`. Its PR body must include `Fixes #<n>` and the
+`Fixes #<n>` line in the body. Then run `/pr-ready`. Its PR body must include `Fixes #<n>` and the
 oracle evidence from step 3, so the issue closes when the PR merges.
 
 Continue with the next issue only if the user asked for the whole queue. Report every issue you

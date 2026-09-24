@@ -89,7 +89,7 @@
     "@crvouga/mockingbird-webhook-collector": "workspace:*",
     "@crvouga/mockingbird-model": "workspace:*",
     "@crvouga/mockingbird-canonicalize": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
     "stripe": "16.12.0",
     "yaml": "2.9.0",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",

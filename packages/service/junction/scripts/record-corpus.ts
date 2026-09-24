@@ -1,15 +1,14 @@
 /**
  * Re-record the shipped corpus (corpus/sandbox-sealed.json) from the Junction sandbox,
- * with the key from Vault. Consumers record their own team with
+ * with MOCKINGBIRD_JUNCTION_API_KEY from the environment. Consumers record their own team with
  * `mockingbird-junction corpus pull` instead.
  *
  *   bun run corpus:record            (refuses to overwrite)
  *   bun run corpus:record -- --force
  */
 import { access, readFile, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join } from "node:path"
-import { loadCredentials } from "@crvouga/mockingbird-openbao"
+import { loadCredentials } from "@crvouga/mockingbird-credentials"
 import { DEFAULT_JUNCTION_BASE_URL, isSandboxKey, pullCorpus } from "../src/corpus-tools.js"
 
 const argv = Bun.argv.slice(2)
@@ -35,7 +34,6 @@ const credentials = await loadCredentials(
   },
   {
     env: Bun.env,
-    readTokenFile: () => readFile(join(homedir(), ".vault-token"), "utf8").catch(() => undefined),
   },
 )
 const apiKey = credentials.values.MOCKINGBIRD_JUNCTION_API_KEY

@@ -1,7 +1,8 @@
 /**
  * Live parity: the same random walk against real Amazon Polly and a fresh mock. Audio bytes
  * compare as "present" (they are synthetic here), so the walk checks status codes, error
- * types and headers. Credentials come from the environment or Vault `secret/personal/prd`:
+ * types and headers. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_AWS_SPEECH_ACCESS_KEY_ID
  *   MOCKINGBIRD_AWS_SPEECH_SECRET_ACCESS_KEY
@@ -11,21 +12,10 @@
  * small). `--include-unsafe` adds Transcribe batch, which starts real (billed) jobs. The
  * HTTP/2 duplex streams are covered by the SDK tests, not by random walks.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { signV4 } from "@crvouga/mockingbird-service"
 import { document, SpeechAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -38,7 +28,7 @@ try {
         MOCKINGBIRD_AWS_SPEECH_REGION: "MOCKINGBIRD_AWS_SPEECH_REGION",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

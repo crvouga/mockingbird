@@ -146,5 +146,7 @@ test(
       { ...fcParameters(process.env), numRuns: 50 },
     )
   },
-  { timeout: 30_000 },
+  // Each walk builds an OAuthAPI, and each OAuthAPI generates an RSA-2048 key: ~60ms on a
+  // laptop, several times that (with a long tail) on a shared CI runner, times 100 walks.
+  { timeout: 120_000 },
 )

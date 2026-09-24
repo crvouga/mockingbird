@@ -2,27 +2,16 @@
  * Live parity: the same random walk against a real Payload CMS and a fresh mock, canonicalized
  * and diffed. The mock is first seeded with the live marketing collection (read-only
  * `GET /api/marketing?limit=0`), so both sides answer from the same documents and the walk
- * checks querying, sorting and paging. Configuration comes from the environment or Vault
- * `secret/personal/prd`:
+ * checks querying, sorting and paging. Configuration comes from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_PAYLOAD_CMS_API_URL   e.g. https://payload.gogeviti.com
  *
  * Every operation is a read.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, PayloadCmsAPI, type PayloadDoc } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -31,7 +20,7 @@ try {
       provider: "payload-cms",
       fields: { MOCKINGBIRD_PAYLOAD_CMS_API_URL: "MOCKINGBIRD_PAYLOAD_CMS_API_URL" },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

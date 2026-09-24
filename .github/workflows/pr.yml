@@ -1,7 +1,7 @@
 # Pull-request gate. A green run of this workflow is the release decision:
 # merging to main publishes (see ci.yml). Do not add a second quality bar there.
 #
-# Every job below is a required status check on main (scripts/pr-merge.ts
+# Every job below is a required status check on main (scripts/pr-ready.ts
 # REQUIRED_CHECKS). Rename a job here and update that list in the same change.
 # GitGuardian Security Checks is the other required check; it is reported by
 # the GitGuardian app, not by a job in this file.
@@ -37,7 +37,7 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          remote-cache: "false"
+          turbo-cache: "false"
 
       # Merge commits land on main, and each PR commit drives the release bump.
       - name: Validate PR commits
@@ -64,7 +64,6 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      id-token: write # Vault OIDC → Turborepo remote cache
     env:
       FC_NUM_RUNS: "40"
     steps:
@@ -80,3 +79,6 @@ jobs:
       - name: Consumer smoke (npm install + import + typecheck every published entry point)
         timeout-minutes: 6
         run: bun run release:smoke
+
+      - if: always()
+        uses: ./.github/actions/turbo-cache-save

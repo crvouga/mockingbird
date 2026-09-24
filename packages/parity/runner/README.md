@@ -128,7 +128,7 @@ real: {
   minIntervalMs: 40,                              // rate-limit spacing
 },
 mock: { create: () => new StripeAPI(), headers: () => ({ authorization: "Bearer sk_test_x" }) },
-redact: createRedactor(credentials.secrets),      // from @crvouga/mockingbird-openbao
+redact: createRedactor(credentials.secrets),      // from @crvouga/mockingbird-credentials
 cleanup: async ({ table, real }) => { /* delete table.all() real ids via real.fetch */ },
 ```
 
@@ -217,7 +217,7 @@ Exported types: `ParityOptions`, `ParityReport`, `RealTarget`, `MockTarget`, `Wa
 ## Related
 
 - [`@crvouga/mockingbird-openapi-metadata`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-metadata) — the `x-mockingbird-*` annotations your spec needs.
-- [`@crvouga/mockingbird-openbao`](https://www.npmjs.com/package/@crvouga/mockingbird-openbao) — load sandbox credentials and build `redact`.
+- [`@crvouga/mockingbird-credentials`](https://github.com/crvouga/mockingbird/tree/main/packages/auth/credentials) — load sandbox credentials and build `redact`.
 - Lower level: [`@crvouga/mockingbird-commands`](https://www.npmjs.com/package/@crvouga/mockingbird-commands), [`@crvouga/mockingbird-canonicalize`](https://www.npmjs.com/package/@crvouga/mockingbird-canonicalize), [`@crvouga/mockingbird-model`](https://www.npmjs.com/package/@crvouga/mockingbird-model), [`@crvouga/mockingbird-openapi`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi).
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).

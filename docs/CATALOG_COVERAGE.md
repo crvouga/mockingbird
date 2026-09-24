@@ -13,7 +13,7 @@ this repo, how it is proven, and what the proof turned up. Every package follows
 - **SDK drop-in**: the vendor's official SDK, at the version the consumer pins, pointed at the
   mock (where the consumer uses one).
 - **Live parity** (`bun run parity:service -- <name>`): the same walks against the real sandbox,
-  when credentials exist in Vault `secret/personal/prd`.
+  when the `MOCKINGBIRD_<VENDOR>_*` repo secrets exist (`bun run parity:remote -- <name>`).
 
 | § | Vendor | Package | SDK drop-in | Live parity |
 | --- | --- | --- | --- | --- |
@@ -44,8 +44,8 @@ this repo, how it is proven, and what the proof turned up. Every package follows
 | S25 | EasyPost, Fullscript, Google Calendar, Plane, Payload CMS, CareTalk, Edamam, Prism | `service-easypost`, `-fullscript`, `-google-calendar`, `-plane`, `-payload-cms`, `-caretalk`, `-edamam`, `-prism` | @googleapis/calendar 9.8 | no credentials |
 
 "No credentials" means the package's `scripts/parity.ts` exits 2 and names the
-`MOCKINGBIRD_<VENDOR>_*` keys it needs; add them to Vault and `bun run parity:service -- <name>`
-runs the live walk. The Junction mock (catalog: "already exists") is unchanged.
+`MOCKINGBIRD_<VENDOR>_*` keys it needs; add them as repo secrets (`bun run secrets:push`) and
+`bun run parity:remote -- <name>` runs the live walk. The Junction mock (catalog: "already exists") is unchanged.
 
 ## What live parity fixed in the Stripe mock
 

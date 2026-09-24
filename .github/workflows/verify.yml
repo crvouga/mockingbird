@@ -2,10 +2,10 @@
 # `mockingbird-junction verify` replays the shipped corpus (drift) and a stateful scenario
 # (users, catalog, serviceability, orders) against both and fails on any divergence.
 #
-# Not a required check — it depends on a live vendor. The sandbox key comes from Vault via
-# GitHub OIDC (role github-actions), the same way .github/actions/setup loads TURBO_*; no
-# stored token. The scenario deletes the user it creates and cancels its order, because it
-# shares the capped sandbox team with everything else.
+# Not a required check — it depends on a live vendor. The sandbox key is the
+# MOCKINGBIRD_JUNCTION_API_KEY repo secret (docs/SECRETS.md). The scenario deletes the
+# user it creates and cancels its order, because it shares the capped sandbox team with
+# everything else.
 name: Verify
 
 on:
@@ -19,7 +19,6 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write # Vault OIDC → MOCKINGBIRD_JUNCTION_API_KEY
 
 env:
   HUSKY: "0"
@@ -33,19 +32,12 @@ jobs:
       - uses: actions/checkout@v5
 
       - uses: ./.github/actions/setup
-        with:
-          remote-cache: "false"
-
-      - uses: hashicorp/vault-action@v4
-        with:
-          url: https://vault.chrisvouga.dev
-          method: jwt
-          path: jwt
-          role: github-actions
-          jwtGithubAudience: https://vault.chrisvouga.dev
-          secrets: |
-            secret/data/personal/prd MOCKINGBIRD_JUNCTION_API_KEY | MOCKINGBIRD_JUNCTION_API_KEY
 
       - name: mockingbird-junction verify (shipped corpus, with orders)
         timeout-minutes: 15
+        env:
+          MOCKINGBIRD_JUNCTION_API_KEY: ${{ secrets.MOCKINGBIRD_JUNCTION_API_KEY }}
         run: bun run --cwd packages/service/junction verify -- --sample 60 --orders
+
+      - if: always()
+        uses: ./.github/actions/turbo-cache-save

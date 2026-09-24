@@ -86,7 +86,7 @@
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@tryvital/vital-node": "3.1.511",

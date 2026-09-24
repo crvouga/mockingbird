@@ -1,6 +1,7 @@
 /**
  * Live parity: the same random walk against the real FirstPromoter API and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_FIRSTPROMOTER_API_URL      e.g. https://api.firstpromoter.com/api
  *   MOCKINGBIRD_FIRSTPROMOTER_API_KEY
@@ -10,20 +11,9 @@
  * archiving promoters and tracking signups change a real account, so they need
  * `--include-unsafe` (use a test account: FirstPromoter has no sandbox mode).
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, FirstPromoterAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -36,7 +26,7 @@ try {
         MOCKINGBIRD_FIRSTPROMOTER_ACCOUNT_ID: "MOCKINGBIRD_FIRSTPROMOTER_ACCOUNT_ID",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

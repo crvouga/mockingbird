@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Install dependencies, copy local untracked files (including .env) from the
-# main checkout, and reserve a docs port for this workspace.
+# Copy local untracked files (including .env.local) from the main checkout,
+# reserve a docs port for this workspace, then run the repo's one-command setup.
 set -euo pipefail
 
 # shellcheck source=/dev/null
@@ -22,6 +22,4 @@ port="$(reserve_docs_port)"
 write_port_files "$port"
 echo "Reserved docs port $port (http://127.0.0.1:$port)."
 
-echo "Installing dependencies..."
-bun install --frozen-lockfile
-echo "Setup complete."
+bun run setup
