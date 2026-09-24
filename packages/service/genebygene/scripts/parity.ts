@@ -373,6 +373,17 @@ if (unsafe) {
 // endpoints on the shared tenant can hold other callers' orders, so they are never written.
 console.log("genebygene parity: catalogs and error shapes")
 const ZERO = "00000000-0000-0000-0000-000000000000"
+/** A filter per list that matches nothing on the shared tenant (see `emptyTenantView`). */
+const NARROW: Readonly<Record<string, readonly [string, string]>> = {
+  "/api/v2/orders": ["orderId", ZERO],
+  "/api/v2/kits": ["kitNumber", "WB000000"],
+  "/api/v2/fulfillments": ["orderId", ZERO],
+  "/api/v2/kitorderlines": ["orderId", ZERO],
+  "/api/v2/kitorderlines/kits": ["orderId", ZERO],
+  "/api/v2/results": ["kitNumber", "WB000000"],
+  "/api/v2/results/search": ["kitNumbers", "WB000000"],
+}
+
 const probe = async (method: string, path: string, token = realToken) => {
   const response = await live(
     new Request(`${baseUrl}${path}`, {
@@ -524,8 +535,19 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
   ["/api/v2/orders", { orderId: ZERO, offset: "-1" }],
 ]
 const queries: Json[] = []
-for (const [path, params] of QUERY_PROBES) {
-  const answer = await probe("GET", `${path}?${new URLSearchParams(params)}`)
+for (const [path, probed] of QUERY_PROBES) {
+  // Narrowed like the walk: an unfiltered list scans the whole shared tenant (minutes, at times).
+  const narrow = NARROW[path]
+  const params =
+    narrow && !probed[narrow[0]]?.trim() ? { ...probed, [narrow[0]]: narrow[1] } : probed
+  let answer: Awaited<ReturnType<typeof probe>>
+  try {
+    answer = await probe("GET", `${path}?${new URLSearchParams(params)}`)
+  } catch (error) {
+    if (!(error instanceof DOMException)) throw error
+    queries.push({ path, params, status: "timeout" })
+    continue
+  }
   const body = answer.body as Json | null
   queries.push({
     path,
@@ -558,15 +580,6 @@ console.log("  wrote src/corpus/live-catalogs.json and corpus/live-errors.json")
  * when there are rows) exactly as they are. Subscriptions have no such filter; their rows are
  * dropped from the live page instead.
  */
-const NARROW: Readonly<Record<string, readonly [string, string]>> = {
-  "/api/v2/orders": ["orderId", ZERO],
-  "/api/v2/kits": ["kitNumber", "WB000000"],
-  "/api/v2/fulfillments": ["orderId", ZERO],
-  "/api/v2/kitorderlines": ["orderId", ZERO],
-  "/api/v2/kitorderlines/kits": ["orderId", ZERO],
-  "/api/v2/results": ["kitNumber", "WB000000"],
-  "/api/v2/results/search": ["kitNumbers", "WB000000"],
-}
 const emptyTenantView = async (request: Request): Promise<Response> => {
   const url = new URL(request.url)
   const narrow = request.method === "GET" ? NARROW[url.pathname] : undefined

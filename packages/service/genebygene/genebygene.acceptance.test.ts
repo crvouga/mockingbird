@@ -1715,7 +1715,8 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
       else expect(body).toEqual(recorded)
     })
   }
-  for (const q of liveErrors.queries) {
+  // A probe staging never answered in time records "timeout": nothing to replay.
+  for (const q of liveErrors.queries.filter((q) => typeof q.status === "number")) {
     test(`GET ${q.path}?${new URLSearchParams(q.params)} → ${q.status}`, async () => {
       const { raw, placeShipped } = await dropIn({ subscribe: false })
       // Staging's /kitorderlines 500s only when there are rows to filter (its tenant had some).
