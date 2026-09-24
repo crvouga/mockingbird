@@ -428,7 +428,16 @@ kbd {
   .site-header .container {
     gap: 12px;
   }
+  /* Five links don't fit beside the actions on a phone. Scroll them instead
+     of letting the header widen the page, which would also stretch every
+     full-screen dialog past the screen edge. */
+  .nav {
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
   .nav a {
+    flex-shrink: 0;
     padding: 6px 7px;
     font-size: 13.5px;
   }
@@ -1051,6 +1060,148 @@ kbd {
 .page-head .lede {
   margin-top: 12px;
   max-width: 680px;
+}
+
+/* ---------- live examples ---------- */
+
+.example-launch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+}
+
+.example-launch p {
+  color: var(--fg-muted);
+  font-size: 13px;
+}
+
+html.example-modal-open {
+  overflow: hidden;
+}
+
+.example-modal {
+  width: min(1240px, calc(100vw - 48px));
+  height: min(920px, calc(100dvh - 48px));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  overscroll-behavior: contain;
+}
+
+.example-modal[open] {
+  display: flex;
+  flex-direction: column;
+  animation: example-modal-in 0.16s var(--ease);
+}
+
+@keyframes example-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+  }
+}
+
+.example-modal::backdrop {
+  background: rgb(10 10 12 / 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.example-modal-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 8px 8px 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-subtle);
+}
+
+.example-modal-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.example-modal-bar strong {
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.example-modal-note {
+  margin-left: auto;
+  color: var(--fg-subtle);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* The example's own window. Containment makes it the containing block for
+   the example's position: fixed overlays, so an app's modals stack inside
+   this box instead of over the docs page. It is deliberately not the
+   scroller (the host is), so those overlays stay put while content scrolls. */
+.example-modal-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  contain: layout paint;
+  isolation: isolate;
+}
+
+.example-modal-status {
+  padding: 24px;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+}
+
+.example-modal-host {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.example-modal[data-fit="panel"] .example-modal-host {
+  padding: 16px;
+}
+
+@media (max-width: 640px) {
+  .example-modal {
+    width: 100%;
+    height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .example-modal-note {
+    display: none;
+  }
+
+  .example-modal-bar strong {
+    margin-right: auto;
+  }
+
+  .example-modal[data-fit="panel"] .example-modal-host {
+    padding: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
