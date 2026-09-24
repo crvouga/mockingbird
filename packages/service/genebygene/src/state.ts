@@ -9,6 +9,7 @@ import {
   type LineRecord,
   type OrderRecord,
   type ResultRecord,
+  type ScenarioRecord,
   type Settings,
   type SubscriptionRecord,
 } from "./types.js"
@@ -43,6 +44,8 @@ export class GeneByGeneState {
   /** Named result fixture (or `custom`) per kit, from `PUT /__admin/results/:kitNumber`. */
   readonly pendingResults: Collection<{ kitNumber: string; fixture: string; custom?: unknown }>
   readonly settings: Collection<Settings>
+  /** Running `POST /__admin/scenario/happy-path` walks, by order id. */
+  readonly scenarios: Collection<ScenarioRecord>
   private readonly ids: IdSequence
 
   constructor(
@@ -60,6 +63,7 @@ export class GeneByGeneState {
     this.products = new Collection(sqlite, namespace, "products")
     this.pendingResults = new Collection(sqlite, namespace, "pendingResults")
     this.settings = new Collection(sqlite, namespace, "settings")
+    this.scenarios = new Collection(sqlite, namespace, "scenarios")
     this.ids = new IdSequence(sqlite, namespace, `genebygene:${namespace}`)
     this.ensureSeeded()
   }

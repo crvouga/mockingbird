@@ -1,17 +1,27 @@
 import { describe, expect, test } from "bun:test"
 import { createHmac } from "node:crypto"
-import { createRuntime, GENEBYGENE_PRESETS, STAGING_PRODUCTS } from "./src/index.js"
+import {
+  catalogProducts,
+  createRuntime,
+  GENEBYGENE_PRESETS,
+  PRODUCTION_PRODUCTS,
+  STAGING_PRODUCTS,
+} from "./src/index.js"
 import { createServer, DEFAULT_PORT, serveTarget } from "./src/server.js"
 import { GxgAuthService, GxgClient, GxgHttpClient, placeOrder } from "./test/consumer.js"
 
 const BUNDLE = "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
 const ADDRESS = {
+  isCommercial: false,
   recipientName: "Ada Lovelace",
   addressLine1: "400 N 5th St",
+  addressLine2: null,
   city: "Phoenix",
   stateOrRegion: "AZ",
   postalCode: "85004",
   countryCode: "US",
+  email: "ada@example.com",
+  phone: "+16025550142",
 }
 
 const consumer = (
@@ -37,21 +47,37 @@ describe("service contract", () => {
     expect(await health.json()).toMatchObject({
       status: "ok",
       service: "genebygene",
-      corpus: "gxg-staging-2026-06",
+      corpus: "gxg-2026-06",
     })
     expect(health.headers.get("x-mockingbird")).toMatch(/^genebygene@.*; ns=default$/)
     const vendor = await runtime.fetch(new Request("http://mock.local/api/v2/products"))
     expect(vendor.status).toBe(401)
-    expect(vendor.headers.get("www-authenticate")).toBe("Bearer")
+    expect(vendor.headers.get("www-authenticate")).toBe('Bearer error="invalid_token"')
     expect(await vendor.text()).toBe("")
   })
 
-  test("the corpus is the recorded staging catalog, byte for byte", async () => {
+  test("the corpus is the recorded catalogs, byte for byte, picked by settings.catalog", async () => {
     const client = consumer("http://mock.local", (r) => createRuntime().fetch(r))
     const runtime = createRuntime()
     const c = consumer("http://mock.local", (r) => runtime.fetch(r))
-    const { data } = await c.http.request<unknown[]>("GET", "/api/v2/products")
-    expect(data).toEqual(STAGING_PRODUCTS as unknown[])
+    const raw = async () => {
+      const token = await c.http.request("GET", "/api/v2/products")
+      return JSON.stringify(token.data)
+    }
+    expect(await raw()).toBe(JSON.stringify(catalogProducts("both")))
+    for (const [catalog, rows] of [
+      ["production", PRODUCTION_PRODUCTS],
+      ["staging", STAGING_PRODUCTS],
+    ] as const) {
+      await runtime.fetch(
+        new Request("http://mock.local/__admin/settings", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ catalog }),
+        }),
+      )
+      expect(await raw()).toBe(JSON.stringify(rows))
+    }
     expect(await client.fetchProduct("49f9c987-ba0e-4801-a3b3-b446a2d4835a")).toMatchObject({
       name: "Standard Swab Domestic Kit with DHL Return Label",
       shippingQualified: true,
@@ -198,15 +224,14 @@ describe("service contract", () => {
       expect(done.status).toBe(200)
       expect(puts.map((p) => p.path).sort()).toEqual(
         [
-          `/geviti-gxg-results-dev/${kit}.csv`,
-          `/geviti-gxg-results-dev/${kit}.json`,
-          `/geviti-gxg-results-dev/${kit}.pdf`,
+          `/geviti-gxg-results-dev/default/${kit}.csv`,
+          `/geviti-gxg-results-dev/default/${kit}.json`,
         ].sort(),
       )
       expect(puts.every((p) => p.auth?.startsWith("AWS4-HMAC-SHA256") && p.bytes > 0)).toBe(true)
       const results = await c.fetchResultsByKitNumber({ kitNumber: kit, offset: 0, pageSize: 10 })
       expect(results.items.map((r) => r.resultPayload)).toContain(
-        `s3://geviti-gxg-results-dev/${kit}.json`,
+        `s3://geviti-gxg-results-dev/default/${kit}.json`,
       )
     } finally {
       s3.stop(true)

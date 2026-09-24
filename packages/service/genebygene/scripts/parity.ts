@@ -1,20 +1,41 @@
 /**
- * Live parity: the same random walk against Gene by Gene staging (Nucleus API v2) and a fresh
- * mock, canonicalized and diffed. Credentials come from the environment
- * (`.env.local` locally, repo secrets in the Parity workflow):
+ * Live parity against Gene by Gene (Nucleus API v2), staging by default. Credentials come from
+ * the environment (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_GENEBYGENE_CLIENT_ID
  *   MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET
- *   MOCKINGBIRD_GENEBYGENE_BASE_URL   optional, default https://staging-api.genebygene.com
+ *   MOCKINGBIRD_GENEBYGENE_API_URL    optional, default https://staging-api.genebygene.com
+ *                                     (MOCKINGBIRD_GENEBYGENE_BASE_URL is the older name)
  *   MOCKINGBIRD_GENEBYGENE_TOKEN_URL  optional, default https://staging-auth.genebygene.com/connect/token
+ *   MOCKINGBIRD_GENEBYGENE_UNSAFE=1   also place (and cancel) real orders; demo/staging only
  *
- * By default only safe operations run (token, catalog, lists, lookups, shipping quotes); order
- * placement, cancels, attribute patches and subscription changes touch a real tenant and need
- * `--include-unsafe`.
+ * Without credentials it prints the missing variable names and exits 2. It never prints a
+ * secret value. What it checks:
+ *
+ * 1. Token, then `GET /api/v2/products`, `/attributes`, `/eventTypes`: status, and for products
+ *    the id set. Live ids win when staging has drifted: a redacted diff (ids and names only) is
+ *    written to `corpus/products-diff.json` for a human to commit.
+ * 2. The synthetic address corpus quoted against the deluxe bundle (or the staging standard
+ *    bundle when staging lacks it): status, whether `errorMessages` is empty, and the SET of
+ *    courier codes — never prices or dates (volatile live, deterministic only in the mock). A
+ *    live code set that contradicts the zone table fails the run and names the ZIP3.
+ * 3. The structural cases (long line, PO Box, non-US, the not-found street) are recorded into
+ *    `corpus/address-parity.json` (`recorded: true`); the acceptance suite replays that file.
+ * 4. A random walk over the other safe operations, mock vs live.
+ * 5. With MOCKINGBIRD_GENEBYGENE_UNSAFE=1 (never against production): one order to
+ *    `1445 N Loop W`, canceled in the same run, and one to `501 N 5th St`, which must answer the
+ *    Address Not Found 400. Responses are redacted to status, message and id shape.
  */
+import { readFile, writeFile } from "node:fs/promises"
+import { join } from "node:path"
 import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
-import { document, GeneByGeneAPI } from "../src/index.js"
+import { DELUXE_BUNDLE_ID } from "../src/corpus.js"
+import { document, GeneByGeneAPI, supportedOperationIds } from "../src/index.js"
+import { ADDRESS_CORPUS, menuFor, zoneFor } from "../src/shipping.js"
+
+const STAGING_STANDARD_ID = "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
+const CORPUS_DIR = join(import.meta.dir, "..", "corpus")
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -30,7 +51,7 @@ try {
   )
 } catch (error) {
   if (error instanceof CredentialError) {
-    console.error(`genebygene parity: no staging credentials. ${error.message}`)
+    console.error(`genebygene parity: no credentials. ${error.message}`)
     process.exit(2)
   }
   throw error
@@ -40,8 +61,15 @@ const tokenUrl =
   process.env.MOCKINGBIRD_GENEBYGENE_TOKEN_URL ??
   "https://staging-auth.genebygene.com/connect/token"
 const baseUrl = (
-  process.env.MOCKINGBIRD_GENEBYGENE_BASE_URL ?? "https://staging-api.genebygene.com"
+  process.env.MOCKINGBIRD_GENEBYGENE_API_URL ??
+  process.env.MOCKINGBIRD_GENEBYGENE_BASE_URL ??
+  "https://staging-api.genebygene.com"
 ).replace(/\/$/, "")
+const unsafe = process.env.MOCKINGBIRD_GENEBYGENE_UNSAFE === "1"
+if (unsafe && /(^|\/\/)api\.genebygene\.com/.test(baseUrl)) {
+  console.error("genebygene parity: MOCKINGBIRD_GENEBYGENE_UNSAFE never runs against production")
+  process.exit(2)
+}
 
 const requestToken = (
   target: (request: Request) => Promise<Response>,
@@ -70,24 +98,224 @@ if (!tokenResponse.ok) {
   process.exit(2)
 }
 const realToken = ((await tokenResponse.json()) as { access_token: string }).access_token
+const redact = createRedactor([...credentials.secrets, realToken])
 
+// The mock answers the staging catalog, the host this script talks to by default.
+const mockApi = new GeneByGeneAPI({ settings: { catalog: "staging" } })
 const mockToken = (
-  (await (await requestToken((r) => new GeneByGeneAPI().fetch(r), "parity", "parity")).json()) as {
+  (await (await requestToken((r) => mockApi.fetch(r), "parity", "parity")).json()) as {
     access_token: string
   }
 ).access_token
 
+type Json = Record<string, unknown>
+const call = async (target: "live" | "mock", method: string, path: string, body?: unknown) => {
+  const init: RequestInit = {
+    method,
+    headers: {
+      authorization: `Bearer ${target === "live" ? realToken : mockToken}`,
+      accept: "application/json",
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }
+  const response =
+    target === "live"
+      ? await fetch(new Request(`${baseUrl}${path}`, init))
+      : await mockApi.fetch(new Request(`https://mock.genebygene.local${path}`, init))
+  const text = await response.text()
+  let json: unknown
+  try {
+    json = text.length > 0 ? JSON.parse(text) : undefined
+  } catch {
+    json = undefined
+  }
+  // Stay under our client's own 2 rps budget on the shared tenant.
+  if (target === "live") await Bun.sleep(500)
+  return { status: response.status, json }
+}
+
+const failures: string[] = []
+const fail = (message: string) => {
+  failures.push(message)
+  console.error(`  ✗ ${redact(message)}`)
+}
+
+// 1. catalog, attributes, event types --------------------------------------------------------------
+console.log("genebygene parity: catalog")
+for (const path of ["/api/v2/products", "/api/v2/attributes", "/api/v2/eventTypes"]) {
+  const [live, mock] = [await call("live", "GET", path), await call("mock", "GET", path)]
+  if (live.status !== mock.status) fail(`${path}: live ${live.status}, mock ${mock.status}`)
+}
+const liveProducts = ((await call("live", "GET", "/api/v2/products")).json ?? []) as Json[]
+const mockProducts = ((await call("mock", "GET", "/api/v2/products")).json ?? []) as Json[]
+const ids = (rows: Json[]) => new Set(rows.map((p) => String(p.id)))
+const [liveIds, mockIds] = [ids(liveProducts), ids(mockProducts)]
+const added = liveProducts.filter((p) => !mockIds.has(String(p.id)))
+const removed = mockProducts.filter((p) => !liveIds.has(String(p.id)))
+if (added.length > 0 || removed.length > 0) {
+  const diff = {
+    host: new URL(baseUrl).host,
+    added: added.map((p) => ({ id: p.id, name: p.name })),
+    removed: removed.map((p) => ({ id: p.id, name: p.name })),
+  }
+  await writeFile(join(CORPUS_DIR, "products-diff.json"), `${JSON.stringify(diff, null, 2)}\n`)
+  fail(`product ids drifted (+${added.length} / -${removed.length}); see corpus/products-diff.json`)
+}
+
+// 2 + 3. the address corpus ---------------------------------------------------------------------
+console.log("genebygene parity: address corpus")
+const productId = liveIds.has(DELUXE_BUNDLE_ID) ? DELUXE_BUNDLE_ID : STAGING_STANDARD_ID
+const address = (over: Json): Json => ({
+  isCommercial: false,
+  recipientName: "Mockingbird Test",
+  addressLine1: "",
+  addressLine2: null,
+  addressLine3: null,
+  city: "",
+  stateOrRegion: "",
+  postalCode: "",
+  countryCode: "US",
+  email: "test@example.com",
+  phone: "+15555550100",
+  shippingInstruction: null,
+  referenceId: null,
+  ...over,
+})
+const quote = (target: "live" | "mock", shippingAddress: Json) =>
+  call(target, "POST", "/api/v2/fulfillments/actions/getShippingOptions", {
+    shippingAddress,
+    quantity: 1,
+    productId,
+  })
+const codes = (json: unknown) =>
+  ((json as { shippingOptions?: { courierServiceCode: string }[] })?.shippingOptions ?? [])
+    .map((o) => o.courierServiceCode)
+    .sort()
+const errorMessages = (json: unknown) =>
+  ((json as { errorMessages?: string[] })?.errorMessages ?? []).map(String)
+
+for (const row of ADDRESS_CORPUS) {
+  const { kind: _kind, note: _note, ...street } = row
+  const sent = address(street)
+  const [live, mock] = [await quote("live", sent), await quote("mock", sent)]
+  const zip3 = row.postalCode.slice(0, 3)
+  if (live.status !== mock.status) fail(`quote ${zip3}: live ${live.status}, mock ${mock.status}`)
+  if ((errorMessages(live.json).length === 0) !== (errorMessages(mock.json).length === 0)) {
+    fail(`quote ${zip3}: errorMessages empty live=${errorMessages(live.json).length === 0}`)
+  }
+  const zone = zoneFor(zip3)
+  const expected =
+    zone === undefined
+      ? []
+      : menuFor(zone)
+          .map((s) => s.courierServiceCode)
+          .sort()
+  if (live.status === 200 && JSON.stringify(codes(live.json)) !== JSON.stringify(expected)) {
+    fail(`ZIP3 ${zip3}: live codes ${codes(live.json).join(",")} contradict the zone table`)
+  }
+}
+
+type Case = {
+  name: string
+  operation: "quote" | "place"
+  address: Json
+  courierServiceCode?: string
+  status: number
+  errorMessages?: string[]
+  courierServiceCodes?: string[]
+  message?: string
+}
+const file = join(CORPUS_DIR, "address-parity.json")
+const recording = JSON.parse(await readFile(file, "utf8")) as { cases: Case[] } & Json
+const recorded: Case[] = []
+for (const c of recording.cases) {
+  if (c.operation === "place" && !unsafe) {
+    recorded.push(c)
+    continue
+  }
+  if (c.operation === "quote") {
+    const live = await quote("live", address(c.address))
+    const next: Case = { ...c, status: live.status, errorMessages: errorMessages(live.json) }
+    if (c.courierServiceCodes) next.courierServiceCodes = codes(live.json)
+    recorded.push(next)
+    continue
+  }
+  const live = await call("live", "POST", "/api/v2/orders", {
+    items: [
+      {
+        productId,
+        placerOrderNumber: `mockingbird-parity:${Date.now()}`,
+        shipments: [
+          { quantity: 1, address: address(c.address), courierServiceCode: c.courierServiceCode },
+        ],
+      },
+    ],
+  })
+  const message = String((live.json as Json | undefined)?.message ?? "")
+  recorded.push({ ...c, status: live.status, message })
+  if (live.status === 200) {
+    fail(`${c.name}: live placed an order (cancel ${String((live.json as Json).id)} by hand)`)
+  }
+}
+await writeFile(
+  file,
+  `${JSON.stringify({ ...recording, source: new URL(baseUrl).host, recorded: true, cases: recorded }, null, 2)}\n`,
+)
+console.log("  wrote corpus/address-parity.json")
+
+// 5. unsafe: one real place + cancel -----------------------------------------------------------
+if (unsafe) {
+  console.log("genebygene parity: unsafe place + cancel")
+  const placed = await call("live", "POST", "/api/v2/orders", {
+    items: [
+      {
+        productId,
+        placerOrderNumber: `mockingbird-parity:${Date.now()}`,
+        shipments: [
+          {
+            quantity: 1,
+            address: address({
+              addressLine1: "1445 N Loop W",
+              city: "Houston",
+              stateOrRegion: "TX",
+              postalCode: "77008",
+            }),
+            courierServiceCode: "DHL_DOMESTIC_RETURN",
+          },
+        ],
+      },
+    ],
+  })
+  if (placed.status !== 200) fail(`place 1445 N Loop W: ${placed.status}`)
+  const order = placed.json as { id?: string; orderLines?: Json[] } | undefined
+  for (const line of order?.orderLines ?? []) {
+    for (const f of (line.fulfillments as Json[] | null) ?? []) {
+      await call("live", "DELETE", `/api/v2/fulfillments/${f.id}`)
+    }
+    for (const kit of (line.kitNumbers as string[] | null) ?? []) {
+      await call("live", "DELETE", `/api/v2/kits/${kit}/orderLines`)
+    }
+    await call("live", "DELETE", `/api/v2/orderLines/${line.id}`)
+  }
+  console.log(`  placed and canceled an order (id ${order?.id ? "uuid" : "missing"})`)
+}
+
+// 4. the random walk over the remaining safe operations ------------------------------------------
+const walked = supportedOperationIds.filter(
+  (id) => id !== "GetShippingOptions" && id !== "GetResultBlob",
+)
 try {
   await parity({
     provider: "genebygene",
     spec: document,
     env: process.env,
-    includeUnsafe: process.argv.includes("--include-unsafe"),
+    only: walked,
+    includeUnsafe: unsafe,
     real: {
       baseUrl,
       allowedHosts: [new URL(baseUrl).host, new URL(tokenUrl).host],
       headers: () => ({ authorization: `Bearer ${realToken}`, accept: "application/json" }),
-      // GxG staging is shared and slow: stay under our client's own 2 rps budget.
       minIntervalMs: 500,
       fetch: (request) => {
         // The token operation lives on the auth host.
@@ -97,12 +325,17 @@ try {
       },
     },
     mock: {
-      create: () => new GeneByGeneAPI(),
+      create: () => new GeneByGeneAPI({ settings: { catalog: "staging" } }),
       headers: () => ({ authorization: `Bearer ${mockToken}`, accept: "application/json" }),
     },
-    redact: createRedactor([...credentials.secrets, realToken]),
+    redact,
   })
 } catch (error) {
-  console.error(`\n${error instanceof Error ? error.message : String(error)}`)
+  fail(error instanceof Error ? error.message : String(error))
+}
+
+if (failures.length > 0) {
+  console.error(`\ngenebygene parity: ${failures.length} failure(s)`)
   process.exit(1)
 }
+console.log("genebygene parity: ok")

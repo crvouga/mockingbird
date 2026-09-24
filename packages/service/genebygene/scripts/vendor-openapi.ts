@@ -23,6 +23,12 @@
 import { readFile, writeFile } from "node:fs/promises"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import {
+  ADDRESS_CORPUS,
+  COURIER_SERVICES,
+  MAX_ADDRESS_LINE,
+  RETURN_COURIER,
+} from "../src/shipping.js"
 
 type Json = Record<string, unknown>
 
@@ -401,10 +407,14 @@ annotate(
   "estimatedDeliveryDate",
   volatile("timestamp"),
 )
-annotate(".GetAvailableShippingOptions.ShippingOptionDto", "estimatedPrice", volatile("opaque"))
+// `estimatedPrice` is not volatile: the mock's zone table is deterministic, so self-parity
+// compares it. Live parity (scripts/parity.ts) compares code sets, never prices.
 annotate("EditAddressCommand", "id", {
   "x-mockingbird-resource-ref": { type: "shipment", missing: MISSING_UUID },
 })
+// The shipment id is how the vendor finds what to edit; our consumer always sends it and the
+// full address (the edit replaces, never merges).
+schemaNamed("EditAddressCommand").required = ["id", "address"]
 
 // The live API answers `null` for these object refs (docs/gxg-list-orders-prod.json).
 for (const name of [".ShipmentDto", "EditAddressCommand"]) {
@@ -460,9 +470,76 @@ annotate("CreateOrder", "items", { minItems: 1, maxItems: 2, nullable: false })
 annotate("CreateOrder_Item", "quantity", { minimum: 1, maximum: 5 })
 schemaNamed("CreateOrder_Shipment").required = ["address", "quantity", "courierServiceCode"]
 annotate("CreateOrder_Shipment", "quantity", { minimum: 1, maximum: 3 })
-annotate("CreateOrder_Shipment", "courierServiceCode", {
-  enum: ["DHL_PARCEL_EXPEDITED", "FEDEX_GROUND", "FEDEX_2_DAY_ONE_RATE", "DHL_DOMESTIC_RETURN"],
+// Generation hints that accept exactly what the vendor accepts. Each is `anyOf: [<the known
+// values>, <the permissive schema>]`: validation passes any value the permissive branch takes
+// (an unknown courier code is the handler's 400 "… not valid for shipping options", never a
+// model-binding error; any AddressDto is judged by the handler's address checks), while the
+// walks send the known values half the time, so they reach every address class.
+const COURIER_CODES = [
+  ...COURIER_SERVICES.map((s) => s.courierServiceCode),
+  RETURN_COURIER.courierServiceCode,
+]
+const courierCode = props("CreateOrder_Shipment").courierServiceCode as Json
+props("CreateOrder_Shipment").courierServiceCode = {
+  description: courierCode.description,
+  anyOf: [
+    { type: "string", enum: COURIER_CODES },
+    { type: "string", nullable: true },
+  ],
+}
+// Addresses the walks send besides random ones: quote-ok/place-ok, quote-ok/place-not-found
+// (the production split), zone 8, and the structural refusals.
+const corpusAddress = (row: (typeof ADDRESS_CORPUS)[number], isCommercial = false) => ({
+  isCommercial,
+  recipientName: "Mockingbird Test",
+  addressLine1: row.addressLine1,
+  addressLine2: null,
+  city: row.city,
+  stateOrRegion: row.stateOrRegion,
+  postalCode: row.postalCode,
+  countryCode: "US",
+  email: "test@example.com",
+  phone: "+15555550100",
 })
+// Interleaved (place-ok, place-not-found, …): fast-check's constantFrom favours early entries.
+const placeOk = ADDRESS_CORPUS.filter((row) => row.kind === "quote-ok-place-ok")
+const placeNotFound = ADDRESS_CORPUS.filter((row) => row.kind === "quote-ok-place-not-found")
+const addressExamples = [
+  ...placeOk.flatMap((row, i) => {
+    const miss = placeNotFound[i % placeNotFound.length] as (typeof ADDRESS_CORPUS)[number]
+    return [corpusAddress(row, i % 2 === 1), corpusAddress(miss, i % 2 === 0)]
+  }),
+  {
+    ...corpusAddress(ADDRESS_CORPUS[0] as (typeof ADDRESS_CORPUS)[number]),
+    addressLine1: "825 Fort Street",
+    city: "Honolulu",
+    stateOrRegion: "HI",
+    postalCode: "96813",
+  },
+  {
+    ...corpusAddress(ADDRESS_CORPUS[0] as (typeof ADDRESS_CORPUS)[number]),
+    addressLine1: "x".repeat(MAX_ADDRESS_LINE + 1),
+  },
+  {
+    ...corpusAddress(ADDRESS_CORPUS[0] as (typeof ADDRESS_CORPUS)[number]),
+    addressLine1: "PO Box 100",
+  },
+]
+const addressHint = {
+  anyOf: [{ type: "object", enum: addressExamples }, ref(".AddressDto")],
+}
+props("CreateOrder_Shipment").address = addressHint
+// A shipped place (one shipment, as our consumer sends) half the time; any list otherwise.
+const shipments = props("CreateOrder_Item").shipments as Json
+props("CreateOrder_Item").shipments = {
+  description: shipments.description,
+  anyOf: [
+    { type: "array", minItems: 1, maxItems: 1, items: ref("CreateOrder_Shipment") },
+    { type: "array", nullable: true, items: ref("CreateOrder_Shipment") },
+  ],
+}
+props(".GetAvailableShippingOptions.Query").shippingAddress = addressHint
+props("EditAddressCommand").address = addressHint
 annotate("CreateOrderForExistingKits", "items", { minItems: 1, maxItems: 2, nullable: false })
 annotate("CreateOrderForExistingKits_Item", "kitNumbers", {
   minItems: 1,
@@ -477,7 +554,9 @@ for (const name of [
   annotate(name, "endPoint", { format: "uri", ...(create ? { nullable: false } : {}) })
   annotate(name, "events", {
     minItems: 1,
-    items: { type: "string", enum: SUBSCRIBABLE_EVENTS },
+    // Any string binds; an unknown or unsubscribable name (`Kit.KitOrderLine.Canceled`) is the
+    // handler's 400 ErrorDto "Valid event type is required.". Walks mostly send real names.
+    items: { anyOf: [{ type: "string", enum: SUBSCRIBABLE_EVENTS }, { type: "string" }] },
     ...(create ? { nullable: false } : {}),
   })
   annotate(name, "type", { enum: ["webhook", "email", null] })

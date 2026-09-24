@@ -1,0 +1,76 @@
+{
+  "source": "issue-122",
+  "recorded": false,
+  "note": "The live quote/place answers for the synthetic address corpus. Until `bun run parity` runs with MOCKINGBIRD_GENEBYGENE_CLIENT_ID / _CLIENT_SECRET, these are the strings issue #122 documents from production observations; a live run rewrites this file (`recorded: true`) and the recorded strings then win. Synthetic streets only: no personal data.",
+  "productId": "789af544-270c-40ff-9677-c492a87262cd",
+  "cases": [
+    {
+      "name": "line1 longer than 35 characters",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "1234 North Example Boulevard Extension",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": ["Address line exceeds 35 characters."]
+    },
+    {
+      "name": "PO Box",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "PO Box 100",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": ["PO Box addresses are not supported for this product."]
+    },
+    {
+      "name": "non-US country",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "100 Queen St W",
+        "city": "Toronto",
+        "stateOrRegion": "ON",
+        "postalCode": "M5H 2N2",
+        "countryCode": "CA"
+      },
+      "status": 200,
+      "errorMessages": ["Only US destinations are available for this product."]
+    },
+    {
+      "name": "quote-ok, place-not-found street: the quote",
+      "operation": "quote",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "status": 200,
+      "errorMessages": [],
+      "courierServiceCodes": [
+        "DHL_PARCEL_EXPEDITED",
+        "FEDEX_EXPRESS_SAVER_ONE_RATE",
+        "FEDEX_2_DAY_ONE_RATE",
+        "FEDEX_PRIORITY_OVERNIGHT"
+      ]
+    },
+    {
+      "name": "quote-ok, place-not-found street: the place",
+      "operation": "place",
+      "address": {
+        "addressLine1": "501 N 5th St",
+        "city": "Phoenix",
+        "stateOrRegion": "AZ",
+        "postalCode": "85004"
+      },
+      "courierServiceCode": "DHL_PARCEL_EXPEDITED",
+      "status": 400,
+      "message": "Shipping address(es) not validated: 501 N 5th St : Address Not Found"
+    }
+  ]
+}

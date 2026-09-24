@@ -138,6 +138,17 @@ export type ResultRecord = {
   resultPayload: string
 }
 
+/** A happy-path walk: step `i` runs once the mock clock reaches `startedAtMs + i * stepDelayMs`. */
+export type ScenarioRecord = {
+  orderId: string
+  startedAtMs: number
+  stepDelayMs: number
+  /** Index of the next step to run. */
+  next: number
+  /** What each step did, in order. */
+  log: string[]
+}
+
 export type BlobRecord = { key: string; contentType: string; base64: string }
 
 export type SubscriptionRecord = {
@@ -170,6 +181,23 @@ export type Settings = {
   resultsBucket: string
   /** Lifetime of a presigned result URL on the mock clock. */
   presignedUrlTtlSeconds: number
+  /** Which recorded catalog `GET /api/v2/products` answers. Default `both`. */
+  catalog: "production" | "staging" | "both"
+  /**
+   * When a shipped-form order gets its kit numbers: `immediate` (default, in the create
+   * response) or `deferred` (the production shape: only `POST /__admin/orders/:id/kit-numbers`
+   * associates them). Quantity-only orders always get theirs immediately.
+   */
+  kitAssociation: "immediate" | "deferred"
+  /** Synthetic address-corpus rows this namespace adds (`PUT /__admin/addresses/corpus`). */
+  addressCorpus: {
+    kind: "quote-ok-place-not-found" | "quote-ok-place-ok"
+    addressLine1: string
+    city: string
+    stateOrRegion: string
+    postalCode: string
+    note: string
+  }[]
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -180,4 +208,7 @@ export const DEFAULT_SETTINGS: Settings = {
   generateKitNumbers: true,
   resultsBucket: "mockingbird-genebygene-results",
   presignedUrlTtlSeconds: 3600,
+  catalog: "both",
+  kitAssociation: "immediate",
+  addressCorpus: [],
 }

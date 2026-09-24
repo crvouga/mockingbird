@@ -22,12 +22,13 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import {
   ATTRIBUTE_DEFINITIONS,
+  type Catalog,
+  catalogProducts,
+  DELUXE_BUNDLE_ID,
   EVENT_TYPES,
-  EXTRA_COURIER_CODES,
   LAB_RETURN_ADDRESS,
   PRODUCT_CODES,
-  SHIPPING_OPTIONS,
-  STAGING_PRODUCTS,
+  STAGING_ONLY_IDS,
   TENANT_ID,
 } from "./corpus.js"
 import {
@@ -37,6 +38,19 @@ import {
   resultFiles,
 } from "./fixtures/index.js"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
+import {
+  type CorpusAddress,
+  closeoutDate,
+  courierServiceName,
+  MESSAGES,
+  notValidatedMessage,
+  placeCheck,
+  quoteMenu,
+  RETURN_COURIER,
+  type ShippingOption,
+  structuralProblems,
+  trackingNumberFor,
+} from "./shipping.js"
 import { GeneByGeneState, netIso } from "./state.js"
 import type {
   AddressDto,
@@ -46,6 +60,7 @@ import type {
   OrderRecord,
   ProductDto,
   ResultRecord,
+  ScenarioRecord,
   Settings,
   ShipmentRecord,
   SubscriptionRecord,
@@ -67,12 +82,16 @@ import {
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { S3Target } from "@crvouga/mockingbird-service"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+export type { Catalog } from "./corpus.js"
 export {
   ATTRIBUTE_DEFINITIONS,
+  CATALOGS,
   CORPUS_VERSION,
+  catalogProducts,
+  DELUXE_BUNDLE_ID,
   EVENT_TYPES,
   PRODUCT_CODES,
-  SHIPPING_OPTIONS,
+  PRODUCTION_PRODUCTS,
   STAGING_PRODUCTS,
 } from "./corpus.js"
 export type { CustomResults, ResultFile, ResultFixture } from "./fixtures/index.js"
@@ -87,6 +106,25 @@ export {
 } from "./fixtures/index.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
+export type { CorpusAddress, CorpusKind, CourierService, ShippingOption } from "./shipping.js"
+export {
+  ADDRESS_CORPUS,
+  COURIER_SERVICES,
+  MAX_ADDRESS_LINE,
+  menuFor,
+  placeCheck,
+  priceFor,
+  QUOTE_OK_PLACE_NOT_FOUND,
+  QUOTE_OK_PLACE_OK,
+  quoteMenu,
+  RETURN_COURIER,
+  stateForZip3,
+  structuralProblems,
+  trackingNumberFor,
+  UNDELIVERABLE_ZIP3,
+  ZONE_FACTORS,
+  zoneFor,
+} from "./shipping.js"
 export { netIso } from "./state.js"
 export type {
   AddressDto,
@@ -126,6 +164,20 @@ export const KIT_STATUSES = [
 ] as const
 
 /** Kits past this point are with the lab: their order lines are no longer cancellable. */
+/** `POST /__admin/scenario/happy-path`, step by step. */
+const HAPPY_PATH = [
+  "associate",
+  "ship",
+  "Received",
+  "In Lab",
+  "In QC Analysis",
+  "QC Analysis Complete",
+  "Results Completed",
+] as const
+
+/** Fulfillment states whose shipment address can no longer change. */
+const LOCKED_FULFILLMENT = new Set<string>(["Shipped", "Canceled", "Error"])
+
 const WITH_LAB = new Set<string>([
   "Received",
   "In Lab",
@@ -135,11 +187,8 @@ const WITH_LAB = new Set<string>([
   "Completed",
 ])
 
-/** Every order request's address line is capped at 35 characters by GxG's carriers. */
-export const MAX_ADDRESS_LINE = 35
-
 export type GeneByGeneAPIOptions = APIOptions & {
-  /** Catalog every namespace starts with. Default: {@link STAGING_PRODUCTS}. */
+  /** A custom catalog. Default: the recorded catalogs, picked by `settings.catalog`. */
   products?: readonly ProductDto[]
   /** Initial per-namespace settings. */
   settings?: Partial<Settings>
@@ -158,6 +207,8 @@ export type TransitionInput = {
   errorMessage?: string
   /** Result fixture at `Completed`; default: `PUT /__admin/results/:kitNumber`, else `normal`. */
   fixture?: ResultFixture
+  /** Also publish the one-page PDF report. */
+  pdf?: boolean
 }
 
 export type ShipInput = { trackingNumber?: string; returnTrackingNumber?: string }
@@ -210,9 +261,19 @@ const PROBLEM_TYPES: Record<number, string> = {
   422: "https://tools.ietf.org/html/rfc4918#section-11.2",
 }
 
-/** Nucleus handler errors: `ErrorDto` (`GXG/shared/gxg-zod-schemas.ts` reads `message`). */
-const errorDto = (status: number, message: string, errorType?: string) =>
-  jsonRes(status, { statusCode: status, message, payload: null, errorType: errorType ?? null })
+/**
+ * Nucleus handler errors: `ErrorDto` (`{"statusCode":400,"message":…,"payload":{},
+ * "errorType":"ValidationError"}`). Our consumer branches on the status and on substrings of
+ * `message`, never on `errorType`.
+ */
+const errorDto = (status: number, message: string, errorType = "ValidationError") =>
+  jsonRes(status, { statusCode: status, message, payload: {}, errorType })
+
+/** `getShippingOptions` for a product with nothing to ship, or an id the catalog lacks. */
+const NOT_VALID_FOR_SHIPPING = "This product Id is not valid for shipping options."
+
+/** The address-edit refusal once a shipment has tracking or has shipped (`can not`: two words). */
+const ADDRESS_LOCKED = "The shipment address can not be updated"
 
 /** ASP.NET problem details, with `errors` for model-binding validation failures. */
 const problem = (
@@ -229,12 +290,11 @@ const problem = (
     traceId: `00-${opaqueToken(`${title}:${extra.detail ?? ""}`, 32).toLowerCase()}-00`,
   })
 
-const unauthorized = (error?: string) =>
+/** An empty 401 (a JSON body here is a failure: our client only invalidates and retries). */
+const unauthorized = () =>
   new Response(null, {
     status: 401,
-    headers: {
-      "www-authenticate": error ? `Bearer error="${error}"` : "Bearer",
-    },
+    headers: { "www-authenticate": 'Bearer error="invalid_token"' },
   })
 
 /** Model-binding style errors, keyed like ASP.NET does (`items[0].productId`). */
@@ -294,27 +354,20 @@ const fullAddress = (address: AddressDto | undefined): Required<AddressDto> => (
   referenceId: address?.referenceId ?? null,
 })
 
-/** Why GxG would refuse to ship to `address`, or undefined. */
-const addressProblem = (address: AddressDto | undefined): string | undefined => {
-  const line1 = address?.addressLine1?.trim() ?? ""
-  if (line1.length === 0) return "address not found: AddressLine1 is required"
-  if (line1.length > MAX_ADDRESS_LINE)
-    return `AddressLine1 must be ${MAX_ADDRESS_LINE} characters or fewer`
-  if ((address?.addressLine2?.length ?? 0) > MAX_ADDRESS_LINE)
-    return `AddressLine2 must be ${MAX_ADDRESS_LINE} characters or fewer`
-  if (!address?.city?.trim() || !address.stateOrRegion?.trim() || !address.postalCode?.trim())
-    return "address not found: City, StateOrRegion and PostalCode are required"
-  return undefined
-}
-
 const isDomestic = (address: AddressDto | undefined) =>
   (address?.countryCode ?? "US").toUpperCase() === "US"
 
-const courierNames: Record<string, string> = {
-  ...Object.fromEntries(
-    SHIPPING_OPTIONS.map((o) => [o.courierServiceCode, o.courierServiceDisplayName]),
-  ),
-  ...EXTRA_COURIER_CODES,
+type QuoteOutcome =
+  | { kind: "http500" }
+  | { kind: "http400" }
+  | { kind: "errorMessages"; errorMessages: string[] }
+  | { kind: "options"; zone: number; options: ShippingOption[] }
+
+/** Address fields that decide where a kit goes (everything but the instruction). */
+const sameDestination = (a: AddressDto, b: AddressDto) => {
+  const { shippingInstruction: _a, ...left } = fullAddress(a)
+  const { shippingInstruction: _b, ...right } = fullAddress(b)
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 const slug = (name: string | null) =>
@@ -401,7 +454,7 @@ export class GeneByGeneAPI implements FetchAPI {
     this.resultsS3 = options.resultsS3
     this.publicNamespace = options.publicNamespace
     this.state = new GeneByGeneState(sqlite, namespace, {
-      products: options.products ?? STAGING_PRODUCTS,
+      products: options.products ?? [],
       settings: {
         ...(options.resultsS3 ? { resultsBucket: options.resultsS3.bucket } : {}),
         ...options.settings,
@@ -461,21 +514,18 @@ export class GeneByGeneAPI implements FetchAPI {
         if (id === "PostConnectToken" || id === "GetResultBlob") return undefined
         const token = bearerToken(context.request)
         if (!token) return unauthorized()
-        if (faultEffect(context.request, "token_revoked") !== undefined) {
-          return unauthorized("invalid_token")
-        }
+        if (faultEffect(context.request, "token_revoked") !== undefined) return unauthorized()
         const claims = tokenClaims(token)
-        if (!claims) return unauthorized("invalid_token")
+        if (!claims) return unauthorized()
         const settings = this.state.current()
+        // The token dies at issuedAt + expires_in on the mock clock.
         const nowSeconds = Math.floor(this.now() / 1000)
-        if (nowSeconds >= claims.issuedAt + settings.tokenTtlSeconds) {
-          return unauthorized("invalid_token")
-        }
+        if (nowSeconds >= claims.issuedAt + settings.tokenTtlSeconds) return unauthorized()
         if (
           claims.generation !== settings.tokenGeneration ||
           settings.blockedClients[claims.clientId]
         ) {
-          return unauthorized("invalid_token")
+          return unauthorized()
         }
         return undefined
       },
@@ -484,7 +534,8 @@ export class GeneByGeneAPI implements FetchAPI {
     this.sqlite = this.service.sqlite
   }
 
-  fetch(request: Request): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
+    await this.runDueScenarios()
     return this.service.fetch(request)
   }
 
@@ -542,8 +593,15 @@ export class GeneByGeneAPI implements FetchAPI {
 
   // --- catalog -------------------------------------------------------------------------------
 
-  private products(): ProductDto[] {
-    return this.state.products.list({ order: "oldest" }).map((row) => row.value)
+  private products(): readonly ProductDto[] {
+    if (this.state.products.count() > 0) {
+      return this.state.products.list({ order: "oldest" }).map((row) => row.value)
+    }
+    return catalogProducts(this.catalog())
+  }
+
+  private catalog(): Catalog {
+    return this.state.current().catalog ?? "both"
   }
 
   /** A catalog product, or a bundle component, by id. */
@@ -580,41 +638,107 @@ export class GeneByGeneAPI implements FetchAPI {
     )
   }
 
+  /** Namespace corpus rows added through `PUT /__admin/addresses/corpus`. */
+  private extraCorpus(): readonly CorpusAddress[] {
+    return this.state.current().addressCorpus ?? []
+  }
+
+  /**
+   * Whether a product can be quoted: the product, an empty 500 (a staging-only id against the
+   * production catalog), or the 400 "not valid for shipping options" (unknown id, or nothing
+   * to ship).
+   */
+  private quotable(productId: string): ProductDto | "http500" | "http400" {
+    if (this.catalog() === "production" && STAGING_ONLY_IDS.has(productId)) return "http500"
+    const product = this.findProduct(productId)
+    if (!product || !expand(product).some((e) => isShippable(e.product))) return "http400"
+    return product
+  }
+
+  /**
+   * The quote: structure and destination class only (never the USPS deliverability check), so
+   * an address the place check will reject still gets its zone's menu.
+   */
+  quote(productId: string, address: AddressDto | undefined, quantity = 1): QuoteOutcome {
+    const quotable = this.quotable(productId)
+    if (quotable === "http500") return { kind: "http500" }
+    if (quotable === "http400") return { kind: "http400" }
+    const problems = structuralProblems(address)
+    if (problems.length > 0) return { kind: "errorMessages", errorMessages: problems }
+    if (quantity < 1)
+      return { kind: "errorMessages", errorMessages: ["Quantity must be at least 1."] }
+    const menu = quoteMenu(address as AddressDto, this.now())
+    if (!menu) return { kind: "errorMessages", errorMessages: [MESSAGES.territory] }
+    return { kind: "options", zone: menu.zone, options: menu.options }
+  }
+
   private shippingOptions(context: OperationContext): Response {
     const invalid = validationErrors(context)
     if (invalid) return invalid
     const body = record(context) ?? {}
-    const product = this.findProduct(String(body.productId))
-    if (!product) return errorDto(400, `Product ${String(body.productId)} not found.`, "NotFound")
-    if (!expand(product).some((e) => isShippable(e.product))) {
-      return errorDto(400, `Product ${product.name} is not valid for shipping options.`)
-    }
+    const productId = String(body.productId)
     const address = body.shippingAddress as AddressDto | undefined
-    const refuse = (message: string) =>
-      jsonRes(200, { dutiesAndTaxesIncluded: false, errorMessages: [message], shippingOptions: [] })
-    if (faultEffect(context.request, "address_not_validated") !== undefined) {
-      return refuse("Address not found")
+    const refuse = (errorMessages: string[]) =>
+      jsonRes(200, { dutiesAndTaxesIncluded: false, errorMessages, shippingOptions: [] })
+    if (
+      faultEffect(context.request, "address_not_validated") !== undefined &&
+      typeof this.quotable(productId) === "object"
+    ) {
+      return refuse([MESSAGES.addressNotFound])
     }
-    const why = addressProblem(address)
-    if (why) return refuse(why)
-    if (!isDomestic(address))
-      return refuse("International shipping is not available for this product.")
     const quantity = typeof body.quantity === "number" ? body.quantity : 1
-    if (quantity < 1) return refuse("Quantity must be at least 1.")
-    const day = 86_400_000
+    const quote = this.quote(productId, address, quantity)
+    if (quote.kind === "http500" || quote.kind === "http400") {
+      // A staging-only id against the production tenant: an empty 500, as recorded.
+      return quote.kind === "http500"
+        ? new Response(null, { status: 500 })
+        : errorDto(400, NOT_VALID_FOR_SHIPPING)
+    }
+    if (quote.kind === "errorMessages") return refuse(quote.errorMessages)
     return jsonRes(200, {
-      dutiesAndTaxesIncluded: false,
+      dutiesAndTaxesIncluded: true,
       errorMessages: [],
-      shippingOptions: SHIPPING_OPTIONS.map((option) => ({
-        courierName: option.courierName,
-        courierServiceCode: option.courierServiceCode,
-        courierServiceDisplayName: option.courierServiceDisplayName,
-        estimatedShipDate: netIso(this.now() + day),
-        estimatedPrice: Math.round(option.estimatedPrice * quantity * 100) / 100,
-        estimatedDeliveryDate: netIso(this.now() + day * (1 + option.transitDays)),
-        attributes: { ...option.attributes },
-      })),
+      shippingOptions: quote.options,
     })
+  }
+
+  /**
+   * Classify an address without placing anything (`POST /__admin/addresses/classify`): what the
+   * quote answers, what a shipped place answers, and the zone's codes and prices.
+   */
+  classify(input: { address: AddressDto; productId?: string; courierServiceCode?: string }) {
+    const quote = this.quote(input.productId ?? DELUXE_BUNDLE_ID, input.address)
+    const place = placeCheck(input.address, this.extraCorpus())
+    const menu = quote.kind === "options" ? quote.options : []
+    const code = input.courierServiceCode
+    const badCourier = code !== undefined && !this.courierAllowed(code, menu)
+    return {
+      quote: quote.kind,
+      place: place.ok ? (badCourier ? "bad-courier" : "ok") : place.kind,
+      ...(place.ok ? {} : { reason: place.reason }),
+      ...(quote.kind === "errorMessages" ? { errorMessages: quote.errorMessages } : {}),
+      zone: quote.kind === "options" ? quote.zone : null,
+      codes: menu.map((o) => o.courierServiceCode),
+      prices: Object.fromEntries(menu.map((o) => [o.courierServiceCode, o.estimatedPrice])),
+    }
+  }
+
+  /**
+   * The place-time check's 400 (`Shipping address(es) not validated: <line1> : <reason>`), or
+   * undefined when the address would ship. `forceNotFound` is the `address_not_found` preset.
+   */
+  private placeRefusal(address: AddressDto | undefined, forceNotFound = false) {
+    const check = placeCheck(address, this.extraCorpus())
+    if (!check.ok) return errorDto(400, notValidatedMessage(address, check.reason))
+    if (forceNotFound) return errorDto(400, notValidatedMessage(address, MESSAGES.addressNotFound))
+    return undefined
+  }
+
+  /** A code the zone's menu offers, or the bundle's return leg (`DHL_DOMESTIC_RETURN`). */
+  private courierAllowed(code: string, menu: readonly ShippingOption[]): boolean {
+    return (
+      code === RETURN_COURIER.courierServiceCode || menu.some((o) => o.courierServiceCode === code)
+    )
   }
 
   // --- orders --------------------------------------------------------------------------------
@@ -743,25 +867,18 @@ export class GeneByGeneAPI implements FetchAPI {
         if (!expand(product).some((e) => isShippable(e.product))) {
           return errorDto(400, `Product ${product.name} is not valid for shipping options.`)
         }
+        const forceNotFound =
+          faultEffect(context.request, "address_not_validated") !== undefined ||
+          faultEffect(context.request, "address_not_found") !== undefined
         for (const shipment of shipments) {
-          if (faultEffect(context.request, "address_not_validated") !== undefined) {
-            return errorDto(
-              400,
-              "One or more shipping address(es) not validated: address not found.",
-              "Validation",
-            )
-          }
-          const why = addressProblem(shipment.address as AddressDto | undefined)
-          if (why) {
-            return errorDto(
-              400,
-              `One or more shipping address(es) not validated: ${why}.`,
-              "Validation",
-            )
-          }
+          const address = shipment.address as AddressDto | undefined
+          // The place-time USPS check: structure, then Address Not Found.
+          const refused = this.placeRefusal(address, forceNotFound)
+          if (refused) return refused
           const code = str(shipment.courierServiceCode)
           if (!code) return errorDto(400, "A courier service code is required for each shipment.")
-          if (!courierNames[code]) {
+          const menu = quoteMenu(address as AddressDto, this.now())?.options ?? []
+          if (!this.courierAllowed(code, menu)) {
             return errorDto(
               400,
               `The courier service code '${code}' is not valid for shipping options.`,
@@ -784,10 +901,13 @@ export class GeneByGeneAPI implements FetchAPI {
       lineIds: [],
     }
     const withKits: LineRecord[] = []
-    const skipKits =
-      !this.state.current().generateKitNumbers ||
-      faultEffect(context.request, "no_kit_numbers") !== undefined
+    const settings = this.state.current()
+    const noKits = faultEffect(context.request, "no_kit_numbers") !== undefined
+    // Shipped-form places wait for the shipping desk when association is deferred (the
+    // production shape); quantity-only places always get their kit numbers in the same turn.
+    const deferShipped = settings.kitAssociation === "deferred" || !settings.generateKitNumbers
     for (const { item, product, shipments, quantity } of plans) {
+      const skipKits = noKits || (shipments.length > 0 && deferShipped)
       const lines: LineRecord[] = expand(product).map(
         ({ product: part, quantity: each, bundle }) => ({
           id: this.state.uuid("orderLine"),
@@ -814,15 +934,18 @@ export class GeneByGeneAPI implements FetchAPI {
       const shipping = lines.find((line) => line.ships)
       if (shipping) {
         for (const shipment of shipments) {
+          // Echoed field for field, including the nulls the caller sent.
           const address = fullAddress(shipment.address as AddressDto)
           const code = String(shipment.courierServiceCode)
-          const option = SHIPPING_OPTIONS.find((o) => o.courierServiceCode === code)
+          const option = quoteMenu(address, this.now())?.options.find(
+            (o) => o.courierServiceCode === code,
+          )
           const fulfillment: FulfillmentRecord = {
             id: this.state.uuid("fulfillment"),
             orderId: order.id,
             orderLineId: shipping.id,
             quantity: shipment.quantity as number,
-            currentStatus: "Pending",
+            currentStatus: "Ordered",
             kitCount: shipment.quantity as number,
             isInternational: !isDomestic(address),
             closeoutDate: null,
@@ -837,7 +960,7 @@ export class GeneByGeneAPI implements FetchAPI {
                 reference1: null,
                 price: option?.estimatedPrice ?? null,
                 courierServiceCode: code,
-                courierServiceName: courierNames[code] ?? null,
+                courierServiceName: courierServiceName(code),
                 referenceId: str(shipment.referenceId),
               },
               {
@@ -1067,13 +1190,20 @@ export class GeneByGeneAPI implements FetchAPI {
     const conflict = this.cancelConflict(context)
     if (conflict) return conflict
     // Already shipped, or already canceled by an earlier partial cancel: both refuse.
-    if (fulfillment.currentStatus !== "Pending") {
+    if (fulfillment.currentStatus !== "Ordered") {
       return errorDto(
         400,
         `Fulfillment ${fulfillment.id} is not in a cancellable status (${fulfillment.currentStatus}).`,
       )
     }
     this.state.fulfillments.update(fulfillment.id, { ...fulfillment, currentStatus: "Canceled" })
+    // The kit it would have mailed is canceled with it (Kit.KitOrderLine.Canceled).
+    const line = this.state.lines.get(fulfillment.orderLineId)
+    for (const kitNumber of line?.kitNumbers ?? []) {
+      const kit = this.state.kits.get(kitNumber)
+      if (kit && !kit.canceled && !WITH_LAB.has(kit.status))
+        this.cancelKit(kit, 1, "Canceled via API")
+    }
     return annotateResponse(new Response(null, { status: 204 }), {
       ids: { fulfillmentId: fulfillment.id },
     })
@@ -1134,7 +1264,7 @@ export class GeneByGeneAPI implements FetchAPI {
     }
     for (const id of line.fulfillmentIds) {
       const f = this.state.fulfillments.get(id)
-      if (f && f.currentStatus === "Pending")
+      if (f && f.currentStatus === "Ordered")
         this.state.fulfillments.update(id, { ...f, currentStatus: "Canceled" })
     }
     this.state.lines.update(line.id, {
@@ -1172,6 +1302,12 @@ export class GeneByGeneAPI implements FetchAPI {
     )
   }
 
+  /**
+   * `EditAddressCommand`: replaces the shipment's address (no merge; the caller sends it whole)
+   * and re-runs the place check. An edit that changes only the instruction always goes through
+   * (our consumer's fallback when a field edit is refused). Once the shipment has tracking, or
+   * its fulfillment is Shipped / Canceled / Error, the address is locked.
+   */
   private updateShipmentAddress(context: OperationContext): Response {
     const invalid = validationErrors(context)
     if (invalid) return invalid
@@ -1184,35 +1320,29 @@ export class GeneByGeneAPI implements FetchAPI {
     if (!fulfillment)
       return problem(404, "Not Found", { detail: `Shipment ${shipmentId} not found.` })
     const shipment = fulfillment.shipments.find((s) => s.id === shipmentId) as ShipmentRecord
-    if (shipment.trackingNumber || fulfillment.currentStatus !== "Pending") {
-      return errorDto(
-        400,
-        `Shipment ${shipmentId} has already shipped or been canceled; its address can no longer be changed.`,
-      )
+    if (shipment.trackingNumber || LOCKED_FULFILLMENT.has(fulfillment.currentStatus)) {
+      return errorDto(400, ADDRESS_LOCKED)
     }
-    if (faultEffect(context.request, "address_not_validated") !== undefined) {
-      return errorDto(
-        400,
-        "One or more shipping address(es) not validated: address not found.",
-        "Validation",
-      )
+    const sent = body.address as AddressDto | undefined
+    const address = fullAddress(sent)
+    const instruction = str(body.shippingInstruction) ?? address.shippingInstruction
+    if (!sameDestination(address, shipment.address)) {
+      const forceNotFound = faultEffect(context.request, "address_not_validated") !== undefined
+      const refused = this.placeRefusal(sent, forceNotFound)
+      if (refused) return refused
     }
-    const address = fullAddress(body.address as AddressDto | undefined)
-    const why = addressProblem(address)
-    if (why)
-      return errorDto(400, `One or more shipping address(es) not validated: ${why}.`, "Validation")
-    const instruction = str(body.shippingInstruction)
+    const nextInstruction = instruction ?? shipment.shippingInstruction
     const updated: ShipmentRecord = {
       ...shipment,
-      address,
-      shippingInstruction:
-        instruction ?? address.shippingInstruction ?? shipment.shippingInstruction,
+      address: { ...address, shippingInstruction: nextInstruction },
+      shippingInstruction: nextInstruction,
     }
     this.state.fulfillments.update(fulfillment.id, {
       ...fulfillment,
       shipments: fulfillment.shipments.map((s) => (s.id === shipmentId ? updated : s)),
     })
-    return annotateResponse(jsonRes(200, this.shipmentDto(updated)), {
+    // 200 echoes the command.
+    return annotateResponse(jsonRes(200, body), {
       ids: { shipmentId, fulfillmentId: fulfillment.id },
     })
   }
@@ -1802,8 +1932,11 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   /**
-   * Ship an order: every pending fulfillment (one is created at a default address for a
-   * quantity-only order) gets tracking numbers and a closeout date; emits `Order.Shipped`.
+   * Ship an order: every open fulfillment (one is created at a default address for a
+   * quantity-only order) gets tracking numbers and a closeout date (`M/D/YYYY`, Houston time),
+   * the kit-material line reads `Shipped` (sibling lines stay as they are, as the recorded
+   * production orders show), and `Order.Shipped` goes out. Tracking numbers are minted from the
+   * shipment ids ({@link trackingNumberFor}) unless the admin call overrides them.
    */
   ship(
     orderId: string,
@@ -1812,8 +1945,7 @@ export class GeneByGeneAPI implements FetchAPI {
     const order = this.state.orders.get(orderId)
     if (!order) return `no order ${orderId}`
     const now = this.now()
-    const closeout = new Date(now)
-    const closeoutDate = `${closeout.getUTCMonth() + 1}/${closeout.getUTCDate()}/${closeout.getUTCFullYear()}`
+    const closeout = closeoutDate(now)
     const entries: ShippedEntry[] = []
     for (const line of this.state.linesOf(order)) {
       if (!line.ships || line.currentStatus === "Canceled") continue
@@ -1823,7 +1955,7 @@ export class GeneByGeneAPI implements FetchAPI {
           orderId: order.id,
           orderLineId: line.id,
           quantity: line.quantity,
-          currentStatus: "Pending",
+          currentStatus: "Ordered",
           kitCount: line.quantity,
           isInternational: false,
           closeoutDate: null,
@@ -1840,7 +1972,7 @@ export class GeneByGeneAPI implements FetchAPI {
               reference1: null,
               price: null,
               courierServiceCode: "DHL_PARCEL_EXPEDITED",
-              courierServiceName: courierNames.DHL_PARCEL_EXPEDITED ?? null,
+              courierServiceName: courierServiceName("DHL_PARCEL_EXPEDITED"),
               referenceId: null,
             },
             ...line.kitNumbers.map(() => ({
@@ -1862,31 +1994,34 @@ export class GeneByGeneAPI implements FetchAPI {
       }
       for (const id of line.fulfillmentIds) {
         const fulfillment = this.state.fulfillments.get(id)
-        if (fulfillment?.currentStatus !== "Pending") continue
+        if (fulfillment?.currentStatus !== "Ordered") continue
         const hhmmss = new Date(now).toISOString().slice(11, 19).replace(/:/g, "")
+        const outboundCode =
+          fulfillment.shipments.find((s) => !s.isReturnShipment)?.courierServiceCode ?? null
+        const minted = (s: ShipmentRecord) =>
+          trackingNumberFor({
+            shipmentId: s.id,
+            isReturnShipment: s.isReturnShipment,
+            courierServiceCode: s.isReturnShipment ? null : outboundCode,
+            postalCode: s.address.postalCode,
+          })
         const shipments = fulfillment.shipments.map((s, index) =>
           s.isReturnShipment
             ? {
                 ...s,
-                trackingNumber:
-                  s.trackingNumber ??
-                  input.returnTrackingNumber ??
-                  `4207700892020903${this.state.digits("return", 18)}`,
+                trackingNumber: s.trackingNumber ?? input.returnTrackingNumber ?? minted(s),
                 reference1: line.kitNumbers[Math.max(0, index - 1)] ?? line.kitNumbers[0] ?? null,
               }
             : {
                 ...s,
-                trackingNumber:
-                  s.trackingNumber ??
-                  input.trackingNumber ??
-                  `42085004936121101530${this.state.digits("outbound", 10)}`,
+                trackingNumber: s.trackingNumber ?? input.trackingNumber ?? minted(s),
                 reference1: `${line.kitNumbers[0] ?? "WB"}T${hhmmss}`,
               },
         )
         const shipped: FulfillmentRecord = {
           ...fulfillment,
           currentStatus: "Shipped",
-          closeoutDate,
+          closeoutDate: closeout,
           shipments,
         }
         this.state.fulfillments.update(id, shipped)
@@ -1907,11 +2042,6 @@ export class GeneByGeneAPI implements FetchAPI {
       })
     }
     if (entries.length === 0) return `order ${orderId} has nothing left to ship`
-    for (const line of this.state.linesOf(order)) {
-      if (!line.ships && line.currentStatus === "Pending") {
-        this.state.lines.update(line.id, { ...line, currentStatus: "Processing" })
-      }
-    }
     this.emit(GXG_EVENTS.orderShipped, orderShippedBody(order, entries))
     return { order: this.orderDto(order) }
   }
@@ -1928,6 +2058,78 @@ export class GeneByGeneAPI implements FetchAPI {
       ...("custom" in source ? { custom: source.custom } : {}),
     })
     return true
+  }
+
+  /**
+   * The one automatic motion: associate kit numbers (when deferred) → ship → `Received` →
+   * `In Lab` → `In QC Analysis` → `QC Analysis Complete` → `Results Completed`, emitting each
+   * step's webhooks. Step `i` runs once the mock clock reaches start + `i * stepDelayMs`
+   * (default 0: every step runs now); later steps run on the next request after the clock
+   * passes them.
+   */
+  async startHappyPath(orderId: string, stepDelayMs = 0): Promise<ScenarioRecord | string> {
+    if (!this.state.orders.has(orderId)) return `no order ${orderId}`
+    const scenario: ScenarioRecord = {
+      orderId,
+      startedAtMs: this.now(),
+      stepDelayMs: Math.max(0, stepDelayMs),
+      next: 0,
+      log: [],
+    }
+    this.state.scenarios.insert(orderId, scenario)
+    await this.runDueScenarios()
+    return this.state.scenarios.get(orderId) ?? scenario
+  }
+
+  private scenarioRunning = false
+
+  /** Run every happy-path step whose time has come on the mock clock. */
+  async runDueScenarios(): Promise<void> {
+    if (this.scenarioRunning || this.state.scenarios.count() === 0) return
+    this.scenarioRunning = true
+    try {
+      for (const { value } of this.state.scenarios.list({ order: "oldest" })) {
+        const scenario = { ...value, log: [...value.log] }
+        while (
+          scenario.next < HAPPY_PATH.length &&
+          scenario.startedAtMs + scenario.next * scenario.stepDelayMs <= this.now()
+        ) {
+          const step = HAPPY_PATH[scenario.next] as string
+          scenario.log.push(`${step}: ${await this.happyPathStep(scenario.orderId, step)}`)
+          scenario.next++
+        }
+        this.state.scenarios.update(scenario.orderId, scenario)
+      }
+    } finally {
+      this.scenarioRunning = false
+    }
+  }
+
+  private async happyPathStep(orderId: string, step: string): Promise<string> {
+    if (step === "associate") {
+      const order = this.state.orders.get(orderId)
+      const hasKits = order && this.state.linesOf(order).some((l) => l.kitNumbers.length > 0)
+      if (hasKits) return "kit numbers already associated"
+      this.generateKitNumbers(orderId)
+      return "kit numbers associated"
+    }
+    if (step === "ship") {
+      const shipped = this.ship(orderId)
+      return typeof shipped === "string" ? shipped : "shipped"
+    }
+    const order = this.state.orders.get(orderId)
+    const kits = order
+      ? this.state
+          .linesOf(order)
+          .flatMap((l) => l.kitNumbers)
+          .filter(unique)
+      : []
+    const outcomes: string[] = []
+    for (const kitNumber of kits) {
+      const kit = await this.transition(kitNumber, { to: step })
+      outcomes.push(typeof kit === "string" ? kit : `${kitNumber} ${step}`)
+    }
+    return outcomes.join("; ") || "no kits"
   }
 
   /**
@@ -1986,7 +2188,7 @@ export class GeneByGeneAPI implements FetchAPI {
                 ? (fixture as ResultFixture)
                 : "normal",
             }
-      const published = await this.publishResults(next, lines, source)
+      const published = await this.publishResults(next, lines, source, input.pdf === true)
       if (typeof published === "string") return published
       for (const line of lines) {
         if (!line.ships && line.currentStatus !== "Canceled") {
@@ -2019,9 +2221,10 @@ export class GeneByGeneAPI implements FetchAPI {
     kit: KitRecord,
     lines: readonly LineRecord[],
     source: { fixture: ResultFixture } | { custom: CustomResults },
+    pdf: boolean,
   ): Promise<ResultRecord[] | string> {
     const reportDate = this.iso()
-    const files = resultFiles(kit.kitNumber, source, reportDate)
+    const files = resultFiles(kit.kitNumber, source, reportDate, { pdf })
     const live = lines.filter((l) => l.currentStatus !== "Canceled")
     const reportLine =
       live.find((l) => l.productCode === "ngx_report_comprehensive_json") ??
@@ -2033,7 +2236,8 @@ export class GeneByGeneAPI implements FetchAPI {
     const bucket = this.resultsS3?.bucket ?? this.state.current().resultsBucket
     const published: ResultRecord[] = []
     for (const file of files) {
-      const key = `${kit.kitNumber}.${file.extension}`
+      // `s3://<bucket>/<namespace>/<kitNumber>.<ext>`: parallel workers share one bucket.
+      const key = `${this.publicNamespace ?? "default"}/${kit.kitNumber}.${file.extension}`
       const line = file.extension === "csv" ? rawLine : reportLine
       let resultPayload = `s3://${bucket}/${key}`
       if (this.resultsS3) {

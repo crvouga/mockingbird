@@ -3023,7 +3023,121 @@ components:
       type: object
       properties:
         shippingAddress:
-          $ref: "#/components/schemas/.AddressDto"
+          &shippingAddress
+          anyOf:
+            - type: object
+              enum:
+                - isCommercial: false
+                  recipientName: Mockingbird Test
+                  addressLine1: 1600 Amphitheatre Pkwy
+                  addressLine2: null
+                  city: Mountain View
+                  stateOrRegion: CA
+                  postalCode: "94043"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: true
+                  recipientName: Mockingbird Test
+                  addressLine1: 1 Unlisted County Road 9
+                  addressLine2: null
+                  city: Nowhere
+                  stateOrRegion: MT
+                  postalCode: "59001"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: true
+                  recipientName: Mockingbird Test
+                  addressLine1: 1445 N Loop W
+                  addressLine2: null
+                  city: Houston
+                  stateOrRegion: TX
+                  postalCode: "77008"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: false
+                  recipientName: Mockingbird Test
+                  addressLine1: 501 N 5th St
+                  addressLine2: null
+                  city: Phoenix
+                  stateOrRegion: AZ
+                  postalCode: "85004"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: false
+                  recipientName: Mockingbird Test
+                  addressLine1: 350 Fifth Avenue
+                  addressLine2: null
+                  city: New York
+                  stateOrRegion: NY
+                  postalCode: "10118"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: true
+                  recipientName: Mockingbird Test
+                  addressLine1: 4440 County Road 000
+                  addressLine2: null
+                  city: Valles Mines
+                  stateOrRegion: MO
+                  postalCode: "63087"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: true
+                  recipientName: Mockingbird Test
+                  addressLine1: 1 Infinite Loop
+                  addressLine2: null
+                  city: Cupertino
+                  stateOrRegion: CA
+                  postalCode: "95014"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: false
+                  recipientName: Mockingbird Test
+                  addressLine1: 1 Unlisted County Road 9
+                  addressLine2: null
+                  city: Nowhere
+                  stateOrRegion: MT
+                  postalCode: "59001"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: false
+                  recipientName: Mockingbird Test
+                  addressLine1: 825 Fort Street
+                  addressLine2: null
+                  city: Honolulu
+                  stateOrRegion: HI
+                  postalCode: "96813"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: false
+                  recipientName: Mockingbird Test
+                  addressLine1: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+                  addressLine2: null
+                  city: Nowhere
+                  stateOrRegion: MT
+                  postalCode: "59001"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+                - isCommercial: false
+                  recipientName: Mockingbird Test
+                  addressLine1: PO Box 100
+                  addressLine2: null
+                  city: Nowhere
+                  stateOrRegion: MT
+                  postalCode: "59001"
+                  countryCode: US
+                  email: test@example.com
+                  phone: "+15555550100"
+            - $ref: "#/components/schemas/.AddressDto"
         quantity:
           type: integer
           format: int32
@@ -3058,8 +3172,6 @@ components:
         estimatedPrice:
           type: number
           format: double
-          x-mockingbird-volatile:
-            kind: opaque
         estimatedDeliveryDate:
           type: string
           format: date-time
@@ -5035,15 +5147,17 @@ components:
         events:
           type: array
           items:
-            type: string
-            enum:
-              &enum
-              - GxG.Nucleus.Order.Created
-              - GxG.Nucleus.Order.KitNumbersGenerated
-              - GxG.Nucleus.Order.Shipped
-              - GxG.Nucleus.Kit.Received
-              - GxG.Nucleus.Kit.Completed
-              - GxG.Nucleus.Kit.Error
+            anyOf:
+              - type: string
+                enum:
+                  &enum
+                  - GxG.Nucleus.Order.Created
+                  - GxG.Nucleus.Order.KitNumbersGenerated
+                  - GxG.Nucleus.Order.Shipped
+                  - GxG.Nucleus.Kit.Received
+                  - GxG.Nucleus.Kit.Completed
+                  - GxG.Nucleus.Kit.Error
+              - type: string
           description: List of subscribed events
           nullable: true
           minItems: 1
@@ -5291,9 +5405,11 @@ components:
         events:
           type: array
           items:
-            type: string
-            enum:
-              *enum
+            anyOf:
+              - type: string
+                enum:
+                  *enum
+              - type: string
           description: List of subscribed events
           nullable: false
           minItems: 1
@@ -5389,11 +5505,17 @@ components:
           minimum: 1
           maximum: 5
         shipments:
-          type: array
-          items:
-            $ref: "#/components/schemas/CreateOrder_Shipment"
           description: "A list of shipments\r\nOmit this property if this is not a third-party logistic order."
-          nullable: true
+          anyOf:
+            - type: array
+              minItems: 1
+              maxItems: 1
+              items:
+                $ref: "#/components/schemas/CreateOrder_Shipment"
+            - type: array
+              nullable: true
+              items:
+                $ref: "#/components/schemas/CreateOrder_Shipment"
         samples:
           type: array
           items:
@@ -5427,7 +5549,7 @@ components:
       type: object
       properties:
         address:
-          $ref: "#/components/schemas/.AddressDto"
+          *shippingAddress
         quantity:
           type: integer
           description: The quantity in this shipment
@@ -5443,14 +5565,17 @@ components:
           description: An optional ID defined by the client
           nullable: true
         courierServiceCode:
-          type: string
           description: A code that defines the shipping method by selected courier
-          nullable: true
-          enum:
-            - DHL_PARCEL_EXPEDITED
-            - FEDEX_GROUND
-            - FEDEX_2_DAY_ONE_RATE
-            - DHL_DOMESTIC_RETURN
+          anyOf:
+            - type: string
+              enum:
+                - DHL_PARCEL_EXPEDITED
+                - FEDEX_EXPRESS_SAVER_ONE_RATE
+                - FEDEX_2_DAY_ONE_RATE
+                - FEDEX_PRIORITY_OVERNIGHT
+                - DHL_DOMESTIC_RETURN
+            - type: string
+              nullable: true
         attributes:
           type: object
           additionalProperties:
@@ -5474,7 +5599,7 @@ components:
         isReturnShipment:
           type: boolean
         address:
-          $ref: "#/components/schemas/.AddressDto"
+          *shippingAddress
         trackingNumber:
           type: string
           nullable: true
@@ -5495,6 +5620,9 @@ components:
           $ref: "#/components/schemas/.CourierServiceDto"
           nullable: true
       additionalProperties: false
+      required:
+        - id
+        - address
     GetAttributeGroupDefinitions:
       type: object
       additionalProperties: false
