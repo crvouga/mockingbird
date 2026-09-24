@@ -150,6 +150,12 @@
       "seed": 1400974216,
       "status": "fixed",
       "failure": "ListKitOrderLineKits attributesFilter=a: real 400 ErrorDto \"Invalid search filter value\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1402714997,
+      "status": "fixed",
+      "failure": "ListProducts productType=㏞: real lists all 3 (SQL LIKE under a collation that ignores the character); productType on products is now marked unsupported"
     }
   ]
 }

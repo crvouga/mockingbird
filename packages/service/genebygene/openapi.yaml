@@ -1959,6 +1959,8 @@ paths:
           in: query
           schema:
             type: string
+            x-mockingbird-unsupported:
+              reason: Staging matches product types with SQL LIKE under a collation that ignores some characters.
       responses:
         "200":
           description: A list of products

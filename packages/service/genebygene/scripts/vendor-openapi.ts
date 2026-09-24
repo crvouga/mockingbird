@@ -290,6 +290,14 @@ parameter("/api/v2/products", "get", "productCode", {
     reason: "Staging matches product codes with SQL LIKE, and no response carries a code.",
   },
 })
+// productType is a SQL LIKE too, under a collation that ignores some characters (`㏞` lists
+// every product); our consumer never filters by it.
+parameter("/api/v2/products", "get", "productType", {
+  "x-mockingbird-unsupported": {
+    reason:
+      "Staging matches product types with SQL LIKE under a collation that ignores some characters.",
+  },
+})
 parameter("/api/v2/orders/{id}", "get", "id", refTo("order"))
 parameter("/api/v2/orderLines/{id}", "get", "id", refTo("orderLine"))
 parameter("/api/v2/orderLines/{id}", "delete", "id", refTo("orderLine"))

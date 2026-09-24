@@ -784,7 +784,9 @@ export class GeneByGeneAPI implements FetchAPI {
             p.id.toLowerCase() === byId ||
             p.components.some((c) => c.product.id.toLowerCase() === byId)) &&
           (!productCode || this.productCode(p) === productCode) &&
-          (!productType || enumKey(p.productType ?? "") === enumKey(productType)),
+          // Staging matches the type with SQL LIKE '%…%' (not modelled beyond a substring).
+          (!productType ||
+            (p.productType ?? "").toLowerCase().includes(productType.trim().toLowerCase())),
       ),
     )
   }

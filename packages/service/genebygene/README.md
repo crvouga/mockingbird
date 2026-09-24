@@ -86,7 +86,7 @@ await admin("/kits/WB3K9Q2X/transition", { to: "Error", errorCode: 19 }) // Kit.
 | Route | Behaviour |
 | --- | --- |
 | `POST /connect/token` | Form `grant_type=client_credentials, client_id, client_secret` → `{access_token, expires_in: 3600, token_type: "Bearer"}`. Blocked clients (`PUT /__admin/settings {blockedClients}`) get 400 `{"error":"invalid_client"}`, 401 or 403; a mismatch against pinned `clients` is 400 `invalid_client`. |
-| `GET /api/v2/products[?productId\|productCode\|productType]` | The recorded catalog `settings.catalog` selects, byte for byte (`preassembly`, null `shippingQualified`, nested `components`). A GUID `productId` lists the product with that id or the bundles that contain it as a component (unknown → `[]`; a non-GUID is ignored); `productType` matches the listed product's type. |
+| `GET /api/v2/products[?productId\|productCode\|productType]` | The recorded catalog `settings.catalog` selects, byte for byte (`preassembly`, null `shippingQualified`, nested `components`). A GUID `productId` lists the product with that id or the bundles that contain it as a component (unknown → `[]`; a non-GUID is ignored); `productType` is a case-insensitive substring of the listed product's type. |
 | `POST /api/v2/fulfillments/actions/getShippingOptions` | `{shippingAddress, quantity, productId}` → `{dutiesAndTaxesIncluded, errorMessages, shippingOptions[…]}`: the destination's menu, a 400 problem-details refusal, HTTP **200** `errorMessages`, or the carrier's 500 (see [Shipping and addresses](#shipping-and-addresses)). Nothing to ship or an unknown id → 400 "This product Id is not valid for shipping options."; a staging-only id against the production catalog → empty 500. |
 | `POST /api/v2/orders` | Shipped form `{items:[{productId, placerOrderNumber, shipments:[{quantity, address, courierServiceCode, referenceId}]}], notes}` runs the place-time USPS check; quantity-only `{items:[{productId, placerOrderNumber, quantity}]}` skips it and never creates a fulfillment. Bundles expand into one order line per component (same `placerOrderNumber`, `bundleProductId`); the kit-material line carries one fulfillment (`Ordered`) with an outbound shipment and a return label, `courier`/`courierService`/`trackingNumber` null until ship; every line carries the kit number (`WB` + 6). `placerOrderNumber` is never deduped. |
 | `POST /api/v2/orders/actions/createOrderForExistingKits` | `{items:[{productId, kitNumbers, samples[{kitNumber, attributes}]}]}`: a lab order on existing kits (`Order.Created` with `OrderType: 3`, no new kit, no `KitNumbersGenerated`); unknown kits → 400. |
@@ -252,8 +252,9 @@ namespace, so parallel workers never collide in the shared results bucket.
 - The 21 operations our consumer never calls (HL7 `ehr/*`, single-attribute edits, CSV/document
   uploads, `resetSecret`, bulk kit-order-line cancel, …): `supported: false` in `openapi.yaml`.
 - Server-side subscription filters (GxG creates them on request), invoicing, insurance.
-- `productCode` on `GET /api/v2/products`: staging matches it with SQL `LIKE` (`a` and `%` list
-  every product) against codes no response carries.
+- `productCode` and `productType` on `GET /api/v2/products`: staging matches them with SQL `LIKE`
+  (`a` and `%` list every product code; `㏞` every type, under a collation that ignores it), and
+  no response carries a code. The mock matches `productType` as a substring.
 - The element shape of a non-empty `attributesFilter` array on `/api/v2/kitorderlines/kits`:
   staging answers anything that is not a JSON array with 400 "Invalid search filter value", and
   the one array shape recorded with an empty 500, which the mock returns for every non-empty

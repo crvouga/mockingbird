@@ -1723,9 +1723,12 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
     })
   }
   // A probe staging never answered in time records "timeout": nothing to replay.
-  // productCode is not modelled (staging matches codes no response carries with SQL LIKE).
+  // productCode and products' productType are not modelled (staging's SQL LIKE collation).
   const replayed = liveErrors.queries.filter(
-    (q) => typeof q.status === "number" && !("productCode" in q.params),
+    (q) =>
+      typeof q.status === "number" &&
+      !("productCode" in q.params) &&
+      !(q.path === "/api/v2/products" && "productType" in q.params),
   )
   for (const q of replayed) {
     test(`GET ${q.path}?${new URLSearchParams(q.params)} → ${q.status}`, async () => {
