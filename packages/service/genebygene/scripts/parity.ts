@@ -391,6 +391,99 @@ const shapes = {
     await probe("GET", "/api/v2/results/results/presignedUrl?kitNumber=WB000000&resultType=x"),
   ],
 }
+// Query validation: each list parameter with a junk value, and the candidate values of the
+// ones the vendor validates as enums. Only the status and the validation errors are kept: a 200
+// page on the shared tenant can hold other callers' rows, so its body is never written.
+const QUERY_PROBES: readonly [string, Record<string, string>][] = [
+  ...(
+    [
+      ["/api/v2/attributes", ["entityType"]],
+      ["/api/v2/eventTypes", ["name"]],
+      ["/api/v2/fulfillments", ["orderLineId", "orderId", "fulfillmentId", "offset", "pageSize"]],
+      [
+        "/api/v2/kitorderlines",
+        [
+          "kitNumbers",
+          "orderId",
+          "orderLineId",
+          "status",
+          "attributeTerm",
+          "attributesToSearch",
+          "attributesFilter",
+          "offset",
+          "pageSize",
+          "orderBy",
+          "productType",
+          "orderByAsc",
+        ],
+      ],
+      ["/api/v2/kitorderlines/kits", ["orderId", "status", "orderBy", "productType", "orderByAsc"]],
+      ["/api/v2/kits", ["kitNumber", "orderNumber", "status", "offset", "pageSize"]],
+      ["/api/v2/notificationSubscriptions", ["type"]],
+      [
+        "/api/v2/orders",
+        ["orderId", "orderDateMin", "orderDateMax", "productName", "offset", "pageSize"],
+      ],
+      ["/api/v2/products", ["productCode", "productId", "productType"]],
+      ["/api/v2/results", ["kitNumber", "offset", "pageSize"]],
+      [
+        "/api/v2/results/search",
+        ["kitNumbers", "dateOfBirth", "resultTypeName", "orderBy", "orderByAsc", "resultDateYear"],
+      ],
+      ["/api/v2/results/results/presignedUrl", ["resultId", "kitNumber", "resultType"]],
+    ] as const
+  ).flatMap(([path, names]) =>
+    names.map((name) => [path, { [name]: "a" }] as [string, Record<string, string>]),
+  ),
+  ...[
+    "Materials",
+    "materials",
+    "Bundle",
+    "DigitalProduct",
+    "Digital Product",
+    "LabServices",
+    "Lab Services",
+    "0",
+    "1",
+  ].flatMap((productType) => [
+    ["/api/v2/kitorderlines/kits", { productType, orderId: ZERO }] as [
+      string,
+      Record<string, string>,
+    ],
+    ["/api/v2/products", { productType }] as [string, Record<string, string>],
+  ]),
+  ...["Shipped", "Canceled", "Received", "Completed", "Pending", "1"].flatMap((status) => [
+    ["/api/v2/kitorderlines/kits", { status, orderId: ZERO }] as [string, Record<string, string>],
+    ["/api/v2/kits", { status, kitNumber: "WB000000" }] as [string, Record<string, string>],
+  ]),
+  ["/api/v2/kitorderlines/kits", { orderBy: "kitNumber", orderId: ZERO }],
+  ["/api/v2/kitorderlines/kits", { orderBy: "KitNumber", orderId: ZERO }],
+  ["/api/v2/notificationSubscriptions", { type: "Webhook" }],
+  ["/api/v2/notificationSubscriptions", { type: "webhook" }],
+  ["/api/v2/attributes", { entityType: "Kit" }],
+  ["/api/v2/attributes", { entityType: "1" }],
+  ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "0" }],
+  ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "-1" }],
+  ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "501" }],
+  ["/api/v2/kits", { kitNumber: "WB000000", offset: "-1" }],
+  ["/api/v2/orders", { orderId: ZERO, pageSize: "0" }],
+  ["/api/v2/orders", { orderId: ZERO, offset: "-1" }],
+]
+const queries: Json[] = []
+for (const [path, params] of QUERY_PROBES) {
+  const answer = await probe("GET", `${path}?${new URLSearchParams(params)}`)
+  const body = answer.body as Json | null
+  queries.push({
+    path,
+    params,
+    status: answer.status,
+    ...(answer.status === 200
+      ? {}
+      : { errors: body?.errors, message: body && "message" in body ? body.message : undefined }),
+  })
+}
+;(shapes as Json).queries = queries
+
 // The mock serves these catalogs (src/corpus/live-catalogs.json); the walk compares them.
 await writeFile(
   join(import.meta.dir, "..", "src", "corpus", "live-catalogs.json"),

@@ -72,6 +72,12 @@
       "seed": 1384192777,
       "status": "open",
       "failure": "ListKits: the shared staging tenant lists 3831 pre-existing kits (a fresh mock has none), and staging pages 100 rows by default where the mock paged 50"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1384928054,
+      "status": "open",
+      "failure": "ListKitOrderLineKits productType=a: real 400 problem \"'Product Type' has a range of values which does not include 'a'.\", mock 200"
     }
   ]
 }
