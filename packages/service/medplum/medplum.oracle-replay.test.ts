@@ -20,6 +20,10 @@ const recording = (await Bun.file(
   scenarios: ScenarioRecording[]
 }
 
+// A scenario replays dozens of requests; graphql takes ~1 s alone and far longer on a loaded
+// CI runner, past bun's 5 s default.
+const SCENARIO_TIMEOUT_MS = 30_000
+
 const recorded = new Map(recording.scenarios.map((scenario) => [scenario.name, scenario]))
 
 describe(`oracle parity (Medplum ${recording.medplum}, recorded ${recording.recordedAt})`, () => {
@@ -47,6 +51,6 @@ describe(`oracle parity (Medplum ${recording.medplum}, recorded ${recording.reco
           failures.push(`${entry.step}\n  ${differences.slice(0, 8).join("\n  ")}`)
       })
       expect(failures).toEqual([])
-    })
+    }, SCENARIO_TIMEOUT_MS)
   }
 })
