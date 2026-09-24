@@ -110,10 +110,19 @@ if (!tokenResponse.ok) {
 const realToken = ((await tokenResponse.json()) as { access_token: string }).access_token
 const redact = createRedactor([...credentials.secrets, realToken])
 
-// The mock answers the staging catalog, the host this script talks to by default.
-const mockApi = new GeneByGeneAPI({ settings: { catalog: "staging" } })
+// The mock answers the staging catalog, the host this script talks to by default, and knows the
+// same tenant client staging does (held in memory only), so an unknown client is refused alike.
+const tenantClient = {
+  client_id: credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_ID ?? "",
+  client_secret: credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET ?? "",
+}
+const createMock = () =>
+  new GeneByGeneAPI({ settings: { catalog: "staging", clients: [tenantClient] } })
+const mockApi = createMock()
 const mockToken = (
-  (await (await requestToken((r) => mockApi.fetch(r), "parity", "parity")).json()) as {
+  (await (
+    await requestToken((r) => mockApi.fetch(r), tenantClient.client_id, tenantClient.client_secret)
+  ).json()) as {
     access_token: string
   }
 ).access_token
@@ -552,7 +561,7 @@ try {
       },
     },
     mock: {
-      create: () => new GeneByGeneAPI({ settings: { catalog: "staging" } }),
+      create: createMock,
       headers: () => ({ authorization: `Bearer ${mockToken}`, accept: "application/json" }),
     },
     redact,

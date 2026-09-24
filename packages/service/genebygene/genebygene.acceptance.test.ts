@@ -776,7 +776,7 @@ describe("issue #122: auth and catalog", () => {
     expect((component.data as unknown as Json[])[0]?.id).toBe(KIT_COMPONENT)
     const missing = await raw("GET", `/api/v2/products?productId=${MISSING_ID}`)
     expect(missing.status).toBe(200)
-    expect(missing.data).toEqual([])
+    expect(missing.data as unknown).toEqual([])
   })
 
   test("B7/B8: the staging bundle quotes an empty 500 on production, and quotes on both", async () => {

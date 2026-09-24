@@ -58,26 +58,32 @@
     {
       "provider": "genebygene",
       "seed": 1383450894,
-      "status": "open",
+      "status": "fixed",
       "failure": "GetKitResults unknown kit: real 404 body is ErrorDto {message: \"Resource not found.\", errorType: null, payload: null, statusCode: 404}, mock answers RFC 9110 ProblemDetails"
     },
     {
       "provider": "genebygene",
       "seed": 1383771939,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListEventTypes: real rows carry payloadStructure and subscriptionTypes [\"Webhook\",\"Email\"], mock rows carry id, description and isSubscribable"
     },
     {
       "provider": "genebygene",
       "seed": 1384192777,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListKits: the shared staging tenant lists 3831 pre-existing kits (a fresh mock has none), and staging pages 100 rows by default where the mock paged 50"
     },
     {
       "provider": "genebygene",
       "seed": 1384928054,
-      "status": "open",
+      "status": "fixed",
       "failure": "ListKitOrderLineKits productType=a: real 400 problem \"'Product Type' has a range of values which does not include 'a'.\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1385623469,
+      "status": "open",
+      "failure": "PostConnectToken with an unknown client: real 400 {\"error\":\"invalid_client\"}, mock 200 (the parity mock did not pin the tenant's client)"
     }
   ]
 }
