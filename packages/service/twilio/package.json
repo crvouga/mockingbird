@@ -54,6 +54,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Twilio",
+    "vendor": {
+      "website": "https://www.twilio.com",
+      "docs": "https://www.twilio.com/docs"
+    },
     "status": "wip",
     "playground": {
       "headers": {

@@ -54,6 +54,11 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Daily",
+    "vendor": {
+      "website": "https://www.daily.co",
+      "docs": "https://docs.daily.co/reference/rest-api",
+      "description": "Daily provides real-time video and audio APIs for embedding calls, plus the open-source Pipecat voice-agent framework."
+    },
     "status": "wip"
   },
   "scripts": {

@@ -10,7 +10,7 @@ import {
 } from "./test/consumer.js"
 
 const API = "http://healthie.mock/graphql"
-const ORG_KEY = "gh_sbox_geviti_org"
+const ORG_KEY = "gh_sbox_acme_org"
 const BACKEND = "http://backend.local"
 /** One of the two values `HEALTHIE_WEBHOOK_IP_ADDRESS` is Joi-restricted to (staging). */
 const ALLOWED_IPS = "18.206.70.225,44.195.8.253"
@@ -128,7 +128,7 @@ describe("S23 acceptance: our Healthie client against the mock", () => {
   })
 
   test("signIn honours HEALTHIE_NAMESPACE: the declared $namespace must match the org's", async () => {
-    const scoped = harness("geviti")
+    const scoped = harness("acme")
     expect(
       (
         await signInOutcome(scoped.consumer, {
@@ -406,7 +406,7 @@ describe("S23 acceptance: our Healthie client against the mock", () => {
     const dup = await rejects(consumer.createFolder(auth, { folderName: "Lab Results" }))
     expect([dup.status, dup.body]).toEqual([400, "Folder with the same name already exists"])
 
-    const name = "LabResults-Geviti Panel ODX - 42.pdf"
+    const name = "LabResults-Acme Panel ODX - 42.pdf"
     const upload = { originalname: "report.pdf", mimetype: "application/pdf", bytes: PDF }
     const first = await consumer.createDocument(
       auth,
@@ -666,7 +666,7 @@ describe("S23 acceptance: our Healthie client against the mock", () => {
       state: "succeeded",
       is_recurring: true,
       offering_id: SEED.membershipOfferingId,
-      offering: { id: SEED.membershipOfferingId, name: "Geviti Membership", price: "149.0" },
+      offering: { id: SEED.membershipOfferingId, name: "Acme Membership", price: "149.0" },
       sender: { stripe_customer_detail: null },
       recurring_payment: { offering_id: SEED.membershipOfferingId, is_paused: false },
     })

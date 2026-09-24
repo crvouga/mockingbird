@@ -7,7 +7,7 @@ const API = "http://plane.mock"
 const PROJECT = "33333333-3333-4333-8333-333333333333"
 const connection: PlaneConnection = {
   accessToken: "plane_api_test",
-  workspaceSlug: "geviti",
+  workspaceSlug: "acme",
   projectId: PROJECT,
 }
 
@@ -51,7 +51,7 @@ describe("S25 Plane acceptance: our bug-report client against the mock", () => {
     const bug = await plane.createLabel("bug")
     const auto = await plane.createLabel("auto-reported")
     await expect(plane.createLabel("bug")).rejects.toThrow(
-      /^Plane POST \/api\/v1\/workspaces\/geviti\/projects\/.+\/labels\/ failed with HTTP 409: .*Label with the same name already exists/,
+      /^Plane POST \/api\/v1\/workspaces\/acme\/projects\/.+\/labels\/ failed with HTTP 409: .*Label with the same name already exists/,
     )
     const todo = states.find((s) => s.name === "Todo")?.id as string
     const item = await plane.createWorkItem({
@@ -80,15 +80,15 @@ describe("S25 Plane acceptance: our bug-report client against the mock", () => {
     const comment = await plane.createComment(item.id, "<p>Seen again by 3 members</p>")
     expect(comment.commentHtml).toBe("<p>Seen again by 3 members</p>")
     const link = await plane.createWorkItemLink(item.id, {
-      url: "https://admin.gogeviti.com/bug-reports/42",
+      url: "https://admin.acme.example/bug-reports/42",
       title: "Report #42",
     })
     expect(link).toMatchObject({
-      url: "https://admin.gogeviti.com/bug-reports/42",
+      url: "https://admin.acme.example/bug-reports/42",
       title: "Report #42",
     })
     await expect(
-      plane.createWorkItemLink(item.id, { url: "https://admin.gogeviti.com/bug-reports/42" }),
+      plane.createWorkItemLink(item.id, { url: "https://admin.acme.example/bug-reports/42" }),
     ).rejects.toThrow(/HTTP 409: .*URL already exists for this Issue/)
     // The journal carries ids, never the comment text.
     const entries = await journal()
@@ -198,7 +198,7 @@ describe("S25 Plane acceptance: our bug-report client against the mock", () => {
       /HTTP 404: \{"error":"The requested resource does not exist."\}/,
     )
     const raw = await runtime.fetch(
-      new Request(`${API}/api/v1/workspaces/geviti/projects/${PROJECT}/work-items/`, {
+      new Request(`${API}/api/v1/workspaces/acme/projects/${PROJECT}/work-items/`, {
         method: "POST",
         headers: { "x-api-key": "k", "content-type": "application/json" },
         body: "{}",
@@ -207,7 +207,7 @@ describe("S25 Plane acceptance: our bug-report client against the mock", () => {
     expect(raw.status).toBe(400)
     expect(await raw.json()).toEqual({ name: ["This field is required."] })
     const anonymous = await runtime.fetch(
-      new Request(`${API}/api/v1/workspaces/geviti/projects/${PROJECT}/states/`),
+      new Request(`${API}/api/v1/workspaces/acme/projects/${PROJECT}/states/`),
     )
     expect(anonymous.status).toBe(401)
   })
@@ -225,7 +225,7 @@ describe("S25 Plane acceptance: our bug-report client against the mock", () => {
 
   test("pinned projects: an unknown workspace/project is a 404", async () => {
     const { plane, admin, consumer } = harness()
-    await admin("/settings", { projects: [`geviti/${PROJECT}`] }, "PUT")
+    await admin("/settings", { projects: [`acme/${PROJECT}`] }, "PUT")
     expect(await plane.listStates()).toHaveLength(5)
     await expect(
       consumer({ projectId: "55555555-5555-4555-8555-555555555555" }).listStates(),
@@ -242,7 +242,7 @@ describe("S25 Plane acceptance: our bug-report client against the mock", () => {
       (await consumer({ accessToken: "other" }, `${API}/ns/a`).listWorkItems()).totalCount,
     ).toBe(1)
     const viaHeader = await runtime.fetch(
-      new Request(`${API}/api/v1/workspaces/geviti/projects/${PROJECT}/work-items/`, {
+      new Request(`${API}/api/v1/workspaces/acme/projects/${PROJECT}/work-items/`, {
         headers: { "x-api-key": "other", "x-mockingbird-namespace": "a" },
       }),
     )

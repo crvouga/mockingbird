@@ -16,18 +16,18 @@ import { document } from "./generated/openapi.js"
 import { FORMBRICKS_NAMESPACE, FormbricksAPI } from "./index.js"
 import type { Settings, Survey } from "./state.js"
 
-/** Where our backend receives the webhook (`onboarding-tasks.controller.ts`; `?token=` checked). */
-export const WEBHOOK_PATH = "/onboarding-tasks/formbricks-webhook"
+/** A conventional path for the consumer app's webhook receiver (examples and the CLI help use it). */
+export const WEBHOOK_PATH = "/webhooks/formbricks"
 
 const error = (code: string, message: string) => ({ code, message, details: {} })
 
 /**
- * Every named Formbricks misbehaviour our consumers branch on, switched on with
+ * Every named Formbricks misbehaviour a consumer app may branch on, switched on with
  * `POST /__admin/faults {"preset": "<name>"}` (add `count` to limit it).
  */
 export const FORMBRICKS_PRESETS: Record<string, FaultPreset> = {
   rate_limited: {
-    description: "Response creation answers 429 (the member app retries 3 times with backoff)",
+    description: "Response creation answers 429 too_many_requests (the client rate limit)",
     rules: [
       {
         operationId: "CreateClientResponse",
@@ -37,7 +37,7 @@ export const FORMBRICKS_PRESETS: Record<string, FaultPreset> = {
     ],
   },
   server_error: {
-    description: "Response creation answers 500 (the backend maps it to 502)",
+    description: "Response creation answers 500 internal_server_error",
     rules: [
       {
         operationId: "CreateClientResponse",
@@ -47,12 +47,11 @@ export const FORMBRICKS_PRESETS: Record<string, FaultPreset> = {
     ],
   },
   missing_response_id: {
-    description:
-      "Response creation stores the response but answers without an id (502 / 503 in our backend)",
+    description: "Response creation stores the response but answers without an id",
     rules: [{ operationId: "CreateClientResponse", effect: "missing_response_id" }],
   },
   environment_unavailable: {
-    description: "The environment state answers 500 (the member app cannot load surveys)",
+    description: "The environment state answers 500 (the SDK cannot load surveys)",
     rules: [
       {
         operationId: "GetEnvironmentState",
@@ -83,11 +82,11 @@ export const FORMBRICKS_PRESETS: Record<string, FaultPreset> = {
     ],
   },
   connection_drop: {
-    description: "Response creation drops the connection (our 30 s backend timeout path)",
+    description: "Response creation drops the connection (a client timeout path)",
     rules: [{ operationId: "CreateClientResponse", drop: true }],
   },
   duplicate: {
-    description: "The next webhook is delivered twice (our receiver does not dedupe)",
+    description: "The next webhook is delivered twice (receivers should dedupe on webhook-id)",
     webhook: { mode: "duplicate" },
   },
   webhook_drop: {
@@ -114,8 +113,8 @@ export type FormbricksRuntimeOptions = {
   surveys?: readonly Survey[]
   settings?: Partial<Settings>
   /**
-   * Where webhooks go: `url` carries our `?token=<FORMBRICKS_WEBHOOK_SECRET>`; `secret` (a
-   * `whsec_…` Standard Webhooks key) signs `webhook-signature`; `events` defaults to
+   * Where webhooks go: `url` (any query, e.g. a `?token=` your receiver checks, is kept); `secret`
+   * (a `whsec_…` Standard Webhooks key) signs `webhook-signature`; `events` defaults to
    * `["responseFinished"]` (add `"responseCreated"` for both).
    */
   webhooks?: Omit<WebhookEndpoint, "id"> & WebhookHubOptionsSubset
@@ -151,21 +150,57 @@ const adminRoutes = (runtime: ServiceRuntime<FormbricksAPI>): AdminRoutes => ({
         return adminError(400, `surveys[${index}]: id and name are required`)
       }
     }
-    for (const survey of list as Survey[]) {
+    for (const survey of list as (Survey & { environmentId?: string })[]) {
+      const { environmentId, ...rest } = survey
+      const owner = survey.workspaceId ?? environmentId
       state.surveys.insert(survey.id, {
-        ...survey,
+        ...rest,
         type: survey.type ?? "app",
         status: survey.status ?? "inProgress",
-        environmentId: survey.environmentId ?? null,
+        workspaceId: owner ? (state.resolveWorkspace(owner) ?? owner) : null,
       })
     }
     return json(200, { surveys: state.allSurveys().map((s) => s.id) })
+  },
+  "GET /contacts": ({ namespace }) =>
+    json(200, {
+      contacts: runtime
+        .instance(namespace)
+        .state.contacts.list({ order: "oldest" })
+        .map((row) => row.value),
+    }),
+  "PUT /contacts": ({ body, namespace }) => {
+    const list = Array.isArray(body) ? body : isRecord(body) ? body.contacts : undefined
+    if (!Array.isArray(list)) return adminError(400, "expected [contact] or {contacts: [contact]}")
+    const state = runtime.instance(namespace).state
+    for (const [index, contact] of list.entries()) {
+      if (!isRecord(contact) || typeof contact.id !== "string") {
+        return adminError(400, `contacts[${index}]: id is required`)
+      }
+    }
+    for (const contact of list as Record<string, unknown>[]) {
+      const attributes = isRecord(contact.attributes)
+        ? Object.fromEntries(Object.entries(contact.attributes).map(([k, v]) => [k, String(v)]))
+        : {}
+      if (typeof contact.userId === "string") attributes.userId = contact.userId
+      state.contacts.insert(contact.id as string, {
+        id: contact.id as string,
+        workspaceId: typeof contact.workspaceId === "string" ? contact.workspaceId : null,
+        attributes,
+      })
+    }
+    return json(200, { contacts: state.contacts.list({ order: "oldest" }).map((r) => r.value.id) })
   },
   "GET /settings": ({ namespace }) => json(200, runtime.instance(namespace).state.current()),
   "PUT /settings": ({ body, namespace }) => {
     if (!isRecord(body)) return adminError(400, "expected a JSON object")
     const patch: Partial<Settings> = {}
-    if (Array.isArray(body.environments)) patch.environments = body.environments.map(String)
+    if (Array.isArray(body.workspaces)) patch.workspaces = body.workspaces.map(String)
+    if (isRecord(body.legacyEnvironmentIds)) {
+      patch.legacyEnvironmentIds = Object.fromEntries(
+        Object.entries(body.legacyEnvironmentIds).map(([k, v]) => [k, String(v)]),
+      )
+    }
     if (Array.isArray(body.apiKeys)) patch.apiKeys = body.apiKeys.map(String)
     if (typeof body.webhookId === "string") patch.webhookId = body.webhookId
     if (typeof body.contactsEnabled === "boolean") patch.contactsEnabled = body.contactsEnabled
@@ -174,8 +209,8 @@ const adminRoutes = (runtime: ServiceRuntime<FormbricksAPI>): AdminRoutes => ({
 })
 
 /**
- * The namespace carrier for the client API is the environment id in the path (the member app's
- * fetch cannot add headers); the management API's is its `x-api-key`.
+ * The namespace carrier for the client API is the workspace (or legacy environment) id in the
+ * path (the SDK cannot add headers); the management API's is its `x-api-key`.
  */
 export const formbricksCredential = (request: Request): string | undefined => {
   const key = request.headers.get("x-api-key")?.trim()
@@ -185,8 +220,8 @@ export const formbricksCredential = (request: Request): string | undefined => {
 
 /**
  * The Formbricks mock with Mockingbird's full service contract: `/health`, `/__admin/*`,
- * namespaces by header, by `/ns/<name>` prefix on `FORMBRICKS_APP_URL`, or by environment id /
- * API key (`PUT /__admin/credentials {"credentials": {"<env id or key>": "<namespace>"}}`),
+ * namespaces by header, by `/ns/<name>` prefix on the app URL, or by workspace id / API key
+ * (`PUT /__admin/credentials {"credentials": {"<workspace id or key>": "<namespace>"}}`),
  * clock control, fault presets, and Standard-Webhooks-signed `responseFinished` webhooks.
  */
 export const createRuntime = (options: FormbricksRuntimeOptions = {}): FormbricksRuntime => {

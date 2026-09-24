@@ -49,9 +49,9 @@ const buildHl7Message = (
 ) => {
   const cr = "\r"
   const dateCompact = testDate.replace(/-/g, "")
-  const msh = `MSH|^~\\&|LAB|AHA|GEVITI|GEVITI|20250101000000||ORU^R01|${msgId}|P|2.3`
+  const msh = `MSH|^~\\&|LAB|AHA|ACME|ACME|20250101000000||ORU^R01|${msgId}|P|2.3`
   const pid = `PID|1||E2E-900001||ODX Webhook Dedup Test^QA Test User -||19800101|${sex}`
-  const obr = `OBR|1|||^^^Geviti|||${dateCompact}`
+  const obr = `OBR|1|||^^^Acme|||${dateCompact}`
   const obx = results.map((r, i) => {
     const elem = lookup.get(r.elementId)
     const code = elem?.elementReferences[0]?.elementCode ?? `EL${r.elementId}`
@@ -129,7 +129,7 @@ const reportRequest = (
   practiceId: PRACTICE,
   patientId,
   outputType,
-  theme: "Geviti",
+  theme: "Acme",
   themeId: 21,
   recipientId: "15",
   cultureCode: "en-US",
@@ -246,7 +246,7 @@ describe("S24 acceptance: our ODX client and webhook guard against the mock", ()
       practiceId: PRACTICE,
       patientId: patient.patientId,
       patientTestId: test.patientTestId,
-      recipient: "Patient (Geviti)",
+      recipient: "Patient (Acme)",
       reports: ["1", "2", "3"],
       unitType: "ConventionalUS",
     })

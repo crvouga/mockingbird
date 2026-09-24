@@ -56,7 +56,7 @@ changes:
 ```bash
 npx mockingbird-genebygene serve --port 8788 \
   --webhook-url http://127.0.0.1:3000/webhooks/gene-by-gene --webhook-secret "$GXG_KV_SECRET" \
-  --results-s3-endpoint http://127.0.0.1:4569 --results-s3-bucket geviti-gxg-results-dev
+  --results-s3-endpoint http://127.0.0.1:4569 --results-s3-bucket acme-gxg-results-dev
 ```
 
 ```ts
@@ -301,7 +301,7 @@ namespace, so parallel workers never collide in the shared results bucket.
 ```bash
 bun test                           # self-parity (incl. the address walk), acceptance B1–B52 through
                                    # test/consumer.ts, contract, served-over-HTTP
-bun scripts/vendor-openapi.ts      # re-vendor openapi.yaml from ~/geviti-monorepo, then bun run generate
+bun scripts/vendor-openapi.ts <gxg-openapi.json>  # re-vendor openapi.yaml, then bun run generate
 bun run parity                     # live parity against GxG staging; exits 2 without
                                    # MOCKINGBIRD_GENEBYGENE_CLIENT_ID / _CLIENT_SECRET (env / .env.local);
                                    # compares and records corpus/address-parity.json, corpus/live-errors.json

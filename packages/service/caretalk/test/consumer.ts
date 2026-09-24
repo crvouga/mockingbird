@@ -1,7 +1,7 @@
 /**
  * A port of our backend's CareTalk client (`apps/backend/src/modules/global-services/services/
  * caretalk/caretalk-client.service.ts` with its zod schemas from `caretalk.types.ts`, and the
- * form-submission transform in `geviti-forms/adapters/form-adapters.ts`): the same paths,
+ * form-submission transform in its forms adapter `form-adapters.ts`): the same paths,
  * headers, token cache (Redis, 3600 s), the one-shot re-login on 401, the `safeParse` →
  * `data: null` behaviour, "400 means no such patient", and `transformFormData`.
  *

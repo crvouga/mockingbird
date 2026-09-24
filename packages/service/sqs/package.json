@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Amazon SQS",
+    "vendor": {
+      "website": "https://aws.amazon.com/sqs/",
+      "docs": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/"
+    },
     "status": "wip"
   },
   "scripts": {

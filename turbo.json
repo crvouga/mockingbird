@@ -102,6 +102,16 @@
         "!packages/**/node_modules/**"
       ]
     },
+    "//#check:brands": {
+      "inputs": [
+        "scripts/brands.ts",
+        "scripts/release/lib.ts",
+        "sites/docs/src/data/brands.json",
+        "sites/docs/public/brands/**",
+        "packages/**/package.json",
+        "!packages/**/node_modules/**"
+      ]
+    },
     "//#check:readme": {
       "inputs": [
         "README.md",

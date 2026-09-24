@@ -401,7 +401,7 @@ export class PharmetikaConsumer {
         method: "PUT",
         headers: this.buildHeaders(),
         body: JSON.stringify({
-          note: note ?? "Cancelled from Geviti EMR",
+          note: note ?? "Cancelled from the Acme EMR",
           prescriber_order_number: pharmacyOrderId,
         }),
       },

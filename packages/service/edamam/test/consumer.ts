@@ -5,8 +5,8 @@
  *   with its search/serving-weight/plausibility helpers, and `edamam-meal-planning.adapter.ts`
  *   with its helpers and zod schemas), changed only at the seams (`seams.ts`): the Nest logger
  *   and ConfigService, the hardcoded `https://api.edamam.com`, and the global `fetch`.
- * - `MakorEdamamClient` below is a TypeScript port of the Makor chat service's Python client
- *   (`apps/makor-ecosystem/services/chat/app/tools/nutrition/client.py`): the same endpoints,
+ * - `PythonEdamamClient` below is a TypeScript port of the Python chat service's client
+ *   (`app/tools/nutrition/client.py`): the same endpoints,
  *   params (httpx repeats list params), and status handling (429/402 rate limit, 422, 555,
  *   404, other non-200).
  */
@@ -50,8 +50,8 @@ export class EdamamAPIError extends Error {
 
 const RATE_LIMIT_STATUS_CODES = new Set([429, 402])
 
-/** Port of the Makor chat `EdamamClient`. */
-export class MakorEdamamClient {
+/** Port of the Python chat service's `EdamamClient`. */
+export class PythonEdamamClient {
   constructor(
     private readonly baseUrl: string,
     private readonly fetchImpl: Fetch,

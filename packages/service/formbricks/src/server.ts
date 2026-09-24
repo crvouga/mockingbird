@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
 import { createRuntime, type FormbricksRuntime, type FormbricksRuntimeOptions } from "./runtime.js"
+import { DEFAULT_SETTINGS } from "./state.js"
 
 /** Port `mockingbird-formbricks serve` listens on when none is given. */
 export const DEFAULT_PORT = 8813
@@ -38,42 +39,37 @@ export const serveTarget: ServeTarget = {
     "webhook-url": {
       type: "string",
       value: "<url>",
-      description:
-        "Deliver webhooks here (e.g. http://127.0.0.1:3000/onboarding-tasks/formbricks-webhook)",
+      description: "Deliver webhooks here (e.g. http://127.0.0.1:3000/webhooks/formbricks)",
     },
     "webhook-token": {
       type: "string",
       value: "<token>",
-      description: "Appended as ?token= (the app's FORMBRICKS_WEBHOOK_SECRET)",
+      description: "Appended to the webhook url as ?token= (for receivers that check one)",
     },
     "webhook-secret": {
       type: "string",
       value: "<whsec_…>",
       description: "Standard Webhooks key that signs webhook-signature (optional)",
     },
-    "environment-id": {
+    "workspace-id": {
       type: "string",
       value: "<id>",
-      description: "An extra environment id that serves the survey fixture",
+      description: "An extra workspace id that serves the survey corpus",
     },
   },
   create: (values, common) => {
     const url = text(values["webhook-url"])
     const token = text(values["webhook-token"])
     const secret = text(values["webhook-secret"])
-    const environment = text(values["environment-id"])
+    const workspace = text(values["workspace-id"])
     const target =
       url && token
         ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
         : url
     return createRuntime({
       ...(target ? { webhooks: { url: target, ...(secret ? { secret } : {}) } } : {}),
-      ...(environment
-        ? {
-            settings: {
-              environments: [environment, "cmlhiza9j0009lj01my5c1g0q", "cmlhiza9c0004lj01jbuhp0nz"],
-            },
-          }
+      ...(workspace
+        ? { settings: { workspaces: [workspace, ...DEFAULT_SETTINGS.workspaces] } }
         : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.seed !== undefined ? { seed: common.seed } : {}),
@@ -81,7 +77,7 @@ export const serveTarget: ServeTarget = {
     })
   },
   banner: () => [
-    "point FORMBRICKS_APP_URL at this url; FORMBRICKS_ENVIRONMENT_ID cmlhiza9j0009lj01my5c1g0q (prod clone)",
-    "management API: x-api-key <any>; namespaces: x-mockingbird-namespace, /ns/<name>/…, or PUT /__admin/credentials {<env id | api key>: <ns>}",
+    `point the SDK's appUrl at this url; workspace ${DEFAULT_SETTINGS.workspaces[0]} (legacy environment ${Object.keys(DEFAULT_SETTINGS.legacyEnvironmentIds)[0]}) serves the survey corpus`,
+    "management API: x-api-key <any>; namespaces: x-mockingbird-namespace, /ns/<name>/…, or PUT /__admin/credentials {<workspace id | api key>: <ns>}",
   ],
 }

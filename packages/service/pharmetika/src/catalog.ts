@@ -93,6 +93,6 @@ export const DEFAULT_TEMPLATES: readonly MedicationTemplate[] = [
 export type Clinic = { identifier: string; data: { name: string } }
 
 export const DEFAULT_CLINICS: readonly Clinic[] = [
-  { identifier: "clinic-geviti-0001", data: { name: "Geviti" } },
-  { identifier: "clinic-geviti-west-0002", data: { name: "Geviti West" } },
+  { identifier: "clinic-acme-0001", data: { name: "Acme" } },
+  { identifier: "clinic-acme-west-0002", data: { name: "Acme West" } },
 ]

@@ -57,6 +57,7 @@ bun run check:full     # mirrors .github/workflows/pr.yml (the pull-request gate
 | Consumer smoke | `bun run release:smoke` | Packs every public package like the release, `npm install`s the tarballs into a clean project, imports every entry point under Node, and typechecks them plus every README TypeScript example |
 | llms.txt | `bun run check:llms` | [`llms.txt`](../llms.txt) lists every published mock service by release tier (`bun run llms:sync` regenerates) |
 | README | `bun run check:readme` | [`README.md`](../README.md) is generated from `sites/docs/src/lib/content.ts`, every service's `package.json` and these guides (`bun run readme:sync` regenerates); never edit it by hand |
+| Vendor branding | `bun run check:brands` | `sites/docs/src/data/brands.json` has a logo, color and description for every service's `mockingbird.vendor` (`bun run brands:sync` fetches them; `-- --all --links` refreshes all and checks the links) |
 | Docs site | `bun run docs:build` (part of `build`) | [`sites/docs`](../sites/docs) renders the same sources, sends every playground sample to a fresh mock, runs the quick start and SQL snippets, and fails on missing or stale service metadata |
 | Agent commands | `bun run check:agents` | Every `.agents/commands/*.md` is symlinked into each agent harness (`bun run agents:sync` repairs) |
 

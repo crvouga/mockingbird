@@ -8,7 +8,7 @@
  *
  * By default only safe operations run (environment state, survey and response reads, the
  * widget script). Creating responses fires the instance's webhooks and creating surveys changes
- * it, so they need `--include-unsafe`. Never point this at forms.gogeviti.com.
+ * it, so they need `--include-unsafe`. Never point this at a production instance.
  */
 import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
@@ -35,11 +35,6 @@ try {
 }
 
 const baseUrl = credentials.values.MOCKINGBIRD_FORMBRICKS_APP_URL.replace(/\/$/, "")
-if (new URL(baseUrl).host === "forms.gogeviti.com") {
-  console.error("formbricks parity: refusing to run against production (forms.gogeviti.com)")
-  process.exit(2)
-}
-
 try {
   await parity({
     provider: "formbricks",

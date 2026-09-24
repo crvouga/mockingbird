@@ -161,7 +161,7 @@ export class FirstPromoterConsumer {
     if (!isRecord(data) || !isString(data.access_token) || !isNumber(data.expires_in)) {
       throw new Error("Failed to fetch FirstPromoter dashboard")
     }
-    return `https://gogeviti.firstpromoter.com/iframe?tk=${data.access_token}`
+    return `https://acme.firstpromoter.com/iframe?tk=${data.access_token}`
   }
 
   /** `fetchPromoterList`: pages of 100 until a short page; stops (keeping what it has) on errors. */
@@ -238,7 +238,7 @@ export class FirstPromoterConsumer {
       return this.claimOrYield(
         user.id,
         SYNTHETIC_PROMOTER_ID_BASE + user.id,
-        `https://gogeviti.com/referrals?fpr=dev-${user.id}`,
+        `https://acme.example/referrals?fpr=dev-${user.id}`,
       )
     }
     const custId = `${this.config.environment}_${user.id}`

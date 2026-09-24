@@ -7,7 +7,7 @@ import { describe, expect, test } from "bun:test"
 import { Webhook } from "svix"
 import { admin, isolatedKey, sharedStack } from "./test/stack.js"
 
-const FROM = "Geviti Platform <no-reply@gogeviti.com>"
+const FROM = "Acme Platform <no-reply@acme.example>"
 
 const client = async (label: string) => {
   const { Resend, resend } = await sharedStack()
@@ -24,7 +24,7 @@ describe("resend@4.8.0 against the mock", () => {
       subject: "Hello",
       html: '<p>Hi <a href="https://app.test/x">there</a></p>',
       text: "Hi there",
-      replyTo: "care@gogeviti.com",
+      replyTo: "care@acme.example",
       tags: [{ name: "category", value: "welcome" }],
       headers: { "X-Entity-Ref-ID": "abc" },
       attachments: [{ filename: "a.txt", content: Buffer.from("hello") }],
@@ -39,7 +39,7 @@ describe("resend@4.8.0 against the mock", () => {
       to: ["Ada Lovelace <Ada@Example.com>"],
       from: FROM,
       subject: "Hello",
-      reply_to: ["care@gogeviti.com"],
+      reply_to: ["care@acme.example"],
       last_event: "delivered",
     })
     const outbox = (await (await admin("/outbox?to=ada@example.com", namespace)).json()) as {
@@ -167,7 +167,7 @@ describe("resend@4.8.0 against the mock", () => {
       })
       const created = await admin("/inbound", namespace, {
         from: "Patient <patient@example.com>",
-        to: "care+tok123@care.gogeviti.com",
+        to: "care+tok123@care.acme.example",
         subject: "Question",
         text: "Hello care team",
       })
@@ -180,7 +180,7 @@ describe("resend@4.8.0 against the mock", () => {
         data: { email_id: string; to: string[] }
       }
       expect(verified.type).toBe("email.received")
-      expect(verified.data.to).toEqual(["care+tok123@care.gogeviti.com"])
+      expect(verified.data.to).toEqual(["care+tok123@care.acme.example"])
       expect(() =>
         new Webhook(`whsec_${Buffer.from("wrong").toString("base64")}`).verify(
           delivery.body,

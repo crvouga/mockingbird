@@ -52,6 +52,11 @@
     "layer": "service",
     "category": "observability",
     "displayName": "PostHog",
+    "vendor": {
+      "website": "https://posthog.com",
+      "docs": "https://posthog.com/docs/api",
+      "description": "PostHog is an open-source product analytics platform with feature flags, session replay, experiments and surveys."
+    },
     "status": "wip"
   },
   "scripts": {

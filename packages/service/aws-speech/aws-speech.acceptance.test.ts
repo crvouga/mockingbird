@@ -232,7 +232,7 @@ describe("Transcribe StartStreamTranscription (HTTP/2 duplex)", () => {
       "PUT",
     )
     const adapter = new AwsVoiceTranscriptionAdapter(
-      config({ CHATBOT_VOICE_VOCABULARY_NAME: "geviti-terms" }),
+      config({ CHATBOT_VOICE_VOCABULARY_NAME: "acme-terms" }),
     )
     const run = async () => {
       const results = []
@@ -309,7 +309,7 @@ describe("Transcribe batch (JSON 1.1): the call-recording adapter", () => {
     AWS_REGION: "us-east-1",
     AWS_ACCESS_KEY_ID: "AKIDBATCH",
     AWS_SECRET_ACCESS_KEY: "s",
-    AWS_S3_RESULTS_BUCKET: "geviti-results",
+    AWS_S3_RESULTS_BUCKET: "acme-results",
   }
 
   test("start → IN_PROGRESS → COMPLETED on the mock clock, with a TranscriptFileUri our adapter accepts", async () => {
@@ -332,7 +332,7 @@ describe("Transcribe batch (JSON 1.1): the call-recording adapter", () => {
     expect(done.status).toBe("COMPLETED")
     const uri = (done as { transcriptFileUri: string }).transcriptFileUri
     expect(uri).toBe(
-      `https://s3.us-east-1.amazonaws.com/geviti-results/care-chat-transcripts/care-chat-${SID.toLowerCase()}.json`,
+      `https://s3.us-east-1.amazonaws.com/acme-results/care-chat-transcripts/care-chat-${SID.toLowerCase()}.json`,
     )
     expect(adapter.transcriptKey(uri)).toBe(
       `care-chat-transcripts/care-chat-${SID.toLowerCase()}.json`,

@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "marketing",
     "displayName": "Klaviyo",
+    "vendor": {
+      "website": "https://www.klaviyo.com",
+      "docs": "https://developers.klaviyo.com/en/reference/api_overview"
+    },
     "status": "wip",
     "playground": {
       "headers": {

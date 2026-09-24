@@ -10,8 +10,8 @@ info:
     note: OTLP/HTTP per opentelemetry-proto v1 (https://opentelemetry.io/docs/specs/otlp/); the O2 routes
       follow OpenObserve's API (/api-doc/openapi.json, v0.92) trimmed to what our clients call.
 servers:
-- url: https://otel.gogeviti.com
-- url: https://observe.gogeviti.com
+- url: https://otel.acme.example
+- url: https://observe.acme.example
 security:
 - bearerAuth: []
 paths:

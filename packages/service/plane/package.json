@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "productivity",
     "displayName": "Plane",
+    "vendor": {
+      "website": "https://plane.so",
+      "docs": "https://developers.plane.so/api-reference/introduction"
+    },
     "status": "wip"
   },
   "scripts": {

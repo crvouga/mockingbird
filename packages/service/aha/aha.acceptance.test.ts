@@ -14,7 +14,7 @@ import {
 
 const params = fcParameters(process.env)
 const API = "http://aha.mock"
-const API_KEY = "geviti_aha_test"
+const API_KEY = "acme_aha_test"
 const API_SECRET = "aha-secret-for-tests"
 const WEBHOOK_SECRET = "aha-webhook-secret"
 
@@ -90,11 +90,11 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
   test("checkout → create-order; Scheduled books the EMR appointment; Check Out + Sample Collected marks drawn", async () => {
     const { admin, deliver, checkout, receiver } = harness()
     const placed = await checkout(101)
-    expect(placed.partnerOrderId).toBe("GV-101")
+    expect(placed.partnerOrderId).toBe("AC-101")
     expect(placed.ahaOrderNumber).toMatch(/^AHA-/)
 
     const scheduledAt = "2026-10-01T16:30:00.000Z"
-    const moved = await admin("/orders/GV-101/transition", {
+    const moved = await admin("/orders/AC-101/transition", {
       status: "Scheduled",
       scheduledAt,
       timeZone: "America/Denver",
@@ -104,7 +104,7 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
     // The trap fields: moment-parsable local time + IANA zone, alongside the DTO's fields.
     expect(scheduled).toMatchObject({
       status: "Scheduled",
-      partnerOrderId: "GV-101",
+      partnerOrderId: "AC-101",
       ahaOrderId: placed.ahaOrderNumber,
       scheduleServiceTime: "2026-10-01T10:30:00",
       scheduleServiceTimeZone: "America/Denver",
@@ -116,8 +116,8 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
     expect(order?.hasScheduledInitialBloodwork).toBe(true)
     expect(order?.storefrontStatus).toBe("bloodwork.Awaiting Draw")
 
-    await admin("/orders/GV-101/transition", { status: "Check In" })
-    await admin("/orders/GV-101/transition", {
+    await admin("/orders/AC-101/transition", { status: "Check In" })
+    await admin("/orders/AC-101/transition", {
       status: "Check Out",
       drawStatus: "Sample Collected",
     })
@@ -134,12 +134,12 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
   test("Rescheduled moves the appointment; Cancelled cancels the test and the appointment", async () => {
     const { admin, deliver, checkout, receiver } = harness()
     await checkout(202)
-    await admin("/orders/GV-202/transition", {
+    await admin("/orders/AC-202/transition", {
       status: "scheduled",
       scheduledAt: "2026-10-02T15:00:00Z",
       timeZone: "America/New_York",
     })
-    await admin("/orders/GV-202/transition", {
+    await admin("/orders/AC-202/transition", {
       status: "RESCHEDULED",
       scheduledAt: "2026-10-05T18:00:00Z",
     })
@@ -151,7 +151,7 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
       at: "2026-10-05T18:00:00.000Z",
       status: "rescheduled",
     })
-    await admin("/orders/GV-202/transition", { status: "Cancelled" })
+    await admin("/orders/AC-202/transition", { status: "Cancelled" })
     await deliver()
     expect(receiver.orders.get(202)?.isTestCancelled).toBe(true)
     expect(receiver.orders.get(202)?.appointment?.status).toBe("cancelled")
@@ -179,9 +179,9 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
     for (const [status, draw, internal] of table) {
       const { admin, deliver, checkout, receiver } = harness()
       await checkout(7)
-      await admin("/orders/GV-7/transition", { status: "Scheduled" })
+      await admin("/orders/AC-7/transition", { status: "Scheduled" })
       await deliver()
-      await admin("/orders/GV-7/transition", { status, ...(draw ? { drawStatus: draw } : {}) })
+      await admin("/orders/AC-7/transition", { status, ...(draw ? { drawStatus: draw } : {}) })
       const [event] = await deliver()
       expect(event?.status).toBe(status)
       expect(mapAhaStatusToInternal(String(event?.status), event?.drawStatus).internalStatus).toBe(
@@ -204,7 +204,7 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
   test("Check Out without a drawStatus defaults to Sample Collected (never the unknown check_out branch)", async () => {
     const { admin, deliver, checkout, receiver } = harness()
     await checkout(8)
-    await admin("/orders/GV-8/transition", { status: "check_out" })
+    await admin("/orders/AC-8/transition", { status: "check_out" })
     const [event] = await deliver()
     expect(event).toMatchObject({ status: "Check Out", drawStatus: "Sample Collected" })
     expect(receiver.orders.get(8)?.vitalBloodDrawn).toBe(true)
@@ -213,7 +213,7 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
   test("webhooks carry Authorization: Token <AHA_WEBHOOK_SECRET>, which the guard accepts", async () => {
     const { admin, runtime, checkout, deliveries } = harness()
     await checkout(9)
-    await admin("/orders/GV-9/transition", { status: "Check In" })
+    await admin("/orders/AC-9/transition", { status: "Check In" })
     await runtime.webhooks.idle()
     expect(deliveries[0]?.headers.get("authorization")).toBe(`Token ${WEBHOOK_SECRET}`)
     const wrongSecret = new AhaWebhookReceiver("other-secret")
@@ -233,7 +233,7 @@ describe("S10.6 acceptance: our consumer's logic against the mock", () => {
     const placed = await service.createOrUpdateOrder(request)
     if (!placed.success) throw new Error("create failed")
     receiver.track(11, placed.ahaOrderNumber)
-    await admin("/orders/GV-11/transition", { status: "Scheduled" })
+    await admin("/orders/AC-11/transition", { status: "Scheduled" })
     const [event] = await deliver()
     expect(event).toMatchObject({
       scheduleServiceTime: "2026-11-03T08:15:00",
@@ -332,7 +332,7 @@ describe("auth: HMAC and legacy modes", () => {
     expect((await service.createOrUpdateOrder(order)).success).toBe(true)
   })
 
-  test("legacy mode (X-Geviti-Auth-Key) works, and can be switched off", async () => {
+  test("legacy mode (X-Acme-Auth-Key) works, and can be switched off", async () => {
     const { runtime, admin } = harness()
     const legacy = new AhaServiceConsumer(
       { apiUrl: API, apiKey: API_KEY, useLegacyAuth: true },
@@ -341,7 +341,7 @@ describe("auth: HMAC and legacy modes", () => {
     const order = bloodworkOrderRequest(24, USER, ADDRESS, PRACTITIONER, TESTS)
     expect((await legacy.createOrUpdateOrder(order)).success).toBe(true)
     const unknownKey = new AhaServiceConsumer(
-      { apiUrl: API, apiKey: "geviti_aha_other", useLegacyAuth: true },
+      { apiUrl: API, apiKey: "acme_aha_other", useLegacyAuth: true },
       (r) => runtime.fetch(r),
     )
     expect((await unknownKey.createOrUpdateOrder(order)).success).toBe(false)
@@ -390,7 +390,7 @@ describe("envelopes (G-A1) and the lab-provider port", () => {
     const placed = await wrapped.labProvider.placeOrder({ ...lab, idempotencyKey: "k-wrapped" })
     expect(placed).toMatchObject({ ok: true, status: "placed" })
     if (placed.ok) {
-      expect(placed.partnerOrderId).toBe(`GV-${partnerSequenceFromIdempotencyKey("k-wrapped")}`)
+      expect(placed.partnerOrderId).toBe(`AC-${partnerSequenceFromIdempotencyKey("k-wrapped")}`)
       expect(placed.providerOrderId).toMatch(/^AHA-/)
       // The lab provider cancels with the order_number in partner_order_id; the mock resolves it.
       expect(
@@ -484,7 +484,7 @@ describe("cancel", () => {
   test("AhaService cancel succeeds, emits Cancelled, and our handler cancels the test", async () => {
     const { service, admin, deliver, checkout, receiver } = harness()
     await checkout(50)
-    await admin("/orders/GV-50/transition", { status: "Scheduled" })
+    await admin("/orders/AC-50/transition", { status: "Scheduled" })
     await deliver()
     expect(await service.cancelOrder(50, "member asked")).toEqual({
       success: true,
@@ -504,7 +504,7 @@ describe("cancel", () => {
       error: { code: "AHA_API_ERROR", message: "AHA API returned 404" },
     })
     await checkout(51)
-    await admin("/orders/GV-51/transition", { status: "Check Out", drawStatus: "Completed" })
+    await admin("/orders/AC-51/transition", { status: "Check Out", drawStatus: "Completed" })
     expect(await service.cancelOrder(51)).toMatchObject({ success: true, status: "ERROR" })
   })
 
@@ -525,11 +525,11 @@ describe("contract", () => {
     await runtime.fetch(
       new Request(`${API}/__admin/credentials`, {
         method: "PUT",
-        body: JSON.stringify({ credentials: { geviti_aha_worker_a: "a" } }),
+        body: JSON.stringify({ credentials: { acme_aha_worker_a: "a" } }),
       }),
     )
     const worker = new AhaServiceConsumer(
-      { apiUrl: API, apiKey: "geviti_aha_worker_a", useLegacyAuth: true },
+      { apiUrl: API, apiKey: "acme_aha_worker_a", useLegacyAuth: true },
       (r) => runtime.fetch(r),
     )
     const placed = await worker.createOrUpdateOrder(
@@ -541,7 +541,7 @@ describe("contract", () => {
     const journal = (await (
       await runtime.fetch(new Request(`${API}/__admin/requests?namespace=a`))
     ).json()) as { requests: { ids?: Record<string, string> }[] }
-    expect(journal.requests[0]?.ids?.partnerOrderId).toBe("GV-60")
+    expect(journal.requests[0]?.ids?.partnerOrderId).toBe("AC-60")
     const text = JSON.stringify(journal)
     for (const phi of ["Lovelace", "1985-12-10", "Main St", "ada@example.com"]) {
       expect(text).not.toContain(phi)
@@ -552,13 +552,13 @@ describe("contract", () => {
 
   test("admin validation: unknown order 404, bad zone 400, settings mask secrets", async () => {
     const { admin, checkout } = harness()
-    expect((await admin("/orders/GV-1/transition", { status: "Scheduled" })).status).toBe(404)
+    expect((await admin("/orders/AC-1/transition", { status: "Scheduled" })).status).toBe(404)
     await checkout(70)
     expect(
-      (await admin("/orders/GV-70/transition", { status: "Scheduled", timeZone: "Mars/Olympus" }))
+      (await admin("/orders/AC-70/transition", { status: "Scheduled", timeZone: "Mars/Olympus" }))
         .status,
     ).toBe(400)
-    expect((await admin("/orders/GV-70/transition", { nope: 1 })).status).toBe(400)
+    expect((await admin("/orders/AC-70/transition", { nope: 1 })).status).toBe(400)
     const settings = (await (await admin("/settings")).json()) as Settings
     expect(JSON.stringify(settings)).not.toContain(API_SECRET)
   })
@@ -582,7 +582,7 @@ describe("contract", () => {
     const { runtime, admin, deliver, checkout, receiver } = harness()
     await checkout(80)
     runtime.applyPreset("webhook_duplicate", "default", { count: 1 })
-    await admin("/orders/GV-80/transition", {
+    await admin("/orders/AC-80/transition", {
       status: "Scheduled",
       scheduledAt: "2026-12-01T17:00:00Z",
     })
@@ -608,7 +608,7 @@ describe("contract", () => {
           const at = Math.floor(instant / 60_000) * 60_000
           const { admin, deliver, checkout, receiver } = harness()
           await checkout(90)
-          await admin("/orders/GV-90/transition", {
+          await admin("/orders/AC-90/transition", {
             status: "Scheduled",
             scheduledAt: at,
             timeZone: zone,

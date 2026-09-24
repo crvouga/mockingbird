@@ -76,14 +76,14 @@ export type Settings = {
 export const DEFAULT_CAMPAIGNS: Campaign[] = [
   {
     id: 1,
-    name: "Geviti Referral Program",
+    name: "Acme Referral Program",
     color: "#4F46E5",
     referralRewards: [
       {
         reward_id: 11,
         apply_on: "first_payment",
         name: "$50 off your first order",
-        coupon: "GEVITI50",
+        coupon: "ACME50",
         amount: 50,
         unit: "cash",
         per_of_sale: null,
@@ -111,7 +111,7 @@ export const DEFAULT_CAMPAIGNS: Campaign[] = [
 ]
 
 export const DEFAULT_SETTINGS: Settings = {
-  website: "https://gogeviti.com/referrals",
+  website: "https://acme.example/referrals",
   defaultCampaignId: 1,
   campaigns: DEFAULT_CAMPAIGNS,
   autoConvert: true,

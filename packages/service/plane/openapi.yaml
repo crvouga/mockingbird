@@ -351,7 +351,7 @@ components:
       schema:
         type: string
         enum:
-        - geviti
+        - acme
     ProjectId:
       name: project_id
       in: path

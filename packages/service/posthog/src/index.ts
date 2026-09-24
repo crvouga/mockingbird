@@ -33,7 +33,7 @@ import { type CapturedEvent, PostHogState, type Settings } from "./state.js"
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 export { decodePostHogBody, tokenFromBody } from "./body.js"
-export { GEVITI_FLAG_STATE } from "./flag-state-fixture.js"
+export { ACME_FLAG_STATE } from "./flag-state-fixture.js"
 export type {
   Evaluation,
   FlagOverride,

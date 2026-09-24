@@ -44,7 +44,7 @@ const harness = (options: ResendRuntimeOptions = {}) => {
 }
 
 const email = (overrides: Record<string, unknown> = {}) => ({
-  from: "Geviti <no-reply@gogeviti.com>",
+  from: "Acme <no-reply@acme.example>",
   to: ["member@example.com"],
   subject: "Hello",
   html: '<p><a href="https://app.test/a?x=1&amp;y=2">A</a></p>',
@@ -188,7 +188,7 @@ describe("inbound and webhooks", () => {
     const { runtime, call, deliveries } = harness()
     runtime.clock.advance(86_400_000)
     const created = await call("/__admin/inbound", {
-      body: { from: "a@example.com", to: "care+x@care.gogeviti.com", subject: "s", text: "t" },
+      body: { from: "a@example.com", to: "care+x@care.acme.example", subject: "s", text: "t" },
     })
     expect(created.status).toBe(201)
     await runtime.webhooks.idle()
@@ -213,7 +213,7 @@ describe("inbound and webhooks", () => {
   test("webhook presets: duplicate and drop", async () => {
     const { runtime, call, deliveries } = harness()
     const inbound = () =>
-      call("/__admin/inbound", { body: { from: "a@example.com", to: "b@care.gogeviti.com" } })
+      call("/__admin/inbound", { body: { from: "a@example.com", to: "b@care.acme.example" } })
     runtime.applyPreset("webhook_duplicate", "default")
     await inbound()
     await runtime.webhooks.idle()
@@ -286,7 +286,7 @@ describe("served over HTTP", () => {
       await fetch(`${server.url}/__admin/inbound`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ from: "a@b.co", to: "care+z@care.gogeviti.com" }),
+        body: JSON.stringify({ from: "a@b.co", to: "care+z@care.acme.example" }),
       })
       const deadline = Date.now() + 3_000
       while (received.length < 1 && Date.now() < deadline) await Bun.sleep(20)

@@ -25,14 +25,14 @@ export const WEBHOOK_PATH = "/bloodwork/aha-webhook"
 export const AHA_PRESETS: Record<string, FaultPreset> = {
   bad_signature: {
     description: "Every call answers 401 Invalid signature (AHA_API_ERROR / upstream)",
-    rules: [{ pathPrefix: "/v1/geviti", effect: "bad_signature" }],
+    rules: [{ pathPrefix: "/v1/", effect: "bad_signature" }],
   },
   rate_limited: {
     description:
       "Every call answers 429 (the lab-provider client maps it to rate_limit, retryable)",
     rules: [
       {
-        pathPrefix: "/v1/geviti",
+        pathPrefix: "/v1/",
         status: 429,
         body: { status: "ERROR", message: "Too many requests" },
       },
@@ -42,7 +42,7 @@ export const AHA_PRESETS: Record<string, FaultPreset> = {
     description: "Every call answers 500",
     rules: [
       {
-        pathPrefix: "/v1/geviti",
+        pathPrefix: "/v1/",
         status: 500,
         body: { status: "ERROR", message: "Internal server error" },
       },
@@ -51,11 +51,11 @@ export const AHA_PRESETS: Record<string, FaultPreset> = {
   order_error: {
     description:
       "create-order / cancel answer 200 with inner status ERROR (the lab provider fails it; AhaService does not check)",
-    rules: [{ pathPrefix: "/v1/geviti", effect: "order_error" }],
+    rules: [{ pathPrefix: "/v1/", effect: "order_error" }],
   },
   invalid_response: {
     description: "create-order / cancel answer 200 with a body neither client's zod schema accepts",
-    rules: [{ pathPrefix: "/v1/geviti", effect: "invalid_response" }],
+    rules: [{ pathPrefix: "/v1/", effect: "invalid_response" }],
   },
   webhook_duplicate: {
     description: "The next webhook is delivered twice",

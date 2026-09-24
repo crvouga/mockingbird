@@ -30,7 +30,7 @@ any Fetch server.
 Point `PHARMETIKA_API_URL` at the mock and give the app any `PHARMETIKA_API_TOKEN` (or pin one
 with `--api-token`). Set `PHARMETIKA_WEBHOOK_SECRET` in the app and pass the same value as
 `--webhook-secret`. `PHARMETIKA_PRACTITIONER_IDENTIFIER` can be any string;
-`PHARMETIKA_CLINIC_NAME=Geviti` picks the seeded clinic.
+`PHARMETIKA_CLINIC_NAME=Acme` picks the seeded clinic.
 
 ```bash
 npx mockingbird-pharmetika serve --port 8801 \
@@ -69,7 +69,7 @@ All provider-portal routes need `x-pmk-authentication-token` (any non-empty toke
 
 | Route | Behaviour |
 | --- | --- |
-| `GET /api/v5/provider_portal/clinic/clinic_list` | `{success: 1, data: [{identifier, data: {name}}]}`. Seeded with `Geviti` and `Geviti West`. |
+| `GET /api/v5/provider_portal/clinic/clinic_list` | `{success: 1, data: [{identifier, data: {name}}]}`. Seeded with `Acme` and `Acme West`. |
 | `GET /api/v5/provider_portal/provider/patient_list` | `{success: 1, data: [{patient_id, demographics: {first_name, last_name, DOB, email, phone_primary, line_1, postal_code}}]}`. Starts with one sandbox patient (id 1, "Sandbox Patient"). |
 | `POST /api/v5/provider_portal/patient/create_new` | A FHIR `Patient` plus `clinic_identifier`. Created: `{success: true, patient_id, messages: [{message: "Added Patient!"}]}`. Same first/last name and DOB as an existing patient: `{success: 0, duplicate_entry_count, duplicate_entries: [...]}` (our adapter adopts the match). |
 | `PUT …/medication_order/id/{uuid}/validate` | Dry run. Checks the clinic, the patient id, each `product_identifier` against the templates, and a non-empty `sig` ("Please provide instructions"). Answers `data: {controlled_substance_list_count, medication_list: [{…entry, medication_order_entry_identifier, controlled, control_level}]}`; a scheduled product (testosterone is C-III) sets `controlled`. |

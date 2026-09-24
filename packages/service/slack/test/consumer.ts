@@ -193,7 +193,7 @@ export class SlackApiError extends Error {
 export type ReactionTarget = { channel: string; timestamp: string }
 
 /**
- * request-intake `SlackClient` (makor-voice-chat revision): throws `SlackApiError` carrying
+ * request-intake `SlackClient`: throws `SlackApiError` carrying
  * Slack's error code; a 429 becomes `ratelimited` with `retry-after` in ms.
  */
 export class SlackClient {

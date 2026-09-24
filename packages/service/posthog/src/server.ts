@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
-import { GEVITI_FLAG_STATE } from "./flag-state-fixture.js"
+import { ACME_FLAG_STATE } from "./flag-state-fixture.js"
 import { specsFromState } from "./import.js"
 import { createRuntime, type PostHogRuntime, type PostHogRuntimeOptions } from "./runtime.js"
 
@@ -39,7 +39,7 @@ export const serveTarget: ServeTarget = {
       type: "string",
       value: "<dev|prod>",
       description:
-        "Seed every namespace from the bundled geviti docs/feature-flags/state.json (member-app project)",
+        "Seed every namespace from the bundled consumer-app docs/feature-flags/state.json (member-app project)",
     },
     "session-recording": {
       type: "boolean",
@@ -52,7 +52,7 @@ export const serveTarget: ServeTarget = {
       throw new Error('--import-flags must be "dev" or "prod"')
     }
     return createRuntime({
-      ...(env ? { flags: specsFromState(GEVITI_FLAG_STATE, { env }) } : {}),
+      ...(env ? { flags: specsFromState(ACME_FLAG_STATE, { env }) } : {}),
       ...(values["session-recording"] === true ? { settings: { sessionRecording: true } } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.seed !== undefined ? { seed: common.seed } : {}),

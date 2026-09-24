@@ -5,7 +5,7 @@ info:
     Stateful mock subset of the LlamaCloud (LlamaIndex managed index) platform API: project and
     pipeline lookup, pipeline retrieval, and pipeline documents (list, get, create, upsert,
     delete). Covers both of our consumers: the backend's plain-`fetch` knowledge adapter and the
-    Makor chat service's `llama_cloud_services.LlamaCloudIndex(...).as_retriever().aretrieve()`.
+    Python chat service's `llama_cloud_services.LlamaCloudIndex(...).as_retriever().aretrieve()`.
   version: "1"
   x-mockingbird-upstream:
     note: >-

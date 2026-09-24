@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "marketing",
     "displayName": "FirstPromoter",
+    "vendor": {
+      "website": "https://firstpromoter.com",
+      "docs": "https://docs.firstpromoter.com"
+    },
     "status": "wip",
     "playground": {
       "headers": {

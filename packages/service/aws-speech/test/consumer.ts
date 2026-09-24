@@ -1,6 +1,6 @@
 /**
- * Ports of OUR consumer's Polly / Transcribe code (geviti-monorepo, branch
- * crvouga/makor-voice-chat), kept as close to the originals as a test harness allows.
+ * Ports of the consumer app's Polly / Transcribe code, kept as close to the
+ * originals as a test harness allows.
  *
  * Sources (B/ = apps/backend/src/modules/):
  * - B/chatbot/voice/resample-pcm-s16le.ts                            → resamplePcmS16Le (verbatim)

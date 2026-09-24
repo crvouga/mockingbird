@@ -28,7 +28,7 @@ Point the app at the mock:
 | --- | --- |
 | `AHA_API_URL` | `http://127.0.0.1:8799` (the lab-provider path already allows loopback; `AhaService` needs an http exception, see G-A1 / S10.2) |
 | `AHA_API_KEY` / `AHA_API_SECRET` | anything, or the pair passed as `--api-key` / `--api-secret` to verify signatures exactly |
-| `AHA_USE_LEGACY_AUTH` | `true` switches to `X-Geviti-Auth-Key`; both modes are accepted |
+| `AHA_USE_LEGACY_AUTH` | `true` switches to `X-<Partner>-Auth-Key` (e.g. `X-Acme-Auth-Key`); both modes are accepted |
 | `AHA_WEBHOOK_SECRET` | the same value as `--webhook-secret` |
 
 ```bash
@@ -54,31 +54,34 @@ const admin = (path: string, body: unknown) =>
     }),
   )
 
-// …the app's checkout calls POST /v1/geviti/create-order for GV-101…
+// …the app's checkout calls POST /v1/acme/create-order for AC-101…
 
 // AHA books the draw: our handler books the EMR appointment for 10:30 Denver time.
-await admin("/orders/GV-101/transition", {
+await admin("/orders/AC-101/transition", {
   status: "Scheduled",
   scheduledAt: "2026-10-01T16:30:00Z",
   timeZone: "America/Denver",
 })
 // The phlebotomist checks out with a sample: our handler sets vitalBloodDrawn.
-await admin("/orders/GV-101/transition", { status: "Check Out", drawStatus: "Sample Collected" })
+await admin("/orders/AC-101/transition", { status: "Check Out", drawStatus: "Sample Collected" })
 ```
 
 ### Routes
 
+The `{partner}` path segment is your account's slug (e.g. `acme`); the mock accepts any.
+
 | Route | Behaviour |
 | --- | --- |
-| `POST /v1/geviti/create-order` | Validates the body (`partner_order_id`, patient fields, `biological_sex`, `service_type`, `npi`, `ordering_physician`, `test_codes`, optional `preferred_schedule_date/time`, `patient_timezone`). Create **or update**: a repeated `partner_order_id` keeps its `order_number`. Answers `{content: {partner_order_id, order_number}, message, status: "SUCCESS"}`. |
-| `POST /v1/geviti/cancel` | `{partner_order_id, notes: [{note_type: "CANCELLATION", notes}]}` → `{message, status}`. Emits a `Cancelled` webhook (turn off with `cancelWebhook: false`). Unknown id → 404; an order whose sample was collected → 200 with `status: "ERROR"`. The AHA `order_number` is accepted in `partner_order_id` too, because our lab-provider client sends it there (G-A1). |
+| `POST /v1/{partner}/create-order` | Validates the body (`partner_order_id`, patient fields, `biological_sex`, `service_type`, `npi`, `ordering_physician`, `test_codes`, optional `preferred_schedule_date/time`, `patient_timezone`). Create **or update**: a repeated `partner_order_id` keeps its `order_number`. Answers `{content: {partner_order_id, order_number}, message, status: "SUCCESS"}`. |
+| `POST /v1/{partner}/cancel` | `{partner_order_id, notes: [{note_type: "CANCELLATION", notes}]}` → `{message, status}`. Emits a `Cancelled` webhook (turn off with `cancelWebhook: false`). Unknown id → 404; an order whose sample was collected → 200 with `status: "ERROR"`. The AHA `order_number` is accepted in `partner_order_id` too, because our lab-provider client sends it there (G-A1). |
 
 **Auth.** HMAC mode: `X-API-KEY`, `X-TIMESTAMP` (epoch ms, within ±5 min of wall-clock time),
 `X-SIGNATURE` = base64 HMAC-SHA256(secret, `"<apiKey>:<path>:<timestamp>"`), where `path` is the
 request path without host, body or `/ns/<name>` prefix. With a known key + secret
 (`--api-key/--api-secret` or `credentials` in settings) the signature is verified exactly;
 with none configured any key is accepted and the signature is checked for shape only. Legacy
-mode: `X-Geviti-Auth-Key` (+ `X-API-Version: 1.0`). Failures are 401 `{status: "ERROR", message}`.
+mode: `X-<Partner>-Auth-Key` (+ `X-API-Version: 1.0`), e.g. `X-Acme-Auth-Key`; any partner name is
+accepted. Failures are 401 `{status: "ERROR", message}`.
 
 **Envelope (G-A1).** `AhaService` expects the raw `{content, message, status}`;
 `AhaLabProvider` expects `{success: true, data: {…}}`. Raw is the default; choose with

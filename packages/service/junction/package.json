@@ -54,6 +54,10 @@
     "layer": "service",
     "category": "health",
     "displayName": "Junction",
+    "vendor": {
+      "website": "https://www.junction.com",
+      "docs": "https://docs.junction.com"
+    },
     "status": "ready"
   },
   "scripts": {

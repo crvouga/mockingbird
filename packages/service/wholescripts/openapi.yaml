@@ -9,7 +9,7 @@ info:
   x-mockingbird-upstream:
     note: >-
       Hand-authored from the wire shapes our consumers read and write
-      (backend and EMR wholescripts.types.ts zod schemas, the Makor wholescripts client,
+      (backend and EMR wholescripts.types.ts zod schemas, the supplement scheduler's Python client,
       adapter and mappers).
 servers:
   - url: https://api.wholescripts.com
@@ -59,7 +59,7 @@ paths:
         - name: search
           in: query
           required: false
-          description: Case-insensitive match on name, SKU, MedPax SKU, brand or categories (Makor).
+          description: Case-insensitive match on name, SKU, MedPax SKU, brand or categories (the supplement scheduler).
           schema:
             type: string
             maxLength: 40

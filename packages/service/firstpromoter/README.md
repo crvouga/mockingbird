@@ -59,7 +59,7 @@ const { tid } = (await (await admin("/clicks", { ref_token: "nate91" })).json())
 
 | Route | Behaviour |
 | --- | --- |
-| `POST /v2/company/promoters` | `{email, cust_id?, profile?: {first_name, last_name}, drip_emails?, initial_campaign_id?}` → the promoter (`FirstPromoterV2ResponseSchema`), enrolled in the default campaign with a `ref_token` (first name + digits) and `ref_link` `https://gogeviti.com/referrals?fpr=<token>`. A live promoter with the same email or `cust_id` is 422 `{message, errors: {email: ["has already been taken"]}}`. |
+| `POST /v2/company/promoters` | `{email, cust_id?, profile?: {first_name, last_name}, drip_emails?, initial_campaign_id?}` → the promoter (`FirstPromoterV2ResponseSchema`), enrolled in the default campaign with a `ref_token` (first name + digits) and `ref_link` `https://acme.example/referrals?fpr=<token>`. A live promoter with the same email or `cust_id` is 422 `{message, errors: {email: ["has already been taken"]}}`. |
 | `GET /v2/company/promoters?page=&per_page=` | `{data: [promoter], meta: {pending_count}}`; archived promoters are left out. |
 | `GET /v2/company/promoters/{value}?find_by=id\|cust_id\|ref_token\|email` | One promoter (archived ones too, with `archived_at`), or 404 `{message: "Promoter not found"}`. |
 | `PUT /v2/company/promoters/{id}` | `{cust_id?, email?, note?, profile?}` → the promoter; 404 / 422 as above. |
@@ -87,7 +87,7 @@ is `user:pass`. Non-2xx answers are retried; `GET /__admin/webhooks`, `…/event
 | `POST /__admin/clicks` | `{ref_token}` → `{tid, promoterId}`: a click on the promoter's link. |
 | `GET /__admin/referrals` | Tracked signups. |
 | `POST /__admin/referrals/:id/convert` | `{saleAmount?}`: the lead paid; credits the promoter (percent reward × amount) and posts the webhook. |
-| `GET\|PUT /__admin/settings` | `{website?, defaultCampaignId?, autoConvert?, campaigns?}` (campaigns carry `referralRewards` / `promoterRewards` with `coupon`, `amount`, `unit`, `per_of_sale`). The default campaign's referral coupon is `GEVITI50`. |
+| `GET\|PUT /__admin/settings` | `{website?, defaultCampaignId?, autoConvert?, campaigns?}` (campaigns carry `referralRewards` / `promoterRewards` with `coupon`, `amount`, `unit`, `per_of_sale`). The default campaign's referral coupon is `ACME50`. |
 
 Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /__admin/faults/presets`):
 `created_but_500` (stored, then 500: the retry must adopt by `cust_id`), `lookup_unavailable`

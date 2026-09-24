@@ -56,6 +56,10 @@
     "layer": "service",
     "category": "ai",
     "displayName": "AWS Bedrock",
+    "vendor": {
+      "website": "https://aws.amazon.com/bedrock/",
+      "docs": "https://docs.aws.amazon.com/bedrock/latest/APIReference/"
+    },
     "status": "wip"
   },
   "scripts": {

@@ -59,6 +59,11 @@
     "layer": "service",
     "category": "health",
     "displayName": "AHA",
+    "vendor": {
+      "website": "https://www.mobileaha.com",
+      "name": "mobileAHA",
+      "description": "mobileAHA provides mobile phlebotomy: at-home and workplace blood draws for lab orders."
+    },
     "status": "wip"
   },
   "scripts": {

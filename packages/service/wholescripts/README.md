@@ -7,7 +7,7 @@ Wholescripts sends no webhooks, so the app sees each change on its next status p
 
 - Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/wholescripts/SUPPORT.md)
 - The vendor publishes no spec. The contract (`openapi.yaml`) is hand-authored from our
-  consumers' zod schemas (backend and EMR `wholescripts.types.ts`) and the Makor Python client.
+  consumers' zod schemas (backend and EMR `wholescripts.types.ts`) and the supplement scheduler's Python client.
 
 ## Install
 
@@ -22,7 +22,7 @@ with any Fetch server.
 ## Usage
 
 Point `WHOLESCRIPTS_API_URL` at the mock. It is read by the backend
-(`global-services/services/wholescripts`), the EMR (`services/wholescripts`) and Makor
+(`global-services/services/wholescripts`), the EMR (`services/wholescripts`) and the supplement scheduler
 (`supplement_management`). Any non-empty `WHOLESCRIPTS_USERNAME` / `WHOLESCRIPTS_PASSWORD`
 pair is accepted unless you pin one with `--username/--password`.
 
@@ -34,7 +34,7 @@ npx mockingbird-wholescripts serve --port 8803 --auto-advance "2000:Processing,C
 import { createRuntime } from "@crvouga/mockingbird-service-wholescripts"
 
 const ws = createRuntime()
-const auth = { authorization: `Basic ${btoa("geviti:secret")}`, "content-type": "application/json" }
+const auth = { authorization: `Basic ${btoa("acme:secret")}`, "content-type": "application/json" }
 
 const submitted = (await (
   await ws.fetch(
@@ -65,7 +65,7 @@ await ws.fetch(
 | Route | Behaviour |
 | --- | --- |
 | `GET /api/Orders/PrivateLabelProductList` | `{privateLabelProducts: [], medPaxPills: [{sku, genericName, privateLabelName, quantity}], privateLabelCartons: [{sku, name, cartonImage, quantity}]}`. |
-| `GET /api/Orders/ProductList` | Product rows (`productName`, `sku`, `medPaxSku`, `categories`, prices, `quantity`, `defaultDosing`, optional `medPaxDetails`). `instockonly=true` keeps `quantity > 0` (the EMR), `search` matches name/SKU/brand/categories (Makor), `limit` caps. |
+| `GET /api/Orders/ProductList` | Product rows (`productName`, `sku`, `medPaxSku`, `categories`, prices, `quantity`, `defaultDosing`, optional `medPaxDetails`). `instockonly=true` keeps `quantity > 0` (the EMR), `search` matches name/SKU/brand/categories (the supplement scheduler), `limit` caps. |
 | `POST /api/Orders/Submit` | `{ShippingAddress, Notes?, Items: [{Sku, Quantity, MedPaxName?, MedPaxPills?: [{Sku, Quantity, ItemTime}]}], ShippingMethod}` → `{orderNumber, success: true, msg}`. A contract violation or an unknown SKU (product, MedPax, pill or carton SKU) is still **200** with `success: false` and the reason in `msg`, which is what both consumers read. |
 | `GET /api/Orders/Status?ordernum=` | `[{orderNumber, orderDate, salesOrder, status, tracking: [{trackingNumber, carrier, trackingUrl}], message, subTotal, shipMethod, shipCharge, discount, tax, serviceFee, orderTotal}]`; `[]` for an unknown order. Totals are priced from the catalog (MedPax SKUs at their `medPaxDetails` price) plus 9.95 shipping (0 for "free" methods). |
 | `POST /api/Orders/Cancel` | `{OrderNumber}` → `{success, msg}`. Succeeds while `Pending`/`Processing` with no tracking; otherwise `success: false`. Unknown order: 404. |
@@ -73,7 +73,7 @@ await ws.fetch(
 Missing or wrong Basic credentials answer 401 `{"Message": "Authorization has been denied for this request."}`.
 
 Statuses are `Pending` (new), `Processing`, `Complete`, `Cancelled`, `Error`, or any string a
-test sets. How our consumers read them: Makor maps `Pending`/`Processing` to `placed` (or
+test sets. How our consumers read them: the scheduler maps `Pending`/`Processing` to `placed` (or
 `shipped` once tracking exists), `Complete` to `shipped` (carrier hand-off, not delivery),
 anything containing `cancel`/`error` to `cancelled`/`failed`, and everything else to `unknown`.
 The backend and EMR do not map statuses.
@@ -90,9 +90,9 @@ The backend and EMR do not map statuses.
 
 Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /__admin/faults/presets`):
 `submit_rejected` (200 `success: false`), `submit_timeout` (the order is placed, then the
-connection drops: Makor's "order may have been placed" branch), `status_empty` (`[]`),
+connection drops: the scheduler's "order may have been placed" branch), `status_empty` (`[]`),
 `status_schema_drift` (rows the backend's zod rejects, so it returns `null`), `server_error`
-(500, which Makor retries), `unauthorized` (401).
+(500, which the scheduler retries), `unauthorized` (401).
 
 ### Namespaces
 
@@ -102,9 +102,9 @@ username: `PUT /__admin/credentials {"credentials": {"<WHOLESCRIPTS_USERNAME>": 
 ### Corpus and seed data
 
 The default catalog is the rows our consumers' own tests use
-(`geviti-emr-backend/tests/unit/services/wholescripts-service.test.ts`), with their repeated
-`medPaxSku`s made unique, plus the Makor MedPax box `000000000200095263` and `medPaxDetails`
-rows the Makor catalog sync reads. `Protein Powder` (`PP001`) is out of stock. No sandbox
+(the consumer app's `wholescripts-service.test.ts`), with their repeated
+`medPaxSku`s made unique, plus the scheduler's MedPax box `000000000200095263` and `medPaxDetails`
+rows the scheduler's catalog sync reads. `Protein Powder` (`PP001`) is out of stock. No sandbox
 recording exists; pass `catalog` (or `PUT /__admin/catalog`) to load recorded rows.
 
 ### Deliberately not modelled
@@ -128,7 +128,7 @@ recording exists; pass `catalog` (or `PUT /__admin/catalog`) to load recorded ro
 | `basicUsername` | function | The Basic username a request carries (how credentials map to namespaces). |
 | `canonicalStatus` | function | The canonical casing of a transition target (`complete` → `Complete`). |
 | `DEFAULT_CATALOG` | object | The default `{products, medPaxPills, privateLabelCartons}`. |
-| `MEDPAX_BOX_SKU` | string | The Makor MedPax box SKU, `000000000200095263`. |
+| `MEDPAX_BOX_SKU` | string | The supplement scheduler's MedPax box SKU, `000000000200095263`. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (auto-advance ticks every 100 ms); the `serve` CLI target; port 8803. |
 

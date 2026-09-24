@@ -11,7 +11,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { requestToken } from "./body.js"
-import { GEVITI_FLAG_STATE } from "./flag-state-fixture.js"
+import { ACME_FLAG_STATE } from "./flag-state-fixture.js"
 import { adminView, type FlagSpec, parseFlagSpec } from "./flags.js"
 import { document } from "./generated/openapi.js"
 import { type FlagStateFile, specsFromState } from "./import.js"
@@ -180,7 +180,7 @@ const adminRoutes = (runtime: ServiceRuntime<PostHogAPI>): AdminRoutes => {
       if (isRecord(input.state) && Array.isArray(input.state.flags)) {
         file = input.state as unknown as FlagStateFile
       } else if (from === "state.json") {
-        file = GEVITI_FLAG_STATE
+        file = ACME_FLAG_STATE
       } else {
         return adminError(400, 'from must be "state.json" (the bundled copy) or pass "state"')
       }
@@ -267,7 +267,7 @@ export const createRuntime = (options: PostHogRuntimeOptions = {}): PostHogRunti
         ...(options.flags ? { flags: options.flags } : {}),
         ...(options.settings ? { settings: options.settings } : {}),
       }),
-    describe: () => ({ flagsImportedFrom: GEVITI_FLAG_STATE.generatedAt ?? null }),
+    describe: () => ({ flagsImportedFrom: ACME_FLAG_STATE.generatedAt ?? null }),
     admin: adminRoutes,
   })
   const inner = runtime.fetch

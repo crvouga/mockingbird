@@ -109,7 +109,7 @@ describe("search, ingest and the admin plane", () => {
     await ingest({
       to: [`Ada <ada@${SERVER}.mailosaur.net>`],
       cc: `cc@${SERVER}.mailosaur.net`,
-      from: "Geviti <no-reply@gogeviti.com>",
+      from: "Acme <no-reply@acme.example>",
       subject: "Reset your password",
       html: "<p>Click <a href='https://app.test/reset?token=abc'>here</a></p>",
     })
@@ -122,7 +122,7 @@ describe("search, ingest and the admin plane", () => {
     expect(await subjects({ sentTo: `cc@${SERVER}.mailosaur.net` })).toEqual([
       "Reset your password",
     ])
-    expect(await subjects({ sentFrom: "no-reply@gogeviti.com" })).toEqual(["Reset your password"])
+    expect(await subjects({ sentFrom: "no-reply@acme.example" })).toEqual(["Reset your password"])
     expect(await subjects({ subject: "welcome" })).toEqual(["Welcome"])
     expect(await subjects({ body: "click here" })).toEqual(["Reset your password"])
     expect(await subjects({ subject: "welcome", body: "click", match: "ALL" })).toEqual([])
@@ -175,7 +175,7 @@ describe("search, ingest and the admin plane", () => {
       type: "SMS",
       to: "+15555550100",
       from: "+15555550199",
-      text: "Your Geviti code is 482913",
+      text: "Your Acme code is 482913",
     })
     const message = (await response.json()) as {
       type: string

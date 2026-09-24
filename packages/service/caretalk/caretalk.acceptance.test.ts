@@ -13,7 +13,7 @@ const API = "http://caretalk.mock"
 const FIXTURE_PASSWORD = crypto.randomUUID()
 const config: CareTalkConfig = {
   apiUrl: API,
-  userName: "geviti-api",
+  userName: "acme-api",
   password: FIXTURE_PASSWORD,
   apiKey: "ct-static-key",
   programId: 21,
@@ -303,7 +303,7 @@ describe("S25 CareTalk acceptance: our client against the mock", () => {
     await admin(
       "/settings",
       {
-        users: [{ userName: "geviti-api", password: FIXTURE_PASSWORD }],
+        users: [{ userName: "acme-api", password: FIXTURE_PASSWORD }],
         apiKeys: ["ct-static-key"],
       },
       "PUT",

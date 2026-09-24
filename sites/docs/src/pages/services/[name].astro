@@ -60,15 +60,25 @@ const toc = [
       <span aria-current="page">{s.displayName}</span>
     </nav>
 
-    <header class="svc-head">
+    <header class="svc-head" style={s.brand.color ? `--brand:${s.brand.color}` : undefined}>
       <div class="svc-id">
-        <Monogram name={s.displayName} hue={s.hue} size={56} />
+        <Monogram name={s.displayName} hue={s.hue} logo={s.brand.logo} size={56} />
         <div>
           <h1>{s.displayName}</h1>
           <code class="pkg">{s.packageName}</code>
         </div>
       </div>
       <p class="lede">{s.description}</p>
+      <aside class="vendor" aria-label={`About ${s.brand.vendor}`}>
+        <p>
+          <strong>Mocks {s.brand.vendor}.</strong>
+          {s.brand.description && ` ${s.brand.description}`}
+        </p>
+        <div class="vendor-links">
+          <a href={s.brand.website} target="_blank" rel="noopener"><Icon name="globe" /> {new URL(s.brand.website).hostname.replace(/^www\./, "")}</a>
+          {s.brand.docs && <a href={s.brand.docs} target="_blank" rel="noopener"><Icon name="file" /> API reference</a>}
+        </div>
+      </aside>
       {
         s.status === "wip" && (
           <div class="callout callout-warn">
@@ -258,6 +268,46 @@ const toc = [
     margin-top: 18px;
     max-width: 820px;
     font-size: 16px;
+  }
+
+  .vendor {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 18px;
+    max-width: 820px;
+    margin-top: 12px;
+    padding-left: 12px;
+    border-left: 3px solid var(--brand, var(--border-strong));
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+
+  .vendor p {
+    flex: 1 1 420px;
+  }
+
+  .vendor strong {
+    color: var(--fg);
+  }
+
+  .vendor-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .vendor-links a {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .vendor-links .i {
+    width: 13px;
+    height: 13px;
   }
 
   .facts {

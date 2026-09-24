@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "storage",
     "displayName": "Amazon S3",
+    "vendor": {
+      "website": "https://aws.amazon.com/s3/",
+      "docs": "https://docs.aws.amazon.com/AmazonS3/latest/API/"
+    },
     "status": "wip"
   },
   "scripts": {

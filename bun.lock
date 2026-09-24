@@ -901,32 +901,6 @@
         "mailosaur": "11.1.0",
       },
     },
-    "packages/service/makor-cpg": {
-      "name": "@crvouga/mockingbird-service-makor-cpg",
-      "version": "0.0.0-development",
-      "bin": {
-        "mockingbird-makor-cpg": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@crvouga/mockingbird-service-sqlite": "workspace:*",
-        "hono": "4.11.9",
-      },
-      "devDependencies": {
-        "@crvouga/mockingbird-adapter-node": "workspace:*",
-        "@crvouga/mockingbird-core": "workspace:*",
-        "@crvouga/mockingbird-credentials": "workspace:*",
-        "@crvouga/mockingbird-http-codec": "workspace:*",
-        "@crvouga/mockingbird-openapi": "workspace:*",
-        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
-        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
-        "@crvouga/mockingbird-parity": "workspace:*",
-        "@crvouga/mockingbird-service": "workspace:*",
-        "@crvouga/mockingbird-service-sqlite": "workspace:*",
-        "@crvouga/mockingbird-sqlite": "workspace:*",
-        "@crvouga/mockingbird-testing": "workspace:*",
-        "fast-check": "4.9.0",
-      },
-    },
     "packages/service/mediaconvert": {
       "name": "@crvouga/mockingbird-service-mediaconvert",
       "version": "0.0.0-development",
@@ -1153,32 +1127,6 @@
       "version": "0.0.0-development",
       "bin": {
         "mockingbird-plane": "./dist/cli.js",
-      },
-      "dependencies": {
-        "@crvouga/mockingbird-service-sqlite": "workspace:*",
-        "hono": "4.11.9",
-      },
-      "devDependencies": {
-        "@crvouga/mockingbird-adapter-node": "workspace:*",
-        "@crvouga/mockingbird-core": "workspace:*",
-        "@crvouga/mockingbird-credentials": "workspace:*",
-        "@crvouga/mockingbird-http-codec": "workspace:*",
-        "@crvouga/mockingbird-openapi": "workspace:*",
-        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
-        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
-        "@crvouga/mockingbird-parity": "workspace:*",
-        "@crvouga/mockingbird-service": "workspace:*",
-        "@crvouga/mockingbird-service-sqlite": "workspace:*",
-        "@crvouga/mockingbird-sqlite": "workspace:*",
-        "@crvouga/mockingbird-testing": "workspace:*",
-        "fast-check": "4.9.0",
-      },
-    },
-    "packages/service/portal-agent": {
-      "name": "@crvouga/mockingbird-service-portal-agent",
-      "version": "0.0.0-development",
-      "bin": {
-        "mockingbird-portal-agent": "./dist/cli.js",
       },
       "dependencies": {
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
@@ -1647,7 +1595,6 @@
         "@crvouga/mockingbird-service-livekit": "workspace:*",
         "@crvouga/mockingbird-service-llamacloud": "workspace:*",
         "@crvouga/mockingbird-service-mailosaur": "workspace:*",
-        "@crvouga/mockingbird-service-makor-cpg": "workspace:*",
         "@crvouga/mockingbird-service-mediaconvert": "workspace:*",
         "@crvouga/mockingbird-service-medplum": "workspace:*",
         "@crvouga/mockingbird-service-oauth": "workspace:*",
@@ -1657,7 +1604,6 @@
         "@crvouga/mockingbird-service-persona": "workspace:*",
         "@crvouga/mockingbird-service-pharmetika": "workspace:*",
         "@crvouga/mockingbird-service-plane": "workspace:*",
-        "@crvouga/mockingbird-service-portal-agent": "workspace:*",
         "@crvouga/mockingbird-service-postgres": "workspace:*",
         "@crvouga/mockingbird-service-posthog": "workspace:*",
         "@crvouga/mockingbird-service-prism": "workspace:*",
@@ -2056,8 +2002,6 @@
 
     "@crvouga/mockingbird-service-mailosaur": ["@crvouga/mockingbird-service-mailosaur@workspace:packages/service/mailosaur"],
 
-    "@crvouga/mockingbird-service-makor-cpg": ["@crvouga/mockingbird-service-makor-cpg@workspace:packages/service/makor-cpg"],
-
     "@crvouga/mockingbird-service-mediaconvert": ["@crvouga/mockingbird-service-mediaconvert@workspace:packages/service/mediaconvert"],
 
     "@crvouga/mockingbird-service-medplum": ["@crvouga/mockingbird-service-medplum@workspace:packages/service/medplum"],
@@ -2075,8 +2019,6 @@
     "@crvouga/mockingbird-service-pharmetika": ["@crvouga/mockingbird-service-pharmetika@workspace:packages/service/pharmetika"],
 
     "@crvouga/mockingbird-service-plane": ["@crvouga/mockingbird-service-plane@workspace:packages/service/plane"],
-
-    "@crvouga/mockingbird-service-portal-agent": ["@crvouga/mockingbird-service-portal-agent@workspace:packages/service/portal-agent"],
 
     "@crvouga/mockingbird-service-postgres": ["@crvouga/mockingbird-service-postgres@workspace:packages/service/postgres"],
 

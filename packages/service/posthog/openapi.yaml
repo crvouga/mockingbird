@@ -82,7 +82,7 @@ paths:
     post:
       operationId: Decide
       description: |
-        The legacy endpoint (makor's Python client sends `POST /decide/?v=3` with
+        The legacy endpoint (the Python client sends `POST /decide/?v=3` with
         `{api_key, distinct_id}`). `v` < 4 answers the legacy maps; `v=4` the `flags` map.
       security: []
       x-mockingbird:

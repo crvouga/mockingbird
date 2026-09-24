@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Resend",
+    "vendor": {
+      "website": "https://resend.com",
+      "docs": "https://resend.com/docs/api-reference/introduction"
+    },
     "status": "wip"
   },
   "scripts": {

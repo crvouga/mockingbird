@@ -1,5 +1,5 @@
 /**
- * A port of OUR consumer's Twilio code (geviti-monorepo, read-only), used as the acceptance
+ * A port of the consumer app's Twilio code (read-only), used as the acceptance
  * oracle. Each block names its source; the requests, field reads, error handling and status
  * interpretation are kept as they are there. The one addition is the G-T1 seam: every
  * `new Twilio(...)` gets an `httpClient` that sends to the mock instead of `*.twilio.com`.

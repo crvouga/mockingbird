@@ -98,7 +98,7 @@ const harness = async (options: { subscribe?: boolean; runtime?: GeneByGeneRunti
     await runtime.webhooks.idle()
     return receiver.events.splice(0)
   }
-  const place = async (placer = "geviti:238307:478b5ca52b7c91fb") => {
+  const place = async (placer = "acme:238307:478b5ca52b7c91fb") => {
     const placed = await placeOrder(client, {
       productId: BUNDLE,
       placerOrderNumber: placer,
@@ -291,7 +291,7 @@ describe("S2.9 acceptance: our consumer's logic against the mock", () => {
         ].sort(),
       )
       expect(event.body.ProductCode).toBe("nt_custom_agena_panel")
-      expect(event.body.PlacerOrderNumber).toBe("geviti:238307:478b5ca52b7c91fb")
+      expect(event.body.PlacerOrderNumber).toBe("acme:238307:478b5ca52b7c91fb")
     }
     const kitDto = (await admin("/kits")).body.kits as { status: string; errors: string[] }[]
     expect(kitDto[0]).toMatchObject({ status: "Error", errors: ["19"] })
@@ -658,7 +658,7 @@ const dropIn = async (options: { subscribe?: boolean; runtime?: GeneByGeneRuntim
   const placeShipped = (
     address: Json,
     courierServiceCode = "FEDEX_EXPRESS_SAVER_ONE_RATE",
-    placerOrderNumber = "geviti:1000:abc",
+    placerOrderNumber = "acme:1000:abc",
   ) =>
     raw(
       "POST",
@@ -991,7 +991,7 @@ describe("issue #122: place", () => {
     const lines = linesOf(data)
     expect(lines).toHaveLength(6)
     for (const line of lines) {
-      expect(line.placerOrderNumber).toBe("geviti:1000:abc")
+      expect(line.placerOrderNumber).toBe("acme:1000:abc")
       expect(line.bundleProductId).toBe(DELUXE)
     }
     const kitLine = kitLineOf(data)
@@ -1132,7 +1132,7 @@ describe("issue #122: place", () => {
     const { status, data } = await raw(
       "POST",
       "/api/v2/orders",
-      buildQuantityOnlyCreateOrderBody({ productId: DELUXE, placerOrderNumber: "geviti:1:q" }),
+      buildQuantityOnlyCreateOrderBody({ productId: DELUXE, placerOrderNumber: "acme:1:q" }),
     )
     expect(status).toBe(200)
     const lines = linesOf(data)
@@ -1157,8 +1157,8 @@ describe("issue #122: place", () => {
 
   test("B33: the vendor does not dedupe placerOrderNumber", async () => {
     const { placeShipped, orders } = await dropIn({ subscribe: false })
-    await placeShipped(MOUNTAIN_VIEW, "DHL_PARCEL_EXPEDITED", "geviti:1:same")
-    await placeShipped(MOUNTAIN_VIEW, "DHL_PARCEL_EXPEDITED", "geviti:1:same")
+    await placeShipped(MOUNTAIN_VIEW, "DHL_PARCEL_EXPEDITED", "acme:1:same")
+    await placeShipped(MOUNTAIN_VIEW, "DHL_PARCEL_EXPEDITED", "acme:1:same")
     expect((await orders()).totalCount).toBe(2)
   })
 

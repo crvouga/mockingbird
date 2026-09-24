@@ -3,7 +3,7 @@
  * partner-platform's stripe-node 17.7 at `2025-02-24.acacia`): the same calls, parameters,
  * idempotency keys, error classification, field fallbacks and webhook verification as
  * `apps/backend/src/modules/{billing,prescriptions,global-services,dev-tools}`,
- * `apps/geviti-emr-backend` and `apps/partner-platform`. The acceptance tests drive the mock
+ * the EMR backend and `apps/partner-platform`. The acceptance tests drive the mock
  * through it, so "the mock works" means "our consumer's own logic reaches the right outcome".
  */
 import Stripe from "stripe"

@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "health",
     "displayName": "CareTalk",
+    "vendor": {
+      "website": "https://caretalkhealth.com",
+      "name": "CareTalk Health"
+    },
     "status": "wip"
   },
   "scripts": {

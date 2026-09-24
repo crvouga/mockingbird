@@ -58,10 +58,10 @@ const harness = () => {
       appApiHost: API,
       apiKey: "app_key",
       channel: "email",
-      transactionalMessageId: "geviti_payment_failed_email",
+      transactionalMessageId: "acme_payment_failed_email",
       identifier: "42",
       to: "ada@example.com",
-      messageData: { firstName: "Ada", ctaUrl: "https://app.gogeviti.com/billing" },
+      messageData: { firstName: "Ada", ctaUrl: "https://app.acme.example/billing" },
       tracked: false,
       disableMessageRetention: false,
       fetchImpl: send,
@@ -86,25 +86,25 @@ describe("S19 Customer.io acceptance: our consumers' logic against the mock", ()
         key: "welcome",
         toEmail: "ada@example.com",
         identifier: "42",
-        subject: "Welcome to Geviti",
-        messageData: { firstName: "Ada", loginUrl: "https://app.gogeviti.com/login", skip: null },
+        subject: "Welcome to Acme",
+        messageData: { firstName: "Ada", loginUrl: "https://app.acme.example/login", skip: null },
         attachments: [
           { filename: "welcome.pdf", contentBase64: "JVBERi0=", contentType: "application/pdf" },
         ],
       },
       send,
     )
-    expect(result?.transactionalMessageId).toBe("geviti_welcome")
+    expect(result?.transactionalMessageId).toBe("acme_welcome")
     expect(result?.deliveryId).toMatch(/^[A-Za-z0-9]{28}$/)
     const [delivery] = await outbox("?to=ada@example.com")
     expect(delivery).toMatchObject({
       channel: "email",
-      transactionalMessageId: "geviti_welcome",
+      transactionalMessageId: "acme_welcome",
       messageId: 1,
       identifiers: { id: "42" },
-      subject: "Welcome to Geviti",
-      messageData: { firstName: "Ada", loginUrl: "https://app.gogeviti.com/login" },
-      links: ["https://app.gogeviti.com/login"],
+      subject: "Welcome to Acme",
+      messageData: { firstName: "Ada", loginUrl: "https://app.acme.example/login" },
+      links: ["https://app.acme.example/login"],
       tracked: false,
       sendToUnsubscribed: true,
       attachments: ["welcome.pdf"],
@@ -212,8 +212,8 @@ describe("S19 Customer.io acceptance: our consumers' logic against the mock", ()
       appApiKey: "k",
       fetchImpl: send,
     })
-    expect(names.has("geviti_welcome")).toBe(true)
-    expect(names.has("geviti_inbox_message")).toBe(true)
+    expect(names.has("acme_welcome")).toBe(true)
+    expect(names.has("acme_inbox_message")).toBe(true)
     runtime.applyPreset("omit_trigger_names", "default", { count: 1 })
     const viaDetail = await listTransactionalTriggerNames({
       appApiHost: API,
@@ -249,7 +249,7 @@ describe("S19 Customer.io acceptance: our consumers' logic against the mock", ()
     expect(await reportClick(API, linkId, send)).toEqual({ status: "sent", httpStatus: 200 })
     const follow = await send(new Request(tracked, { redirect: "manual" }))
     expect(follow.status).toBe(302)
-    expect(follow.headers.get("location")).toBe("https://app.gogeviti.com/billing")
+    expect(follow.headers.get("location")).toBe("https://app.acme.example/billing")
     expect((await outbox())[0]?.clicks).toBe(2)
     expect(await reportClick(API, "unknown-link", send)).toEqual({
       status: "failed",
@@ -363,7 +363,7 @@ describe("S19 Customer.io acceptance: our consumers' logic against the mock", ()
       appApiHost: API,
       apiKey: "app_a",
       channel: "email",
-      transactionalMessageId: "geviti_welcome",
+      transactionalMessageId: "acme_welcome",
       identifier: "42",
       to: "ada@example.com",
       messageData: { secretLabResult: "TSH 2.1" },
@@ -422,7 +422,7 @@ describe("served over HTTP", () => {
       appApiHost: `http://127.0.0.1:${deadPort}`,
       apiKey: "k",
       channel: "email",
-      transactionalMessageId: "geviti_welcome",
+      transactionalMessageId: "acme_welcome",
       identifier: "1",
       to: "a@example.com",
       messageData: {},
@@ -460,7 +460,7 @@ describe("served over HTTP", () => {
         appApiHost: server.url,
         apiKey: "k",
         channel: "email",
-        transactionalMessageId: "geviti_welcome",
+        transactionalMessageId: "acme_welcome",
         identifier: "42",
         to: "a@example.com",
         messageData: {},

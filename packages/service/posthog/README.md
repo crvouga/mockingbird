@@ -33,7 +33,7 @@ Point the app's PostHog host at the mock (port 8795 by default):
 | EMR backend | `POSTHOG_HOST`, `POSTHOG_API_KEY` |
 | EMR frontend (browser posthog-js and the server raw fetch) | `NEXT_PUBLIC_POSTHOG_HOST`, `NEXT_PUBLIC_POSTHOG_KEY` |
 | member app | `public-config.json[stage]` host, or `?POSTHOG_HOST=&POSTHOG_API_KEY=` on web (G-P1) |
-| makor supplement-management | `POSTHOG_HOST` |
+| Python supplement-management service | `POSTHOG_HOST` |
 
 ```bash
 npx mockingbird-posthog serve --port 8795 --import-flags dev
@@ -68,7 +68,7 @@ await admin("/flags/mobile-smart-links?namespace=w1", undefined, "DELETE") // ab
 | --- | --- |
 | `POST /flags/?v=2` (`&config=true`) | posthog-node, posthog-react-native, posthog-js. Body `{token, distinct_id, person_properties?, groups?, flag_keys_to_evaluate?, …}`. Answers `{flags: {<key>: {key, enabled, variant, reason, metadata: {id, version, description, payload?}}}, errorsWhileComputingFlags, requestId, evaluatedAt}`; `payload` is the JSON **string** and only accompanies an enabled flag. `config=true` adds the remote-config fields. |
 | `POST /flags?v=2` | Same route without the trailing slash: the EMR frontend's raw fetch, body `{api_key, distinct_id, person_properties?}`. |
-| `POST /flags/` (no `v`, or `v=1`), `POST /decide/?v=3` | The legacy shape `{featureFlags: {k: bool \| variant}, featureFlagPayloads: {k: "<json>"}, errorsWhileComputingFlags, config, …}` (makor). `/decide/?v=4` answers the v2 shape. |
+| `POST /flags/` (no `v`, or `v=1`), `POST /decide/?v=3` | The legacy shape `{featureFlags: {k: bool \| variant}, featureFlagPayloads: {k: "<json>"}, errorsWhileComputingFlags, config, …}` (the Python client). `/decide/?v=4` answers the v2 shape. |
 | `GET /array/{token}/config`, `…/config.js` | Remote config: `{supportedCompression: ["gzip","gzip-js"], hasFeatureFlags: true, analytics: {endpoint: "/i/v0/e/"}, sessionRecording: false \| {endpoint: "/s/"}, surveys: false, …}`; the `.js` form sets `window._POSTHOG_REMOTE_CONFIG[token]`. `hasFeatureFlags` is always true (false makes posthog-react-native skip flag loading). |
 | `POST /batch/` | `{api_key, batch: [{event, distinct_id, properties, timestamp, uuid}], sent_at}`, usually `Content-Encoding: gzip`. |
 | `POST /e/`, `POST /i/v0/e/` | One event, an array of events, or `{api_key, batch}`; bodies may be raw gzip (`gzip-js`), base64 `data=` forms (`compression=base64`), or JSON. Events with a known `uuid` are deduplicated. |
@@ -91,7 +91,7 @@ Every route answers with and without its trailing slash. Errors use PostHog's
 - **Targeting:** overrides in order, by exact `distinct_id` or by `person_properties.email`
   (case-insensitive), then the default.
 - **Variants:** a string value is a variant (`enabled: true, variant: "<key>"`); our backend,
-  EMR and makor clients all read it as `true`.
+  EMR and Python clients all read it as `true`.
 - **Payloads:** any JSON; stored and sent as the JSON string PostHog uses. The backend's
   `getConfig` only accepts object payloads.
 - **Management `filters` → model:** `distinct_id` / `email` property groups become overrides;
@@ -108,7 +108,7 @@ Every route answers with and without its trailing slash. Errors use PostHog's
 | `PUT /__admin/flags` | Bulk: `{flags: {<key>: spec}, replace?: true}` or `[{key, …spec}]`. |
 | `GET /__admin/flags`, `GET /__admin/flags/:key` | The namespace's flags. |
 | `GET /__admin/flags/evaluate?distinct_id=&email=` | What `/flags` answers for that subject, as `{flags: {key: value}}`. |
-| `POST /__admin/flags/import` | `{from: "state.json", env: "dev" \| "prod", project?: "member-app" \| "emr", replace?}` seeds from the bundled copy of geviti `docs/feature-flags/state.json` (or pass `state: {flags: […]}` inline). `live` → `true` (or the largest variant), `rollout 0` / `targeted` / `ramping` → `false`, `inactive` / `missing` → absent. |
+| `POST /__admin/flags/import` | `{from: "state.json", env: "dev" \| "prod", project?: "member-app" \| "emr", replace?}` seeds from the bundled copy of the consumer app's `docs/feature-flags/state.json` (or pass `state: {flags: […]}` inline). `live` → `true` (or the largest variant), `rollout 0` / `targeted` / `ramping` → `false`, `inactive` / `missing` → absent. |
 | `POST /__admin/flags/bump` | Changes nothing server-side; returns a `generation` counter. The documented moment to clear the app's flag caches (backend `getAllFlagsAndPayloads` 60 s per user; EMR frontend server 60 s / 10 s). |
 | `GET /__admin/events?distinct_id=&event=&since=` | Captured events, oldest first (`since`: epoch ms or ISO, mock clock). `$exception` keeps only `$lib`, `$lib_version`, `$exception_level`, `$session_id`; properties named like message/body/text/content/prompt/stack/trace/html/comment/note are dropped from every event (and from `$set`). |
 | `GET /__admin/recordings` | `{count}` of `/s/` posts. |
@@ -160,7 +160,7 @@ through it with a credential-mapped personal key instead.
 | `parseFlagSpec` | function | Validate an admin flag body into a `FlagSpec`. |
 | `payloadString` | function | A payload as PostHog stores it (JSON string, or `null`). |
 | `specsFromState`, `valueForState` | functions | Map a `state.json` file (or one flag state) to flag specs. |
-| `GEVITI_FLAG_STATE` | object | The bundled, trimmed copy of geviti `docs/feature-flags/state.json`. |
+| `ACME_FLAG_STATE` | object | The bundled, trimmed copy of the consumer app's `docs/feature-flags/state.json`. |
 | `decodePostHogBody`, `tokenFromBody` | functions | Undo PostHog body envelopes (gzip, gzip-js, base64 `data=`); find the project token in a body. |
 | `scrubProperties` | function | The event-property scrubbing applied before storage. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |

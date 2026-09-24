@@ -110,8 +110,19 @@ const isBase64Sha256 = (value: string) => {
 }
 
 /**
+ * The legacy key header, `X-<Partner>-Auth-Key` (e.g. `X-Acme-Auth-Key`): the real header
+ * embeds the partner's name, so any name is accepted.
+ */
+const legacyAuthKey = (request: Request): string | undefined => {
+  for (const [name, value] of request.headers) {
+    if (/^x-[a-z0-9_-]+-auth-key$/.test(name) && value) return value
+  }
+  return undefined
+}
+
+/**
  * Verify AHA partner authentication: HMAC mode (`X-API-KEY`, `X-TIMESTAMP`,
- * `X-SIGNATURE` over `"<apiKey>:<path>:<timestamp>"`) or legacy `X-Geviti-Auth-Key`.
+ * `X-SIGNATURE` over `"<apiKey>:<path>:<timestamp>"`) or legacy `X-<Partner>-Auth-Key`.
  * Returns an error message, or `undefined` when the request is authentic.
  */
 export const verifyAuth = async (
@@ -146,7 +157,7 @@ export const verifyAuth = async (
     if (settings.credentials.length > 0) return "API key has no secret; use legacy auth"
     return isBase64Sha256(signature) ? undefined : "Invalid signature"
   }
-  const legacy = request.headers.get("x-geviti-auth-key")
+  const legacy = legacyAuthKey(request)
   if (legacy) {
     if (!settings.allowLegacy) return "Legacy authentication is disabled"
     if (settings.credentials.length > 0 && !settings.credentials.some((c) => c.apiKey === legacy)) {
@@ -157,9 +168,9 @@ export const verifyAuth = async (
   return "Missing authentication headers"
 }
 
-/** The credential a request carries (`X-API-KEY`, else `X-Geviti-Auth-Key`), for namespaces. */
+/** The credential a request carries (`X-API-KEY`, else `X-<Partner>-Auth-Key`), for namespaces. */
 export const apiKeyCredential = (request: Request): string | undefined =>
-  request.headers.get("x-api-key") ?? request.headers.get("x-geviti-auth-key") ?? undefined
+  request.headers.get("x-api-key") ?? legacyAuthKey(request)
 
 /**
  * Stateful mock of the AHA partner API.

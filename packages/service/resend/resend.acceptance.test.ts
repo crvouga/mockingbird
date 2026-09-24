@@ -51,7 +51,7 @@ describe("S9.6 acceptance: our consumers' logic against the mock", () => {
       token,
     })
     const [email] = await outbox(namespace, "?to=invitee@example.com")
-    expect(email?.subject).toBe("Grace Hopper invited you to join their Geviti family")
+    expect(email?.subject).toBe("Grace Hopper invited you to join their Acme family")
     const [invite] = await links(namespace, email?.id as string)
     const url = new URL(invite as string)
     expect(url.origin).toBe(MEMBER_APP)
@@ -64,7 +64,7 @@ describe("S9.6 acceptance: our consumers' logic against the mock", () => {
     const { key, namespace } = await isolatedKey("emr-invite")
     const emr = new EmrEmailService(Resend, {
       apiKey: key,
-      fromEmail: "Geviti EMR <team@gogeviti.com>",
+      fromEmail: "Acme EMR <team@acme.example>",
       appUrl: EMR_APP,
     })
     await emr.sendTeamMemberInvitation({
@@ -76,7 +76,7 @@ describe("S9.6 acceptance: our consumers' logic against the mock", () => {
         role: "Provider",
       },
       inviterName: "Dr. Admin",
-      organizationName: "Geviti Clinic",
+      organizationName: "Acme Clinic",
       recipientEmail: "new.provider@example.com",
       firstName: "Nia",
     })
@@ -134,7 +134,7 @@ describe("S9.6 acceptance: our consumers' logic against the mock", () => {
     resend.runtime.applyPreset("send_422", namespace, { count: 1 })
     const emr = new EmrEmailService(Resend, {
       apiKey: key,
-      fromEmail: "team@gogeviti.com",
+      fromEmail: "team@acme.example",
       appUrl: EMR_APP,
     })
     await emr.sendTeamMemberInvitation({
@@ -151,16 +151,16 @@ describe("S9.6 acceptance: our consumers' logic against the mock", () => {
     const { key, namespace } = await isolatedKey("dispatcher")
     const channel = new EmailChannel(Resend, {
       apiKey: key,
-      fromEmail: "Geviti <hello@gogeviti.com>",
+      fromEmail: "Acme <hello@acme.example>",
     })
     const job = {
       to: "member@example.com",
       subject: "Your results are ready",
-      html: '<p>See <a href="https://app.gogeviti.com/results">results</a></p>',
+      html: '<p>See <a href="https://app.acme.example/results">results</a></p>',
       tags: ["results-ready"],
       correlationId: "notif:results:user-17",
       dedupeKey: "results:user-17",
-      unsubscribeUrl: "https://api.gogeviti.com/unsubscribe?t=abc",
+      unsubscribeUrl: "https://api.acme.example/unsubscribe?t=abc",
     }
     const first = await channel.send(job)
     const retried = await channel.send(job)
@@ -169,7 +169,7 @@ describe("S9.6 acceptance: our consumers' logic against the mock", () => {
     expect(entries).toHaveLength(1)
     expect(entries[0]?.tags).toEqual([{ name: "category", value: "results-ready" }])
     expect(entries[0]?.headers["List-Unsubscribe"]).toBe(
-      "<https://api.gogeviti.com/unsubscribe?t=abc>",
+      "<https://api.acme.example/unsubscribe?t=abc>",
     )
     const stored = resend.runtime.instance(namespace).sent()[0]
     expect(stored?.idempotencyKey).toBe("notif_results_user-17")
@@ -183,7 +183,7 @@ describe("S9.6 acceptance: our consumers' logic against the mock", () => {
     const { Resend } = await sharedStack()
     const { key, namespace } = await isolatedKey("forward")
     const sent = await new Resend(key).emails.send({
-      from: "Geviti <no-reply@gogeviti.com>",
+      from: "Acme <no-reply@acme.example>",
       to: "reset-user@qa7x2k9m.mailosaur.net",
       subject: "Your password reset code",
       html: "<p>Your verification code is <strong>731946</strong>. It expires in 10 minutes.</p>",
@@ -243,11 +243,11 @@ describe("S9.4 inbound: the signed email.received webhook through our receiver",
       const pdf = Buffer.from("%PDF-1.4 lab results")
       const created = await admin("/inbound", namespace, {
         from: "Ada Lovelace <ada@example.com>",
-        to: ["care+tok_8f2a@care.gogeviti.com"],
+        to: ["care+tok_8f2a@care.acme.example"],
         subject: "  Re: your results  ",
         text: "Thanks, see attached.",
         html: "<p>Thanks, see attached.</p>",
-        headers: { To: "info@gogeviti.com" },
+        headers: { To: "info@acme.example" },
         attachments: [
           {
             filename: "results.pdf",
@@ -268,7 +268,7 @@ describe("S9.4 inbound: the signed email.received webhook through our receiver",
       })
       if (outcome.status !== 200) throw new Error(`receiver answered ${outcome.status}`)
       expect(outcome.event.sender).toBe("ada@example.com")
-      expect(outcome.event.recipients).toEqual(["care+tok_8f2a@care.gogeviti.com"])
+      expect(outcome.event.recipients).toEqual(["care+tok_8f2a@care.acme.example"])
       expect(outcome.event.subject).toBe("Re: your results")
       // The webhook carries no body (as Resend's): hydration fetched it.
       expect(outcome.event.text).toBeNull()
@@ -296,7 +296,7 @@ describe("S9.4 inbound: the signed email.received webhook through our receiver",
       await route(namespace, hook.url)
       await admin("/inbound", namespace, {
         from: "p@example.com",
-        to: "care+t@care.gogeviti.com",
+        to: "care+t@care.acme.example",
         subject: "Hi",
         text: "inline body",
         inline: true,
@@ -342,7 +342,7 @@ describe("S9.4 inbound: the signed email.received webhook through our receiver",
     const hook = sink()
     try {
       await route(namespace, hook.url)
-      await admin("/inbound", namespace, { from: "p@example.com", to: "care+t@care.gogeviti.com" })
+      await admin("/inbound", namespace, { from: "p@example.com", to: "care+t@care.acme.example" })
       await resend.runtime.webhooks.idle()
       resend.runtime.applyPreset("receiving_500", namespace, { count: 1 })
       const [delivery] = hook.deliveries

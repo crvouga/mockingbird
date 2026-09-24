@@ -3,8 +3,8 @@ import { band, type ResultElement } from "./results.js"
 import type { PatientTestRecord } from "./state.js"
 
 const RECIPIENTS: Record<string, string> = {
-  "15": "Patient (Geviti)",
-  "16": "Practitioner (Geviti)",
+  "15": "Patient (Acme)",
+  "16": "Practitioner (Acme)",
   "1": "Patient",
   "2": "Practitioner",
 }

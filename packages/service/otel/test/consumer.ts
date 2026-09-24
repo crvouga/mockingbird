@@ -1,5 +1,5 @@
 /**
- * Ports of our OpenObserve clients (geviti-monorepo, `crvouga/makor-voice-chat`):
+ * Ports of the consumer app's OpenObserve clients:
  *
  * - backend `OpenObserveBloodworkClient` (`B/bloodwork/ops/openobserve-bloodwork.client.ts`):
  *   org identifier lookup with display-name fallback, schema-field cache, `searchSql`.
@@ -602,7 +602,7 @@ export const logsExport = (
       },
       scopeLogs: [
         {
-          scope: { name: "@geviti/telemetry/pino" },
+          scope: { name: "@acme/telemetry/pino" },
           logRecords: logs.map((log) => ({
             timeUnixNano: `${BigInt(log.timeMs ?? Date.now()) * 1_000_000n}`,
             severityNumber: log.severityNumber ?? 9,

@@ -19,7 +19,7 @@ import {
 const params = fcParameters(process.env)
 const HOST = "http://slack.mock"
 const API = `${HOST}/api`
-const HOOK = `${HOST}/services/T0GEVITI/B0ALERTS/abcdEFGH1234ijklMNOP5678`
+const HOOK = `${HOST}/services/T0ACME/B0ALERTS/abcdEFGH1234ijklMNOP5678`
 const TOKEN = "xoxb-emr-critical-alerts"
 
 /** A runtime, a `fetch` into it, recorded backoff sleeps and admin helpers. */
@@ -74,7 +74,7 @@ describe("S17 acceptance: incoming webhooks through backend postSlackWebhook", (
     )
     expect(result).toEqual({ posted: true })
     const [message] = await outbox(
-      `?webhook=${encodeURIComponent("/services/T0GEVITI/B0ALERTS/abcdEFGH1234ijklMNOP5678")}`,
+      `?webhook=${encodeURIComponent("/services/T0ACME/B0ALERTS/abcdEFGH1234ijklMNOP5678")}`,
     )
     expect(message?.text).toBe("pipeline alert: reconcile failed")
     expect(message?.blocks).toEqual(blocks)
@@ -172,7 +172,7 @@ describe("S17 acceptance: incoming webhooks through backend postSlackWebhook", (
     const { admin, fetchImpl, sleep, outbox } = harness()
     await admin("/channels", { id: "C0PIPELINE", name: "pipeline-alerts" })
     await admin("/hooks", { path: HOOK, channel: "C0PIPELINE" })
-    const other = `${HOST}/services/T0GEVITI/B0ERX/erxerxerxerxerx`
+    const other = `${HOST}/services/T0ACME/B0ERX/erxerxerxerxerx`
     await admin("/hooks", { path: other })
     const deps = { fetch: fetchImpl, sleep }
     await postSlackWebhook(HOOK, { text: "pipeline" }, silentLogger(), "a", deps)

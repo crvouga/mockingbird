@@ -253,7 +253,7 @@ export class WholescriptsAPI implements FetchAPI {
       advanced: 0,
     }
     this.state.orders.insert(order.orderNumber, order)
-    // The vendor placed the order but the caller never hears back (Makor's "order may have
+    // The vendor placed the order but the caller never hears back (the scheduler's "order may have
     // been placed" timeout branch).
     if (faultEffect(context.request, "submit_timeout") !== undefined) {
       throw new DroppedConnectionError()

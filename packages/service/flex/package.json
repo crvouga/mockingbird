@@ -54,6 +54,11 @@
     "layer": "service",
     "category": "payments",
     "displayName": "Flex",
+    "vendor": {
+      "website": "https://www.withflex.com",
+      "docs": "https://docs.withflex.com",
+      "description": "Flex lets merchants accept HSA/FSA funds at checkout for eligible health and wellness products."
+    },
     "status": "ready",
     "playground": {
       "headers": {

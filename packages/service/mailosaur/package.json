@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Mailosaur",
+    "vendor": {
+      "website": "https://mailosaur.com",
+      "docs": "https://mailosaur.com/docs/api"
+    },
     "status": "wip"
   },
   "scripts": {
