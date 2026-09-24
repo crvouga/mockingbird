@@ -567,6 +567,30 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
   ["/api/v2/kits", { kitNumber: "WB000000", pageSize: "100000" }],
   ["/api/v2/kits", { kitNumber: "WB000000" }],
   ["/api/v2/orders", { orderId: NOTHING, pageSize: "2000" }],
+  // Which id filter wins when several are sent (counts only; the rows are never kept).
+  ...[
+    { orderId: NOTHING },
+    { orderLineId: NOTHING },
+    { fulfillmentId: NOTHING },
+    { orderId: NOTHING, orderLineId: "a" },
+    { orderId: NOTHING, fulfillmentId: "a" },
+    { orderLineId: NOTHING, orderId: "a" },
+    { fulfillmentId: NOTHING, orderId: "a" },
+    { fulfillmentId: NOTHING, orderLineId: "a" },
+    { orderLineId: NOTHING, fulfillmentId: "a" },
+  ].map((params) => ["/api/v2/fulfillments", params] as [string, Record<string, string>]),
+  ...[
+    { orderId: NOTHING, orderLineId: "a" },
+    { orderLineId: NOTHING, orderId: "a" },
+    { orderId: NOTHING, kitNumbers: "a" },
+  ].flatMap((params) => [
+    ["/api/v2/kitorderlines", params] as [string, Record<string, string>],
+    ["/api/v2/kitorderlines/kits", params] as [string, Record<string, string>],
+  ]),
+  ...[
+    { orderId: NOTHING, orderDateMax: "2030-01-01T00:00:00Z" },
+    { orderDateMin: "9999-01-01T00:00:00Z", orderId: "a" },
+  ].map((params) => ["/api/v2/orders", params] as [string, Record<string, string>]),
   // Character-format rules on the free-text filters.
   ...(
     [
@@ -620,7 +644,7 @@ for (const [path, probed] of QUERY_PROBES) {
     // A 200 page keeps only its paging (never rows: the tenant is shared).
     ...(answer.status === 200
       ? body && !Array.isArray(body) && "pageSize" in body
-        ? { offset: body.offset, pageSize: body.pageSize }
+        ? { offset: body.offset, pageSize: body.pageSize, totalCount: body.totalCount }
         : {}
       : { errors: body?.errors, message: body && "message" in body ? body.message : undefined }),
   })
