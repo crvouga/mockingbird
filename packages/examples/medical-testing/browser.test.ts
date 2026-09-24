@@ -152,5 +152,7 @@ describe("in-process fetcher (browser mount wiring)", () => {
       const order = orders.find((o) => o.id === orderId)
       return order?.status === "results_ready" && Boolean(order.interpretation)
     })
-  })
+    // The lab adapter holds results for RESULTS_READY_DELAY_MS (4s), so bun's 5s default
+    // leaves no room; budget for both waitUntil calls instead.
+  }, 20_000)
 })
