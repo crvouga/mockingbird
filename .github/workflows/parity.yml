@@ -1,0 +1,64 @@
+# Live parity against the real provider sandboxes, on demand, with the repo's secrets.
+#
+# Sandbox keys are GitHub Actions repo secrets named MOCKINGBIRD_* (docs/SECRETS.md). Nobody
+# has to hand them out: anyone with write access dispatches this workflow, usually through
+#   bun run parity:remote -- stripe twilio      # or --all
+# which runs it on the current branch and streams the log. Values never leave GitHub and are
+# masked in the log.
+#
+# Not a required check — it depends on live vendors.
+name: Parity
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to verify, space-separated (e.g. `stripe junction`), or `--all`"
+        required: true
+        default: junction
+
+concurrency:
+  group: parity-${{ github.ref }}-${{ inputs.services }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: "0"
+
+jobs:
+  parity:
+    name: Live parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup
+
+      - name: Build
+        timeout-minutes: 20
+        run: bunx turbo run build --output-logs=errors-only
+
+      # Every MOCKINGBIRD_* repo secret becomes an env var for the steps below, so a newly
+      # added service's keys work without editing this file.
+      - name: Load MOCKINGBIRD_* repo secrets
+        env:
+          SECRETS: ${{ toJSON(secrets) }}
+        run: |
+          echo "$SECRETS" | jq -r '
+            to_entries[]
+            | select(.key | startswith("MOCKINGBIRD_"))
+            | "\(.key)<<__MOCKINGBIRD_EOF__\n\(.value)\n__MOCKINGBIRD_EOF__"
+          ' >> "$GITHUB_ENV"
+
+      - name: Live parity (${{ inputs.services }})
+        timeout-minutes: 35
+        env:
+          PARITY_SERVICES: ${{ inputs.services }}
+        # One argument per service; parity-service.ts rejects anything that is not a
+        # service with a parity script.
+        run: |
+          read -ra services <<< "$PARITY_SERVICES"
+          bun run parity:service -- "${services[@]}"

@@ -2,7 +2,8 @@
  * Live parity: the same random walk against real Amazon Bedrock Runtime and a fresh mock,
  * canonicalized and diffed. Model output is language, so the contract marks text, token
  * counts and embedding values volatile: the walk compares status codes, error types and
- * response shapes. Credentials come from the environment or Vault `secret/personal/prd`:
+ * response shapes. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_BEDROCK_ACCESS_KEY_ID
  *   MOCKINGBIRD_BEDROCK_SECRET_ACCESS_KEY
@@ -12,21 +13,11 @@
  * (`FC_NUM_RUNS`). The AgentCore harness needs a deployed harness, so it is skipped unless
  * `--include-harness` is passed.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { signV4 } from "@crvouga/mockingbird-service"
 import { BedrockAPI, document } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -39,7 +30,7 @@ try {
         MOCKINGBIRD_BEDROCK_REGION: "MOCKINGBIRD_BEDROCK_REGION",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

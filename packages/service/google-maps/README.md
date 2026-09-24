@@ -118,7 +118,7 @@ parameter is the credential). The request journal records operation, status, the
 - There is no SDK drop-in test: native uses plain `fetch`, and the web SDK is Google's hosted
   script, which the shim replaces.
 - `bun scripts/parity.ts`: live parity against `maps.googleapis.com` with
-  `MOCKINGBIRD_GOOGLE_MAPS_API_KEY` (env or Vault `secret/personal/prd`); exits 2 without it.
+  `MOCKINGBIRD_GOOGLE_MAPS_API_KEY` (env / `.env.local`); exits 2 without it.
 
 ### Deliberately not modelled
 

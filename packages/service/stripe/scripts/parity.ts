@@ -1,7 +1,5 @@
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, StripeAPI } from "../src/index.js"
 import { ACCOUNT_GLOBAL_OPS, QA_SURFACE_OPS } from "../src/qa-corpus.js"
@@ -31,7 +29,7 @@ state from another mock instance, and an HTTP oracle cannot hand its account ove
 coverage of the same surface lives in stripe.qa.seed.property.test.ts (seeded lockstep between
 two mock instances, no credentials).
 
-Credentials: MOCKINGBIRD_STRIPE_SECRET_KEY (sk_test_* / rk_test_*) or the self-hosted Vault.
+Credentials: MOCKINGBIRD_STRIPE_SECRET_KEY (sk_test_* / rk_test_*) from the environment (.env.local).
 Webhook oracle: stripe-cli listen (test mode), forwarded to a local Hono collector.
 `
 
@@ -138,14 +136,6 @@ const wellFormed = <T>(spec: T): T => {
   return copy as T
 }
 
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
-
 const options = parseArgs(process.argv.slice(2))
 if (options.help) {
   console.log(USAGE)
@@ -159,12 +149,12 @@ try {
       provider: "stripe",
       fields: { MOCKINGBIRD_STRIPE_SECRET_KEY: "MOCKINGBIRD_STRIPE_SECRET_KEY" },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {
     console.error(
-      `stripe parity: no test-mode key. Set MOCKINGBIRD_STRIPE_SECRET_KEY (sk_test_…) or log in to Vault (secret/personal/prd). ${error.message}`,
+      `stripe parity: no test-mode key. Set MOCKINGBIRD_STRIPE_SECRET_KEY (sk_test_…) in .env.local, or run it on GitHub: bun run parity:remote -- stripe. ${error.message}`,
     )
     process.exit(2)
   }

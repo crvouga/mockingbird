@@ -167,6 +167,16 @@ npx mockingbird-junction serve --config mockingbird.json  # every service in the
 
 Every service README doubles as its integration guide and ships inside the npm tarball (`node_modules/<package>/README.md`). [`llms.txt`](llms.txt) indexes them by tier, and the docs site publishes the same content as markdown and JSON, rebuilt from the packages on every build. When a mock diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
 
+## Contributing
+
+```bash
+git clone https://github.com/crvouga/mockingbird.git && cd mockingbird
+bun run setup   # install, build every package, create .env.local
+bun test
+```
+
+Building, testing and `bun run check` need no secrets and no accounts. Live parity against the real provider sandboxes runs on GitHub Actions with the repo's secrets, so anyone with write access runs it without holding a key: `bun run parity:remote -- <service>`. See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/SECRETS.md](docs/SECRETS.md).
+
 ## Guides
 
 | Guide | |
@@ -177,8 +187,8 @@ Every service README doubles as its integration guide and ships inside the npm t
 | [Service catalog coverage](docs/CATALOG_COVERAGE.md) | Where each section of the geviti "Mockingbird wish list — service catalog" (2026-09-20) lives in this repo, how it is proven, and what the proof turned up. Every package follows [AUTHORING_A_SERVICE.md](AUTHORING_A_SERVICE.md) and ships the same evidence: |
 | [Developing Mockingbird](docs/DEVELOPMENT.md) | Working on this repo: requirements, how the packages are layered, and the quality gates every change passes. |
 | [Reporting issues](docs/REPORTING_ISSUES.md) | How coding agents in other projects file a GitHub issue when a mock diverges from its oracle, lacks a feature they call, or breaks, or when they need a service mocked that the catalog does not have yet. Agents in this repository pick the issues up and resolve them. |
-| [Releasing](docs/RELEASING.md) | How packages get from `main` to npm. Once `NPM_TOKEN` is provisioned in Vault, releases run automatically. |
-| [Secrets runbook (maintainers)](docs/SECRETS.md) | The mock services (`@crvouga/mockingbird-service-*`, the only published packages) are released automatically on every green push to `main` (see [RELEASING.md](RELEASING.md)) and publish with **npm Trusted Publishing (OIDC)**. |
+| [Releasing](docs/RELEASING.md) | How packages get from `main` to npm. Once the `NPM_TOKEN` repo secret is set, releases run automatically. |
+| [Secrets runbook](docs/SECRETS.md) | Where every credential lives, who needs it, and how to run live parity without ever holding a sandbox key: GitHub Actions repo secrets are the only secret store. |
 
 ## License
 

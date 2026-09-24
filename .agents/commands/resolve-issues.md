@@ -51,8 +51,8 @@ Check the report before you change any code:
 Before changing the mock to match a claim, confirm what the oracle really does. A reporter can be
 wrong about the vendor.
 
-- HTTP services: send the same requests to the provider sandbox (`curl` using the keys from
-  `vault run --config prd`, or `bun run parity:service -- <service>`). A parity seed in the report
+- HTTP services: send the same requests to the provider sandbox (`bun run parity:remote -- <service>`
+  on GitHub, or `curl` / `bun run parity:service -- <service>` with keys from `.env.local`). A parity seed in the report
   reproduces with `FC_SEED=<seed>`, and `MOCKINGBIRD_TRACE=1` prints the walk. Never print key values.
 - SQLite and PostgreSQL: run the statements against the real engine through the package's oracle
   tests.

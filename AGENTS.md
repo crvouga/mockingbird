@@ -1,25 +1,22 @@
 # AGENTS.md
 
-Shared infra (Vault, Turborepo remote cache, R2 object store, hosting):
-https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt
+Onboarding is `bun run setup`, then `bun test` / `bun run check`. None of it needs a secret, an
+account, or any self-hosted service.
 
-Always re-fetch that URL rather than trusting a cached copy: it is generated from
-`crvouga/workspace` and tracks its `main`, so ports, hostnames and the fleet list stay current.
-
-How this repo uses it (details in [docs/SECRETS.md](docs/SECRETS.md)):
-
-- **Vault** — `.vault.yaml` points at `secret/personal/dev`. Never print, invent, or commit secret
-  values; if one is missing, tell the human the key + path and stop.
-- **Turborepo remote cache** — root turbo scripts (`bun run build|test|check|…`) run through
-  `scripts/vault-run.ts`, i.e. `vault run`, which injects `TURBO_*`. CI loads them in
-  `.github/actions/setup` via Vault GitHub OIDC; never add a `VAULT_TOKEN` or `TURBO_TOKEN`
-  GitHub secret. If the cache is down, report it — don't disable caching.
-- **Live parity** — `bun run parity*` runs under `vault run --config prd` (sandbox keys live in
-  `secret/personal/prd`).
+- **Secrets** — GitHub Actions repo secrets are the only store ([docs/SECRETS.md](docs/SECRETS.md)).
+  Never print, invent, or commit secret values; if one is missing, tell the human the key name and
+  stop. Local values go in `.env.local` (gitignored, loaded by Bun).
+- **Live parity** — `bun run parity:remote -- <service…>` runs it on GitHub with the repo's
+  `MOCKINGBIRD_*` secrets (needs only `gh auth login`); `bun run parity:service -- <service…>` runs
+  it locally with keys from `.env.local`. `bun run secrets:doctor` shows which services have keys.
+- **Build cache** — turbo's local cache; CI keeps it in the GitHub Actions cache
+  (`.github/actions/setup`). There is no remote cache or token.
 - **Hosting** — the docs site ships as the fleet service `mockingbird-docs`: `sites/docs/Dockerfile`
   (build context = repo root) is built and pushed to GHCR by `.github/workflows/publish.yml` on every
   push to `main`, then deployed by `crvouga/workspace`. Never deploy from Railway or push images by
-  hand; the `services.yaml` entry lives in `crvouga/workspace`.
+  hand; the `services.yaml` entry lives in `crvouga/workspace`. Hosting contract:
+  https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt (re-fetch it, don't trust a
+  cached copy).
 
 Agent commands (`/ci`, `/pr-merge`, `/parity-loop`, `/resolve-issues`) live in `.agents/commands/`;
 see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md#agent-commands).

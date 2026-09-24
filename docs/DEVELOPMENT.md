@@ -7,7 +7,13 @@ Working on this repo: requirements, how the packages are layered, and the qualit
 - **Node.js ≥ 22** or **Bun ≥ 1.2** (ESM only).
 - npm is required for the package-integrity gates (`bunx publint`, `bunx attw`); Bun runs the rest.
 
-Install with `bun install` (uses [workspaces](https://bun.sh/docs/install/workspaces) + [Turborepo](https://turbo.build/repo/docs/overview)). A git hook lints commit messages on the spot — see [Development](#development--quality-gates).
+```bash
+git clone https://github.com/crvouga/mockingbird.git && cd mockingbird
+bun run setup   # install, build every package, create .env.local from .env.example
+bun test
+```
+
+That is the whole onboarding: no secrets, no accounts, nothing self-hosted. `bun run setup` is idempotent and uses [workspaces](https://bun.sh/docs/install/workspaces) + [Turborepo](https://turbo.build/repo/docs/overview). Live parity against the real sandboxes needs keys, but they are GitHub Actions secrets: with write access to the repo, `bun run parity:remote -- <service>` runs it on GitHub without you ever holding one ([docs/SECRETS.md](SECRETS.md)). A git hook lints commit messages on the spot — see [Quality gates](#quality-gates).
 
 ## Packages
 
@@ -23,16 +29,16 @@ Install with `bun install` (uses [workspaces](https://bun.sh/docs/install/worksp
 | Contract | `openapi`, `openapi-metadata`, `openapi-arbitrary`, `openapi-codegen` | bundled / build tool |
 | Parity | `commands`, `model`, `canonicalize`, `parity` (runner) | bundled / tests |
 | Adapters | `adapter-node`, `adapter-bun` | tests only |
-| Auth | `openbao` (sandbox credentials for live parity) | tests only |
+| Auth | `credentials` (sandbox credentials for live parity, from the environment) | tests only |
 
 ## Quality gates
 
 Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates the pull-request gate end-to-end (install + commitlint + check). Passing that gate is the release decision.
 
-CI is one turbo graph: the `Check` job runs `bun run check` with `node_modules` in the GitHub Actions cache and task outputs in the shared self-hosted **Turborepo remote cache** (`https://turborepo.chrisvouga.dev`), so a PR only rebuilds and retests the packages it changed, and the release job replays that build instead of rebuilding. Local runs share the same cache: root turbo scripts run under `vault run` ([`scripts/vault-run.ts`](../scripts/vault-run.ts)), which injects `TURBO_*` from Vault. CI gets them through Vault GitHub OIDC — no stored token. Setup: [docs/SECRETS.md](SECRETS.md).
+CI is one turbo graph: the `Check` job runs `bun run check` with `node_modules` and turbo's cache (`.turbo/cache`) in the GitHub Actions cache ([`.github/actions/setup`](../.github/actions/setup/action.yml)), so a PR replays what `main` already built and only rebuilds and retests the packages it changed. Locally turbo uses the same cache directory on disk. No token, no server.
 
 ```bash
-bun install            # workspaces + generates dist
+bun run setup          # first time: install + build
 bun run check          # every gate below, in parallel, cached by turbo
 bun run check:full     # mirrors .github/workflows/pr.yml (the pull-request gate)
 ```
@@ -74,8 +80,8 @@ pull-request check has passed:
 
 There is no required review, no required approval, and an unresolved review thread does not block
 the merge. A green pull request is releasable: merging it to `main` publishes. The Release
-workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds from the cache Check
-already filled and publishes. It does not re-run the pull-request checks. The branch must be up
+workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds (replaying main's turbo
+cache) and publishes. It does not re-run the pull-request checks. The branch must be up
 to date with `main` before merge, so those checks ran against the code that lands. Only merge
 commits are allowed, because each commit on the pull request is a release input. Head branches
 are deleted on merge. PRs use the template in `.github/pull_request_template.md`.

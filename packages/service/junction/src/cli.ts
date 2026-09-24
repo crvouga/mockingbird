@@ -14,8 +14,8 @@ const asString = (value: string | boolean | undefined): string | undefined =>
 
 const realKeyOf = (values: CliValues): string | undefined =>
   asString(values["real-key"]) ??
-  process.env.MOCKINGBIRD_JUNCTION_API_KEY ??
-  process.env.JUNCTION_API_KEY
+  asString(process.env.MOCKINGBIRD_JUNCTION_API_KEY) ??
+  asString(process.env.JUNCTION_API_KEY)
 
 const readCorpus = async (source: string): Promise<SealedCorpus> =>
   source === "default"

@@ -3,15 +3,11 @@
  * validation (no `Fields`, which are paid data packages). Verify, Messages and Recordings are
  * never called — they send real SMS or touch real calls.
  *
- * Credentials come from the environment or Vault `secret/personal/prd`:
+ * Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_TWILIO_ACCOUNT_SID
  *   MOCKINGBIRD_TWILIO_AUTH_TOKEN
- *
- * Vault holds them as TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN; map them without printing:
- *
- *   bun scripts/vault-run.ts --config prd -- sh -c 'MOCKINGBIRD_TWILIO_ACCOUNT_SID="$TWILIO_ACCOUNT_SID" \
- *     MOCKINGBIRD_TWILIO_AUTH_TOKEN="$TWILIO_AUTH_TOKEN" bun run --cwd packages/service/twilio parity'
  *
  * Every number is fictional (NANP 555-01xx, Ofcom's 020 7946 0xxx drama range) or a
  * well-known malformed input. Three checks run: a curated table compared byte for byte
@@ -19,9 +15,8 @@
  * inputs through the parity runner, and the 401 body for a wrong auth token.
  */
 import { readFile, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { createRuntime, document } from "../src/index.js"
 
@@ -61,14 +56,6 @@ export const LOOKUP_CASES: [string, string?][] = [
 const pathOf = ([raw, country]: [string, string?]) =>
   `/v2/PhoneNumbers/${encodeURIComponent(raw)}${country ? `?CountryCode=${country}` : ""}`
 
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
-
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
   credentials = await loadCredentials(
@@ -79,7 +66,7 @@ try {
         MOCKINGBIRD_TWILIO_AUTH_TOKEN: "MOCKINGBIRD_TWILIO_AUTH_TOKEN",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

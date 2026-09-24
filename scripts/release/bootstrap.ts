@@ -1,22 +1,20 @@
 /**
  * Bootstrap npm publishing credentials and start a fresh CI release on main.
  *
- * The token is read from a TTY without echo, validated with npm, written directly
- * to Vault over stdin. CI reads it directly through GitHub OIDC.
- * It is never passed on the command line or printed.
+ * The token is read from a TTY without echo, validated with npm, and written to the
+ * NPM_TOKEN GitHub Actions repo secret over stdin (`gh secret set`). The release job reads it
+ * from there. It is never passed on the command line or printed.
  *
- *   bun run release:bootstrap
+ *   bun run release:bootstrap            # store NPM_TOKEN only if the repo secret is missing
+ *   bun run release:bootstrap -- --replace
  */
 import {
   ghAuthOk,
+  ghSecretNames,
   loadManifest,
-  loadVaultConfig,
   redactSecrets,
   root,
   run,
-  vaultEnv,
-  vaultFieldValue,
-  vaultTokenOk,
   which,
 } from "../secrets/lib.ts"
 
@@ -72,15 +70,6 @@ async function readSecret(label: string): Promise<string> {
   })
 }
 
-async function ensureVaultAuth(): Promise<void> {
-  const cfg = await loadVaultConfig()
-  if ((await vaultTokenOk(cfg)).ok) return
-  console.log("Vault login required.")
-  await inherited(["bun", "run", "vault:login"])
-  const retry = await vaultTokenOk(cfg)
-  if (!retry.ok) throw new Error(`Vault authentication failed: ${retry.error}`)
-}
-
 async function ensureGitHubAuth(): Promise<void> {
   if ((await ghAuthOk()).ok) return
   console.log("GitHub CLI login required.")
@@ -89,20 +78,17 @@ async function ensureGitHubAuth(): Promise<void> {
   if (!retry.ok) throw new Error(`GitHub authentication failed: ${retry.error}`)
 }
 
-async function ensureNpmToken(): Promise<void> {
-  const cfg = await loadVaultConfig()
+async function ensureNpmToken(replace: boolean): Promise<void> {
   const manifest = await loadManifest()
   const entry = manifest.secrets.find(({ id }) => id === "npm_token")
-  if (!entry) throw new Error("secrets.manifest.yaml has no npm_token entry")
-  const { path, key } = entry.vault
+  const key = entry?.github.name
+  if (!key) throw new Error("secrets.manifest.yaml has no npm_token GitHub secret")
 
-  const existing = await vaultFieldValue(cfg, path, key)
-  if (existing.value && (await npmAccepts(existing.value))) {
-    console.log(`[PASS] ${key} at secret/${path} is valid`)
+  const listed = await ghSecretNames(manifest.repo)
+  if (!listed.names) throw new Error(`Cannot list ${manifest.repo} secrets: ${listed.error}`)
+  if (listed.names.includes(key) && !replace) {
+    console.log(`[PASS] ${key} repo secret exists (pass --replace to rotate it)`)
     return
-  }
-  if (existing.value) {
-    console.log(`[WARN] ${key} at secret/${path} is no longer accepted by npm; replacing it`)
   }
 
   console.log("Create an npm granular access token:")
@@ -111,7 +97,7 @@ async function ensureNpmToken(): Promise<void> {
   console.log("  Enable bypass 2FA so GitHub Actions can bootstrap packages")
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error(
-      `Missing ${key} at secret/${path}; create the token at ${TOKEN_URL}, then run this command in a terminal`,
+      `Missing ${key} repo secret; create the token at ${TOKEN_URL}, then run this command in a terminal`,
     )
   }
   const token = (await readSecret("Paste token (input hidden): ")).trim()
@@ -119,16 +105,13 @@ async function ensureNpmToken(): Promise<void> {
 
   if (!(await npmAccepts(token))) throw new Error("npm rejected the token")
 
-  const stored = await run(["vault", "kv", "patch", `-mount=${cfg.mount}`, path, `${key}=-`], {
-    env: vaultEnv(cfg),
+  const stored = await run(["gh", "secret", "set", key, "--repo", manifest.repo], {
     stdin: token,
   })
   if (!stored.ok) {
-    throw new Error(
-      `Could not write secret/${path}#${key}: ${redactSecrets(stored.stderr || stored.stdout)}`,
-    )
+    throw new Error(`Could not set ${key}: ${redactSecrets(stored.stderr || stored.stdout)}`)
   }
-  console.log(`[PASS] stored ${key} at secret/${path}`)
+  console.log(`[PASS] stored ${key} as a ${manifest.repo} repo secret`)
 }
 
 async function npmAccepts(token: string): Promise<boolean> {
@@ -168,18 +151,15 @@ async function dispatchedRun(repo: string, after: number): Promise<string> {
 
 async function main(): Promise<void> {
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
-    console.log("Usage: bun run release:bootstrap")
-    console.log("Loads or securely stores NPM_TOKEN in Vault, then runs current CI on main.")
+    console.log("Usage: bun run release:bootstrap [-- --replace]")
+    console.log("Stores NPM_TOKEN as a GitHub Actions repo secret, then runs current CI on main.")
     return
   }
 
-  for (const command of ["vault", "gh"]) {
-    if (!(await which(command))) throw new Error(`${command} CLI is required but was not found`)
-  }
+  if (!(await which("gh"))) throw new Error("gh CLI is required but was not found")
 
-  await ensureVaultAuth()
   await ensureGitHubAuth()
-  await ensureNpmToken()
+  await ensureNpmToken(process.argv.includes("--replace"))
 
   const { repo } = await loadManifest()
   const dispatchedAt = Date.now()

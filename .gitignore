@@ -20,3 +20,4 @@ packages/service/*/CHANGELOG.md
 .superset/dev-server.pid
 .superset/ports.json
 **/__pycache__/
+.superset/config.local.json

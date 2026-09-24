@@ -1,7 +1,7 @@
 /**
  * Live parity: the same random walk against a real PostHog project and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_POSTHOG_HOST            e.g. https://us.i.posthog.com
  *   MOCKINGBIRD_POSTHOG_PROJECT_TOKEN   a phc_… token of a sandbox project with NO feature flags
@@ -12,20 +12,9 @@
  * experiments, recorder): capture writes events into the project and the management API needs
  * a personal key, so `--include-unsafe` adds capture only.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, PostHogAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -37,7 +26,7 @@ try {
         MOCKINGBIRD_POSTHOG_PROJECT_TOKEN: "MOCKINGBIRD_POSTHOG_PROJECT_TOKEN",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

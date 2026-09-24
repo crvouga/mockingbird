@@ -83,7 +83,7 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
     "@crvouga/mockingbird-parity": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",

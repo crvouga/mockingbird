@@ -77,7 +77,7 @@
     "@crvouga/mockingbird-testing": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@crvouga/mockingbird-parity": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-core": "workspace:*",

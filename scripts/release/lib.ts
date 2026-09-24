@@ -47,7 +47,7 @@ export const legacyDeprecationMessage = (replacement: string): string =>
   `Moved to ${replacement} (https://github.com/${REPO}). This package is archived and no longer maintained.`
 
 /** Packages once published from this repo whose workspace directory has since been deleted. */
-export const REMOVED_PACKAGES = ["@crvouga/mockingbird"] as const
+export const REMOVED_PACKAGES = ["@crvouga/mockingbird", "@crvouga/mockingbird-openbao"] as const
 
 export const RETIRED_DEPRECATION_MESSAGE = `No longer published: Mockingbird now ships only its mock services (@crvouga/mockingbird-service-*), which bundle this code. See https://github.com/${REPO}.`
 

@@ -1,36 +1,35 @@
 /**
- * Full maintainer secrets doctor: Vault + GitHub + local env + OIDC checklist.
- * Prints linked obtain/populate instructions for anything missing.
+ * Secrets doctor: GitHub Actions repo secrets + .env.local + the Trusted Publishing checklist,
+ * and which services can run live parity where (on GitHub, locally, or neither).
+ * Values are never printed — GitHub cannot return them, and local ones stay in memory.
+ *
+ *   bun run secrets:doctor
  */
 import {
   type CheckResult,
   ghAuthOk,
   ghSecretNames,
   loadManifest,
-  loadVaultConfig,
   localEnvStatus,
+  parityRequirements,
   printCheck,
   printObtain,
   printPopulate,
-  vaultFieldPresent,
-  vaultTokenOk,
+  readEnvLocal,
   which,
 } from "./lib.ts"
 import { discoverPackages, npmVersions } from "../release/lib.ts"
 
 console.log("mockingbird secrets doctor")
-console.log("=========================")
-console.log("Publish path: npm Trusted Publishing (OIDC); NPM_TOKEN only creates new packages.")
-console.log("Values are never printed. See docs/SECRETS.md for the full runbook.")
+console.log("==========================")
+console.log("Source of truth: GitHub Actions repo secrets. Values are never printed.")
+console.log("Nothing here is needed to build, test, or run `bun run check`.")
+console.log("See docs/SECRETS.md for the full runbook.")
 console.log("")
 
 const results: CheckResult[] = []
-const cfg = await loadVaultConfig()
 const manifest = await loadManifest()
-
-console.log(`Vault: ${process.env.VAULT_ADDR?.trim() || cfg.addr}`)
-console.log(`Mount: ${cfg.mount}  project=${cfg.project}  config=${cfg.config}`)
-console.log(`Repo:  ${manifest.repo}`)
+console.log(`Repo: ${manifest.repo}`)
 console.log("")
 
 for (const pkg of discoverPackages().filter((p) => p.isPublic)) {
@@ -47,107 +46,21 @@ for (const pkg of discoverPackages().filter((p) => p.isPublic)) {
       id: `npm:${pkg.name}`,
       status: "warn",
       message: `${pkg.name} is not on npm yet — the next release creates it`,
-      details: [
-        "Needs the NPM_TOKEN Actions secret (then Trusted Publisher is attached automatically),",
-        "or seed locally: bun run release:seed",
-      ],
-    })
-  } else {
-    results.push({
-      id: `npm:${pkg.name}`,
-      status: "pass",
-      message: `${pkg.name} exists on npm`,
-      details: [`Trusted Publisher: https://www.npmjs.com/package/${pkg.name}/access`],
-    })
-  }
-}
-
-// --- Tooling ---
-const hasVault = await which("vault")
-const hasGh = await which("gh")
-
-if (!hasVault) {
-  results.push({
-    id: "tool:vault",
-    status: "fail",
-    message: "vault CLI missing",
-    details: ["https://developer.hashicorp.com/vault/docs/install"],
-  })
-} else {
-  results.push({ id: "tool:vault", status: "pass", message: "vault CLI found" })
-}
-
-if (!hasGh) {
-  results.push({
-    id: "tool:gh",
-    status: "fail",
-    message: "gh CLI missing",
-    details: ["https://cli.github.com/"],
-  })
-} else {
-  results.push({ id: "tool:gh", status: "pass", message: "gh CLI found" })
-}
-
-// --- Vault ---
-let vaultReady = false
-if (hasVault) {
-  const auth = await vaultTokenOk(cfg)
-  if (!auth.ok) {
-    results.push({
-      id: "vault-auth",
-      status: "fail",
-      message: "Vault not authenticated",
-      details: [
-        auth.error ?? "token lookup failed",
-        `export VAULT_ADDR=${cfg.addr}`,
-        "vault login",
-        "https://developer.hashicorp.com/vault/docs/commands/login",
-      ],
-    })
-  } else {
-    vaultReady = true
-    results.push({ id: "vault-auth", status: "pass", message: "Vault authenticated" })
-  }
-}
-
-if (vaultReady) {
-  for (const entry of manifest.secrets) {
-    const { present, error } = await vaultFieldPresent(cfg, entry.vault.path, entry.vault.key)
-    if (present) {
-      results.push({
-        id: `vault:${entry.id}`,
-        status: "pass",
-        message: `${entry.vault.path}#${entry.vault.key} present`,
-      })
-    } else if (entry.required) {
-      results.push({
-        id: `vault:${entry.id}`,
-        status: "fail",
-        message: `Required Vault secret missing: ${entry.id}`,
-        details: [error ?? "missing"],
-      })
-    } else {
-      results.push({
-        id: `vault:${entry.id}`,
-        status: "warn",
-        message: `Optional Vault secret missing: ${entry.id}`,
-        details: [error ?? "missing"],
-      })
-    }
-  }
-} else {
-  for (const entry of manifest.secrets) {
-    results.push({
-      id: `vault:${entry.id}`,
-      status: "skip",
-      message: `Skipped Vault check for ${entry.id} (CLI/auth unavailable)`,
+      details: ["Needs the NPM_TOKEN repo secret (bun run release:bootstrap)"],
     })
   }
 }
 
 // --- GitHub ---
 let ghNames: Set<string> | null = null
-if (hasGh) {
+if (!(await which("gh"))) {
+  results.push({
+    id: "tool:gh",
+    status: "fail",
+    message: "gh CLI missing",
+    details: ["https://cli.github.com/", "Then: gh auth login"],
+  })
+} else {
   const auth = await ghAuthOk()
   if (!auth.ok) {
     results.push({
@@ -162,12 +75,9 @@ if (hasGh) {
     if (!listed.names) {
       results.push({
         id: "gh-secrets",
-        status: "fail",
-        message: "Cannot list repo secrets",
-        details: [
-          listed.error ?? "list failed",
-          `https://github.com/${manifest.repo}/settings/secrets/actions`,
-        ],
+        status: "warn",
+        message: `Cannot list repo secrets (needs write access to ${manifest.repo})`,
+        details: [listed.error ?? "list failed"],
       })
     } else {
       ghNames = new Set(listed.names)
@@ -182,95 +92,59 @@ if (hasGh) {
 
 for (const entry of manifest.secrets) {
   const ghName = entry.github.name
-  if (!ghName) {
-    results.push({
-      id: `github:${entry.id}`,
-      status: "skip",
-      message: `${entry.id} not mapped to Actions secrets`,
-    })
-    continue
-  }
-  if (!ghNames) {
-    results.push({
-      id: `github:${entry.id}`,
-      status: "skip",
-      message: `Skipped GitHub check for ${ghName}`,
-    })
-    continue
-  }
+  if (!ghName || !ghNames) continue
   if (ghNames.has(ghName)) {
-    results.push({
-      id: `github:${entry.id}`,
-      status: "pass",
-      message: `Actions secret ${ghName} exists`,
-    })
-  } else if (entry.github.required) {
-    results.push({
-      id: `github:${entry.id}`,
-      status: "fail",
-      message: `Required Actions secret missing: ${ghName}`,
-      details: [
-        `https://github.com/${manifest.repo}/settings/secrets/actions`,
-        "bun run secrets:sync -- --yes",
-      ],
-    })
+    results.push({ id: `github:${entry.id}`, status: "pass", message: `${ghName} is set` })
   } else {
     results.push({
       id: `github:${entry.id}`,
-      status: "warn",
-      message: `Optional Actions secret missing: ${ghName}`,
+      status: entry.github.required ? "fail" : "warn",
+      message: `${entry.github.required ? "Required" : "Optional"} repo secret missing: ${ghName}`,
+      details: [`https://github.com/${manifest.repo}/settings/secrets/actions`],
     })
   }
 }
 
-results.push({
-  id: "github:GITHUB_TOKEN",
-  status: "pass",
-  message: "Actions GITHUB_TOKEN is automatic (no repo secret)",
-})
-
-// --- Local env ---
 console.log("--- Checks ---")
-for (const r of results) {
-  printCheck(r)
+for (const r of results) printCheck(r)
+
+// --- Live parity readiness ---
+const envLocal = await readEnvLocal()
+const isLocal = (name: string) => Boolean(envLocal[name]?.trim() || process.env[name]?.trim())
+console.log("")
+console.log("--- Live parity credentials (per service) ---")
+console.log(
+  "  github = bun run parity:remote -- <service>   local = bun run parity:service -- <service>",
+)
+for (const { service, env } of parityRequirements()) {
+  const onGitHub = ghNames ? env.filter((name) => !ghNames?.has(name)) : null
+  const locally = env.filter((name) => !isLocal(name))
+  const github = onGitHub === null ? "?" : onGitHub.length === 0 ? "ready" : "missing"
+  const local = locally.length === 0 ? "ready" : "missing"
+  console.log(`  ${service.padEnd(16)} github: ${github.padEnd(8)} local: ${local}`)
+  if (onGitHub && onGitHub.length > 0 && onGitHub.length < env.length)
+    console.log(`    missing on GitHub: ${onGitHub.join(", ")}`)
 }
 
 console.log("")
-console.log("--- Local environment (for release:dry-run) ---")
+console.log("--- Other local values (.env.local) ---")
 for (const entry of manifest.secrets) {
-  const { set, unset } = localEnvStatus(entry.local_env)
-  if (set.length > 0) {
-    printCheck({
-      id: `local:${entry.id}`,
-      status: "pass",
-      message: `set: ${set.join(", ")}`,
-    })
-  } else if (entry.required) {
-    printCheck({
-      id: `local:${entry.id}`,
-      status: "warn",
-      message: `none of ${entry.local_env.join(" / ")} set in this shell`,
-      details: [
-        "CI does not need local env. For dry-run:",
-        `  export ${entry.local_env[0]}="$(vault kv get -mount=${cfg.mount} -field=${entry.vault.key} ${entry.vault.path})"`,
-      ],
-    })
-  } else {
-    printCheck({
-      id: `local:${entry.id}`,
-      status: "skip",
-      message: `optional unset (${unset.join(", ")})`,
-    })
-  }
+  const { set } = localEnvStatus(entry.local_env)
+  const inEnvLocal = entry.local_env.filter((name) => envLocal[name]?.trim())
+  const all = [...new Set([...set, ...inEnvLocal])]
+  printCheck({
+    id: `local:${entry.id}`,
+    status: all.length > 0 ? "pass" : "skip",
+    message: all.length > 0 ? `set: ${all.join(", ")}` : `unset (${entry.description})`,
+  })
 }
 
 console.log("")
 console.log("--- External checklists (manual) ---")
 for (const item of manifest.checklists) {
-  const status = item.required ? "warn" : "skip"
   printCheck({
     id: `checklist:${item.id}`,
-    status,
+    status: item.required ? "warn" : "skip",
     message: item.required
       ? `${item.description} — confirm in npm UI (not auto-verified)`
       : item.description,
@@ -278,50 +152,15 @@ for (const item of manifest.checklists) {
   printObtain(item)
 }
 
-console.log("")
-console.log("--- Publish path ---")
-printCheck({
-  id: "publish:oidc",
-  status: "pass",
-  message: "CI publish uses Trusted Publishing + id-token; NPM_TOKEN only bootstraps new packages",
-  details: ["https://docs.npmjs.com/trusted-publishers"],
-})
-
-// Guidance for failures
-const failedEntries = results.filter((r) => r.status === "fail")
-const requiredChecklists = manifest.checklists.filter((c) => c.required)
-if (failedEntries.length > 0 || requiredChecklists.length > 0) {
+const failed = results.filter((r) => r.status === "fail")
+for (const entry of manifest.secrets) {
+  if (!failed.some((r) => r.id === `github:${entry.id}`)) continue
   console.log("")
-  console.log("--- How to fix ---")
-  if (requiredChecklists.length > 0) {
-    console.log("")
-    console.log("# Trusted Publishing (required for CI publish)")
-    for (const item of requiredChecklists) {
-      printObtain(item)
-    }
-  }
-  for (const entry of manifest.secrets) {
-    const vaultFail = failedEntries.some((r) => r.id === `vault:${entry.id}`)
-    const ghFail = failedEntries.some((r) => r.id === `github:${entry.id}`)
-    if (!vaultFail && !ghFail) continue
-    console.log("")
-    console.log(`# ${entry.id} — ${entry.description}`)
-    printObtain(entry)
-    printPopulate(entry)
-  }
-  const syncable = manifest.secrets.some((s) => s.github.name)
-  if (syncable && failedEntries.some((r) => r.id.startsWith("github:"))) {
-    console.log("")
-    console.log("After populating Vault, sync to GitHub:")
-    console.log("  bun run secrets:sync -- --yes")
-  }
-  console.log("")
-  console.log("Full runbook: docs/SECRETS.md")
+  console.log(`# ${entry.id} — ${entry.description}`)
+  printObtain(entry)
+  printPopulate(entry)
 }
 
-const hardFail = results.some((r) => r.status === "fail")
 console.log("")
-console.log(
-  hardFail ? "secrets:doctor FAILED" : "secrets:doctor OK (confirm Trusted Publishing in npm UI)",
-)
-process.exit(hardFail ? 1 : 0)
+console.log(failed.length > 0 ? "secrets:doctor FAILED" : "secrets:doctor OK")
+process.exit(failed.length > 0 ? 1 : 0)

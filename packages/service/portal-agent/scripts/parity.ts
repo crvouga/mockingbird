@@ -1,8 +1,8 @@
 /**
  * Live parity: the same random walk against a real portal-agent deployment and a fresh mock,
  * canonicalized and diffed. The portal agent is our own service (the LifeFile / VPI browser
- * runner), not a third-party sandbox. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * runner), not a third-party sandbox. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_PORTAL_AGENT_API_URL    the agent's base URL
  *   MOCKINGBIRD_PORTAL_AGENT_API_KEY    its bearer key (ERX_PORTAL_AGENT_API_KEY)
@@ -10,20 +10,9 @@
  * Creating a job drives a real pharmacy portal, so the only operation is unsafe: it runs only
  * with `--include-unsafe`, and should only ever target an agent whose `allowSubmit` is off.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, PortalAgentAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -35,7 +24,7 @@ try {
         MOCKINGBIRD_PORTAL_AGENT_API_KEY: "MOCKINGBIRD_PORTAL_AGENT_API_KEY",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

@@ -1,7 +1,7 @@
 /**
  * Live parity: the same random walk against a real Plane project and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_PLANE_API_KEY         an API token for a scratch workspace
  *   MOCKINGBIRD_PLANE_WORKSPACE_SLUG  the scratch workspace's slug
@@ -11,20 +11,9 @@
  * items, comments, links and labels needs `--include-unsafe`. The contract pins the parity
  * walk's slug and project id, so the real side's are substituted in the URL.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, PlaneAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -37,7 +26,7 @@ try {
         MOCKINGBIRD_PLANE_PROJECT_ID: "MOCKINGBIRD_PLANE_PROJECT_ID",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

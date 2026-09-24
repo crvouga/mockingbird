@@ -101,7 +101,8 @@ would echo back.
 5. **Served over HTTP**: start `createServer()`, hit it with plain `fetch`, receive a webhook on a
    `Bun.serve` sink.
 6. **Live parity** (`scripts/parity.ts`, `"parity": "bun scripts/parity.ts"`): load
-   `MOCKINGBIRD_<NAME>_*` credentials with `loadCredentials` (env or Vault `secret/personal/prd`);
+   `MOCKINGBIRD_<NAME>_*` credentials with `loadCredentials` (from the environment: `.env.local`, or the repo's
+   `MOCKINGBIRD_*` secrets in the Parity workflow);
    without them print which keys are missing and `process.exit(2)`. Run only safe operations by
    default. Never print secret values; never send real messages, charges or orders to real people.
 

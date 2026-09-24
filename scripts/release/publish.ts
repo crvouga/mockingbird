@@ -72,7 +72,7 @@ if (plan.releases.length === 0) {
 }
 
 // Fail once before touching the workspace when CI cannot create initial packages.
-// Scheduled and manual runs retry the same plan after the credential appears in Vault.
+// Scheduled and manual runs retry the same plan once the NPM_TOKEN repo secret is set.
 if (inCi && !local && !dryRun && !npmToken) {
   const unseeded: string[] = []
   for (const release of plan.releases) {
@@ -84,7 +84,7 @@ if (inCi && !local && !dryRun && !npmToken) {
   }
   if (unseeded.length > 0) {
     console.error(
-      `::error::${unseeded.length} initial npm package(s) need NPM_TOKEN at secret/personal/prd`,
+      `::error::${unseeded.length} initial npm package(s) need the NPM_TOKEN repo secret`,
     )
     console.error("Run bun run release:bootstrap locally to store the token securely and retry CI.")
     process.exit(1)

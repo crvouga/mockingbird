@@ -1,6 +1,7 @@
 /**
  * Live parity: the same random walk against the real Flex sandbox and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_FLEX_API_URL   e.g. https://api.withflex.com
  *   MOCKINGBIRD_FLEX_API_KEY   a test-mode secret key (fsk_test_…); live keys are refused
@@ -9,20 +10,9 @@
  * products, customers and sessions, and refunds, write to the shared sandbox account, so they
  * need `--include-unsafe`.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, FlexAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -34,7 +24,7 @@ try {
         MOCKINGBIRD_FLEX_API_KEY: "MOCKINGBIRD_FLEX_API_KEY",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

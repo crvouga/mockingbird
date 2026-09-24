@@ -1426,8 +1426,8 @@ async function guardianIgnore(): Promise<void> {
     die(EXIT.fail, {
       step: "guardian-auth",
       error: `${GITGUARDIAN_KEY_ENV} is not set`,
-      vault: `secret/personal/dev key ${GITGUARDIAN_KEY_ENV} (a GitGuardian API token with incidents:write)`,
-      run: "bun scripts/vault-run.ts -- bun scripts/pr-merge.ts guardian ignore --incident <id> --reason <reason>",
+      fix: `add ${GITGUARDIAN_KEY_ENV} (a GitGuardian API token with incidents:write) to .env.local`,
+      run: "bun run pr:merge guardian ignore --incident <id> --reason <reason>",
     })
   }
   const api = "https://api.gitguardian.com"

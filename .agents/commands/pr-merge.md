@@ -24,7 +24,7 @@ base with a usage error, and `pr` always opens the PR against `main`.
 
 Stop and report to the user only if `gh auth status` fails, if a command returns a usage error
 (exit 2) you cannot resolve, or if a failure genuinely needs a human (a missing secret or token —
-report the key name and Vault path, never a value; OIDC/infrastructure; an external outage; a real
+report the key name, never a value; OIDC/infrastructure; an external outage; a real
 leaked credential that must be rotated).
 
 ## Fast path
@@ -98,7 +98,7 @@ fixtures. GitHub push protection and GitGuardian scan every commit, and once a c
 contents cannot be scrubbed without a force-push. Unpushed commits can still be fixed locally: amend
 or fold the fix into the commit that introduced it (`git commit --fixup <sha>` then
 `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash origin/main`), then publish. Real secrets never go
-in the repo (they live in Vault); test values should be obviously fake and not look like real
+in the repo (they are GitHub Actions secrets, or `.env.local` locally); test values should be obviously fake and not look like real
 credentials.
 
 Before publishing, run the CI graph locally — turbo caches it, so only what changed re-runs:
@@ -206,7 +206,7 @@ Each incident has its `id`, `detector`, `commit`, `file`, `line`, and whether th
 `pushed`. Open the file at that line and decide what the value is:
 
 1. **A real credential** (it works, or might, against a real service): remove it from the code and
-   read it from the environment instead (Vault — see `docs/SECRETS.md`). Then **stop and tell the
+   read it from the environment instead (see `docs/SECRETS.md`). Then **stop and tell the
    user** the incident link and that the credential must be rotated — rotation is theirs to do,
    and a rotated secret is the only real fix once it has been pushed. Never mark a real
    credential as ignored.
@@ -218,14 +218,14 @@ Each incident has its `id`, `detector`, `commit`, `file`, `line`, and whether th
      GitGuardian as not a leak, then re-run the check:
 
      ```
-     bun scripts/vault-run.ts -- bun scripts/pr-merge.ts guardian ignore --incident <id> --reason test_credential
+     bun run pr:merge guardian ignore --incident <id> --reason test_credential
      bun run pr:merge rerun --name "GitGuardian Security Checks"
      bun run pr:merge checks
      ```
 
      Use `--reason false_positive` when the value is not a secret at all (for example a hash or
      an ID the detector mistook for one). `guardian ignore` needs `GITGUARDIAN_API_KEY` (a
-     GitGuardian API token with `incidents:write`) in Vault `secret/personal/dev`. If it
+     GitGuardian API token with `incidents:write`) in `.env.local`. If it
      reports `step: "guardian-auth"`, stop and tell the user either to add that key or to mark
      the incident as a test credential themselves at its dashboard link. Then continue from the
      `rerun`.
@@ -290,6 +290,6 @@ passed — never report success on an open PR, or on a partial, queued, or filte
 - Keep each fix minimal and focused on the failing check's root cause.
 - Use the script's JSON instead of raw `git`/`gh` output.
 - Do not paste full diffs or full CI logs into chat — quote only the failing lines.
-- Never print, invent, or commit secret values; name the missing key and its Vault path instead.
+- Never print, invent, or commit secret values; name the missing key instead.
 - Never target a base other than `main`.
 - Only merge commits land on `main` — never squash or rebase.

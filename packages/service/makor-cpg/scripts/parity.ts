@@ -1,7 +1,7 @@
 /**
  * Live parity: the same random walk against the real legacy Makor AI ("CPG") API and a fresh
- * mock, canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * mock, canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_MAKOR_CPG_API_URL      e.g. the Railway staging URL (MAKOR_AI_API_URL)
  *   MOCKINGBIRD_MAKOR_CPG_API_KEY      its x-api-key (MAKOR_AI_API_KEY)
@@ -11,20 +11,9 @@
  * bloodwork webhook, generation), so those need `--include-unsafe`, and even then should only
  * be pointed at throwaway user ids.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, MakorCpgAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -36,7 +25,7 @@ try {
         MOCKINGBIRD_MAKOR_CPG_API_KEY: "MOCKINGBIRD_MAKOR_CPG_API_KEY",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

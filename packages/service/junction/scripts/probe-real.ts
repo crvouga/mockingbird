@@ -1,22 +1,11 @@
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { loadCredentials } from "@crvouga/mockingbird-openbao"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
+import { loadCredentials } from "@crvouga/mockingbird-credentials"
 
 const credentials = await loadCredentials(
   {
     provider: "junction",
     fields: { MOCKINGBIRD_JUNCTION_API_KEY: "MOCKINGBIRD_JUNCTION_API_KEY" },
   },
-  { env: Bun.env, readTokenFile },
+  { env: Bun.env },
 )
 const apiKey = credentials.values.MOCKINGBIRD_JUNCTION_API_KEY
 const baseUrl = Bun.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? "https://api.sandbox.us.junction.com"

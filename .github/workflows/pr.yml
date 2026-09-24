@@ -37,7 +37,7 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          remote-cache: "false"
+          turbo-cache: "false"
 
       # Merge commits land on main, and each PR commit drives the release bump.
       - name: Validate PR commits
@@ -64,7 +64,6 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      id-token: write # Vault OIDC → Turborepo remote cache
     env:
       FC_NUM_RUNS: "40"
     steps:

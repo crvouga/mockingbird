@@ -1,7 +1,7 @@
 /**
  * Live parity: the same random walk against the real Intercom API and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_INTERCOM_ACCESS_TOKEN   an access token for a test workspace
  *   MOCKINGBIRD_INTERCOM_API_URL        optional, default https://api.intercom.io
@@ -10,20 +10,9 @@
  * and conversation writes create records and can message real people, so they need
  * `--include-unsafe` and a workspace with no real members.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, IntercomAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -32,7 +21,7 @@ try {
       provider: "intercom",
       fields: { MOCKINGBIRD_INTERCOM_ACCESS_TOKEN: "MOCKINGBIRD_INTERCOM_ACCESS_TOKEN" },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

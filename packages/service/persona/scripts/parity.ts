@@ -1,6 +1,7 @@
 /**
  * Live parity: the same random walk against Persona's sandbox and a fresh mock, canonicalized
- * and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ * and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_PERSONA_API_KEY        a sandbox key (persona_sandbox_…)
  *   MOCKINGBIRD_PERSONA_API_URL        optional, default https://withpersona.com/api/v1
@@ -8,20 +9,9 @@
  * By default only safe operations run (list and get inquiries); creating an inquiry writes to
  * the sandbox, so it needs `--include-unsafe`. The hosted flow pages are never walked.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, PersonaAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -30,7 +20,7 @@ try {
       provider: "persona",
       fields: { MOCKINGBIRD_PERSONA_API_KEY: "MOCKINGBIRD_PERSONA_API_KEY" },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

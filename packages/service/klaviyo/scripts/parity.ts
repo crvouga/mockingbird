@@ -1,26 +1,16 @@
 /**
  * Live parity: the same random walk against the real Klaviyo API and a fresh mock,
- * canonicalized and diffed. Credentials come from the environment or Vault `secret/personal/prd`:
+ * canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_KLAVIYO_API_KEY   a private key (pk_…) of a sandbox / test account
  *
  * By default only safe operations run (event reads); creating events writes to a real
  * account (and can trigger flows that email real people), so it needs `--include-unsafe`.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, KLAVIYO_REVISION, KlaviyoAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -29,7 +19,7 @@ try {
       provider: "klaviyo",
       fields: { MOCKINGBIRD_KLAVIYO_API_KEY: "MOCKINGBIRD_KLAVIYO_API_KEY" },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {

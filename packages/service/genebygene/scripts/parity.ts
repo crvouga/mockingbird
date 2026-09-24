@@ -1,7 +1,7 @@
 /**
  * Live parity: the same random walk against Gene by Gene staging (Nucleus API v2) and a fresh
- * mock, canonicalized and diffed. Credentials come from the environment or Vault
- * `secret/personal/prd`:
+ * mock, canonicalized and diffed. Credentials come from the environment
+ * (`.env.local` locally, repo secrets in the Parity workflow):
  *
  *   MOCKINGBIRD_GENEBYGENE_CLIENT_ID
  *   MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET
@@ -12,20 +12,9 @@
  * placement, cancels, attribute patches and subscription changes touch a real tenant and need
  * `--include-unsafe`.
  */
-import { readFile } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-openbao"
+import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { document, GeneByGeneAPI } from "../src/index.js"
-
-const readTokenFile = async () => {
-  try {
-    return await readFile(join(homedir(), ".vault-token"), "utf8")
-  } catch {
-    return undefined
-  }
-}
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
 try {
@@ -37,7 +26,7 @@ try {
         MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET: "MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET",
       },
     },
-    { env: process.env, readTokenFile },
+    { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {
