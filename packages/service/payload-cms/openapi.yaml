@@ -12,7 +12,7 @@ info:
       https://payloadcms.com/docs/queries/overview; the consumer is
       apps/backend/src/modules/cms/payload-cms/payload-cms.service.ts.
 servers:
-  - url: https://payload.gogeviti.com
+  - url: https://payload.acme.example
 paths:
   /api/{collection}:
     parameters:

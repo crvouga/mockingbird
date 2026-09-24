@@ -39,7 +39,7 @@ The shared runtime also provides health, reset, journal, metrics, timeline, and 
 
 ### Deliberately not modelled
 
-Operations outside the listed Geviti surface, object versioning, ACL/IAM policy evaluation, storage classes, checksums beyond ETags, production quotas, AWS dashboards and billing, virtual-host bucket routing, and real SQS delivery are not modelled. SQS consumers can use the same captured notification payload through a configured HTTP sink.
+Operations outside the surface listed above, object versioning, ACL/IAM policy evaluation, storage classes, checksums beyond ETags, production quotas, AWS dashboards and billing, virtual-host bucket routing, and real SQS delivery are not modelled. SQS consumers can use the same captured notification payload through a configured HTTP sink.
 
 ## API
 

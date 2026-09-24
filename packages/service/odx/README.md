@@ -6,7 +6,7 @@ imports (HL7 v2 ORU and structured results), the Functional Health Report (JSON 
 webhook registrations, and the signed `PatientTest` webhooks ODX posts back.
 
 > **The vendor was retired 2026-07-22.** Our queue paths are gated only by the
-> `geviti-pdf-enabled` flag (default `false`), so a local stack with no PostHog still calls ODX.
+> `acme-pdf-enabled` flag (default `false`), so a local stack with no PostHog still calls ODX.
 > The cheaper fix is to turn that flag on through the PostHog mock
 > (`@crvouga/mockingbird-service-posthog`); use this mock when a suite must exercise the ODX
 > path itself (bio-age webhooks, the Healthie PDF upload, migrations).
@@ -27,6 +27,8 @@ Fetch server.
 
 ## Usage
 
+The real base URL is `https://odxinstanceresource.azure-api.net/<partner>`; the partner segment is
+your account's slug.
 Point `OPTIMAL_URL` at the mock (it is overridable; no path prefix is needed), keep any
 `OPTIMAL_API_KEY` and `OPTIMAL_PRACTICE_ID`. Pre-register the backend's webhook, or let
 `manageWebhooks` register it through `POST /v1/webhook` as it does in production:

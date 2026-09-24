@@ -43,7 +43,7 @@ process.env.RESEND_BASE_URL = mock.url
 const { Resend } = await import("resend")
 
 await new Resend("re_test").emails.send({
-  from: "Geviti <no-reply@gogeviti.com>",
+  from: "Acme <no-reply@acme.example>",
   to: ["invitee@example.com"],
   subject: "You're invited",
   html: '<a href="https://app.test/family/invitations/claim?token=abc">Join</a>',

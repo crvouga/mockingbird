@@ -35,7 +35,7 @@ npx mockingbird-plane serve --port 8821 --rate-limit 60
 import { createRuntime } from "@crvouga/mockingbird-service-plane"
 
 const plane = createRuntime()
-const base = "http://plane.test/api/v1/workspaces/geviti/projects/33333333-3333-4333-8333-333333333333"
+const base = "http://plane.test/api/v1/workspaces/acme/projects/33333333-3333-4333-8333-333333333333"
 const headers = { "x-api-key": "plane_api_test", "content-type": "application/json" }
 
 const created = await plane.fetch(
@@ -58,7 +58,8 @@ await plane.fetch(
 
 ### Routes
 
-All under `/api/v1/workspaces/{slug}/projects/{project_id}/`, with `X-API-Key`.
+All under `/api/v1/workspaces/{slug}/projects/{project_id}/`, with `X-API-Key`. `{slug}` is your
+workspace's slug (`acme` in the examples).
 
 | Route | Behaviour |
 | --- | --- |

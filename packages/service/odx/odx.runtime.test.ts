@@ -4,7 +4,7 @@ import { createRuntime, SIGNATURE_HEADER, signOdx } from "./src/index.js"
 
 const PRACTICE = "3f0c0c43-7d2b-4b8e-9a50-9c1f0c6c0001"
 const HL7 =
-  "MSH|^~\\&|LAB|AHA|GEVITI|GEVITI|20250115000000||ORU^R01|X|P|2.3\rPID|1||E2E||Doe^Jane||19800101|F\rOBX|1|NM|1751-7^Albumin||4.2|g/dL|3.5-5.5|N|||F\r"
+  "MSH|^~\\&|LAB|AHA|ACME|ACME|20250115000000||ORU^R01|X|P|2.3\rPID|1||E2E||Doe^Jane||19800101|F\rOBX|1|NM|1751-7^Albumin||4.2|g/dL|3.5-5.5|N|||F\r"
 
 const setup = () => {
   const received: { headers: Headers; body: string }[] = []

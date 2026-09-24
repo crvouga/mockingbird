@@ -13,7 +13,6 @@
  * (`FC_NUM_RUNS`). The AgentCore harness needs a deployed harness, so it is skipped unless
  * `--include-harness` is passed.
  */
-import { join } from "node:path"
 import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
 import { signV4 } from "@crvouga/mockingbird-service"

@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "ai",
     "displayName": "Amazon Textract",
+    "vendor": {
+      "website": "https://aws.amazon.com/textract/",
+      "docs": "https://docs.aws.amazon.com/textract/latest/dg/API_Reference.html"
+    },
     "status": "wip"
   },
   "scripts": {

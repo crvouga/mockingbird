@@ -25,7 +25,7 @@ const TOKEN = "twilio-auth-token"
 const VERIFY_SERVICE = "VA0123456789abcdef0123456789abcdef"
 const MESSAGING_SERVICE = "MG0123456789abcdef0123456789abcdef"
 const CALLER_ID = "+13105550100"
-const PUBLIC_BASE = "https://api.geviti.example"
+const PUBLIC_BASE = "https://api.acme.example"
 // Fictional numbers only (NANP 555-01xx).
 const PHONE = "+12025550123"
 

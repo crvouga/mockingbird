@@ -52,6 +52,9 @@
     "layer": "service",
     "category": "pharmacy",
     "displayName": "Pharmetika",
+    "vendor": {
+      "website": "https://pharmetika.com"
+    },
     "status": "wip"
   },
   "scripts": {

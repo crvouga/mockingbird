@@ -5,7 +5,7 @@
  * checks querying, sorting and paging. Configuration comes from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_PAYLOAD_CMS_API_URL   e.g. https://payload.gogeviti.com
+ *   MOCKINGBIRD_PAYLOAD_CMS_API_URL   e.g. https://payload.acme.example
  *
  * Every operation is a read.
  */

@@ -32,7 +32,7 @@ export class EmailDeliveryError extends Error {
   }
 }
 
-const DEFAULT_FROM_ADDRESS = "Geviti Platform <no-reply@gogeviti.com>"
+const DEFAULT_FROM_ADDRESS = "Acme Platform <no-reply@acme.example>"
 
 /**
  * What `FamilyAdultInvitationEmail` renders to (React Email's `Button` is an `<a>` with inline
@@ -43,7 +43,7 @@ export const familyAdultInvitationHtml = (props: {
   invitationUrl: string
   expiresInDays: number
 }) =>
-  `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html dir="ltr" lang="en"><head><meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/></head><body style="background-color:#f4f6f8;font-family:Arial, sans-serif;margin:0"><div style="display:none">${props.inviterName} invited you to join their Geviti family</div><table align="center" width="100%" style="background-color:#ffffff;border-radius:18px;margin:40px auto;max-width:560px;padding:40px"><tbody><tr><td><p style="color:#181a1c;font-size:28px;font-weight:600;margin-top:0">Join your Geviti family</p><p style="color:#4b5563;font-size:16px;line-height:24px">${props.inviterName} invited you to create a Geviti account and join their household.</p><a href="${props.invitationUrl.replace(/&/g, "&amp;")}" style="background-color:#99d4ff;border-radius:999px;color:#181a1c;display:block;font-weight:600;margin:28px 0;padding:14px 24px;text-align:center;text-decoration:none" target="_blank"><span>Create account and review invitation</span></a><p style="color:#6b7280;font-size:13px;line-height:20px">This invitation expires in ${props.expiresInDays} days. If you were not expecting it, you can ignore this email.</p></td></tr></tbody></table></body></html>`
+  `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html dir="ltr" lang="en"><head><meta content="text/html; charset=UTF-8" http-equiv="Content-Type"/></head><body style="background-color:#f4f6f8;font-family:Arial, sans-serif;margin:0"><div style="display:none">${props.inviterName} invited you to join their Acme family</div><table align="center" width="100%" style="background-color:#ffffff;border-radius:18px;margin:40px auto;max-width:560px;padding:40px"><tbody><tr><td><p style="color:#181a1c;font-size:28px;font-weight:600;margin-top:0">Join your Acme family</p><p style="color:#4b5563;font-size:16px;line-height:24px">${props.inviterName} invited you to create a Acme account and join their household.</p><a href="${props.invitationUrl.replace(/&/g, "&amp;")}" style="background-color:#99d4ff;border-radius:999px;color:#181a1c;display:block;font-weight:600;margin:28px 0;padding:14px 24px;text-align:center;text-decoration:none" target="_blank"><span>Create account and review invitation</span></a><p style="color:#6b7280;font-size:13px;line-height:20px">This invitation expires in ${props.expiresInDays} days. If you were not expecting it, you can ignore this email.</p></td></tr></tbody></table></body></html>`
 
 export class SendEmailsService {
   constructor(
@@ -79,7 +79,7 @@ export class SendEmailsService {
       await this.sendEmail(resend, {
         from: DEFAULT_FROM_ADDRESS,
         to: [toEmail],
-        subject: `${inviterName} invited you to join their Geviti family`,
+        subject: `${inviterName} invited you to join their Acme family`,
         html: familyAdultInvitationHtml({
           inviterName,
           invitationUrl: invitationUrl.toString(),
@@ -179,7 +179,7 @@ export class EmrEmailService {
         from: this.config.fromEmail,
         to: [recipientEmail],
         subject: `Invitation to join ${organizationName} as ${role}`,
-        html: `<!DOCTYPE html><html lang="en"><head><title>Welcome to ${organizationName}</title><style>.cta-button{display:inline-block}</style></head><body><div class="container"><div class="header"><div class="logo">Geviti EMR</div><h1 class="title">You're Invited!</h1></div><div class="content"><p>Hello ${recipientEmail},</p><p><strong>${inviterName}</strong> has invited you to join <strong>${organizationName}</strong> as a team member in our Electronic Medical Records system.</p><div style="text-align: center;"><a href="${signUpUrl}" class="cta-button">Accept Invitation & Sign Up</a></div><div class="expiration"><strong>⏰ Important:</strong> This invitation expires on <strong>${expirationDate}</strong>.</div><p style="word-break: break-all; color: #2563eb;">${signUpUrl}</p><p>Your invitation code (for reference): <span class="invite-code">${inviteKey.key}</span></p></div></div></body></html>`,
+        html: `<!DOCTYPE html><html lang="en"><head><title>Welcome to ${organizationName}</title><style>.cta-button{display:inline-block}</style></head><body><div class="container"><div class="header"><div class="logo">Acme EMR</div><h1 class="title">You're Invited!</h1></div><div class="content"><p>Hello ${recipientEmail},</p><p><strong>${inviterName}</strong> has invited you to join <strong>${organizationName}</strong> as a team member in our Electronic Medical Records system.</p><div style="text-align: center;"><a href="${signUpUrl}" class="cta-button">Accept Invitation & Sign Up</a></div><div class="expiration"><strong>⏰ Important:</strong> This invitation expires on <strong>${expirationDate}</strong>.</div><p style="word-break: break-all; color: #2563eb;">${signUpUrl}</p><p>Your invitation code (for reference): <span class="invite-code">${inviteKey.key}</span></p></div></div></body></html>`,
         text: `\nHello ${recipientEmail},\n\n${inviterName} has invited you to join ${organizationName} as a team member in our Electronic Medical Records system.\n\nTo accept this invitation and set up your account, please visit:\n${signUpUrl}\n\nIMPORTANT: This invitation expires on ${expirationDate}.\n`,
         tags: [
           { name: "category", value: "team-invitation" },

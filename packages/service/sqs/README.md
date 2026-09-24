@@ -36,7 +36,7 @@ The shared runtime supplies reset, clock, journal, timeline, metrics, faults, an
 
 ### Deliberately not modelled
 
-Operations outside the listed Geviti surface, IAM policy evaluation, server-side encryption, queue tagging, production throughput and size limits beyond the 1 MiB message limit, real long-poll wall-clock waits, AWS dashboards, and billing are not modelled.
+Operations outside the surface listed above, IAM policy evaluation, server-side encryption, queue tagging, production throughput and size limits beyond the 1 MiB message limit, real long-poll wall-clock waits, AWS dashboards, and billing are not modelled.
 
 ## API
 

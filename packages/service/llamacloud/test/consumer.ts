@@ -7,9 +7,9 @@
  *    and the EMR chatbot-admin knowledge CRUD): the same requests, headers, pipeline
  *    resolution, field fallbacks and "non-2xx is logged and returns null" behaviour. The base
  *    URL is injectable (seam G-L1).
- * 2. `MakorLlamaCloudClient` — `apps/makor-ecosystem/services/chat/app/core/rag/
- *    llamacloud_client.py` over the HTTP calls `llama_cloud_services` 0.6.88 makes (read from
- *    the installed wheel, see README "Makor chat SDK: verified call sequence"):
+ * 2. `PythonLlamaCloudClient` — the Python chat service's `app/core/rag/llamacloud_client.py`
+ *    over the HTTP calls `llama_cloud_services` 0.6.88 makes (read from
+ *    the installed wheel, see README "Python chat SDK: verified call sequence"):
  *    `LlamaCloudIndex(name, project_name=…)` → `GET /api/v1/projects?project_name=` then
  *    `GET /api/v1/pipelines?project_id=&pipeline_name=&pipeline_type=MANAGED`;
  *    `.as_retriever(similarity_top_k=)` → `GET /api/v1/pipelines/{id}` then
@@ -305,7 +305,7 @@ export class LlamaCloudKnowledgeAdapter {
   }
 }
 
-/** A retrieved source as the Makor chat client builds it (`RAGSource`). */
+/** A retrieved source as the Python chat client builds it (`RAGSource`). */
 export type RAGSource = {
   content: string
   score: number
@@ -321,11 +321,11 @@ type SdkProject = { id: string; name: string; organization_id: string }
 type SdkPipeline = { id: string; name: string; project_id: string; embedding_config: unknown }
 
 /**
- * `LlamaCloudClient` from the Makor chat service over `llama_cloud_services`' wire calls.
+ * `LlamaCloudClient` from the Python chat service over `llama_cloud_services`' wire calls.
  * Initialization failures (no project, unknown index, non-2xx) degrade to empty results, as
  * the Python client's `try/except` does. `base_url` is `LLAMA_CLOUD_BASE_URL`.
  */
-export class MakorLlamaCloudClient {
+export class PythonLlamaCloudClient {
   readonly calls: string[] = []
   initializationError: string | null = null
   private pipeline: SdkPipeline | null = null

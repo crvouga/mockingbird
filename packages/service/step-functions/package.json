@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "productivity",
     "displayName": "AWS Step Functions",
+    "vendor": {
+      "website": "https://aws.amazon.com/step-functions/",
+      "docs": "https://docs.aws.amazon.com/step-functions/latest/apireference/"
+    },
     "status": "wip"
   },
   "scripts": {

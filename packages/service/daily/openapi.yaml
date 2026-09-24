@@ -10,7 +10,7 @@ info:
   x-mockingbird-upstream:
     note: >-
       Hand-authored from docs.daily.co/reference/rest-api and our consumers
-      (apps/backend daily-video.service.ts + schemas, apps/geviti-emr-backend daily-service.ts).
+      (apps/backend daily-video.service.ts + schemas, the consumer app's daily-service.ts).
 servers:
   - url: https://api.daily.co
 security:

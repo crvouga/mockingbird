@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "health",
     "displayName": "Healthie",
+    "vendor": {
+      "website": "https://www.gethealthie.com",
+      "docs": "https://docs.gethealthie.com"
+    },
     "status": "wip"
   },
   "scripts": {

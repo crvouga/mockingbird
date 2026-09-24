@@ -13,6 +13,7 @@ export interface PaletteEntry {
   category: string
   tier: string
   hue: number
+  logo: string | null
   text: string
 }
 
@@ -36,9 +37,11 @@ export const GET: APIRoute = () => {
       category: CATEGORIES[s.category as CategorySlug].label,
       tier: s.status,
       hue: s.hue,
+      logo: s.brand.logo,
       text: [
         s.packageName,
         s.description,
+        s.brand.vendor,
         CATEGORIES[s.category as CategorySlug].label,
         ...s.keywords,
         ...s.operations.map((o) => o.id),
@@ -54,6 +57,7 @@ export const GET: APIRoute = () => {
       category: "",
       tier: "",
       hue: 0,
+      logo: null,
       text: `${g.summary} ${g.toc.map((t) => t.text).join(" ")}`,
     })),
     ...PAGES.map(([href, displayName, subtitle]) => ({
@@ -66,6 +70,7 @@ export const GET: APIRoute = () => {
       category: "",
       tier: "",
       hue: 0,
+      logo: null,
       text: subtitle,
     })),
   ]

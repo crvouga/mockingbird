@@ -55,6 +55,10 @@
     "layer": "service",
     "category": "ai",
     "displayName": "AWS Polly & Transcribe",
+    "vendor": {
+      "website": "https://aws.amazon.com/polly/",
+      "docs": "https://docs.aws.amazon.com/polly/latest/dg/API_Reference.html"
+    },
     "status": "wip"
   },
   "scripts": {

@@ -63,7 +63,7 @@ describe("mailosaur@11.1.0 SDK against the mock", () => {
     await server.runtime.reset("*")
     ingest({
       to: `signup-1@${SERVER}.mailosaur.net`,
-      from: "Geviti <no-reply@gogeviti.com>",
+      from: "Acme <no-reply@acme.example>",
       subject: "Your verification code",
       html: '<p>Your verification code is <b>482913</b>.</p><a href="https://app.test/confirm?c=482913">Confirm</a><img src="https://cdn.test/logo.png" alt="Logo">',
       text: "Your verification code is 482913. Confirm at https://app.test/confirm?c=482913",
@@ -74,7 +74,7 @@ describe("mailosaur@11.1.0 SDK against the mock", () => {
       new SearchOptions({ timeout: 2_000 }),
     )
     expect(message.subject).toBe("Your verification code")
-    expect(message.from?.[0]).toMatchObject({ name: "Geviti", email: "no-reply@gogeviti.com" })
+    expect(message.from?.[0]).toMatchObject({ name: "Acme", email: "no-reply@acme.example" })
     expect(message.to?.[0]?.email).toBe(`signup-1@${SERVER}.mailosaur.net`)
     expect(message.html?.codes?.map((c) => c.value)).toEqual(["482913"])
     expect(message.text?.codes?.map((c) => c.value)).toEqual(["482913"])

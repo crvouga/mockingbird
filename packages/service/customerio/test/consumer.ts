@@ -119,7 +119,7 @@ export const sendNotification = async (
       client.track(
         {
           userId,
-          event: "geviti.notification.requested",
+          event: "acme.notification.requested",
           messageId: request.transactionId,
           properties: compactProperties({
             ...request.properties,
@@ -217,7 +217,7 @@ export const transactionalEmailTarget = (config: TransactionalEmailConfig, key: 
   const override = config.messageIds?.[key]
   if (override) return { transactionalMessageId: override, source: "message_id" as const }
   if (!(config.enabledTypes ?? []).includes(key)) return null
-  const trigger = `geviti_${key.replace(/\./g, "_")}`
+  const trigger = `acme_${key.replace(/\./g, "_")}`
   if (!/^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(trigger)) return null
   return { transactionalMessageId: trigger, source: "trigger_name" as const }
 }

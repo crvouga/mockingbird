@@ -54,6 +54,9 @@
     "layer": "service",
     "category": "health",
     "displayName": "Gene by Gene",
+    "vendor": {
+      "website": "https://www.genebygene.com"
+    },
     "status": "ready"
   },
   "scripts": {

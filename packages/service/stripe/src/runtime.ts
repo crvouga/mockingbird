@@ -17,7 +17,7 @@ import { type AccountConfig, AccountDirectory, validateAccounts } from "./accoun
 import { completeSession } from "./checkout.js"
 import { STRIPE_NAMESPACE } from "./constants.js"
 import type { Corpus } from "./corpus.js"
-import { GEVITI_CORPUS } from "./corpus-data.js"
+import { ACME_CORPUS } from "./corpus-data.js"
 import { StripeError } from "./errors.js"
 import { document } from "./generated/openapi.js"
 import { StripeAPI, type StripeAPIOptions } from "./index.js"
@@ -312,7 +312,7 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
     },
   }
 
-  const corpus = options.corpus ?? GEVITI_CORPUS
+  const corpus = options.corpus ?? ACME_CORPUS
 
   const admin = (runtime: ServiceRuntime<StripeAPI>): AdminRoutes => ({
     "GET /accounts": () =>

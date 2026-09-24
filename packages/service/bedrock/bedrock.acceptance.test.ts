@@ -25,8 +25,8 @@ import {
   isBedrockValidationError,
   isRetriableBedrockError,
   isThrottlingBedrockError,
-  makorConverse,
   parseMeal,
+  pythonConverse,
   RxSymptomInputSchema,
   streamChatTurn,
 } from "./test/consumer.js"
@@ -162,7 +162,7 @@ describe("S7.6 acceptance: the AI SDK chat turn", () => {
     const first = await streamChatTurn({
       bedrock,
       modelId: CHAT_MODEL,
-      systemPrompt: "You are Makor.",
+      systemPrompt: "You are Acme.",
       messages: history,
       tools,
       retryBaseDelayMs: 5,
@@ -175,7 +175,7 @@ describe("S7.6 acceptance: the AI SDK chat turn", () => {
     const resumed = await streamChatTurn({
       bedrock,
       modelId: CHAT_MODEL,
-      systemPrompt: "You are Makor.",
+      systemPrompt: "You are Acme.",
       messages: approve(history, first),
       tools,
       retryBaseDelayMs: 5,
@@ -569,7 +569,7 @@ describe("S7.6 acceptance: the SDK paths", () => {
     })
   })
 
-  test("Makor converse with a URL-encoded inference-profile ARN, plus outputConfig.textFormat", async () => {
+  test("Python converse with a URL-encoded inference-profile ARN, plus outputConfig.textFormat", async () => {
     const { scripts, client, admin } = await harness()
     await scripts([
       {
@@ -583,7 +583,7 @@ describe("S7.6 acceptance: the SDK paths", () => {
         turns: [{ text: "Blueprint ready." }],
       },
     ])
-    const plain = await makorConverse(client, NOVA_PRO_ARN, {
+    const plain = await pythonConverse(client, NOVA_PRO_ARN, {
       system: "Blueprint agent",
       userText: "hello",
     })
@@ -593,7 +593,7 @@ describe("S7.6 acceptance: the SDK paths", () => {
       toolRequests: [],
     })
     expect(plain.requestId).toMatch(/^[0-9a-f-]{36}$/)
-    const structured = await makorConverse(client, NOVA_PRO_ARN, {
+    const structured = await pythonConverse(client, NOVA_PRO_ARN, {
       system: "Blueprint agent",
       userText: "draft a strategy",
       outputConfig: {
@@ -992,7 +992,7 @@ describe("the scripting model", () => {
       byScript: Record<string, number>
       unscripted: number
     }
-    expect(stats.byScript["twice"]).toBe(2)
+    expect(stats.byScript.twice).toBe(2)
     expect(stats.unscripted).toBe(1)
   })
 

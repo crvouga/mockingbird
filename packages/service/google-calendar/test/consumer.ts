@@ -3,13 +3,13 @@
  * `@googleapis/calendar@9.8.0` (the calendar client inside `googleapis@149`, on the same
  * googleapis-common 7 / gaxios 6) and `google-auth-library@9.15.0`.
  *
- * - `apps/geviti-emr-backend/src/services/google-calendar-service.ts`: the EMR calendar
+ * - `src/services/google-calendar-service.ts`: the EMR calendar
  *   get-or-create, `fetchCalendarEvents` (410 → full-sync fallback), EMR appointment create /
  *   update / find / delete, webhook channel register (watch, then stop the previous channel),
  *   unregister, token refresh and revoke.
- * - `apps/geviti-emr-backend/src/business/authorize/authorize.business.ts`: the authorization
+ * - `src/business/authorize/authorize.business.ts`: the authorization
  *   code exchange (`redirect_uri: postmessage`) and the userinfo fetch.
- * - `apps/geviti-emr-backend/src/routers/v1/webhooks/controller.ts`: the push receiver.
+ * - `src/routers/v1/webhooks/controller.ts`: the push receiver.
  *
  * Seams only: the calendar client gets `rootUrl` (the app passes none), the OAuth2 client gets
  * `endpoints` (token / revoke URLs), and userinfo's hardcoded

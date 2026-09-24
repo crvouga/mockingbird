@@ -5539,7 +5539,7 @@ components:
         placerOrderNumber:
           type: string
           nullable: true
-          description: "Our correlation id (`geviti:<userId>:<nonce>`), echoed on order lines and webhooks."
+          description: "Our correlation id (`acme:<userId>:<nonce>`), echoed on order lines and webhooks."
       additionalProperties: false
       required:
         - productId

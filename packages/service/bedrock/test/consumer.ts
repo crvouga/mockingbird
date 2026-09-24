@@ -1,9 +1,9 @@
 /**
- * Ports of OUR consumer's Bedrock code (geviti-monorepo, branch crvouga/makor-voice-chat),
- * kept as close to the originals as a test harness allows. The acceptance tests drive the
- * mock only through these, so "the mock works" means "our code works against the mock".
+ * Ports of the consumer app's Bedrock code, kept as close to the originals as a test
+ * harness allows. The acceptance tests drive the mock only through these, so
+ * "the mock works" means "our code works against the mock".
  *
- * Sources (B/ = apps/backend/src/modules/, E/ = apps/geviti-emr-backend/src/):
+ * Sources (B/ = apps/backend/src/modules/, E/ = the EMR backend's src/):
  * - B/chatbot/services/bedrock-errors.ts                      → the error classifiers (verbatim)
  * - B/chatbot/adapters/bedrock-llm-provider.ts                → BedrockLlmProvider
  * - B/chatbot/services/ai-chat-agent.service.ts               → streamChatTurn (invokeStreamWithRetry)
@@ -17,7 +17,7 @@
  * - E/business/prescribe/erx-prescreen-agent.ts                → invokeErxPrescreenAgent
  * - packages/health-intake-voice-gateway/src/bedrock-nova-sonic-runtime-connection.ts
  *                                                              → createNovaSonicConnection
- * - Makor services/blueprint/app/clients/bedrock_client.py     → makorConverse (Python, ported)
+ * - the Python AI service's clients/bedrock_client.py         → pythonConverse (Python, ported)
  */
 import type { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
 import {
@@ -1150,7 +1150,7 @@ const buildNovaSonicInitEvents = (p: { promptName: string; systemContentName: st
         promptName: p.promptName,
         contentName: p.systemContentName,
         content:
-          "You are Makor, a warm voice assistant helping a member complete a wellness intake.",
+          "You are Acme, a warm voice assistant helping a member complete a wellness intake.",
       },
     },
   },
@@ -1331,10 +1331,10 @@ export const createNovaSonicConnection = (params: {
   }
 }
 
-// ── Makor services/blueprint/app/clients/bedrock_client.py (converse + parse) ──
+// ── the Python AI service's clients/bedrock_client.py (converse + parse) ──
 
 /** `_invoke_model` + `_parse_converse_response`: boto3 `converse` with an ARN model id. */
-export const makorConverse = async (
+export const pythonConverse = async (
   client: BedrockRuntimeClient,
   modelArn: string,
   request: { system: string; userText: string; outputConfig?: Record<string, unknown> },

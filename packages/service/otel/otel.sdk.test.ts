@@ -15,11 +15,11 @@ import { createO2Client, O2_RECIPES, OpenObserveBloodworkClient } from "./test/c
 /**
  * The OpenTelemetry JS SDK at our pins (`@opentelemetry/exporter-*-otlp-http@0.201.1`,
  * `sdk-trace-base@2.0.1`, `sdk-logs@0.201.1`), plus the protobuf exporters the Python services'
- * wire format matches, exporting to the served mock the way `@geviti/telemetry` does
- * (`Authorization: Bearer <OTEL_AUTH_TOKEN>`), then read back through our O2 clients.
+ * wire format matches, exporting to the served mock the way the consumer app's `@acme/telemetry`
+ * package does (`Authorization: Bearer <OTEL_AUTH_TOKEN>`), then read back through our O2 clients.
  */
 const TOKEN = "otel-sdk-token"
-const O2_AUTH = btoa("agent@gogeviti.com:pw")
+const O2_AUTH = btoa("agent@acme.example:pw")
 const DEV_ORG = DEFAULT_ORGANIZATIONS.find((o) => o.name === "development")?.identifier as string
 
 let server: OtelServer
@@ -62,8 +62,8 @@ const pipeline = (
     resource: resource(serviceName),
     processors: [new SimpleLogRecordProcessor(logExporter)],
   })
-  const tracer = tracerProvider.getTracer("@geviti/telemetry")
-  const logger = loggerProvider.getLogger("@geviti/telemetry/pino")
+  const tracer = tracerProvider.getTracer("@acme/telemetry")
+  const logger = loggerProvider.getLogger("@acme/telemetry/pino")
   const emit = (span: Span, event: string, attributes: Record<string, string | number>) =>
     logger.emit({
       context: trace.setSpan(ROOT_CONTEXT, span),
@@ -99,7 +99,7 @@ describe.each(["json", "protobuf"] as const)("OpenTelemetry SDK over OTLP/HTTP %
       const service = `backend-${encoding}`
       const otel = pipeline(service, encoding)
       const root = otel.tracer.startSpan("reconcile.run", {
-        attributes: { "geviti.reconcile_run_id": `run-${encoding}` },
+        attributes: { "acme.reconcile_run_id": `run-${encoding}` },
       })
       const traceId = root.spanContext().traceId
       otel.emit(root, "junction_order_failed", {
@@ -118,7 +118,7 @@ describe.each(["json", "protobuf"] as const)("OpenTelemetry SDK over OTLP/HTTP %
         service_service_version: "3f2c9ab",
         service_deployment_environment_name: "local",
         operation_name: "reconcile.run",
-        geviti_reconcile_run_id: `run-${encoding}`,
+        acme_reconcile_run_id: `run-${encoding}`,
         span_status: "UNSET",
       })
       const [log] = (await wait({ trace_id: traceId })).matched

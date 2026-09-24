@@ -47,7 +47,7 @@ export type Settings = {
    * secret has its signature verified exactly.
    */
   credentials: ApiCredential[]
-  /** Accept `X-Geviti-Auth-Key` (legacy mode). Default true. */
+  /** Accept `X-<Partner>-Auth-Key` (legacy mode). Default true. */
   allowLegacy: boolean
   /** Reject an `X-TIMESTAMP` further than this from wall-clock time; 0 disables. Default 5 min. */
   timestampToleranceMs: number

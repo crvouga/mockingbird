@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "productivity",
     "displayName": "Payload CMS",
+    "vendor": {
+      "website": "https://payloadcms.com",
+      "docs": "https://payloadcms.com/docs/rest-api/overview"
+    },
     "status": "wip"
   },
   "scripts": {

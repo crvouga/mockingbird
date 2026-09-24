@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "payments",
     "displayName": "Kill Bill",
+    "vendor": {
+      "website": "https://killbill.io",
+      "docs": "https://killbill.github.io/slate/"
+    },
     "status": "wip"
   },
   "scripts": {

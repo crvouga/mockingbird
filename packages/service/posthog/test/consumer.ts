@@ -1,5 +1,5 @@
 /**
- * Ports of OUR PostHog consumers (geviti-monorepo, read-only), used as the acceptance oracle.
+ * Ports of the consumer app's PostHog consumers (read-only), used as the acceptance oracle.
  * Each keeps the original's requests, timeouts, caches and value mapping; only logging and DI
  * are dropped, and every client takes an optional `fetch` so tests can run in-process.
  *
@@ -7,9 +7,9 @@
  * - {@link PostHogTrackingService}: apps/backend/src/modules/posthog-tracking/posthog-tracking.service.ts
  * - {@link WebsitePostHogPurchaseSink}: B/global-services/services/conversion-tracking/website-posthog-purchase.sink.ts
  * - {@link PostHogHogqlClient}: B/marketing-metrics/intake-engagement/posthog-hogql.client.ts
- * - {@link EmrFeatureFlagsService}: apps/geviti-emr-backend/src/services/feature-flags/feature-flags.service.ts
- * - {@link evaluatePostHogFlag}: apps/geviti-emr-frontend/src/lib/feature-flags/posthog-server.ts
- * - {@link MakorPostHogClient}: apps/makor-ecosystem/libs/makor_common/src/makor_common/posthog/client.py
+ * - {@link EmrFeatureFlagsService}: apps/emr-backend/src/services/feature-flags/feature-flags.service.ts
+ * - {@link evaluatePostHogFlag}: apps/emr-frontend/src/lib/feature-flags/posthog-server.ts
+ * - {@link PythonPostHogClient}: the Python services' shared posthog/client.py
  * - {@link fetchProjectFlags}: tooling/feature-flags-cli/lib/posthog.ts (+ posthog-schema.ts)
  * - {@link MemberAppFlagsAdapter} over {@link ReactNativeLikeClient}: M/lib/feature-flags/adapters/posthog.ts
  *   on the same `@posthog/core` `PostHogCore` posthog-react-native 4.72.1 extends.
@@ -441,7 +441,7 @@ const POSTHOG_TIMEOUT_MS = 2_000
 const SUCCESS_CACHE_TTL_MS = 60_000
 const FAILURE_CACHE_TTL_MS = 10_000
 
-export const SERVER_FLAG_SENTINEL_DISTINCT_ID = "geviti-emr-server"
+export const SERVER_FLAG_SENTINEL_DISTINCT_ID = "acme-emr-server"
 
 export type ServerFlagIdentity = {
   distinctId: string
@@ -544,10 +544,10 @@ export async function evaluatePostHogFlag(
 }
 
 // ---------------------------------------------------------------------------------------------
-// makor: PostHogClient (Python, httpx) — `POST ${host}/decide/?v=3 {api_key, distinct_id}`
+// Python services: PostHogClient (httpx) — `POST ${host}/decide/?v=3 {api_key, distinct_id}`
 // ---------------------------------------------------------------------------------------------
 
-export class MakorPostHogClient {
+export class PythonPostHogClient {
   private readonly cache = new Map<string, [number, Record<string, unknown>]>()
 
   constructor(

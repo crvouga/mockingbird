@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Intercom",
+    "vendor": {
+      "website": "https://www.intercom.com",
+      "docs": "https://developers.intercom.com/docs/references/rest-api/api.intercom.io"
+    },
     "status": "wip"
   },
   "scripts": {

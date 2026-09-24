@@ -29,7 +29,13 @@ const OUT = join(root, "README.md")
 interface Manifest {
   description?: string
   license?: string
-  mockingbird?: { layer?: string; category?: string; displayName?: string; status?: ServiceStatus }
+  mockingbird?: {
+    layer?: string
+    category?: string
+    displayName?: string
+    status?: ServiceStatus
+    vendor?: { website?: string; docs?: string }
+  }
 }
 
 const services = discoverPackages()
@@ -57,6 +63,8 @@ const services = discoverPackages()
       category: CATEGORIES[meta.category as CategorySlug].label,
       tier: meta.status,
       description: (manifest.description ?? "").replace(/\s+/g, " ").trim(),
+      website: meta.vendor?.website ?? null,
+      docs: meta.vendor?.docs ?? null,
     }
   })
   .sort((a, b) => a.displayName.localeCompare(b.displayName))
@@ -87,6 +95,14 @@ const cell = (s: string) => s.replace(/\|/g, "\\|")
 const badge = (label: string, message: string | number, color: string) =>
   `https://img.shields.io/badge/${encodeURIComponent(label.replace(/-/g, "--").replace(/ /g, "_"))}-${encodeURIComponent(String(message))}-${color}`
 
+const vendorLinks = (s: { website: string | null; docs: string | null }) =>
+  [
+    s.website && `[${new URL(s.website).hostname.replace(/^www\./, "")}](${s.website})`,
+    s.docs && `[API docs](${s.docs})`,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+
 const serviceTable = (tier: ServiceStatus) => {
   const rows = services
     .filter((s) => s.tier === tier)
@@ -97,9 +113,13 @@ const serviceTable = (tier: ServiceStatus) => {
     )
     .map(
       (s) =>
-        `| [${cell(s.displayName)}](${s.dir}) | ${cell(s.category)} | [\`${s.name}\`](https://www.npmjs.com/package/${s.name}) | ${cell(s.description)} |`,
+        `| [${cell(s.displayName)}](${s.dir}) | ${vendorLinks(s)} | ${cell(s.category)} | [\`${s.name}\`](https://www.npmjs.com/package/${s.name}) | ${cell(s.description)} |`,
     )
-  return ["| Service | Category | Package | What it mocks |", "| --- | --- | --- | --- |", ...rows]
+  return [
+    "| Service | Vendor | Category | Package | What it mocks |",
+    "| --- | --- | --- | --- | --- |",
+    ...rows,
+  ]
 }
 
 const body = [
@@ -122,7 +142,7 @@ const body = [
   "",
   "</div>",
   "",
-  ...(RISK_DISCLAIMER.enabled ? ["> ⚠️ " + RISK_DISCLAIMER.text, ""] : []),
+  ...(RISK_DISCLAIMER.enabled ? [`> ⚠️ ${RISK_DISCLAIMER.text}`, ""] : []),
   PITCH,
   "",
   "## Quick start",

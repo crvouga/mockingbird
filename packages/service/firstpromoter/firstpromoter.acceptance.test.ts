@@ -24,7 +24,7 @@ const harness = (config: Partial<ConsumerConfig> = {}) => {
     {
       apiUrl: API,
       apiKey: "fp_key",
-      accountId: "acc_geviti",
+      accountId: "acc_acme",
       environment: "production",
       webhookUsername: WEBHOOK_USER,
       webhookPassword: WEBHOOK_PASS,
@@ -64,7 +64,7 @@ describe("S19 First Promoter acceptance: our consumer's logic against the mock",
     const { db, consumer, admin } = harness()
     const user = member(db)
     const result = await consumer.createFirstPromoterAccount(user)
-    expect(result?.referralUrl).toMatch(/^https:\/\/gogeviti\.com\/referrals\?fpr=ada\d+$/)
+    expect(result?.referralUrl).toMatch(/^https:\/\/acme\.example\/referrals\?fpr=ada\d+$/)
     expect(db.users.get(42)?.promoterId).toBe(result?.promoterId as number)
     const { promoters } = await admin<{ promoters: { cust_id: string; email: string }[] }>(
       "/promoters",
@@ -175,9 +175,9 @@ describe("S19 First Promoter acceptance: our consumer's logic against the mock",
         {
           id: 11,
           name: "$50 off your first order",
-          default_promo_code: "GEVITI50",
+          default_promo_code: "ACME50",
           campaign_id: 1,
-          campaign_name: "Geviti Referral Program",
+          campaign_name: "Acme Referral Program",
         },
       ],
     })
@@ -190,7 +190,7 @@ describe("S19 First Promoter acceptance: our consumer's logic against the mock",
     const { db, consumer, admin } = harness()
     const seeded = await admin<{ id: number }>("/promoters", { email: "old@example.com" })
     expect(await consumer.getFirstPromoterDashboardUrl(seeded.id)).toMatch(
-      /^https:\/\/gogeviti\.firstpromoter\.com\/iframe\?tk=\w+$/,
+      /^https:\/\/acme\.firstpromoter\.com\/iframe\?tk=\w+$/,
     )
     await expect(consumer.getFirstPromoterDashboardUrl(1)).rejects.toThrow()
     db.add({

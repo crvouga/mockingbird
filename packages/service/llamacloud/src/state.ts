@@ -58,7 +58,7 @@ export const DEFAULT_SETTINGS: Settings = { apiKeys: [], defaultTopK: 5 }
 
 export const DEFAULT_PROJECT_NAME = "Default"
 /** The member-app knowledge-base pipeline name (`LLAMACLOUD_INDEX_NAME` in dev). */
-export const DEFAULT_PIPELINE_NAME = "geviti-member-kb-v1"
+export const DEFAULT_PIPELINE_NAME = "acme-member-kb-v1"
 export const DEFAULT_PIPELINES: readonly PipelineSeed[] = [
   { name: DEFAULT_PIPELINE_NAME, projectName: DEFAULT_PROJECT_NAME },
 ]

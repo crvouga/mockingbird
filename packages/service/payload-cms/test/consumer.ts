@@ -45,14 +45,14 @@ export type PayloadCmsCollectionResponse<T> = {
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 
 export const createDefault = (): ReferralContent => {
-  const shareMessage = `I've been loving my Geviti membership—it's truly been a game changer in taking my health to the next level. I believe you'll benefit from it too! Use my link to join and get $150 off your membership. Let's boost our wellness together!`
+  const shareMessage = `I've been loving my Acme membership—it's truly been a game changer in taking my health to the next level. I believe you'll benefit from it too! Use my link to join and get $150 off your membership. Let's boost our wellness together!`
   return {
     card: {
       title: "Earn Rewards",
       subtitle: "Earn Rewards",
       description: "Share your referral link with friends and earn rewards when they sign up.",
     },
-    cta: { title: "Share Geviti With Someone You Love", actionText: "Invite Friends" },
+    cta: { title: "Share Acme With Someone You Love", actionText: "Invite Friends" },
     share: { message: shareMessage },
     message: shareMessage,
   }

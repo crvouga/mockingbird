@@ -42,7 +42,7 @@ export const EDAMAM_PRESETS: Record<string, FaultPreset> = {
   },
   payment_required: {
     description:
-      "Every API answers 402 (plan quota exhausted; makor chat treats it as a rate limit)",
+      "Every API answers 402 (plan quota exhausted; the Python chat client treats it as a rate limit)",
     rules: everywhere(402, "payment_required", "Payment required: plan limits reached"),
   },
   unauthorized: {

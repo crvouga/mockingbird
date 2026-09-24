@@ -4,9 +4,9 @@ import { createServer } from "./src/server.js"
 import {
   EdamamAPIError,
   type Fetch,
-  MakorEdamamClient,
   mealPlanningAdapter,
   nutritionAdapter,
+  PythonEdamamClient,
 } from "./test/consumer.js"
 
 const API = "https://api.edamam.mock"
@@ -47,13 +47,13 @@ const harness = () => {
     )
   const nutrition = nutritionAdapter(API, fetchImpl, FOOD_ENV)
   const meals = mealPlanningAdapter(API, fetchImpl, MEAL_ENV)
-  const makor = new MakorEdamamClient(API, fetchImpl, {
+  const python = new PythonEdamamClient(API, fetchImpl, {
     foodAppId: "food-app",
     foodAppKey: "food-key",
     nutritionAppId: "nutrition-app",
     nutritionAppKey: "nutrition-key",
   })
-  return { runtime, requests, fetchImpl, admin, nutrition, meals, makor }
+  return { runtime, requests, fetchImpl, admin, nutrition, meals, python }
 }
 
 describe("S25 Edamam acceptance: the backend's nutrition adapter", () => {
@@ -332,10 +332,10 @@ describe("S25 Edamam acceptance: the meal-planning adapter", () => {
   })
 })
 
-describe("S25 Edamam acceptance: the Makor chat client", () => {
+describe("S25 Edamam acceptance: the Python chat client", () => {
   test("food search, ingredient and recipe analysis, food nutrients", async () => {
-    const { makor, requests } = harness()
-    const search = await makor.foodSearch("greek yogurt", {
+    const { python, requests } = harness()
+    const search = await python.foodSearch("greek yogurt", {
       healthLabels: ["vegetarian", "gluten-free"],
       category: "generic-foods",
     })
@@ -344,32 +344,32 @@ describe("S25 Edamam acceptance: the Makor chat client", () => {
       "vegetarian",
       "gluten-free",
     ])
-    const rice = await makor.analyzeIngredient("1 cup cooked rice")
+    const rice = await python.analyzeIngredient("1 cup cooked rice")
     expect(rice.calories).toBe(205)
-    await expect(makor.analyzeIngredient("xyzzy")).rejects.toMatchObject({ statusCode: 422 })
-    const recipe = await makor.analyzeRecipe(["2 large eggs", "1 slice bread"], "Breakfast", 1)
+    await expect(python.analyzeIngredient("xyzzy")).rejects.toMatchObject({ statusCode: 422 })
+    const recipe = await python.analyzeRecipe(["2 large eggs", "1 slice bread"], "Breakfast", 1)
     expect(recipe.calories).toBe(Math.round(143 + 247 * 0.32))
-    await expect(makor.analyzeRecipe(["2 large eggs", "xyzzy"])).rejects.toMatchObject({
+    await expect(python.analyzeRecipe(["2 large eggs", "xyzzy"])).rejects.toMatchObject({
       statusCode: 555,
     })
-    const nutrients = await makor.getFoodNutrients("food_banana", `${MEASURE_URI}unit`, 2)
+    const nutrients = await python.getFoodNutrients("food_banana", `${MEASURE_URI}unit`, 2)
     expect(nutrients.calories).toBe(210)
-    await expect(makor.getFoodNutrients("food_nope", `${MEASURE_URI}unit`)).rejects.toMatchObject({
+    await expect(python.getFoodNutrients("food_nope", `${MEASURE_URI}unit`)).rejects.toMatchObject({
       statusCode: 422,
     })
   })
 
-  test("402 and 429 are rate limits for the Makor client", async () => {
+  test("402 and 429 are rate limits for the Python client", async () => {
     for (const preset of ["payment_required", "rate_limited"]) {
-      const { makor, runtime } = harness()
+      const { python, runtime } = harness()
       runtime.applyPreset(preset, "default", { count: 1 })
-      const error = await makor.foodSearch("banana").catch((e: unknown) => e)
+      const error = await python.foodSearch("banana").catch((e: unknown) => e)
       expect(error).toBeInstanceOf(EdamamAPIError)
       expect((error as EdamamAPIError).isRateLimited).toBe(true)
     }
-    const { makor, runtime } = harness()
+    const { python, runtime } = harness()
     runtime.applyPreset("recipe_quality", "default", { count: 1 })
-    await expect(makor.analyzeRecipe(["2 large eggs"])).rejects.toMatchObject({ statusCode: 555 })
+    await expect(python.analyzeRecipe(["2 large eggs"])).rejects.toMatchObject({ statusCode: 555 })
   })
 })
 

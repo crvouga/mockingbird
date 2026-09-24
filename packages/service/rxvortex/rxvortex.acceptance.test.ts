@@ -31,7 +31,7 @@ const harness = () => {
   })
   const consumer = new RxVortexConsumer(
     API,
-    { clientId: "geviti-dev", clientSecret: "s3cret" },
+    { clientId: "acme-dev", clientSecret: "s3cret" },
     (request) => runtime.fetch(request),
   )
   const admin = (path: string, body?: unknown, method = body === undefined ? "GET" : "POST") =>

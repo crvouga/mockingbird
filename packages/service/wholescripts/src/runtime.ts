@@ -18,16 +18,18 @@ import type { AutoAdvance, Settings } from "./state.js"
  */
 export const WHOLESCRIPTS_PRESETS: Record<string, FaultPreset> = {
   submit_rejected: {
-    description: "Submit answers 200 {success: false, msg} (the backend and Makor both reject it)",
+    description:
+      "Submit answers 200 {success: false, msg} (the backend and the scheduler both reject it)",
     rules: [{ operationId: "SubmitOrder", effect: "submit_rejected" }],
   },
   submit_timeout: {
     description:
-      "Submit places the order, then drops the connection (Makor's 'order may have been placed')",
+      "Submit places the order, then drops the connection (the scheduler's 'order may have been placed')",
     rules: [{ operationId: "SubmitOrder", effect: "submit_timeout" }],
   },
   status_empty: {
-    description: "Status answers [] even for a known order (backend returns null, Makor 'unknown')",
+    description:
+      "Status answers [] even for a known order (backend returns null, the scheduler 'unknown')",
     rules: [{ operationId: "GetOrderStatus", effect: "status_empty" }],
   },
   status_schema_drift: {
@@ -36,7 +38,7 @@ export const WHOLESCRIPTS_PRESETS: Record<string, FaultPreset> = {
     rules: [{ operationId: "GetOrderStatus", effect: "status_schema_drift" }],
   },
   server_error: {
-    description: "Every call answers 500 (Makor retries 5xx; the backend throws)",
+    description: "Every call answers 500 (the scheduler retries 5xx; the backend throws)",
     rules: [{ status: 500, body: { Message: "An error has occurred." } }],
   },
   unauthorized: {

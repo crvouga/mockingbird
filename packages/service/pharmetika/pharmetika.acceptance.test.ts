@@ -41,7 +41,7 @@ const harness = (settings: Parameters<typeof createRuntime>[0] = {}) => {
       apiToken: TOKEN,
       practitionerIdentifier: "prac-global-1",
       webhookSecret: SECRET,
-      clinicName: "Geviti",
+      clinicName: "Acme",
     },
     (request) => runtime.fetch(request),
     () => runtime.clock.now(),
@@ -194,7 +194,7 @@ describe("S12.1 acceptance: our Pharmetika adapter against the mock", () => {
           method: "PUT",
           headers: { "x-pmk-authentication-token": TOKEN, "content-type": "application/json" },
           body: JSON.stringify({
-            clinic_identifier: "clinic-geviti-0001",
+            clinic_identifier: "clinic-acme-0001",
             medication_order_identifier: id,
             patient: { identification: { patient_id: 2 } },
             medication_requests: [
@@ -334,12 +334,12 @@ describe("S12.1 acceptance: our Pharmetika adapter against the mock", () => {
           apiToken: TOKEN,
           practitionerIdentifier: "p",
           webhookSecret: null,
-          clinicName: "Geviti West",
+          clinicName: "Acme West",
         },
         (r) => runtime.fetch(r),
       )
       expect((await consumer.submit(sampleRequest("pay_c"))).success).toBe(true)
-      expect(runtime.instance().orders()[0]?.clinic_identifier).toBe("clinic-geviti-west-0002")
+      expect(runtime.instance().orders()[0]?.clinic_identifier).toBe("clinic-acme-west-0002")
     }
   })
 

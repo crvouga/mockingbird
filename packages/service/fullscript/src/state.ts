@@ -91,7 +91,7 @@ export const DEFAULT_SETTINGS: Settings = {
 
 export const DEFAULT_CLINIC: Clinic = {
   id: "clinic_mock_1",
-  name: "Geviti Mock Clinic",
+  name: "Acme Mock Clinic",
   created_at: "2025-01-01T00:00:00.000Z",
 }
 export const DEFAULT_PRACTITIONER: Practitioner = {

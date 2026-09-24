@@ -1,6 +1,6 @@
 import type { FlagSpec, FlagValue } from "./flags.js"
 
-/** The shape of geviti-monorepo `docs/feature-flags/state.json` that the importer reads. */
+/** The shape of the consumer app's `docs/feature-flags/state.json` that the importer reads. */
 export type FlagStateFile = {
   generatedAt?: string
   flags: {

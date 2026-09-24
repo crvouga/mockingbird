@@ -120,6 +120,10 @@
     "layer": "service",
     "category": "databases",
     "displayName": "PostgreSQL",
+    "vendor": {
+      "website": "https://www.postgresql.org",
+      "docs": "https://www.postgresql.org/docs/current/"
+    },
     "status": "ready"
   },
   "trustedDependencies": [

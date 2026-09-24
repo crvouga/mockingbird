@@ -20,13 +20,13 @@ describe("served over HTTP", () => {
     const server = await createServer({
       webhooks: { url: `http://127.0.0.1:${sink.port}/bloodwork/aha-webhook`, secret: SECRET },
       settings: {
-        credentials: [{ apiKey: "geviti_aha_http", apiSecret: "http-secret" }],
+        credentials: [{ apiKey: "acme_aha_http", apiSecret: "http-secret" }],
         autoSchedule: { afterMs: 50 },
       },
     })
     try {
       const consumer = new AhaServiceConsumer(
-        { apiUrl: server.url, apiKey: "geviti_aha_http", apiSecret: "http-secret" },
+        { apiUrl: server.url, apiKey: "acme_aha_http", apiSecret: "http-secret" },
         (r) => fetch(r),
       )
       const placed = await consumer.createOrUpdateOrder(
@@ -49,7 +49,7 @@ describe("served over HTTP", () => {
       expect(placed.success).toBe(true)
       const deadline = Date.now() + 3_000
       while (received.length < 1 && Date.now() < deadline) await Bun.sleep(25)
-      expect(received[0]).toMatchObject({ status: "Scheduled", partnerOrderId: "GV-5" })
+      expect(received[0]).toMatchObject({ status: "Scheduled", partnerOrderId: "AC-5" })
       expect(typeof received[0]?.scheduleServiceTime).toBe("string")
       expect(received[0]?.scheduleServiceTimeZone).toBe("America/New_York")
       const health = await fetch(`${server.url}/health`)

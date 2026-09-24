@@ -20,8 +20,8 @@ const PRODUCT = "fprod_01m0tgysj4ahvf8fas60c2ef2d" // marketplace, auto_substant
 
 const session = (key: string) => ({
   checkout_session: {
-    success_url: "https://app.gogeviti.com/ok",
-    cancel_url: "https://app.gogeviti.com/no",
+    success_url: "https://app.acme.example/ok",
+    cancel_url: "https://app.acme.example/no",
     client_reference_id: "ref-1",
     line_items: [{ price_data: { product: PRODUCT, unit_amount: 500 }, quantity: 2 }],
     metadata: { key },
@@ -248,8 +248,8 @@ describe("served over HTTP", () => {
             quantity: 1,
           },
         ],
-        successUrl: "https://app.gogeviti.com/shop/success?session_id={CHECKOUT_SESSION_ID}",
-        cancelUrl: "https://app.gogeviti.com/shop",
+        successUrl: "https://app.acme.example/shop/success?session_id={CHECKOUT_SESSION_ID}",
+        cancelUrl: "https://app.acme.example/shop",
         metadata: {},
       })
       expect(result.redirectUrl.startsWith(`${server.url}/pay/`)).toBe(true)
@@ -257,7 +257,7 @@ describe("served over HTTP", () => {
       const paid = await payOnHostedPage((r) => fetch(r), result.redirectUrl, "4000051230000072")
       expect(paid.response.status).toBe(302)
       expect(paid.response.headers.get("location")).toBe(
-        `https://app.gogeviti.com/shop/success?session_id=${result.providerReference}`,
+        `https://app.acme.example/shop/success?session_id=${result.providerReference}`,
       )
       const read = () => orchestrator.repository.attempts.get(attempt.id)?.status
       while (read() !== "succeeded" && performance.now() - started < 2_000) await Bun.sleep(10)
@@ -275,8 +275,8 @@ describe("served over HTTP", () => {
           clientReferenceId: "expire-1",
           mode: "payment",
           lineItems: [{ flexProductId: PRODUCT, unitAmountCents: 100, quantity: 1 }],
-          successUrl: "https://app.gogeviti.com/ok",
-          cancelUrl: "https://app.gogeviti.com/no",
+          successUrl: "https://app.acme.example/ok",
+          cancelUrl: "https://app.acme.example/no",
           metadata: {},
         },
         "expire-key",
@@ -320,8 +320,8 @@ describe("served over HTTP", () => {
             quantity: 1,
           },
         ],
-        successUrl: "https://app.gogeviti.com/ok",
-        cancelUrl: "https://app.gogeviti.com/no",
+        successUrl: "https://app.acme.example/ok",
+        cancelUrl: "https://app.acme.example/no",
         metadata: {},
       })
       expect(adopted.result.status).toBe("pending")

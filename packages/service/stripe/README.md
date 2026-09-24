@@ -236,7 +236,7 @@ only — never bodies, card numbers or emails.
 
 ### Corpus
 
-`GEVITI_CORPUS` is the recorded test-mode catalog our seeded fixtures point at (reference-data
+`ACME_CORPUS` is the recorded test-mode catalog our seeded fixtures point at (reference-data
 products and prices, catalog plans, shop fixtures, QA snapshots such as `prod_SNj3rQYHrHNS0H` /
 `price_1StxtjGBBGmxLhdL8PzNSEgX`, and runbook coupons and promotion codes; 144 products, 172
 prices). Accounts with `corpus: true` answer those ids byte for byte; customers, intents and
@@ -261,7 +261,7 @@ recorded prices (listed in `synthesizedLookupKeys`). Pass your own with `createR
 | `STRIPE_API_VERSION` | The vendored latest version (`2026-08-26.dahlia`). |
 | `LEGACY_API_VERSION` | `"2024-06-20"`. |
 | `ACACIA_API_VERSION` | `"2025-02-24.acacia"`. |
-| `GEVITI_CORPUS` | The bundled recorded catalog. |
+| `ACME_CORPUS` | The bundled recorded catalog. |
 | `TEST_TOKENS` | Every modelled `tok_…`. |
 | `TEST_PAYMENT_METHOD_IDS` | Every modelled magic `pm_card_…`. |
 | `TEST_CARD_NUMBERS` | Every modelled test card number. |

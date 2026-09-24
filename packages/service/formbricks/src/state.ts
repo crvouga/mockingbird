@@ -1,16 +1,19 @@
 import { Collection, IdSequence } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import prodClone from "./corpus/prod-clone.json" with { type: "json" }
+import corpus from "./corpus/surveys.json" with { type: "json" }
 
-/** A survey definition, passed through as Formbricks serves it (blocks, elements, logic, …). */
+/** A survey definition, passed through as Formbricks serves it (blocks, elements, endings, …). */
 export type Survey = Record<string, unknown> & {
   id: string
   name: string
   type: string
   status: string
-  /** `null` for the shared fixture surveys, which every configured environment serves. */
-  environmentId?: string | null
+  /** `null` for the shared corpus surveys, which every configured workspace serves. */
+  workspaceId?: string | null
 }
+
+/** A contact (`PUT /__admin/contacts`); `attributes.userId` becomes the response's `contact.userId`. */
+export type Contact = { id: string; workspaceId: string | null; attributes: Record<string, string> }
 
 /** One stored response, in Formbricks' `TResponse` shape. */
 export type ResponseRecord = {
@@ -18,9 +21,9 @@ export type ResponseRecord = {
   createdAt: string
   updatedAt: string
   surveyId: string
-  environmentId: string
+  workspaceId: string
   displayId: string | null
-  contact: { id: string; userId: string } | null
+  contact: { id: string; userId?: string } | null
   contactAttributes: Record<string, string> | null
   finished: boolean
   endingId: string | null
@@ -35,51 +38,50 @@ export type ResponseRecord = {
 
 /** Per-namespace knobs, set through `PUT /__admin/settings`; cleared on reset. */
 export type Settings = {
-  /** Environment ids that serve the shared fixture surveys. */
-  environments: string[]
+  /** Workspace ids that exist and serve the shared corpus surveys. */
+  workspaces: string[]
+  /** Pre-Formbricks-5 environment ids, each an alias of a workspace (`{envId: workspaceId}`). */
+  legacyEnvironmentIds: Record<string, string>
   /** Accepted management API keys; empty means any non-empty `x-api-key` works. */
   apiKeys: string[]
   /** The `webhookId` put in webhook bodies. */
   webhookId: string
-  /** Whether a `userId` on a response finds-or-creates a contact (the fork's behaviour). */
+  /** Contacts are an Enterprise feature: when off, a response with a `contactId` is 403. */
   contactsEnabled: boolean
 }
 
-/** Our member-app production and development Formbricks environments. */
-export const PRODUCTION_ENVIRONMENT_ID = "cmlhiza9j0009lj01my5c1g0q"
-export const DEVELOPMENT_ENVIRONMENT_ID = "cmlhiza9c0004lj01jbuhp0nz"
+/** The default workspace every namespace starts with. */
+export const WORKSPACE_ID = "cworkspace000000000000001"
+/** A legacy environment id that resolves to {@link WORKSPACE_ID} (older SDKs still send one). */
+export const ENVIRONMENT_ID = "cenvironment0000000000001"
 
 export const DEFAULT_SETTINGS: Settings = {
-  environments: [PRODUCTION_ENVIRONMENT_ID, DEVELOPMENT_ENVIRONMENT_ID],
+  workspaces: [WORKSPACE_ID],
+  legacyEnvironmentIds: { [ENVIRONMENT_ID]: WORKSPACE_ID },
   apiKeys: [],
-  webhookId: "cm0mockingbirdwebhook0001",
-  contactsEnabled: true,
+  webhookId: "cwebhook00000000000000001",
+  contactsEnabled: false,
 }
 
-/**
- * The committed clone of our production survey definitions
- * (`packages/forms-fixtures/formbricks/prod-clone.json` in geviti-monorepo).
- */
-export const PROD_CLONE_SURVEYS: readonly Survey[] = (prodClone as unknown as { surveys: Survey[] })
+/** The synthetic survey corpus every namespace is seeded with (`src/corpus/surveys.json`). */
+export const CORPUS_SURVEYS: readonly Survey[] = (corpus as unknown as { surveys: Survey[] })
   .surveys
 
-export const PROD_CLONE_EXPORTED_AT: string = (prodClone as { exportedAt: string }).exportedAt
-
-/** The project block of the environment state (as the backend's compat shim serves it). */
-export const PROJECT = {
-  id: "cmlhiza930003lj01jz0hfnkz",
+/** The workspace settings block of the environment state (`workspace`, and legacy `project`). */
+export const workspaceSettings = (workspaceId: string) => ({
+  id: workspaceId,
   recontactDays: 7,
   clickOutsideClose: true,
   overlay: "none",
   placement: "bottomRight",
   inAppSurveyBranding: true,
-  styling: { brandColor: { light: "#64748b" }, allowStyleOverwrite: true },
-}
+  styling: { allowStyleOverwrite: true },
+})
 
 export class FormbricksState {
   readonly surveys: Collection<Survey>
   readonly responses: Collection<ResponseRecord>
-  readonly contacts: Collection<{ id: string; environmentId: string; userId: string }>
+  readonly contacts: Collection<Contact>
   readonly settings: Collection<Settings>
   readonly ids: IdSequence
 
@@ -99,7 +101,7 @@ export class FormbricksState {
   ensureSeeded(): void {
     if (this.surveys.count() === 0) {
       for (const survey of this.seed.surveys) {
-        this.surveys.insert(survey.id, { ...survey, environmentId: survey.environmentId ?? null })
+        this.surveys.insert(survey.id, { ...survey, workspaceId: survey.workspaceId ?? null })
       }
     }
     if (!this.settings.has("settings")) {
@@ -122,40 +124,46 @@ export class FormbricksState {
     return `c${this.ids.next("", 24).toLowerCase()}`
   }
 
-  knownEnvironment(environmentId: string): boolean {
-    return (
-      this.current().environments.includes(environmentId) ||
-      this.allSurveys().some((s) => s.environmentId === environmentId)
+  /**
+   * `resolveClientApiIds`: a workspace id, or a legacy environment id, to its workspace id
+   * (`undefined` when neither is known).
+   */
+  resolveWorkspace(id: string): string | undefined {
+    const settings = this.current()
+    if (settings.workspaces.includes(id)) return id
+    const aliased = settings.legacyEnvironmentIds[id]
+    if (aliased !== undefined) return aliased
+    return this.allSurveys().some((s) => s.workspaceId === id) ? id : undefined
+  }
+
+  /** The v1 `environmentId` of a workspace: its legacy environment id, else its own id. */
+  legacyEnvironmentId(workspaceId: string): string {
+    const entry = Object.entries(this.current().legacyEnvironmentIds).find(
+      ([, target]) => target === workspaceId,
     )
+    return entry?.[0] ?? workspaceId
   }
 
   allSurveys(): Survey[] {
     return this.surveys.list({ order: "oldest" }).map((row) => row.value)
   }
 
-  /** Surveys an environment serves: its own, plus the shared fixture when it is configured. */
-  surveysOf(environmentId: string): Survey[] {
-    const shared = this.current().environments.includes(environmentId)
-    return this.allSurveys().filter(
-      (s) => s.environmentId === environmentId || (shared && (s.environmentId ?? null) === null),
-    )
+  /** Surveys a workspace serves: its own, plus the shared corpus when it is configured. */
+  surveysOf(workspaceId: string): Survey[] {
+    return this.allSurveys().filter((s) => this.belongsTo(s, workspaceId))
   }
 
-  /** Whether a survey belongs to an environment (the fork's `survey.environmentId` check). */
-  belongsTo(survey: Survey, environmentId: string): boolean {
-    return (survey.environmentId ?? null) === null
-      ? this.current().environments.includes(environmentId)
-      : survey.environmentId === environmentId
+  /** Whether a survey belongs to a workspace (`survey.workspaceId !== workspaceId` check). */
+  belongsTo(survey: Survey, workspaceId: string): boolean {
+    return (survey.workspaceId ?? null) === null
+      ? this.current().workspaces.includes(workspaceId)
+      : survey.workspaceId === workspaceId
   }
 
-  /** The fork's find-or-create contact for a response `userId` (the member's email). */
-  contactFor(environmentId: string, userId: string): { id: string; userId: string } {
-    const found = this.contacts
-      .list({ where: (c) => c.environmentId === environmentId && c.userId === userId })
-      .at(0)?.value
-    if (found) return { id: found.id, userId: found.userId }
-    const created = { id: this.nextId(), environmentId, userId }
-    this.contacts.insert(created.id, created)
-    return { id: created.id, userId }
+  /** `getContact(contactId, workspaceId)`: a contact of that workspace (or a shared one). */
+  contactOf(contactId: string, workspaceId: string): Contact | undefined {
+    const contact = this.contacts.get(contactId)
+    if (!contact) return undefined
+    return contact.workspaceId === null || contact.workspaceId === workspaceId ? contact : undefined
   }
 }

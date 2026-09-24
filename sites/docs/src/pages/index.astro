@@ -107,7 +107,7 @@ const logos = catalog.services.filter((s) => s.kind === "http").slice(0, 18)
               </div>
               <p>{c.blurb}</p>
               <div class="cat-members">
-                {members.slice(0, 5).map((s) => <Monogram name={s.displayName} hue={s.hue} size={26} />)}
+                {members.slice(0, 5).map((s) => <Monogram name={s.displayName} hue={s.hue} logo={s.brand.logo} size={26} />)}
               </div>
             </a>
           )

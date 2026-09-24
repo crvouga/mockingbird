@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-formbricks",
   "version": "0.0.0-development",
-  "description": "Stateful mock of Formbricks (Geviti fork): client environment state seeded from our production survey clone, response creation with the fork's validation errors, the v1 management API, the widget script, and responseFinished webhooks.",
+  "description": "Stateful mock of open-source Formbricks: the client environment state (seeded with a synthetic survey corpus), response creation with upstream's validation and {code, message, details} errors, the v1 management API, the widget script, and signed response webhooks.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "productivity",
     "displayName": "Formbricks",
+    "vendor": {
+      "website": "https://formbricks.com",
+      "docs": "https://formbricks.com/docs"
+    },
     "status": "wip"
   },
   "scripts": {

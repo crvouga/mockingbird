@@ -43,7 +43,7 @@ const { token } = (await (
     method: "POST",
     headers: { "content-type": "application/json" },
     // Any credentials log in unless --api-user pins them.
-    body: JSON.stringify({ userName: "geviti-api", password: crypto.randomUUID() }),
+    body: JSON.stringify({ userName: "acme-api", password: crypto.randomUUID() }),
   })
 ).json()) as { token: string }
 const [form] = (await (

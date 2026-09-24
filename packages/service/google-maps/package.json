@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "logistics",
     "displayName": "Google Maps",
+    "vendor": {
+      "website": "https://mapsplatform.google.com",
+      "docs": "https://developers.google.com/maps/documentation/places/web-service"
+    },
     "status": "wip"
   },
   "scripts": {

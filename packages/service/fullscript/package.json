@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "health",
     "displayName": "Fullscript",
+    "vendor": {
+      "website": "https://fullscript.com",
+      "docs": "https://fullscript.dev"
+    },
     "status": "wip"
   },
   "scripts": {

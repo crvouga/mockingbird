@@ -109,7 +109,7 @@ describe("@aws-sdk/client-transcribe-streaming@3.1132.0 (h2c duplex)", () => {
         MediaSampleRateHertz: 16_000,
         EnablePartialResultsStabilization: true,
         PartialResultsStability: "high",
-        VocabularyName: "geviti-terms",
+        VocabularyName: "acme-terms",
         AudioStream: (async function* () {
           for (let i = 0; i < 3; i++) yield { AudioEvent: { AudioChunk: new Uint8Array(3_200) } }
         })(),
@@ -118,7 +118,7 @@ describe("@aws-sdk/client-transcribe-streaming@3.1132.0 (h2c duplex)", () => {
     expect(response.LanguageCode).toBe("en-US")
     expect(response.MediaSampleRateHertz).toBe(16_000)
     expect(response.MediaEncoding).toBe("pcm")
-    expect(response.VocabularyName).toBe("geviti-terms")
+    expect(response.VocabularyName).toBe("acme-terms")
     expect(response.SessionId).toMatch(/^[0-9a-f-]{36}$/)
     const results: [boolean | undefined, string | undefined][] = []
     for await (const event of response.TranscriptResultStream ?? []) {

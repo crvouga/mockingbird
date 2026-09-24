@@ -14,7 +14,7 @@ import { z } from "zod"
 
 export type Fetch = (request: Request) => Promise<Response>
 
-// --- flex-product.types.ts / @geviti/db FLEX_ELIGIBILITY_TYPES ------------------------------
+// --- flex-product.types.ts / the consumer's db FLEX_ELIGIBILITY_TYPES ------------------------------
 
 export const FLEX_ELIGIBILITY_TYPES = [
   "not_eligible",
@@ -491,14 +491,14 @@ export const getProductValidationFailure = (
   if (product.client_reference_id !== expectedClientReferenceId) {
     return `Flex product ${product.product_id} has an invalid client reference`
   }
-  const providerMetadataClientReferenceId = product.metadata?.geviti_client_reference_id
+  const providerMetadataClientReferenceId = product.metadata?.acme_client_reference_id
   if (
-    product.metadata?.geviti_purpose !== mapping.purpose ||
-    product.metadata?.geviti_merchant_product_id !== mapping.merchantProductId ||
+    product.metadata?.acme_purpose !== mapping.purpose ||
+    product.metadata?.acme_merchant_product_id !== mapping.merchantProductId ||
     (providerMetadataClientReferenceId !== undefined &&
       providerMetadataClientReferenceId !== expectedClientReferenceId)
   ) {
-    return `Flex product ${product.product_id} has invalid Geviti correlation metadata`
+    return `Flex product ${product.product_id} has invalid Acme correlation metadata`
   }
   if (!eligibility) return `Flex product ${product.product_id} has an unresolved eligibility`
   if (requireConfiguredEligibilityMatch && eligibility !== mapping.eligibility) {
@@ -1314,7 +1314,7 @@ export const payOnHostedPage = async (
   pageUrl: string,
   card: string,
   contact = {
-    email: "qa-flex-test+mock@geviti.com",
+    email: "qa-flex-test+mock@acme.example",
     firstName: "QA",
     lastName: "Playwright",
     phone: "5555550199",

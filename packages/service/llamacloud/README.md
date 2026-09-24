@@ -24,7 +24,7 @@ any Fetch server.
 ## Usage
 
 ```bash
-npx mockingbird-llamacloud serve --port 8805 --index geviti-member-kb-v1 --project Default
+npx mockingbird-llamacloud serve --port 8805 --index acme-member-kb-v1 --project Default
 ```
 
 Point the app at it:
@@ -32,12 +32,12 @@ Point the app at it:
 | Consumer | Setting |
 | --- | --- |
 | Backend `LlamaCloudKnowledgeAdapter` | `LLAMACLOUD_BASE_URL=http://127.0.0.1:8805/api/v1` (seam **G-L1**: the adapter hardcodes `https://api.cloud.llamaindex.ai/api/v1` today), plus `LLAMACLOUD_API_KEY` (any value) and `LLAMACLOUD_INDEX_NAME` / `LLAMACLOUD_PROJECT_NAME` matching a seeded pipeline |
-| Makor chat (`llama_cloud_services`) | `LLAMA_CLOUD_BASE_URL=http://127.0.0.1:8805` (no `/api/v1`; verified below, no code change needed) |
+| Python chat service (`llama_cloud_services`) | `LLAMA_CLOUD_BASE_URL=http://127.0.0.1:8805` (no `/api/v1`; verified below, no code change needed) |
 
 ```ts
 import { createRuntime } from "@crvouga/mockingbird-service-llamacloud"
 
-const llama = createRuntime({ pipelines: [{ name: "geviti-member-kb-v1", projectName: "Default" }] })
+const llama = createRuntime({ pipelines: [{ name: "acme-member-kb-v1", projectName: "Default" }] })
 const admin = (path: string, body: unknown) =>
   llama.fetch(
     new Request(`http://llamacloud.test/__admin${path}`, {
@@ -89,12 +89,12 @@ Node metadata is sent under both `metadata` (read by our backend) and `extra_inf
 official client model's field name). Without live credentials, which of the two the real API
 sends is unverified.
 
-### Makor chat SDK: verified call sequence
+### Python chat SDK: verified call sequence
 
 The catalog listed this as unverified. It has now been checked against the installed SDK:
 llama-cloud-services **0.6.88**, llama-cloud **0.1.45** and llama-index-core **0.14.10**, the
-versions pinned in `apps/makor-ecosystem/uv.lock`. The wheels were read, and
-`llamacloud.sdk.test.ts` runs the real Makor `LlamaCloudClient` file on the real SDK against the
+versions the consumer app's Python chat service pins. The wheels were read, and
+`llamacloud.sdk.test.ts` runs that service's real `LlamaCloudClient` file on the real SDK against the
 served mock. `LlamaCloudIndex(name, project_name=…, api_key=…)` followed by
 `.as_retriever(similarity_top_k=5).aretrieve(q)` makes these calls:
 
@@ -107,13 +107,13 @@ served mock. `LlamaCloudIndex(name, project_name=…, api_key=…)` followed by
 4. `POST /api/v1/pipelines/{id}/retrieve {query, dense_similarity_top_k: 5}`.
 
 The base URL comes from `base_url` or `LLAMA_CLOUD_BASE_URL`, falling back to
-`https://api.cloud.llamaindex.ai` (`llama_index.core.ingestion.api_utils.get_client`). Makor
-passes no `base_url`, so setting the environment variable is enough. The SDK's pydantic models
+`https://api.cloud.llamaindex.ai` (`llama_index.core.ingestion.api_utils.get_client`). The
+client passes no `base_url`, so setting the environment variable is enough. The SDK's pydantic models
 are strict: `Pipeline.status` must be `CREATED` or `DELETING`, and `embedding_config` is
 required. The mock satisfies both, and the SDK test fails if a shape drifts.
 
-**Discrepancy:** Makor's `llamacloud_project_name` defaults to `"default"` (lowercase). The
-backend's default is `"Default"`. Project lookup is exact, so Makor needs
+**Discrepancy:** the Python client's `llamacloud_project_name` defaults to `"default"` (lowercase). The
+backend's default is `"Default"`. Project lookup is exact, so it needs
 `LLAMACLOUD_PROJECT_NAME=Default`, or a seeded `default` project. Otherwise the client degrades
 to empty results, which the acceptance tests cover.
 
@@ -122,7 +122,8 @@ To run the SDK test:
 ```bash
 uv venv /tmp/llama && VIRTUAL_ENV=/tmp/llama uv pip install \
   llama-cloud-services==0.6.88 llama-cloud==0.1.45 llama-index-core==0.14.10
-MOCKINGBIRD_LLAMACLOUD_PYTHON=/tmp/llama/bin/python bun test llamacloud.sdk
+MOCKINGBIRD_LLAMACLOUD_PYTHON=/tmp/llama/bin/python \
+  MOCKINGBIRD_LLAMACLOUD_PY_CLIENT=/path/to/llamacloud_client.py bun test llamacloud.sdk
 ```
 
 ### Admin (beyond the standard contract)
@@ -157,7 +158,7 @@ Neither consumer can add headers, so a namespace can be chosen three ways:
 - a `/ns/<name>` prefix on the base URL;
 - the API key: `PUT /__admin/credentials {"credentials": {"<LLAMACLOUD_API_KEY>": "<namespace>"}}`.
 
-Each namespace starts with the seeded pipelines, by default `geviti-member-kb-v1` in project
+Each namespace starts with the seeded pipelines, by default `acme-member-kb-v1` in project
 `Default`. The request journal records operation ids, statuses and pipeline and document ids. It
 never records queries, document text or titles.
 
@@ -179,7 +180,7 @@ never records queries, document text or titles.
 | `createRuntime` | function | The mock with the full service contract (health, admin, namespaces, credentials, presets). Options: `pipelines`, `settings`, `clock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
 | `LLAMACLOUD_PRESETS` | object | Every named fault preset. |
 | `LLAMACLOUD_NAMESPACE` | string | The service name, `"llamacloud"`. |
-| `DEFAULT_PIPELINES`, `DEFAULT_PIPELINE_NAME`, `DEFAULT_PROJECT_NAME`, `DEFAULT_SETTINGS` | values | The seed: `geviti-member-kb-v1` in `Default`, top-k 5, any key. |
+| `DEFAULT_PIPELINES`, `DEFAULT_PIPELINE_NAME`, `DEFAULT_PROJECT_NAME`, `DEFAULT_SETTINGS` | values | The seed: `acme-member-kb-v1` in `Default`, top-k 5, any key. |
 | `rank`, `terms` | functions | The default term-overlap ranking and its tokenizer. |
 | `uuidFrom` | function | The stable UUID derivation used for project, pipeline and document ids. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |

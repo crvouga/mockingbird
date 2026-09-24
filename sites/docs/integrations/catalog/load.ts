@@ -7,6 +7,7 @@ import { guideInfo, sortGuides } from "../../src/lib/guides.ts"
 import { EXPECTED_ERROR_SNIPPETS, SQL_SNIPPETS, splitStatements } from "../../src/lib/sql.ts"
 import { isTier, TIER_ORDER } from "../../src/lib/tiers.ts"
 import type {
+  Brand,
   Catalog,
   Operation,
   Service,
@@ -40,6 +41,7 @@ export function watchedFiles({ repoRoot }: CatalogPaths): string[] {
       .filter((f) => f.endsWith(".md"))
       .map((f) => join(repoRoot, "docs", f)),
     join(repoRoot, "llms.txt"),
+    join(docsRootOf(repoRoot), BRANDS),
   ]
 }
 
@@ -58,6 +60,8 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
     .map((p) => ({ ...p, pkg: readJson(p.file) }))
     .filter((p) => p.pkg.private !== true && p.pkg.mockingbird?.layer === "service")
   const repo = repositoryUrl(packages[0]?.pkg)
+  const brandsFile = join(docsRoot, BRANDS)
+  const brands: Record<string, Brand> = existsSync(brandsFile) ? readJson(brandsFile) : {}
 
   const names = new Set(packages.map((p) => p.name))
   const problems: string[] = []
@@ -85,6 +89,11 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
         return null
       }
       const status: ServiceStatus = meta.status
+      const brand = brands[name]
+      if (!brand) {
+        problems.push(`${where}: no vendor branding; run \`bun run brands:sync\``)
+        return null
+      }
       if (!declared.has(pkg.name)) {
         problems.push(
           `sites/docs/package.json: add "${pkg.name}": "workspace:*" to devDependencies`,
@@ -208,6 +217,14 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
           : null,
         examples,
         hue: hue(name),
+        brand: {
+          vendor: brand.vendor,
+          website: brand.website,
+          docs: brand.docs,
+          description: brand.description,
+          color: brand.color,
+          logo: brand.logo,
+        },
       }
     }),
   )
@@ -264,6 +281,10 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
     },
   }
 }
+
+/** Written by scripts/brands.ts. */
+const BRANDS = "src/data/brands.json"
+const docsRootOf = (repoRoot: string) => join(repoRoot, "sites/docs")
 
 const readJson = (file: string): Json => JSON.parse(readFileSync(file, "utf8"))
 

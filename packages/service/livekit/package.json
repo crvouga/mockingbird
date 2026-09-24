@@ -53,6 +53,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "LiveKit",
+    "vendor": {
+      "website": "https://livekit.io",
+      "docs": "https://docs.livekit.io"
+    },
     "status": "wip"
   },
   "scripts": {

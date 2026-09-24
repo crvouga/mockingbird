@@ -51,6 +51,10 @@
     "layer": "service",
     "category": "communication",
     "displayName": "Slack",
+    "vendor": {
+      "website": "https://slack.com",
+      "docs": "https://docs.slack.dev/reference/methods"
+    },
     "status": "wip"
   },
   "scripts": {

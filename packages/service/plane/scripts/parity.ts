@@ -40,7 +40,7 @@ const baseUrl = "https://api.plane.so"
 const { MOCKINGBIRD_PLANE_API_KEY: key, MOCKINGBIRD_PLANE_WORKSPACE_SLUG: slug } =
   credentials.values
 const project = credentials.values.MOCKINGBIRD_PLANE_PROJECT_ID
-const PARITY_PATH = "/api/v1/workspaces/geviti/projects/33333333-3333-4333-8333-333333333333/"
+const PARITY_PATH = "/api/v1/workspaces/acme/projects/33333333-3333-4333-8333-333333333333/"
 const realPath = `/api/v1/workspaces/${encodeURIComponent(slug)}/projects/${encodeURIComponent(project)}/`
 
 try {

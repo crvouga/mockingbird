@@ -52,6 +52,10 @@
     "layer": "service",
     "category": "health",
     "displayName": "Optimal DX",
+    "vendor": {
+      "website": "https://www.optimaldx.com",
+      "name": "OptimalDX"
+    },
     "status": "wip"
   },
   "scripts": {
