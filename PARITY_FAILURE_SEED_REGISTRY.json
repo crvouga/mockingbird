@@ -112,7 +112,7 @@
     {
       "provider": "genebygene",
       "seed": 1394162303,
-      "status": "open",
+      "status": "fixed",
       "failure": "GetNotificationSubscription unknown id: real 404 ErrorDto \"Invalid Id <id>\", mock 400 (only the empty GUID is a 400)"
     }
   ]

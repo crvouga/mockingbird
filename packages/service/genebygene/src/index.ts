@@ -1721,15 +1721,12 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   /** (kit, line) rows, newest kit first, filtered like `GET /api/v2/kitorderlines`. */
-  private kitOrderLineRows(
-    context: OperationContext,
-    options: { productType?: boolean } = {},
-  ): { kit: KitRecord; line: LineRecord }[] {
+  private kitOrderLineRows(context: OperationContext): { kit: KitRecord; line: LineRecord }[] {
     const kitNumbers = csv(query(context, "kitNumbers"))
     const orderId = query(context, "orderId")
     const orderLineId = query(context, "orderLineId")
     const status = query(context, "status")
-    const productType = options.productType === false ? undefined : query(context, "productType")
+    const productType = query(context, "productType")
     const term = query(context, "attributeTerm")?.toLowerCase()
     const searched = csv(query(context, "attributesToSearch") ?? "FirstName,LastName").map((s) =>
       s.toLowerCase(),
@@ -1763,16 +1760,16 @@ export class GeneByGeneAPI implements FetchAPI {
       true,
     )
     if (invalid) return invalid
-    // Staging fails with an empty 500 on a productType it cannot parse, or an attributesFilter
-    // that is not JSON, but only when there are rows to apply it to (kitorderlines/kits
-    // validates productType as a 400 instead).
+    // Staging fails with an empty 500 on a productType it cannot parse (kitorderlines/kits
+    // validates it as a 400 instead), and on an attributesFilter that is not JSON, but the
+    // latter only when rows remain to apply it to.
     const rows = this.kitOrderLineRows(context)
     const productType = query(context, "productType")
     const filter = query(context, "attributesFilter")
-    const unparsable =
-      (productType && queryProblem(context, { productType: "productType" })) ||
-      (filter && !isJson(filter))
-    if (unparsable && this.kitOrderLineRows(context, { productType: false }).length > 0) {
+    if (productType && queryProblem(context, { productType: "productType" })) {
+      return new Response(null, { status: 500 })
+    }
+    if (filter && !isJson(filter) && rows.length > 0) {
       return new Response(null, { status: 500 })
     }
     const page = pageOf(context)

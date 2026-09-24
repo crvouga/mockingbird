@@ -1722,7 +1722,7 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
       // Staging's /kitorderlines 500s only when there are rows to filter (its tenant had some).
       if (q.status === 500) await placeShipped(MOUNTAIN_VIEW)
       const { status, data, error } = await raw("GET", `${q.path}?${new URLSearchParams(q.params)}`)
-      expect(status).toBe(q.status)
+      expect(status).toBe(q.status as number)
       if ("errors" in q && q.errors) expect((error as Json).errors).toEqual(q.errors)
       if ("pageSize" in q) expect(data).toMatchObject({ offset: q.offset, pageSize: q.pageSize })
     })
