@@ -602,6 +602,30 @@ const emptyTenantView = async (request: Request): Promise<Response> => {
   return new Response("[]", { status: 200, headers: response.headers })
 }
 
+/**
+ * Staging lists a bundle's `components` in a different order from one call to the next (same
+ * rows, no stable sort), so both sides of the walk compare them sorted by product id.
+ */
+const sortComponents = async (request: Request, response: Response): Promise<Response> => {
+  if (new URL(request.url).pathname !== "/api/v2/products" || response.status !== 200) {
+    return response
+  }
+  const body = (await response.json()) as Json[]
+  const sorted = body.map((product) =>
+    Array.isArray(product.components)
+      ? {
+          ...product,
+          components: [...(product.components as Json[])].sort((a, b) =>
+            String((a.product as Json | undefined)?.id).localeCompare(
+              String((b.product as Json | undefined)?.id),
+            ),
+          ),
+        }
+      : product,
+  )
+  return new Response(JSON.stringify(sorted), { status: 200, headers: response.headers })
+}
+
 // 4. the random walk over the remaining safe operations ------------------------------------------
 const walked = supportedOperationIds.filter(
   (id) => id !== "GetShippingOptions" && id !== "GetResultBlob",
@@ -622,11 +646,18 @@ try {
         // The token operation lives on the auth host.
         const url = new URL(request.url)
         if (url.pathname.endsWith("/connect/token")) return live(new Request(tokenUrl, request))
-        return unsafe ? live(request) : emptyTenantView(request)
+        return (unsafe ? live(request) : emptyTenantView(request)).then((response) =>
+          sortComponents(request, response),
+        )
       },
     },
     mock: {
-      create: createMock,
+      create: () => {
+        const api = createMock()
+        return {
+          fetch: async (request: Request) => sortComponents(request, await api.fetch(request)),
+        }
+      },
       headers: () => ({ authorization: `Bearer ${mockToken}`, accept: "application/json" }),
     },
     redact,
