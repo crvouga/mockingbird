@@ -3,16 +3,20 @@ info:
   title: Flex HSA/FSA payments API (Mockingbird subset)
   description: |
     Stateful mock subset of the Flex (withflex.com) payments API: products, checkout sessions
-    (payment, off-session and setup modes), customers, setup intents, refunds, and the hosted
-    checkout page. Request and response bodies are wrapped in an envelope named after the
+    (payment, subscription, off-session and setup modes), subscriptions, customers, setup
+    intents, refunds, and the hosted checkout page. Request and response bodies are wrapped in an envelope named after the
     object (`{product: {...}}`, `{checkout_session: {...}}`, `{products: [...]}`).
-    Hand-authored from the consumer's wire shapes (Flex publishes no machine-readable spec).
+    Hand-authored from the consumer's wire shapes and the Flex API reference
+    (https://docs.withflex.com/api-reference); Flex publishes no machine-readable spec.
   version: "1"
   x-mockingbird-upstream:
     note: >-
       Hand-authored from the wire shapes our consumer reads and writes (flex-api.client.ts,
       flex-payment.types.ts, flex-product.types.ts, flex-webhook.service.ts,
-      do-flex-hosted-checkout.ts).
+      do-flex-hosted-checkout.ts). Subscription mode, recurring price_data and the Subscription
+      object follow https://docs.withflex.com/api-reference/checkout-sessions/create-checkout-session,
+      https://docs.withflex.com/api-reference/subscriptions/get-subscription and
+      https://docs.withflex.com/api-reference/prices/create-price.
 servers:
   - url: https://api.withflex.com
 security:
@@ -384,6 +388,35 @@ paths:
           $ref: "#/components/responses/Error"
         "404":
           $ref: "#/components/responses/Error"
+  /v1/subscriptions/{subscriptionId}:
+    parameters:
+      - name: subscriptionId
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: subscription
+            missing: fsub_00000000000000000000000000
+    get:
+      operationId: GetSubscription
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: >-
+            The subscription a completed subscription-mode checkout session created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionEnvelope"
+        "401":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
   /pay/{sessionId}:
     parameters:
       - name: sessionId
@@ -664,10 +697,32 @@ components:
               type: integer
               minimum: 0
               maximum: 10000000
+            recurring:
+              $ref: "#/components/schemas/Recurring"
         quantity:
           type: integer
           minimum: 1
           maximum: 100
+    Recurring:
+      type: object
+      description: >-
+        Makes the line item's price recurring; a subscription-mode session needs at least one.
+      required: [interval]
+      properties:
+        interval:
+          type: string
+          enum: [day, week, month, year]
+        interval_count:
+          type: integer
+          minimum: 1
+          maximum: 12
+    SubscriptionData:
+      type: object
+      properties:
+        cancel_at_period_end:
+          type: boolean
+        metadata:
+          $ref: "#/components/schemas/StringMap"
     CreateCheckoutSessionBody:
       type: object
       required: [checkout_session]
@@ -702,7 +757,9 @@ components:
               $ref: "#/components/schemas/StringMap"
             mode:
               type: string
-              enum: [payment, off_session, setup]
+              enum: [payment, subscription, off_session, setup]
+            subscription_data:
+              $ref: "#/components/schemas/SubscriptionData"
             payment_method:
               type: string
               maxLength: 255
@@ -911,6 +968,10 @@ components:
                 kind: id
             unit_amount:
               type: integer
+            recurring:
+              anyOf:
+                - $ref: "#/components/schemas/Recurring"
+                - type: "null"
         quantity:
           type: integer
         amount_total:
@@ -967,7 +1028,15 @@ components:
             kind: id
         mode:
           type: string
-          enum: [payment, off_session, setup]
+          enum: [payment, subscription, off_session, setup]
+        subscription:
+          type: ["string", "null"]
+          x-mockingbird-volatile:
+            kind: id
+        subscription_data:
+          anyOf:
+            - $ref: "#/components/schemas/SubscriptionData"
+            - type: "null"
         status:
           type: string
           enum: [open, paid, complete, canceled, expired]
@@ -1029,3 +1098,83 @@ components:
             $ref: "#/components/schemas/CheckoutSession"
         has_more:
           type: boolean
+    SubscriptionItem:
+      type: object
+      required: [price_data, quantity]
+      properties:
+        price_data:
+          type: object
+          required: [product, unit_amount, recurring]
+          properties:
+            product:
+              type: string
+              x-mockingbird-volatile:
+                kind: id
+            unit_amount:
+              type: integer
+            recurring:
+              $ref: "#/components/schemas/Recurring"
+        quantity:
+          type: integer
+    Subscription:
+      type: object
+      required: [subscription_id, created_at, items, status, cancel_at_period_end, test_mode]
+      properties:
+        subscription_id:
+          type: string
+          x-mockingbird-resource:
+            type: subscription
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        status:
+          type: string
+          enum:
+            - incomplete
+            - incomplete_expired
+            - trialing
+            - active
+            - past_due
+            - canceled
+            - unpaid
+            - paused
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubscriptionItem"
+        customer:
+          type: ["string", "null"]
+          x-mockingbird-volatile:
+            kind: id
+        default_payment_method:
+          type: ["string", "null"]
+          x-mockingbird-volatile:
+            kind: id
+        cancel_at_period_end:
+          type: boolean
+        current_period_start:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        current_period_end:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        canceled_at:
+          type: ["string", "null"]
+        metadata:
+          type: ["object", "null"]
+          additionalProperties:
+            type: string
+        test_mode:
+          type: boolean
+        created_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    SubscriptionEnvelope:
+      type: object
+      required: [subscription]
+      properties:
+        subscription:
+          $ref: "#/components/schemas/Subscription"

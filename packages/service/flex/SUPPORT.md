@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **13**
-- supported by the mock: **13**
-- parity enabled: **10**
+- operations in spec: **14**
+- supported by the mock: **14**
+- parity enabled: **11**
 
 | operationId | route | mock | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -18,6 +18,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `RefundCheckoutSession` | `POST /v1/checkout/sessions/{sessionId}/refund` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `CreateCustomer` | `POST /v1/customers` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetSetupIntent` | `GET /v1/setup_intents/{setupIntentId}` | ✅ supported | ✅ |  |
+| `GetSubscription` | `GET /v1/subscriptions/{subscriptionId}` | ✅ supported | ✅ |  |
 | `HostedCheckoutPage` | `GET /pay/{sessionId}` | ✅ supported | ❌ disabled | A browser-facing HTML page; covered by the acceptance suite, not by JSON walks. |
 | `SubmitHostedCheckout` | `POST /pay/{sessionId}` | ✅ supported | ❌ disabled | A browser form post; covered by the acceptance suite. |
 | `CancelHostedCheckout` | `GET /pay/{sessionId}/cancel` | ✅ supported | ❌ disabled | A browser navigation to cancel_url; covered by the acceptance suite. |

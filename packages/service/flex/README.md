@@ -1,9 +1,9 @@
 # @crvouga/mockingbird-service-flex
 
 Stateful mock of the **Flex** (withflex.com) HSA/FSA payments API for test suites: products
-(answered from a recorded catalog corpus), checkout sessions in `payment`, `off_session` and
-`setup` modes, customers, setup intents, refunds, the **hosted checkout page**, and the
-Svix-signed webhooks Flex posts back. A UI checkout that drove the real
+(answered from a recorded catalog corpus), checkout sessions in `payment` (one-time),
+`subscription`, `off_session` and `setup` modes, subscriptions, customers, setup intents,
+refunds, the **hosted checkout page**, and the Svix-signed webhooks Flex posts back. A UI checkout that drove the real
 `checkout.withflex.com` page and then waited on a 5-minute reconciler settles here in
 milliseconds: the page is local, and the signed webhook reaches the app as soon as the card is
 accepted.
@@ -11,7 +11,9 @@ accepted.
 - Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/flex/SUPPORT.md)
 - Flex publishes no machine-readable spec: the contract (`openapi.yaml`) is hand-authored from
   the wire shapes our consumer reads and writes (`B/billing/flex/`), and every field its zod
-  schemas require is served.
+  schemas require is served. Subscription mode, `price_data.recurring` and the subscription
+  object follow the [Flex API reference](https://docs.withflex.com/api-reference) (there is
+  no sandbox recording).
 
 ## Install
 
@@ -73,6 +75,16 @@ const { checkout_session } = (await (
 await post(`/__admin/sessions/${checkout_session.checkout_session_id}/complete`, {})
 ```
 
+### Browser E2E suites
+
+Run `npx mockingbird-flex serve` on a port, point `FLEX_API_BASE_URL` at it, and the browser
+lands on the mock's page instead of `checkout.withflex.com`: no network, no shared Flex
+account, and the signed webhook reaches the app as soon as Pay is clicked. The page URL takes
+the mock's origin, or `--public-url` when given. A suite that finds the Flex tab by host
+(`/\bcheckout\.withflex\.com\b/`) keeps working with
+`--public-url http://checkout.withflex.com.localhost:8792`: Chromium resolves every
+`*.localhost` name to loopback. Other browsers may need a hosts entry.
+
 ### Routes
 
 All API bodies are wrapped: `{product: {…}}`, `{checkout_session: {…}}`, `{customer: {…}}`,
@@ -85,12 +97,13 @@ Errors are `{error: {type, message, param?}}`.
 | `POST /v1/products` | `{product: {name, description?, url?, client_reference_id?, metadata?}}`. New products are active, `hsa_fsa_eligibility: null` until classified (`PUT /__admin/products/:id`). |
 | `GET /v1/products/{id}` | `product_id, name, description, url, client_reference_id, hsa_fsa_eligibility, visit_type, active, test_mode, metadata, created_at`. |
 | `PATCH /v1/products/{id}` | `{product: {active?, name?, description?, url?, metadata?}}`; emits `product.updated`. |
-| `POST /v1/checkout/sessions` | `Idempotency-Key` honoured. `mode` `payment` (≥1 line item), `setup` (a customer and no line items, else 400), `off_session` (customer + a saved `payment_method`, charged before answering: the response is already `complete`, or its expanded payment intent is `requires_payment_method` / `requires_action` per `offSessionOutcome`). Unknown or inactive products, customers and payment methods are 400. `redirect_url` and `url` are the hosted page. |
+| `POST /v1/checkout/sessions` | `Idempotency-Key` honoured. `mode` `payment` (≥1 line item), `subscription` (≥1 line item whose `price_data.recurring` is `{interval: day\|week\|month\|year, interval_count?}`, else 400; optional `subscription_data: {cancel_at_period_end?, metadata?}`), `setup` (a customer and no line items, else 400), `off_session` (customer + a saved `payment_method`, charged before answering: the response is already `complete`, or its expanded payment intent is `requires_payment_method` / `requires_action` per `offSessionOutcome`). Unknown or inactive products, customers and payment methods are 400. `redirect_url` and `url` are the hosted page. |
 | `GET /v1/checkout/sessions/{id}?expand_customer=true&expand_payment_intent=true` | The session; expansions return `customer` / `payment_intent` objects instead of ids. |
 | `GET /v1/checkout/sessions?client_reference_id=&limit=&starting_after=` | Newest first (our ambiguous-create recovery). |
 | `POST /v1/checkout/sessions/{id}/refund` | `Idempotency-Key` honoured. `{checkout_session: {}}` (full) or `{checkout_session: {amount}}`; 400 when unpaid or over-refunded. |
 | `POST /v1/customers` | `Idempotency-Key` honoured. `{customer: {first_name, last_name, email, phone}}` (all required). |
 | `GET /v1/setup_intents/{id}?expand=customer,payment_method` | `setup_intent_id, status, customer, payment_method`. |
+| `GET /v1/subscriptions/{id}` | `{subscription: {subscription_id, status, items, customer, default_payment_method, cancel_at_period_end, current_period_start, current_period_end, canceled_at, metadata, test_mode, created_at}}`. A paid subscription-mode session starts one: `active`, `items` = its recurring line items, the period one interval of the first recurring item (month/year steps clamp to the month's last day), charged to the card just used; the session's `subscription` holds its id. |
 
 Auth: `Authorization: Bearer fsk_test_…` or `fsk_…`; a missing key, or any other format
 (`sk_test_…`, `whsec_…`), is 401 `authentication_error`. `test_mode` on created objects follows
@@ -129,6 +142,7 @@ intent plus `checkout_session_id`, refund events `checkout_session` and `payment
 | Event | When |
 | --- | --- |
 | `payment_intent.succeeded`, then `checkout.session.completed` | the page (or `…/complete`, or an off-session charge) settles a session |
+| `customer.subscription.created` (the subscription), before those two | a subscription-mode session settles |
 | `checkout.session.async_payment_succeeded` | settling a session whose intent was `processing` |
 | `checkout.session.async_payment_failed` | a decline (page, admin, off-session) |
 | `checkout.session.expired` | `…/expire`, or `expires_at` passing on the mock clock (default 24 h) |
@@ -188,8 +202,12 @@ so product names are synthesised.
   split payment is reachable only as `next_action: provide_second_payment_method`.
 - The letter-of-medical-necessity questionnaire: one submit button stands in for it.
 - Test/live data separation: a live key sees the same objects (only `test_mode` differs).
-- Subscriptions, coupons, promotion codes (`allow_promotion_codes` is echoed only), partial
-  captures, disputes.
+- Subscription lifecycle after checkout: renewals, invoices and the `invoice.*` events,
+  trials, `customer.subscription.updated` / `.deleted`, and the subscription update/cancel
+  routes. A subscription stays `active` for its first period. The Prices API (`price` ids in
+  line items) is not modelled either: use inline `price_data`.
+- Coupons, promotion codes (`allow_promotion_codes` is echoed only), partial captures,
+  disputes.
 - Flex's exact error texts and ids: shapes follow what our consumer reads; ids look like
   `fprod_01z…`, `fcs_01z…`, `fcus_…`, `fpi_…`, `fseti_…`, `fpm_…`, `fevt_…`.
 
@@ -197,7 +215,7 @@ so product names are synthesised.
 
 | Export | Kind | Description |
 | --- | --- | --- |
-| `FlexAPI` | class | The in-process mock: `fetch(request)`, `reset()`, `settle(id)`, `decline(id)`, `expire(id)`, `requireAction(id, type)`, `setPaymentIntent(id, patch)`, `applyRefund(id, amount)`, `putProduct(product)`, `emitFor(type, target)`, `tick()`, `sessions()`, `present(session, view)`. Options: `sqlite`, `now`, `namespace`, `publicNamespace`, `products`, `settings`, `onEvent`. |
+| `FlexAPI` | class | The in-process mock: `fetch(request)`, `reset()`, `settle(id)`, `decline(id)`, `expire(id)`, `requireAction(id, type)`, `setPaymentIntent(id, patch)`, `applyRefund(id, amount)`, `putProduct(product)`, `emitFor(type, target)`, `tick()`, `sessions()`, `subscriptions()`, `present(session, view)`. Options: `sqlite`, `now`, `namespace`, `publicNamespace`, `products`, `settings`, `onEvent`. |
 | `createRuntime` | function | The mock with the full service contract. Options: `webhooks: {url, secret, retryDelaysMs?, fetch?}`, `products`, `settings`, `tickMs`, `clock`, `seed`, `adminKey`, `onLog`. |
 | `FLEX_PRESETS` | object | Every named fault preset. |
 | `FLEX_NAMESPACE` | string | The service name, `"flex"`. |
@@ -206,7 +224,8 @@ so product names are synthesised.
 | `isNextActionType` | function | Whether a string is a next-action type. |
 | `CARDS`, `classifyCard`, `substituteSessionId` | values | The hosted page's test cards, its card classifier, and the `{CHECKOUT_SESSION_ID}` substitution. |
 | `CORPUS_ROWS`, `corpusProduct` | values | The recorded product corpus and its row → product mapping. |
-| `DEFAULT_SETTINGS`, `ELIGIBILITIES`, `NEXT_ACTION_TYPES`, `PAYMENT_INTENT_STATUSES` | values | Defaults and enums. |
+| `DEFAULT_SETTINGS`, `ELIGIBILITIES`, `NEXT_ACTION_TYPES`, `PAYMENT_INTENT_STATUSES`, `SUBSCRIPTION_STATUSES` | values | Defaults and enums. |
+| `periodEnd` | function | `periodEnd(startMs, {interval, interval_count?})`: the end of a billing period (epoch ms). |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (expiry ticks every 100 ms); the `serve` CLI target (`--webhook-url`, `--webhook-secret`, `--public-url`, `--event-naming`); port 8792. |
 
