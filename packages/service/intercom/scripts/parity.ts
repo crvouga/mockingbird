@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_INTERCOM_ACCESS_TOKEN   an access token for a test workspace
- *   MOCKINGBIRD_INTERCOM_API_URL        optional, default https://api.intercom.io
+ *   INTERCOM_ACCESS_TOKEN   an access token for a test workspace
+ *   INTERCOM_API_URL        optional, default https://api.intercom.io
  *
  * By default only reads run (contact and conversation search, gets, admins, /me). Contact
  * and conversation writes create records and can message real people, so they need
@@ -19,7 +19,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "intercom",
-      fields: { MOCKINGBIRD_INTERCOM_ACCESS_TOKEN: "MOCKINGBIRD_INTERCOM_ACCESS_TOKEN" },
+      fields: { INTERCOM_ACCESS_TOKEN: "INTERCOM_ACCESS_TOKEN" },
     },
     { env: process.env },
   )
@@ -31,11 +31,8 @@ try {
   throw error
 }
 
-const baseUrl = (process.env.MOCKINGBIRD_INTERCOM_API_URL ?? "https://api.intercom.io").replace(
-  /\/$/,
-  "",
-)
-const token = credentials.values.MOCKINGBIRD_INTERCOM_ACCESS_TOKEN
+const baseUrl = (process.env.INTERCOM_API_URL ?? "https://api.intercom.io").replace(/\/$/, "")
+const token = credentials.values.INTERCOM_ACCESS_TOKEN
 const headers = (value: string) => ({
   authorization: `Bearer ${value}`,
   accept: "application/json",

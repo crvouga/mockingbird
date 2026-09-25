@@ -88,18 +88,18 @@ const cliOptions = parseCLIOptions(Bun.argv.slice(2))
 const credentials = await loadCredentials(
   {
     provider: "junction",
-    fields: { MOCKINGBIRD_JUNCTION_API_KEY: "MOCKINGBIRD_JUNCTION_API_KEY" },
+    fields: { JUNCTION_API_KEY: "JUNCTION_API_KEY" },
   },
   { env: Bun.env },
 )
-const apiKey = credentials.values.MOCKINGBIRD_JUNCTION_API_KEY
+const apiKey = credentials.values.JUNCTION_API_KEY
 if (!TEST_KEY_PREFIXES.some((prefix) => apiKey.startsWith(prefix))) {
   console.error("junction parity: refusing to run with a key that is not a sandbox team key")
   process.exit(2)
 }
 
-const baseUrl = Bun.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? `https://${DEFAULT_JUNCTION_HOST}`
-const webhookReceiverUrl = Bun.env.MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL?.replace(/\/$/, "")
+const baseUrl = Bun.env.JUNCTION_BASE_URL ?? `https://${DEFAULT_JUNCTION_HOST}`
+const webhookReceiverUrl = Bun.env.JUNCTION_WEBHOOK_RECEIVER_URL?.replace(/\/$/, "")
 const webhookParity =
   webhookReceiverUrl === undefined
     ? undefined
@@ -108,8 +108,8 @@ const webhookParity =
           const response = await fetch(
             `${webhookReceiverUrl}/events/${encodeURIComponent(scope.runId)}?service=junction`,
             {
-              headers: Bun.env.MOCKINGBIRD_WEBHOOK_READ_TOKEN
-                ? { authorization: `Bearer ${Bun.env.MOCKINGBIRD_WEBHOOK_READ_TOKEN}` }
+              headers: Bun.env.WEBHOOK_READ_TOKEN
+                ? { authorization: `Bearer ${Bun.env.WEBHOOK_READ_TOKEN}` }
                 : {},
             },
           )
@@ -289,7 +289,7 @@ const runSeed = async (seed: number | undefined) => {
       console.log(`junction webhook parity: enabled (${webhookReceiverUrl})`)
     } else {
       console.warn(
-        "junction webhook parity: skipped; configure MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL with a deployed receiver URL, then register the webhook URL in the Junction sandbox dashboard using `bun run webhook:register`",
+        "junction webhook parity: skipped; configure JUNCTION_WEBHOOK_RECEIVER_URL with a deployed receiver URL, then register the webhook URL in the Junction sandbox dashboard using `bun run webhook:register`",
       )
     }
     console.log(

@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_FORMBRICKS_APP_URL      e.g. https://forms.example.com (a NON-production instance)
- *   MOCKINGBIRD_FORMBRICKS_API_KEY      a management API key for that instance
+ *   FORMBRICKS_APP_URL      e.g. https://forms.example.com (a NON-production instance)
+ *   FORMBRICKS_API_KEY      a management API key for that instance
  *
  * By default only safe operations run (environment state, survey and response reads, the
  * widget script). Creating responses fires the instance's webhooks and creating surveys changes
@@ -20,8 +20,8 @@ try {
     {
       provider: "formbricks",
       fields: {
-        MOCKINGBIRD_FORMBRICKS_APP_URL: "MOCKINGBIRD_FORMBRICKS_APP_URL",
-        MOCKINGBIRD_FORMBRICKS_API_KEY: "MOCKINGBIRD_FORMBRICKS_API_KEY",
+        FORMBRICKS_APP_URL: "FORMBRICKS_APP_URL",
+        FORMBRICKS_API_KEY: "FORMBRICKS_API_KEY",
       },
     },
     { env: process.env },
@@ -34,7 +34,7 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_FORMBRICKS_APP_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.FORMBRICKS_APP_URL.replace(/\/$/, "")
 try {
   await parity({
     provider: "formbricks",
@@ -44,7 +44,7 @@ try {
     real: {
       baseUrl,
       allowedHosts: [new URL(baseUrl).host],
-      headers: () => ({ "x-api-key": credentials.values.MOCKINGBIRD_FORMBRICKS_API_KEY }),
+      headers: () => ({ "x-api-key": credentials.values.FORMBRICKS_API_KEY }),
       minIntervalMs: 250,
     },
     mock: { create: () => new FormbricksAPI(), headers: () => ({ "x-api-key": "fbk_mock" }) },

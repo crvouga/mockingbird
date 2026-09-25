@@ -27,7 +27,7 @@ stays with the deterministic generator.
 
 The recording is shipped in the package (`@crvouga/mockingbird-service-junction/corpus`) and is
 what `mockingbird-junction serve` loads by default. Re-record it (requires a sandbox key —
-`MOCKINGBIRD_JUNCTION_API_KEY` in the environment):
+`JUNCTION_API_KEY` in the environment):
 
 ```bash
 cd packages/service/junction

@@ -15,11 +15,11 @@ const credentials = await loadCredentials(
   {
     provider: "stripe",
     // secret field name -> env var that supplies it
-    fields: { MOCKINGBIRD_STRIPE_SECRET_KEY: "MOCKINGBIRD_STRIPE_SECRET_KEY" },
+    fields: { STRIPE_SECRET_KEY: "STRIPE_SECRET_KEY" },
   },
   { env: process.env },
 )
-const secretKey = credentials.values.MOCKINGBIRD_STRIPE_SECRET_KEY
+const secretKey = credentials.values.STRIPE_SECRET_KEY
 
 // Pass as `redact` to parity(...) so failure reports never print the key.
 const redact = createRedactor(credentials.secrets)

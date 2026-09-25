@@ -5,9 +5,9 @@
  * response shapes. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_BEDROCK_ACCESS_KEY_ID
- *   MOCKINGBIRD_BEDROCK_SECRET_ACCESS_KEY
- *   MOCKINGBIRD_BEDROCK_REGION            e.g. us-east-1
+ *   BEDROCK_ACCESS_KEY_ID
+ *   BEDROCK_SECRET_ACCESS_KEY
+ *   BEDROCK_REGION            e.g. us-east-1
  *
  * Every operation is read-only (no side effects), but each call is billed: keep runs small
  * (`FC_NUM_RUNS`). The AgentCore harness needs a deployed harness, so it is skipped unless
@@ -24,9 +24,9 @@ try {
     {
       provider: "bedrock",
       fields: {
-        MOCKINGBIRD_BEDROCK_ACCESS_KEY_ID: "MOCKINGBIRD_BEDROCK_ACCESS_KEY_ID",
-        MOCKINGBIRD_BEDROCK_SECRET_ACCESS_KEY: "MOCKINGBIRD_BEDROCK_SECRET_ACCESS_KEY",
-        MOCKINGBIRD_BEDROCK_REGION: "MOCKINGBIRD_BEDROCK_REGION",
+        BEDROCK_ACCESS_KEY_ID: "BEDROCK_ACCESS_KEY_ID",
+        BEDROCK_SECRET_ACCESS_KEY: "BEDROCK_SECRET_ACCESS_KEY",
+        BEDROCK_REGION: "BEDROCK_REGION",
       },
     },
     { env: process.env },
@@ -39,7 +39,7 @@ try {
   throw error
 }
 
-const region = credentials.values.MOCKINGBIRD_BEDROCK_REGION
+const region = credentials.values.BEDROCK_REGION
 const baseUrl = `https://bedrock-runtime.${region}.amazonaws.com`
 
 /**
@@ -61,8 +61,8 @@ const signedFetch = async (request: Request): Promise<Response> => {
     body,
     region,
     service: url.pathname.startsWith("/harnesses/") ? "bedrock-agentcore" : "bedrock",
-    accessKeyId: credentials.values.MOCKINGBIRD_BEDROCK_ACCESS_KEY_ID,
-    secretAccessKey: credentials.values.MOCKINGBIRD_BEDROCK_SECRET_ACCESS_KEY,
+    accessKeyId: credentials.values.BEDROCK_ACCESS_KEY_ID,
+    secretAccessKey: credentials.values.BEDROCK_SECRET_ACCESS_KEY,
     headers: { "content-type": headers["content-type"] ?? "application/json" },
   })
   return fetch(url, {

@@ -3,7 +3,7 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_DAILY_API_KEY     a Daily API key for a test domain
+ *   DAILY_API_KEY     a Daily API key for a test domain
  *
  * By default only safe operations run (get room, presence, meeting tokens); room create,
  * update, delete and eject change the domain, so they need `--include-unsafe`.
@@ -17,7 +17,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "daily",
-      fields: { MOCKINGBIRD_DAILY_API_KEY: "MOCKINGBIRD_DAILY_API_KEY" },
+      fields: { DAILY_API_KEY: "DAILY_API_KEY" },
     },
     { env: process.env },
   )
@@ -30,7 +30,7 @@ try {
 }
 
 const baseUrl = "https://api.daily.co"
-const apiKey = credentials.values.MOCKINGBIRD_DAILY_API_KEY
+const apiKey = credentials.values.DAILY_API_KEY
 const auth = () => ({ authorization: `Bearer ${apiKey}` })
 
 try {

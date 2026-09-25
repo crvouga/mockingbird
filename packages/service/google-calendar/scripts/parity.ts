@@ -3,9 +3,9 @@
  * a fresh mock, canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_ID
- *   MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_SECRET
- *   MOCKINGBIRD_GOOGLE_CALENDAR_REFRESH_TOKEN   for a throwaway test Google account only
+ *   GOOGLE_CALENDAR_CLIENT_ID
+ *   GOOGLE_CALENDAR_CLIENT_SECRET
+ *   GOOGLE_CALENDAR_REFRESH_TOKEN   for a throwaway test Google account only
  *
  * By default only reads run (calendarList, events list/get, userinfo); event writes, watch,
  * channels.stop and calendars.insert need `--include-unsafe` and must only ever target that
@@ -22,9 +22,9 @@ try {
     {
       provider: "google-calendar",
       fields: {
-        MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_ID: "MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_ID",
-        MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_SECRET: "MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_SECRET",
-        MOCKINGBIRD_GOOGLE_CALENDAR_REFRESH_TOKEN: "MOCKINGBIRD_GOOGLE_CALENDAR_REFRESH_TOKEN",
+        GOOGLE_CALENDAR_CLIENT_ID: "GOOGLE_CALENDAR_CLIENT_ID",
+        GOOGLE_CALENDAR_CLIENT_SECRET: "GOOGLE_CALENDAR_CLIENT_SECRET",
+        GOOGLE_CALENDAR_REFRESH_TOKEN: "GOOGLE_CALENDAR_REFRESH_TOKEN",
       },
     },
     { env: process.env },
@@ -43,9 +43,9 @@ const refreshed = await fetch("https://oauth2.googleapis.com/token", {
   headers: { "content-type": "application/x-www-form-urlencoded" },
   body: new URLSearchParams({
     grant_type: "refresh_token",
-    refresh_token: values.MOCKINGBIRD_GOOGLE_CALENDAR_REFRESH_TOKEN,
-    client_id: values.MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_ID,
-    client_secret: values.MOCKINGBIRD_GOOGLE_CALENDAR_CLIENT_SECRET,
+    refresh_token: values.GOOGLE_CALENDAR_REFRESH_TOKEN,
+    client_id: values.GOOGLE_CALENDAR_CLIENT_ID,
+    client_secret: values.GOOGLE_CALENDAR_CLIENT_SECRET,
   }),
 })
 if (!refreshed.ok) {

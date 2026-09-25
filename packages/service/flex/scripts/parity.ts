@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_FLEX_API_URL   e.g. https://api.withflex.com
- *   MOCKINGBIRD_FLEX_API_KEY   a test-mode secret key (fsk_test_…); live keys are refused
+ *   FLEX_API_URL   e.g. https://api.withflex.com
+ *   FLEX_API_KEY   a test-mode secret key (fsk_test_…); live keys are refused
  *
  * By default only safe operations run (product, session and setup-intent reads). Creating
  * products, customers and sessions, and refunds, write to the shared sandbox account, so they
@@ -20,8 +20,8 @@ try {
     {
       provider: "flex",
       fields: {
-        MOCKINGBIRD_FLEX_API_URL: "MOCKINGBIRD_FLEX_API_URL",
-        MOCKINGBIRD_FLEX_API_KEY: "MOCKINGBIRD_FLEX_API_KEY",
+        FLEX_API_URL: "FLEX_API_URL",
+        FLEX_API_KEY: "FLEX_API_KEY",
       },
     },
     { env: process.env },
@@ -34,12 +34,12 @@ try {
   throw error
 }
 
-const apiKey = credentials.values.MOCKINGBIRD_FLEX_API_KEY
+const apiKey = credentials.values.FLEX_API_KEY
 if (!apiKey.startsWith("fsk_test_")) {
-  console.error("flex parity: MOCKINGBIRD_FLEX_API_KEY must be a test-mode key (fsk_test_…)")
+  console.error("flex parity: FLEX_API_KEY must be a test-mode key (fsk_test_…)")
   process.exit(2)
 }
-const baseUrl = credentials.values.MOCKINGBIRD_FLEX_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.FLEX_API_URL.replace(/\/$/, "")
 
 try {
   await parity({

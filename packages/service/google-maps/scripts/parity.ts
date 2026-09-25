@@ -3,7 +3,7 @@
  * and diffed. The key comes from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_GOOGLE_MAPS_API_KEY     a Maps Platform key with Places, Geocoding and
+ *   GOOGLE_MAPS_API_KEY     a Maps Platform key with Places, Geocoding and
  *                                       Address Validation enabled
  *
  * Every operation is read-only (Address Validation is a POST with no side effects, served from
@@ -25,7 +25,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "google-maps",
-      fields: { MOCKINGBIRD_GOOGLE_MAPS_API_KEY: "MOCKINGBIRD_GOOGLE_MAPS_API_KEY" },
+      fields: { GOOGLE_MAPS_API_KEY: "GOOGLE_MAPS_API_KEY" },
     },
     { env: process.env },
   )
@@ -37,7 +37,7 @@ try {
   throw error
 }
 
-const realKey = credentials.values.MOCKINGBIRD_GOOGLE_MAPS_API_KEY
+const realKey = credentials.values.GOOGLE_MAPS_API_KEY
 const baseUrl = "https://maps.googleapis.com"
 /** `ValidateAddress` lives on its own host (the spec's path-level `servers`). */
 const validationUrl = "https://addressvalidation.googleapis.com"

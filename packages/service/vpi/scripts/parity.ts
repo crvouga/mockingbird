@@ -3,9 +3,9 @@
  * and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_VPI_API_URL        a VPI sandbox/staging base URL (never production)
- *   MOCKINGBIRD_VPI_EMAIL
- *   MOCKINGBIRD_VPI_PASSWORD
+ *   VPI_API_URL        a VPI sandbox/staging base URL (never production)
+ *   VPI_EMAIL
+ *   VPI_PASSWORD
  *
  * By default only safe operations run (auth, catalog, clinic, patients, status lists);
  * saveNewPrescription creates a real draft in the clinic's queue, so it needs `--include-unsafe`.
@@ -20,9 +20,9 @@ try {
     {
       provider: "vpi",
       fields: {
-        MOCKINGBIRD_VPI_API_URL: "MOCKINGBIRD_VPI_API_URL",
-        MOCKINGBIRD_VPI_EMAIL: "MOCKINGBIRD_VPI_EMAIL",
-        MOCKINGBIRD_VPI_PASSWORD: "MOCKINGBIRD_VPI_PASSWORD",
+        VPI_API_URL: "VPI_API_URL",
+        VPI_EMAIL: "VPI_EMAIL",
+        VPI_PASSWORD: "VPI_PASSWORD",
       },
     },
     { env: process.env },
@@ -35,7 +35,7 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_VPI_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.VPI_API_URL.replace(/\/$/, "")
 if (new URL(baseUrl).host === "api.vpicompounding.net") {
   console.error("vpi parity: refusing to run against production (api.vpicompounding.net)")
   process.exit(2)
@@ -46,8 +46,8 @@ const authenticate = async (fetchFn: (request: Request) => Promise<Response>, ur
       method: "POST",
       headers: { accept: "application/json", "content-type": "application/json" },
       body: JSON.stringify({
-        email: credentials.values.MOCKINGBIRD_VPI_EMAIL,
-        password: credentials.values.MOCKINGBIRD_VPI_PASSWORD,
+        email: credentials.values.VPI_EMAIL,
+        password: credentials.values.VPI_PASSWORD,
         isPatientLogin: false,
       }),
     }),

@@ -3,7 +3,7 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_KLAVIYO_API_KEY   a private key (pk_…) of a sandbox / test account
+ *   KLAVIYO_API_KEY   a private key (pk_…) of a sandbox / test account
  *
  * By default only safe operations run (event reads); creating events writes to a real
  * account (and can trigger flows that email real people), so it needs `--include-unsafe`.
@@ -17,7 +17,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "klaviyo",
-      fields: { MOCKINGBIRD_KLAVIYO_API_KEY: "MOCKINGBIRD_KLAVIYO_API_KEY" },
+      fields: { KLAVIYO_API_KEY: "KLAVIYO_API_KEY" },
     },
     { env: process.env },
   )
@@ -29,7 +29,7 @@ try {
   throw error
 }
 
-const key = credentials.values.MOCKINGBIRD_KLAVIYO_API_KEY
+const key = credentials.values.KLAVIYO_API_KEY
 const headers = () => ({
   authorization: `Klaviyo-API-Key ${key}`,
   revision: KLAVIYO_REVISION,

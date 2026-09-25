@@ -4,9 +4,9 @@
  * types and headers. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_AWS_SPEECH_ACCESS_KEY_ID
- *   MOCKINGBIRD_AWS_SPEECH_SECRET_ACCESS_KEY
- *   MOCKINGBIRD_AWS_SPEECH_REGION            e.g. us-east-1
+ *   AWS_SPEECH_ACCESS_KEY_ID
+ *   AWS_SPEECH_SECRET_ACCESS_KEY
+ *   AWS_SPEECH_REGION            e.g. us-east-1
  *
  * Only Polly `SynthesizeSpeech` runs by default (billed per character; keep `FC_NUM_RUNS`
  * small). `--include-unsafe` adds Transcribe batch, which starts real (billed) jobs. The
@@ -23,9 +23,9 @@ try {
     {
       provider: "aws-speech",
       fields: {
-        MOCKINGBIRD_AWS_SPEECH_ACCESS_KEY_ID: "MOCKINGBIRD_AWS_SPEECH_ACCESS_KEY_ID",
-        MOCKINGBIRD_AWS_SPEECH_SECRET_ACCESS_KEY: "MOCKINGBIRD_AWS_SPEECH_SECRET_ACCESS_KEY",
-        MOCKINGBIRD_AWS_SPEECH_REGION: "MOCKINGBIRD_AWS_SPEECH_REGION",
+        AWS_SPEECH_ACCESS_KEY_ID: "AWS_SPEECH_ACCESS_KEY_ID",
+        AWS_SPEECH_SECRET_ACCESS_KEY: "AWS_SPEECH_SECRET_ACCESS_KEY",
+        AWS_SPEECH_REGION: "AWS_SPEECH_REGION",
       },
     },
     { env: process.env },
@@ -38,7 +38,7 @@ try {
   throw error
 }
 
-const region = credentials.values.MOCKINGBIRD_AWS_SPEECH_REGION
+const region = credentials.values.AWS_SPEECH_REGION
 const polly = `https://polly.${region}.amazonaws.com`
 const transcribe = `https://transcribe.${region}.amazonaws.com`
 
@@ -60,8 +60,8 @@ const signedFetch = async (request: Request): Promise<Response> => {
     body,
     region,
     service: batch ? "transcribe" : "polly",
-    accessKeyId: credentials.values.MOCKINGBIRD_AWS_SPEECH_ACCESS_KEY_ID,
-    secretAccessKey: credentials.values.MOCKINGBIRD_AWS_SPEECH_SECRET_ACCESS_KEY,
+    accessKeyId: credentials.values.AWS_SPEECH_ACCESS_KEY_ID,
+    secretAccessKey: credentials.values.AWS_SPEECH_SECRET_ACCESS_KEY,
     headers,
   })
   return fetch(url, {

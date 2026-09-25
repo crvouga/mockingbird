@@ -2,9 +2,9 @@ import { ResourceTable } from "@crvouga/mockingbird-model"
 import { StripeAPI } from "../src/index.js"
 import { compareStripeWebhooks, startStripeWebhookOracle } from "./webhook-oracle.js"
 
-const key = process.env.MOCKINGBIRD_STRIPE_SECRET_KEY
+const key = process.env.STRIPE_SECRET_KEY
 if (!key?.startsWith("sk_test_"))
-  throw new Error("webhook smoke requires MOCKINGBIRD_STRIPE_SECRET_KEY with a sk_test_ key")
+  throw new Error("webhook smoke requires STRIPE_SECRET_KEY with a sk_test_ key")
 
 const oracle = await startStripeWebhookOracle(key)
 const mock = new StripeAPI()

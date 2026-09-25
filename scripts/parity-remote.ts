@@ -1,5 +1,5 @@
 /**
- * Run live parity on GitHub Actions with the repo's MOCKINGBIRD_* secrets, for the current
+ * Run live parity on GitHub Actions with the repo's sandbox-key secrets, for the current
  * branch, and stream the log here. Needs only `gh auth login` with write access to the repo:
  * no sandbox keys on this machine.
  *

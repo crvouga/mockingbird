@@ -318,7 +318,7 @@ bun run client-parity      # stripe-node smoke proof with webhook signature veri
 bun run vendor             # re-vendor openapi.yaml from the pinned upstream spec
 ```
 
-Live parity loads `MOCKINGBIRD_STRIPE_SECRET_KEY` (a `sk_test_` key) from the environment (`.env.local`,
+Live parity loads `STRIPE_SECRET_KEY` (a `sk_test_` key) from the environment (`.env.local`,
 or the repo secret via `bun run parity:remote -- stripe`) and exits 2 without one. By default it walks only safe operations and
 leaves out account-global ones (account profile, lifetime balance, lingering test clocks and
 webhook endpoints).

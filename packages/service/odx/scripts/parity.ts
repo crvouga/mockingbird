@@ -3,9 +3,9 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_ODX_API_URL        e.g. https://odxinstanceresource.azure-api.net/<partner>   (the partner segment is your account's slug)
- *   MOCKINGBIRD_ODX_API_KEY        the ApiKey header value
- *   MOCKINGBIRD_ODX_PRACTICE_ID    OPTIMAL_PRACTICE_ID
+ *   ODX_API_URL        e.g. https://odxinstanceresource.azure-api.net/<partner>   (the partner segment is your account's slug)
+ *   ODX_API_KEY        the ApiKey header value
+ *   ODX_PRACTICE_ID    OPTIMAL_PRACTICE_ID
  *
  * The vendor was retired 2026-07-22, so these normally do not exist and the script exits 2.
  * By default only safe operations run (labs, elements, patient/test/webhook reads, reports);
@@ -24,9 +24,9 @@ try {
     {
       provider: "odx",
       fields: {
-        MOCKINGBIRD_ODX_API_URL: "MOCKINGBIRD_ODX_API_URL",
-        MOCKINGBIRD_ODX_API_KEY: "MOCKINGBIRD_ODX_API_KEY",
-        MOCKINGBIRD_ODX_PRACTICE_ID: "MOCKINGBIRD_ODX_PRACTICE_ID",
+        ODX_API_URL: "ODX_API_URL",
+        ODX_API_KEY: "ODX_API_KEY",
+        ODX_PRACTICE_ID: "ODX_PRACTICE_ID",
       },
     },
     { env: process.env },
@@ -41,9 +41,9 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_ODX_API_URL.replace(/\/$/, "")
-const apiKey = credentials.values.MOCKINGBIRD_ODX_API_KEY
-const practiceId = credentials.values.MOCKINGBIRD_ODX_PRACTICE_ID
+const baseUrl = credentials.values.ODX_API_URL.replace(/\/$/, "")
+const apiKey = credentials.values.ODX_API_KEY
+const practiceId = credentials.values.ODX_PRACTICE_ID
 
 /** Rewrite the spec's placeholder practice id into the real one. */
 const withRealPractice = (request: Request): Request =>

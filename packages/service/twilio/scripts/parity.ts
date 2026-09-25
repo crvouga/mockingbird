@@ -6,8 +6,8 @@
  * Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_TWILIO_ACCOUNT_SID
- *   MOCKINGBIRD_TWILIO_AUTH_TOKEN
+ *   TWILIO_ACCOUNT_SID
+ *   TWILIO_AUTH_TOKEN
  *
  * Every number is fictional (NANP 555-01xx, Ofcom's 020 7946 0xxx drama range) or a
  * well-known malformed input. Three checks run: a curated table compared byte for byte
@@ -62,8 +62,8 @@ try {
     {
       provider: "twilio",
       fields: {
-        MOCKINGBIRD_TWILIO_ACCOUNT_SID: "MOCKINGBIRD_TWILIO_ACCOUNT_SID",
-        MOCKINGBIRD_TWILIO_AUTH_TOKEN: "MOCKINGBIRD_TWILIO_AUTH_TOKEN",
+        TWILIO_ACCOUNT_SID: "TWILIO_ACCOUNT_SID",
+        TWILIO_AUTH_TOKEN: "TWILIO_AUTH_TOKEN",
       },
     },
     { env: process.env },
@@ -76,8 +76,8 @@ try {
   throw error
 }
 
-const sid = credentials.values.MOCKINGBIRD_TWILIO_ACCOUNT_SID as string
-const token = credentials.values.MOCKINGBIRD_TWILIO_AUTH_TOKEN as string
+const sid = credentials.values.TWILIO_ACCOUNT_SID as string
+const token = credentials.values.TWILIO_AUTH_TOKEN as string
 const redact = createRedactor([...credentials.secrets, sid])
 const basic = (password: string) => `Basic ${btoa(`${sid}:${password}`)}`
 const REAL = "https://lookups.twilio.com"

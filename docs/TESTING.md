@@ -64,11 +64,11 @@ OpenAPI spec
 
 | Command | Sandbox | Credential |
 | --- | --- | --- |
-| `bun run parity:stripe` | `https://api.stripe.com` (test mode) | `MOCKINGBIRD_STRIPE_SECRET_KEY` (`sk_test_*`) |
-| `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `MOCKINGBIRD_JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) |
-| `bun run parity:genebygene` | staging auth + API | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` |
-| `bun run parity:twilio` | `https://lookups.twilio.com` (free Lookup v2 only) | `MOCKINGBIRD_TWILIO_ACCOUNT_SID` / `_AUTH_TOKEN` |
+| `bun run parity:stripe` | `https://api.stripe.com` (test mode) | `STRIPE_SECRET_KEY` (`sk_test_*`) |
+| `bun run parity:junction` | `https://api.sandbox.us.junction.com` | `JUNCTION_API_KEY` (`sk_us_*` / `sk_eu_*`) |
+| `bun run parity:genebygene` | staging auth + API | `GENEBYGENE_CLIENT_ID` / `_CLIENT_SECRET` |
+| `bun run parity:twilio` | `https://lookups.twilio.com` (free Lookup v2 only) | `TWILIO_ACCOUNT_SID` / `_AUTH_TOKEN` |
 | `cd packages/service/oauth && bun run parity` | Google, Apple, Microsoft discovery/JWKS plus GitHub REST auth error | None; public, read-only metadata |
-| `bun run parity:service -- <name…> \| --all` | each service's sandbox | `MOCKINGBIRD_<NAME>_*` in env; reports `parity`, `diverged`, or `no credentials` per service |
-| `bun run parity:remote -- <name…> \| --all` | each service's sandbox, on GitHub Actions | the repo's `MOCKINGBIRD_*` secrets; nothing local. Dispatches the [Parity workflow](../.github/workflows/parity.yml) on the pushed branch and streams its log |
+| `bun run parity:service -- <name…> \| --all` | each service's sandbox | `<NAME>_*` in env; reports `parity`, `diverged`, or `no credentials` per service |
+| `bun run parity:remote -- <name…> \| --all` | each service's sandbox, on GitHub Actions | the repo's `<NAME>_*` secrets; nothing local. Dispatches the [Parity workflow](../.github/workflows/parity.yml) on the pushed branch and streams its log |
 | `bun run verify:junction` | Junction sandbox | `mockingbird-junction verify`: corpus drift plus a stateful scenario; also runs daily in the [Verify workflow](../.github/workflows/verify.yml) |

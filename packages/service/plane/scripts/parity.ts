@@ -3,9 +3,9 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_PLANE_API_KEY         an API token for a scratch workspace
- *   MOCKINGBIRD_PLANE_WORKSPACE_SLUG  the scratch workspace's slug
- *   MOCKINGBIRD_PLANE_PROJECT_ID      a scratch project (never the real BUGS project)
+ *   PLANE_API_KEY         an API token for a scratch workspace
+ *   PLANE_WORKSPACE_SLUG  the scratch workspace's slug
+ *   PLANE_PROJECT_ID      a scratch project (never the real BUGS project)
  *
  * By default only reads run (work items, states, labels, comments, links); creating work
  * items, comments, links and labels needs `--include-unsafe`. The contract pins the parity
@@ -21,9 +21,9 @@ try {
     {
       provider: "plane",
       fields: {
-        MOCKINGBIRD_PLANE_API_KEY: "MOCKINGBIRD_PLANE_API_KEY",
-        MOCKINGBIRD_PLANE_WORKSPACE_SLUG: "MOCKINGBIRD_PLANE_WORKSPACE_SLUG",
-        MOCKINGBIRD_PLANE_PROJECT_ID: "MOCKINGBIRD_PLANE_PROJECT_ID",
+        PLANE_API_KEY: "PLANE_API_KEY",
+        PLANE_WORKSPACE_SLUG: "PLANE_WORKSPACE_SLUG",
+        PLANE_PROJECT_ID: "PLANE_PROJECT_ID",
       },
     },
     { env: process.env },
@@ -37,9 +37,8 @@ try {
 }
 
 const baseUrl = "https://api.plane.so"
-const { MOCKINGBIRD_PLANE_API_KEY: key, MOCKINGBIRD_PLANE_WORKSPACE_SLUG: slug } =
-  credentials.values
-const project = credentials.values.MOCKINGBIRD_PLANE_PROJECT_ID
+const { PLANE_API_KEY: key, PLANE_WORKSPACE_SLUG: slug } = credentials.values
+const project = credentials.values.PLANE_PROJECT_ID
 const PARITY_PATH = "/api/v1/workspaces/acme/projects/33333333-3333-4333-8333-333333333333/"
 const realPath = `/api/v1/workspaces/${encodeURIComponent(slug)}/projects/${encodeURIComponent(project)}/`
 

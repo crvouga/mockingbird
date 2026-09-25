@@ -1,6 +1,6 @@
 /**
  * Re-record the shipped corpus (corpus/sandbox-sealed.json) from the Junction sandbox,
- * with MOCKINGBIRD_JUNCTION_API_KEY from the environment. Consumers record their own team with
+ * with JUNCTION_API_KEY from the environment. Consumers record their own team with
  * `mockingbird-junction corpus pull` instead.
  *
  *   bun run corpus:record            (refuses to overwrite)
@@ -30,13 +30,13 @@ if (!argv.includes("--force")) {
 const credentials = await loadCredentials(
   {
     provider: "junction",
-    fields: { MOCKINGBIRD_JUNCTION_API_KEY: "MOCKINGBIRD_JUNCTION_API_KEY" },
+    fields: { JUNCTION_API_KEY: "JUNCTION_API_KEY" },
   },
   {
     env: Bun.env,
   },
 )
-const apiKey = credentials.values.MOCKINGBIRD_JUNCTION_API_KEY
+const apiKey = credentials.values.JUNCTION_API_KEY
 if (!isSandboxKey(apiKey)) {
   console.error("refusing to run with a key that is not a sandbox team key")
   process.exit(2)
@@ -44,7 +44,7 @@ if (!isSandboxKey(apiKey)) {
 
 const corpus = await pullCorpus({
   apiKey,
-  baseUrl: process.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? DEFAULT_JUNCTION_BASE_URL,
+  baseUrl: process.env.JUNCTION_BASE_URL ?? DEFAULT_JUNCTION_BASE_URL,
   onProgress: (message) => console.log(message),
 })
 const json = JSON.stringify(corpus, null, 2)

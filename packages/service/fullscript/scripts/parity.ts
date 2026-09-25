@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_FULLSCRIPT_API_URL        e.g. https://api-us-snd.fullscript.io
- *   MOCKINGBIRD_FULLSCRIPT_ACCESS_TOKEN   a sandbox practitioner's access token
+ *   FULLSCRIPT_API_URL        e.g. https://api-us-snd.fullscript.io
+ *   FULLSCRIPT_ACCESS_TOKEN   a sandbox practitioner's access token
  *
  * Only reads run by default (clinic, lab orders, events); session grants, token calls and
  * revocation need `--include-unsafe`. The sandbox clinic's lab orders differ from the mock's
@@ -21,8 +21,8 @@ try {
     {
       provider: "fullscript",
       fields: {
-        MOCKINGBIRD_FULLSCRIPT_API_URL: "MOCKINGBIRD_FULLSCRIPT_API_URL",
-        MOCKINGBIRD_FULLSCRIPT_ACCESS_TOKEN: "MOCKINGBIRD_FULLSCRIPT_ACCESS_TOKEN",
+        FULLSCRIPT_API_URL: "FULLSCRIPT_API_URL",
+        FULLSCRIPT_ACCESS_TOKEN: "FULLSCRIPT_ACCESS_TOKEN",
       },
     },
     { env: process.env },
@@ -35,14 +35,14 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_FULLSCRIPT_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.FULLSCRIPT_API_URL.replace(/\/$/, "")
 if (!/snd|sandbox|staging/.test(baseUrl) && !process.argv.includes("--allow-production")) {
   console.error(
     "fullscript parity: refusing a non-sandbox Fullscript URL (pass --allow-production)",
   )
   process.exit(2)
 }
-const realToken = credentials.values.MOCKINGBIRD_FULLSCRIPT_ACCESS_TOKEN
+const realToken = credentials.values.FULLSCRIPT_ACCESS_TOKEN
 const mockToken = issueAccessToken(
   {
     clientId: "parity",

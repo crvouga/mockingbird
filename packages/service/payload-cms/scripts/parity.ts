@@ -5,7 +5,7 @@
  * checks querying, sorting and paging. Configuration comes from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_PAYLOAD_CMS_API_URL   e.g. https://payload.acme.example
+ *   PAYLOAD_CMS_API_URL   e.g. https://payload.acme.example
  *
  * Every operation is a read.
  */
@@ -18,7 +18,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "payload-cms",
-      fields: { MOCKINGBIRD_PAYLOAD_CMS_API_URL: "MOCKINGBIRD_PAYLOAD_CMS_API_URL" },
+      fields: { PAYLOAD_CMS_API_URL: "PAYLOAD_CMS_API_URL" },
     },
     { env: process.env },
   )
@@ -30,7 +30,7 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_PAYLOAD_CMS_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.PAYLOAD_CMS_API_URL.replace(/\/$/, "")
 const live = await fetch(`${baseUrl}/api/marketing?limit=0&depth=0`, {
   headers: { accept: "application/json" },
 })

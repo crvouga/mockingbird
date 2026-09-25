@@ -3,7 +3,7 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_SLACK_BOT_TOKEN     a bot token (xoxb-…) in a sandbox workspace
+ *   SLACK_BOT_TOKEN     a bot token (xoxb-…) in a sandbox workspace
  *
  * By default only safe operations run (auth.test, users.*, files.info, reactions.get,
  * chat.getPermalink). Posting, reacting, joining and opening views change a real workspace,
@@ -19,7 +19,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "slack",
-      fields: { MOCKINGBIRD_SLACK_BOT_TOKEN: "MOCKINGBIRD_SLACK_BOT_TOKEN" },
+      fields: { SLACK_BOT_TOKEN: "SLACK_BOT_TOKEN" },
     },
     { env: process.env },
   )
@@ -31,7 +31,7 @@ try {
   throw error
 }
 
-const token = credentials.values.MOCKINGBIRD_SLACK_BOT_TOKEN
+const token = credentials.values.SLACK_BOT_TOKEN
 const baseUrl = "https://slack.com"
 try {
   await parity({

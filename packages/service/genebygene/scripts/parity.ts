@@ -2,12 +2,12 @@
  * Live parity against Gene by Gene (Nucleus API v2), staging by default. Credentials come from
  * the environment (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_GENEBYGENE_CLIENT_ID      (or GENE_BY_GENE_CLIENT_ID, the repo secret's name)
- *   MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET  (or GENE_BY_GENE_CLIENT_SECRET)
- *   MOCKINGBIRD_GENEBYGENE_API_URL    optional, default https://staging-api.genebygene.com
- *                                     (MOCKINGBIRD_GENEBYGENE_BASE_URL is the older name)
- *   MOCKINGBIRD_GENEBYGENE_TOKEN_URL  optional, default https://staging-auth.genebygene.com/connect/token
- *   MOCKINGBIRD_GENEBYGENE_UNSAFE=1   also place (and cancel) real orders; demo/staging only
+ *   GENEBYGENE_CLIENT_ID      (or GENE_BY_GENE_CLIENT_ID, the vendor's name)
+ *   GENEBYGENE_CLIENT_SECRET  (or GENE_BY_GENE_CLIENT_SECRET)
+ *   GENEBYGENE_API_URL    optional, default https://staging-api.genebygene.com
+ *                                     (GENEBYGENE_BASE_URL is the older name)
+ *   GENEBYGENE_TOKEN_URL  optional, default https://staging-auth.genebygene.com/connect/token
+ *   GENEBYGENE_UNSAFE=1   also place (and cancel) real orders; demo/staging only
  *
  * Without credentials it prints the missing variable names and exits 2. It never prints a
  * secret value. What it checks:
@@ -22,7 +22,7 @@
  * 3. The structural cases (long line, PO Box, non-US, the not-found street) are recorded into
  *    `corpus/address-parity.json` (`recorded: true`); the acceptance suite replays that file.
  * 4. A random walk over the other safe operations, mock vs live.
- * 5. With MOCKINGBIRD_GENEBYGENE_UNSAFE=1 (never against production): one order to
+ * 5. With GENEBYGENE_UNSAFE=1 (never against production): one order to
  *    `1445 N Loop W`, canceled in the same run, and one to `501 N 5th St`, which must answer the
  *    Address Not Found 400. Responses are redacted to status, message and id shape.
  */
@@ -43,17 +43,16 @@ try {
     {
       provider: "genebygene",
       fields: {
-        MOCKINGBIRD_GENEBYGENE_CLIENT_ID: "MOCKINGBIRD_GENEBYGENE_CLIENT_ID",
-        MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET: "MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET",
+        GENEBYGENE_CLIENT_ID: "GENEBYGENE_CLIENT_ID",
+        GENEBYGENE_CLIENT_SECRET: "GENEBYGENE_CLIENT_SECRET",
       },
     },
     {
       env: {
-        MOCKINGBIRD_GENEBYGENE_CLIENT_ID:
-          process.env.MOCKINGBIRD_GENEBYGENE_CLIENT_ID || process.env.GENE_BY_GENE_CLIENT_ID,
-        MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET:
-          process.env.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET ||
-          process.env.GENE_BY_GENE_CLIENT_SECRET,
+        GENEBYGENE_CLIENT_ID:
+          process.env.GENEBYGENE_CLIENT_ID || process.env.GENE_BY_GENE_CLIENT_ID,
+        GENEBYGENE_CLIENT_SECRET:
+          process.env.GENEBYGENE_CLIENT_SECRET || process.env.GENE_BY_GENE_CLIENT_SECRET,
       },
     },
   )
@@ -68,16 +67,15 @@ try {
 }
 
 const tokenUrl =
-  process.env.MOCKINGBIRD_GENEBYGENE_TOKEN_URL ??
-  "https://staging-auth.genebygene.com/connect/token"
+  process.env.GENEBYGENE_TOKEN_URL ?? "https://staging-auth.genebygene.com/connect/token"
 const baseUrl = (
-  process.env.MOCKINGBIRD_GENEBYGENE_API_URL ??
-  process.env.MOCKINGBIRD_GENEBYGENE_BASE_URL ??
+  process.env.GENEBYGENE_API_URL ??
+  process.env.GENEBYGENE_BASE_URL ??
   "https://staging-api.genebygene.com"
 ).replace(/\/$/, "")
-const unsafe = process.env.MOCKINGBIRD_GENEBYGENE_UNSAFE === "1"
+const unsafe = process.env.GENEBYGENE_UNSAFE === "1"
 if (unsafe && /(^|\/\/)api\.genebygene\.com/.test(baseUrl)) {
-  console.error("genebygene parity: MOCKINGBIRD_GENEBYGENE_UNSAFE never runs against production")
+  console.error("genebygene parity: GENEBYGENE_UNSAFE never runs against production")
   process.exit(2)
 }
 
@@ -115,8 +113,8 @@ const requestToken = (
 
 const tokenResponse = await requestToken(
   (r) => live(r),
-  credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_ID ?? "",
-  credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET ?? "",
+  credentials.values.GENEBYGENE_CLIENT_ID ?? "",
+  credentials.values.GENEBYGENE_CLIENT_SECRET ?? "",
 )
 if (!tokenResponse.ok) {
   console.error(`genebygene parity: token request failed (${tokenResponse.status})`)
@@ -128,8 +126,8 @@ const redact = createRedactor([...credentials.secrets, realToken])
 // The mock answers the staging catalog, the host this script talks to by default, and knows the
 // same tenant client staging does (held in memory only), so an unknown client is refused alike.
 const tenantClient = {
-  client_id: credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_ID ?? "",
-  client_secret: credentials.values.MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET ?? "",
+  client_id: credentials.values.GENEBYGENE_CLIENT_ID ?? "",
+  client_secret: credentials.values.GENEBYGENE_CLIENT_SECRET ?? "",
 }
 const createMock = () =>
   new GeneByGeneAPI({ settings: { catalog: "staging", clients: [tenantClient] } })

@@ -303,9 +303,9 @@ bun test                           # self-parity (incl. the address walk), accep
                                    # test/consumer.ts, contract, served-over-HTTP
 bun scripts/vendor-openapi.ts <gxg-openapi.json>  # re-vendor openapi.yaml, then bun run generate
 bun run parity                     # live parity against GxG staging; exits 2 without
-                                   # MOCKINGBIRD_GENEBYGENE_CLIENT_ID / _CLIENT_SECRET (env / .env.local);
+                                   # GENEBYGENE_CLIENT_ID / _CLIENT_SECRET (env / .env.local);
                                    # compares and records corpus/address-parity.json, corpus/live-errors.json
-                                   # and src/corpus/live-catalogs.json; MOCKINGBIRD_GENEBYGENE_UNSAFE=1
+                                   # and src/corpus/live-catalogs.json; GENEBYGENE_UNSAFE=1
                                    # also places (and cancels) one real order on demo/staging
 bun run parity:remote -- genebygene  # the same on GitHub Actions with the repo's secrets; download the
                                    # recordings with gh run download <run-id> -n parity-corpus

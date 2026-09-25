@@ -3,8 +3,8 @@
  * and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_PERSONA_API_KEY        a sandbox key (persona_sandbox_…)
- *   MOCKINGBIRD_PERSONA_API_URL        optional, default https://withpersona.com/api/v1
+ *   PERSONA_API_KEY        a sandbox key (persona_sandbox_…)
+ *   PERSONA_API_URL        optional, default https://withpersona.com/api/v1
  *
  * By default only safe operations run (list and get inquiries); creating an inquiry writes to
  * the sandbox, so it needs `--include-unsafe`. The hosted flow pages are never walked.
@@ -18,7 +18,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "persona",
-      fields: { MOCKINGBIRD_PERSONA_API_KEY: "MOCKINGBIRD_PERSONA_API_KEY" },
+      fields: { PERSONA_API_KEY: "PERSONA_API_KEY" },
     },
     { env: process.env },
   )
@@ -30,10 +30,8 @@ try {
   throw error
 }
 
-const baseUrl = (
-  process.env.MOCKINGBIRD_PERSONA_API_URL ?? "https://withpersona.com/api/v1"
-).replace(/\/$/, "")
-const key = credentials.values.MOCKINGBIRD_PERSONA_API_KEY
+const baseUrl = (process.env.PERSONA_API_URL ?? "https://withpersona.com/api/v1").replace(/\/$/, "")
+const key = credentials.values.PERSONA_API_KEY
 const headers = (token: string) => () => ({
   authorization: `Bearer ${token}`,
   "persona-version": "2023-01-05",

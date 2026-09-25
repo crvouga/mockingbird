@@ -3,9 +3,9 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_FIRSTPROMOTER_API_URL      e.g. https://api.firstpromoter.com/api
- *   MOCKINGBIRD_FIRSTPROMOTER_API_KEY
- *   MOCKINGBIRD_FIRSTPROMOTER_ACCOUNT_ID
+ *   FIRSTPROMOTER_API_URL      e.g. https://api.firstpromoter.com/api
+ *   FIRSTPROMOTER_API_KEY
+ *   FIRSTPROMOTER_ACCOUNT_ID
  *
  * By default only safe operations run (promoter reads, iframe login); creating, updating and
  * archiving promoters and tracking signups change a real account, so they need
@@ -21,9 +21,9 @@ try {
     {
       provider: "firstpromoter",
       fields: {
-        MOCKINGBIRD_FIRSTPROMOTER_API_URL: "MOCKINGBIRD_FIRSTPROMOTER_API_URL",
-        MOCKINGBIRD_FIRSTPROMOTER_API_KEY: "MOCKINGBIRD_FIRSTPROMOTER_API_KEY",
-        MOCKINGBIRD_FIRSTPROMOTER_ACCOUNT_ID: "MOCKINGBIRD_FIRSTPROMOTER_ACCOUNT_ID",
+        FIRSTPROMOTER_API_URL: "FIRSTPROMOTER_API_URL",
+        FIRSTPROMOTER_API_KEY: "FIRSTPROMOTER_API_KEY",
+        FIRSTPROMOTER_ACCOUNT_ID: "FIRSTPROMOTER_ACCOUNT_ID",
       },
     },
     { env: process.env },
@@ -36,7 +36,7 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_FIRSTPROMOTER_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.FIRSTPROMOTER_API_URL.replace(/\/$/, "")
 const headers = (key: string, account: string) => () => ({
   authorization: `Bearer ${key}`,
   "account-id": account,
@@ -53,8 +53,8 @@ try {
       baseUrl,
       allowedHosts: [new URL(baseUrl).host],
       headers: headers(
-        credentials.values.MOCKINGBIRD_FIRSTPROMOTER_API_KEY,
-        credentials.values.MOCKINGBIRD_FIRSTPROMOTER_ACCOUNT_ID,
+        credentials.values.FIRSTPROMOTER_API_KEY,
+        credentials.values.FIRSTPROMOTER_ACCOUNT_ID,
       ),
       minIntervalMs: 250,
     },
