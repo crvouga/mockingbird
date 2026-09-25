@@ -58,7 +58,10 @@ describe("the Mockingbird service contract", () => {
     expect(claims.sub).toBe(DEFAULT_USER_ID)
     expect(claims.exp - claims.iat).toBe(120)
     expect(claims.iat).toBe(Math.floor(runtime.clock.now() / 1000))
-    const tampered = `${jwt.slice(0, -2)}xx`
+    // Flip a character mid-signature: the last base64url character carries padding bits a decoder
+    // drops, so overwriting the tail can leave the signature bytes unchanged.
+    const at = jwt.lastIndexOf(".") + 10
+    const tampered = `${jwt.slice(0, at)}${jwt[at] === "A" ? "B" : "A"}${jwt.slice(at + 1)}`
     expect(
       (
         await call(runtime, "/admin/rxOrdering/getShippingStates", {
