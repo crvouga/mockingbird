@@ -1,3 +1,5 @@
+import type { ValidationOverrides } from "./validation.js"
+
 /**
  * The addresses the mock knows, matching our QA fixtures: every row of `ROUTING_ZIP_CORPUS`
  * (`packages/qa/src/world/gen/addresses.ts`, ≥1 real ZIP per state + DC, ids kept stable), the
@@ -16,6 +18,8 @@ export type CorpusAddress = {
   county: string
   lat: number
   lng: number
+  /** Address Validation controls for this row (admin rows only): pin a verdict, flag units. */
+  validation?: ValidationOverrides
 }
 
 const row = (

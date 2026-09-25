@@ -70,6 +70,7 @@ export const serveTarget: ServeTarget = {
   banner: () => [
     "REST: /maps/api/place/{autocomplete,details,findplacefromtext}/json, /maps/api/geocode/json (?key=)",
     'web: <script src="<this server>/maps/api/js?key=…&libraries=places">',
+    "Address Validation: POST /v1:validateAddress?key= (addressvalidation.googleapis.com)",
     "namespaces: x-mockingbird-namespace, /ns/<name>/…, or PUT /__admin/credentials {<key>: <ns>}",
   ],
 }
