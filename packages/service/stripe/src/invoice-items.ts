@@ -1,7 +1,7 @@
 import { jsonResponse, type OperationHandler } from "@crvouga/mockingbird-service"
 import { recomputeInvoice } from "./billing.js"
 import { invalidRequest, parameterMissing, resourceMissing, StripeError } from "./errors.js"
-import { optionalString } from "./fields.js"
+import { optionalString, parseUnitAmountDecimal } from "./fields.js"
 import {
   customerNow,
   intOf,
@@ -18,8 +18,15 @@ import {
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, queryParams } from "./params.js"
-import { renderDeletedInvoiceItem, renderInvoiceItem } from "./render.js"
-import { type InvoiceItemRecord, type InvoiceLineRecord, type Metadata, seconds } from "./state.js"
+import { normalizeCurrency } from "./prices.js"
+import { priceOrId, renderDeletedInvoiceItem, renderInvoiceItem } from "./render.js"
+import {
+  type InvoiceItemRecord,
+  type InvoiceLineRecord,
+  type Metadata,
+  type PriceRecord,
+  seconds,
+} from "./state.js"
 
 type RecordValue = Record<string, unknown>
 
@@ -39,10 +46,45 @@ const lineOf = (scope: RequestScope, item: InvoiceItemRecord): InvoiceLineRecord
   type: "invoiceitem",
 })
 
-/** The rendered item carries its price id so `expand[]=price` has something to replace. */
-const renderItem = (item: InvoiceItemRecord): RecordValue => {
-  const rendered = renderInvoiceItem(item)
-  return item.price === null ? rendered : { ...rendered, price: item.price }
+/** At 2024-06-20 and 2025-02-24.acacia an invoice item's `price` is the Price object itself. */
+const renderItem = (scope: RequestScope, item: InvoiceItemRecord): RecordValue => ({
+  ...renderInvoiceItem(item),
+  price: item.price === null ? null : priceOrId(scope.account, item.price),
+})
+
+/**
+ * `price_data` generates a new Price inline: inactive, one-time, owned by `price_data[product]`,
+ * and retrievable by id like any other price. Validated here, stored once the item is valid.
+ */
+const inlinePrice = (scope: RequestScope, data: RecordValue): PriceRecord => {
+  const product = typeof data.product === "string" ? data.product : ""
+  if (!scope.account.products.get(product))
+    throw resourceMissing("product", product, "price_data[product]")
+  const hasAmount = data.unit_amount !== undefined
+  const hasDecimal = data.unit_amount_decimal !== undefined
+  if (hasAmount && hasDecimal)
+    throw invalidRequest(
+      "You may only specify one of these parameters: unit_amount, unit_amount_decimal.",
+      "price_data[unit_amount]",
+    )
+  const unit_amount_decimal = hasDecimal
+    ? parseUnitAmountDecimal(String(data.unit_amount_decimal), "price_data[unit_amount_decimal]")
+    : String(intOf(data.unit_amount) ?? 0)
+  const taxBehavior = data.tax_behavior
+  return {
+    id: scope.ids.next("price_", 24),
+    active: false,
+    created: seconds(scope.now),
+    currency: normalizeCurrency(String(data.currency ?? ""), "price_data[currency]"),
+    lookup_key: null,
+    metadata: {},
+    nickname: null,
+    product,
+    recurring: null,
+    tax_behavior:
+      taxBehavior === "exclusive" || taxBehavior === "inclusive" ? taxBehavior : "unspecified",
+    unit_amount_decimal,
+  }
 }
 
 /** Draft invoices derive their money fields from lines, so any change re-derives both. */
@@ -80,13 +122,10 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
     const params = bodyParams(context)
     const customer = requireLiveCustomer(scope, stringOf(params, "customer") ?? "", "customer")
     const priceId = stringOf(params, "price")
-    const price = priceId === null ? undefined : requirePrice(scope, priceId, "price")
     const priceData = recordOf(params.price_data)
-    if (priceData !== undefined) {
-      const product = typeof priceData.product === "string" ? priceData.product : ""
-      if (!scope.account.products.get(product))
-        throw resourceMissing("product", product, "price_data[product]")
-    }
+    const inline =
+      priceId === null && priceData !== undefined ? inlinePrice(scope, priceData) : undefined
+    const price = priceId === null ? inline : requirePrice(scope, priceId, "price")
     const invoiceId = stringOf(params, "invoice")
     const invoice = invoiceId === null ? undefined : requireInvoice(scope, invoiceId, "invoice")
     if (invoice !== undefined && invoice.status !== "draft")
@@ -96,11 +135,7 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
       )
     const quantity = intOf(params.quantity) ?? 1
     const unitAmount =
-      price !== undefined
-        ? Number(price.unit_amount_decimal)
-        : priceData !== undefined
-          ? (intOf(priceData.unit_amount) ?? Number(priceData.unit_amount_decimal ?? 0))
-          : intOf(params.unit_amount)
+      price !== undefined ? Number(price.unit_amount_decimal) : intOf(params.unit_amount)
     const derived =
       price !== undefined
         ? priceAmount(price, quantity)
@@ -109,16 +144,14 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
           : Math.round(unitAmount * quantity)
     const amount = intOf(params.amount) ?? derived
     if (amount === undefined) throw parameterMissing("amount")
+    if (inline !== undefined) scope.account.prices.insert(inline.id, inline)
     const id = scope.ids.next("ii_", 24)
     const now = customerNow(scope, customer.id)
     const item: InvoiceItemRecord = {
       id,
       amount,
       created: seconds(scope.now),
-      currency:
-        stringOf(params, "currency") ??
-        price?.currency ??
-        (typeof priceData?.currency === "string" ? priceData.currency : "usd"),
+      currency: stringOf(params, "currency") ?? price?.currency ?? "usd",
       customer: customer.id,
       date: now,
       description: stringOf(params, "description"),
@@ -133,8 +166,8 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
     }
     scope.account.invoiceItems.insert(id, item)
     syncDraftInvoice(scope, item)
-    scope.emit("invoiceitem.created", renderItem(item))
-    return jsonResponse(200, renderItem(item))
+    scope.emit("invoiceitem.created", renderItem(scope, item))
+    return jsonResponse(200, renderItem(scope, item))
   },
 
   GetInvoiceitems: async (context) => {
@@ -151,7 +184,7 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
         (customer === null || item.customer === customer) &&
         (invoice === null || item.invoice === invoice) &&
         (!pending || item.invoice === null),
-      render: renderItem,
+      render: (item) => renderItem(scope, item),
     })
     return jsonResponse(200, page)
   },
@@ -159,7 +192,10 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
   GetInvoiceitemsInvoiceitem: async (context) => {
     const scope = requestScope(services, context)
     queryParams(context)
-    return jsonResponse(200, renderItem(requireItem(scope, context.params.invoiceitem ?? "")))
+    return jsonResponse(
+      200,
+      renderItem(scope, requireItem(scope, context.params.invoiceitem ?? "")),
+    )
   },
 
   PostInvoiceitemsInvoiceitem: async (context) => {
@@ -168,7 +204,11 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
     const current = requireItem(scope, context.params.invoiceitem ?? "")
     const quantity = intOf(params.quantity) ?? current.quantity
     const priceId = stringOf(params, "price")
-    const price = priceId === null ? undefined : requirePrice(scope, priceId, "price")
+    const priceData = recordOf(params.price_data)
+    const inline =
+      priceId === null && priceData !== undefined ? inlinePrice(scope, priceData) : undefined
+    const price = priceId === null ? inline : requirePrice(scope, priceId, "price")
+    if (inline !== undefined) scope.account.prices.insert(inline.id, inline)
     const next: InvoiceItemRecord = {
       ...current,
       amount:
@@ -185,7 +225,7 @@ export const invoiceItemHandlers = (services: Services): Record<string, Operatio
     }
     scope.account.invoiceItems.update(next.id, next)
     syncDraftInvoice(scope, next)
-    return jsonResponse(200, renderItem(next))
+    return jsonResponse(200, renderItem(scope, next))
   },
 
   DeleteInvoiceitemsInvoiceitem: async (context) => {
