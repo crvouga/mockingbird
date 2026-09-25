@@ -41,6 +41,12 @@ export const serveTarget: ServeTarget = {
       description:
         "Backend webhook receiver (e.g. http://127.0.0.1:3000/messaging/webhook); comma-separate several",
     },
+    "webhook-events": {
+      type: "string",
+      value: "<topics>",
+      description:
+        "Comma-separated topics for --webhook-url (e.g. add conversation.user.created,conversation.user.replied); default the admin topics",
+    },
     "emr-webhook-url": {
       type: "string",
       value: "<url>",
@@ -58,11 +64,18 @@ export const serveTarget: ServeTarget = {
     },
   },
   create: (values, common) => {
-    const urls = [text(values["webhook-url"]), text(values["emr-webhook-url"])]
-      .filter((value): value is string => value !== undefined)
-      .flatMap((value) => value.split(","))
-      .map((value) => value.trim())
-      .filter(Boolean)
+    const split = (value: string | undefined) =>
+      (value ?? "")
+        .split(",")
+        .map((each) => each.trim())
+        .filter(Boolean)
+    const events = split(text(values["webhook-events"]))
+    const urls = [
+      ...split(text(values["webhook-url"])).map((url) =>
+        events.length > 0 ? { url, events } : url,
+      ),
+      ...split(text(values["emr-webhook-url"])),
+    ]
     const secret = text(values["webhook-secret"])
     const token = text(values["access-token"])
     return createRuntime({

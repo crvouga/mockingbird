@@ -9,7 +9,8 @@ our backend makes:
   `?display_as=plaintext`, and cursor-paginated search;
 - **identity:** `/admins` and `/me`.
 
-Admin replies and close/open send Intercom's `notification_event` webhooks, signed with
+Admin replies and close/open (and, for a receiver that subscribes to them, member messages and
+replies) send Intercom's `notification_event` webhooks, signed with
 `X-Hub-Signature: sha1=<hex HMAC-SHA1>`, to both of our receivers: the backend's
 `POST /messaging/webhook` and the EMR's `POST /v1/webhooks/intercom`.
 
@@ -35,6 +36,10 @@ npx mockingbird-intercom serve --port 8807 \
   --emr-webhook-url http://127.0.0.1:4000/v1/webhooks/intercom \
   --webhook-secret "$INTERCOM_WEBHOOK_SECRET"
 ```
+
+Add `--webhook-events conversation.user.created,conversation.user.replied,conversation.admin.replied,conversation.admin.closed,conversation.admin.opened`
+to subscribe `--webhook-url` to the member topics too; `--emr-webhook-url` keeps the admin-only
+default.
 
 | Consumer | Setting |
 | --- | --- |
@@ -124,11 +129,14 @@ The mock sends webhooks for these events:
 | Close (`/parts` or `POST /__admin/conversations/:id/close`) | `conversation.admin.closed` |
 | Open (`/parts` or `POST /__admin/conversations/:id/open`) | `conversation.admin.opened` |
 | Admin-initiated conversation (`POST /__admin/conversations`) | `conversation.admin.single.created` |
+| Member starts a conversation (`POST /conversations`) | `conversation.user.created` (opt-in) |
+| Member reply (`/reply` with `type: "user"`) | `conversation.user.replied` (opt-in) |
 
-Snooze and assignment publish `conversation.admin.snoozed` and `.assigned`, but the default
-endpoints do not subscribe to them. Member messages and notes send nothing: the EMR treats every
-`notification_event` it receives as an admin event, so a real subscription must not include
-member topics either.
+An endpoint receives the four admin topics above unless it lists its own `events`. The member
+topics, `conversation.admin.snoozed` and `.assigned` are published but opt-in: subscribe with
+`--webhook-events`, `webhooks.urls: [{url, events}]` or `PUT /__admin/webhook-endpoints`. The EMR
+treats every `notification_event` it receives as an admin event, so its subscription must not
+include member topics. Notes send nothing.
 
 Each delivery is a JSON body posted with `X-Hub-Signature: sha1=<hex HMAC-SHA1(secret, rawBody)>`:
 
@@ -156,7 +164,8 @@ Each delivery is a JSON body posted with `X-Hub-Signature: sha1=<hex HMAC-SHA1(s
 
 | Route | Effect |
 | --- | --- |
-| `POST /__admin/conversations/:id/admin-reply` | `{adminId? (default: first admin), body, messageType?: "comment" \| "note"}` appends an admin part and fires the webhook. |
+| `POST /__admin/conversations/:id/admin-reply` | `{adminId? \| admin_id? (default: first admin), body, messageType?: "comment" \| "note"}` appends an admin part ("the care team replied") and fires the webhook. |
+| `GET /__admin/outbox?since=&to=&limit=`, `GET /__admin/outbox/:id` | What the client sent through `POST /conversations` and `/reply`, oldest first: `{id, operation, conversationId, contactId, partId, partType ("source" for the opening message), authorType, authorId, hasBody, bodyLength, attachmentCount, at, createdAt}`. **Metadata only**: the body is never stored. `to=` matches the conversation or contact id; `since=` takes epoch ms or ISO-8601 on the mock clock. The admin plane's own replies are not listed. |
 | `POST /__admin/conversations/:id/close`, `…/open` | `{adminId?}` closes or reopens as an admin and fires the webhook. |
 | `POST /__admin/conversations` | `{contactId \| externalId, adminId?, body}` creates an admin-initiated conversation. The EMR then looks the member up by `contacts[0].external_id`. |
 | `GET /__admin/conversations`, `GET /__admin/contacts` | The namespace's records. |
@@ -205,14 +214,14 @@ never records message bodies or contact details.
 | --- | --- | --- |
 | `IntercomAPI` | class | The in-process mock: `fetch(request)`, `reset()`, `appendPart(…)`, `manage(…)`, `startAdminConversation(…)`, `conversations()`, `contacts()`, `conversationBody(…)`, `contactBody(…)`, `error(…)`, `state`. Options: `sqlite`, `now`, `wallClock`, `namespace`, `admins`, `settings`, `onWebhook`. |
 | `IntercomError` | class | A vendor error (status, code, message) raised by the admin-facing methods. |
-| `createRuntime` | function | The mock with the full service contract (health, admin, namespaces, credentials, presets, webhooks). Options: `webhooks: {urls, secret?, events?, retryDelaysMs?, fetch?}`, `admins`, `settings`, `clock`, `wallClock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
+| `createRuntime` | function | The mock with the full service contract (health, admin, namespaces, credentials, presets, webhooks). Options: `webhooks: {urls, secret?, events?, retryDelaysMs?, fetch?}` (a `urls` entry may be `{url, events}` to override `events` for that URL), `admins`, `settings`, `clock`, `wallClock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
 | `INTERCOM_PRESETS` | object | Every named fault preset. |
 | `INTERCOM_NAMESPACE` | string | The service name, `"intercom"`. |
-| `INTERCOM_TOPICS` | array | Every webhook topic the mock can send. |
+| `INTERCOM_TOPICS` | array | Every webhook topic the mock can send, including the opt-in member topics. |
 | `HUB_SIGNATURE_HEADER`, `signHub` | values | `X-Hub-Signature` and the `sha1=<hex>` signer, for your own receivers. |
 | `DEFAULT_ADMINS`, `DEFAULT_SETTINGS` | values | The seeded admins and default settings. |
 | `toHtml`, `toPlaintext`, `encodeCursor`, `decodeCursor` | functions | Body rendering and the search cursor format. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
-| `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--webhook-url`, `--emr-webhook-url`, `--webhook-secret`, `--access-token`); port 8807. |
+| `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--webhook-url`, `--webhook-events`, `--emr-webhook-url`, `--webhook-secret`, `--access-token`); port 8807. |
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).

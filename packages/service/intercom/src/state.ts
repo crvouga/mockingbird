@@ -1,4 +1,4 @@
-import { Collection, opaqueToken } from "@crvouga/mockingbird-service"
+import { Collection, type OutboxItem, OutboxStore, opaqueToken } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 
 export type ContactRecord = {
@@ -78,6 +78,29 @@ export type ConversationRecord = {
   parts: PartRecord[]
 }
 
+/**
+ * One message the API client sent (`POST /conversations`, `POST /conversations/{id}/reply`),
+ * as metadata only: the body is never stored, just whether there was one and its length.
+ */
+export type OutboxRecord = OutboxItem & {
+  /** `[conversationId, contactId]`, so `GET /__admin/outbox?to=` matches either. */
+  to: string[]
+  operation: "CreateConversation" | "ReplyConversation"
+  conversationId: string
+  contactId: string
+  /** The reply's part id; `null` for the message that opened the conversation. */
+  partId: string | null
+  /** `source` for the message that opened the conversation, else the part's type. */
+  partType: "source" | "comment" | "note" | "quick_reply"
+  authorType: "user" | "admin"
+  authorId: string
+  hasBody: boolean
+  bodyLength: number
+  attachmentCount: number
+  /** Same instant as `createdAt` (ISO-8601 on the mock clock). */
+  at: string
+}
+
 export type AdminRecord = {
   type: "admin"
   id: string
@@ -137,6 +160,7 @@ export class IntercomState {
   readonly admins: Collection<AdminRecord>
   readonly settings: Collection<Settings>
   readonly counters: Collection<number>
+  readonly outbox: OutboxStore<OutboxRecord>
   readonly workspaceId: string
 
   constructor(
@@ -149,6 +173,7 @@ export class IntercomState {
     this.admins = new Collection(sqlite, namespace, "admins")
     this.settings = new Collection(sqlite, namespace, "settings")
     this.counters = new Collection(sqlite, namespace, "counters")
+    this.outbox = new OutboxStore<OutboxRecord>(sqlite, namespace, "outbox")
     this.workspaceId = "mockapp"
     this.ensureSeeded()
   }

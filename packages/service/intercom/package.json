@@ -55,7 +55,7 @@
       "website": "https://www.intercom.com",
       "docs": "https://developers.intercom.com/docs/references/rest-api/api.intercom.io"
     },
-    "status": "wip"
+    "status": "ready"
   },
   "scripts": {
     "generate": "bun ../../openapi/codegen/dist/cli.js",
