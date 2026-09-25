@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_HEALTHIE_API_URL   e.g. https://staging-api.gethealthie.com
- *   MOCKINGBIRD_HEALTHIE_API_KEY   an organization API key for a sandbox org
+ *   HEALTHIE_API_URL   e.g. https://staging-api.gethealthie.com
+ *   HEALTHIE_API_KEY   an organization API key for a sandbox org
  *
  * The walk's documents include mutations (signIn issues keys, updateClient writes metadata,
  * createFolder creates folders), so GraphQL only runs with `--include-unsafe`; by default only
@@ -21,8 +21,8 @@ try {
     {
       provider: "healthie",
       fields: {
-        MOCKINGBIRD_HEALTHIE_API_URL: "MOCKINGBIRD_HEALTHIE_API_URL",
-        MOCKINGBIRD_HEALTHIE_API_KEY: "MOCKINGBIRD_HEALTHIE_API_KEY",
+        HEALTHIE_API_URL: "HEALTHIE_API_URL",
+        HEALTHIE_API_KEY: "HEALTHIE_API_KEY",
       },
     },
     { env: process.env },
@@ -35,11 +35,8 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_HEALTHIE_API_URL.replace(/\/graphql$/, "").replace(
-  /\/$/,
-  "",
-)
-const realKey = credentials.values.MOCKINGBIRD_HEALTHIE_API_KEY
+const baseUrl = credentials.values.HEALTHIE_API_URL.replace(/\/graphql$/, "").replace(/\/$/, "")
+const realKey = credentials.values.HEALTHIE_API_KEY
 const mockKey = DEFAULT_SETTINGS.orgApiKeys[0] as string
 
 try {

@@ -3,7 +3,7 @@
 # (users, catalog, serviceability, orders) against both and fails on any divergence.
 #
 # Not a required check — it depends on a live vendor. The sandbox key is the
-# MOCKINGBIRD_JUNCTION_API_KEY repo secret (docs/SECRETS.md). The scenario deletes the
+# JUNCTION_API_KEY repo secret (docs/SECRETS.md). The scenario deletes the
 # user it creates and cancels its order, because it shares the capped sandbox team with
 # everything else.
 name: Verify
@@ -36,7 +36,7 @@ jobs:
       - name: mockingbird-junction verify (shipped corpus, with orders)
         timeout-minutes: 15
         env:
-          MOCKINGBIRD_JUNCTION_API_KEY: ${{ secrets.MOCKINGBIRD_JUNCTION_API_KEY }}
+          JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
         run: bun run --cwd packages/service/junction verify -- --sample 60 --orders
 
       - if: always()

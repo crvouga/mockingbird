@@ -196,7 +196,7 @@ records operation, status, the resolved `placeId` and the `sessionToken`, and fo
   script, which the shim replaces.
 - `bun scripts/parity.ts`: live parity against `maps.googleapis.com` (and
   `addressvalidation.googleapis.com` for `ValidateAddress`) with
-  `MOCKINGBIRD_GOOGLE_MAPS_API_KEY` (env / `.env.local`; Address Validation must be enabled on
+  `GOOGLE_MAPS_API_KEY` (env / `.env.local`; Address Validation must be enabled on
   the key); exits 2 without it.
 
 ### Deliberately not modelled

@@ -17,15 +17,16 @@ seeing a value (GitHub never returns a secret's value, to anyone):
 
 | Workflow | Secrets it reads | How to run it |
 | --- | --- | --- |
-| [Parity](../.github/workflows/parity.yml) | the `MOCKINGBIRD_*` keys its live-parity step maps | `bun run parity:remote -- <service…>` or `-- --all` |
-| [Verify](../.github/workflows/verify.yml) | `MOCKINGBIRD_JUNCTION_API_KEY` | daily, or `gh workflow run verify.yml` |
+| [Parity](../.github/workflows/parity.yml) | the `<SERVICE>_*` keys its live-parity step maps | `bun run parity:remote -- <service…>` or `-- --all` |
+| [Verify](../.github/workflows/verify.yml) | `JUNCTION_API_KEY` | daily, or `gh workflow run verify.yml` |
 | [Release](../.github/workflows/ci.yml) | `NPM_TOKEN` (new packages only) | automatic on merge to `main` |
 
 ## Live parity
 
 Each service's `scripts/parity.ts` loads its sandbox credentials from the environment through
-[`@crvouga/mockingbird-credentials`](../packages/auth/credentials). The env var names all start
-with `MOCKINGBIRD_`, and the GitHub Actions secret has the same name.
+[`@crvouga/mockingbird-credentials`](../packages/auth/credentials). The env var names start
+with the service's name (`STRIPE_SECRET_KEY`, `JUNCTION_API_KEY`), and the GitHub Actions secret
+has the same name.
 
 **On GitHub (no keys needed).** Push your branch, then:
 
@@ -68,9 +69,9 @@ stdin, so they never appear in output or on a command line:
 bun run secrets                            # status: set / missing per service, on GitHub and locally
 bun run secrets fill stripe                # prompt (hidden) for each missing key; Enter skips one
 bun run secrets fill                       # ...for every service
-bun run secrets set MOCKINGBIRD_STRIPE_SECRET_KEY          # prompt for one value (rotate)
-bun run secrets set MOCKINGBIRD_STRIPE_SECRET_KEY --from-env   # take it from .env.local
-bun run secrets rm MOCKINGBIRD_OLD_KEY --yes
+bun run secrets set STRIPE_SECRET_KEY          # prompt for one value (rotate)
+bun run secrets set STRIPE_SECRET_KEY --from-env   # take it from .env.local
+bun run secrets rm STRIPE_OLD_KEY --yes
 ```
 
 To upload everything you have set in `.env.local` at once:
@@ -80,9 +81,9 @@ bun run secrets push -- --dry-run          # which secrets would be set (= secre
 bun run secrets push -- --yes
 ```
 
-Once a service's parity script loads a `MOCKINGBIRD_*` field, `secrets:doctor`, `secrets:push` and
-`.env.example` pick it up. The Parity workflow needs one line per secret in the `env:` of its
-live-parity step (`MOCKINGBIRD_X: ${{ secrets.MOCKINGBIRD_X }}`). It maps each secret by name
+A service's secrets are the fields its parity script loads plus the names `.env.example` lists
+under the service's heading; `secrets:doctor` and `secrets:push` read both. The Parity workflow needs one line per secret in the `env:` of its
+live-parity step (`STRIPE_X: ${{ secrets.STRIPE_X }}`). It maps each secret by name
 because GitHub holds a run that dumps the whole `secrets` context as "may be malicious" until
 someone approves it by hand.
 
@@ -135,7 +136,7 @@ GitHub Actions cache, so pull requests replay what `main` already built. No toke
 | npm Trusted Publisher (OIDC) | each package on npm | CI publish (attached automatically) |
 | `GITHUB_TOKEN` | built into GitHub Actions | automatic |
 | `NPM_TOKEN` | repo secret | creating new packages, deprecations |
-| `MOCKINGBIRD_*` sandbox keys | repo secrets (+ optionally your `.env.local`) | live parity only |
+| `<SERVICE>_*` sandbox keys | repo secrets (+ optionally your `.env.local`) | live parity only |
 | `GITGUARDIAN_API_KEY` | your `.env.local` | optional: `pr:ready guardian ignore` |
 
 Inventory: [`secrets.manifest.yaml`](../secrets.manifest.yaml) (non-parity secrets and the

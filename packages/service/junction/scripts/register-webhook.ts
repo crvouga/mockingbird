@@ -1,10 +1,10 @@
 import process from "node:process"
 
 const EVENT_TYPES = ["labtest.order.created", "labtest.order.updated"] as const
-const receiverUrl = process.env.MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL?.trim().replace(/\/$/, "")
+const receiverUrl = process.env.JUNCTION_WEBHOOK_RECEIVER_URL?.trim().replace(/\/$/, "")
 
 if (!receiverUrl) {
-  throw new Error("MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL is required")
+  throw new Error("JUNCTION_WEBHOOK_RECEIVER_URL is required")
 }
 
 const healthUrl = `${receiverUrl}/health`

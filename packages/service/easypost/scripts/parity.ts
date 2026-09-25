@@ -3,7 +3,7 @@
  * mock, canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_EASYPOST_API_KEY    a **test** key (EZTK…); production keys are refused
+ *   EASYPOST_API_KEY    a **test** key (EZTK…); production keys are refused
  *
  * Trackers created in test mode are free and never reach a carrier.
  */
@@ -16,7 +16,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "easypost",
-      fields: { MOCKINGBIRD_EASYPOST_API_KEY: "MOCKINGBIRD_EASYPOST_API_KEY" },
+      fields: { EASYPOST_API_KEY: "EASYPOST_API_KEY" },
     },
     { env: process.env },
   )
@@ -28,9 +28,9 @@ try {
   throw error
 }
 
-const key = credentials.values.MOCKINGBIRD_EASYPOST_API_KEY
+const key = credentials.values.EASYPOST_API_KEY
 if (!key.startsWith("EZTK")) {
-  console.error("easypost parity: MOCKINGBIRD_EASYPOST_API_KEY must be a test key (EZTK…)")
+  console.error("easypost parity: EASYPOST_API_KEY must be a test key (EZTK…)")
   process.exit(2)
 }
 const baseUrl = "https://api.easypost.com"

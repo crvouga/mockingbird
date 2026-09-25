@@ -3,9 +3,9 @@
  * mock, canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_AHA_API_URL      e.g. https://stage-api.mobileaha.com
- *   MOCKINGBIRD_AHA_API_KEY
- *   MOCKINGBIRD_AHA_API_SECRET
+ *   AHA_API_URL      e.g. https://stage-api.mobileaha.com
+ *   AHA_API_KEY
+ *   AHA_API_SECRET
  *
  * Both AHA operations create or cancel a real phlebotomy order, so nothing runs unless
  * `--include-unsafe` is passed (and even then, only against a staging URL).
@@ -21,9 +21,9 @@ try {
     {
       provider: "aha",
       fields: {
-        MOCKINGBIRD_AHA_API_URL: "MOCKINGBIRD_AHA_API_URL",
-        MOCKINGBIRD_AHA_API_KEY: "MOCKINGBIRD_AHA_API_KEY",
-        MOCKINGBIRD_AHA_API_SECRET: "MOCKINGBIRD_AHA_API_SECRET",
+        AHA_API_URL: "AHA_API_URL",
+        AHA_API_KEY: "AHA_API_KEY",
+        AHA_API_SECRET: "AHA_API_SECRET",
       },
     },
     { env: process.env },
@@ -44,13 +44,13 @@ if (!includeUnsafe) {
   process.exit(2)
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_AHA_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.AHA_API_URL.replace(/\/$/, "")
 if (!/stage|sandbox/i.test(baseUrl)) {
   console.error("aha parity: refusing to walk a non-staging AHA URL")
   process.exit(2)
 }
-const apiKey = credentials.values.MOCKINGBIRD_AHA_API_KEY
-const apiSecret = credentials.values.MOCKINGBIRD_AHA_API_SECRET
+const apiKey = credentials.values.AHA_API_KEY
+const apiSecret = credentials.values.AHA_API_SECRET
 
 /** Sign each request the way our consumer does: HMAC over "<key>:<path>:<ms timestamp>". */
 const signed =

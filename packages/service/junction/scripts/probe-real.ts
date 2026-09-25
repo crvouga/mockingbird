@@ -3,12 +3,12 @@ import { loadCredentials } from "@crvouga/mockingbird-credentials"
 const credentials = await loadCredentials(
   {
     provider: "junction",
-    fields: { MOCKINGBIRD_JUNCTION_API_KEY: "MOCKINGBIRD_JUNCTION_API_KEY" },
+    fields: { JUNCTION_API_KEY: "JUNCTION_API_KEY" },
   },
   { env: Bun.env },
 )
-const apiKey = credentials.values.MOCKINGBIRD_JUNCTION_API_KEY
-const baseUrl = Bun.env.MOCKINGBIRD_JUNCTION_BASE_URL ?? "https://api.sandbox.us.junction.com"
+const apiKey = credentials.values.JUNCTION_API_KEY
+const baseUrl = Bun.env.JUNCTION_BASE_URL ?? "https://api.sandbox.us.junction.com"
 const headers = { "x-vital-api-key": apiKey, "content-type": "application/json" }
 
 const log = (label: string, value: unknown) => {

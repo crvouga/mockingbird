@@ -3,8 +3,8 @@
  * and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_EDAMAM_APP_ID    an application with the Food Database, Nutrition Analysis,
- *   MOCKINGBIRD_EDAMAM_APP_KEY   Recipe Search and Meal Planner APIs enabled
+ *   EDAMAM_APP_ID    an application with the Food Database, Nutrition Analysis,
+ *   EDAMAM_APP_KEY   Recipe Search and Meal Planner APIs enabled
  *
  * The contract pins `app_id=parity&app_key=parity-key` (and the meal planner's path app_id)
  * as its parity vocabulary; the real side's requests are rewritten to the real credentials.
@@ -23,8 +23,8 @@ try {
     {
       provider: "edamam",
       fields: {
-        MOCKINGBIRD_EDAMAM_APP_ID: "MOCKINGBIRD_EDAMAM_APP_ID",
-        MOCKINGBIRD_EDAMAM_APP_KEY: "MOCKINGBIRD_EDAMAM_APP_KEY",
+        EDAMAM_APP_ID: "EDAMAM_APP_ID",
+        EDAMAM_APP_KEY: "EDAMAM_APP_KEY",
       },
     },
     { env: process.env },
@@ -38,8 +38,8 @@ try {
 }
 
 const baseUrl = "https://api.edamam.com"
-const appId = credentials.values.MOCKINGBIRD_EDAMAM_APP_ID
-const appKey = credentials.values.MOCKINGBIRD_EDAMAM_APP_KEY
+const appId = credentials.values.EDAMAM_APP_ID
+const appKey = credentials.values.EDAMAM_APP_KEY
 
 try {
   await parity({

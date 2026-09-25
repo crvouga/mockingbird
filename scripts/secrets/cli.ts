@@ -19,8 +19,8 @@ import {
   hasFlag,
   isGitHubSecretEntry,
   loadManifest,
-  PARITY_SECRET_PREFIX,
   parityRequirements,
+  paritySettingNames,
   readEnvLocal,
   readSecret,
   redactSecrets,
@@ -92,10 +92,11 @@ async function groups(remote: Set<string>): Promise<Array<{ group: string; names
     ...parityRequirements().map(({ service, env }) => ({ group: service, names: env })),
   ]
   const known = new Set(out.flatMap(({ names }) => names))
+  const settings = paritySettingNames()
   const extras = [...remote].filter(
     (name) =>
       !known.has(name) &&
-      [PARITY_SECRET_PREFIX, ...EXTRA_PREFIXES].some((prefix) => name.startsWith(prefix)),
+      (settings.has(name) || EXTRA_PREFIXES.some((prefix) => name.startsWith(prefix))),
   )
   if (extras.length > 0) out.push({ group: "other", names: extras.sort() })
   return out

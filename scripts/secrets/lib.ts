@@ -81,10 +81,10 @@ export async function loadManifest(): Promise<SecretsManifest> {
   return manifest
 }
 
-/** Prefix shared by every live-parity credential, locally and as a GitHub Actions secret. */
-export const PARITY_SECRET_PREFIX = "MOCKINGBIRD_"
-
 export type ParityRequirement = { service: string; env: string[] }
+
+const hasParityScript = (service: string): boolean =>
+  existsSync(join(root, "packages/service", service, "scripts/parity.ts"))
 
 /**
  * Every service with a live-parity script, and the env vars its `loadCredentials({ fields })`
@@ -94,16 +94,34 @@ export function parityRequirements(): ParityRequirement[] {
   const servicesDir = join(root, "packages/service")
   const out: ParityRequirement[] = []
   for (const service of readdirSync(servicesDir).sort()) {
-    const path = join(servicesDir, service, "scripts/parity.ts")
-    if (!existsSync(path)) continue
-    const source = readFileSync(path, "utf8")
+    if (!hasParityScript(service)) continue
+    const source = readFileSync(join(servicesDir, service, "scripts/parity.ts"), "utf8")
     const env = new Set<string>()
     for (const block of source.matchAll(/fields:\s*\{([^}]*)\}/g)) {
       for (const name of (block[1] ?? "").matchAll(/:\s*"([A-Z0-9_]+)"/g)) {
-        if (name[1]?.startsWith(PARITY_SECRET_PREFIX)) env.add(name[1])
+        if (name[1]) env.add(name[1])
       }
     }
     if (env.size > 0) out.push({ service, env: [...env] })
+  }
+  return out
+}
+
+/**
+ * Every live-parity credential and setting: the names `.env.example` lists under a `# <service>`
+ * heading for a service with a parity script. Each is a repo secret of the same name.
+ */
+export function paritySettingNames(): Set<string> {
+  const out = new Set<string>()
+  if (!existsSync(ENV_EXAMPLE_PATH)) return out
+  let inService = false
+  for (const rawLine of readFileSync(ENV_EXAMPLE_PATH, "utf8").split("\n")) {
+    const line = rawLine.trim()
+    const heading = /^#\s*([a-z0-9-]+)$/.exec(line)
+    if (heading?.[1]) inService = hasParityScript(heading[1])
+    else if (line === "") inService = false
+    const key = /^([A-Z_][A-Z0-9_]*)=/.exec(line)?.[1]
+    if (inService && key) out.add(key)
   }
   return out
 }

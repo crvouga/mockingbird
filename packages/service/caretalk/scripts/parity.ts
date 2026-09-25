@@ -3,9 +3,9 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_CARETALK_API_URL     e.g. https://api.caretalkbeta.com
- *   MOCKINGBIRD_CARETALK_USERNAME
- *   MOCKINGBIRD_CARETALK_PASSWORD
+ *   CARETALK_API_URL     e.g. https://api.caretalkbeta.com
+ *   CARETALK_USERNAME
+ *   CARETALK_PASSWORD
  *
  * By default only reads run (login, GetForm, States, patient search, free slots, appointment
  * lists). Saving forms, inserting patients and booking need `--include-unsafe` and must only
@@ -22,9 +22,9 @@ try {
     {
       provider: "caretalk",
       fields: {
-        MOCKINGBIRD_CARETALK_API_URL: "MOCKINGBIRD_CARETALK_API_URL",
-        MOCKINGBIRD_CARETALK_USERNAME: "MOCKINGBIRD_CARETALK_USERNAME",
-        MOCKINGBIRD_CARETALK_PASSWORD: "MOCKINGBIRD_CARETALK_PASSWORD",
+        CARETALK_API_URL: "CARETALK_API_URL",
+        CARETALK_USERNAME: "CARETALK_USERNAME",
+        CARETALK_PASSWORD: "CARETALK_PASSWORD",
       },
     },
     { env: process.env },
@@ -37,7 +37,7 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_CARETALK_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.CARETALK_API_URL.replace(/\/$/, "")
 if (!/caretalkbeta/.test(baseUrl) && !process.argv.includes("--allow-non-beta")) {
   console.error("caretalk parity: refusing a non-beta CareTalk URL (pass --allow-non-beta)")
   process.exit(2)
@@ -46,8 +46,8 @@ const login = await fetch(`${baseUrl}/externalapi/Auth/client-login`, {
   method: "POST",
   headers: { "content-type": "application/json", accept: "*/*" },
   body: JSON.stringify({
-    userName: credentials.values.MOCKINGBIRD_CARETALK_USERNAME,
-    password: credentials.values.MOCKINGBIRD_CARETALK_PASSWORD,
+    userName: credentials.values.CARETALK_USERNAME,
+    password: credentials.values.CARETALK_PASSWORD,
   }),
 })
 if (!login.ok) {

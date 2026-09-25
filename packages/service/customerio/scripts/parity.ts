@@ -3,9 +3,9 @@
  * and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_CUSTOMERIO_APP_API_KEY    App API key of a test workspace
- *   MOCKINGBIRD_CUSTOMERIO_CDP_WRITE_KEY  CDP source write key of the same workspace
- *   MOCKINGBIRD_CUSTOMERIO_REGION         optional: "us" (default) or "eu"
+ *   CUSTOMERIO_APP_API_KEY    App API key of a test workspace
+ *   CUSTOMERIO_CDP_WRITE_KEY  CDP source write key of the same workspace
+ *   CUSTOMERIO_REGION         optional: "us" (default) or "eu"
  *
  * By default only safe operations run (the transactional-message catalog). Sends and CDP
  * calls change a real workspace and can message real people, so they need `--include-unsafe`
@@ -21,8 +21,8 @@ try {
     {
       provider: "customerio",
       fields: {
-        MOCKINGBIRD_CUSTOMERIO_APP_API_KEY: "MOCKINGBIRD_CUSTOMERIO_APP_API_KEY",
-        MOCKINGBIRD_CUSTOMERIO_CDP_WRITE_KEY: "MOCKINGBIRD_CUSTOMERIO_CDP_WRITE_KEY",
+        CUSTOMERIO_APP_API_KEY: "CUSTOMERIO_APP_API_KEY",
+        CUSTOMERIO_CDP_WRITE_KEY: "CUSTOMERIO_CDP_WRITE_KEY",
       },
     },
     { env: process.env },
@@ -35,10 +35,10 @@ try {
   throw error
 }
 
-const eu = process.env.MOCKINGBIRD_CUSTOMERIO_REGION === "eu"
+const eu = process.env.CUSTOMERIO_REGION === "eu"
 const includeUnsafe = process.argv.includes("--include-unsafe")
-const appKey = credentials.values.MOCKINGBIRD_CUSTOMERIO_APP_API_KEY
-const writeKey = credentials.values.MOCKINGBIRD_CUSTOMERIO_CDP_WRITE_KEY
+const appKey = credentials.values.CUSTOMERIO_APP_API_KEY
+const writeKey = credentials.values.CUSTOMERIO_CDP_WRITE_KEY
 const redact = createRedactor(credentials.secrets)
 
 // The App API and the CDP live on different hosts with different credentials: two runs.

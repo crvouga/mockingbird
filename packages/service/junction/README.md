@@ -874,7 +874,7 @@ bun test junction.sdk.property.test.ts     # drives the served mock through @try
 
 bun run mock:serve                         # env-configured `serve`: HOST, PORT, MOCKINGBIRD_JUNCTION_CORPUS,
                                            # MOCKINGBIRD_JUNCTION_WEBHOOK_URL / _SECRET / _SCOPE
-bun run corpus:record -- --force           # re-record the shipped corpus/sandbox-sealed.json (MOCKINGBIRD_JUNCTION_API_KEY)
+bun run corpus:record -- --force           # re-record the shipped corpus/sandbox-sealed.json (JUNCTION_API_KEY)
 bun run verify -- --real-key "$KEY"        # `mockingbird-junction verify` from source
 ```
 

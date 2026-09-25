@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_POSTHOG_HOST            e.g. https://us.i.posthog.com
- *   MOCKINGBIRD_POSTHOG_PROJECT_TOKEN   a phc_… token of a sandbox project with NO feature flags
+ *   POSTHOG_HOST            e.g. https://us.i.posthog.com
+ *   POSTHOG_PROJECT_TOKEN   a phc_… token of a sandbox project with NO feature flags
  *
  * Every request's project token (body `token` / `api_key`, `?token=`, `/array/{token}/…`) is
  * rewritten to the sandbox token on the real side, since the walk generates random ones. Only
@@ -22,8 +22,8 @@ try {
     {
       provider: "posthog",
       fields: {
-        MOCKINGBIRD_POSTHOG_HOST: "MOCKINGBIRD_POSTHOG_HOST",
-        MOCKINGBIRD_POSTHOG_PROJECT_TOKEN: "MOCKINGBIRD_POSTHOG_PROJECT_TOKEN",
+        POSTHOG_HOST: "POSTHOG_HOST",
+        POSTHOG_PROJECT_TOKEN: "POSTHOG_PROJECT_TOKEN",
       },
     },
     { env: process.env },
@@ -36,8 +36,8 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_POSTHOG_HOST.replace(/\/$/, "")
-const realToken = credentials.values.MOCKINGBIRD_POSTHOG_PROJECT_TOKEN
+const baseUrl = credentials.values.POSTHOG_HOST.replace(/\/$/, "")
+const realToken = credentials.values.POSTHOG_PROJECT_TOKEN
 const MOCK_TOKEN = "phc_mockingbird_parity"
 
 /** Put `token` everywhere a PostHog request carries a project key. */

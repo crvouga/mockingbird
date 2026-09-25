@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_PRISM_API_URL   e.g. https://sandbox-api.hosted.prismlabs.tech
- *   MOCKINGBIRD_PRISM_API_KEY   a sandbox key
+ *   PRISM_API_URL   e.g. https://sandbox-api.hosted.prismlabs.tech
+ *   PRISM_API_KEY   a sandbox key
  *
  * By default only reads run (scans, stage states, results); subject upserts, scan creation
  * and upload URLs need `--include-unsafe` and must use synthetic subject tokens only (never a
@@ -20,8 +20,8 @@ try {
     {
       provider: "prism",
       fields: {
-        MOCKINGBIRD_PRISM_API_URL: "MOCKINGBIRD_PRISM_API_URL",
-        MOCKINGBIRD_PRISM_API_KEY: "MOCKINGBIRD_PRISM_API_KEY",
+        PRISM_API_URL: "PRISM_API_URL",
+        PRISM_API_KEY: "PRISM_API_KEY",
       },
     },
     { env: process.env },
@@ -34,12 +34,12 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_PRISM_API_URL.replace(/\/+$/, "")
+const baseUrl = credentials.values.PRISM_API_URL.replace(/\/+$/, "")
 if (!/sandbox/.test(baseUrl) && !process.argv.includes("--allow-non-sandbox")) {
   console.error("prism parity: refusing a non-sandbox Prism URL (pass --allow-non-sandbox)")
   process.exit(2)
 }
-const key = credentials.values.MOCKINGBIRD_PRISM_API_KEY
+const key = credentials.values.PRISM_API_KEY
 
 try {
   await parity({

@@ -3,9 +3,9 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_RXVORTEX_API_URL        e.g. https://sandbox-api.rxvortex.com
- *   MOCKINGBIRD_RXVORTEX_CLIENT_ID
- *   MOCKINGBIRD_RXVORTEX_CLIENT_SECRET
+ *   RXVORTEX_API_URL        e.g. https://sandbox-api.rxvortex.com
+ *   RXVORTEX_CLIENT_ID
+ *   RXVORTEX_CLIENT_SECRET
  *
  * By default only safe operations run (token, catalog, order lookups); order submit and cancel
  * reach a real pharmacy queue, so they need `--include-unsafe`.
@@ -20,9 +20,9 @@ try {
     {
       provider: "rxvortex",
       fields: {
-        MOCKINGBIRD_RXVORTEX_API_URL: "MOCKINGBIRD_RXVORTEX_API_URL",
-        MOCKINGBIRD_RXVORTEX_CLIENT_ID: "MOCKINGBIRD_RXVORTEX_CLIENT_ID",
-        MOCKINGBIRD_RXVORTEX_CLIENT_SECRET: "MOCKINGBIRD_RXVORTEX_CLIENT_SECRET",
+        RXVORTEX_API_URL: "RXVORTEX_API_URL",
+        RXVORTEX_CLIENT_ID: "RXVORTEX_CLIENT_ID",
+        RXVORTEX_CLIENT_SECRET: "RXVORTEX_CLIENT_SECRET",
       },
     },
     { env: process.env },
@@ -35,13 +35,13 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_RXVORTEX_API_URL.replace(/\/$/, "")
+const baseUrl = credentials.values.RXVORTEX_API_URL.replace(/\/$/, "")
 const tokenResponse = await fetch(`${baseUrl}/api/v1/generate-access-token`, {
   method: "POST",
   headers: { accept: "application/json", "content-type": "application/json" },
   body: JSON.stringify({
-    client_id: credentials.values.MOCKINGBIRD_RXVORTEX_CLIENT_ID,
-    client_secret: credentials.values.MOCKINGBIRD_RXVORTEX_CLIENT_SECRET,
+    client_id: credentials.values.RXVORTEX_CLIENT_ID,
+    client_secret: credentials.values.RXVORTEX_CLIENT_SECRET,
   }),
 })
 if (!tokenResponse.ok) {

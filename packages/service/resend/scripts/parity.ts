@@ -3,7 +3,7 @@
  * and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_RESEND_API_KEY    a Resend API key (a sending-restricted test key is enough)
+ *   RESEND_API_KEY    a Resend API key (a sending-restricted test key is enough)
  *
  * Only safe operations run (retrieve a sent email, the received-email endpoints, downloads).
  * `POST /emails` is never run live: a random walk would email whatever addresses it generates.
@@ -22,7 +22,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "resend",
-      fields: { MOCKINGBIRD_RESEND_API_KEY: "MOCKINGBIRD_RESEND_API_KEY" },
+      fields: { RESEND_API_KEY: "RESEND_API_KEY" },
     },
     { env: process.env },
   )
@@ -35,7 +35,7 @@ try {
 }
 
 const baseUrl = "https://api.resend.com"
-const apiKey = credentials.values.MOCKINGBIRD_RESEND_API_KEY
+const apiKey = credentials.values.RESEND_API_KEY
 
 try {
   await parity({

@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_MAILOSAUR_API_KEY      a Mailosaur API key
- *   MOCKINGBIRD_MAILOSAUR_SERVER_ID    the 8-character server (inbox) id to search
+ *   MAILOSAUR_API_KEY      a Mailosaur API key
+ *   MAILOSAUR_SERVER_ID    the 8-character server (inbox) id to search
  *
  * Every walk's `server=` is pinned to that server on both sides (a random server id is a 404 on
  * the vendor and an empty inbox on the mock). By default only safe operations run (search, list,
@@ -20,8 +20,8 @@ try {
     {
       provider: "mailosaur",
       fields: {
-        MOCKINGBIRD_MAILOSAUR_API_KEY: "MOCKINGBIRD_MAILOSAUR_API_KEY",
-        MOCKINGBIRD_MAILOSAUR_SERVER_ID: "MOCKINGBIRD_MAILOSAUR_SERVER_ID",
+        MAILOSAUR_API_KEY: "MAILOSAUR_API_KEY",
+        MAILOSAUR_SERVER_ID: "MAILOSAUR_SERVER_ID",
       },
     },
     { env: process.env },
@@ -35,8 +35,8 @@ try {
 }
 
 const baseUrl = "https://mailosaur.com"
-const serverId = credentials.values.MOCKINGBIRD_MAILOSAUR_SERVER_ID
-const apiKey = credentials.values.MOCKINGBIRD_MAILOSAUR_API_KEY
+const serverId = credentials.values.MAILOSAUR_SERVER_ID
+const apiKey = credentials.values.MAILOSAUR_API_KEY
 const authorization = `Basic ${btoa(`${apiKey}:`)}`
 
 /** Pin `server=` to the configured inbox, so both sides search the same (possibly empty) one. */

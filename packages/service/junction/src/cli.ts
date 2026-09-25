@@ -14,7 +14,7 @@ const asString = (value: string | boolean | undefined): string | undefined =>
 
 const realKeyOf = (values: CliValues): string | undefined =>
   asString(values["real-key"]) ??
-  asString(process.env.MOCKINGBIRD_JUNCTION_API_KEY) ??
+  asString(process.env.JUNCTION_API_KEY) ??
   asString(process.env.JUNCTION_API_KEY)
 
 const readCorpus = async (source: string): Promise<SealedCorpus> =>
@@ -24,7 +24,7 @@ const readCorpus = async (source: string): Promise<SealedCorpus> =>
 
 const guardKey = (key: string | undefined, values: CliValues): string | undefined => {
   if (key === undefined) {
-    console.error("missing --real-key (or env MOCKINGBIRD_JUNCTION_API_KEY)")
+    console.error("missing --real-key (or env JUNCTION_API_KEY)")
     return undefined
   }
   if (!isSandboxKey(key) && values["allow-any-key"] !== true) {
@@ -40,7 +40,7 @@ const REAL_OPTIONS = {
   "real-key": {
     type: "string",
     value: "<key>",
-    description: "Junction API key (env MOCKINGBIRD_JUNCTION_API_KEY)",
+    description: "Junction API key (env JUNCTION_API_KEY)",
   },
   "real-url": {
     type: "string",

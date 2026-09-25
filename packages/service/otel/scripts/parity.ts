@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_OTEL_O2_BASE_URL     e.g. https://observe.example.com (a sandbox org, never prod)
- *   MOCKINGBIRD_OTEL_O2_BASIC_AUTH   base64 "user:password" (the shape of O2_BASIC_AUTH)
+ *   OTEL_O2_BASE_URL     e.g. https://observe.example.com (a sandbox org, never prod)
+ *   OTEL_O2_BASIC_AUTH   base64 "user:password" (the shape of O2_BASIC_AUTH)
  *
  * Only the read-only O2 routes run (organizations, streams, schema, _search). The OTLP
  * receiver routes write telemetry into the real org, so they are never walked live.
@@ -19,8 +19,8 @@ try {
     {
       provider: "otel",
       fields: {
-        MOCKINGBIRD_OTEL_O2_BASE_URL: "MOCKINGBIRD_OTEL_O2_BASE_URL",
-        MOCKINGBIRD_OTEL_O2_BASIC_AUTH: "MOCKINGBIRD_OTEL_O2_BASIC_AUTH",
+        OTEL_O2_BASE_URL: "OTEL_O2_BASE_URL",
+        OTEL_O2_BASIC_AUTH: "OTEL_O2_BASIC_AUTH",
       },
     },
     { env: process.env },
@@ -33,8 +33,8 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_OTEL_O2_BASE_URL.replace(/\/$/, "")
-const auth = credentials.values.MOCKINGBIRD_OTEL_O2_BASIC_AUTH
+const baseUrl = credentials.values.OTEL_O2_BASE_URL.replace(/\/$/, "")
+const auth = credentials.values.OTEL_O2_BASIC_AUTH
 try {
   await parity({
     provider: "otel",

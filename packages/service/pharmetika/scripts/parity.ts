@@ -3,8 +3,8 @@
  * mock, canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_PHARMETIKA_API_URL      e.g. https://testreviverx.pharmetika.com
- *   MOCKINGBIRD_PHARMETIKA_API_TOKEN    the x-pmk-authentication-token
+ *   PHARMETIKA_API_URL      e.g. https://testreviverx.pharmetika.com
+ *   PHARMETIKA_API_TOKEN    the x-pmk-authentication-token
  *
  * By default only safe operations run (clinic and patient lists, validate, order lookup, the
  * template catalog). Patient create, submit, EPCS prepare and cancel reach a real pharmacy
@@ -20,8 +20,8 @@ try {
     {
       provider: "pharmetika",
       fields: {
-        MOCKINGBIRD_PHARMETIKA_API_URL: "MOCKINGBIRD_PHARMETIKA_API_URL",
-        MOCKINGBIRD_PHARMETIKA_API_TOKEN: "MOCKINGBIRD_PHARMETIKA_API_TOKEN",
+        PHARMETIKA_API_URL: "PHARMETIKA_API_URL",
+        PHARMETIKA_API_TOKEN: "PHARMETIKA_API_TOKEN",
       },
     },
     { env: process.env },
@@ -34,8 +34,8 @@ try {
   throw error
 }
 
-const baseUrl = credentials.values.MOCKINGBIRD_PHARMETIKA_API_URL.replace(/\/$/, "")
-const realToken = credentials.values.MOCKINGBIRD_PHARMETIKA_API_TOKEN
+const baseUrl = credentials.values.PHARMETIKA_API_URL.replace(/\/$/, "")
+const realToken = credentials.values.PHARMETIKA_API_TOKEN
 
 try {
   await parity({

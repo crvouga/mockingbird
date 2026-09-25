@@ -7,7 +7,7 @@ account, or any self-hosted service.
   Never print, invent, or commit secret values; if one is missing, tell the human the key name and
   stop. Local values go in `.env.local` (gitignored, loaded by Bun).
 - **Live parity** — `bun run parity:remote -- <service…>` runs it on GitHub with the repo's
-  `MOCKINGBIRD_*` secrets (needs only `gh auth login`); `bun run parity:service -- <service…>` runs
+  `<SERVICE>_*` secrets (needs only `gh auth login`); `bun run parity:service -- <service…>` runs
   it locally with keys from `.env.local`. `bun run secrets:doctor` shows which services have keys.
 - **Build cache** — turbo's local cache; CI keeps it in the GitHub Actions cache
   (`.github/actions/setup`). There is no remote cache or token.

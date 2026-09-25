@@ -29,7 +29,7 @@ state from another mock instance, and an HTTP oracle cannot hand its account ove
 coverage of the same surface lives in stripe.qa.seed.property.test.ts (seeded lockstep between
 two mock instances, no credentials).
 
-Credentials: MOCKINGBIRD_STRIPE_SECRET_KEY (sk_test_* / rk_test_*) from the environment (.env.local).
+Credentials: STRIPE_SECRET_KEY (sk_test_* / rk_test_*) from the environment (.env.local).
 Webhook oracle: stripe-cli listen (test mode), forwarded to a local Hono collector.
 `
 
@@ -147,26 +147,26 @@ try {
   credentials = await loadCredentials(
     {
       provider: "stripe",
-      fields: { MOCKINGBIRD_STRIPE_SECRET_KEY: "MOCKINGBIRD_STRIPE_SECRET_KEY" },
+      fields: { STRIPE_SECRET_KEY: "STRIPE_SECRET_KEY" },
     },
     { env: process.env },
   )
 } catch (error) {
   if (error instanceof CredentialError) {
     console.error(
-      `stripe parity: no test-mode key. Set MOCKINGBIRD_STRIPE_SECRET_KEY (sk_test_…) in .env.local, or run it on GitHub: bun run parity:remote -- stripe. ${error.message}`,
+      `stripe parity: no test-mode key. Set STRIPE_SECRET_KEY (sk_test_…) in .env.local, or run it on GitHub: bun run parity:remote -- stripe. ${error.message}`,
     )
     process.exit(2)
   }
   throw error
 }
-const secretKey = credentials.values.MOCKINGBIRD_STRIPE_SECRET_KEY
+const secretKey = credentials.values.STRIPE_SECRET_KEY
 if (!secretKey || !TEST_KEY_PREFIXES.some((prefix) => secretKey.startsWith(prefix))) {
   console.error("stripe parity: refusing to run with a key that is not a test-mode key")
   process.exit(2)
 }
 
-const baseUrl = process.env.MOCKINGBIRD_STRIPE_BASE_URL ?? `https://${STRIPE_HOST}`
+const baseUrl = process.env.STRIPE_BASE_URL ?? `https://${STRIPE_HOST}`
 const authHeaders = {
   authorization: `Bearer ${secretKey}`,
   "stripe-version": document.info.version,

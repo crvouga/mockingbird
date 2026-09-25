@@ -3,8 +3,8 @@
  * canonicalized and diffed. Credentials come from the environment
  * (`.env.local` locally, repo secrets in the Parity workflow):
  *
- *   MOCKINGBIRD_LLAMACLOUD_API_KEY      an llx-… key for a sandbox project
- *   MOCKINGBIRD_LLAMACLOUD_BASE_URL     optional, default https://api.cloud.llamaindex.ai
+ *   LLAMACLOUD_API_KEY      an llx-… key for a sandbox project
+ *   LLAMACLOUD_BASE_URL     optional, default https://api.cloud.llamaindex.ai
  *
  * Every operation is a read or a write to a pipeline's documents; the walk only writes
  * documents it generates, but it still needs a throwaway pipeline, so by default only the
@@ -19,7 +19,7 @@ try {
   credentials = await loadCredentials(
     {
       provider: "llamacloud",
-      fields: { MOCKINGBIRD_LLAMACLOUD_API_KEY: "MOCKINGBIRD_LLAMACLOUD_API_KEY" },
+      fields: { LLAMACLOUD_API_KEY: "LLAMACLOUD_API_KEY" },
     },
     { env: process.env },
   )
@@ -31,10 +31,11 @@ try {
   throw error
 }
 
-const baseUrl = (
-  process.env.MOCKINGBIRD_LLAMACLOUD_BASE_URL ?? "https://api.cloud.llamaindex.ai"
-).replace(/\/$/, "")
-const key = credentials.values.MOCKINGBIRD_LLAMACLOUD_API_KEY
+const baseUrl = (process.env.LLAMACLOUD_BASE_URL ?? "https://api.cloud.llamaindex.ai").replace(
+  /\/$/,
+  "",
+)
+const key = credentials.values.LLAMACLOUD_API_KEY
 const unsafe = process.argv.includes("--include-unsafe")
 const reads = [
   "ListProjects",

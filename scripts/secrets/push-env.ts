@@ -1,6 +1,6 @@
 /**
  * Push values from .env.local → GitHub Actions repo secrets: the manifest's GitHub secrets plus
- * every `MOCKINGBIRD_*` value set there (live-parity credentials and settings).
+ * every live-parity credential and setting `.env.example` lists that is set there.
  * Requires --yes. Never prints secret values.
  *
  *   bun run secrets:push -- --dry-run
@@ -11,8 +11,8 @@ import {
   hasFlag,
   isGitHubSecretEntry,
   loadManifest,
-  PARITY_SECRET_PREFIX,
   parityRequirements,
+  paritySettingNames,
   readEnvLocal,
   run,
   which,
@@ -57,10 +57,8 @@ for (const entry of manifest.secrets.filter(isGitHubSecretEntry)) {
   if (sourceKey) targets.set(entry.github.name, sourceKey)
 }
 for (const { env } of parityRequirements()) for (const name of env) targets.set(name, name)
-// Optional parity settings (e.g. MOCKINGBIRD_JUNCTION_WEBHOOK_RECEIVER_URL) ride along: the
-// Parity workflow exposes every MOCKINGBIRD_* secret.
-for (const name of Object.keys(envLocal))
-  if (name.startsWith(PARITY_SECRET_PREFIX)) targets.set(name, name)
+// Optional parity settings (e.g. JUNCTION_WEBHOOK_RECEIVER_URL) ride along.
+for (const name of paritySettingNames()) targets.set(name, name)
 
 let failed = false
 
