@@ -370,6 +370,12 @@ components:
           type: boolean
         allow_streaming_from_bucket:
           type: boolean
+        storage_provider:
+          type: string
+          maxLength: 32
+        namespace:
+          type: string
+          maxLength: 64
     Permissions:
       type: object
       additionalProperties: false
@@ -415,6 +421,8 @@ components:
           minimum: 1
           maximum: 200
         enable_people_ui:
+          type: boolean
+        enable_cpu_warning_notifications:
           type: boolean
         enable_pip_ui:
           type: boolean
@@ -465,6 +473,11 @@ components:
           type: boolean
         enable_terse_logging:
           type: boolean
+        close_tab_on_exit:
+          type: boolean
+          description: >-
+            Documented on meeting tokens; the live API also accepts it on a room, so a body
+            that sets it on both is not rejected.
         sfu_switchover:
           type: number
         enable_adaptive_simulcast:
@@ -523,6 +536,8 @@ components:
               type: string
               maxLength: 32
             max_idle_timeout_sec:
+              type: number
+            max_idle_timeout_post_conversation_sec:
               type: number
         streaming_endpoints:
           type: [array, "null"]

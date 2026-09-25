@@ -557,6 +557,61 @@ describe("contract", () => {
     expect(JSON.stringify(settings)).not.toContain(API_KEY)
   })
 
+  test("the EMR room body with close_tab_on_exit and lang creates a room (issue #132)", async () => {
+    const { runtime } = harness()
+    const now = Math.floor(NOW / 1000)
+    const properties = {
+      nbf: now,
+      exp: now + 3600,
+      eject_after_elapsed: 4500,
+      max_participants: 3,
+      enable_prejoin_ui: true,
+      enable_people_ui: true,
+      enable_pip_ui: false,
+      enable_live_captions_ui: true,
+      enable_terse_logging: false,
+      close_tab_on_exit: false,
+      lang: "en",
+      permissions: {
+        hasPresence: true,
+        canSend: ["video", "audio"],
+        canReceive: { base: true },
+        canAdmin: false,
+      },
+    }
+    const response = await runtime.fetch(
+      new Request(`${API}/v1/rooms`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${API_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({ privacy: "private", properties }),
+      }),
+    )
+    expect(response.status).toBe(200)
+    const room = (await response.json()) as Record<string, unknown>
+    expect(room).toMatchObject({ api_created: true, privacy: "private", config: properties })
+    expect(room.url).toBe(`${ROOM_BASE}${room.name}`)
+    expect((room.config as Record<string, unknown>).close_tab_on_exit).toBe(false)
+  })
+
+  test("room properties from Daily's create-room reference are accepted", async () => {
+    const { emr } = harness()
+    const created = await emr.createRoom({
+      properties: {
+        enable_cpu_warning_notifications: false,
+        dialout_config: { allow_room_start: false, max_idle_timeout_post_conversation_sec: 30 },
+        recordings_bucket: {
+          storage_provider: "aws",
+          bucket_name: "acme-recordings",
+          bucket_region: "us-west-2",
+          namespace: "acme",
+          assume_role_arn: "arn:aws:iam::555555555555:role/DailyS3AccessRole",
+          allow_api_access: true,
+        },
+      },
+    })
+    expect(created.name).toBeString()
+  })
+
   test("Daily-style validation: unknown room properties and duplicate names are 400", async () => {
     const { emr } = harness()
     await expect(emr.createRoom({ properties: { not_a_property: true } })).rejects.toThrow(
