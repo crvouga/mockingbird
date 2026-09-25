@@ -27,7 +27,12 @@ import { isShippedOrLater, isTerminal, triple } from "./statuses.js"
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 export type { CatalogItem } from "./catalog.js"
-export { CUSTOM_CREAM_ANCHOR_PRESET_ID, DEFAULT_CATALOG } from "./catalog.js"
+export {
+  CUSTOM_CREAM_ANCHOR_PRESET_ID,
+  DEFAULT_CATALOG,
+  parseCatalog,
+  parseCatalogItem,
+} from "./catalog.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 export type { AutoAdvance, OrderRecord, Settings } from "./state.js"
@@ -62,6 +67,18 @@ export type RxVortexAPIOptions = APIOptions & {
 }
 
 const TOKEN_PREFIX = "rxv_"
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** The fields of a validated `medication_requests[]` entry the mock reads. */
+type MedicationRequest = {
+  preset_catalog_id: string
+  medication_name: string
+  medication_strength?: string
+  medication_form?: string
+  quantity: number
+  quantity_units: string
+}
 
 const base64url = (value: string) =>
   toBase64(new TextEncoder().encode(value))
@@ -177,7 +194,7 @@ export class RxVortexAPI implements FetchAPI {
     this.now = options.now ?? (() => Date.now())
     this.onWebhook = options.onWebhook
     this.state = new RxVortexState(sqlite, namespace, {
-      catalog: options.catalog ?? [],
+      catalog: options.catalog,
       settings: options.settings ?? {},
     })
     const handlers = defineOperations<SupportedOperationId>({
@@ -185,10 +202,7 @@ export class RxVortexAPI implements FetchAPI {
       CreateOrder: (context) => this.createOrder(context),
       GetOrder: (context) => this.getOrder(context),
       CancelOrder: (context) => this.cancelOrder(context),
-      ListPresetCatalogItems: () =>
-        jsonRes(200, {
-          data: this.state.catalog.list({ order: "oldest" }).map((row) => row.value),
-        }),
+      ListPresetCatalogItems: () => jsonRes(200, { data: this.state.catalogRows() }),
     })
     this.service = createService({
       document,
@@ -274,10 +288,12 @@ export class RxVortexAPI implements FetchAPI {
       return jsonRes(422, { message: "The given data was invalid.", errors: issuesByField(issues) })
     }
     const order = body.order as { sender_order_id: string }
-    const meds = body.medication_requests as { preset_catalog_id: string }[]
+    const meds = body.medication_requests as MedicationRequest[]
+    const adoptable = (med: MedicationRequest) =>
+      this.state.current().unknownPresets === "accept" && UUID.test(med.preset_catalog_id)
     const unknown = meds.find((med) => {
       const item = this.state.catalog.get(med.preset_catalog_id)
-      return !item || item.status !== "active"
+      return item ? item.status !== "active" : !adoptable(med)
     })
     if (unknown) {
       return jsonRes(422, {
@@ -298,6 +314,9 @@ export class RxVortexAPI implements FetchAPI {
         }),
         { ids: { orderId: existing.order_tracking_id } },
       )
+    }
+    for (const med of meds) {
+      if (!this.state.catalog.has(med.preset_catalog_id)) this.adoptPreset(med)
     }
     const now = this.iso()
     const created: OrderRecord = {
@@ -343,6 +362,26 @@ export class RxVortexAPI implements FetchAPI {
       }),
       { ids },
     )
+  }
+
+  /**
+   * Under `unknownPresets: "accept"`, a well-formed preset id the catalog lacks becomes an
+   * active row described by the request, so later submits and catalog reads see it.
+   */
+  private adoptPreset(med: MedicationRequest): void {
+    const item: CatalogItem = {
+      catalog_id: med.preset_catalog_id,
+      medication_name: med.medication_name,
+      medication_strength: med.medication_strength ?? null,
+      package_size: null,
+      quantity: med.quantity,
+      quantity_units: med.quantity_units,
+      medication_form: med.medication_form ?? null,
+      route: null,
+      states: [],
+      status: "active",
+    }
+    this.state.putCatalog([item], "merge")
   }
 
   private getOrder(context: OperationContext): Response {

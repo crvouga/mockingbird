@@ -1,5 +1,7 @@
 /// <reference types="node" />
+import { readFileSync } from "node:fs"
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
+import { type CatalogItem, parseCatalog } from "./catalog.js"
 import { createRuntime, type RxVortexRuntime, type RxVortexRuntimeOptions } from "./runtime.js"
 
 /** Port `mockingbird-rxvortex serve` listens on when none is given. */
@@ -37,6 +39,24 @@ export const createServer = async (
 const text = (value: string | boolean | undefined) =>
   typeof value === "string" ? value : undefined
 
+/**
+ * Read a catalog file: a JSON array of rows, or the `{data: [...]}` body
+ * `GET /api/v1/preset-catalog-items` answers with, so a recorded response loads as-is.
+ */
+export const loadCatalogFile = (path: string): CatalogItem[] => {
+  let raw: string
+  try {
+    raw = readFileSync(path, "utf8")
+  } catch {
+    throw new Error(`rxvortex catalog not found: ${path}`)
+  }
+  try {
+    return parseCatalog(JSON.parse(raw))
+  } catch (error) {
+    throw new Error(`rxvortex catalog ${path}: ${(error as Error).message}`)
+  }
+}
+
 /** How `serve` (and `serve --config`) builds the RxVortex mock from flags. */
 export const serveTarget: ServeTarget = {
   name: "rxvortex",
@@ -58,6 +78,18 @@ export const serveTarget: ServeTarget = {
       value: "<token>",
       description: "A static bearer token to accept (the app's RXVORTEX_API_TOKEN)",
     },
+    catalog: {
+      type: "string",
+      value: "<file.json>",
+      description:
+        "Preset catalog every namespace starts with and resets to: a JSON array, or {data: [...]} as GET /api/v1/preset-catalog-items returns",
+    },
+    "unknown-presets": {
+      type: "string",
+      value: "<reject|accept>",
+      description:
+        "An unknown preset_catalog_id: 422 like the sandbox (reject, default) or add it (accept)",
+    },
     "auto-advance": {
       type: "string",
       value: "<ms:Status,Status,…>",
@@ -69,13 +101,19 @@ export const serveTarget: ServeTarget = {
     const secret = text(values["webhook-secret"])
     const token = text(values["api-token"])
     const auto = text(values["auto-advance"])
+    const catalogPath = text(values.catalog)
+    const unknownPresets = text(values["unknown-presets"])
+    if (unknownPresets !== undefined && unknownPresets !== "reject" && unknownPresets !== "accept")
+      throw new Error('--unknown-presets must be "reject" or "accept"')
     const plan = auto ? /^(\d+):(.+)$/.exec(auto) : null
     if (auto && !plan)
       throw new Error('--auto-advance must look like "2000:Fill,Shipping,Delivered"')
     return createRuntime({
       tickMs: 100,
       ...(url ? { webhooks: { url, ...(secret ? { secret } : {}) } } : {}),
+      ...(catalogPath ? { catalog: loadCatalogFile(catalogPath) } : {}),
       settings: {
+        ...(unknownPresets ? { unknownPresets } : {}),
         ...(token ? { staticTokens: [token] } : {}),
         ...(plan
           ? {

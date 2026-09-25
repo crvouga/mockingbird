@@ -43,6 +43,12 @@ export type Settings = {
   /** Only these client credentials get a token; empty means any pair does. */
   clients: { client_id: string; client_secret: string }[]
   autoAdvance: AutoAdvance | null
+  /**
+   * What a submit does with a well-formed `preset_catalog_id` the catalog does not hold:
+   * `"reject"` answers 422 as the sandbox does; `"accept"` adds it as an active row named
+   * after the request's `medication_name`. Inactive rows are refused either way.
+   */
+  unknownPresets: "reject" | "accept"
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -50,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   staticTokens: [],
   clients: [],
   autoAdvance: null,
+  unknownPresets: "reject",
 }
 
 export class RxVortexState {
@@ -61,7 +68,10 @@ export class RxVortexState {
   constructor(
     sqlite: SqliteClient,
     namespace: string,
-    private readonly seed: { catalog: readonly CatalogItem[]; settings: Partial<Settings> },
+    private readonly seed: {
+      catalog: readonly CatalogItem[] | undefined
+      settings: Partial<Settings>
+    },
   ) {
     this.orders = new Collection(sqlite, namespace, "orders")
     this.catalog = new Collection(sqlite, namespace, "catalog")
@@ -72,14 +82,27 @@ export class RxVortexState {
 
   /** Re-apply the catalog and settings after a reset. */
   ensureSeeded(): void {
-    if (this.catalog.count() === 0) {
-      for (const item of this.seed.catalog.length > 0 ? this.seed.catalog : DEFAULT_CATALOG) {
-        this.catalog.insert(item.catalog_id, item)
-      }
-    }
+    if (this.catalog.count() === 0) this.putCatalog(this.seed.catalog ?? DEFAULT_CATALOG, "merge")
+
     if (!this.settings.has("settings")) {
       this.settings.insert("settings", { ...DEFAULT_SETTINGS, ...this.seed.settings })
     }
+  }
+
+  /** Load rows: `replace` drops every other row first, `merge` upserts by `catalog_id`. */
+  putCatalog(items: readonly CatalogItem[], mode: "replace" | "merge"): number {
+    if (mode === "replace") {
+      for (const row of this.catalog.list()) this.catalog.delete(row.id)
+    }
+    for (const item of items) {
+      if (this.catalog.has(item.catalog_id)) this.catalog.update(item.catalog_id, item)
+      else this.catalog.insert(item.catalog_id, item)
+    }
+    return this.catalog.count()
+  }
+
+  catalogRows(): CatalogItem[] {
+    return this.catalog.list({ order: "oldest" }).map((row) => row.value)
   }
 
   current(): Settings {
