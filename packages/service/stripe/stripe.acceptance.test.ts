@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import Stripe from "stripe"
 import { createServer, type StripeServer } from "./src/server.js"
+import { HOSTED_PAGE_TEST_CARDS, testInstrument } from "./src/test-tokens.js"
 import {
   advanceTestClock,
   attachTestCard,
@@ -637,6 +638,11 @@ describe("S1.9 hosted Checkout page and Stripe.js", () => {
     const page = await (await fetch(session.url as string)).text()
     for (const id of ["card", "exp", "cvc", "zip", "pay", "cancel"])
       expect(page).toContain(`data-testid="stripe-mock-${id}"`)
+    for (const card of HOSTED_PAGE_TEST_CARDS) {
+      expect(testInstrument(card.number)).toBeDefined()
+      expect(page).toContain(`data-test-card="${card.number}"`)
+    }
+    expect(page).toContain("Pay $179.99")
     const declined = await fetch(session.url as string, {
       method: "POST",
       redirect: "manual",
@@ -649,7 +655,9 @@ describe("S1.9 hosted Checkout page and Stripe.js", () => {
       }),
     })
     expect(declined.status).toBe(200)
-    expect(await declined.text()).toContain('data-testid="stripe-mock-error"')
+    const declinedPage = await declined.text()
+    expect(declinedPage).toContain('data-testid="stripe-mock-error"')
+    expect(declinedPage).toContain('value="4000000000000002"')
     const started = performance.now()
     const paid = await fetch(session.url as string, {
       method: "POST",
