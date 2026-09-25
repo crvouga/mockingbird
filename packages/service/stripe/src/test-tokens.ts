@@ -179,6 +179,86 @@ const CARD_NUMBERS: Record<string, string> = {
   "4000051230000072": "tok_hsa",
 }
 
+export type TestCardGroup = "succeeds" | "declines" | "authentication"
+
+/** The prefill shortcuts on the hosted Checkout page, in display order. */
+export const HOSTED_PAGE_TEST_CARDS: Array<{
+  number: string
+  label: string
+  group: TestCardGroup
+  hint: string
+}> = [
+  { number: "4242424242424242", label: "Visa", group: "succeeds", hint: "Payment succeeds" },
+  {
+    number: "4000056655665556",
+    label: "Visa debit",
+    group: "succeeds",
+    hint: "Payment succeeds",
+  },
+  {
+    number: "5555555555554444",
+    label: "Mastercard",
+    group: "succeeds",
+    hint: "Payment succeeds",
+  },
+  { number: "378282246310005", label: "Amex", group: "succeeds", hint: "Payment succeeds" },
+  { number: "6011111111111117", label: "Discover", group: "succeeds", hint: "Payment succeeds" },
+  {
+    number: "4000051230000072",
+    label: "HSA / FSA",
+    group: "succeeds",
+    hint: "Prepaid HSA card, payment succeeds",
+  },
+  {
+    number: "4000000000000002",
+    label: "Generic decline",
+    group: "declines",
+    hint: "card_declined: generic_decline",
+  },
+  {
+    number: "4000000000009995",
+    label: "Insufficient funds",
+    group: "declines",
+    hint: "card_declined: insufficient_funds",
+  },
+  {
+    number: "4000000000000069",
+    label: "Expired card",
+    group: "declines",
+    hint: "expired_card",
+  },
+  {
+    number: "4000000000000341",
+    label: "Attach, then fail",
+    group: "declines",
+    hint: "Attaches to the customer, then every charge declines",
+  },
+  {
+    number: "4000002500003155",
+    label: "3D Secure 2",
+    group: "authentication",
+    hint: "Authenticated on this page; succeeds off-session once saved",
+  },
+  {
+    number: "4000002760003184",
+    label: "3D Secure always",
+    group: "authentication",
+    hint: "Authenticated on this page; declines off-session",
+  },
+  {
+    number: "4000000000003220",
+    label: "Auth required",
+    group: "authentication",
+    hint: "Authenticated on this page; declines off-session",
+  },
+  {
+    number: "4000000000000259",
+    label: "Dispute",
+    group: "authentication",
+    hint: "Succeeds, then the charge is disputed",
+  },
+]
+
 /** Token id for a magic payment method id, card token, or card number; undefined if unknown. */
 export const testInstrument = (value: string): string | undefined => {
   if (CARDS[value]) return value

@@ -173,10 +173,15 @@ finalize; a customer credit balance is applied at finalize; `void` works only on
 
 ### Hosted Checkout page and Stripe.js
 
-- `GET /c/pay/:sessionId` — the page `session.url` points to: card number, expiry, CVC, ZIP and
-  Pay/Cancel with `data-testid`s `stripe-mock-card`, `stripe-mock-exp`, `stripe-mock-cvc`,
-  `stripe-mock-zip`, `stripe-mock-pay`, `stripe-mock-cancel` (a decline shows
-  `stripe-mock-error`). Pay completes the session (creating the customer, the PaymentIntent with
+- `GET /c/pay/:sessionId` — the page `session.url` points to, laid out like Stripe's hosted
+  Checkout (order summary beside the payment form, stacked on narrow screens): card number,
+  expiry, CVC, ZIP and Pay/Cancel with `data-testid`s `stripe-mock-card`, `stripe-mock-exp`,
+  `stripe-mock-cvc`, `stripe-mock-zip`, `stripe-mock-pay`, `stripe-mock-cancel` (a decline shows
+  `stripe-mock-error`), plus optional email, cardholder name and country. A **Test cards** panel
+  has one button per test card number (`stripe-mock-test-card`, `data-test-card="<number>"`):
+  succeeding brands, declines (generic, insufficient funds, expired, attach-then-fail), 3D Secure
+  and dispute. Each button fills every field, and with “Pay immediately after filling” ticked it
+  submits the form too. Pay completes the session (creating the customer, the PaymentIntent with
   `payment_intent_data.metadata`, the Subscription with `subscription_data.metadata`, or the
   SetupIntent), emits `checkout.session.completed` and 302s to `success_url` with
   `{CHECKOUT_SESSION_ID}` substituted raw and `%7B…%7D`-encoded; Cancel 302s to `cancel_url`.
