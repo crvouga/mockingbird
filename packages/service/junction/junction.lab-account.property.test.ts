@@ -330,8 +330,9 @@ describe("Junction order lab-account routing", () => {
         if (testCase.status === 200) {
           const { order } = (await response.json()) as { order: Record<string, unknown> }
           expect(order.billing_type).toBe("client_bill")
-          // A requested account id round-trips; an implicitly routed order omits the field.
-          expect(order.lab_account_id).toBe(testCase.id ?? undefined)
+          // Junction's order has no lab_account_id; the mock keeps the account it used.
+          expect("lab_account_id" in order).toBe(false)
+          if (testCase.id) expect(api.orderLabAccount(order.id as string)).toBe(testCase.id)
         } else {
           expect(await errorDetail(response)).toBe(testCase.detail)
         }

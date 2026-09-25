@@ -100,6 +100,29 @@ export const BILLING_TYPES = [
   "upfront_payment",
 ] as const
 
+export type BillingType = (typeof BILLING_TYPES)[number]
+
+/**
+ * Validate a lab slug → `billing_type` map: the billing type `create_order` evaluates for
+ * that lab when the request omits `billing_type`. Junction documents `client_bill` as the
+ * default, but a sandbox team was observed evaluating BioReference orders as
+ * `patient_bill_passthrough`, so it is configurable per lab.
+ */
+export const defaultBillingTypesFrom = (input: unknown): Record<string, BillingType> => {
+  if (typeof input !== "object" || input === null || Array.isArray(input))
+    throw new TypeError("default billing types must map lab slugs to billing types")
+  const out: Record<string, BillingType> = {}
+  for (const [lab, type] of Object.entries(input)) {
+    if (lab.trim() === "") throw new TypeError("default billing types: lab slug is empty")
+    if (!(BILLING_TYPES as readonly unknown[]).includes(type))
+      throw new TypeError(
+        `default billing type for ${lab}: ${String(type)} is not a billing type (${BILLING_TYPES.join(", ")})`,
+      )
+    out[lab.trim().toLowerCase()] = type as BillingType
+  }
+  return out
+}
+
 export const LAB_ACCOUNT_STATUSES: readonly LabAccountStatus[] = [
   "active",
   "pending",

@@ -15,11 +15,13 @@ import {
 } from "./fixtures.js"
 import type { JunctionAPI } from "./index.js"
 import {
+  LAB_ACCOUNT_PRESET_ALIASES,
   LAB_ACCOUNT_PRESETS,
   type LabAccountLayout,
   labAccountFromPreset,
+  SYNTHETIC_LAB_ACCOUNT_PRESETS,
 } from "./lab-account-presets.js"
-import { type LabAccountInput, renderLabAccount } from "./lab-accounts.js"
+import { type BillingType, type LabAccountInput, renderLabAccount } from "./lab-accounts.js"
 import { sandboxUserQuotaBody } from "./limits.js"
 import type { GeoMode, ResultFixture } from "./state.js"
 import type { WebhookDispatcher } from "./webhooks.js"
@@ -250,6 +252,7 @@ export const junctionAdminRoutes =
               method: methodOf(order),
               status: order.last_event.status,
               updated_at: order.updated_at,
+              lab_account_id: api(request).orderLabAccount(order.id) ?? null,
             })),
         }),
 
@@ -355,6 +358,8 @@ export const junctionAdminRoutes =
               return [name, record ? renderLabAccount(record) : null]
             }),
           ),
+          aliases: LAB_ACCOUNT_PRESET_ALIASES,
+          synthetic: SYNTHETIC_LAB_ACCOUNT_PRESETS,
         }),
       "POST /lab-accounts/presets/:name": (request) => {
         const body = isRecord(request.body) ? request.body : {}
@@ -380,6 +385,21 @@ export const junctionAdminRoutes =
         if (!isRecord(request.body)) return adminError(400, "expected an object of limits")
         const input = request.body
         return guarded(() => jsonRes(200, { limits: api(request).configureLimits(input) }))
+      },
+
+      "GET /default-billing-types": (request) =>
+        jsonRes(200, { defaultBillingTypes: api(request).defaultBillingTypes }),
+      "PUT /default-billing-types": (request) => {
+        const input = isRecord(request.body) ? request.body.defaultBillingTypes : undefined
+        if (!isRecord(input))
+          return adminError(
+            400,
+            'body needs "defaultBillingTypes": { "<lab slug>": "<billing_type>" } ({} restores client_bill)',
+          )
+        return guarded(() => {
+          api(request).defaultBillingTypes = input as Record<string, BillingType>
+          return jsonRes(200, { defaultBillingTypes: api(request).defaultBillingTypes })
+        })
       },
 
       "GET /identity": (request) => jsonRes(200, { identity: api(request).identity }),

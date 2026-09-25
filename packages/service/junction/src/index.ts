@@ -32,6 +32,8 @@ import {
   labAccountFromPreset,
 } from "./lab-account-presets.js"
 import {
+  type BillingType,
+  defaultBillingTypesFrom,
   type LabAccountInput,
   labAccountFromClientFacing,
   labAccountFromInput,
@@ -110,17 +112,21 @@ export { document, operationIds, supportedOperationIds } from "./generated/opena
 export type { LabAccountLayout } from "./lab-account-presets.js"
 export {
   DELEGATED_ACCOUNT_STATES,
+  LAB_ACCOUNT_PRESET_ALIASES,
   LAB_ACCOUNT_PRESETS,
   PLATFORM_ACCOUNT_STATES,
   presetAccountId,
+  SYNTHETIC_LAB_ACCOUNT_PRESETS,
 } from "./lab-account-presets.js"
 export type {
+  BillingType,
   LabAccountDelegatedFlow,
   LabAccountInput,
   LabAccountRecord,
   LabAccountStatus,
 } from "./lab-accounts.js"
 export {
+  BILLING_TYPES,
   isLinkedToTeam,
   labAccountFromInput,
   OTHER_TEAM_ID,
@@ -201,6 +207,12 @@ export type JunctionAPIOptions = APIOptions & {
   limits?: JunctionLimitsInput
   /** `adopt-users` creates an unknown (well-formed) `user_id` on first use. Default `strict`. */
   identity?: IdentityMode
+  /**
+   * Lab slug → the `billing_type` `create_order` uses when the request omits it, e.g.
+   * `{ bioreference: "patient_bill_passthrough" }`. Unlisted labs use Junction's documented
+   * default, `client_bill`.
+   */
+  defaultBillingTypes?: Partial<Record<string, BillingType>>
   /** Users and orders to load into every namespace, re-applied on every `reset()`. */
   fixtures?: JunctionFixtures
 }
@@ -280,6 +292,7 @@ export class JunctionAPI implements FetchAPI {
     if (options.identity !== undefined && !IDENTITY_MODES.includes(options.identity))
       throw new TypeError(`identity must be one of ${IDENTITY_MODES.join(", ")}`)
     state.identity = options.identity ?? "strict"
+    state.defaultBillingTypes = defaultBillingTypesFrom(options.defaultBillingTypes ?? {})
     const handlers = defineOperations<SupportedOperationId>({
       ...userHandlers(state),
       ...orderHandlers(state),
@@ -438,6 +451,16 @@ export class JunctionAPI implements FetchAPI {
     return this.limits
   }
 
+  /** Lab slug → the `billing_type` an order gets when it omits one. Kept across `reset()`. */
+  get defaultBillingTypes(): Record<string, BillingType> {
+    return { ...this.state.defaultBillingTypes } as Record<string, BillingType>
+  }
+
+  /** Replace the per-lab default billing types (`{}` restores `client_bill` everywhere). */
+  set defaultBillingTypes(input: Partial<Record<string, BillingType>>) {
+    this.state.defaultBillingTypes = defaultBillingTypesFrom(input)
+  }
+
   get identity(): IdentityMode {
     return this.state.identity
   }
@@ -500,6 +523,15 @@ export class JunctionAPI implements FetchAPI {
 
   orders(): OrderRecord[] {
     return this.state.orders.list({ order: "oldest" }).map((entry) => entry.value)
+  }
+
+  /**
+   * The lab account an order was placed with: its id, `null` for Junction's platform account,
+   * or `undefined` for an unknown order. Junction's order has no such field, so this is the
+   * only place the mock reports it.
+   */
+  orderLabAccount(id: string): string | null | undefined {
+    return this.state.orderLabAccounts.get(id)?.lab_account_id
   }
 
   /**
@@ -639,7 +671,6 @@ const touchedIds = async (
     const order = asRecord(created?.order)
     put("orderId", order?.id)
     put("userId", order?.user_id)
-    put("labAccountId", order?.lab_account_id)
     put("userId", created?.user_id)
   }
   return ids

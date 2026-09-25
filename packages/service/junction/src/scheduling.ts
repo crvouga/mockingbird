@@ -66,7 +66,11 @@ const cachedResponse = (state: JunctionState, context: OperationContext) => {
     materializeAvailabilityBookingKeys(state, context, cached.body)
     rotateAvailabilityBookingKeys(state, cached.body, context.now())
   }
-  const headers = new Headers(cached.headers)
+  return responseFromCache(cached)
+}
+
+const responseFromCache = (cached: { status: number; headers?: unknown; body: unknown }) => {
+  const headers = new Headers(cached.headers as HeadersInit | undefined)
   // The recorded body is served uncompressed, so drop transfer/encoding headers captured
   // from the sandbox response or a client would try to decompress plain JSON.
   headers.delete("content-encoding")
@@ -621,6 +625,74 @@ const radiusOf = (context: OperationContext): number => {
     })
   }
   return value
+}
+
+/**
+ * A recorded area/PSC read for the same query at another radius, or `undefined`.
+ * `radius=25` and no `radius` are the same request (the sandbox's default is 25).
+ */
+const recordedAtRadius = (state: JunctionState, context: OperationContext, radius: number) => {
+  const params = new URLSearchParams(context.url.searchParams)
+  params.delete("radius")
+  const lookup = (query: URLSearchParams) =>
+    state.getGetCache(state.cacheKeyForRequest("GET", context.url.pathname, query))
+  if (radius === DEFAULT_RADIUS) {
+    const bare = lookup(params)
+    if (bare) return bare
+  }
+  params.set("radius", String(radius))
+  return lookup(params)
+}
+
+/**
+ * A covered ZIP's read at a radius the corpus did not record, answered from the recording.
+ *
+ * `psc/info`: the sandbox lists the nearest sites (at most 30) within the radius, so a smaller
+ * radius is exactly the smallest wider recording's sites with `distance < radius` (`distance`
+ * is rounded, and a recorded `25` is outside a 25-mile search). `area/info`: `within_radius`
+ * counts cannot be derived, so only the default-radius equivalence applies. `undefined` when
+ * nothing recorded answers it.
+ */
+const derivedFromRecording = (
+  state: JunctionState,
+  context: OperationContext,
+  radius: number,
+): Response | undefined => {
+  const same = recordedAtRadius(state, context, radius)
+  if (same) return responseFromCache(same)
+  if (!context.url.pathname.endsWith("/psc/info")) return undefined
+  for (const wider of ALLOWED_RADII) {
+    if (wider <= radius) continue
+    const recorded = recordedAtRadius(state, context, wider)
+    if (!recorded) continue
+    const body = recorded.body as Record<string, unknown> | null
+    if (recorded.status !== 200 || !body || !Array.isArray(body.patient_service_centers))
+      return undefined
+    const centers = body.patient_service_centers.filter(
+      (center) => Number((center as Record<string, unknown>).distance) < radius,
+    )
+    return responseFromCache({ ...recorded, body: { ...body, patient_service_centers: centers } })
+  }
+  return undefined
+}
+
+/**
+ * In `corpus` geo mode, a covered ZIP's read the recording cannot answer fails like an
+ * uncovered ZIP instead of inventing sites and labs next to recorded ones.
+ */
+const requireRecordedRead = (state: JunctionState, context: OperationContext, zip: string) => {
+  if (state.geoMode !== "corpus") return
+  const query = [...context.url.searchParams.entries()]
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&")
+  throw new HttpError(UNKNOWN_ZIP_STATUS, {
+    detail: {
+      error_type: UNKNOWN_ZIP_ERROR_TYPE,
+      error_message: `ZIP ${zip} is in the loaded Junction corpus, but GET ${context.url.pathname}?${query} was not recorded and cannot be derived from what was (a smaller psc/info radius is filtered from a wider recording; area/info needs its own). Record it, or serve with --geo synthetic to invent coverage.`,
+      zip_code: zip,
+      corpus: state.corpusLabel ?? null,
+    },
+  })
 }
 
 const zipCodeOf = (context: OperationContext, required: boolean): string | undefined => {
@@ -1219,7 +1291,11 @@ export const schedulingHandlers = (state: JunctionState) => ({
     }
     const zip = rawZip.slice(0, 5)
     requireCoveredZip(state, zip)
-    return jsonRes(200, areaInfoFor(zip, radius, labAccountOf(state, context)))
+    const account = labAccountOf(state, context)
+    const derived = derivedFromRecording(state, context, radius)
+    if (derived) return derived
+    requireRecordedRead(state, context, zip)
+    return jsonRes(200, areaInfoFor(zip, radius, account))
   },
 
   get_psc_info_v3_order_psc_info_get: async (context: OperationContext) => {
@@ -1302,6 +1378,9 @@ export const schedulingHandlers = (state: JunctionState) => ({
       throw new HttpError(404, { detail: "Lab not found." })
     }
     requireCoveredZip(state, zip)
+    const derived = derivedFromRecording(state, context, radius)
+    if (derived) return derived
+    requireRecordedRead(state, context, zip)
     // The sandbox returns the nearest sites within the radius, capped at 30 entries; the
     // mock synthesizes a deterministic inventory of the same contract.
     const within = withinRadiusFor(zip, lab.slug, radius)

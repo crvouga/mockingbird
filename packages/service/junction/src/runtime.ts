@@ -10,6 +10,7 @@ import type { IdentityMode, JunctionFixtures } from "./fixtures.js"
 import { document } from "./generated/openapi.js"
 import { JUNCTION_NAMESPACE, JunctionAPI } from "./index.js"
 import type { LabAccountLayout } from "./lab-account-presets.js"
+import type { BillingType } from "./lab-accounts.js"
 import type { JunctionLimitsInput } from "./limits.js"
 import type { SealedCorpus } from "./sealed-corpus.js"
 import type { GeoMode, WebhookPublisher } from "./state.js"
@@ -35,6 +36,11 @@ export type JunctionRuntimeOptions = {
   limits?: JunctionLimitsInput
   /** `adopt-users` creates unknown user ids on first use. Default `strict`. */
   identity?: IdentityMode
+  /**
+   * Lab slug → `billing_type` for orders that omit it; see
+   * {@link JunctionAPIOptions.defaultBillingTypes}. Per namespace via `PUT /__admin/default-billing-types`.
+   */
+  defaultBillingTypes?: Partial<Record<string, BillingType>>
   /** Users and orders every namespace starts with, re-applied on each reset. */
   fixtures?: JunctionFixtures
   /** Requests each namespace's journal keeps (`GET /__admin/requests`). Default 1000. */
@@ -86,6 +92,9 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
         ...(options.teamId !== undefined ? { teamId: options.teamId } : {}),
         ...(options.limits ? { limits: options.limits } : {}),
         ...(options.identity ? { identity: options.identity } : {}),
+        ...(options.defaultBillingTypes
+          ? { defaultBillingTypes: options.defaultBillingTypes }
+          : {}),
         ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         onWebhook: (event) => {
           options.onWebhook?.(event, publicNamespace)

@@ -227,9 +227,105 @@ describe("A6 geo realism", () => {
     )
   })
 
+  test("psc/info at an unrecorded radius is the wider recording filtered by distance (#140)", async () => {
+    // Drop every default-radius (25-mile) PSC recording, then derive each from the 100-mile
+    // one: it must equal what the sandbox recorded at 25 miles.
+    const pscDefaults = Object.keys(defaultCorpus.observations).filter(
+      (key) => key.startsWith("GET /v3/order/psc/info?") && !key.includes("radius="),
+    )
+    expect(pscDefaults.length).toBeGreaterThan(100)
+    const observations = Object.fromEntries(
+      Object.entries(defaultCorpus.observations).filter(([key]) => !pscDefaults.includes(key)),
+    )
+    const runtime = createRuntime({ corpus: { ...defaultCorpus, observations } })
+    let derived = 0
+    for (const key of pscDefaults) {
+      const query = new URLSearchParams(key.slice(key.indexOf("?") + 1))
+      query.set("radius", "100")
+      query.sort()
+      const wide = defaultCorpus.observations[`GET /v3/order/psc/info?${query}`]
+      if (!wide) continue
+      const res = await call(runtime, "GET", `${key.slice("GET ".length)}&radius=25`)
+      expect(res.status).toBe(200)
+      expect(res.body).toEqual(defaultCorpus.observations[key]?.body as Json)
+      derived += 1
+    }
+    expect(derived).toBe(pscDefaults.length)
+  })
+
+  test("a covered ZIP never gets invented sites or labs at another radius (#140)", async () => {
+    const runtime = createRuntime({ corpus: defaultCorpus })
+    const recorded = (key: string) => defaultCorpus.observations[key]?.body as Json
+    // radius=25 is the default radius, so it is the default-radius recording.
+    const psc25 = await call(
+      runtime,
+      "GET",
+      "/v3/order/psc/info?lab_id=13&zip_code=02108&radius=25",
+    )
+    expect(psc25.body).toEqual(recorded("GET /v3/order/psc/info?lab_id=13&zip_code=02108"))
+    expect(psc25.body.patient_service_centers).toEqual([])
+    const area25 = await call(runtime, "GET", "/v3/order/area/info?zip_code=02108&radius=25")
+    expect(area25.body).toEqual(recorded("GET /v3/order/area/info?zip_code=02108"))
+    // Smaller radii filter the smallest wider recording; 50 miles filters the 100-mile one.
+    const quest100 = recorded("GET /v3/order/psc/info?lab_id=4&radius=100&zip_code=02108")
+    const within = (body: Json, miles: number) =>
+      (body.patient_service_centers as Json[]).filter((site) => Number(site.distance) < miles)
+    const quest50 = await call(
+      runtime,
+      "GET",
+      "/v3/order/psc/info?lab_id=4&zip_code=02108&radius=50",
+    )
+    expect(quest50.status).toBe(200)
+    expect(quest50.body.patient_service_centers).toEqual(within(quest100, 50))
+    const quest10 = await call(
+      runtime,
+      "GET",
+      "/v3/order/psc/info?lab_id=4&zip_code=02108&radius=10",
+    )
+    expect(quest10.body.patient_service_centers).toEqual(
+      within(recorded("GET /v3/order/psc/info?lab_id=4&zip_code=02108"), 10),
+    )
+    // within_radius counts cannot be derived: the corpus error, not an invented answer.
+    for (const radius of [10, 20, 50]) {
+      const area = await call(runtime, "GET", `/v3/order/area/info?zip_code=02108&radius=${radius}`)
+      expect(area.status).toBe(UNKNOWN_ZIP_STATUS)
+      expect((area.body.detail as Json).error_type).toBe(UNKNOWN_ZIP_ERROR_TYPE)
+    }
+  })
+
   test("a malformed ZIP is still Junction's 422, not the corpus error", async () => {
     const runtime = createRuntime({ corpus: defaultCorpus })
     expect((await call(runtime, "GET", "/v3/order/area/info?zip_code=abc")).status).toBe(422)
+  })
+})
+
+describe("create_order with the deprecated top-level lab_test_id (#141)", () => {
+  const { order_set: _orderSet, ...withoutOrderSet } = orderBody("", "CA")
+  const post = async (runtime: JunctionRuntime, extra: Json) => {
+    const userId = await createUser(runtime)
+    return call(runtime, "POST", "/v3/order", {
+      body: { ...withoutOrderSet, user_id: userId, ...extra },
+    })
+  }
+
+  test("places the order for that one lab test", async () => {
+    const res = await post(createRuntime(), { lab_test_id: AT_HOME_LABCORP })
+    expect(res.status).toBe(200)
+    expect(((res.body.order as Json).lab_test as Json).id).toBe(AT_HOME_LABCORP)
+  })
+
+  test("a malformed or unknown id is Junction's error, never a thrown TypeError", async () => {
+    const runtime = createRuntime()
+    const malformed = await post(runtime, { lab_test_id: "nope" })
+    expect(malformed.status).toBe(422)
+    expect(((malformed.body.detail as Json[])[0] as Json).loc).toEqual(["body", "lab_test_id"])
+    const unknown = await post(runtime, { lab_test_id: "00000000-0000-4000-8000-000000000000" })
+    expect([unknown.status, unknown.body]).toEqual([400, { detail: "Test does not exist" }])
+    const neither = await post(runtime, {})
+    expect([neither.status, neither.body]).toEqual([
+      400,
+      { detail: "Either lab_test_id or order_set must be set" },
+    ])
   })
 })
 
@@ -263,7 +359,9 @@ describe("A5 lab accounts", () => {
 
     const ok = await createOrder(runtime, "TX", { lab_account_id: "acct-labcorp-47" })
     expect(ok.res.status).toBe(200)
-    expect((ok.res.body.order as Json).lab_account_id).toBe("acct-labcorp-47")
+    // Junction's order has no lab_account_id; the mock reports it only through /__admin.
+    expect("lab_account_id" in (ok.res.body.order as Json)).toBe(false)
+    expect(runtime.instance().orderLabAccount(ok.orderId as string)).toBe("acct-labcorp-47")
   })
 
   test("with one active account for the lab, an omitted id selects it", async () => {
@@ -527,6 +625,53 @@ describe("A11 verify", () => {
     })
     return { report, real }
   }
+
+  test("--orders shows a team whose omitted billing_type is not client_bill (#137)", async () => {
+    const slug = String(defaultCorpus.catalog.labTests[0]?.lab?.slug)
+    const labTest = { lab: { slug } }
+    const corpus = {
+      ...defaultCorpus,
+      labAccounts: [
+        {
+          id: "c0a80000-0000-4000-8000-0000000000c1",
+          lab: labTest.lab.slug,
+          org_id: "0a0a0000-0000-4000-8000-000000000001",
+          status: "active",
+          delegated_flow: "not_delegated",
+          provider_account_id: "ACME-1",
+          account_name: null,
+          default_clinical_notes: null,
+          business_units: null,
+          allowed_billing: { client_bill: ["CA"] },
+          team_id_allowlist: ["aaaaaaaa-0000-4000-8000-000000000001"],
+        },
+      ],
+    }
+    const real = createRuntime({
+      corpus,
+      defaultBillingTypes: { [labTest.lab.slug]: "patient_bill_passthrough" },
+    })
+    const report = await verifyAgainstReal({
+      realKey: "sk_us_fake",
+      realUrl: "https://real.test",
+      corpus,
+      mock: createRuntime({ corpus }),
+      skipDrift: true,
+      orders: true,
+      minIntervalMs: 0,
+      fetch: (request) => real.fetch(request),
+    })
+    // The plain order.create routes through the same (only) account, so it diverges too.
+    expect(report.divergences.map((d) => [d.check, d.kind, d.real, d.mock])).toEqual([
+      ["order.create", "status", 400, 200],
+      [
+        `order.create via ${labTest.lab.slug} account c0a80000-0000-4000-8000-0000000000c1 with billing_type omitted`,
+        "status",
+        400,
+        200,
+      ],
+    ])
+  })
 
   test("a faithful mock verifies clean, and the verify user is cleaned up", async () => {
     const { report, real } = await verifyWith()
