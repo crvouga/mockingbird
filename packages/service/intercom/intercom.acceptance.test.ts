@@ -334,6 +334,8 @@ describe("S16 acceptance: the member messaging adapter against the mock", () => 
     ).toBeInstanceOf(NotFoundException)
   })
 
+  // Creates 161 conversations (each also recorded in the outbox and published as a webhook);
+  // ~0.6 s locally, past bun's 5 s default on a loaded CI runner.
   test("admin inbox: cursor pagination over >150 conversations, sort, filters, 503s", async () => {
     const { messaging, runtime } = harness()
     await messaging.createConversation({
@@ -391,7 +393,7 @@ describe("S16 acceptance: the member messaging adapter against the mock", () => 
       status: 503,
       message: "Intercom conversation pagination did not advance",
     })
-  })
+  }, 30_000)
 
   test("admin reply / close / reopen and admin lookup by email", async () => {
     const { messaging } = harness()
