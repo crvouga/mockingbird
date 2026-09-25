@@ -51,7 +51,8 @@ describe("JunctionAPI", () => {
       // here is probabilistic and flakes when one valid operation is not sampled.
       expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(0)
     },
-    { timeout: 30_000 },
+    // The 10 ms real-side delay alone reaches 30 s at 100 runs × 30 commands; match stripe's budget.
+    { timeout: 120_000 },
   )
 
   test("a deliberately divergent instance is caught and shrunk", async () => {

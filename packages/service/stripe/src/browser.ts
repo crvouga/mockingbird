@@ -1,20 +1,15 @@
 import type { OperationContext, OperationHandler } from "@crvouga/mockingbird-service"
 import { afterIntentSucceeded } from "./billing.js"
 import { completeSession, successUrlFor } from "./checkout.js"
+import { type CheckoutPageView, checkoutPage } from "./checkout-page.js"
 import { requestInfo } from "./context.js"
 import { invalidRequest, parameterMissing, resourceMissing, StripeError } from "./errors.js"
-import { type Services, scopeForAccount } from "./internal.js"
+import { findCustomer, type RequestScope, type Services, scopeForAccount } from "./internal.js"
 import { confirmIntent } from "./payments.js"
 import { renderPaymentIntent, renderSetupIntent } from "./render.js"
 import { confirmSetup } from "./setup-intents.js"
 import type { CheckoutSessionRecord } from "./state.js"
 import { stripeJs } from "./stripe-js.js"
-
-const escapeHtml = (value: string) =>
-  value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`)
-
-const money = (amount: number, currency: string) =>
-  `${(amount / 100).toFixed(2)} ${currency.toUpperCase()}`
 
 const html = (status: number, body: string) =>
   new Response(`<!doctype html>\n${body}`, {
@@ -22,45 +17,53 @@ const html = (status: number, body: string) =>
     headers: { "content-type": "text/html; charset=utf-8" },
   })
 
-/**
- * The hosted Checkout page served in place of checkout.stripe.com: a plain form with stable
- * `data-testid`s so UI suites can fill it (`stripe-mock-card`, `-exp`, `-cvc`, `-zip`, `-pay`,
- * `-cancel`). Card numbers post straight to the mock and are mapped to a test token on arrival;
- * they are never stored or logged.
- */
-const checkoutPage = (session: CheckoutSessionRecord, error?: string) => {
-  const lines = session.line_items
-    .map(
-      (line) =>
-        `<li data-testid="stripe-mock-line">${escapeHtml(line.description ?? "Item")} × ${line.quantity ?? 1} — ${money(line.amount_total, line.currency)}</li>`,
-    )
-    .join("")
-  const open = session.status === "open"
-  return `<html lang="en"><head><meta charset="utf-8"><title>Mockingbird Checkout</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>body{font-family:system-ui,sans-serif;max-width:28rem;margin:2rem auto;padding:0 1rem}
-label{display:block;margin:.5rem 0 .2rem}input{width:100%;padding:.5rem;box-sizing:border-box}
-button{margin-top:1rem;padding:.6rem 1rem}.error{color:#b00020}</style></head>
-<body data-testid="stripe-mock-checkout" data-session-id="${escapeHtml(session.id)}" data-status="${session.status}">
-<h1>Checkout</h1>
-<p data-testid="stripe-mock-mode">${escapeHtml(session.mode)}</p>
-<ul>${lines}</ul>
-<p data-testid="stripe-mock-total">Total: ${money(session.amount_total, session.currency)}</p>
-${error ? `<p class="error" role="alert" data-testid="stripe-mock-error">${escapeHtml(error)}</p>` : ""}
-${
-  open
-    ? `<form method="post" data-testid="stripe-mock-form">
-<label for="card">Card number</label><input id="card" name="card" data-testid="stripe-mock-card" inputmode="numeric" autocomplete="cc-number" placeholder="4242 4242 4242 4242">
-<label for="exp">Expiry (MM/YY)</label><input id="exp" name="exp" data-testid="stripe-mock-exp" autocomplete="cc-exp" placeholder="12/34">
-<label for="cvc">CVC</label><input id="cvc" name="cvc" data-testid="stripe-mock-cvc" autocomplete="cc-csc" placeholder="123">
-<label for="zip">ZIP</label><input id="zip" name="zip" data-testid="stripe-mock-zip" autocomplete="postal-code" placeholder="94107">
-<button type="submit" name="action" value="pay" data-testid="stripe-mock-pay">Pay</button>
-<button type="submit" name="action" value="cancel" data-testid="stripe-mock-cancel" formnovalidate>Cancel</button>
-</form>`
-    : `<p data-testid="stripe-mock-closed">This Checkout Session is ${escapeHtml(session.status)}.</p>`
+const notFound = () => html(404, "<title>Not found</title><p>Unknown Checkout Session.</p>")
+
+/** Everything the hosted page shows besides the session: merchant, customer, catalog details. */
+const viewFor = (
+  scope: RequestScope,
+  session: CheckoutSessionRecord,
+  extra: Pick<CheckoutPageView, "values" | "error" | "notice"> = {},
+): CheckoutPageView => {
+  const account = scope.account
+  const merchant = scope.services.accounts.config(account.account)?.displayName ?? "Test business"
+  const customer = session.customer === null ? undefined : findCustomer(scope, session.customer)
+  return {
+    ...extra,
+    session,
+    merchant,
+    customerEmail: customer?.email ?? null,
+    lines: session.line_items.map((line) => {
+      const price = line.price === null ? undefined : account.prices.get(line.price)
+      const productId = price?.product ?? (line as { product?: string | null }).product ?? null
+      const product = productId === null ? undefined : account.products.get(productId)
+      const recurring = price?.recurring ?? null
+      return {
+        name: line.description ?? product?.name ?? "Item",
+        description: product?.description ?? null,
+        image: product?.images[0] ?? null,
+        quantity: line.quantity ?? 1,
+        unitAmount: line.unit_amount,
+        amount: line.amount_subtotal,
+        currency: line.currency,
+        interval:
+          recurring === null
+            ? null
+            : recurring.interval_count === 1
+              ? recurring.interval
+              : `${recurring.interval_count} ${recurring.interval}s`,
+      }
+    }),
+  }
 }
-</body></html>`
-}
+
+/** The fields a shopper typed, echoed back after a decline (never stored). */
+const postedValues = (form: Record<string, unknown>): Record<string, string> =>
+  Object.fromEntries(
+    ["email", "card", "exp", "cvc", "name", "country", "zip"]
+      .map((key) => [key, form[key]])
+      .filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  )
 
 /** The account partition holding an object, searched across the namespace. */
 const findAccount = (
@@ -82,12 +85,12 @@ const redirect = (location: string) => new Response(null, { status: 302, headers
 export const browserHandlers = (services: Services): Record<string, OperationHandler> => ({
   GetCheckoutPage: (context) => {
     const found = sessionScope(services, context)
-    if (!found) return html(404, "<title>Not found</title><p>Unknown Checkout Session.</p>")
-    return html(200, checkoutPage(found.session))
+    if (!found) return notFound()
+    return html(200, checkoutPage(viewFor(found.scope, found.session)))
   },
   PostCheckoutPage: (context) => {
     const found = sessionScope(services, context)
-    if (!found) return html(404, "<title>Not found</title><p>Unknown Checkout Session.</p>")
+    if (!found) return notFound()
     const { scope, session } = found
     const form =
       context.body.kind === "form" &&
@@ -95,20 +98,23 @@ export const browserHandlers = (services: Services): Record<string, OperationHan
       context.body.value !== null
         ? (context.body.value as Record<string, unknown>)
         : {}
+    const page = (current: CheckoutSessionRecord, extra?: Parameters<typeof viewFor>[2]) =>
+      html(200, checkoutPage(viewFor(scope, current, extra)))
     if (form.action === "cancel") {
       if (session.cancel_url !== null) return redirect(session.cancel_url)
-      return html(200, checkoutPage(session, "Checkout canceled."))
+      return page(session, { notice: "Checkout canceled." })
     }
-    if (session.status !== "open") return html(200, checkoutPage(session))
+    if (session.status !== "open") return page(session)
     const card =
       typeof form.card === "string" && form.card.trim() !== "" ? form.card : "4242424242424242"
+    const values = postedValues(form)
     try {
       const result = completeSession(scope, session, card)
-      if (!result.ok) return html(200, checkoutPage(session, result.message))
+      if (!result.ok) return page(session, { values, error: result.message })
       const target = successUrlFor(result.session)
-      return target === null ? html(200, checkoutPage(result.session)) : redirect(target)
+      return target === null ? page(result.session) : redirect(target)
     } catch (error) {
-      if (error instanceof StripeError) return html(200, checkoutPage(session, error.init.message))
+      if (error instanceof StripeError) return page(session, { values, error: error.init.message })
       throw error
     }
   },
