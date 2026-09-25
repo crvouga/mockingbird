@@ -462,3 +462,148 @@ describe("M8: GET /v3/lab_tests serves the catalog as a bare array", () => {
     expect(((res.body.detail as Json[])[0] as Json).loc).toEqual(["query", "generation_method"])
   })
 })
+
+describe("M9: the order a sandbox team places, as the sandbox reports it", () => {
+  // A BioReference layout like a real sandbox team's: two customer-owned accounts and
+  // Junction's own. Fake ids; states and billing types as the reports recorded them.
+  const NY_NJ = "c0a80000-0000-4000-8000-000000000001"
+  const DELEGATED = "c0a80000-0000-4000-8000-000000000002"
+  const PLATFORM = "c0a80000-0000-4000-8000-000000000003"
+  const ORG = "0a0a0000-0000-4000-8000-000000000001"
+  const layout = [
+    account(NY_NJ, [TEAM], {
+      org_id: ORG,
+      allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] },
+    }),
+    account(DELEGATED, [TEAM], {
+      org_id: ORG,
+      delegated_flow: "order_delegated",
+      allowed_billing: {
+        client_bill: US_STATES.filter((state) => state !== "NY" && state !== "NJ"),
+      },
+    }),
+    account(PLATFORM, []),
+  ]
+  const runtimeWith = (extra: Parameters<typeof createRuntime>[0] = {}) =>
+    createRuntime({ corpus: corpusOf(2, layout), geo: "synthetic", ...extra })
+
+  test("an order never renders the lab_account_id it was placed with; /__admin/orders does (#139)", async () => {
+    const runtime = runtimeWith()
+    const userId = await createUser(runtime)
+    const created = await call(runtime, "POST", "/v3/order", {
+      body: orderBody(userId, BIOREFERENCE_TEST.id, "NY", {
+        lab_account_id: NY_NJ,
+        billing_type: "patient_bill_passthrough",
+      }),
+    })
+    expect(created.status).toBe(200)
+    const order = created.body.order as Json
+    expect("lab_account_id" in order).toBe(false)
+    const got = await call(runtime, "GET", `/v3/order/${order.id}`)
+    expect(got.status).toBe(200)
+    expect("lab_account_id" in got.body).toBe(false)
+    const listed = await call(runtime, "GET", `/v3/orders?user_id=${userId}`)
+    const listedOrders = listed.body.orders as Json[]
+    expect(listedOrders.length).toBeGreaterThan(0)
+    for (const entry of listedOrders) expect("lab_account_id" in entry).toBe(false)
+    const adminOrders = (await admin(runtime, "GET", "/orders")).body.orders as Json[]
+    expect(adminOrders.find((entry) => entry.id === order.id)?.lab_account_id).toBe(NY_NJ)
+    expect(runtime.instance().orderLabAccount(order.id as string)).toBe(NY_NJ)
+  })
+
+  test("an omitted billing_type is client_bill unless the lab's default is configured (#137)", async () => {
+    // Documented default: client_bill, so the delegated client-bill account places in AZ.
+    const documented = runtimeWith()
+    const docUser = await createUser(documented)
+    const placed = await call(documented, "POST", "/v3/order", {
+      body: orderBody(docUser, BIOREFERENCE_TEST.id, "AZ", { lab_account_id: DELEGATED }),
+    })
+    expect(placed.status).toBe(200)
+    expect((placed.body.order as Json).billing_type).toBe("client_bill")
+
+    // The sandbox team the report probed evaluates BioReference as patient_bill_passthrough.
+    const observed = runtimeWith({
+      defaultBillingTypes: { bioreference: "patient_bill_passthrough" },
+    })
+    const userId = await createUser(observed)
+    const order = (id: string, state: string) =>
+      call(observed, "POST", "/v3/order", {
+        body: orderBody(userId, BIOREFERENCE_TEST.id, state, { lab_account_id: id }),
+      })
+    const c5 = await order(NY_NJ, "NY")
+    expect(c5.status).toBe(200)
+    expect((c5.body.order as Json).billing_type).toBe("patient_bill_passthrough")
+    const refusal = { detail: "Lab 13 does not support billing type patient_bill_passthrough" }
+    const c7 = await order(PLATFORM, "NY")
+    expect([c7.status, c7.body]).toEqual([400, refusal])
+    const c8 = await order(DELEGATED, "AZ")
+    expect([c8.status, c8.body]).toEqual([400, refusal])
+    // An explicit billing_type is unaffected by the default.
+    const explicit = await call(observed, "POST", "/v3/order", {
+      body: orderBody(userId, BIOREFERENCE_TEST.id, "AZ", {
+        lab_account_id: DELEGATED,
+        billing_type: "client_bill",
+      }),
+    })
+    expect(explicit.status).toBe(200)
+  })
+
+  test("default billing types are per namespace through /__admin, and validated", async () => {
+    const runtime = runtimeWith()
+    expect((await admin(runtime, "GET", "/default-billing-types")).body).toEqual({
+      defaultBillingTypes: {},
+    })
+    const put = await admin(runtime, "PUT", "/default-billing-types", {
+      defaultBillingTypes: { BioReference: "patient_bill_passthrough" },
+    })
+    expect(put.body).toEqual({ defaultBillingTypes: { bioreference: "patient_bill_passthrough" } })
+    expect(
+      (await admin(runtime, "GET", "/default-billing-types", undefined, "other")).body,
+    ).toEqual({ defaultBillingTypes: {} })
+    await call(runtime, "POST", "/__admin/reset")
+    expect(runtime.instance().defaultBillingTypes).toEqual({
+      bioreference: "patient_bill_passthrough",
+    })
+    const bad = await admin(runtime, "PUT", "/default-billing-types", {
+      defaultBillingTypes: { quest: "barter" },
+    })
+    expect(bad.status).toBe(400)
+    expect((bad.body.error as Json).message as string).toMatch(/barter is not a billing type/)
+    expect(() =>
+      createRuntime({ defaultBillingTypes: { quest: "barter" as never } }).instance(),
+    ).toThrow(/barter is not a billing type/)
+  })
+
+  test("Junction's BioReference account is the bioreference_platform preset; the old name is an alias (#142)", async () => {
+    const runtime = createRuntime({ corpus: corpusOf(2), geo: "synthetic", labAccounts: [] })
+    const platform = await admin(runtime, "POST", "/lab-accounts/presets/bioreference_platform")
+    expect(platform.status).toBe(201)
+    expect(platform.body).toMatchObject({
+      id: presetAccountId("bioreference_platform"),
+      lab: "bioreference",
+      org_id: null,
+      team_id_allowlist: [],
+      account_name: "Junction BioReference Account",
+    })
+    const alias = await admin(
+      runtime,
+      "POST",
+      "/lab-accounts/presets/bioreference_customer_multi_state",
+    )
+    expect(alias.status).toBe(201)
+    // The alias keeps its own default id (and the provider id derived from it).
+    const { id: aliasId, provider_account_id: _a, ...aliasRest } = alias.body
+    const { id: _platformId, provider_account_id: _p, ...platformRest } = platform.body
+    expect(aliasId).toBe(presetAccountId("bioreference_customer_multi_state"))
+    expect(aliasRest).toEqual(platformRest)
+    // Every preset but the *_platform and suspended_* ones is customer-owned.
+    for (const [name, preset] of Object.entries(LAB_ACCOUNT_PRESETS)) {
+      const houseAccount = name.endsWith("_platform") || name.startsWith("suspended_")
+      expect(preset.org_id === null).toBe(houseAccount)
+    }
+    const listing = (await admin(runtime, "GET", "/lab-accounts/presets")).body
+    expect(listing.aliases).toEqual({ bioreference_customer_multi_state: "bioreference_platform" })
+    expect(listing.synthetic).toEqual(["bioreference_ny_nj_delegated"])
+    expect(Object.keys(listing.presets as Json)).not.toContain("bioreference_customer_multi_state")
+  })
+})

@@ -249,7 +249,6 @@ export const insertOrders = (
         icdCodes: input.icd_codes ?? null,
         clinicalNotes: input.clinical_notes ?? null,
         passthrough: input.passthrough ?? null,
-        ...(input.lab_account_id !== undefined ? { labAccountId: input.lab_account_id } : {}),
       },
       createdMs === undefined ? now : () => createdMs,
     )
@@ -258,6 +257,7 @@ export const insertOrders = (
   const run = () => {
     for (const { input, order, labTest, details, address, status } of prepared) {
       persistOrderRecord(state, order, labTest, details, address)
+      state.orderLabAccounts.insert(order.id, { lab_account_id: input.lab_account_id ?? null })
       state.publishOrderWebhook(order, "labtest.order.created", now())
       if (status !== undefined) {
         const stored = state.orders.get(order.id)

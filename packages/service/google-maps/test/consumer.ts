@@ -519,3 +519,136 @@ export async function geocodeOnWeb(
   if (fromGeocoder != null) return fromGeocoder
   return findPlaceWithGoogleMaps(win, address)
 }
+
+// ---------------------------------------------------------------------------------------------
+// Address Validation: a checkout's pre-charge ship-to check (wire level, `fetch` + JSON).
+
+export type ShipToAddress = {
+  line1: string
+  line2?: string
+  city: string
+  state: string
+  zip: string
+}
+
+export type ShipToVerdict =
+  | { kind: "unavailable"; reason: string }
+  | { kind: "reject"; reason: string }
+  | {
+      kind: "accept"
+      formattedAddress: string | undefined
+      corrected: boolean
+      suggestion: ShipToAddress | undefined
+    }
+
+const ACCEPTED_GRANULARITIES = new Set(["SUB_PREMISE", "PREMISE", "PREMISE_PROXIMITY"])
+const REJECTED_ACTIONS = new Set(["FIX", "CONFIRM_ADD_SUBPREMISES"])
+const CRITICAL_COMPONENTS = new Set([
+  "street_number",
+  "route",
+  "locality",
+  "postal_code",
+  "administrative_area_level_1",
+])
+
+/** The request body a checkout sends: one address line, or two with an apt/suite. */
+export function validationRequestBody(address: ShipToAddress) {
+  return {
+    address: {
+      regionCode: "US",
+      addressLines: address.line2 ? [address.line1, address.line2] : [address.line1],
+      locality: address.city,
+      administrativeArea: address.state,
+      postalCode: address.zip,
+    },
+    enableUspsCass: true,
+  }
+}
+
+/** The fail-open evaluation: Google unavailable accepts, a USPS or verdict problem rejects. */
+export function evaluateAddressValidation(
+  status: number,
+  bodyText: string,
+  input: ShipToAddress,
+): ShipToVerdict {
+  if (status < 200 || status >= 300) {
+    return { kind: "unavailable", reason: `Google Address Validation HTTP ${status}` }
+  }
+  let data: unknown
+  try {
+    data = JSON.parse(bodyText)
+  } catch {
+    return { kind: "unavailable", reason: "non-JSON body" }
+  }
+  if (!isRecord(data)) return { kind: "unavailable", reason: "non-object body" }
+  if (isRecord(data.error) && data.error.status === "REQUEST_DENIED") {
+    return { kind: "unavailable", reason: "REQUEST_DENIED" }
+  }
+  const result = isRecord(data.result) ? data.result : undefined
+  const verdict = result && isRecord(result.verdict) ? result.verdict : undefined
+  if (!result || !verdict) return { kind: "unavailable", reason: "no verdict" }
+  const address = isRecord(result.address) ? result.address : {}
+  const usps = isRecord(result.uspsData) ? result.uspsData : undefined
+  if (typeof usps?.errorMessage === "string" && usps.errorMessage) {
+    return { kind: "reject", reason: `USPS rejected this address: ${usps.errorMessage}` }
+  }
+  if (!ACCEPTED_GRANULARITIES.has(String(verdict.validationGranularity))) {
+    return { kind: "reject", reason: `granularity ${String(verdict.validationGranularity)}` }
+  }
+  if (verdict.addressComplete !== true) return { kind: "reject", reason: "incomplete" }
+  const action = String(verdict.possibleNextAction)
+  if (REJECTED_ACTIONS.has(action)) return { kind: "reject", reason: `next action ${action}` }
+  const unconfirmed = Array.isArray(address.unconfirmedComponentTypes)
+    ? (address.unconfirmedComponentTypes as unknown[]).map(String)
+    : []
+  const critical = unconfirmed.find((type) => CRITICAL_COMPONENTS.has(type))
+  if (critical) return { kind: "reject", reason: `unconfirmed ${critical}` }
+  if (usps) {
+    const dpv = typeof usps.dpvConfirmation === "string" ? usps.dpvConfirmation : ""
+    const accepted =
+      dpv === "" || dpv === "Y" || (dpv === "S" && (action === "ACCEPT" || action === "CONFIRM"))
+    if (!accepted) return { kind: "reject", reason: `DPV ${dpv}` }
+  }
+  const postal = isRecord(address.postalAddress) ? address.postalAddress : undefined
+  const lines = Array.isArray(postal?.addressLines) ? (postal.addressLines as unknown[]) : []
+  const suggestion: ShipToAddress | undefined = postal
+    ? {
+        line1: String(lines[0] ?? ""),
+        ...(lines[1] ? { line2: String(lines[1]) } : {}),
+        city: String(postal.locality ?? ""),
+        state: String(postal.administrativeArea ?? ""),
+        zip: String(postal.postalCode ?? ""),
+      }
+    : undefined
+  const corrected =
+    !!suggestion &&
+    (suggestion.line1.toLowerCase() !== input.line1.toLowerCase() ||
+      suggestion.city.toLowerCase() !== input.city.toLowerCase() ||
+      suggestion.state.toUpperCase() !== input.state.toUpperCase() ||
+      suggestion.zip.slice(0, 5) !== input.zip.slice(0, 5))
+  return {
+    kind: "accept",
+    formattedAddress:
+      typeof address.formattedAddress === "string" ? address.formattedAddress : undefined,
+    corrected,
+    suggestion,
+  }
+}
+
+/** POST `<base>/v1:validateAddress?key=…` and evaluate the answer. */
+export async function validateShipTo(
+  send: Fetch,
+  base: string,
+  key: string | undefined,
+  address: ShipToAddress,
+): Promise<ShipToVerdict> {
+  const url = `${base}/v1:validateAddress${key === undefined ? "" : `?key=${encodeURIComponent(key)}`}`
+  const res = await send(
+    new Request(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(validationRequestBody(address)),
+    }),
+  )
+  return evaluateAddressValidation(res.status, await res.text(), address)
+}

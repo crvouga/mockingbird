@@ -4,7 +4,11 @@
  *
  * Where a preset copies a recorded account, its states and billing types are the
  * recording's. `bioreference_ny_nj_delegated` is not a recorded account: it is the
- * NY/NJ client-bill shape a consumer asked for, kept because suites depend on it.
+ * NY/NJ client-bill shape a consumer asked for, kept because suites depend on it, and
+ * listed in `SYNTHETIC_LAB_ACCOUNT_PRESETS`.
+ *
+ * `*_platform` presets are Junction's own accounts (`org_id: null`, allowlist `[]`); every
+ * other active preset is customer-owned (it belongs to an Org and is linked to the team).
  */
 import {
   type LabAccountInput,
@@ -25,7 +29,7 @@ export const DELEGATED_ACCOUNT_STATES: readonly string[] = except("NJ", "NY")
 
 type Preset = Omit<LabAccountInput, "id">
 
-const bioreferenceCustomer: Preset = {
+const bioreferencePlatform: Preset = {
   lab: "bioreference",
   account_name: "Junction BioReference Account",
   delegated_flow: "not_delegated",
@@ -65,7 +69,7 @@ export const LAB_ACCOUNT_PRESETS: Readonly<Record<string, Preset>> = {
     delegated_flow: "order_delegated",
     allowed_billing: { client_bill: DELEGATED_ACCOUNT_STATES },
   },
-  bioreference_customer_multi_state: bioreferenceCustomer,
+  bioreference_platform: bioreferencePlatform,
   bioreference_patient_bill_passthrough: {
     lab: "bioreference",
     delegated_flow: "not_delegated",
@@ -73,9 +77,30 @@ export const LAB_ACCOUNT_PRESETS: Readonly<Record<string, Preset>> = {
   },
   quest_platform: questPlatform,
   labcorp_platform: labcorpPlatform,
-  suspended_bioreference: { ...bioreferenceCustomer, status: "suspended" },
+  suspended_bioreference: { ...bioreferencePlatform, status: "suspended" },
   suspended_quest: { ...questPlatform, status: "suspended" },
   suspended_labcorp: { ...labcorpPlatform, status: "suspended" },
+}
+
+/**
+ * Deprecated preset names and the preset each stands for. An alias keeps its own default id,
+ * so a suite that pinned `presetAccountId(alias)` still finds its account.
+ */
+export const LAB_ACCOUNT_PRESET_ALIASES: Readonly<Record<string, string>> = {
+  /** Misnamed: the record is Junction's platform account, not a customer-owned one. */
+  bioreference_customer_multi_state: "bioreference_platform",
+}
+
+/** Presets that model a shape consumers asked for, not an account recorded from a real team. */
+export const SYNTHETIC_LAB_ACCOUNT_PRESETS: readonly string[] = ["bioreference_ny_nj_delegated"]
+
+const presetNamed = (name: string): Preset | undefined => {
+  const target = Object.hasOwn(LAB_ACCOUNT_PRESET_ALIASES, name)
+    ? LAB_ACCOUNT_PRESET_ALIASES[name]
+    : name
+  return target !== undefined && Object.hasOwn(LAB_ACCOUNT_PRESETS, target)
+    ? LAB_ACCOUNT_PRESETS[target]
+    : undefined
 }
 
 /** A preset's id when none is given: stable across runs and namespaces. */
@@ -87,7 +112,7 @@ export const labAccountFromPreset = (
   name: string,
   options: { id?: string; teamId: string },
 ): LabAccountRecord | undefined => {
-  const preset = Object.hasOwn(LAB_ACCOUNT_PRESETS, name) ? LAB_ACCOUNT_PRESETS[name] : undefined
+  const preset = presetNamed(name)
   if (!preset) return undefined
   return labAccountFromInput({ ...preset, id: options.id ?? presetAccountId(name) }, options.teamId)
 }

@@ -11,6 +11,7 @@ import { type CorpusAddress, DEFAULT_CORPUS } from "./corpus.js"
 import { document } from "./generated/openapi.js"
 import { GOOGLE_MAPS_NAMESPACE, GoogleMapsAPI, keyCredential } from "./index.js"
 import type { Settings } from "./state.js"
+import { DPV_CODES, GRANULARITIES, NEXT_ACTIONS, type ValidationOverrides } from "./validation.js"
 
 const WEB_SERVICES = ["PlaceAutocomplete", "PlaceDetails", "Geocode", "FindPlaceFromText"] as const
 
@@ -64,6 +65,63 @@ export const GOOGLE_MAPS_PRESETS: Record<string, FaultPreset> = {
     description: "Every web-service call is held 6 s: past QA's 5 s wait for predictions",
     rules: everyWebService({ latencyMs: 6_000 }),
   },
+  address_validation_denied: {
+    description:
+      "Address Validation answers 403 PERMISSION_DENIED, as for a key without the API enabled",
+    rules: [
+      {
+        operationId: "ValidateAddress",
+        status: 403,
+        body: {
+          error: {
+            code: 403,
+            message:
+              "Requests to this API addressvalidation.googleapis.com method google.maps.addressvalidation.v1.AddressValidation.ValidateAddress are blocked.",
+            status: "PERMISSION_DENIED",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                reason: "API_KEY_SERVICE_BLOCKED",
+                domain: "googleapis.com",
+                metadata: { service: "addressvalidation.googleapis.com" },
+              },
+            ],
+          },
+        },
+      },
+    ],
+  },
+  address_validation_unavailable: {
+    description: "Address Validation answers 503 UNAVAILABLE (Google's transient failure)",
+    rules: [
+      {
+        operationId: "ValidateAddress",
+        status: 503,
+        body: {
+          error: {
+            code: 503,
+            message: "The service is currently unavailable.",
+            status: "UNAVAILABLE",
+          },
+        },
+      },
+    ],
+  },
+  address_validation_slow: {
+    description: "Address Validation is held 3 s: past a 2.5 s checkout timeout",
+    rules: [{ operationId: "ValidateAddress", latencyMs: 3_000 }],
+  },
+  address_validation_no_verdict: {
+    description:
+      'Address Validation answers 200 {"result": {}} (no verdict): a malformed answer, for a client\'s defensive branch',
+    rules: [{ operationId: "ValidateAddress", status: 200, body: { result: {} } }],
+  },
+  address_validation_dpv_n: {
+    description: "Address Validation reports USPS DPV confirmation N (not deliverable)",
+    rules: [
+      { operationId: "ValidateAddress", effect: "usps_dpv", params: { dpvConfirmation: "N" } },
+    ],
+  },
   script_unavailable: {
     description: "The Maps JavaScript API answers 503, so the script's onerror fires",
     rules: [{ operationId: "MapsJavaScriptApi", status: 503, body: "Service Unavailable" }],
@@ -90,6 +148,52 @@ const adminError = (status: number, message: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
+const stringList = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((v) => typeof v === "string")
+    ? (value as string[])
+    : undefined
+
+/** A row's Address Validation overrides, or the reason they are refused. */
+const parseValidation = (
+  value: unknown,
+  index: number,
+): ValidationOverrides | undefined | string => {
+  if (value === undefined || value === null) return undefined
+  const at = `addresses[${index}].validation`
+  if (!isRecord(value)) return `${at} must be an object`
+  const out: ValidationOverrides = {}
+  const enums = [
+    ["granularity", GRANULARITIES],
+    ["possibleNextAction", NEXT_ACTIONS],
+    ["dpvConfirmation", DPV_CODES],
+  ] as const
+  for (const [key, allowed] of enums) {
+    if (value[key] === undefined) continue
+    if (!(allowed as readonly unknown[]).includes(value[key])) {
+      return `${at}.${key} must be one of ${allowed.join(", ")}`
+    }
+    Object.assign(out, { [key]: value[key] })
+  }
+  for (const key of ["addressComplete", "multiUnit"] as const) {
+    if (value[key] === undefined) continue
+    if (typeof value[key] !== "boolean") return `${at}.${key} must be a boolean`
+    out[key] = value[key] as boolean
+  }
+  for (const key of ["unconfirmedComponentTypes", "units"] as const) {
+    if (value[key] === undefined) continue
+    const list = stringList(value[key])
+    if (!list) return `${at}.${key} must be a string[]`
+    out[key] = list
+  }
+  if (value.uspsErrorMessage !== undefined) {
+    if (typeof value.uspsErrorMessage !== "string" || !value.uspsErrorMessage) {
+      return `${at}.uspsErrorMessage must be a non-empty string`
+    }
+    out.uspsErrorMessage = value.uspsErrorMessage
+  }
+  return out
+}
+
 /** One admin-supplied address, or the reason it is refused. */
 export const parseAddress = (value: unknown, index: number): CorpusAddress | string => {
   if (!isRecord(value)) return `addresses[${index}] must be an object`
@@ -100,6 +204,8 @@ export const parseAddress = (value: unknown, index: number): CorpusAddress | str
   }
   const state = String(value.state).toUpperCase()
   if (!/^[A-Z]{2}$/.test(state)) return `addresses[${index}].state must be a two-letter code`
+  const validation = parseValidation(value.validation, index)
+  if (typeof validation === "string") return validation
   const lat = value.lat === undefined ? 0 : Number(value.lat)
   const lng = value.lng === undefined ? 0 : Number(value.lng)
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -119,6 +225,7 @@ export const parseAddress = (value: unknown, index: number): CorpusAddress | str
     county: typeof value.county === "string" ? value.county : "",
     lat,
     lng,
+    ...(validation ? { validation } : {}),
   }
 }
 
@@ -133,7 +240,10 @@ const adminRoutes = (runtime: ServiceRuntime<GoogleMapsAPI>): AdminRoutes => ({
   "PUT /corpus": ({ body, namespace }) => {
     const list = Array.isArray(body) ? body : isRecord(body) ? body.addresses : undefined
     if (!Array.isArray(list)) {
-      return adminError(400, 'expected {"addresses": [{line1, city, state, zip, lat?, lng?}]}')
+      return adminError(
+        400,
+        'expected {"addresses": [{line1, city, state, zip, lat?, lng?, validation?}]}',
+      )
     }
     const rows: CorpusAddress[] = []
     for (const [index, each] of list.entries()) {

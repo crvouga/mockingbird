@@ -21,7 +21,7 @@ const MAX_INTERVAL_COUNT: Record<Recurring["interval"], { limit: number; adjecti
   year: { limit: 3, adjective: "yearly" },
 }
 
-const normalizeCurrency = (raw: string, param = "currency") => {
+export const normalizeCurrency = (raw: string, param = "currency") => {
   const currency = raw.toLowerCase()
   if (!SUPPORTED_CURRENCIES.includes(currency))
     throw invalidRequest(

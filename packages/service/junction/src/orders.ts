@@ -448,6 +448,13 @@ const orderValidation = (
       input: labAccountId,
     })
   }
+  const labTestId = body.lab_test_id
+  if (labTestId !== undefined && labTestId !== null) {
+    if (typeof labTestId !== "string")
+      errors.push(stringTypeError(["body", "lab_test_id"], labTestId))
+    else if (!isUuid(labTestId))
+      errors.push(uuidError(labTestId, undefined, ["body", "lab_test_id"]))
+  }
   const os = body.order_set
   const osWrongType =
     os !== undefined && (typeof os !== "object" || os === null || Array.isArray(os))
@@ -950,7 +957,10 @@ export const orderHandlers = (state: JunctionState) => ({
     const aoeError = aoeValidationError(state, body)
     if (aoeError) throw new HttpError(400, { detail: aoeError })
     const rawOrderSet = body.order_set
-    if (rawOrderSet === undefined && body.lab_test_id === undefined) {
+    // `lab_test_id` is the deprecated single-test form: it stands for an order set of one
+    // test, and `order_set` wins when both are sent.
+    const singleLabTestId = typeof body.lab_test_id === "string" ? body.lab_test_id : undefined
+    if (rawOrderSet === undefined && singleLabTestId === undefined) {
       throw new HttpError(400, { detail: "Either lab_test_id or order_set must be set" })
     }
     if (
@@ -964,9 +974,15 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     const details = body.patient_details as Record<string, unknown>
     const address = body.patient_address as Record<string, unknown>
-    const labTestIds = Array.isArray((body.order_set as Record<string, unknown>).lab_test_ids)
-      ? ((body.order_set as Record<string, unknown>).lab_test_ids as unknown[])
-      : []
+    const orderSetIds =
+      typeof rawOrderSet === "object" && rawOrderSet !== null
+        ? (rawOrderSet as Record<string, unknown>).lab_test_ids
+        : undefined
+    const labTestIds = Array.isArray(orderSetIds)
+      ? (orderSetIds as unknown[])
+      : rawOrderSet === undefined && singleLabTestId !== undefined
+        ? [singleLabTestId]
+        : []
     // Vital: empty lab_test_ids → "No markers found…"; unknown id → "Test does not exist";
     // known panels with markers:null (e.g. Female General Wellness) still create successfully.
     if (labTestIds.length === 0) {
@@ -1006,14 +1022,20 @@ export const orderHandlers = (state: JunctionState) => ({
       state.teamId,
       state.listLabAccounts(),
     )
-    const billingType =
+    const requestedBilling =
       typeof body.billing_type === "string" && body.billing_type !== ""
         ? body.billing_type
-        : "client_bill"
+        : undefined
+    const billingType = requestedBilling ?? state.defaultBillingTypes[labSlug] ?? "client_bill"
     const allowedStates = effectiveBilling(labAccount)[billingType]
     if (!allowedStates)
       throw new HttpError(400, {
-        detail: `Billing type ${billingType} is not supported by the lab account used for this order`,
+        // An omitted billing_type that resolves to one the account lacks is reported against
+        // the lab, as the sandbox words it.
+        detail:
+          requestedBilling === undefined
+            ? `Lab ${String(labTest.lab?.id ?? labSlug)} does not support billing type ${billingType}`
+            : `Billing type ${billingType} is not supported by the lab account used for this order`,
       })
     const patientState = String(address.state ?? "")
       .trim()
@@ -1066,11 +1088,13 @@ export const orderHandlers = (state: JunctionState) => ({
         icdCodes,
         clinicalNotes: typeof body.clinical_notes === "string" ? body.clinical_notes : null,
         passthrough: typeof body.passthrough === "string" ? body.passthrough : null,
-        ...(typeof body.lab_account_id === "string" ? { labAccountId: body.lab_account_id } : {}),
       },
       context.now,
     )
     persistOrderRecord(state, order, labTest, details, address)
+    state.orderLabAccounts.insert(orderId, {
+      lab_account_id: labAccount === "platform" ? null : labAccount.id,
+    })
     const responseOrder = { ...order } as Record<string, unknown>
     if (responseOrder.result_types === null) delete responseOrder.result_types
     const response = {
@@ -1313,7 +1337,6 @@ export type OrderDraft = {
   icdCodes: string[] | null
   clinicalNotes: string | null
   passthrough: string | null
-  labAccountId?: string
 }
 
 /** The order record `create_order` stores, in its initial `received.<method>.ordered` state. */
@@ -1380,7 +1403,6 @@ export const buildOrderRecord = (
     notes: null,
     clinical_notes: draft.clinicalNotes,
     passthrough: draft.passthrough,
-    ...(draft.labAccountId !== undefined ? { lab_account_id: draft.labAccountId } : {}),
     created_at: nowIso,
     updated_at: nowIso,
     events: [event],

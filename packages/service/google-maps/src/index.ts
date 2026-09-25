@@ -29,6 +29,14 @@ import {
 } from "./places.js"
 import { mapsJavaScript } from "./shim.js"
 import { GoogleMapsState, type Settings } from "./state.js"
+import {
+  DPV_CODES,
+  type DpvConfirmation,
+  type GoogleApiError,
+  parseValidateRequest,
+  ValidationRequestError,
+  validateAddress,
+} from "./validation.js"
 
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
@@ -41,6 +49,13 @@ export { corpusPlaceId } from "./places.js"
 export type { ShimOptions } from "./shim.js"
 export { mapsJavaScript } from "./shim.js"
 export type { Settings } from "./state.js"
+export type {
+  DpvConfirmation,
+  GoogleApiError,
+  Granularity,
+  PossibleNextAction,
+  ValidationOverrides,
+} from "./validation.js"
 
 export const GOOGLE_MAPS_NAMESPACE = "google-maps"
 
@@ -48,6 +63,13 @@ export const GOOGLE_MAPS_NAMESPACE = "google-maps"
 export const MISSING_KEY_MESSAGE =
   "You must use an API key to authenticate each request to Google Maps Platform APIs. For additional information, please refer to http://g.co/dev/maps-no-account"
 export const INVALID_KEY_MESSAGE = "The provided API key is invalid. "
+
+/**
+ * The Address Validation API is a Google Cloud API (`addressvalidation.googleapis.com`): keys
+ * are refused with a `google.rpc.Status` envelope and an HTTP error, not a 200 with `status`.
+ */
+export const MISSING_API_KEY_MESSAGE = "The request is missing a valid API key."
+export const INVALID_API_KEY_MESSAGE = "API key not valid. Please pass a valid API key."
 
 /** Google statuses the mock answers with (always HTTP 200, as Google does). */
 export type GoogleStatus =
@@ -68,9 +90,12 @@ export type GoogleMapsAPIOptions = APIOptions & {
   publicNamespace?: string
 }
 
-/** The API key a request carries (`?key=`): how keys map to namespaces. */
+/**
+ * The API key a request carries (`?key=`, or the `X-Goog-Api-Key` header Google Cloud APIs
+ * also accept): how keys map to namespaces.
+ */
 export const keyCredential = (request: Request): string | undefined =>
-  new URL(request.url).searchParams.get("key") ?? undefined
+  new URL(request.url).searchParams.get("key") ?? request.headers.get("x-goog-api-key") ?? undefined
 
 const CORS = { "access-control-allow-origin": "*" }
 
@@ -93,6 +118,28 @@ const DEFAULT_MESSAGES: Partial<Record<GoogleStatus, string>> = {
     "You have exceeded your rate-limit for this API. For more information on Google Maps Platform rate limits, please see https://developers.google.com/maps/documentation/places/web-service/usage-and-billing",
   UNKNOWN_ERROR: "An unknown error occurred. Please try again.",
   REQUEST_DENIED: INVALID_KEY_MESSAGE,
+}
+
+/** A Google Cloud API error (`{"error": {code, message, status}}`). */
+const apiError = (error: GoogleApiError): Response => json({ error }, error.code)
+
+/** The JSON a Google Cloud API reads from a body (it parses bodies sent without a JSON type too). */
+const requestJson = (body: OperationContext["body"]): unknown => {
+  if (body.kind === "json") return body.value
+  if (body.kind === "empty") return {}
+  const raw =
+    body.kind === "bytes"
+      ? new TextDecoder().decode(body.value)
+      : body.kind === "text"
+        ? body.value
+        : body.kind === "invalid"
+          ? body.text
+          : undefined
+  try {
+    return JSON.parse(raw ?? "")
+  } catch {
+    throw new ValidationRequestError("Invalid JSON payload received.")
+  }
 }
 
 const text = (value: unknown): string | undefined =>
@@ -123,6 +170,7 @@ export class GoogleMapsAPI implements FetchAPI {
       Geocode: (context) => this.geocode(context),
       FindPlaceFromText: (context) => this.findPlace(context),
       MapsJavaScriptApi: (context) => this.script(context),
+      ValidateAddress: (context) => this.validate(context),
     })
     this.service = createService({
       document,
@@ -171,6 +219,7 @@ export class GoogleMapsAPI implements FetchAPI {
   private gate(context: OperationContext): Response | undefined {
     const operationId = context.operation.operationId
     if (operationId === "MapsJavaScriptApi") return undefined
+    if (operationId === "ValidateAddress") return this.cloudGate(context)
     const key = text(context.query.key)
     if (!key) return this.status(operationId, "REQUEST_DENIED", MISSING_KEY_MESSAGE)
     const keys = this.state.current().keys
@@ -187,6 +236,55 @@ export class GoogleMapsAPI implements FetchAPI {
       return this.status(operationId, status, message)
     }
     return undefined
+  }
+
+  /** Key check for the Google Cloud-style Address Validation API. */
+  private cloudGate(context: OperationContext): Response | undefined {
+    const key = text(context.query.key) ?? context.request.headers.get("x-goog-api-key")
+    if (!key) {
+      return apiError({ code: 403, message: MISSING_API_KEY_MESSAGE, status: "PERMISSION_DENIED" })
+    }
+    const keys = this.state.current().keys
+    if (keys.length > 0 && !keys.includes(key)) {
+      return apiError({
+        code: 400,
+        message: INVALID_API_KEY_MESSAGE,
+        status: "INVALID_ARGUMENT",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            reason: "API_KEY_INVALID",
+            domain: "googleapis.com",
+            metadata: { service: "addressvalidation.googleapis.com" },
+          },
+        ],
+      })
+    }
+    return undefined
+  }
+
+  private validate(context: OperationContext): Response {
+    let request: ReturnType<typeof parseValidateRequest>
+    try {
+      request = parseValidateRequest(requestJson(context.body))
+    } catch (error) {
+      if (!(error instanceof ValidationRequestError)) throw error
+      return apiError({ code: 400, message: error.message, status: "INVALID_ARGUMENT" })
+    }
+    const forced = faultEffect(context.request, "usps_dpv")?.dpvConfirmation
+    const dpvOverride = DPV_CODES.includes(forced as DpvConfirmation)
+      ? (forced as DpvConfirmation)
+      : undefined
+    const outcome = validateAddress(request, this.state.corpus(), {
+      ...(dpvOverride ? { dpvOverride } : {}),
+    })
+    // The journal gets the resolved row and the verdict class, never the address itself.
+    return annotateResponse(json(outcome.body), {
+      ids: {
+        ...(outcome.rowId ? { addressRowId: outcome.rowId } : {}),
+        verdict: outcome.verdictClass,
+      },
+    })
   }
 
   private noted(response: Response, context: OperationContext, place?: Place): Response {

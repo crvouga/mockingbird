@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createHmac } from "node:crypto"
 import { createRuntime, INTERCOM_PRESETS } from "./src/index.js"
-import { createServer } from "./src/server.js"
+import { createServer, serveTarget } from "./src/server.js"
 import {
   BackendWebhookReceiver,
   EmrWebhookReceiver,
@@ -334,6 +334,8 @@ describe("S16 acceptance: the member messaging adapter against the mock", () => 
     ).toBeInstanceOf(NotFoundException)
   })
 
+  // Creates 161 conversations (each also recorded in the outbox and published as a webhook);
+  // ~0.6 s locally, past bun's 5 s default on a loaded CI runner.
   test("admin inbox: cursor pagination over >150 conversations, sort, filters, 503s", async () => {
     const { messaging, runtime } = harness()
     await messaging.createConversation({
@@ -391,7 +393,7 @@ describe("S16 acceptance: the member messaging adapter against the mock", () => 
       status: 503,
       message: "Intercom conversation pagination did not advance",
     })
-  })
+  }, 30_000)
 
   test("admin reply / close / reopen and admin lookup by email", async () => {
     const { messaging } = harness()
@@ -663,5 +665,371 @@ describe("served over HTTP", () => {
       await server.close()
       sink.stop(true)
     }
+  })
+})
+
+/**
+ * Test controls and parity details a messaging consumer asked for: search paging, email
+ * matching, the admin-reply control, the metadata-only outbox, the member webhook topics and
+ * token namespaces. Raw requests, in the shapes the consumer sends.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: response bodies are read as loose JSON in assertions
+type Loose = any
+
+describe("messaging test controls (B1–B6)", () => {
+  const MEMBER_TOPICS = [
+    "conversation.user.created",
+    "conversation.user.replied",
+    "conversation.admin.replied",
+    "conversation.admin.closed",
+    "conversation.admin.opened",
+  ]
+
+  const setup = () => {
+    const deliveries: Delivery[] = []
+    const runtime = createRuntime({
+      webhooks: {
+        urls: [{ url: BACKEND_HOOK, events: MEMBER_TOPICS }, EMR_HOOK],
+        secret: SECRET,
+        fetch: async (request) => {
+          deliveries.push({
+            url: request.url,
+            signature: request.headers.get("x-hub-signature"),
+            body: await request.text(),
+          })
+          return new Response(null, { status: 200 })
+        },
+      },
+    })
+    const call = async (method: string, path: string, body?: unknown, token = TOKEN) => {
+      const response = await runtime.fetch(
+        new Request(`${API}${path}`, {
+          method,
+          headers: {
+            authorization: `Bearer ${token}`,
+            "intercom-version": "2.11",
+            "content-type": "application/json",
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      )
+      return { status: response.status, body: (await response.json()) as Record<string, Loose> }
+    }
+    const admin = async (method: string, path: string, body?: unknown) => {
+      const response = await runtime.fetch(
+        new Request(`${API}/__admin${path}`, {
+          method,
+          headers: { "content-type": "application/json" },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      )
+      return { status: response.status, body: (await response.json()) as Record<string, Loose> }
+    }
+    const topics = async () => {
+      await runtime.webhooks.idle()
+      return deliveries
+        .splice(0)
+        .filter((d) => d.url === BACKEND_HOOK)
+        .map((d) => {
+          expect(d.signature).toBe(
+            `sha1=${createHmac("sha1", SECRET).update(d.body).digest("hex")}`,
+          )
+          return JSON.parse(d.body) as { topic: string; data: { item: Record<string, Loose> } }
+        })
+    }
+    const contact = async (externalId: string, email: string) =>
+      (await call("POST", "/contacts", { role: "user", external_id: externalId, email })).body
+        .id as string
+    return { runtime, call, admin, topics, contact, deliveries }
+  }
+
+  test("the consumer's verified request table still answers as recorded", async () => {
+    const { call, runtime } = setup()
+    const noAuth = await runtime.fetch(new Request(`${API}/me`))
+    expect(noAuth.status).toBe(401)
+    expect(((await noAuth.json()) as Loose).type).toBe("error.list")
+    expect((await call("GET", "/me")).body).toMatchObject({ type: "admin" })
+    const byExternal = await call("POST", "/contacts/search", {
+      query: { field: "external_id", operator: "=", value: "t1" },
+    })
+    expect(byExternal.body).toMatchObject({ total_count: 0, data: [] })
+    const created = await call("POST", "/contacts", {
+      role: "user",
+      external_id: "t1",
+      email: "t1@example.com",
+      name: "Test One",
+    })
+    expect(created.body).toMatchObject({ type: "contact" })
+    const duplicate = await call("POST", "/contacts", {
+      role: "user",
+      external_id: "t1",
+      email: "t1@example.com",
+    })
+    expect(duplicate.status).toBe(409)
+    expect(duplicate.body.errors[0]).toMatchObject({ code: "conflict" })
+    expect(duplicate.body.errors[0].message).toContain(`id=${created.body.id}`)
+    expect(
+      (await call("PUT", `/contacts/${created.body.id}`, { custom_attributes: {} })).status,
+    ).toBe(200)
+    expect((await call("GET", `/contacts/${created.body.id}`)).status).toBe(200)
+    const message = await call("POST", "/conversations", {
+      from: { type: "user", id: created.body.id },
+      body: "hi",
+    })
+    expect(message.body).toMatchObject({ type: "user_message" })
+    const id = message.body.conversation_id as string
+    expect((await call("GET", `/conversations/${id}?display_as=plaintext`)).status).toBe(200)
+    const inbox = await call("POST", "/conversations/search", {
+      query: {
+        operator: "AND",
+        value: [
+          { field: "state", operator: "=", value: "open" },
+          { field: "admin_assignee_id", operator: "=", value: "1000001" },
+        ],
+      },
+      pagination: { per_page: 20 },
+      sort_field: "updated_at",
+      sort_order: "descending",
+    })
+    expect(inbox.status).toBe(200)
+    for (const reply of [
+      { message_type: "comment", type: "admin", admin_id: "1000001", body: "a" },
+      { message_type: "comment", type: "user", intercom_user_id: created.body.id, body: "u" },
+    ]) {
+      expect((await call("POST", `/conversations/${id}/reply`, reply)).status).toBe(200)
+    }
+    const assigned = await call("POST", `/conversations/${id}/parts`, {
+      message_type: "assignment",
+      type: "admin",
+      admin_id: "1000001",
+      assignee_id: "1000001",
+    })
+    expect(assigned.status).toBe(200)
+    const closed = await call("POST", `/conversations/${id}/parts`, {
+      message_type: "close",
+      type: "admin",
+      admin_id: "1000001",
+    })
+    expect(closed.body.open).toBe(false)
+    expect((await call("PUT", `/conversations/${id}`, { read: true })).status).toBe(200)
+    expect((await call("GET", "/admins")).body.type).toBe("admin.list")
+    const missing = await call("GET", "/conversations/999")
+    expect(missing.status).toBe(404)
+    expect(missing.body.errors[0].code).toBe("not_found")
+  })
+
+  test("B1: conversations/search pages with pagination.starting_after and pages.next.starting_after", async () => {
+    const { call, contact, runtime } = setup()
+    const contactId = await contact("u1", "u1@example.com")
+    for (let i = 0; i < 60; i++) {
+      runtime.clock.advance(1_000)
+      await call("POST", "/conversations", { from: { type: "user", id: contactId }, body: `m${i}` })
+    }
+    const search = (startingAfter?: string) =>
+      call("POST", "/conversations/search?display_as=plaintext", {
+        query: { field: "contact_ids", operator: "=", value: contactId },
+        pagination: { per_page: 50, ...(startingAfter ? { starting_after: startingAfter } : {}) },
+      })
+    const first = await search()
+    expect(first.status).toBe(200)
+    expect(first.body.type).toBe("conversation.list")
+    expect(first.body.total_count).toBe(60)
+    expect(first.body.conversations).toHaveLength(50)
+    const cursor = first.body.pages.next?.starting_after
+    expect(typeof cursor).toBe("string")
+    const second = await search(cursor)
+    expect(second.body.conversations).toHaveLength(10)
+    expect(second.body.pages.next).toBeUndefined()
+    const ids = [...first.body.conversations, ...second.body.conversations].map((c) => c.id)
+    expect(new Set(ids).size).toBe(60)
+  })
+
+  test("B2: contact search on email matches a mixed-case stored email", async () => {
+    const { call } = setup()
+    await call("POST", "/contacts", { role: "user", external_id: "u2", email: "Jane@Example.com" })
+    const found = await call("POST", "/contacts/search", {
+      query: { field: "email", operator: "=", value: "jane@example.com" },
+    })
+    expect(found.status).toBe(200)
+    expect(found.body.total_count).toBe(1)
+    expect(found.body.data[0].email).toBe("Jane@Example.com")
+  })
+
+  test("B3: the admin-reply control adds an admin comment part and delivers a signed conversation.admin.replied", async () => {
+    const { call, admin, contact, topics } = setup()
+    const contactId = await contact("u3", "u3@example.com")
+    const created = await call("POST", "/conversations", {
+      from: { type: "user", id: contactId },
+      body: "hello",
+    })
+    await topics()
+    const replied = await admin(
+      "POST",
+      `/conversations/${created.body.conversation_id}/admin-reply`,
+      { admin_id: "1000002", body: "The care team replied" },
+    )
+    expect(replied.status).toBe(200)
+    const got = await call(
+      "GET",
+      `/conversations/${created.body.conversation_id}?display_as=plaintext`,
+    )
+    const part = got.body.conversation_parts.conversation_parts.at(-1)
+    expect(part).toMatchObject({
+      part_type: "comment",
+      body: "The care team replied",
+      author: { type: "admin", id: "1000002" },
+    })
+    const [event] = await topics()
+    expect(event?.topic).toBe("conversation.admin.replied")
+    expect(event?.data.item.id).toBe(created.body.conversation_id)
+  })
+
+  test("B4: the outbox lists what the client sent, as metadata only", async () => {
+    const { call, admin, contact, runtime } = setup()
+    const contactId = await contact("u4", "u4@example.com")
+    const created = await call("POST", "/conversations", {
+      from: { type: "user", id: contactId },
+      body: "secret member text",
+    })
+    const conversationId = created.body.conversation_id as string
+    runtime.clock.advance(60_000)
+    const since = runtime.clock.now()
+    await call("POST", `/conversations/${conversationId}/reply`, {
+      message_type: "comment",
+      type: "admin",
+      admin_id: "1000001",
+      body: "secret admin text",
+    })
+    // The test's own admin-reply control is not something the client sent.
+    await admin("POST", `/conversations/${conversationId}/admin-reply`, { body: "control" })
+    const all = await admin("GET", "/outbox")
+    expect(all.status).toBe(200)
+    expect(all.body.messages).toHaveLength(2)
+    const recent = await admin("GET", `/outbox?since=${since}`)
+    expect(recent.body.messages).toHaveLength(1)
+    expect(recent.body.messages[0]).toMatchObject({
+      conversationId,
+      contactId,
+      operation: "ReplyConversation",
+      partType: "comment",
+      authorType: "admin",
+      authorId: "1000001",
+      hasBody: true,
+      bodyLength: "secret admin text".length,
+    })
+    expect(typeof recent.body.messages[0].at).toBe("string")
+    expect(all.body.messages[0]).toMatchObject({ partType: "source", authorType: "user" })
+    expect(JSON.stringify(all.body)).not.toContain("secret")
+    expect((await admin("GET", `/outbox?to=${conversationId}`)).body.messages).toHaveLength(2)
+    await admin("POST", "/reset")
+    expect((await admin("GET", "/outbox")).body.messages).toEqual([])
+  })
+
+  test("B5: create, user reply, close and reopen deliver their topics to a subscribed receiver", async () => {
+    const { call, contact, topics, deliveries, runtime } = setup()
+    const contactId = await contact("u5", "u5@example.com")
+    const created = await call("POST", "/conversations", {
+      from: { type: "user", id: contactId },
+      body: "hi",
+    })
+    const id = created.body.conversation_id as string
+    await call("POST", `/conversations/${id}/reply`, {
+      message_type: "comment",
+      type: "user",
+      intercom_user_id: contactId,
+      body: "more",
+    })
+    await call("POST", `/conversations/${id}/parts`, {
+      message_type: "close",
+      type: "admin",
+      admin_id: "1000001",
+    })
+    await call("POST", `/conversations/${id}/parts`, {
+      message_type: "open",
+      type: "admin",
+      admin_id: "1000001",
+    })
+    await runtime.webhooks.idle()
+    const emr = deliveries.filter((d) => d.url === EMR_HOOK)
+    const received = await topics()
+    expect(received.map((event) => [event.topic, event.data.item.id])).toEqual([
+      ["conversation.user.created", id],
+      ["conversation.user.replied", id],
+      ["conversation.admin.closed", id],
+      ["conversation.admin.opened", id],
+    ])
+    expect(received[1]?.data.item.conversation_parts.conversation_parts).toMatchObject([
+      { part_type: "comment", author: { type: "user", id: contactId } },
+    ])
+    // A receiver on the default subscription gets only the admin topics.
+    expect(emr.map((d) => (JSON.parse(d.body) as { topic: string }).topic)).toEqual([
+      "conversation.admin.closed",
+      "conversation.admin.opened",
+    ])
+  })
+
+  test("B5: serve --webhook-events subscribes --webhook-url to the member topics", async () => {
+    const runtime = serveTarget.create(
+      {
+        "webhook-url": BACKEND_HOOK,
+        "webhook-events": "conversation.user.created, conversation.admin.replied",
+        "emr-webhook-url": EMR_HOOK,
+      },
+      { adminKey: undefined, seed: undefined, onLog: undefined },
+    ) as ReturnType<typeof createRuntime>
+    const events = Object.fromEntries(
+      runtime.webhooks.endpoints("default").map((endpoint) => [endpoint.url, endpoint.events]),
+    )
+    expect(events[BACKEND_HOOK]).toEqual([
+      "conversation.user.created",
+      "conversation.admin.replied",
+    ])
+    expect(events[EMR_HOOK]).not.toContain("conversation.user.created")
+  })
+
+  test("B6: access tokens mapped to namespaces keep contacts and conversations apart", async () => {
+    const { call, admin } = setup()
+    await admin("PUT", "/credentials", { credentials: { "tok-w1": "w1", "tok-w2": "w2" } })
+    const created = await call(
+      "POST",
+      "/contacts",
+      { role: "user", external_id: "shared", email: "shared@example.com" },
+      "tok-w1",
+    )
+    await call(
+      "POST",
+      "/conversations",
+      { from: { type: "user", id: created.body.id }, body: "w1 only" },
+      "tok-w1",
+    )
+    const search = (token: string) =>
+      call(
+        "POST",
+        "/contacts/search",
+        { query: { field: "external_id", operator: "=", value: "shared" } },
+        token,
+      )
+    expect((await search("tok-w1")).body.total_count).toBe(1)
+    expect((await search("tok-w2")).body.total_count).toBe(0)
+    // The same identifiers are free in the other namespace: no 409.
+    expect(
+      (
+        await call(
+          "POST",
+          "/contacts",
+          { role: "user", external_id: "shared", email: "shared@example.com" },
+          "tok-w2",
+        )
+      ).status,
+    ).toBe(200)
+    const conversations = (token: string) =>
+      call(
+        "POST",
+        "/conversations/search",
+        { query: { field: "state", operator: "=", value: "open" } },
+        token,
+      )
+    expect((await conversations("tok-w1")).body.total_count).toBe(1)
+    expect((await conversations("tok-w2")).body.total_count).toBe(0)
   })
 })

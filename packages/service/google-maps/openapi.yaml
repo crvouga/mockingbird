@@ -247,6 +247,55 @@ paths:
             text/plain:
               schema:
                 type: string
+  /v1:validateAddress:
+    servers:
+      - url: https://addressvalidation.googleapis.com
+    post:
+      operationId: ValidateAddress
+      description: >-
+        Address Validation API v1 validateAddress, with USPS CASS data (`enableUspsCass`). A
+        Google Cloud API: errors are HTTP 4xx/5xx with a `google.rpc.Status` envelope, and the
+        key may also be sent as the `X-Goog-Api-Key` header. Responses are proto3 JSON (false
+        booleans and empty lists omitted). Reference:
+        https://developers.google.com/maps/documentation/address-validation/reference/rest/v1/TopLevel/validateAddress
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - $ref: "#/components/parameters/Key"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ValidateAddressRequest"
+      responses:
+        "200":
+          description: The validation result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidateAddressResponse"
+        "400":
+          description: INVALID_ARGUMENT (malformed request, unsupported region, invalid API key)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleApiError"
+        "403":
+          description: PERMISSION_DENIED (missing key; address_validation_denied preset)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleApiError"
+        "503":
+          description: UNAVAILABLE (address_validation_unavailable preset)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GoogleApiError"
 components:
   parameters:
     Key:
@@ -464,4 +513,235 @@ components:
         status:
           $ref: "#/components/schemas/Status"
         error_message:
+          type: string
+    GoogleApiError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, status]
+          properties:
+            code:
+              type: integer
+            message:
+              type: string
+            status:
+              type: string
+            details:
+              type: array
+              items:
+                type: object
+    PostalAddress:
+      type: object
+      description: google.type.PostalAddress
+      properties:
+        revision:
+          type: integer
+        regionCode:
+          type: string
+          examples: [US]
+        languageCode:
+          type: string
+        postalCode:
+          type: string
+          examples: ["85004", "10006", "80202", "90012", "00000"]
+        sortingCode:
+          type: string
+        administrativeArea:
+          type: string
+          examples: [AZ, NY, CO, CA]
+        locality:
+          type: string
+          examples: [Phoenix, New York, Denver, Los Angeles, Springfield]
+        sublocality:
+          type: string
+        addressLines:
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            maxLength: 80
+            examples:
+              - "1625 N Central Ave"
+              - "1625 North Central Avenue Building A"
+              - "4821 Maple Street"
+              - "N Central Ave"
+              - "Apt 2"
+        recipients:
+          type: array
+          items:
+            type: string
+        organization:
+          type: string
+    ValidateAddressRequest:
+      type: object
+      required: [address]
+      additionalProperties: false
+      properties:
+        address:
+          $ref: "#/components/schemas/PostalAddress"
+          examples:
+            - regionCode: US
+              addressLines: ["1625 N Central Ave"]
+              locality: Phoenix
+              administrativeArea: AZ
+              postalCode: "85004"
+            - regionCode: US
+              addressLines: ["4821 Maple Street"]
+              locality: Denver
+              administrativeArea: CO
+              postalCode: "80202"
+            - regionCode: US
+              addressLines: ["N Central Ave"]
+              locality: Phoenix
+              administrativeArea: AZ
+              postalCode: "85004"
+            - regionCode: US
+              addressLines: ["1625 N Central Ave, Phoenix, AZ 85004"]
+            - regionCode: US
+              addressLines: ["12 Nowhere Rd"]
+              locality: Springfield
+              administrativeArea: ZZ
+              postalCode: "00000"
+        previousResponseId:
+          type: string
+        enableUspsCass:
+          type: boolean
+        languageOptions:
+          type: object
+        sessionToken:
+          type: string
+    ValidationAddressComponent:
+      type: object
+      required: [componentName, componentType, confirmationLevel]
+      properties:
+        componentName:
+          type: object
+          required: [text]
+          properties:
+            text:
+              type: string
+            languageCode:
+              type: string
+        componentType:
+          type: string
+        confirmationLevel:
+          type: string
+          enum: [CONFIRMED, UNCONFIRMED_BUT_PLAUSIBLE, UNCONFIRMED_AND_SUSPICIOUS]
+        inferred:
+          type: boolean
+        spellCorrected:
+          type: boolean
+        replaced:
+          type: boolean
+        unexpected:
+          type: boolean
+    Granularity:
+      type: string
+      enum: [GRANULARITY_UNSPECIFIED, SUB_PREMISE, PREMISE, PREMISE_PROXIMITY, BLOCK, ROUTE, OTHER]
+    ValidationResult:
+      type: object
+      properties:
+        verdict:
+          type: object
+          properties:
+            inputGranularity:
+              $ref: "#/components/schemas/Granularity"
+            validationGranularity:
+              $ref: "#/components/schemas/Granularity"
+            geocodeGranularity:
+              $ref: "#/components/schemas/Granularity"
+            addressComplete:
+              type: boolean
+            hasUnconfirmedComponents:
+              type: boolean
+            hasInferredComponents:
+              type: boolean
+            hasReplacedComponents:
+              type: boolean
+            hasSpellCorrectedComponents:
+              type: boolean
+            possibleNextAction:
+              type: string
+              enum: [POSSIBLE_NEXT_ACTION_UNSPECIFIED, FIX, CONFIRM_ADD_SUBPREMISES, CONFIRM, ACCEPT]
+        address:
+          type: object
+          properties:
+            formattedAddress:
+              type: string
+            postalAddress:
+              $ref: "#/components/schemas/PostalAddress"
+            addressComponents:
+              type: array
+              items:
+                $ref: "#/components/schemas/ValidationAddressComponent"
+            missingComponentTypes:
+              type: array
+              items:
+                type: string
+            unconfirmedComponentTypes:
+              type: array
+              items:
+                type: string
+            unresolvedTokens:
+              type: array
+              items:
+                type: string
+        geocode:
+          type: object
+          properties:
+            location:
+              type: object
+              properties:
+                latitude:
+                  type: number
+                longitude:
+                  type: number
+            placeId:
+              type: string
+            placeTypes:
+              type: array
+              items:
+                type: string
+        uspsData:
+          type: object
+          properties:
+            standardizedAddress:
+              type: object
+              properties:
+                firstAddressLine:
+                  type: string
+                secondAddressLine:
+                  type: string
+                cityStateZipAddressLine:
+                  type: string
+                city:
+                  type: string
+                state:
+                  type: string
+                zipCode:
+                  type: string
+                zipCodeExtension:
+                  type: string
+            dpvConfirmation:
+              type: string
+              enum: [Y, N, S, D]
+            dpvFootnote:
+              type: string
+            postOfficeCity:
+              type: string
+            postOfficeState:
+              type: string
+            errorMessage:
+              type: string
+            cassProcessed:
+              type: boolean
+    ValidateAddressResponse:
+      type: object
+      required: [result, responseId]
+      properties:
+        result:
+          $ref: "#/components/schemas/ValidationResult"
+        responseId:
           type: string

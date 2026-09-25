@@ -102,3 +102,67 @@ export const DEFAULT_CATALOG: readonly CatalogItem[] = [
     status: "inactive",
   },
 ]
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const optionalString = (row: Record<string, unknown>, key: string): string | null => {
+  const value = row[key]
+  if (value === undefined || value === null) return null
+  if (typeof value !== "string") throw new Error(`${key} must be a string or null`)
+  return value
+}
+
+/**
+ * One catalog row from loose input: `catalog_id` and `medication_name` are required; the
+ * other fields default to `null`, `states` to `[]` and `status` to `"active"`.
+ */
+export const parseCatalogItem = (value: unknown): CatalogItem => {
+  if (!isRecord(value)) throw new Error("a catalog row must be an object")
+  const { catalog_id, medication_name, quantity, states, status } = value
+  if (typeof catalog_id !== "string" || catalog_id.length === 0) {
+    throw new Error("catalog_id must be a non-empty string")
+  }
+  if (typeof medication_name !== "string") {
+    throw new Error(`${catalog_id}: medication_name must be a string`)
+  }
+  if (quantity !== undefined && quantity !== null && typeof quantity !== "number") {
+    throw new Error(`${catalog_id}: quantity must be a number or null`)
+  }
+  if (
+    states !== undefined &&
+    (!Array.isArray(states) || states.some((s) => typeof s !== "string"))
+  ) {
+    throw new Error(`${catalog_id}: states must be a list of state codes`)
+  }
+  if (status !== undefined && status !== "active" && status !== "inactive") {
+    throw new Error(`${catalog_id}: status must be "active" or "inactive"`)
+  }
+  try {
+    return {
+      catalog_id,
+      medication_name,
+      medication_strength: optionalString(value, "medication_strength"),
+      package_size: optionalString(value, "package_size"),
+      quantity: typeof quantity === "number" ? quantity : null,
+      quantity_units: optionalString(value, "quantity_units"),
+      medication_form: optionalString(value, "medication_form"),
+      route: optionalString(value, "route"),
+      states: (states as string[] | undefined) ?? [],
+      status: status ?? "active",
+    }
+  } catch (error) {
+    throw new Error(`${catalog_id}: ${(error as Error).message}`)
+  }
+}
+
+/**
+ * Catalog rows from a JSON value: a bare array, or the `{data: [...]}` envelope
+ * `GET /api/v1/preset-catalog-items` answers with (so a recorded response loads as-is).
+ * Throws on the first malformed row.
+ */
+export const parseCatalog = (value: unknown): CatalogItem[] => {
+  const rows = Array.isArray(value) ? value : isRecord(value) ? value.data : undefined
+  if (!Array.isArray(rows)) throw new Error("a catalog must be an array or {data: [...]}")
+  return rows.map(parseCatalogItem)
+}

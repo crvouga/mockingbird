@@ -36,6 +36,7 @@ import {
   type ConversationRecord,
   DEFAULT_ADMINS,
   IntercomState,
+  type OutboxRecord,
   type PartRecord,
   type Settings,
 } from "./state.js"
@@ -52,6 +53,7 @@ export type {
   Author,
   ContactRecord,
   ConversationRecord,
+  OutboxRecord,
   PartRecord,
   Settings,
 } from "./state.js"
@@ -67,6 +69,8 @@ export const INTERCOM_TOPICS = [
   "conversation.admin.snoozed",
   "conversation.admin.assigned",
   "conversation.admin.single.created",
+  "conversation.user.created",
+  "conversation.user.replied",
 ] as const
 export type IntercomTopic = (typeof INTERCOM_TOPICS)[number]
 
@@ -594,6 +598,17 @@ export class IntercomAPI implements FetchAPI {
         parts: [],
       }
       this.state.conversations.insert(conversation.id, conversation)
+      const text = String(body.body)
+      this.recordSent({
+        operation: "CreateConversation",
+        conversation,
+        partId: null,
+        partType: "source",
+        author: conversation.source.author,
+        bodyLength: text.length,
+        attachmentCount: 0,
+      })
+      this.notify("conversation.user.created", conversation, [])
       return annotateResponse(
         jsonRes(200, {
           type: "user_message",
@@ -782,6 +797,15 @@ export class IntercomAPI implements FetchAPI {
       body: body === undefined ? null : toHtml(body),
       attachments: stored,
     })
+    this.recordSent({
+      operation: "ReplyConversation",
+      conversation: next,
+      partId,
+      partType: messageType,
+      author,
+      bodyLength: body?.length ?? 0,
+      attachmentCount: stored.length,
+    })
     return annotateResponse(jsonRes(200, this.conversationBody(next, { parts: next.parts })), {
       ids: { conversationId: next.id, partId },
     })
@@ -830,7 +854,37 @@ export class IntercomAPI implements FetchAPI {
     }
     this.state.conversations.update(conversation.id, next)
     if (byAdmin && visible) this.notify("conversation.admin.replied", next, [part])
+    if (input.author.type === "user") this.notify("conversation.user.replied", next, [part])
     return next
+  }
+
+  /** Record what the API client sent, for `GET /__admin/outbox`: metadata only, never the body. */
+  private recordSent(input: {
+    operation: OutboxRecord["operation"]
+    conversation: ConversationRecord
+    partId: string | null
+    partType: OutboxRecord["partType"]
+    author: Author
+    bodyLength: number
+    attachmentCount: number
+  }): void {
+    const at = new Date(this.now()).toISOString()
+    this.state.outbox.record({
+      id: `sent_${this.state.next("sent")}`,
+      to: [input.conversation.id, input.conversation.contactId],
+      createdAt: at,
+      at,
+      operation: input.operation,
+      conversationId: input.conversation.id,
+      contactId: input.conversation.contactId,
+      partId: input.partId,
+      partType: input.partType,
+      authorType: input.author.type === "admin" ? "admin" : "user",
+      authorId: input.author.id,
+      hasBody: input.bodyLength > 0,
+      bodyLength: input.bodyLength,
+      attachmentCount: input.attachmentCount,
+    })
   }
 
   private manageConversation(context: OperationContext): Response | Promise<Response> {

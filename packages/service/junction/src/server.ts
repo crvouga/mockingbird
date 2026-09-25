@@ -10,6 +10,7 @@ import { defaultCorpus } from "./corpus.js"
 import { pullCorpus } from "./corpus-tools.js"
 import { IDENTITY_MODES, type IdentityMode, type JunctionFixtures } from "./fixtures.js"
 import type { LabAccountLayout } from "./lab-account-presets.js"
+import { type BillingType, defaultBillingTypesFrom } from "./lab-accounts.js"
 import { createRuntime, type JunctionRuntime, type JunctionRuntimeOptions } from "./runtime.js"
 import { parseSealedCorpus, type SealedCorpus } from "./sealed-corpus.js"
 import type { GeoMode } from "./state.js"
@@ -90,6 +91,20 @@ const retryDelays = (value: string | undefined): number[] | undefined => {
   return delays
 }
 
+/** `--default-billing-type bioreference=patient_bill_passthrough,quest=client_bill`. */
+const billingDefaults = (value: string | undefined): Record<string, BillingType> | undefined => {
+  if (value === undefined) return undefined
+  const entries = value.split(",").map((part) => part.split("=").map((side) => side.trim()))
+  if (entries.some((entry) => entry.length !== 2 || !entry[0] || !entry[1])) {
+    throw new Error(`--default-billing-type must be lab=billing_type pairs (got ${value})`)
+  }
+  try {
+    return defaultBillingTypesFrom(Object.fromEntries(entries))
+  } catch (error) {
+    throw new Error(`--default-billing-type: ${(error as Error).message}`)
+  }
+}
+
 /** How `serve` (and `serve --config`) builds the Junction mock from flags. */
 export const serveTarget: ServeTarget = {
   name: "junction",
@@ -127,6 +142,12 @@ export const serveTarget: ServeTarget = {
       value: "<strict|adopt-users>",
       description: "Unknown user ids: 404 (strict) or create on first use",
       default: "strict",
+    },
+    "default-billing-type": {
+      type: "string",
+      value: "<lab=type,…>",
+      description:
+        "billing_type an order for that lab gets when it omits one (default: client_bill), e.g. bioreference=patient_bill_passthrough",
     },
     fixtures: {
       type: "string",
@@ -200,6 +221,7 @@ export const serveTarget: ServeTarget = {
     if (identity !== undefined && !IDENTITY_MODES.includes(identity as IdentityMode)) {
       throw new Error(`--identity must be one of ${IDENTITY_MODES.join(", ")} (got ${identity})`)
     }
+    const defaultBillingTypes = billingDefaults(asString(values["default-billing-type"]))
     const webhookUrl = asString(values["webhook-url"])
     const webhookSecret =
       asString(values["webhook-secret"]) ?? process.env.MOCKINGBIRD_JUNCTION_WEBHOOK_SECRET
@@ -216,6 +238,7 @@ export const serveTarget: ServeTarget = {
       ...(teamId !== undefined ? { teamId } : {}),
       ...(maxUsers !== undefined ? { limits: { maxUsers } } : {}),
       ...(identity !== undefined ? { identity: identity as IdentityMode } : {}),
+      ...(defaultBillingTypes ? { defaultBillingTypes } : {}),
       ...(journalSize !== undefined ? { journalSize } : {}),
       ...(webhookUrl !== undefined && webhookSecret !== undefined
         ? {

@@ -585,3 +585,56 @@ describe("stripe-node drop-in (every S1.4 operation)", () => {
     { timeout: 60_000 },
   )
 })
+
+describe("invoice items with inline price_data", () => {
+  test("generate an inactive one-time Price that the item and the invoice line carry", async () => {
+    await register("sk_test_sdkPriceData", "sdk-price-data")
+    const stripe = new Stripe("sk_test_sdkPriceData", {
+      apiVersion: "2024-06-20",
+      ...stripeClientOptions(new URL(server.url)),
+    })
+    const customer = await stripe.customers.create({ email: "inline@example.com" })
+    const product = await stripe.products.create({ id: "prod_free_panel", name: "Free panel" })
+    const draft = await stripe.invoices.create({
+      customer: customer.id,
+      auto_advance: false,
+      collection_method: "charge_automatically",
+    })
+    const item = await stripe.invoiceItems.create({
+      customer: customer.id,
+      invoice: draft.id,
+      quantity: 1,
+      price_data: { currency: "usd", product: product.id, unit_amount: 0 },
+    })
+    const price = item.price as Stripe.Price
+    expect(price.id).toStartWith("price_")
+    expect(price).toMatchObject({
+      object: "price",
+      active: false,
+      currency: "usd",
+      product: product.id,
+      type: "one_time",
+      unit_amount: 0,
+      recurring: null,
+    })
+    expect((await stripe.prices.retrieve(price.id)).active).toBe(false)
+    const listedItem = (await stripe.invoiceItems.list({ customer: customer.id })).data[0]
+    expect(listedItem?.price?.id).toBe(price.id)
+
+    const finalized = await stripe.invoices.finalizeInvoice(draft.id)
+    expect(finalized.status).toBe("paid")
+    expect(finalized.total).toBe(0)
+    const paid = await stripe.invoices.list({ customer: customer.id, status: "paid" })
+    const line = paid.data[0]?.lines.data[0]
+    expect(line?.price?.id).toBe(price.id)
+    expect(line?.price?.product).toBe(product.id)
+
+    const priced = await stripe.invoiceItems.create({
+      customer: customer.id,
+      quantity: 3,
+      price_data: { currency: "usd", product: product.id, unit_amount_decimal: "250.5" },
+    })
+    expect(priced.amount).toBe(752)
+    expect(priced.price?.unit_amount_decimal).toBe("250.5")
+  })
+})

@@ -527,6 +527,7 @@ export class DailyEmrConsumer {
         enable_multiparty_adaptive_simulcast: false,
         enforce_unique_user_ids: true,
         experimental_optimize_large_calls: false,
+        close_tab_on_exit: false,
         lang: "en",
         enable_transcription_storage: true,
         transcription_bucket: bucketConfig,

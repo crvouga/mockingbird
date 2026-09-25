@@ -11,7 +11,7 @@ import {
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import type { CatalogItem } from "./catalog.js"
+import { type CatalogItem, parseCatalogItem } from "./catalog.js"
 import { document } from "./generated/openapi.js"
 import { RXVORTEX_NAMESPACE, RxVortexAPI, tokenCredential } from "./index.js"
 import type { AutoAdvance, Settings } from "./state.js"
@@ -83,6 +83,10 @@ export type RxVortexRuntimeOptions = {
   seed?: number | string
   adminKey?: string
   onLog?: (entry: RequestLog) => void
+  /**
+   * Rows every namespace starts with, and returns to on `POST /__admin/reset` (`serve
+   * --catalog <file>`). Default: `DEFAULT_CATALOG`.
+   */
   catalog?: readonly CatalogItem[]
   settings?: Partial<Settings>
   /** Where status webhooks go (`POST /prescriptions/webhooks/rxvortex`), sent with the secret header. */
@@ -143,6 +147,25 @@ const adminRoutes = (runtime: ServiceRuntime<RxVortexAPI>): AdminRoutes => ({
     })
     return order ? json(200, order) : adminError(404, `no order ${params.id}`)
   },
+  "GET /catalog": ({ namespace }) =>
+    json(200, { data: runtime.instance(namespace).state.catalogRows() }),
+  "PUT /catalog": ({ body, namespace }) => {
+    const rows = isRecord(body) ? (body.items ?? body.data) : undefined
+    if (!isRecord(body) || !Array.isArray(rows)) {
+      return adminError(400, 'expected {"items": [{catalog_id, medication_name, …}], "mode"?}')
+    }
+    const mode = body.mode ?? "replace"
+    if (mode !== "replace" && mode !== "merge") {
+      return adminError(400, 'mode must be "replace" or "merge"')
+    }
+    let items: CatalogItem[]
+    try {
+      items = rows.map(parseCatalogItem)
+    } catch (error) {
+      return adminError(400, `items: ${(error as Error).message}`)
+    }
+    return json(200, { count: runtime.instance(namespace).state.putCatalog(items, mode) })
+  },
   "GET /settings": ({ namespace }) => json(200, runtime.instance(namespace).state.current()),
   "PUT /settings": ({ body, namespace }) => {
     if (!isRecord(body)) return adminError(400, "expected a JSON object")
@@ -168,6 +191,12 @@ const adminRoutes = (runtime: ServiceRuntime<RxVortexAPI>): AdminRoutes => ({
       const parsed = parseAutoAdvance(body.autoAdvance)
       if (typeof parsed === "string") return adminError(400, parsed)
       patch.autoAdvance = parsed
+    }
+    if (body.unknownPresets !== undefined) {
+      if (body.unknownPresets !== "reject" && body.unknownPresets !== "accept") {
+        return adminError(400, 'unknownPresets: "reject" | "accept"')
+      }
+      patch.unknownPresets = body.unknownPresets
     }
     return json(200, runtime.instance(namespace).state.update(patch))
   },

@@ -6,6 +6,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   hmac,
+  outboxAdminRoutes,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -25,8 +26,12 @@ export const HUB_SIGNATURE_HEADER = "X-Hub-Signature"
 export const signHub = async (secret: string, body: string): Promise<string> =>
   `sha1=${await hmac("SHA-1", secret, body, "hex")}`
 
-/** The topics a webhook endpoint receives unless it lists its own `events`. */
-const DEFAULT_TOPICS = [
+/**
+ * The topics a webhook endpoint receives unless it lists its own `events`. The member topics
+ * (`conversation.user.created`, `conversation.user.replied`) are opt-in, because a receiver
+ * that treats every notification as an admin event must not be subscribed to them.
+ */
+const DEFAULT_TOPICS: readonly string[] = [
   "conversation.admin.replied",
   "conversation.admin.closed",
   "conversation.admin.opened",
@@ -117,9 +122,10 @@ export type IntercomRuntimeOptions = {
    * `POST /v1/webhooks/intercom`, signed with `secret` (the app's `INTERCOM_WEBHOOK_SECRET`).
    */
   webhooks?: {
-    urls: readonly string[]
+    /** Receiver URLs; an entry with its own `events` overrides the shared list for that URL. */
+    urls: readonly (string | { url: string; events?: readonly string[] })[]
     secret?: string
-    /** Topics to deliver; default the admin replied/closed/opened/single.created topics. */
+    /** Topics to deliver; default {@link DEFAULT_TOPICS} (admin replied/closed/opened/single.created). */
     events?: readonly string[]
     retryDelaysMs?: readonly number[]
     fetch?: (request: Request) => Promise<Response>
@@ -150,6 +156,7 @@ const adminRoutes = (runtime: ServiceRuntime<IntercomAPI>): AdminRoutes => {
   const defaultAdmin = (namespace: string) =>
     api(namespace).state.admins.list({ order: "oldest" }).at(0)?.value.id ?? ""
   return {
+    ...outboxAdminRoutes(runtime, (instance) => instance.state.outbox),
     "GET /contacts": ({ namespace }) => json(200, { contacts: api(namespace).contacts() }),
     "GET /conversations": ({ namespace }) =>
       json(200, { conversations: api(namespace).conversations() }),
@@ -180,14 +187,16 @@ const adminRoutes = (runtime: ServiceRuntime<IntercomAPI>): AdminRoutes => {
         if (!isRecord(body) || typeof body.body !== "string") {
           return adminError(
             400,
-            'expected {"adminId"?, "body", "messageType"?: "comment" | "note"}',
+            'expected {"adminId" | "admin_id"?, "body", "messageType"?: "comment" | "note"}',
           )
         }
         const instance = api(namespace)
+        // `adminId`, or `admin_id` as the reply API spells it.
+        const requested = body.adminId ?? body.admin_id
         const author = instance.state.admins.get(
-          typeof body.adminId === "string" ? body.adminId : defaultAdmin(namespace),
+          typeof requested === "string" ? requested : defaultAdmin(namespace),
         )
-        if (!author) return adminError(404, `no admin ${String(body.adminId)}`)
+        if (!author) return adminError(404, `no admin ${String(requested)}`)
         const next = instance.appendPart(found, {
           partType: body.messageType === "note" ? "note" : "comment",
           author: { type: "admin", id: author.id, name: author.name, email: author.email },
@@ -273,14 +282,15 @@ export const createRuntime = (options: IntercomRuntimeOptions = {}): IntercomRun
     ...(hooks?.retryDelaysMs ? { retryDelaysMs: hooks.retryDelaysMs } : {}),
     ...(hooks?.fetch ? { fetch: hooks.fetch } : {}),
     ...(options.wallClock ? { now: options.wallClock } : {}),
-    endpoints: (hooks?.urls ?? []).map(
-      (url, index): WebhookEndpoint => ({
+    endpoints: (hooks?.urls ?? []).map((entry, index): WebhookEndpoint => {
+      const target = typeof entry === "string" ? { url: entry } : entry
+      return {
         id: `we_intercom_${index}`,
-        url,
+        url: target.url,
         ...(hooks?.secret ? { secret: hooks.secret } : {}),
-        events: [...(hooks?.events ?? DEFAULT_TOPICS)],
-      }),
-    ),
+        events: [...(target.events ?? hooks?.events ?? DEFAULT_TOPICS)],
+      }
+    }),
   })
   const runtime = createServiceRuntime<IntercomAPI>({
     name: INTERCOM_NAMESPACE,

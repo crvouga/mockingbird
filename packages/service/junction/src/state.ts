@@ -207,8 +207,6 @@ export type OrderRecord = {
   notes: null
   clinical_notes: string | null
   passthrough: string | null
-  /** Echoed from the request's opaque provider account id; absent when the order had none. */
-  lab_account_id?: string
   created_at: string
   updated_at: string
   events: OrderEventRecord[]
@@ -306,6 +304,11 @@ export class JunctionState {
   readonly pendingSimulateTransitions: Collection<PendingSimulateTransition>
 
   readonly orderByTransaction: Collection<{ order_id: string }>
+  /**
+   * The lab account each order was placed with (`null`: Junction's platform account). Kept
+   * off the order record: Junction's `ClientFacingOrder` has no `lab_account_id`.
+   */
+  readonly orderLabAccounts: Collection<{ lab_account_id: string | null }>
   readonly webhookEvents: Collection<WebhookEventRecord>
   readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
 
@@ -322,6 +325,8 @@ export class JunctionState {
   teamId: string = MOCK_TEAM_ID
   /** Sandbox-only restrictions to enforce; every one is off by default. */
   limits: JunctionLimits = { ...DEFAULT_LIMITS }
+  /** Lab slug → the `billing_type` an order for that lab gets when it omits one. */
+  defaultBillingTypes: Readonly<Record<string, string>> = {}
   /** Whether an unknown `user_id` is refused (`strict`) or created on first use. */
   identity: IdentityMode = "strict"
   private webhooksMuted = 0
@@ -363,6 +368,7 @@ export class JunctionState {
       "pending_simulate_transitions",
     )
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
+    this.orderLabAccounts = new Collection(sqlite, namespace, "order_lab_accounts")
     this.webhookEvents = new Collection(sqlite, namespace, "webhook_events")
     this.webhookDeliveryAttempts = new Collection(sqlite, namespace, "webhook_delivery_attempts")
     this.labTests = new Collection(sqlite, namespace, "lab_tests")
