@@ -1044,6 +1044,33 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/service/paddle": {
+      "name": "@crvouga/mockingbird-service-paddle",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-paddle": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "@paddle/paddle-node-sdk": "3.10.0",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/payload-cms": {
       "name": "@crvouga/mockingbird-service-payload-cms",
       "version": "0.0.0-development",
@@ -1600,6 +1627,7 @@
         "@crvouga/mockingbird-service-oauth": "workspace:*",
         "@crvouga/mockingbird-service-odx": "workspace:*",
         "@crvouga/mockingbird-service-otel": "workspace:*",
+        "@crvouga/mockingbird-service-paddle": "workspace:*",
         "@crvouga/mockingbird-service-payload-cms": "workspace:*",
         "@crvouga/mockingbird-service-persona": "workspace:*",
         "@crvouga/mockingbird-service-pharmetika": "workspace:*",
@@ -2012,6 +2040,8 @@
 
     "@crvouga/mockingbird-service-otel": ["@crvouga/mockingbird-service-otel@workspace:packages/service/otel"],
 
+    "@crvouga/mockingbird-service-paddle": ["@crvouga/mockingbird-service-paddle@workspace:packages/service/paddle"],
+
     "@crvouga/mockingbird-service-payload-cms": ["@crvouga/mockingbird-service-payload-cms@workspace:packages/service/payload-cms"],
 
     "@crvouga/mockingbird-service-persona": ["@crvouga/mockingbird-service-persona@workspace:packages/service/persona"],
@@ -2265,6 +2295,8 @@
     "@oslojs/encoding": ["@oslojs/encoding@1.1.0", "", {}, "sha512-70wQhgYmndg4GCPxPPxPGevRKqTIJ2Nh4OkiMWmDAVYsTQ+Ta7Sq+rPevXyXGdzr30/qZBnyOalCszoMxlyldQ=="],
 
     "@oxc-project/types": ["@oxc-project/types@0.150.0", "", {}, "sha512-rDS5/31E9HfPl/CIzGrn0DOlvBbXFseQ5URJ9sYMfstbKLD/c6Gm9vmRzRGDdAXyOIL4zmO37lc9RIwYqVruZw=="],
+
+    "@paddle/paddle-node-sdk": ["@paddle/paddle-node-sdk@3.10.0", "", {}, "sha512-njqp+L6e/2aR99EYh/Ulyu6B9sIyVERTFclGOznKmLZcy11pAwHoHyIgq1BUH1ybQH+YmJQmrrUQC/Rfg8JAAw=="],
 
     "@poppinss/colors": ["@poppinss/colors@4.1.6", "", { "dependencies": { "kleur": "^4.1.5" } }, "sha512-H9xkIdFswbS8n1d6vmRd8+c10t2Qe+rZITbbDHHkQixH5+2x1FDGmi/0K+WgWiqQFKPSlIYB7jlH6Kpfn6Fleg=="],
 

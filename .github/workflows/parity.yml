@@ -53,6 +53,7 @@ jobs:
           GENEBYGENE_CLIENT_ID: ${{ secrets.GENEBYGENE_CLIENT_ID }}
           GENEBYGENE_CLIENT_SECRET: ${{ secrets.GENEBYGENE_CLIENT_SECRET }}
           JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
+          PADDLE_API_KEY: ${{ secrets.PADDLE_API_KEY }}
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
         # One argument per service; parity-service.ts rejects anything that is not a
         # service with a parity script.

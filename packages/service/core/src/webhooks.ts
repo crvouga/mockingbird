@@ -178,7 +178,7 @@ export type WebhookHub = {
   messages(namespace?: string): WebhookMessage[]
   deliveries(namespace?: string): WebhookDelivery[]
   replay(deliveryId: string): Promise<WebhookDelivery | undefined>
-  /** Run every pending retry (and release held reordered messages) now. */
+  /** Run every pending retry (and release held reordered messages) now, and every retry those attempts schedule, until nothing is pending. */
   flush(): Promise<void>
   /** Resolve once nothing is in flight. */
   idle(): Promise<void>
@@ -412,22 +412,30 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       return delivery
     },
     async flush() {
-      for (const namespace of [...held.keys()]) releaseHeld(namespace)
-      const waiting = [...pending.entries()]
-      for (const [id, timer] of waiting) {
-        if (timer === undefined) continue
-        cancel(timer)
-        pending.delete(id)
-        const delivery = deliveries.get(id)
-        if (!delivery) continue
-        track(
-          attempt(delivery).then((ok) => {
-            if (ok) delivery.state = "delivered"
-            else schedule(delivery)
-          }),
-        )
+      // Drains until nothing is held or scheduled: a retry that an attempt failing during this
+      // flush schedules runs too, so a caller asserting after `flush` never catches a delivery
+      // between attempts. Bounded, as every pass moves each delivery an attempt closer to
+      // `delivered` or `failed`.
+      for (;;) {
+        for (const namespace of [...held.keys()]) releaseHeld(namespace)
+        const waiting = [...pending.entries()]
+        for (const [id, timer] of waiting) {
+          if (timer === undefined) continue
+          cancel(timer)
+          pending.delete(id)
+          const delivery = deliveries.get(id)
+          if (!delivery) continue
+          track(
+            attempt(delivery).then((ok) => {
+              if (ok) delivery.state = "delivered"
+              else schedule(delivery)
+            }),
+          )
+        }
+        await hub.idle()
+        const scheduled = [...pending.values()].some((timer) => timer !== undefined)
+        if (held.size === 0 && !scheduled) return
       }
-      await hub.idle()
     },
     async idle() {
       while (inFlight.size > 0) await Promise.allSettled([...inFlight])

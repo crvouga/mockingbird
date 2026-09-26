@@ -178,7 +178,8 @@ describe("GeneByGeneAPI", () => {
       // Quote with a menu, shipped and quantity-only place, address edit, and Address Not Found.
       expect([...classes.keys()].sort()).toEqual([...ADDRESS_CLASSES].sort())
     },
-    { timeout: 120_000 },
+    // 23 s locally; a loaded CI runner has taken 134 s (turbo runs every package's tests at once).
+    { timeout: 300_000 },
   )
 
   test(

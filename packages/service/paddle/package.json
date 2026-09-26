@@ -1,0 +1,101 @@
+{
+  "name": "@crvouga/mockingbird-service-paddle",
+  "version": "0.0.0-development",
+  "description": "Stateful mock of the Paddle Billing API (customers, addresses, businesses, products, prices, transactions with computed totals, subscriptions with pause/resume/cancel and renewals, events) with Paddle-Signature webhooks and admin routes that simulate checkout, renewals and failed payments (Mockingbird service contract).",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-paddle": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/paddle"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/paddle#readme",
+  "keywords": [
+    "mockingbird",
+    "service",
+    "paddle",
+    "billing",
+    "subscriptions",
+    "payments",
+    "webhooks",
+    "mock"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "payments",
+    "displayName": "Paddle",
+    "vendor": {
+      "website": "https://www.paddle.com/billing",
+      "docs": "https://developer.paddle.com/api-reference/overview"
+    },
+    "status": "ready",
+    "playground": {
+      "operation": "CreateCustomer",
+      "headers": {
+        "authorization": "Bearer pdl_sdbx_apikey_mockingbird"
+      }
+    }
+  },
+  "scripts": {
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "parity": "bun scripts/parity.ts",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "hono": "4.11.9"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@paddle/paddle-node-sdk": "3.10.0",
+    "fast-check": "4.9.0"
+  }
+}

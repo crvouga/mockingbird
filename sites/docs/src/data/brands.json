@@ -409,6 +409,19 @@
     "logo": "/brands/otel.svg",
     "logoSource": "simple-icons"
   },
+  "paddle": {
+    "vendor": "Paddle",
+    "website": "https://www.paddle.com/billing",
+    "docs": "https://developer.paddle.com/api-reference/overview",
+    "description": "The leading app and SaaS billing solution chosen by n8n and Letterboxd. Rated fastest implementation on G2. Get started today.",
+    "input": {
+      "website": "https://www.paddle.com/billing",
+      "docs": "https://developer.paddle.com/api-reference/overview"
+    },
+    "color": "#FDDD35",
+    "logo": "/brands/paddle.svg",
+    "logoSource": "simple-icons"
+  },
   "payload-cms": {
     "vendor": "Payload CMS",
     "website": "https://payloadcms.com",

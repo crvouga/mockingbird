@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-10-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-40-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-11-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-40-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -65,9 +65,9 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-50 services, each its own npm package. Every service declares a release tier:
+51 services, each its own npm package. Every service declares a release tier:
 
-- **Ready** (10): Complete, checked against the vendor, and kept stable. Use it in your test suite.
+- **Ready** (11): Complete, checked against the vendor, and kept stable. Use it in your test suite.
 - **Work in progress** (40): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
@@ -80,6 +80,7 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [Junction](packages/service/junction) | [junction.com](https://www.junction.com) · [API docs](https://docs.junction.com) | Health & labs | [`@crvouga/mockingbird-service-junction`](https://www.npmjs.com/package/@crvouga/mockingbird-service-junction) | Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox. |
 | [Medplum](packages/service/medplum) | [medplum.com](https://www.medplum.com) · [API docs](https://www.medplum.com/docs) | Health & labs | [`@crvouga/mockingbird-service-medplum`](https://www.npmjs.com/package/@crvouga/mockingbird-service-medplum) | Stateful, portable mock of the self-hosted Medplum server (FHIR R4 REST, OAuth2 and admin API) that runs anywhere JavaScript runs, proven at parity with a real self-hosted Medplum used as the oracle. |
 | [OAuth & Social Login](packages/service/oauth) | [openid.net](https://openid.net) · [API docs](https://openid.net/specs/openid-connect-core-1_0.html) | Identity | [`@crvouga/mockingbird-service-oauth`](https://www.npmjs.com/package/@crvouga/mockingbird-service-oauth) | Portable social-login mock with Google, Apple, Microsoft, GitHub and generic OIDC profiles, private relay identities, reproducible edge cases, signed tokens and an accessible UI. |
+| [Paddle](packages/service/paddle) | [paddle.com](https://www.paddle.com/billing) · [API docs](https://developer.paddle.com/api-reference/overview) | Payments | [`@crvouga/mockingbird-service-paddle`](https://www.npmjs.com/package/@crvouga/mockingbird-service-paddle) | Stateful mock of the Paddle Billing API (customers, addresses, businesses, products, prices, transactions with computed totals, subscriptions with pause/resume/cancel and renewals, events) with Paddle-Signature webhooks and admin routes that simulate checkout, renewals and failed payments (Mockingbird service contract). |
 | [PostgreSQL](packages/service/postgres) | [postgresql.org](https://www.postgresql.org) · [API docs](https://www.postgresql.org/docs/current/) | Databases | [`@crvouga/mockingbird-service-postgres`](https://www.npmjs.com/package/@crvouga/mockingbird-service-postgres) | Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies |
 | [RxVortex](packages/service/rxvortex) | [rxvortex.com](https://www.rxvortex.com) | Pharmacy | [`@crvouga/mockingbird-service-rxvortex`](https://www.npmjs.com/package/@crvouga/mockingbird-service-rxvortex) | Stateful mock of the RxVortex (Strive) pharmacy API: OAuth token, order submit, status, cancel, recovery by sender order id, preset catalog, and signed status webhooks. |
 | [SQLite](packages/service/sqlite) | [sqlite.org](https://sqlite.org) · [API docs](https://sqlite.org/docs.html) | Databases | [`@crvouga/mockingbird-service-sqlite`](https://www.npmjs.com/package/@crvouga/mockingbird-service-sqlite) | Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies |

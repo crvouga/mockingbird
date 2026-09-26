@@ -129,124 +129,130 @@ const pscAvailability = async (
 }
 
 describe("Junction scheduling state space", () => {
-  test("phlebotomy book/reschedule/cancel lifecycle stays coherent under random walks", async () => {
-    await fc.assert(
-      fc.asyncProperty(
-        fc.record({
-          zip: fc.constantFrom("92101", "94105", "10001", "12345"),
-          reschedule: fc.boolean(),
-          cancelThenRebook: fc.boolean(),
-          reasonIndex: fc.integer({ min: 0, max: 13 }),
-        }),
-        async ({ zip, reschedule, cancelThenRebook, reasonIndex }) => {
-          const clock = makeNow()
-          const api = new JunctionAPI({ now: clock.now, webhook: { seed: 11 } })
-          const userId = await createUser(api, `sched-phlebo-${zip}`)
-          const order = await createBookableOrder(api, userId, LAB_AT_HOME)
-          const orderId = order.id as string
+  test(
+    "phlebotomy book/reschedule/cancel lifecycle stays coherent under random walks",
+    async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          fc.record({
+            zip: fc.constantFrom("92101", "94105", "10001", "12345"),
+            reschedule: fc.boolean(),
+            cancelThenRebook: fc.boolean(),
+            reasonIndex: fc.integer({ min: 0, max: 13 }),
+          }),
+          async ({ zip, reschedule, cancelThenRebook, reasonIndex }) => {
+            const clock = makeNow()
+            const api = new JunctionAPI({ now: clock.now, webhook: { seed: 11 } })
+            const userId = await createUser(api, `sched-phlebo-${zip}`)
+            const order = await createBookableOrder(api, userId, LAB_AT_HOME)
+            const orderId = order.id as string
 
-          const availability = await phlebotomyAvailability(api, zip)
-          expect(availability.status).toBe(200)
-          expect(availability.slots.length).toBeGreaterThan(0)
+            const availability = await phlebotomyAvailability(api, zip)
+            expect(availability.status).toBe(200)
+            expect(availability.slots.length).toBeGreaterThan(0)
 
-          const firstKey = availability.slots[0]?.booking_key ?? ""
-          const booked = await request(api, `/v3/order/${orderId}/phlebotomy/appointment/book`, {
-            method: "POST",
-            body: JSON.stringify({ booking_key: firstKey }),
-            headers: { "content-type": "application/json" },
-          })
-          expect(booked.status).toBe(200)
-          const appointment = (await booked.json()) as Json
-          expect(appointment.order_id).toBe(orderId)
-          expect(appointment.user_id).toBe(userId)
-          expect(appointment.type).toBe("phlebotomy")
-          // Vital quirk: top-level status + events[0].status are pending, event_status is scheduled.
-          expect(appointment.status).toBe("pending")
-          expect(appointment.event_status).toBe("scheduled")
+            const firstKey = availability.slots[0]?.booking_key ?? ""
+            const booked = await request(api, `/v3/order/${orderId}/phlebotomy/appointment/book`, {
+              method: "POST",
+              body: JSON.stringify({ booking_key: firstKey }),
+              headers: { "content-type": "application/json" },
+            })
+            expect(booked.status).toBe(200)
+            const appointment = (await booked.json()) as Json
+            expect(appointment.order_id).toBe(orderId)
+            expect(appointment.user_id).toBe(userId)
+            expect(appointment.type).toBe("phlebotomy")
+            // Vital quirk: top-level status + events[0].status are pending, event_status is scheduled.
+            expect(appointment.status).toBe("pending")
+            expect(appointment.event_status).toBe("scheduled")
 
-          const fetched = await request(api, `/v3/order/${orderId}/phlebotomy/appointment`)
-          expect(fetched.status).toBe(200)
-          expect(((await fetched.json()) as Json).id).toBe(appointment.id)
+            const fetched = await request(api, `/v3/order/${orderId}/phlebotomy/appointment`)
+            expect(fetched.status).toBe(200)
+            expect(((await fetched.json()) as Json).id).toBe(appointment.id)
 
-          const updatedOrder = (await (await request(api, `/v3/order/${orderId}`)).json()) as Json
-          const scheduledEvent = (updatedOrder.last_event as Json).status
-          expect(scheduledEvent).toBe("collecting_sample.at_home_phlebotomy.appointment_scheduled")
+            const updatedOrder = (await (await request(api, `/v3/order/${orderId}`)).json()) as Json
+            const scheduledEvent = (updatedOrder.last_event as Json).status
+            expect(scheduledEvent).toBe(
+              "collecting_sample.at_home_phlebotomy.appointment_scheduled",
+            )
 
-          if (reschedule) {
-            const secondAvailability = await phlebotomyAvailability(api, zip)
-            const secondKey = secondAvailability.slots.find(
-              (slot) => slot.booking_key !== firstKey && slot.start !== appointment.start_at,
-            )?.booking_key
-            if (secondKey !== undefined) {
-              const rescheduled = await request(
+            if (reschedule) {
+              const secondAvailability = await phlebotomyAvailability(api, zip)
+              const secondKey = secondAvailability.slots.find(
+                (slot) => slot.booking_key !== firstKey && slot.start !== appointment.start_at,
+              )?.booking_key
+              if (secondKey !== undefined) {
+                const rescheduled = await request(
+                  api,
+                  `/v3/order/${orderId}/phlebotomy/appointment/reschedule`,
+                  {
+                    method: "PATCH",
+                    body: JSON.stringify({ booking_key: secondKey }),
+                    headers: { "content-type": "application/json" },
+                  },
+                )
+                expect(rescheduled.status).toBe(200)
+                const rescheduledAppointment = (await rescheduled.json()) as Json
+                expect(rescheduledAppointment.id).toBe(appointment.id)
+                expect(rescheduledAppointment.start_at).not.toBe(appointment.start_at)
+              }
+            }
+
+            if (cancelThenRebook) {
+              const reasonId = await cancellationReasonId(api, reasonIndex)
+              const cancelled = await request(
                 api,
-                `/v3/order/${orderId}/phlebotomy/appointment/reschedule`,
+                `/v3/order/${orderId}/phlebotomy/appointment/cancel`,
                 {
                   method: "PATCH",
-                  body: JSON.stringify({ booking_key: secondKey }),
+                  body: JSON.stringify({
+                    cancellation_reason_id: reasonId,
+                    notes: reasonId === OTHER_CANCELLATION_REASON_ID ? "unavoidable" : null,
+                  }),
                   headers: { "content-type": "application/json" },
                 },
               )
-              expect(rescheduled.status).toBe(200)
-              const rescheduledAppointment = (await rescheduled.json()) as Json
-              expect(rescheduledAppointment.id).toBe(appointment.id)
-              expect(rescheduledAppointment.start_at).not.toBe(appointment.start_at)
-            }
-          }
+              expect(cancelled.status).toBe(200)
+              const cancelledAppointment = (await cancelled.json()) as Json
+              expect(cancelledAppointment.status).toBe("cancelled")
+              expect(cancelledAppointment.event_status).toBe("cancelled")
 
-          if (cancelThenRebook) {
-            const reasonId = await cancellationReasonId(api, reasonIndex)
-            const cancelled = await request(
-              api,
-              `/v3/order/${orderId}/phlebotomy/appointment/cancel`,
-              {
-                method: "PATCH",
-                body: JSON.stringify({
-                  cancellation_reason_id: reasonId,
-                  notes: reasonId === OTHER_CANCELLATION_REASON_ID ? "unavoidable" : null,
-                }),
-                headers: { "content-type": "application/json" },
-              },
-            )
-            expect(cancelled.status).toBe(200)
-            const cancelledAppointment = (await cancelled.json()) as Json
-            expect(cancelledAppointment.status).toBe("cancelled")
-            expect(cancelledAppointment.event_status).toBe("cancelled")
-
-            const orderAfterCancel = (await (
-              await request(api, `/v3/order/${orderId}`)
-            ).json()) as Json
-            expect((orderAfterCancel.last_event as Json).status).toBe(
-              "collecting_sample.at_home_phlebotomy.appointment_cancelled",
-            )
-
-            const rebookAvailability = await phlebotomyAvailability(api, zip)
-            const rebookKey = rebookAvailability.slots.find(
-              (slot) => slot.booking_key !== firstKey,
-            )?.booking_key
-            if (rebookKey !== undefined) {
-              const rebook = await request(
-                api,
-                `/v3/order/${orderId}/phlebotomy/appointment/book`,
-                {
-                  method: "POST",
-                  body: JSON.stringify({ booking_key: rebookKey }),
-                  headers: { "content-type": "application/json" },
-                },
+              const orderAfterCancel = (await (
+                await request(api, `/v3/order/${orderId}`)
+              ).json()) as Json
+              expect((orderAfterCancel.last_event as Json).status).toBe(
+                "collecting_sample.at_home_phlebotomy.appointment_cancelled",
               )
-              expect(rebook.status).toBe(200)
-            }
-          }
 
-          const appointmentEvents = api
-            .webhookEvents()
-            .filter((event) => event.event_type === "labtest.appointment.updated")
-          expect(appointmentEvents.length).toBeGreaterThanOrEqual(1)
-        },
-      ),
-      { numRuns: 24, seed: 424242 },
-    )
-  })
+              const rebookAvailability = await phlebotomyAvailability(api, zip)
+              const rebookKey = rebookAvailability.slots.find(
+                (slot) => slot.booking_key !== firstKey,
+              )?.booking_key
+              if (rebookKey !== undefined) {
+                const rebook = await request(
+                  api,
+                  `/v3/order/${orderId}/phlebotomy/appointment/book`,
+                  {
+                    method: "POST",
+                    body: JSON.stringify({ booking_key: rebookKey }),
+                    headers: { "content-type": "application/json" },
+                  },
+                )
+                expect(rebook.status).toBe(200)
+              }
+            }
+
+            const appointmentEvents = api
+              .webhookEvents()
+              .filter((event) => event.event_type === "labtest.appointment.updated")
+            expect(appointmentEvents.length).toBeGreaterThanOrEqual(1)
+          },
+        ),
+        { numRuns: 24, seed: 424242 },
+      )
+    },
+    { timeout: 30_000 },
+  ) // 3 s locally; a loaded CI runner has taken 7 s, past bun's 5 s default.
 
   test("booking keys are single-use, expiring, and modality-bound", async () => {
     await fc.assert(
