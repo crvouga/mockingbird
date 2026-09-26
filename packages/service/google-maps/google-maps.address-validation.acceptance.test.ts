@@ -275,6 +275,10 @@ describe("Address Validation (POST /v1:validateAddress) with USPS CASS", () => {
       { address: { regionCode: "US", addressLines: ["1 A St"], street: "x" } },
       { address: { regionCode: "US", addressLines: ["1 A St"] }, bogus: true },
       { address: { regionCode: "CA", addressLines: ["1 A St"] }, enableUspsCass: true },
+      // Over the vendored PostalAddress limits (items maxLength 80, maxItems 3), which the mock
+      // would otherwise echo into a response that violates the same caps.
+      { address: { regionCode: "US", addressLines: ["1".padEnd(81, "x")] } },
+      { address: { regionCode: "US", addressLines: ["1 A St", "2 B St", "3 C St", "4 D St"] } },
       "{not json",
     ]) {
       const { status, body: response } = await post(body)

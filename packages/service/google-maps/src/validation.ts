@@ -106,6 +106,9 @@ const POSTAL_ADDRESS = new Set([
   "organization",
 ])
 const MAX_INPUT_LENGTH = 280
+/** Vendored PostalAddress limits: `addressLines` has `maxItems: 3`, items `maxLength: 80`. */
+const MAX_ADDRESS_LINES = 3
+const MAX_ADDRESS_LINE_LENGTH = 80
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
@@ -151,6 +154,20 @@ export const parseValidateRequest = (body: unknown): ValidateRequest => {
   if (!Array.isArray(rawLines) || rawLines.some((line) => typeof line !== "string")) {
     throw new ValidationRequestError(
       `Invalid value at 'address.address_lines' (TYPE_STRING), ${JSON.stringify(rawLines)}`,
+    )
+  }
+  // The vendored PostalAddress caps addressLines at 3 items of 80 characters each; the mock
+  // echoes the lines into the response, whose schema caps them the same way, so an over-long or
+  // over-long-list request is rejected here rather than echoed into a non-conformant response.
+  if ((rawLines as string[]).length > MAX_ADDRESS_LINES) {
+    throw new ValidationRequestError(
+      `Invalid value at 'address.address_lines' (repeated STRING), a maximum of ${MAX_ADDRESS_LINES} address lines is allowed.`,
+    )
+  }
+  const overLong = (rawLines as string[]).findIndex((line) => line.length > MAX_ADDRESS_LINE_LENGTH)
+  if (overLong !== -1) {
+    throw new ValidationRequestError(
+      `Invalid value at 'address.address_lines[${overLong}]' (STRING), the maximum length is ${MAX_ADDRESS_LINE_LENGTH} characters.`,
     )
   }
   const addressLines = (rawLines as string[]).map((line) => line.trim()).filter(Boolean)
