@@ -446,7 +446,12 @@ describe("webhooks and transcripts", () => {
         callDurationSeconds: 1_200,
       },
     ])
-    const event = JSON.parse(deliveries[0]?.raw.toString() as string) as DailyWebhook
+    // Two topics fire; their delivery order across topics is not guaranteed (the outbox even has
+    // a `reorder` fault), so pick the transcription.stopped delivery by content, not by index.
+    const transcription = deliveries.find(
+      (d) => (JSON.parse(d.raw.toString()) as DailyWebhook).type === "transcription.stopped",
+    )
+    const event = JSON.parse(transcription?.raw.toString() as string) as DailyWebhook
     expect(event).toMatchObject({
       event: "transcription.stopped",
       type: "transcription.stopped",
@@ -458,9 +463,9 @@ describe("webhooks and transcripts", () => {
       },
     })
     // Our scheme: hex HMAC-SHA256 over the raw body, checked independently here.
-    expect(deliveries[0]?.headers.get("x-webhook-signature")).toBe(
+    expect(transcription?.headers.get("x-webhook-signature")).toBe(
       createHmac("sha256", WEBHOOK_SECRET)
-        .update(deliveries[0]?.raw as Buffer)
+        .update(transcription?.raw as Buffer)
         .digest("hex"),
     )
     // The mock keeps no transcript text, and the journal holds no bodies.
