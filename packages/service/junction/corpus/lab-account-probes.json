@@ -1,0 +1,777 @@
+{
+  "source": "api.sandbox.tryvital.io",
+  "note": "Recorded by scripts/parity.ts: how the sandbox routes create-order by lab account (ids replaced). Orders were cancelled and the user deleted in the same run.",
+  "accounts": [
+    {
+      "lab": "labcorp",
+      "org_id": null,
+      "team_id_allowlist": []
+    },
+    {
+      "lab": "bioreference",
+      "org_id": null,
+      "team_id_allowlist": []
+    },
+    {
+      "lab": "quest",
+      "org_id": null,
+      "team_id_allowlist": []
+    }
+  ],
+  "labs": [
+    "labcorp",
+    "ussl"
+  ],
+  "probes": [
+    {
+      "name": "own-lab account by id",
+      "issue": null,
+      "lab": "labcorp",
+      "account": {
+        "lab": "labcorp",
+        "org_id": null,
+        "team_id_allowlist": []
+      },
+      "request": {
+        "lab_account_id": "<uuid>"
+      },
+      "status": 200,
+      "body": {
+        "order": {
+          "user_id": "<uuid>",
+          "id": "<uuid>",
+          "team_id": "<uuid>",
+          "patient_details": {
+            "first_name": "Mockingbird",
+            "last_name": "Probe",
+            "dob": "1990-01-01T00:00:00+00:00",
+            "gender": "female",
+            "phone_number": "+14155551234",
+            "email": "probe@example.com",
+            "medical_proxy": null,
+            "race": null,
+            "ethnicity": null,
+            "sexual_orientation": null,
+            "gender_identity": null
+          },
+          "patient_address": {
+            "receiver_name": "Mockingbird Probe",
+            "first_line": "1 Main St",
+            "second_line": null,
+            "city": "San Diego",
+            "state": "CA",
+            "zip": "92101",
+            "country": "US",
+            "access_notes": null,
+            "phone_number": "+14155551234"
+          },
+          "lab_test": {
+            "id": "<uuid>",
+            "slug": "comprehensive_metabolic_panel",
+            "name": "CMP",
+            "sample_type": "serum",
+            "method": "walk_in_test",
+            "price": 0,
+            "is_active": true,
+            "status": "active",
+            "fasting": false,
+            "lab": {
+              "id": 6,
+              "slug": "labcorp",
+              "name": "Labcorp",
+              "first_line_address": "Labcorp",
+              "city": "San Diego",
+              "zipcode": "92128",
+              "collection_methods": [
+                "at_home_phlebotomy",
+                "walk_in_test",
+                "on_site_collection"
+              ],
+              "sample_types": [
+                "serum",
+                "saliva",
+                "urine"
+              ],
+              "logo_url": null
+            },
+            "markers": [
+              {
+                "id": 2075,
+                "name": "Comp. Metabolic Panel (14)",
+                "slug": "comp-metabolic-panel-14",
+                "description": "Comp. Metabolic Panel (14)",
+                "lab_id": 6,
+                "provider_id": "322000",
+                "type": "biomarker",
+                "unit": null,
+                "price": "N/A",
+                "aoe": {
+                  "questions": [
+                    {
+                      "id": 1,
+                      "required": false,
+                      "code": "FSTING",
+                      "value": "FASTING",
+                      "type": "choice",
+                      "sequence": 1,
+                      "answers": [
+                        {
+                          "id": 1,
+                          "code": "N",
+                          "value": "No"
+                        },
+                        {
+                          "id": 2,
+                          "code": "Y",
+                          "value": "Yes"
+                        }
+                      ],
+                      "constraint": null,
+                      "default": null
+                    }
+                  ]
+                },
+                "a_la_carte_enabled": true,
+                "common_tat_days": 3,
+                "worst_case_tat_days": 5,
+                "is_orderable": true
+              }
+            ],
+            "is_delegated": false,
+            "auto_generated": false,
+            "has_collection_instructions": false,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5
+          },
+          "details": {
+            "type": "walk_in_test",
+            "data": {
+              "id": "<uuid>",
+              "created_at": "2026-09-26T01:08:18+00:00",
+              "updated_at": "2026-09-26T01:08:18+00:00",
+              "appointment_id": null
+            }
+          },
+          "sample_id": null,
+          "notes": null,
+          "clinical_notes": null,
+          "created_at": "2026-09-26T01:08:18+00:00",
+          "updated_at": "2026-09-26T01:08:18+00:00",
+          "events": [
+            {
+              "id": 728091,
+              "created_at": "2026-09-26T01:08:18+00:00",
+              "status": "received.walk_in_test.ordered",
+              "status_detail": null
+            }
+          ],
+          "status": "received",
+          "last_event": {
+            "id": 728091,
+            "created_at": "2026-09-26T01:08:18+00:00",
+            "status": "received.walk_in_test.ordered",
+            "status_detail": null
+          },
+          "physician": {
+            "first_name": "Leo",
+            "last_name": "Damasco",
+            "npi": "1134326366"
+          },
+          "health_insurance_id": null,
+          "requisition_form_url": null,
+          "priority": false,
+          "shipping_details": null,
+          "activate_by": null,
+          "passthrough": null,
+          "billing_type": "client_bill",
+          "icd_codes": null,
+          "has_abn": false,
+          "interpretation": null,
+          "has_missing_results": null,
+          "expected_result_by_date": null,
+          "worst_case_result_by_date": null,
+          "origin": "initial",
+          "order_transaction": {
+            "id": "<uuid>",
+            "status": "active",
+            "orders": [
+              {
+                "id": "<uuid>",
+                "low_level_status": "ordered",
+                "low_level_status_created_at": "2026-09-26T01:08:18.141153Z",
+                "origin": "initial",
+                "parent_id": null,
+                "created_at": "2026-09-26T01:08:18.140153Z",
+                "updated_at": "2026-09-26T01:08:18.140153Z"
+              }
+            ]
+          }
+        },
+        "status": "success",
+        "message": "Order created successfully"
+      }
+    },
+    {
+      "name": "another lab's account by id",
+      "issue": "#138",
+      "lab": "labcorp",
+      "account": {
+        "lab": "bioreference",
+        "org_id": null,
+        "team_id_allowlist": []
+      },
+      "request": {
+        "lab_account_id": "<uuid>"
+      },
+      "status": 200,
+      "body": {
+        "order": {
+          "user_id": "<uuid>",
+          "id": "<uuid>",
+          "team_id": "<uuid>",
+          "patient_details": {
+            "first_name": "Mockingbird",
+            "last_name": "Probe",
+            "dob": "1990-01-01T00:00:00+00:00",
+            "gender": "female",
+            "phone_number": "+14155551234",
+            "email": "probe@example.com",
+            "medical_proxy": null,
+            "race": null,
+            "ethnicity": null,
+            "sexual_orientation": null,
+            "gender_identity": null
+          },
+          "patient_address": {
+            "receiver_name": "Mockingbird Probe",
+            "first_line": "1 Main St",
+            "second_line": null,
+            "city": "San Diego",
+            "state": "CA",
+            "zip": "92101",
+            "country": "US",
+            "access_notes": null,
+            "phone_number": "+14155551234"
+          },
+          "lab_test": {
+            "id": "<uuid>",
+            "slug": "comprehensive_metabolic_panel",
+            "name": "CMP",
+            "sample_type": "serum",
+            "method": "walk_in_test",
+            "price": 0,
+            "is_active": true,
+            "status": "active",
+            "fasting": false,
+            "lab": {
+              "id": 6,
+              "slug": "labcorp",
+              "name": "Labcorp",
+              "first_line_address": "Labcorp",
+              "city": "San Diego",
+              "zipcode": "92128",
+              "collection_methods": [
+                "at_home_phlebotomy",
+                "walk_in_test",
+                "on_site_collection"
+              ],
+              "sample_types": [
+                "serum",
+                "saliva",
+                "urine"
+              ],
+              "logo_url": null
+            },
+            "markers": [
+              {
+                "id": 2075,
+                "name": "Comp. Metabolic Panel (14)",
+                "slug": "comp-metabolic-panel-14",
+                "description": "Comp. Metabolic Panel (14)",
+                "lab_id": 6,
+                "provider_id": "322000",
+                "type": "biomarker",
+                "unit": null,
+                "price": "N/A",
+                "aoe": {
+                  "questions": [
+                    {
+                      "id": 1,
+                      "required": false,
+                      "code": "FSTING",
+                      "value": "FASTING",
+                      "type": "choice",
+                      "sequence": 1,
+                      "answers": [
+                        {
+                          "id": 1,
+                          "code": "N",
+                          "value": "No"
+                        },
+                        {
+                          "id": 2,
+                          "code": "Y",
+                          "value": "Yes"
+                        }
+                      ],
+                      "constraint": null,
+                      "default": null
+                    }
+                  ]
+                },
+                "a_la_carte_enabled": true,
+                "common_tat_days": 3,
+                "worst_case_tat_days": 5,
+                "is_orderable": true
+              }
+            ],
+            "is_delegated": false,
+            "auto_generated": false,
+            "has_collection_instructions": false,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5
+          },
+          "details": {
+            "type": "walk_in_test",
+            "data": {
+              "id": "<uuid>",
+              "created_at": "2026-09-26T01:08:19+00:00",
+              "updated_at": "2026-09-26T01:08:19+00:00",
+              "appointment_id": null
+            }
+          },
+          "sample_id": null,
+          "notes": null,
+          "clinical_notes": null,
+          "created_at": "2026-09-26T01:08:19+00:00",
+          "updated_at": "2026-09-26T01:08:19+00:00",
+          "events": [
+            {
+              "id": 728092,
+              "created_at": "2026-09-26T01:08:19+00:00",
+              "status": "received.walk_in_test.ordered",
+              "status_detail": null
+            }
+          ],
+          "status": "received",
+          "last_event": {
+            "id": 728092,
+            "created_at": "2026-09-26T01:08:19+00:00",
+            "status": "received.walk_in_test.ordered",
+            "status_detail": null
+          },
+          "physician": {
+            "first_name": "Leo",
+            "last_name": "Damasco",
+            "npi": "1134326366"
+          },
+          "health_insurance_id": null,
+          "requisition_form_url": null,
+          "priority": false,
+          "shipping_details": null,
+          "activate_by": null,
+          "passthrough": null,
+          "billing_type": "client_bill",
+          "icd_codes": null,
+          "has_abn": false,
+          "interpretation": null,
+          "has_missing_results": null,
+          "expected_result_by_date": null,
+          "worst_case_result_by_date": null,
+          "origin": "initial",
+          "order_transaction": {
+            "id": "<uuid>",
+            "status": "active",
+            "orders": [
+              {
+                "id": "<uuid>",
+                "low_level_status": "ordered",
+                "low_level_status_created_at": "2026-09-26T01:08:19.155349Z",
+                "origin": "initial",
+                "parent_id": null,
+                "created_at": "2026-09-26T01:08:19.154349Z",
+                "updated_at": "2026-09-26T01:08:19.154349Z"
+              }
+            ]
+          }
+        },
+        "status": "success",
+        "message": "Order created successfully"
+      }
+    },
+    {
+      "name": "empty-allowlist account by id",
+      "issue": null,
+      "lab": "labcorp",
+      "account": {
+        "lab": "labcorp",
+        "org_id": null,
+        "team_id_allowlist": []
+      },
+      "request": {
+        "lab_account_id": "<uuid>"
+      },
+      "status": 200,
+      "body": {
+        "order": {
+          "user_id": "<uuid>",
+          "id": "<uuid>",
+          "team_id": "<uuid>",
+          "patient_details": {
+            "first_name": "Mockingbird",
+            "last_name": "Probe",
+            "dob": "1990-01-01T00:00:00+00:00",
+            "gender": "female",
+            "phone_number": "+14155551234",
+            "email": "probe@example.com",
+            "medical_proxy": null,
+            "race": null,
+            "ethnicity": null,
+            "sexual_orientation": null,
+            "gender_identity": null
+          },
+          "patient_address": {
+            "receiver_name": "Mockingbird Probe",
+            "first_line": "1 Main St",
+            "second_line": null,
+            "city": "San Diego",
+            "state": "CA",
+            "zip": "92101",
+            "country": "US",
+            "access_notes": null,
+            "phone_number": "+14155551234"
+          },
+          "lab_test": {
+            "id": "<uuid>",
+            "slug": "comprehensive_metabolic_panel",
+            "name": "CMP",
+            "sample_type": "serum",
+            "method": "walk_in_test",
+            "price": 0,
+            "is_active": true,
+            "status": "active",
+            "fasting": false,
+            "lab": {
+              "id": 6,
+              "slug": "labcorp",
+              "name": "Labcorp",
+              "first_line_address": "Labcorp",
+              "city": "San Diego",
+              "zipcode": "92128",
+              "collection_methods": [
+                "at_home_phlebotomy",
+                "walk_in_test",
+                "on_site_collection"
+              ],
+              "sample_types": [
+                "serum",
+                "saliva",
+                "urine"
+              ],
+              "logo_url": null
+            },
+            "markers": [
+              {
+                "id": 2075,
+                "name": "Comp. Metabolic Panel (14)",
+                "slug": "comp-metabolic-panel-14",
+                "description": "Comp. Metabolic Panel (14)",
+                "lab_id": 6,
+                "provider_id": "322000",
+                "type": "biomarker",
+                "unit": null,
+                "price": "N/A",
+                "aoe": {
+                  "questions": [
+                    {
+                      "id": 1,
+                      "required": false,
+                      "code": "FSTING",
+                      "value": "FASTING",
+                      "type": "choice",
+                      "sequence": 1,
+                      "answers": [
+                        {
+                          "id": 1,
+                          "code": "N",
+                          "value": "No"
+                        },
+                        {
+                          "id": 2,
+                          "code": "Y",
+                          "value": "Yes"
+                        }
+                      ],
+                      "constraint": null,
+                      "default": null
+                    }
+                  ]
+                },
+                "a_la_carte_enabled": true,
+                "common_tat_days": 3,
+                "worst_case_tat_days": 5,
+                "is_orderable": true
+              }
+            ],
+            "is_delegated": false,
+            "auto_generated": false,
+            "has_collection_instructions": false,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5
+          },
+          "details": {
+            "type": "walk_in_test",
+            "data": {
+              "id": "<uuid>",
+              "created_at": "2026-09-26T01:08:21+00:00",
+              "updated_at": "2026-09-26T01:08:21+00:00",
+              "appointment_id": null
+            }
+          },
+          "sample_id": null,
+          "notes": null,
+          "clinical_notes": null,
+          "created_at": "2026-09-26T01:08:21+00:00",
+          "updated_at": "2026-09-26T01:08:21+00:00",
+          "events": [
+            {
+              "id": 728093,
+              "created_at": "2026-09-26T01:08:21+00:00",
+              "status": "received.walk_in_test.ordered",
+              "status_detail": null
+            }
+          ],
+          "status": "received",
+          "last_event": {
+            "id": 728093,
+            "created_at": "2026-09-26T01:08:21+00:00",
+            "status": "received.walk_in_test.ordered",
+            "status_detail": null
+          },
+          "physician": {
+            "first_name": "Leo",
+            "last_name": "Damasco",
+            "npi": "1134326366"
+          },
+          "health_insurance_id": null,
+          "requisition_form_url": null,
+          "priority": false,
+          "shipping_details": null,
+          "activate_by": null,
+          "passthrough": null,
+          "billing_type": "client_bill",
+          "icd_codes": null,
+          "has_abn": false,
+          "interpretation": null,
+          "has_missing_results": null,
+          "expected_result_by_date": null,
+          "worst_case_result_by_date": null,
+          "origin": "initial",
+          "order_transaction": {
+            "id": "<uuid>",
+            "status": "active",
+            "orders": [
+              {
+                "id": "<uuid>",
+                "low_level_status": "ordered",
+                "low_level_status_created_at": "2026-09-26T01:08:21.022194Z",
+                "origin": "initial",
+                "parent_id": null,
+                "created_at": "2026-09-26T01:08:21.021194Z",
+                "updated_at": "2026-09-26T01:08:21.021194Z"
+              }
+            ]
+          }
+        },
+        "status": "success",
+        "message": "Order created successfully"
+      }
+    },
+    {
+      "name": "id omitted for labcorp (1 active)",
+      "issue": null,
+      "lab": "labcorp",
+      "account": {
+        "lab": "labcorp",
+        "org_id": null,
+        "team_id_allowlist": []
+      },
+      "request": {},
+      "status": 200,
+      "body": {
+        "order": {
+          "user_id": "<uuid>",
+          "id": "<uuid>",
+          "team_id": "<uuid>",
+          "patient_details": {
+            "first_name": "Mockingbird",
+            "last_name": "Probe",
+            "dob": "1990-01-01T00:00:00+00:00",
+            "gender": "female",
+            "phone_number": "+14155551234",
+            "email": "probe@example.com",
+            "medical_proxy": null,
+            "race": null,
+            "ethnicity": null,
+            "sexual_orientation": null,
+            "gender_identity": null
+          },
+          "patient_address": {
+            "receiver_name": "Mockingbird Probe",
+            "first_line": "1 Main St",
+            "second_line": null,
+            "city": "San Diego",
+            "state": "CA",
+            "zip": "92101",
+            "country": "US",
+            "access_notes": null,
+            "phone_number": "+14155551234"
+          },
+          "lab_test": {
+            "id": "<uuid>",
+            "slug": "comprehensive_metabolic_panel",
+            "name": "CMP",
+            "sample_type": "serum",
+            "method": "walk_in_test",
+            "price": 0,
+            "is_active": true,
+            "status": "active",
+            "fasting": false,
+            "lab": {
+              "id": 6,
+              "slug": "labcorp",
+              "name": "Labcorp",
+              "first_line_address": "Labcorp",
+              "city": "San Diego",
+              "zipcode": "92128",
+              "collection_methods": [
+                "at_home_phlebotomy",
+                "walk_in_test",
+                "on_site_collection"
+              ],
+              "sample_types": [
+                "serum",
+                "saliva",
+                "urine"
+              ],
+              "logo_url": null
+            },
+            "markers": [
+              {
+                "id": 2075,
+                "name": "Comp. Metabolic Panel (14)",
+                "slug": "comp-metabolic-panel-14",
+                "description": "Comp. Metabolic Panel (14)",
+                "lab_id": 6,
+                "provider_id": "322000",
+                "type": "biomarker",
+                "unit": null,
+                "price": "N/A",
+                "aoe": {
+                  "questions": [
+                    {
+                      "id": 1,
+                      "required": false,
+                      "code": "FSTING",
+                      "value": "FASTING",
+                      "type": "choice",
+                      "sequence": 1,
+                      "answers": [
+                        {
+                          "id": 1,
+                          "code": "N",
+                          "value": "No"
+                        },
+                        {
+                          "id": 2,
+                          "code": "Y",
+                          "value": "Yes"
+                        }
+                      ],
+                      "constraint": null,
+                      "default": null
+                    }
+                  ]
+                },
+                "a_la_carte_enabled": true,
+                "common_tat_days": 3,
+                "worst_case_tat_days": 5,
+                "is_orderable": true
+              }
+            ],
+            "is_delegated": false,
+            "auto_generated": false,
+            "has_collection_instructions": false,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5
+          },
+          "details": {
+            "type": "walk_in_test",
+            "data": {
+              "id": "<uuid>",
+              "created_at": "2026-09-26T01:08:21+00:00",
+              "updated_at": "2026-09-26T01:08:21+00:00",
+              "appointment_id": null
+            }
+          },
+          "sample_id": null,
+          "notes": null,
+          "clinical_notes": null,
+          "created_at": "2026-09-26T01:08:21+00:00",
+          "updated_at": "2026-09-26T01:08:21+00:00",
+          "events": [
+            {
+              "id": 728094,
+              "created_at": "2026-09-26T01:08:21+00:00",
+              "status": "received.walk_in_test.ordered",
+              "status_detail": null
+            }
+          ],
+          "status": "received",
+          "last_event": {
+            "id": 728094,
+            "created_at": "2026-09-26T01:08:21+00:00",
+            "status": "received.walk_in_test.ordered",
+            "status_detail": null
+          },
+          "physician": {
+            "first_name": "Leo",
+            "last_name": "Damasco",
+            "npi": "1134326366"
+          },
+          "health_insurance_id": null,
+          "requisition_form_url": null,
+          "priority": false,
+          "shipping_details": null,
+          "activate_by": null,
+          "passthrough": null,
+          "billing_type": "client_bill",
+          "icd_codes": null,
+          "has_abn": false,
+          "interpretation": null,
+          "has_missing_results": null,
+          "expected_result_by_date": null,
+          "worst_case_result_by_date": null,
+          "origin": "initial",
+          "order_transaction": {
+            "id": "<uuid>",
+            "status": "active",
+            "orders": [
+              {
+                "id": "<uuid>",
+                "low_level_status": "ordered",
+                "low_level_status_created_at": "2026-09-26T01:08:21.929850Z",
+                "origin": "initial",
+                "parent_id": null,
+                "created_at": "2026-09-26T01:08:21.928850Z",
+                "updated_at": "2026-09-26T01:08:21.928850Z"
+              }
+            ]
+          }
+        },
+        "status": "success",
+        "message": "Order created successfully"
+      }
+    }
+  ]
+}

@@ -78,6 +78,174 @@
       "seed": 0,
       "status": "fixed",
       "failure": "harness gap, no seed: invalid bodies were never generated for form-encoded operations (the form root was skipped instead of only its wrong-type site), and optional properties were absent 100% of the time inside invalid bodies (fc.option nil frequency inverted)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1383450894,
+      "status": "fixed",
+      "failure": "GetKitResults unknown kit: real 404 body is ErrorDto {message: \"Resource not found.\", errorType: null, payload: null, statusCode: 404}, mock answers RFC 9110 ProblemDetails"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1383771939,
+      "status": "fixed",
+      "failure": "ListEventTypes: real rows carry payloadStructure and subscriptionTypes [\"Webhook\",\"Email\"], mock rows carry id, description and isSubscribable"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1384192777,
+      "status": "fixed",
+      "failure": "ListKits: the shared staging tenant lists 3831 pre-existing kits (a fresh mock has none), and staging pages 100 rows by default where the mock paged 50"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1384928054,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits productType=a: real 400 problem \"'Product Type' has a range of values which does not include 'a'.\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1385623469,
+      "status": "fixed",
+      "failure": "PostConnectToken with an unknown client: real 400 {\"error\":\"invalid_client\"}, mock 200 (the parity mock did not pin the tenant's client)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1386508987,
+      "status": "fixed",
+      "failure": "ListEventTypes name=\" \": real lists all 12 (blank name is no filter), mock 0"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1387183420,
+      "status": "fixed",
+      "failure": "ListKitOrderLines attributesFilter=a narrowed to no rows: real 200 empty page, mock empty 500 (staging's parse failure only happens when there are rows)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1388373597,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits kitNumbers={: real 400 \"'Kit Numbers' is not in the correct format.\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1390261398,
+      "status": "fixed",
+      "failure": "ListKits kitNumber=\"\": the blank filter was not narrowed, so staging listed the shared tenant's 3831 kits against the mock's 0"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1394162303,
+      "status": "fixed",
+      "failure": "GetNotificationSubscription unknown id: real 404 ErrorDto \"Invalid Id <id>\", mock 400 (only the empty GUID is a 400)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1394856319,
+      "status": "fixed",
+      "failure": "ListProducts: staging's catalog drifted (two bundle components now report preassembly: true), the mock's staging catalog said false"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1395812853,
+      "status": "fixed",
+      "failure": "ListProducts productType=\" \": real lists all 3 (a whitespace-only filter is no filter), mock 0"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1396808717,
+      "status": "fixed",
+      "failure": "ListKits status=\" a\": real message echoes the trimmed value 'a', mock echoed ' a'"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1398886294,
+      "status": "fixed",
+      "failure": "ListProducts productCode=a: real lists all 3 products, mock 0"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1400369508,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits attributesFilter=!: real 400 ErrorDto \"Invalid search filter value\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1400974216,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits attributesFilter=a: real 400 ErrorDto \"Invalid search filter value\", mock 200"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1402714997,
+      "status": "fixed",
+      "failure": "ListProducts productType=㏞: real lists all 3 (SQL LIKE under a collation that ignores the character); productType on products is now marked unsupported"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1405240703,
+      "status": "fixed",
+      "failure": "ListOrders orderId=⁇: staging ignores a non-GUID id filter and listed the shared tenant's 14381 orders; the mock filtered to none"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1416601298,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits attributesFilter=aaa… pageSize=0: staging validates the query (pageSize) before the filter; the mock answered the filter's 400 first"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1417154522,
+      "status": "fixed",
+      "failure": "ListOrders orderDateMax=2026-03-09: the walk's date range was taken as narrowing, so staging listed a real tenant order; only exact filters now count as narrowing"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1417917287,
+      "status": "fixed",
+      "failure": "ListEventTypes name=ჷ: real lists all 12 (SQL LIKE under a collation that ignores the character); the name filter is now marked unsupported"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1418403559,
+      "status": "fixed",
+      "failure": "PostConnectToken client_id=\" \": real 400 invalid_request (a blank client_id is missing), mock invalid_client"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1418840073,
+      "status": "fixed",
+      "failure": "ListAttributeDefinitions entityType=\"a \": real echoes 'a ' (only leading spaces are dropped), mock echoed 'a'"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1419478373,
+      "status": "fixed",
+      "failure": "ListKits status=\"a \": real echoes 'a' (status is trimmed; entityType is echoed as sent)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1420005841,
+      "status": "fixed",
+      "failure": "ListFulfillments orderLineId=ໞ: the narrowing orderId was the all-zero GUID, which staging reads as no filter, so the shared tenant's 14466 fulfillments were listed"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1420835929,
+      "status": "fixed",
+      "failure": "ListKitOrderLineKits productType=\"a a\": real echoes 'aa' (status and productType drop all whitespace)"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1421396226,
+      "status": "fixed",
+      "failure": "ListKits kitNumber=\" a\": real 200 (the format is checked on the trimmed value), mock 400"
+    },
+    {
+      "provider": "genebygene",
+      "seed": 1422048242,
+      "status": "fixed",
+      "failure": "ListFulfillments orderLineId=a: a sent orderLineId replaces staging's orderId filter even when it is ignored, so the orderId narrowing leaked 12936 fulfillments; the mock and the narrowing now follow that precedence"
     }
   ]
 }

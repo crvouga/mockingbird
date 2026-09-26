@@ -5,7 +5,14 @@
  * Slot data is generated deterministically (seeded by zip/site/date), so walks are
  * reproducible without any provider-side state.
  */
-import { HttpError, jsonRes, opaqueToken, type OperationContext } from "@crvouga/mockingbird-service"
+import {
+  HttpError,
+  jsonRes,
+  type OperationContext,
+  opaqueToken,
+} from "@crvouga/mockingbird-service"
+import { isLinkedToTeam, type LabAccountRecord, labAccountById } from "./lab-accounts.js"
+import { orderMissing } from "./not-found.js"
 import type {
   AppointmentEventRecord,
   AppointmentModality,
@@ -14,9 +21,33 @@ import type {
   JunctionState,
 } from "./state.js"
 
+/** Status of the unknown-ZIP error: unused by Junction, and not retried by HTTP clients. */
+export const UNKNOWN_ZIP_STATUS = 424
+export const UNKNOWN_ZIP_ERROR_TYPE = "MOCKINGBIRD_UNKNOWN_ZIP"
+
+/**
+ * In `corpus` geo mode, refuse a ZIP the corpus has no serviceability record for.
+ *
+ * The error is deliberately not Junction-shaped in status: a consumer that classifies
+ * vendor errors must not mistake a fixture gap for a real validation failure and carry
+ * on. It fails loudly, and says how to close the gap.
+ */
+const requireCoveredZip = (state: JunctionState, zip: string): void => {
+  if (state.geoMode !== "corpus" || state.coveredZips.has(zip)) return
+  throw new HttpError(UNKNOWN_ZIP_STATUS, {
+    detail: {
+      error_type: UNKNOWN_ZIP_ERROR_TYPE,
+      error_message: `ZIP ${zip} is not in the loaded Junction corpus (${String(state.coveredZips.size)} ZIPs covered). Record it with \`mockingbird-junction corpus pull --zip ${zip}\`, or serve with --geo synthetic to invent coverage.`,
+      zip_code: zip,
+      corpus: state.corpusLabel ?? null,
+    },
+  })
+}
+
 const cachedResponse = (state: JunctionState, context: OperationContext) => {
   const body =
-    context.request.method.toUpperCase() === "GET" || context.request.method.toUpperCase() === "HEAD"
+    context.request.method.toUpperCase() === "GET" ||
+    context.request.method.toUpperCase() === "HEAD"
       ? undefined
       : context.body.kind === "json"
         ? context.body.value
@@ -35,7 +66,16 @@ const cachedResponse = (state: JunctionState, context: OperationContext) => {
     materializeAvailabilityBookingKeys(state, context, cached.body)
     rotateAvailabilityBookingKeys(state, cached.body, context.now())
   }
-  const headers = new Headers(cached.headers)
+  return responseFromCache(cached)
+}
+
+const responseFromCache = (cached: { status: number; headers?: unknown; body: unknown }) => {
+  const headers = new Headers(cached.headers as HeadersInit | undefined)
+  // The recorded body is served uncompressed, so drop transfer/encoding headers captured
+  // from the sandbox response or a client would try to decompress plain JSON.
+  headers.delete("content-encoding")
+  headers.delete("content-length")
+  headers.delete("transfer-encoding")
   if (!headers.has("content-type")) headers.set("content-type", "application/json")
   return new Response(JSON.stringify(cached.body), { status: cached.status, headers })
 }
@@ -158,8 +198,6 @@ const bookingKeyRotationFor = (
   )
 }
 
-type DayBucket = Record<string, unknown>
-
 /**
  * Rotation for the generated (cache-miss) availability paths: newly created slot
  * records are replaced with fresh records on every serve so repeated reads mint
@@ -171,7 +209,11 @@ const rotateGeneratedAvailabilityKeys = (
   state: JunctionState,
   days: Array<Record<string, unknown>>,
   nowMs: number,
-  override?: { address: Record<string, unknown>; location: { lng: number; lat: number }; zip: string },
+  override?: {
+    address: Record<string, unknown>
+    location: { lng: number; lat: number }
+    zip: string
+  },
 ): void => {
   for (const day of days) {
     const slots = Array.isArray(day.slots) ? day.slots : []
@@ -255,9 +297,7 @@ export const addressFromAvailabilityRequest = (
     first_line: firstLine,
     second_line: secondLine,
     city:
-      typeof requestBody.city === "string" && requestBody.city.length > 0
-        ? requestBody.city
-        : city,
+      typeof requestBody.city === "string" && requestBody.city.length > 0 ? requestBody.city : city,
     state:
       typeof requestBody.state === "string" && requestBody.state.length > 0
         ? requestBody.state
@@ -493,11 +533,16 @@ const pscSiteFor = (zip: string, labSlug: string, index: number, radius: number)
  * Deterministic area model: `within_radius` mirrors the PSC inventory count per lab, the
  * phlebotomy section mirrors getlabs market coverage, and central_labs always lists the
  * four national labs with their billing/capability profiles.
+ *
+ * With a lab account, the availability check is scoped to that account: `central_labs`
+ * contains only the account's lab (empty when the account's lab has no area profile) and
+ * `supported_bill_types` comes from the account's `allowed_billing` keys.
  */
-const areaInfoFor = (zip: string, radius: number) => {
+const areaInfoFor = (zip: string, radius: number, account: LabAccountRecord | null = null) => {
   const served = phlebotomyServed(zip)
   const centralLabs: Record<string, unknown> = {}
-  for (const lab of AREA_LABS) {
+  const labs = account === null ? AREA_LABS : AREA_LABS.filter((lab) => lab.slug === account.lab)
+  for (const lab of labs) {
     centralLabs[lab.slug] = {
       patient_service_centers: {
         appointment_with_vital: lab.appointment_with_vital,
@@ -505,7 +550,10 @@ const areaInfoFor = (zip: string, radius: number) => {
         radius: String(radius),
         capabilities: [...lab.capabilities],
       },
-      supported_bill_types: [...(AREA_LAB_BILLS[lab.slug] ?? [])],
+      supported_bill_types:
+        account === null
+          ? [...(AREA_LAB_BILLS[lab.slug] ?? [])]
+          : Object.keys(account.allowed_billing),
       lab_id: lab.lab_id,
     }
   }
@@ -579,6 +627,74 @@ const radiusOf = (context: OperationContext): number => {
   return value
 }
 
+/**
+ * A recorded area/PSC read for the same query at another radius, or `undefined`.
+ * `radius=25` and no `radius` are the same request (the sandbox's default is 25).
+ */
+const recordedAtRadius = (state: JunctionState, context: OperationContext, radius: number) => {
+  const params = new URLSearchParams(context.url.searchParams)
+  params.delete("radius")
+  const lookup = (query: URLSearchParams) =>
+    state.getGetCache(state.cacheKeyForRequest("GET", context.url.pathname, query))
+  if (radius === DEFAULT_RADIUS) {
+    const bare = lookup(params)
+    if (bare) return bare
+  }
+  params.set("radius", String(radius))
+  return lookup(params)
+}
+
+/**
+ * A covered ZIP's read at a radius the corpus did not record, answered from the recording.
+ *
+ * `psc/info`: the sandbox lists the nearest sites (at most 30) within the radius, so a smaller
+ * radius is exactly the smallest wider recording's sites with `distance < radius` (`distance`
+ * is rounded, and a recorded `25` is outside a 25-mile search). `area/info`: `within_radius`
+ * counts cannot be derived, so only the default-radius equivalence applies. `undefined` when
+ * nothing recorded answers it.
+ */
+const derivedFromRecording = (
+  state: JunctionState,
+  context: OperationContext,
+  radius: number,
+): Response | undefined => {
+  const same = recordedAtRadius(state, context, radius)
+  if (same) return responseFromCache(same)
+  if (!context.url.pathname.endsWith("/psc/info")) return undefined
+  for (const wider of ALLOWED_RADII) {
+    if (wider <= radius) continue
+    const recorded = recordedAtRadius(state, context, wider)
+    if (!recorded) continue
+    const body = recorded.body as Record<string, unknown> | null
+    if (recorded.status !== 200 || !body || !Array.isArray(body.patient_service_centers))
+      return undefined
+    const centers = body.patient_service_centers.filter(
+      (center) => Number((center as Record<string, unknown>).distance) < radius,
+    )
+    return responseFromCache({ ...recorded, body: { ...body, patient_service_centers: centers } })
+  }
+  return undefined
+}
+
+/**
+ * In `corpus` geo mode, a covered ZIP's read the recording cannot answer fails like an
+ * uncovered ZIP instead of inventing sites and labs next to recorded ones.
+ */
+const requireRecordedRead = (state: JunctionState, context: OperationContext, zip: string) => {
+  if (state.geoMode !== "corpus") return
+  const query = [...context.url.searchParams.entries()]
+    .map(([key, value]) => `${key}=${value}`)
+    .join("&")
+  throw new HttpError(UNKNOWN_ZIP_STATUS, {
+    detail: {
+      error_type: UNKNOWN_ZIP_ERROR_TYPE,
+      error_message: `ZIP ${zip} is in the loaded Junction corpus, but GET ${context.url.pathname}?${query} was not recorded and cannot be derived from what was (a smaller psc/info radius is filtered from a wider recording; area/info needs its own). Record it, or serve with --geo synthetic to invent coverage.`,
+      zip_code: zip,
+      corpus: state.corpusLabel ?? null,
+    },
+  })
+}
+
 const zipCodeOf = (context: OperationContext, required: boolean): string | undefined => {
   const raw = context.query.zip_code
   if (raw === undefined) {
@@ -598,6 +714,25 @@ const zipCodeOf = (context: OperationContext, required: boolean): string | undef
   }
   if (typeof raw !== "string") throw new HttpError(422, { detail: "zip_code must be a string" })
   return raw
+}
+
+/**
+ * Optional `lab_account_id` for an availability check: it must be a UUID, exist for this
+ * team, and be active — the same account rules Create Order applies.
+ */
+const labAccountOf = (state: JunctionState, context: OperationContext): LabAccountRecord | null => {
+  const raw = context.query.lab_account_id
+  if (raw === undefined) return null
+  if (typeof raw !== "string" || !isUuid(raw)) {
+    throw new HttpError(422, {
+      detail: [uuidError(typeof raw === "string" ? raw : String(raw), ["query", "lab_account_id"])],
+    })
+  }
+  const account = labAccountById(raw, state.listLabAccounts())
+  if (!account || !isLinkedToTeam(account, state.teamId))
+    throw new HttpError(404, { detail: "Lab account does not exist" })
+  if (account.status !== "active") throw new HttpError(400, { detail: "Lab account is not active" })
+  return account
 }
 
 const startDateOf = (context: OperationContext, nowMs: number): string => {
@@ -832,24 +967,16 @@ function invalidBookingKey(): never {
 
 type Order = NonNullable<ReturnType<JunctionState["orders"]["get"]>>
 
-const requireOrder = (
-  state: JunctionState,
-  orderId: string,
-  context: OperationContext,
-  missingMessage = "This order doesn't exist.",
-): Order => {
+const requireOrder = (state: JunctionState, orderId: string, context: OperationContext): Order => {
   if (!isUuid(orderId)) {
     throw new HttpError(422, { detail: [uuidError(orderId, ["path", "order_id"])] })
   }
-  const order: Order | undefined = state.orders.get(orderId)
-  if (order === undefined) notFound(missingMessage)
-  const loaded: Order = order
+  const loaded: Order =
+    state.orders.get(orderId) ?? orderMissing(state, context.operation.operationId, orderId)
   state.applyDueSimulateTransitions(context.now(), (_due, finalStatus, flags) => {
     applySimulateTransition(state, loaded, finalStatus, flags, context)
   })
-  const fresh: Order | undefined = state.orders.get(orderId)
-  if (fresh === undefined) notFound(missingMessage)
-  return fresh
+  return state.orders.get(orderId) ?? orderMissing(state, context.operation.operationId, orderId)
 }
 
 const orderCollectionMethod = (order: Order): string => {
@@ -877,8 +1004,7 @@ const requirePscCapableOrder = (order: Order): void => {
 
 const requireOrderHasRequisition = (order: Order): void => {
   const hasRequisition = order.events.some(
-    (entry) =>
-      typeof entry.status === "string" && entry.status.endsWith(".requisition_created"),
+    (entry) => typeof entry.status === "string" && entry.status.endsWith(".requisition_created"),
   )
   if (hasRequisition) return
   const lowLevel =
@@ -896,16 +1022,12 @@ const appendOrderStatusEvent = (
   state: JunctionState,
   order: Order,
   status: string,
-  context: OperationContext,
+  context: Pick<OperationContext, "now">,
 ): void => {
   const now = state.isoNow(context.now)
   const eventId =
-    Number.parseInt(
-      opaqueToken(`junction:order-event:${order.id}:${order.events.length}`, 8),
-      16,
-    ) %
-      1_000_000_000 ||
-    order.events.length + 1
+    Number.parseInt(opaqueToken(`junction:order-event:${order.id}:${order.events.length}`, 8), 16) %
+      1_000_000_000 || order.events.length + 1
   const event = {
     id: eventId,
     created_at: now,
@@ -963,6 +1085,25 @@ const applySimulationFlags = (order: Order, flags: Record<string, unknown> | nul
  *     jump through partial then completed (+ result date fields)
  *   - `failed.*` → append the failed status
  */
+/** Set the expected and worst-case result dates from the lab test's turnaround times. */
+const markExpectedResultDates = (order: Order, nowMs: number): void => {
+  const now = new Date(nowMs)
+  const commonDays =
+    typeof order.lab_test.common_tat_days === "number" && order.lab_test.common_tat_days > 0
+      ? order.lab_test.common_tat_days
+      : 3
+  const worstDays =
+    typeof order.lab_test.worst_case_tat_days === "number" && order.lab_test.worst_case_tat_days > 0
+      ? order.lab_test.worst_case_tat_days
+      : 5
+  const expected = new Date(now)
+  expected.setUTCDate(expected.getUTCDate() + commonDays)
+  const worst = new Date(now)
+  worst.setUTCDate(worst.getUTCDate() + worstDays)
+  order.expected_result_by_date = expected.toISOString().slice(0, 10)
+  order.worst_case_result_by_date = worst.toISOString().slice(0, 10)
+}
+
 const applySimulateTransition = (
   state: JunctionState,
   order: Order,
@@ -1048,24 +1189,7 @@ const applySimulateTransition = (
     appendOrderStatusEvent(state, order, status, context)
   }
   if (applyFlags) applySimulationFlags(order, flags)
-  if (markCompleteDates) {
-    const now = new Date(context.now())
-    const commonDays =
-      typeof order.lab_test.common_tat_days === "number" && order.lab_test.common_tat_days > 0
-        ? order.lab_test.common_tat_days
-        : 3
-    const worstDays =
-      typeof order.lab_test.worst_case_tat_days === "number" &&
-      order.lab_test.worst_case_tat_days > 0
-        ? order.lab_test.worst_case_tat_days
-        : 5
-    const expected = new Date(now)
-    expected.setUTCDate(expected.getUTCDate() + commonDays)
-    const worst = new Date(now)
-    worst.setUTCDate(worst.getUTCDate() + worstDays)
-    order.expected_result_by_date = expected.toISOString().slice(0, 10)
-    order.worst_case_result_by_date = worst.toISOString().slice(0, 10)
-  }
+  if (markCompleteDates) markExpectedResultDates(order, context.now())
   state.orders.update(order.id, order)
   state.publishOrderWebhook(order, "labtest.order.updated", context.now())
 }
@@ -1099,7 +1223,7 @@ const linkAppointmentToOrder = (
     transactionOrder.updated_at = nowIso
   }
   state.orders.update(order.id, order)
-  state.publishOrderWebhook(order, "labtest.order.updated")
+  state.publishOrderWebhook(order, "labtest.order.updated", new Date(nowIso).getTime())
 }
 
 const appendAppointmentEvent = (
@@ -1166,7 +1290,12 @@ export const schedulingHandlers = (state: JunctionState) => ({
       })
     }
     const zip = rawZip.slice(0, 5)
-    return jsonRes(200, areaInfoFor(zip, radius))
+    requireCoveredZip(state, zip)
+    const account = labAccountOf(state, context)
+    const derived = derivedFromRecording(state, context, radius)
+    if (derived) return derived
+    requireRecordedRead(state, context, zip)
+    return jsonRes(200, areaInfoFor(zip, radius, account))
   },
 
   get_psc_info_v3_order_psc_info_get: async (context: OperationContext) => {
@@ -1248,6 +1377,10 @@ export const schedulingHandlers = (state: JunctionState) => ({
     if (!lab) {
       throw new HttpError(404, { detail: "Lab not found." })
     }
+    requireCoveredZip(state, zip)
+    const derived = derivedFromRecording(state, context, radius)
+    if (derived) return derived
+    requireRecordedRead(state, context, zip)
     // The sandbox returns the nearest sites within the radius, capped at 30 entries; the
     // mock synthesizes a deterministic inventory of the same contract.
     const within = withinRadiusFor(zip, lab.slug, radius)
@@ -1312,6 +1445,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
         ],
       })
     }
+    requireCoveredZip(state, zip)
     const startDate = startDateOf(context, context.now())
     const { timezone, days } = generatePhlebotomySlots(
       state,
@@ -1367,6 +1501,7 @@ export const schedulingHandlers = (state: JunctionState) => ({
         throw new HttpError(422, { detail: "site_codes must be a JSON array of strings" })
       }
     }
+    if (zip !== undefined) requireCoveredZip(state, zip)
     const { timezone, days } = generatePscSlots(
       state,
       zip ?? "",
@@ -1673,6 +1808,38 @@ export const cascadeCancelAppointments = (
   const order = state.orders.get(orderId)
   if (!order) return
   cancelAppointment(state, appointment, order, nowMs)
+}
+
+/**
+ * Put an order straight into `status`, as the admin API does. Unlike `simulate_order`
+ * it skips the sandbox's stepwise rules, but it records the same event, dates and
+ * appointment cascade and publishes the same webhook a real transition does.
+ */
+export const forceOrderStatus = (
+  state: JunctionState,
+  order: Order,
+  status: string,
+  flags: Record<string, unknown> | null,
+  context: Pick<OperationContext, "now">,
+): void => {
+  const hasRequisition = order.events.some((entry) =>
+    typeof entry.status === "string" ? entry.status.endsWith(".requisition_created") : false,
+  )
+  if (!hasRequisition && !status.startsWith("received.")) {
+    // A real order passes through requisition before anything else; keep the ids it mints.
+    appendOrderStatusEvent(
+      state,
+      order,
+      `received.${status.split(".")[1]}.requisition_created`,
+      context,
+    )
+  }
+  appendOrderStatusEvent(state, order, status, context)
+  if (flags) applySimulationFlags(order, flags)
+  if (status.startsWith("completed.")) markExpectedResultDates(order, context.now())
+  state.orders.update(order.id, order)
+  if (status.startsWith("cancelled.")) cascadeCancelAppointments(state, order.id, context.now())
+  state.publishOrderWebhook(order, "labtest.order.updated", context.now())
 }
 
 export { applySimulateTransition, appointmentOfOrder, renderAppointment, requireOrder }

@@ -1,0 +1,108 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../../components/Icon.astro"
+import Base from "../../layouts/Base.astro"
+---
+
+<Base title="Docs" description="Guides for using, testing and contributing to Mockingbird. The same markdown GitHub renders.">
+  <div class="container">
+    <header class="page-head">
+      <h1>Docs</h1>
+      <p class="lede">
+        Guides for using, testing and contributing to Mockingbird. Each page is a file in <code>docs/</code>, the same markdown
+        GitHub renders, so the two never differ. Each service's own guide is its README, on its
+        <a href="/services">service page</a>.
+      </p>
+    </header>
+    <ul class="guides">
+      {
+        catalog.guides.map((g) => (
+          <li>
+            <a href={`/docs/${g.slug}`}>
+              <span class="g-icon"><Icon name="file" /></span>
+              <span class="g-text">
+                <strong>{g.title}</strong>
+                <span>{g.summary}</span>
+              </span>
+              <Icon name="arrow-right" />
+            </a>
+          </li>
+        ))
+      }
+    </ul>
+  </div>
+</Base>
+
+<style>
+  .page-head code {
+    font-size: 0.85em;
+  }
+
+  .page-head a {
+    color: var(--accent-soft-fg);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .guides {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 14px;
+  }
+
+  .guides a {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    height: 100%;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  }
+
+  .guides a:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+  }
+
+  .g-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent-soft-fg);
+  }
+
+  .g-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .g-text strong {
+    display: block;
+    font-size: 15px;
+  }
+
+  .g-text span {
+    display: -webkit-box;
+    margin-top: 4px;
+    overflow: hidden;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    color: var(--fg-muted);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .guides a > :global(.i:last-child) {
+    margin-top: 10px;
+    color: var(--fg-faint);
+  }
+</style>

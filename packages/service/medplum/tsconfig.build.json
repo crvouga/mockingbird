@@ -3,7 +3,7 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
-    "types": ["node"]
+    "exactOptionalPropertyTypes": false
   },
   "include": ["src"],
   "exclude": ["**/*.test.ts"]

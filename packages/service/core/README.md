@@ -1,0 +1,166 @@
+# @crvouga/mockingbird-service
+
+> **Internal package — not published to npm.** Mockingbird publishes only its mock services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+
+The generic runtime behind every Mockingbird provider mock: turns an OpenAPI document plus one handler
+per `operationId` into a Fetch-native `FetchAPI` (Hono routing), with SQLite-backed collections,
+deterministic ids, bracket-decoded queries/bodies and schema-driven form parsing. Use it to build a
+mock for an API Mockingbird does not ship. To mock Stripe, Junction, etc., install that provider
+package (e.g. `@crvouga/mockingbird-service-stripe`) instead.
+
+## Install
+
+```bash
+npm install @crvouga/mockingbird-service @crvouga/mockingbird-openapi
+```
+
+ESM only, portable (Node >=22, Bun >=1.2, workers). `@crvouga/mockingbird-openapi` provides
+`parseOpenAPIDocument` and the `OpenAPIDocument` type used below.
+
+## Usage
+
+```ts
+import { parseOpenAPIDocument } from "@crvouga/mockingbird-openapi"
+import {
+  bootSqlite,
+  Collection,
+  createService,
+  defineOperations,
+  HttpError,
+  IdSequence,
+  jsonRes,
+} from "@crvouga/mockingbird-service"
+
+const document = parseOpenAPIDocument({
+  openapi: "3.1.0",
+  info: { title: "Widgets", version: "1" },
+  paths: {
+    "/v1/widgets": {
+      post: { operationId: "widgets.create", responses: { "200": { description: "ok" } } },
+    },
+    "/v1/widgets/{id}": {
+      parameters: [{ name: "id", in: "path", required: true, schema: { type: "string" } }],
+      get: { operationId: "widgets.retrieve", responses: { "200": { description: "ok" } } },
+    },
+  },
+})
+
+type Widget = { id: string; name: string; created: number }
+
+const sqlite = bootSqlite() // in-memory by default; runs core migrations
+const widgets = new Collection<Widget>(sqlite, "widgets", "widgets")
+const ids = new IdSequence(sqlite, "widgets")
+
+const handlers = defineOperations<"widgets.create" | "widgets.retrieve">({
+  "widgets.create": ({ body, now }) => {
+    const name = body.kind === "json" || body.kind === "form" ? body.value : undefined
+    if (typeof name !== "object" || name === null || !("name" in name)) {
+      throw new HttpError(400, { error: "name is required" })
+    }
+    const widget: Widget = { id: ids.next("wid_"), name: String(name.name), created: now() }
+    widgets.insert(widget.id, widget)
+    return jsonRes(200, widget)
+  },
+  "widgets.retrieve": ({ params }) => {
+    const widget = widgets.get(params.id ?? "")
+    if (!widget) throw new HttpError(404, { error: "no such widget" })
+    return jsonRes(200, widget)
+  },
+})
+
+const api = createService({
+  document,
+  handlers,
+  sqlite,
+  namespace: "widgets",
+  notFound: () => jsonRes(404, { error: "unknown route" }),
+  onError: (error) =>
+    error instanceof HttpError ? error.toResponse() : jsonRes(500, { error: "internal" }),
+  before: ({ request }) =>
+    request.headers.has("authorization") ? undefined : jsonRes(401, { error: "unauthorized" }),
+})
+
+const created = await api.fetch(
+  new Request("https://mock.local/v1/widgets", {
+    method: "POST",
+    headers: { authorization: "Bearer test", "content-type": "application/x-www-form-urlencoded" },
+    body: "name=Sprocket",
+  }),
+)
+console.log(await created.json()) // { id: "wid_...", name: "Sprocket", created: ... }
+await api.reset() // wipes every record and id sequence in the "widgets" namespace
+```
+
+`createService` throws `OperationRegistryError` unless handlers match the document exactly: one per
+supported operation, none for unknown ids or operations marked `x-mockingbird: { supported: false }`
+(those answer via `unsupported`, else `notFound`). Static path segments win over parameters
+(`/v1/widgets/search` beats `/v1/widgets/{id}`). `before` runs only for supported operations, after
+the body is read.
+
+## API
+
+| Export | Signature / shape | Description |
+| --- | --- | --- |
+| `createService` | `(options: ServiceOptions) => Service` | Build the routed `FetchAPI`; verifies handlers and runs core migrations. |
+| `bootSqlite` | `(sqlite?: SqliteClient) => SqliteClient` | Injected client or a new in-memory one, core-migrated. Call first in a constructor. |
+| `defineOperations` | `<Id>(handlers: Record<Id, OperationHandler>) => Record<Id, OperationHandler>` | Identity helper that type-checks a handler map against an id union. |
+| `verifyOperations` | `(document, handlers) => string[]` | Registry problems (missing, extra, unsupported-with-handler, duplicate ids); `[]` if consistent. |
+| `OperationRegistryError` | `class extends Error { problems: string[] }` | Thrown by `createService` when `verifyOperations` finds problems. |
+| `Collection` | `new Collection<T>(sqlite, namespace, name)` | JSON records by id: `get`, `has`, `insert` (upsert; moves to newest), `update` (keeps position; `undefined` if missing), `delete`, `list({ where?, order?: "newest" \| "oldest" })` (default newest first), `count()`, `nextSequence`. |
+| `IdSequence` | `new IdSequence(sqlite, namespace, salt = "mockingbird")` | `next(prefix, length = 14)` gives deterministic ids like `cus_` + 14 alphanumerics, stable for a given history. |
+| `opaqueToken` | `(input: string, length: number) => string` | Deterministic alphanumeric token derived from `input` (non-cryptographic). |
+| `jsonRes` | `(status, body, headers?) => Response` | JSON response with `content-type: application/json`. |
+| `jsonResponse` | alias of `jsonRes` | |
+| `HttpError` | `new HttpError(status, body, headers = {})` | Throw from handlers; `toResponse()` gives JSON, or plain text if `headers["content-type"]` is `text/plain`. Convert it in `onError`. |
+| `coerce` | `{ string, integer, boolean, enumeration, stringMap }` | Coerce form strings like servers do; each returns `FieldResult<T>`. `boolean` accepts `true`/`false`/`1`/`0`. |
+| `codePointLength` | `(value: string) => number` | String length in Unicode code points (JSON Schema `maxLength` semantics). |
+| `parseForm` | `(document, schema, raw: FormValue \| undefined, path?) => ParsedForm` | Validate and coerce a bracket-decoded form value against an OpenAPI schema. |
+| `sortIssues` | `(issues: FormIssue[]) => FormIssue[]` | Stable sort: `unknown`, then `missing`, then value errors. |
+| `MOCKINGBIRD_HEADER` | `"x-mockingbird"` | Set by `createRuntime` on every response: `<service>@<version>; ns=<namespace>`. |
+| `PACKAGE_VERSION` / `UNRELEASED_VERSION` | `string` | The bundled service's version (stamped by `release:publish`); `"0.0.0-development"` from source. |
+| `createJournal` | `(size = 1000) => Journal` | Per-namespace ring buffer of request logs behind `GET /__admin/requests`. |
+| `annotateResponse` / `responseNotes` | `(response, { ids?, adopted?, issues? }) => Response` | Attach the ids a handler touched (and, on a rejection, the body issues behind it) to a response for the journal and log, without changing what the client sees. |
+| `createRuntime` | `(options: RuntimeOptions) => ServiceRuntime` | Wrap a service in the full contract: `/health`, `/__admin/*`, namespaces (header, `/ns/<name>/…` prefix, or `credential`-mapped via `PUT /__admin/credentials`), clock, faults and `presets`, metrics, journal, optional `webhooks` hub. |
+| `BRANCH_HEADER` / `AT_HEADER` / `CHECKPOINT_HEADER` | HTTP header constants | `x-mockingbird-branch` selects an isolated branch; `x-mockingbird-at` reads/forks from a checkpoint; successful mutations return `x-mockingbird-checkpoint`. Omitting them preserves normal behavior. |
+| `faultEffect` / `faultEffects` | `(request, name?) => params \| list` | The `effect` fault rules that fired for a request, so a handler can switch on a named vendor misbehaviour. |
+| `DroppedConnectionError` | `class extends TypeError` | What an in-process `runtime.fetch` throws for a `drop: true` fault; the Node adapter destroys the socket instead. |
+| `bearerToken` / `basicAuth` / `sigV4AccessKeyId` / `anyCredential` | `(request) => …` | Read a vendor credential (for the runtime's `credential` hook). |
+| `createCredentialRegistry` / `maskCredential` | | The credential → namespace map behind `/__admin/credentials`, and how admin output shows a credential. |
+| `createWebhookHub` | `(options: WebhookHubOptions) => WebhookHub` | Signed outbound webhooks: fan-out by event type and tags, vendor retry schedule, replay, flush, duplicate/reorder/drop faults. Wall-clock signature timestamps. |
+| `signers` | `{ none, svix, timestamped, twilio, header, custom }` | Vendor signature schemes for the hub. |
+| `webhookAdminRoutes` | `(hub) => AdminRoutes` | `/__admin/webhooks*` and `/__admin/webhook-endpoints` (added automatically when `webhooks` is passed to `createRuntime`). |
+| `hmac` / `sha` / `signSvix` / `signTimestamped` / `signTwilio` / `svixSecretBytes` / `timingSafeEqual` / `toHex` / `toBase64` / `fromBase64` | | WebCrypto signing primitives. |
+| `OutboxStore` / `outboxAdminRoutes` / `parseSince` | | What a comms mock "sent", per namespace, and `GET /__admin/outbox?to=&since=`. |
+| `extractLinks` / `extractCodes` | `(html) => string[]`, `(text, length?) => string[]` | Links and numeric codes in a message. |
+| `IdempotencyStore` / `requestFingerprint` / `stableStringify` | | Idempotency keys: replay, mismatch error, in-flight conflict. |
+| `bodyIssues` / `issuesByField` | `(context) => BodyIssue[]` | Validate the body against the operation's contract schema for the media type it sent; group issues Laravel-style. Each issue has a `kind`: `media_type` (a present body whose `content-type` is missing or not one the contract lists — never "required"), `syntax`, `required` (an empty body), `schema`. |
+| `unsupportedMediaType` | `(context, { includeEmpty? }) => { mediaType, accepted } \| undefined` | The `415` case on its own: the request's media type and the ones the operation accepts (`application/*+json` wildcards understood). `includeEmpty` treats an empty body the way ASP.NET Core does (the header alone decides). |
+| `putObject` / `signV4` | | SigV4-signed S3 `PutObject` (for vendors that hand the app an `s3://` object). |
+
+Types:
+
+- `ServiceOptions`: `{ document; handlers; sqlite; namespace; now?; notFound(request); unsupported?(request, operation); onError(error, request); before?(context) }`.
+- `Service`: `FetchAPI & { app: Hono; sqlite; namespace; reset(): Promise<void> }`.
+- `OperationContext` (handler argument): `{ request; url; params; query: FormObject; body: DecodedBody; sqlite; namespace; operation; now }`.
+- `OperationHandler`: `(context) => Response | Promise<Response>`; `OperationHandlers`: `Record<string, OperationHandler>`.
+- `APIOptions`: `{ sqlite?: SqliteClient; now?: () => number }`, the options every provider mock accepts.
+- `ServiceRuntime`: also exposes `checkpoint(namespace?, branch?)`, `branch(name, { namespace?, at? })`, `checkout(id, { namespace?, branch? })`, and `timeline(namespace?)`. Equivalent HTTP control routes are `GET /__admin/timeline`, `POST /__admin/checkpoints`, `POST /__admin/branches/:name`, and `POST /__admin/branches/:name/checkout`.
+- `RuntimeIO`: injectable `wallNow`, `monotonicNow`, and `sleep`; pass a partial value as `RuntimeOptions.io` for fully controlled observations and fault delays. `WebhookHubOptions` likewise accepts `now`, `id`, `schedule`, `cancel`, and `fetch`.
+
+Provider state must live in the shared `Collection` storage and receives version history only from
+the runtime's `Timeline`. Do not add service-local snapshot maps or rollback managers. For async
+all-or-nothing work that cannot remain inside a SQLite transaction, use
+`withNamespaceRollback`; it is a thin Timeline-based compatibility helper. The boundary gate
+enforces this rule.
+- `Stored<T>` / `ListRecordsOptions<T>`, `FieldResult<T>` (`{ ok: true; value } | { ok: false; reason }`),
+  `ParsedForm` (`{ value; issues }`) and `FormIssue` (`{ kind, path, ... }`, bracket-notation paths).
+
+## Related
+
+- `@crvouga/mockingbird-core`: the `FetchAPI` contract `Service` implements.
+- `@crvouga/mockingbird-sqlite`: the `SqliteClient` port and migrations.
+- `@crvouga/mockingbird-http-codec`: the body/query codecs behind `OperationContext`.
+- `@crvouga/mockingbird-openapi`, `@crvouga/mockingbird-openapi-metadata`: document parsing and `x-mockingbird` metadata.
+- `@crvouga/mockingbird-adapter-node` / `@crvouga/mockingbird-adapter-bun`: serve the result over HTTP.
+
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

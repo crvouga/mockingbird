@@ -8,7 +8,14 @@
  *   3. a workspace package never depends on itself,
  *   4. every module import in a package's code is declared in its package.json
  *      (dependencies + peerDependencies for shipped src; plus devDependencies
- *      for tests / scripts / benchmarks).
+ *      for tests / scripts / benchmarks),
+ *   5. a published package never needs a private one at runtime (npm consumers
+ *      could not install it),
+ *   6. every workspace package is named `@crvouga/mockingbird` or
+ *      `@crvouga/mockingbird-<kebab-case>` (hard rule: one npm naming convention),
+ *   7. only mock services (`@crvouga/mockingbird-service-<name>`) are published; a
+ *      service that imports private helper packages builds with
+ *      scripts/bundle-service.ts, which inlines them into its `dist`.
  *
  *   bun run check:boundaries
  */
@@ -29,13 +36,24 @@ type Pkg = {
   layer: string
   runtime: string
   private: boolean
+  public: boolean
   dependencies: Set<string>
   devDependencies: Set<string>
   peerDependencies: Set<string>
+  build: string | undefined
 }
 
 const INTERNAL = /^@crvouga\/mockingbird(?:[-/].*)?$/
-const BUILTIN = /^(node|bun|deno|stream\/web|assert):/
+const PACKAGE_NAME = /^@crvouga\/mockingbird(?:-[a-z0-9]+)*$/
+const SERVICE_NAME = /^@crvouga\/mockingbird-service-[a-z0-9]+(?:-[a-z0-9]+)*$/
+const BUNDLE_BUILD = "bun ../../../scripts/bundle-service.ts"
+const BUILTIN = /^(?:(?:node|bun|deno):|bun$|stream\/web$|assert$)/
+const VALID_SPECIFIER = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(?:\/[^\s"']+)*$/i
+
+function packageRoot(specifier: string): string {
+  const parts = specifier.split("/")
+  return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : (parts[0] ?? specifier)
+}
 
 const packages = new Map<string, Pkg>()
 
@@ -60,10 +78,12 @@ for (const dir of packageDirs) {
   const pkg = JSON.parse(await Bun.file(join(dir, "package.json")).text()) as {
     name?: string
     private?: boolean
+    publishConfig?: { access?: string }
     dependencies?: Record<string, string>
     devDependencies?: Record<string, string>
     peerDependencies?: Record<string, string>
     mockingbird?: { layer?: string; runtime?: string }
+    scripts?: Record<string, string>
   }
   if (!pkg.name) continue
   packages.set(pkg.name, {
@@ -72,13 +92,39 @@ for (const dir of packageDirs) {
     layer: pkg.mockingbird?.layer ?? "unknown",
     runtime: pkg.mockingbird?.runtime ?? "portable",
     private: pkg.private === true,
+    public: pkg.private !== true && pkg.publishConfig?.access === "public",
     dependencies: new Set(Object.keys(pkg.dependencies ?? {})),
     devDependencies: new Set(Object.keys(pkg.devDependencies ?? {})),
     peerDependencies: new Set(Object.keys(pkg.peerDependencies ?? {})),
+    build: pkg.scripts?.build,
   })
 }
 
 console.log(`boundaries: ${packages.size} workspace packages`)
+
+// 6. one naming convention for every package.
+for (const pkg of packages.values()) {
+  if (!PACKAGE_NAME.test(pkg.name)) {
+    fail(
+      `${relative(root, pkg.dir)}: package name "${pkg.name}" must be @crvouga/mockingbird or @crvouga/mockingbird-<kebab-case>`,
+    )
+  }
+}
+
+// 7. only mock services are published.
+for (const pkg of packages.values()) {
+  if (pkg.public && !SERVICE_NAME.test(pkg.name)) {
+    fail(
+      `${pkg.name}: only mock services (@crvouga/mockingbird-service-<name>) are published — mark it "private": true`,
+    )
+  }
+}
+
+/** Private workspace packages a published service inlines into its bundle. */
+const bundled = (pkg: Pkg): string[] =>
+  pkg.public && pkg.build === BUNDLE_BUILD
+    ? [...pkg.devDependencies].filter((d) => packages.get(d)?.private === true)
+    : []
 
 // 1. internal deps resolve; 3. no self-dependency.
 for (const pkg of packages.values()) {
@@ -88,6 +134,19 @@ for (const pkg of packages.values()) {
       fail(`${pkg.name} depends on itself`)
     } else if (!packages.has(depName)) {
       fail(`${pkg.name} → ${depName}: internal dependency is not a workspace package`)
+    }
+  }
+}
+
+// 5. published packages only depend on published packages at runtime.
+for (const pkg of packages.values()) {
+  if (!pkg.public) continue
+  for (const depName of [...pkg.dependencies, ...pkg.peerDependencies]) {
+    const dep = packages.get(depName)
+    if (dep && !dep.public) {
+      fail(
+        `${pkg.name} → ${depName}: a published package cannot depend on an unpublished one at runtime (move it to devDependencies or publish it)`,
+      )
     }
   }
 }
@@ -268,6 +327,7 @@ for (const entry of glob.scanSync({ cwd: root })) {
   if (
     entry.includes("node_modules") ||
     entry.includes("/dist/") ||
+    entry.includes("/examples/") ||
     entry.includes("/src/generated/")
   )
     continue
@@ -281,24 +341,50 @@ for (const file of files) {
   const inSrc = rel.split("/").includes("src") && !file.endsWith(".test.ts")
   const text = await Bun.file(file).text()
 
+  // Service state architecture: provider packages get history/branching exclusively from the
+  // shared runtime's Timeline. Raw namespace payload capture is a core implementation detail;
+  // asynchronous provider rollbacks use withNamespaceRollback instead. This prevents a second
+  // snapshot manager from silently diverging from clocks, PRNG state, branching, and GC.
+  if (
+    /^packages\/service\/(?!core\/|sqlite\/|postgres\/)[^/]+\/src\//.test(rel) &&
+    /\b(?:snapshotNamespace|restoreNamespace)\b/.test(text)
+  ) {
+    fail(
+      `${rel} uses raw namespace snapshots; use the shared runtime Timeline or withNamespaceRollback`,
+    )
+  }
+  if (rel !== "packages/core/src/timeline.ts" && /\bclass\s+Timeline\b/.test(text)) {
+    fail(`${rel} declares a competing Timeline; extend @crvouga/mockingbird-core Timeline instead`)
+  }
+  if (
+    /^packages\/service\/(?!core\/)[^/]+\/src\/runtime\.ts$/.test(rel) &&
+    /\bnew\s+Map\s*</.test(text)
+  ) {
+    fail(
+      `${rel} keeps provider state in a runtime Map; persist it in Collection so Timeline owns it`,
+    )
+  }
+
   for (const specifier of findModuleSpecifiers(text)) {
+    if (!VALID_SPECIFIER.test(specifier)) continue
     if (specifier === owner.name) {
       fail(`${rel} self-imports ${owner.name}`)
       continue
     }
     if (specifier.startsWith(".") || BUILTIN.test(specifier)) continue
 
-    const isInternal = INTERNAL.test(specifier) || packages.has(specifier)
-    if (isInternal && !packages.has(specifier)) {
+    const dependency = packageRoot(specifier)
+    const isInternal = INTERNAL.test(dependency) || packages.has(dependency)
+    if (isInternal && !packages.has(dependency)) {
       fail(`${rel} imports "${specifier}" which is not a workspace package`)
       continue
     }
 
     const allowed = inSrc
-      ? new Set([...owner.dependencies, ...owner.peerDependencies])
+      ? new Set([...owner.dependencies, ...owner.peerDependencies, ...bundled(owner)])
       : new Set([...owner.dependencies, ...owner.devDependencies, ...owner.peerDependencies])
 
-    if (!allowed.has(specifier)) {
+    if (!allowed.has(dependency) && dependency !== owner.name) {
       fail(
         `${rel} imports "${specifier}" but it is not in ${owner.name} ${inSrc ? "dependencies/peerDependencies" : "dependencies, devDependencies, or peerDependencies"}`,
       )

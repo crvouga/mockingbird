@@ -1,0 +1,384 @@
+openapi: 3.1.0
+info:
+  title: AHA (Advanced Health Academy) partner API (Mockingbird subset)
+  description: |
+    Stateful mock of the AHA at-home phlebotomy partner API: create-or-update order and cancel.
+    The vendor has no pull API; order state reaches the partner only as inbound webhooks, which
+    the mock emits from admin transitions (see the README). Hand-authored from the consumer's
+    wire shapes (the vendor publishes no spec).
+  version: "1"
+  x-mockingbird-upstream:
+    note: >-
+      Hand-authored from aha.service.ts, aha.types.ts (zod request/response schemas) and
+      aha.lab-provider.ts. Success responses come in one of two envelopes (raw, or
+      {success, data}) because our two clients disagree (G-A1); the mock serves either.
+servers:
+  - url: https://stage-api.mobileaha.com
+security:
+  - hmacKey: []
+    hmacTimestamp: []
+    hmacSignature: []
+  - legacyKey: []
+paths:
+  /v1/{partner}/create-order:
+    post:
+      operationId: CreateOrder
+      description: >-
+        Create an order, or update it when partner_order_id already exists (the same
+        order_number is returned). Honors X-Idempotency-Key.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      parameters:
+        - $ref: "#/components/parameters/Partner"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderBody"
+      responses:
+        "200":
+          description: Order created or updated (raw or wrapped envelope, per namespace setting)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CreateOrderResponse"
+                  - $ref: "#/components/schemas/WrappedCreateOrderResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing or invalid authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Idempotency key reused with a different request, or still in flight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+  /v1/{partner}/cancel:
+    post:
+      operationId: CancelOrder
+      description: >-
+        Cancel an order by partner_order_id. The mock also accepts the AHA order_number here,
+        because our lab-provider client sends it in that field (G-A1).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      parameters:
+        - $ref: "#/components/parameters/Partner"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelOrderBody"
+      responses:
+        "200":
+          description: Cancel outcome (raw or wrapped envelope; status ERROR when not cancellable)
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CancelOrderResponse"
+                  - $ref: "#/components/schemas/WrappedCancelOrderResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "401":
+          description: Missing or invalid authentication
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "404":
+          description: Unknown partner order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "409":
+          description: Idempotency key reused with a different request, or still in flight
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "429":
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorBody"
+components:
+  securitySchemes:
+    hmacKey:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+    hmacTimestamp:
+      type: apiKey
+      in: header
+      name: X-TIMESTAMP
+      description: Unix epoch milliseconds.
+    hmacSignature:
+      type: apiKey
+      in: header
+      name: X-SIGNATURE
+      description: base64(HMAC-SHA256(apiSecret, "<apiKey>:<path>:<timestamp>")).
+    legacyKey:
+      type: apiKey
+      in: header
+      name: X-Acme-Auth-Key
+      description: >-
+        Legacy mode (AHA_USE_LEGACY_AUTH=true), sent with X-API-Version 1.0. The real header
+        embeds the partner's name (`X-<Partner>-Auth-Key`); the mock accepts any partner name.
+  parameters:
+    Partner:
+      name: partner
+      in: path
+      required: true
+      description: The partner segment AHA assigns your account (its slug), e.g. `acme`.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9_-]{1,64}$"
+        examples: [acme]
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: false
+      description: Sent by the lab-provider client; the same key and body replays the stored response.
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9:_.-]{1,128}$"
+  schemas:
+    TestCode:
+      type: object
+      required: [test_code, test_description]
+      properties:
+        test_code:
+          type: string
+          minLength: 1
+          maxLength: 64
+        test_description:
+          type: string
+          maxLength: 200
+    CreateOrderBody:
+      type: object
+      required:
+        - partner_order_id
+        - patient_first_name
+        - patient_id
+        - patient_last_name
+        - biological_sex
+        - patient_dob
+        - patient_phone_number
+        - patient_address_line1
+        - patient_city
+        - patient_state
+        - patient_zipcode
+        - service_type
+        - npi
+        - ordering_physician
+        - test_codes
+      properties:
+        partner_order_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        patient_first_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        patient_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        patient_middle_initial:
+          type: string
+          maxLength: 5
+        patient_last_name:
+          type: string
+          minLength: 1
+          maxLength: 60
+        biological_sex:
+          type: string
+          enum: [Male, Female, Non-binary]
+        patient_dob:
+          type: string
+          description: YYYY-MM-DD
+          maxLength: 10
+        patient_phone_number:
+          type: string
+          description: 10 digits from AhaService; the lab-provider client may send +1XXXXXXXXXX.
+          maxLength: 20
+        patient_email_address:
+          type: string
+          maxLength: 120
+        patient_address_line1:
+          type: string
+          minLength: 1
+          maxLength: 120
+        patient_address_line2:
+          type: string
+          maxLength: 120
+        patient_city:
+          type: string
+          minLength: 1
+          maxLength: 60
+        patient_state:
+          type: string
+          minLength: 1
+          maxLength: 20
+        patient_zipcode:
+          type: string
+          minLength: 1
+          maxLength: 10
+        service_type:
+          type: string
+          enum: [Full Service, Draw Only, Pickup Only]
+        preferred_schedule_date:
+          type: string
+          description: YYYY-MM-DD
+          maxLength: 10
+        preferred_schedule_time:
+          type: string
+          description: HH:MM
+          maxLength: 8
+        patient_timezone:
+          type: string
+          description: IANA zone, e.g. America/New_York
+          maxLength: 64
+        npi:
+          type: string
+          minLength: 1
+          maxLength: 20
+        ordering_physician:
+          type: string
+          minLength: 1
+          maxLength: 120
+        test_codes:
+          type: array
+          maxItems: 20
+          items:
+            $ref: "#/components/schemas/TestCode"
+    CancelOrderBody:
+      type: object
+      required: [partner_order_id, notes]
+      properties:
+        partner_order_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          x-mockingbird-resource-ref:
+            type: order
+            missing: AC-999999999
+        notes:
+          type: array
+          maxItems: 5
+          items:
+            type: object
+            required: [note_type, notes]
+            properties:
+              note_type:
+                type: string
+                enum: [CANCELLATION]
+              notes:
+                type: string
+                maxLength: 500
+    CreateOrderResponse:
+      type: object
+      required: [content, message, status]
+      properties:
+        content:
+          type: object
+          required: [partner_order_id, order_number]
+          properties:
+            partner_order_id:
+              type: string
+              x-mockingbird-resource:
+                type: order
+                identity: true
+            order_number:
+              type: string
+              x-mockingbird-volatile:
+                kind: id
+        message:
+          type: string
+        status:
+          type: string
+          enum: [SUCCESS, ERROR]
+    WrappedCreateOrderResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/CreateOrderResponse"
+    CancelOrderResponse:
+      type: object
+      required: [message, status]
+      properties:
+        message:
+          type: string
+        status:
+          type: string
+          enum: [SUCCESS, ERROR]
+    WrappedCancelOrderResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/CancelOrderResponse"
+    ErrorBody:
+      type: object
+      required: [status, message]
+      properties:
+        status:
+          type: string
+          enum: [ERROR]
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string

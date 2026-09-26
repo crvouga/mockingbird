@@ -8,7 +8,13 @@
       "!**/dist",
       "!**/node_modules",
       "!**/src/generated",
+      "!**/src/vendor",
       "!**/openapi.yaml",
+      "!**/corpus",
+      "!packages/service/medplum/test/fixtures",
+      "!packages/service/postgres",
+      "!packages/service/sqlite",
+      "!sites/docs/public/brands",
       "!bun.lock"
     ]
   },

@@ -1,0 +1,23 @@
+---
+import { initials } from "../lib/format.ts"
+
+interface Props {
+  name: string
+  hue: number
+  size?: number
+  /** The vendor's logo; the initials are the fallback. */
+  logo?: string | null
+}
+const { name, hue, size = 40, logo = null } = Astro.props
+const letters = initials(name)
+---
+
+{
+  logo ? (
+    <span class="monogram monogram-logo" style={`--size:${size}px`} aria-hidden="true">
+      <img src={logo} alt="" width={size} height={size} loading="lazy" decoding="async" />
+    </span>
+  ) : (
+    <span class="monogram" style={`--h:${hue};--size:${size}px`} aria-hidden="true">{letters}</span>
+  )
+}

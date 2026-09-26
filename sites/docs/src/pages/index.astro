@@ -1,0 +1,655 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import Icon from "../components/Icon.astro"
+import Install from "../components/Install.astro"
+import Monogram from "../components/Monogram.astro"
+import ServiceCard from "../components/ServiceCard.astro"
+import Base from "../layouts/Base.astro"
+import { AGENTS, CONTRACT, FEATURES, HEADLINE, PITCH, QUICK_START } from "../lib/content.ts"
+import { inline } from "../lib/inline.ts"
+
+const { totals } = catalog
+const ready = catalog.services.filter((s) => s.status === "ready")
+const logos = catalog.services.filter((s) => s.kind === "http").slice(0, 18)
+---
+
+<Base>
+  <section class="hero">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <a class="pill" href="/services?tier=ready">
+          <span class="emoji" aria-hidden="true">🐦‍⬛</span>
+          <span class="pill-dot"></span>{totals.ready} ready to use · {totals.wip} in progress
+          <Icon name="arrow-right" />
+        </a>
+        <h1>{HEADLINE.lead} <span class="accent">{HEADLINE.accent}</span></h1>
+        <p class="lede" set:html={inline(PITCH)} />
+        <div class="hero-cta">
+          <a class="btn btn-primary" href="/services">Browse services <Icon name="arrow-right" /></a>
+          <a class="btn btn-secondary" href="/why">Why Mockingbird</a>
+        </div>
+        <div class="hero-install">
+          <Install pkg={QUICK_START.package} />
+        </div>
+      </div>
+      <div class="hero-code">
+        <div class="window">
+          <div class="window-bar">
+            <span class="dots"><i /><i /><i /></span>
+            <span class="window-title">{QUICK_START.file}</span>
+            <a href="/services/stripe" class="window-link">Try it live <Icon name="arrow-right" /></a>
+          </div>
+          <Fragment set:html={catalog.quickStart.html} />
+        </div>
+        <p class="hero-caption">The README's quick start. The build runs it against the published package.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="container">
+    <section class="stats" aria-label="By the numbers">
+    <a href="/services?tier=ready"><strong class="ok">{totals.ready}</strong><span>ready to use</span></a>
+    <a href="/services?tier=wip"><strong class="warn">{totals.wip}</strong><span>in progress</span></a>
+    <a href="/coverage"><strong>{totals.opsSupported}</strong><span>vendor operations mocked</span></a>
+    <div><strong>0</strong><span>network calls</span></div>
+  </section>
+  </div>
+
+  <section class="section container ready-section">
+    <div class="section-head">
+      <span class="eyebrow">Ready to use</span>
+      <h2>Start with the {totals.ready} that are ready.</h2>
+      <p>
+        These are complete and kept stable. The other {totals.wip} are marked work in progress: usable in a suite,
+        but their operations and shapes can still change.
+      </p>
+    </div>
+    <div class="ready-grid">
+      {ready.map((s) => <ServiceCard service={s} />)}
+    </div>
+    <a class="more" href="/services?tier=wip">See the {totals.wip} in progress <Icon name="arrow-right" /></a>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <span class="eyebrow">Why it works</span>
+      <h2>Test doubles that don't drift from the vendor.</h2>
+      <p>Hand-written stubs return whatever you guessed. Mockingbird mocks are driven by the vendor's contract and checked against it.</p>
+    </div>
+    <div class="values">
+      {
+        FEATURES.map((v) => (
+          <div class="value">
+            <span class="value-icon"><Icon name={v.icon} /></span>
+            <h3>{v.title}</h3>
+            <p set:html={inline(v.body)} />
+          </div>
+        ))
+      }
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <span class="eyebrow">Catalog</span>
+      <h2>Payments, health, messaging, AI, and more.</h2>
+      <p>Every category links to a filtered view of the catalog.</p>
+    </div>
+    <div class="cats">
+      {
+        catalog.categories.map((c) => {
+          const members = catalog.services.filter((s) => s.category === c.slug)
+          return (
+            <a class="cat" href={`/services?category=${c.slug}`}>
+              <div class="cat-head">
+                <h3>{c.label}</h3>
+                <span>{c.count}</span>
+              </div>
+              <p>{c.blurb}</p>
+              <div class="cat-members">
+                {members.slice(0, 5).map((s) => <Monogram name={s.displayName} hue={s.hue} logo={s.brand.logo} size={26} />)}
+              </div>
+            </a>
+          )
+        })
+      }
+    </div>
+    <div class="logo-strip" aria-hidden="true">
+      {logos.map((s) => <span>{s.displayName}</span>)}
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="section-head">
+      <span class="eyebrow">The service contract</span>
+      <h2>One contract for every HTTP service.</h2>
+      <p set:html={inline(CONTRACT.intro)} />
+    </div>
+    <div class="contract">
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th>Surface</th><th>What it gives you</th></tr></thead>
+          <tbody>
+            {CONTRACT.rows.map(([surface, detail]) => (
+              <tr><td set:html={inline(surface)} /><td set:html={inline(detail)} /></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="contract-note" set:html={inline(CONTRACT.configNote)} />
+    </div>
+  </section>
+
+  <section class="section container">
+    <div class="agents">
+      <div>
+        <span class="eyebrow">Built for coding agents</span>
+        <h2>Docs an agent can read, generated from the code.</h2>
+        <p set:html={inline(AGENTS)} />
+      </div>
+      <ul class="agent-links">
+        <li><a href="/llms.txt"><Icon name="bot" /><span><strong>/llms.txt</strong>An index of every service with links to its markdown</span></a></li>
+        <li><a href="/llms-full.txt"><Icon name="file" /><span><strong>/llms-full.txt</strong>Every README in one file</span></a></li>
+        <li><a href="/catalog.json"><Icon name="database" /><span><strong>/catalog.json</strong>Surfaces, runtimes and operation coverage</span></a></li>
+        <li><a href="/services/stripe.md"><Icon name="file" /><span><strong>/services/&lt;name&gt;.md</strong>Any service's README as raw markdown</span></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="container">
+    <div class="cta">
+      <h2>Take the vendor off your test suite's critical path.</h2>
+      <div class="hero-cta">
+        <a class="btn btn-accent" href="/services">Find your API <Icon name="arrow-right" /></a>
+        <a class="btn btn-secondary" href={catalog.repo} target="_blank" rel="noopener"><Icon name="github" /> Star on GitHub</a>
+      </div>
+    </div>
+  </section>
+</Base>
+
+<style>
+  .hero {
+    position: relative;
+    padding-block: 72px 40px;
+    overflow: hidden;
+  }
+
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: -40% -10% auto;
+    height: 640px;
+    background: radial-gradient(ellipse at 50% 40%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
+    pointer-events: none;
+  }
+
+  .hero-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: 56px;
+    align-items: center;
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 32px;
+    padding: 0 12px 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg);
+    color: var(--fg-muted);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--shadow-sm);
+    transition: border-color 0.15s var(--ease);
+  }
+
+  .pill-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 22%, transparent);
+  }
+
+  .ready-section {
+    padding-bottom: 0;
+  }
+
+  .ready-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+  }
+
+  .more {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 18px;
+    color: var(--fg-muted);
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .more:hover {
+    color: var(--fg);
+  }
+
+  .more :global(.i) {
+    width: 14px;
+    height: 14px;
+  }
+
+  .stats a:hover strong {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .stats .ok {
+    color: var(--ok);
+  }
+
+  .stats .warn {
+    color: var(--warn);
+  }
+
+  .pill:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+
+  .pill .i {
+    width: 14px;
+    height: 14px;
+  }
+
+  h1 {
+    margin-top: 22px;
+    font-size: clamp(36px, 5.2vw, 58px);
+    line-height: 1.04;
+    letter-spacing: -0.04em;
+    font-weight: 700;
+  }
+
+  .accent {
+    background: linear-gradient(100deg, var(--fg) 0%, var(--accent) 55%, #b35fe8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero .lede {
+    margin-top: 20px;
+    max-width: 540px;
+    font-size: 18px;
+  }
+
+  .hero-cta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 28px;
+  }
+
+  .hero-install {
+    margin-top: 28px;
+    max-width: 480px;
+  }
+
+  .hero-code {
+    min-width: 0;
+  }
+
+  .window :global(.code) {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .window :global(.code figcaption) {
+    display: none;
+  }
+
+  .window {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-inset);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+  }
+
+  .window-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 42px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-subtle);
+  }
+
+  .dots {
+    display: flex;
+    gap: 6px;
+  }
+
+  .dots i {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--border-strong);
+  }
+
+  .window-title {
+    flex: 1;
+    color: var(--fg-subtle);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+
+  .window-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--accent-soft-fg);
+    font-size: 12.5px;
+    font-weight: 600;
+  }
+
+  .window-link .i {
+    width: 13px;
+    height: 13px;
+  }
+
+  .window :global(pre) {
+    margin: 0;
+    padding: 16px 18px;
+    max-height: 440px;
+    overflow: auto;
+    font-size: 12.5px;
+    line-height: 1.7;
+    background: transparent !important;
+  }
+
+  .hero-caption {
+    margin-top: 12px;
+    color: var(--fg-subtle);
+    font-size: 12.5px;
+    text-align: center;
+  }
+
+  .hero-caption a {
+    color: var(--fg-muted);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    margin-top: 48px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-subtle);
+  }
+
+  .stats > * {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 22px 24px;
+  }
+
+  .stats > * + * {
+    border-left: 1px solid var(--border);
+  }
+
+  .stats strong {
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stats span {
+    color: var(--fg-subtle);
+    font-size: 13.5px;
+  }
+
+  .values {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--border);
+    overflow: hidden;
+  }
+
+  .value {
+    padding: 26px;
+    background: var(--bg);
+  }
+
+  .value-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: var(--accent-soft);
+    color: var(--accent-soft-fg);
+  }
+
+  .value h3 {
+    margin-top: 16px;
+    font-size: 15.5px;
+  }
+
+  .value p {
+    margin-top: 8px;
+    color: var(--fg-muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .cats {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 14px;
+  }
+
+  .cat {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+  }
+
+  .cat:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+  }
+
+  .cat-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .cat-head h3 {
+    font-size: 15px;
+  }
+
+  .cat-head span {
+    color: var(--fg-subtle);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .cat p {
+    color: var(--fg-muted);
+    font-size: 13.5px;
+  }
+
+  .cat-members {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+  }
+
+  .logo-strip {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px 26px;
+    margin-top: 40px;
+    color: var(--fg-faint);
+    font-size: 15px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
+
+  .contract-note {
+    margin-top: 14px;
+    max-width: 760px;
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+
+  .contract td :global(code),
+  .contract-note :global(code),
+  .value p :global(code),
+  .agents p :global(code) {
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--bg-muted);
+    font-size: 0.86em;
+  }
+
+  .agents p :global(a) {
+    color: var(--accent-soft-fg);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .agents {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    align-items: center;
+    padding: 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-subtle);
+  }
+
+  .agents h2 {
+    margin-top: 10px;
+    font-size: clamp(24px, 3vw, 30px);
+  }
+
+  .agents p {
+    margin-top: 14px;
+    color: var(--fg-muted);
+  }
+
+  .agent-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+  }
+
+  .agent-links a {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    transition: border-color 0.15s var(--ease);
+  }
+
+  .agent-links a:hover {
+    border-color: var(--border-strong);
+  }
+
+  .agent-links .i {
+    margin-top: 2px;
+    color: var(--accent-soft-fg);
+  }
+
+  .agent-links strong {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  .agent-links span span,
+  .agent-links a > span {
+    color: var(--fg-muted);
+    font-size: 13.5px;
+  }
+
+  .cta {
+    margin-top: 80px;
+    padding: 56px 32px;
+    border-radius: var(--radius-lg);
+    background: radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%), var(--bg-subtle);
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+
+  .cta h2 {
+    max-width: 620px;
+    margin-inline: auto;
+    font-size: clamp(24px, 3.2vw, 32px);
+  }
+
+  .cta .hero-cta {
+    justify-content: center;
+  }
+
+  @media (max-width: 960px) {
+    .hero-grid,
+    .agents {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .values {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .hero {
+      padding-top: 40px;
+    }
+    .stats {
+      grid-template-columns: 1fr 1fr;
+    }
+    .stats > :nth-child(3) {
+      border-left: 0;
+    }
+    .stats > :nth-child(n + 3) {
+      border-top: 1px solid var(--border);
+    }
+    .values {
+      grid-template-columns: 1fr;
+    }
+    .agents {
+      padding: 24px;
+    }
+  }
+</style>

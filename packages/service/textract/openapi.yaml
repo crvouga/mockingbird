@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: Amazon Textract (Mockingbird subset)
+  version: "2018-06-27"
+  description: AWS JSON contract used by the pinned Textract client.
+servers:
+  - url: https://textract.us-east-1.amazonaws.com
+paths:
+  /:
+    post:
+      operationId: TextractRpc
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: X-Amz-Target, in: header, required: true, schema: { type: string, pattern: '^Textract\.[A-Za-z]+$' } }
+      requestBody:
+        required: true
+        content:
+          application/x-amz-json-1.1: { schema: { type: object, additionalProperties: true } }
+          application/json: { schema: { type: object, additionalProperties: true } }
+      responses:
+        "200": { description: Operation response, content: { application/x-amz-json-1.1: { schema: { type: object, additionalProperties: true } } } }
+        "400": { description: Textract exception, content: { application/x-amz-json-1.1: { schema: { type: object, additionalProperties: true } } } }

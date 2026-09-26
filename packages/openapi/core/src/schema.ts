@@ -75,8 +75,9 @@ export const jsonTypeOf = (value: unknown): SchemaType | "undefined" => {
 export type SchemaVisitor = (schema: SchemaObject, path: string[]) => void
 
 /**
- * Depth-first walk over a schema tree, resolving `$ref`s. Each schema is visited once per
- * distinct path, cycles are cut by reference identity.
+ * Depth-first walk over a schema tree, resolving `$ref`s. Each resolved schema is visited once per
+ * call: the annotation consumers (identities, refs, volatile/scope marks) only care that a node is
+ * reachable, and visiting per path is exponential on densely cross-referenced documents.
  */
 export const walkSchema = (
   document: OpenAPIDocument,
@@ -105,11 +106,9 @@ export const walkSchema = (
       })
     }
     resolved.not && go(resolved.not, [...at, "not"])
-    seen.delete(resolved)
   }
   go(schema, path)
 }
-
 export type ValidationError = { path: Array<string | number>; message: string }
 
 const deepEqual = (a: unknown, b: unknown): boolean => {

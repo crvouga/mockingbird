@@ -1,0 +1,5 @@
+{
+  "files": [],
+  "prefixes": [],
+  "notes": "Add vendor/sqllogictest/test/<file> or <file>#<line> entries when a record is intentionally unsupported."
+}

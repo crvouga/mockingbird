@@ -1,0 +1,134 @@
+---
+import { CATEGORIES, type CategorySlug } from "../lib/categories.ts"
+import type { Service } from "../lib/types.ts"
+import Icon from "./Icon.astro"
+import Monogram from "./Monogram.astro"
+import TierBadge from "./TierBadge.astro"
+
+interface Props {
+  service: Service
+}
+const { service: s } = Astro.props
+const category = CATEGORIES[s.category as CategorySlug]
+const search = [
+  s.name,
+  s.displayName,
+  s.packageName,
+  s.brand.vendor,
+  s.description,
+  category.label,
+  ...s.keywords,
+  ...s.operations.map((o) => o.id),
+].join(" ")
+---
+
+<a
+  class="svc"
+  href={`/services/${s.name}`}
+  data-service={s.name}
+  data-display={s.displayName}
+  data-category={s.category}
+  data-kind={s.kind}
+  data-tier={s.status}
+  data-browser={s.surfaces.browser ? "1" : "0"}
+  data-cli={s.surfaces.cli ? "1" : "0"}
+  data-ops={s.opsSupported}
+  data-search={search}
+>
+  <div class="svc-top">
+    <Monogram name={s.displayName} hue={s.hue} logo={s.brand.logo} />
+    <div class="svc-title">
+      <h3>{s.displayName}</h3>
+      <span>{category.label}</span>
+    </div>
+    <TierBadge tier={s.status} />
+  </div>
+  <p class="svc-desc">{s.description}</p>
+  <div class="svc-meta">
+    {s.kind === "sql" ? <span>SQL engine</span> : s.kind === "node" ? <span>Real server</span> : <span>{s.opsSupported} operations</span>}
+    {s.surfaces.browser ? (
+      <span class="svc-flag"><Icon name="globe" /> Browser</span>
+    ) : (
+      <span class="svc-flag"><Icon name="terminal" /> Node only</span>
+    )}
+    {s.surfaces.cli && <span class="svc-flag svc-hide-sm"><Icon name="terminal" /> CLI</span>}
+  </div>
+</a>
+
+<style is:global>
+  .svc {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg);
+    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease), transform 0.15s var(--ease);
+  }
+
+  .svc:hover {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-md);
+    transform: translateY(-1px);
+  }
+
+  .svc-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .svc-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .svc-title h3 {
+    font-size: 15.5px;
+    letter-spacing: -0.01em;
+  }
+
+  .svc-title span {
+    color: var(--fg-subtle);
+    font-size: 12.5px;
+  }
+
+  .svc-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    color: var(--fg-muted);
+    font-size: 13.5px;
+    line-height: 1.55;
+  }
+
+  .svc-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    margin-top: auto;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    color: var(--fg-subtle);
+    font-size: 12.5px;
+  }
+
+  .svc-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .svc-flag .i {
+    width: 13px;
+    height: 13px;
+  }
+
+  @media (max-width: 720px) {
+    .svc-hide-sm {
+      display: none;
+    }
+  }
+</style>

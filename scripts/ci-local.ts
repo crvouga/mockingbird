@@ -1,5 +1,6 @@
 /**
- * Local replica of .github/workflows/ci.yml (minus the main-only release job).
+ * Local replica of .github/workflows/pr.yml (the pull-request gate).
+ * Publishing happens only after that gate is green and the PR is merged.
  *
  *   bun run check:full
  *   npm run check:full
@@ -85,7 +86,7 @@ async function commitlintJob(): Promise<void> {
   const base = await resolveBaseRef()
 
   if (onMain) {
-    console.log("On main: CI treats commitlint as a warning on push (enforced on PRs).")
+    console.log("On main: commitlint is a pull-request check. Merge commits are not linted.")
     const proc = Bun.spawn(["bunx", "commitlint", "--last", "--verbose"], {
       cwd: root,
       stdout: "inherit",
@@ -98,7 +99,7 @@ async function commitlintJob(): Promise<void> {
     }
     finished.push({ label: "Commitlint (--last, warning on main)", seconds: 0 })
     notes.push(
-      "commitlint on main is warning-only (matches CI push); PRs still fail on bad messages",
+      "commitlint is enforced on pull requests; a checkout of main only warns on the merge commit",
     )
     return
   }
@@ -110,24 +111,35 @@ async function commitlintJob(): Promise<void> {
   }
 
   const from = (await git(["merge-base", base, "HEAD"])).stdout || base
-  console.log(`Linting commits ${from}..HEAD (base ${base}, branch ${branch})`)
-  const proc = Bun.spawn(["bunx", "commitlint", "--from", from, "--to", "HEAD", "--verbose"], {
-    cwd: root,
-    stdout: "inherit",
-    stderr: "inherit",
-  })
-  const code = await proc.exited
-  if (code !== 0) {
-    printCommitlintHelp("range")
-    console.error("")
-    console.error(`check:full FAILED at "Commitlint" (exit ${code})`)
-    process.exit(code)
+  console.log(`Linting first-parent commits ${from}..HEAD (base ${base}, branch ${branch})`)
+  const hashes = (await git(["rev-list", "--first-parent", "--reverse", `${from}..HEAD`])).stdout
+    .split("\n")
+    .filter(Boolean)
+  for (const hash of hashes) {
+    const message = (await git(["show", "--no-patch", "--format=%B", hash])).stdout
+    const proc = Bun.spawn(["bunx", "commitlint", "--verbose"], {
+      cwd: root,
+      stdin: "pipe",
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    proc.stdin.write(message)
+    proc.stdin.end()
+    const code = await proc.exited
+    if (code !== 0) {
+      printCommitlintHelp("range")
+      console.error("")
+      console.error(`check:full FAILED at "Commitlint" (exit ${code}, commit ${hash})`)
+      process.exit(code)
+    }
   }
   finished.push({ label: "Commitlint", seconds: 0 })
 }
 
 console.log("mockingbird check:full")
-console.log("Mirrors .github/workflows/ci.yml — skipped: release/publish (main + OIDC only)")
+console.log(
+  "Mirrors .github/workflows/pr.yml — the pull-request gate. Release publishes after merge.",
+)
 if (process.platform !== "linux") {
   notes.push(`CI runs on ubuntu-latest; this host is ${process.platform}.`)
 }
@@ -137,17 +149,9 @@ await runStep("Install (frozen lockfile)", ["bun", "install", "--frozen-lockfile
 
 await commitlintJob()
 
-job("quality  (CI job)")
-await runStep("Format check", ["bun", "run", "check:format"])
-await runStep("Lint", ["bun", "run", "lint"])
-await runStep("Typecheck", ["bun", "run", "typecheck"])
-await runStep("Build", ["bun", "run", "build"])
-await runStep("Package integrity", ["bun", "run", "pack:check"])
-await runStep("Portability", ["bun", "run", "portability"])
-
-job("test  (CI job)")
-await runStep("Build", ["bun", "run", "build"])
-await runStep("Property tests", ["bun", "run", "test"], { env: { FC_NUM_RUNS: "20" } })
+job("check  (CI job)")
+await runStep("Check (turbo graph)", ["bun", "run", "check"], { env: { FC_NUM_RUNS: "40" } })
+await runStep("Consumer smoke", ["bun", "run", "release:smoke"])
 
 const total = finished.reduce((sum, step) => sum + step.seconds, 0)
 console.log("")
@@ -158,6 +162,6 @@ console.log("=".repeat(72))
 for (const step of finished) console.log(`  ${step.seconds.toFixed(1).padStart(6)}s  ${step.label}`)
 console.log(`  ${total.toFixed(1).padStart(6)}s  total`)
 console.log("")
-console.log("Skipped: release (main + OIDC only).")
+console.log("Not a pull-request check: release (publishes on main after these checks pass).")
 for (const note of notes) console.log(`Note: ${note}`)
 console.log("")

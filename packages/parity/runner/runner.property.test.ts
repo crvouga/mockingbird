@@ -295,6 +295,10 @@ const run = (
     },
     mock: { create: () => referenceServer("M", fault, clock) },
     clockSkewSeconds: 0,
+    // Both sides share this process's scheduler, and the real side's 10ms delay is not a
+    // latency budget: on a loaded runner the mock can take longer and raise a latency
+    // failure that masks the injected fault.
+    latencyToleranceMs: 1_000,
     now: clock,
     sleep: async () => {},
     log: (line) => lines.push(line),
@@ -305,6 +309,121 @@ const run = (
 }
 
 describe("parity runner", () => {
+  test("webhook capture brackets a walk and receives mock events before waiting on live delivery", async () => {
+    const calls: string[] = []
+    const server = () => referenceServer("R", "none", () => 1_700_000_000_000)
+    const real = server()
+    const report = await parity({
+      provider: "reference",
+      spec,
+      seed: 3,
+      numRuns: 1,
+      maxCommands: 1,
+      only: ["customers.list"],
+      shrink: false,
+      log: () => {},
+      real: {
+        baseUrl: "https://reference.local",
+        allowedHosts: ["reference.local"],
+        fetch: (r) => real.fetch(r),
+      },
+      mock: { create: server },
+      webhooks: {
+        beforeWalk: async () => {
+          calls.push("before")
+        },
+        collectMock: async () => {
+          calls.push("mock")
+          return [{ type: "customer.created" }]
+        },
+        collectReal: async (_scope, expected) => {
+          calls.push(`real:${expected.length}`)
+          return [{ type: "customer.created" }]
+        },
+        compare: (actual, expected) => {
+          calls.push("compare")
+          return JSON.stringify(actual) === JSON.stringify(expected) ? undefined : "different"
+        },
+      },
+    })
+    expect(report.walks).toBe(1)
+    expect(calls).toEqual(["before", "mock", "real:1", "compare"])
+  })
+
+  test("reports a webhook mismatch after a successful API walk", async () => {
+    const real = referenceServer("R", "none", () => 1_700_000_000_000)
+    let difference: string | undefined
+    await expect(
+      parity({
+        provider: "reference",
+        spec,
+        seed: 3,
+        numRuns: 1,
+        maxCommands: 1,
+        only: ["customers.list"],
+        shrink: false,
+        log: () => {},
+        real: {
+          baseUrl: "https://reference.local",
+          allowedHosts: ["reference.local"],
+          fetch: (request) => real.fetch(request),
+        },
+        mock: { create: () => referenceServer("R", "none", () => 1_700_000_000_000) },
+        webhooks: {
+          collectMock: async () => [{ type: "customer.created" }],
+          collectReal: async () => [],
+          compare: (actual, expected) => {
+            difference = `event count real=${actual.length} mock=${expected.length}`
+            return difference
+          },
+        },
+      }),
+    ).rejects.toThrow("parity FAILED")
+    expect(difference).toBe("event count real=0 mock=1")
+  })
+  test("API failures take precedence over webhook comparison", async () => {
+    const real = referenceServer("R", "none", () => 1_700_000_000_000)
+    let snapshots = 0
+    let collections = 0
+    let failure: unknown
+    try {
+      await parity({
+        provider: "reference",
+        spec,
+        seed: 1,
+        numRuns: 10,
+        maxCommands: 10,
+        only: ["customers.list"],
+        shrink: false,
+        log: () => {},
+        real: {
+          baseUrl: "https://reference.local",
+          allowedHosts: ["reference.local"],
+          fetch: (request) => real.fetch(request),
+        },
+        mock: {
+          create: () => ({
+            fetch: async () => Response.json({ error: "broken" }, { status: 500 }),
+          }),
+        },
+        webhooks: {
+          beforeWalk: async () => {
+            snapshots++
+          },
+          collectMock: async () => {
+            collections++
+            return []
+          },
+          collectReal: async () => [],
+        },
+      })
+    } catch (error) {
+      failure = error
+    }
+    expect(failure).toBeInstanceOf(ParityError)
+    expect((failure as ParityError).details.kind).not.toBe("webhook-mismatch")
+    expect(collections).toBeLessThan(snapshots)
+  })
   test("identical implementations pass and every planned operation is exercised given enough walks", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 1_000_000 }), async (seed) => {
@@ -363,7 +482,9 @@ describe("parity runner", () => {
       ),
       { ...params, numRuns: 12 },
     )
-  }, 60_000)
+    // Worst case: a fault that never surfaces runs all 40 walks x 20 commands against the
+    // real side's 10ms delay (~8s), for each of the 12 outer runs (~100s).
+  }, 180_000)
 
   test("the same seed reproduces the same shrunk failure", async () => {
     await fc.assert(

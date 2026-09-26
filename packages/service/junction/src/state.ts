@@ -3,10 +3,12 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import {
   EXPECTED_RESULTS,
   type ExpectedResult,
-  type LabTestRecord,
   LAB_TEST_CATALOG,
+  type LabTestRecord,
   TEAM_LABS,
 } from "./catalog.js"
+import type { IdentityMode } from "./fixtures.js"
+import { DEFAULT_LIMITS, type JunctionLimits } from "./limits.js"
 
 export type { CatalogMarker, ExpectedResult, LabTestRecord } from "./catalog.js"
 export { expectedResultsFor, LAB_TEST_CATALOG, labTestById, TEAM_LABS } from "./catalog.js"
@@ -18,15 +20,14 @@ export type GetCacheEntry = {
 }
 
 const sortedQueryString = (params: URLSearchParams): string => {
-  const entries = [...params.entries()].sort(([left], [right]) => left.localeCompare(right))
+  const entries = [...params.entries()].sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+    const keyOrder = leftKey.localeCompare(rightKey)
+    return keyOrder === 0 ? leftValue.localeCompare(rightValue) : keyOrder
+  })
   return new URLSearchParams(entries).toString()
 }
 
-export const observationCacheKey = (
-  url: URL | string,
-  method = "GET",
-  body?: unknown,
-): string => {
+export const observationCacheKey = (url: URL | string, method = "GET", body?: unknown): string => {
   const parsed = typeof url === "string" ? new URL(url, "https://observation.local") : url
   const query = sortedQueryString(parsed.searchParams)
   const pathAndQuery = `${parsed.pathname}${query ? `?${query}` : ""}`
@@ -219,7 +220,7 @@ export type OrderRecord = {
   billing_type: string
   priority: boolean
   activate_by: null
-  icd_codes: null
+  icd_codes: string[] | null
   interpretation: string | null
   has_missing_results: boolean | null
   result_types: string[] | null
@@ -228,6 +229,48 @@ export type OrderRecord = {
   origin: string
   order_transaction: OrderTransactionEmbed
 }
+
+/**
+ * A lab account as the ordering rules read it. Structurally `LabAccountRecord` from
+ * lab-accounts.ts, restated here because that module imports this one.
+ */
+export type StoredLabAccount = {
+  id: string
+  lab: string
+  org_id: string | null
+  status: "active" | "pending" | "suspended" | "ready_to_launch"
+  delegated_flow: "order_delegated" | "result_delegated" | "fully_delegated" | "not_delegated"
+  provider_account_id: string
+  account_name: string | null
+  default_clinical_notes: string | null
+  business_units: string[] | null
+  allowed_billing: Record<string, readonly string[]>
+  team_id_allowlist: readonly string[]
+}
+
+/**
+ * A chosen result for one order, installed through the admin API. Replaces the
+ * generated biomarker lines, so a suite can assert on an exact payload — an abnormal
+ * panel, a critical value, a missing marker — instead of whatever the generator made.
+ */
+export type ResultFixture = {
+  /** The fixture's name, for logs and `GET /__admin/results`. */
+  name: string
+  results?: unknown[]
+  missing_results?: unknown[] | null
+  interpretation?: string
+  /** Served from `GET /v3/order/{id}/result/pdf` instead of the generated PDF. */
+  pdf_base64?: string
+}
+
+/**
+ * How serviceability reads answer a ZIP the loaded corpus has no record for.
+ *
+ * - `synthetic`: invent plausible coverage. Right for property tests that walk random ZIPs.
+ * - `corpus`: refuse with a documented Mockingbird error. Right for a mock standing in for
+ *   the vendor, where invented coverage would silently disagree with production.
+ */
+export type GeoMode = "synthetic" | "corpus"
 
 export type WebhookPublisher = (event: JunctionWebhookEvent) => void
 
@@ -261,13 +304,43 @@ export class JunctionState {
   readonly pendingSimulateTransitions: Collection<PendingSimulateTransition>
 
   readonly orderByTransaction: Collection<{ order_id: string }>
+  /**
+   * The lab account each order was placed with (`null`: Junction's platform account). Kept
+   * off the order record: Junction's `ClientFacingOrder` has no `lab_account_id`.
+   */
+  readonly orderLabAccounts: Collection<{ lab_account_id: string | null }>
   readonly webhookEvents: Collection<WebhookEventRecord>
   readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
 
   readonly labTests: Collection<LabTestRecord>
   readonly labs: Collection<Record<string, unknown>>
+  readonly labAccounts: Collection<StoredLabAccount>
+  readonly resultFixtures: Collection<ResultFixture>
   readonly expectedResults: Collection<ExpectedResult[]>
   readonly getCache: Collection<GetCacheEntry>
+
+  /** Configuration, not data: set by JunctionAPI and re-applied on reset. */
+  geoMode: GeoMode = "synthetic"
+  /** The team this mock answers as: `team_id` on users and orders, and lab-account linking. */
+  teamId: string = MOCK_TEAM_ID
+  /** Sandbox-only restrictions to enforce; every one is off by default. */
+  limits: JunctionLimits = { ...DEFAULT_LIMITS }
+  /** Lab slug → the `billing_type` an order for that lab gets when it omits one. */
+  defaultBillingTypes: Readonly<Record<string, string>> = {}
+  /** Whether an unknown `user_id` is refused (`strict`) or created on first use. */
+  identity: IdentityMode = "strict"
+  private webhooksMuted = 0
+  private readonly adoptedRequests = new WeakSet<Request>()
+  /** ZIPs the loaded corpus has serviceability records for. */
+  coveredZips: ReadonlySet<string> = new Set()
+  /** Identifies the loaded corpus in errors and `/health`. */
+  corpusLabel: string | undefined
+  /**
+   * The loaded corpus's recorded reads. Immutable and shared by every namespace, so it
+   * lives outside SQLite: copying hundreds of large bodies into each namespace would
+   * make a new namespace cost seconds, and snapshots would copy them too.
+   */
+  corpusObservations: ReadonlyMap<string, GetCacheEntry> = new Map()
 
   constructor(
     sqlite: SqliteClient,
@@ -295,10 +368,13 @@ export class JunctionState {
       "pending_simulate_transitions",
     )
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
+    this.orderLabAccounts = new Collection(sqlite, namespace, "order_lab_accounts")
     this.webhookEvents = new Collection(sqlite, namespace, "webhook_events")
     this.webhookDeliveryAttempts = new Collection(sqlite, namespace, "webhook_delivery_attempts")
     this.labTests = new Collection(sqlite, namespace, "lab_tests")
     this.labs = new Collection(sqlite, namespace, "labs")
+    this.labAccounts = new Collection(sqlite, namespace, "lab_accounts")
+    this.resultFixtures = new Collection(sqlite, namespace, "result_fixtures")
     this.expectedResults = new Collection(sqlite, namespace, "expected_results")
     this.getCache = new Collection(sqlite, namespace, "get_cache")
     this.ids = new IdSequence(sqlite, namespace, "junction")
@@ -396,6 +472,10 @@ export class JunctionState {
     return this.labs.list({ order: "oldest" }).map((entry) => entry.value)
   }
 
+  listLabAccounts(): StoredLabAccount[] {
+    return this.labAccounts.list({ order: "oldest" }).map((entry) => entry.value)
+  }
+
   expectedResultsFor(labTestId: string): ExpectedResult[] {
     return this.expectedResults.get(labTestId) ?? []
   }
@@ -415,12 +495,18 @@ export class JunctionState {
     }
   }
 
+  replaceLabAccounts(entries: readonly StoredLabAccount[]): void {
+    this.clearCollection(this.labAccounts)
+    for (const entry of entries) this.labAccounts.insert(entry.id, clone(entry))
+  }
+
   putGetCache(key: string, entry: GetCacheEntry): void {
     this.getCache.insert(key, clone(entry))
   }
 
+  /** A recorded read: one seeded into this namespace first, then the shared corpus. */
   getGetCache(key: string): GetCacheEntry | undefined {
-    const entry = this.getCache.get(key)
+    const entry = this.getCache.get(key) ?? this.corpusObservations.get(key)
     return entry ? clone(entry) : undefined
   }
 
@@ -497,9 +583,7 @@ export class JunctionState {
         price: typeof slot.price === "number" ? slot.price : 0,
         is_priority: slot.is_priority === true,
         num_appointments_available:
-          typeof slot.num_appointments_available === "number"
-            ? slot.num_appointments_available
-            : 1,
+          typeof slot.num_appointments_available === "number" ? slot.num_appointments_available : 1,
         modality,
         provider: modality === "patient_service_center" ? "quest" : "getlabs",
         site_code: typeof slot.site_code === "string" ? slot.site_code : null,
@@ -606,7 +690,27 @@ export class JunctionState {
     return deterministicUuid(`junction:testkit:${orderId}`)
   }
 
+  /** Run `fn` without publishing any webhook: how fixtures load without side effects. */
+  muteWebhooks<T>(fn: () => T): T {
+    this.webhooksMuted++
+    try {
+      return fn()
+    } finally {
+      this.webhooksMuted--
+    }
+  }
+
+  /** Record that handling `request` adopted an unknown user (see `requireUser`). */
+  noteAdoption(request: Request): void {
+    this.adoptedRequests.add(request)
+  }
+
+  adopted(request: Request): boolean {
+    return this.adoptedRequests.has(request)
+  }
+
   publishWebhook(event: JunctionWebhookEvent, now = Date.now()): void {
+    if (this.webhooksMuted > 0) return
     const sequence = this.webhookEvents.nextSequence()
     const snapshot = clone(event)
     this.webhookEvents.insert(String(sequence), { sequence, event: snapshot })

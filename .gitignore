@@ -11,3 +11,13 @@ dist/
 .DS_Store
 coverage/
 .parity-artifacts/
+
+# Generated from git tags at publish time (scripts/release/publish.ts)
+packages/service/*/CHANGELOG.md
+
+# Per-workspace docs server, written by .superset/setup.sh and run.sh
+.superset/dev-port
+.superset/dev-server.pid
+.superset/ports.json
+**/__pycache__/
+.superset/config.local.json

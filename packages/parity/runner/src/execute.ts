@@ -212,7 +212,8 @@ export const executeCommand = async (
       mockResponse.body.kind !== "json" &&
       mockResponse.body.kind !== "form" &&
       mockResponse.body.kind !== "bytes" &&
-      mediaTypeOf(mockResponse.headers["content-type"]) !== "text/plain"
+      // Text bodies (plain, HTML) have no structure to validate beyond the declared status.
+      !mediaTypeOf(mockResponse.headers["content-type"])?.startsWith("text/")
     ) {
       problems.push(`expected a structured body, got ${mockResponse.body.kind}`)
     }

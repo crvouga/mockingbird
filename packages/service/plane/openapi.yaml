@@ -1,0 +1,1014 @@
+openapi: 3.1.0
+info:
+  title: Plane REST API (Mockingbird subset)
+  description: 'Stateful mock subset of Plane''s public REST API v1 for one project: work items (cursor-paginated
+    list, get, create, patch), comments, links, states and labels. Hand-authored from Plane''s API reference
+    and the consumer''s zod schemas (plane-response.ts).
+
+    '
+  version: '1'
+  x-mockingbird-upstream:
+    note: 'Shapes from https://developers.plane.so/api-reference; consumer: apps/backend/src/modules/bug-reports/adapters/native-fetch-plane.adapter.ts,
+      plane-http-client.ts, plane-response.ts.'
+servers:
+- url: https://api.plane.so
+security:
+- apiKey: []
+paths:
+  /api/v1/workspaces/{slug}/projects/{project_id}/work-items/:
+    get:
+      operationId: ListWorkItems
+      description: Cursor-paginated work items (`cursor=<per_page>:<page>:<is_prev>`).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: A page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItemPage'
+        '400':
+          description: Invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401': &id001
+          $ref: '#/components/responses/Unauthorized'
+        '404': &id002
+          $ref: '#/components/responses/NotFound'
+        '429': &id003
+          $ref: '#/components/responses/Throttled'
+      parameters:
+      - &id005
+        $ref: '#/components/parameters/PerPage'
+      - &id006
+        $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/OrderBy'
+    post:
+      operationId: CreateWorkItem
+      description: Create a work item.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '400': &id004
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWorkItemBody'
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+  /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/:
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+    - $ref: '#/components/parameters/WorkItemId'
+    get:
+      operationId: GetWorkItem
+      description: One work item.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: The work item
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '401': *id001
+        '404': *id002
+        '429': *id003
+    patch:
+      operationId: UpdateWorkItem
+      description: Partial update (the consumer sends `state` or `labels`).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkItem'
+        '400': *id004
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWorkItemBody'
+  /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/comments/:
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+    - $ref: '#/components/parameters/WorkItemId'
+    get:
+      operationId: ListComments
+      description: Comments on a work item.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: A page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommentPage'
+        '400':
+          description: Invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      parameters: &id007
+      - *id005
+      - *id006
+    post:
+      operationId: CreateComment
+      description: Add a comment.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Comment'
+        '400': *id004
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCommentBody'
+  /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/links/:
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+    - $ref: '#/components/parameters/WorkItemId'
+    get:
+      operationId: ListLinks
+      description: Links on a work item.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: A page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LinkPage'
+        '400':
+          description: Invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      parameters: *id007
+    post:
+      operationId: CreateLink
+      description: Attach a link (the same URL twice is a 400).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Link'
+        '400': *id004
+        '401': *id001
+        '404': *id002
+        '429': *id003
+        '409':
+          description: The URL is already linked (carries the existing link id)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLinkBody'
+  /api/v1/workspaces/{slug}/projects/{project_id}/states/:
+    get:
+      operationId: ListStates
+      description: The project's workflow states.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: A page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatePage'
+        '400':
+          description: Invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      parameters: *id007
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+  /api/v1/workspaces/{slug}/projects/{project_id}/labels/:
+    get:
+      operationId: ListLabels
+      description: The project's labels.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: A page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LabelPage'
+        '400':
+          description: Invalid cursor
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      parameters: *id007
+    post:
+      operationId: CreateLabel
+      description: Create a label (a duplicate name is a 409 carrying the existing id).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Label'
+        '409':
+          description: Duplicate name
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorBody'
+        '400': *id004
+        '401': *id001
+        '404': *id002
+        '429': *id003
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateLabelBody'
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+components:
+  securitySchemes:
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+  parameters:
+    Slug:
+      name: slug
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+        - acme
+    ProjectId:
+      name: project_id
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+        - 33333333-3333-4333-8333-333333333333
+    WorkItemId:
+      name: work_item_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        x-mockingbird-resource-ref:
+          type: work_item
+          missing: 00000000-0000-4000-8000-000000000000
+    PerPage:
+      name: per_page
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+        - '2:0:0'
+        - '2:1:0'
+        - '2:2:0'
+        - '100:0:0'
+    OrderBy:
+      name: order_by
+      in: query
+      required: false
+      schema:
+        type: string
+        enum:
+        - -created_at
+        - created_at
+        - sequence_id
+        - -sequence_id
+        - name
+        - -name
+  responses:
+    Unauthorized:
+      description: Missing or invalid X-API-Key
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    NotFound:
+      description: Unknown workspace, project or item
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+    Throttled:
+      description: Rate limited (60 requests per minute per key)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorBody'
+  schemas:
+    WorkItem:
+      type: object
+      required:
+      - id
+      - sequence_id
+      - name
+      - description_html
+      - state
+      - labels
+      - priority
+      - created_at
+      - updated_at
+      - project
+      - workspace
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-resource:
+            type: work_item
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        sequence_id:
+          type: integer
+        name:
+          type: string
+        description_html:
+          type: string
+        description_stripped:
+          type:
+          - string
+          - 'null'
+        priority:
+          type: string
+          enum:
+          - urgent
+          - high
+          - medium
+          - low
+          - none
+        state:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        labels:
+          type: array
+          items:
+            type: string
+            x-mockingbird-volatile:
+              kind: id
+        assignees:
+          type: array
+          items:
+            type: string
+        parent:
+          type:
+          - string
+          - 'null'
+        start_date:
+          type:
+          - string
+          - 'null'
+        target_date:
+          type:
+          - string
+          - 'null'
+        completed_at:
+          type:
+          - string
+          - 'null'
+          x-mockingbird-volatile:
+            kind: timestamp
+        archived_at:
+          type:
+          - string
+          - 'null'
+        is_draft:
+          type: boolean
+        sort_order:
+          type: number
+        project:
+          type: string
+        workspace:
+          type: string
+        created_by:
+          type:
+          - string
+          - 'null'
+        updated_by:
+          type:
+          - string
+          - 'null'
+        created_at: &id008
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updated_at: *id008
+    State:
+      type: object
+      required:
+      - id
+      - name
+      - group
+      - color
+      - sequence
+      - default
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-resource:
+            type: state
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        name:
+          type: string
+        group:
+          type: string
+          enum:
+          - backlog
+          - unstarted
+          - started
+          - completed
+          - cancelled
+          - triage
+        color:
+          type: string
+        sequence:
+          type: number
+        default:
+          type: boolean
+        description:
+          type: string
+        project:
+          type: string
+        workspace:
+          type: string
+        created_at: *id008
+        updated_at: *id008
+    Label:
+      type: object
+      required:
+      - id
+      - name
+      - color
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-resource:
+            type: label
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        name:
+          type: string
+        color:
+          type: string
+        description:
+          type: string
+        parent:
+          type:
+          - string
+          - 'null'
+        sort_order:
+          type: number
+        project:
+          type: string
+        workspace:
+          type: string
+        created_at: *id008
+        updated_at: *id008
+    Comment:
+      type: object
+      required:
+      - id
+      - comment_html
+      - issue
+      - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-volatile:
+            kind: id
+        comment_html:
+          type: string
+        comment_stripped:
+          type: string
+        access:
+          type: string
+        issue:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        actor:
+          type:
+          - string
+          - 'null'
+        project:
+          type: string
+        workspace:
+          type: string
+        created_at: *id008
+        updated_at: *id008
+    Link:
+      type: object
+      required:
+      - id
+      - url
+      - title
+      - issue
+      - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-mockingbird-volatile:
+            kind: id
+        url:
+          type: string
+        title:
+          type:
+          - string
+          - 'null'
+        metadata:
+          type: object
+        issue:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        project:
+          type: string
+        workspace:
+          type: string
+        created_at: *id008
+        updated_at: *id008
+    WorkItemPage:
+      type: object
+      required:
+      - results
+      - next_cursor
+      - prev_cursor
+      - next_page_results
+      - prev_page_results
+      - count
+      - total_count
+      - total_pages
+      - total_results
+      properties:
+        grouped_by:
+          type:
+          - string
+          - 'null'
+        sub_grouped_by:
+          type:
+          - string
+          - 'null'
+        total_count:
+          type: integer
+        next_cursor:
+          type: string
+        prev_cursor:
+          type: string
+        next_page_results:
+          type: boolean
+        prev_page_results:
+          type: boolean
+        count:
+          type: integer
+        total_pages:
+          type: integer
+        total_results:
+          type: integer
+        extra_stats:
+          type:
+          - object
+          - 'null'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkItem'
+    StatePage:
+      type: object
+      required:
+      - results
+      - next_cursor
+      - prev_cursor
+      - next_page_results
+      - prev_page_results
+      - count
+      - total_count
+      - total_pages
+      - total_results
+      properties:
+        grouped_by:
+          type:
+          - string
+          - 'null'
+        sub_grouped_by:
+          type:
+          - string
+          - 'null'
+        total_count:
+          type: integer
+        next_cursor:
+          type: string
+        prev_cursor:
+          type: string
+        next_page_results:
+          type: boolean
+        prev_page_results:
+          type: boolean
+        count:
+          type: integer
+        total_pages:
+          type: integer
+        total_results:
+          type: integer
+        extra_stats:
+          type:
+          - object
+          - 'null'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/State'
+    LabelPage:
+      type: object
+      required:
+      - results
+      - next_cursor
+      - prev_cursor
+      - next_page_results
+      - prev_page_results
+      - count
+      - total_count
+      - total_pages
+      - total_results
+      properties:
+        grouped_by:
+          type:
+          - string
+          - 'null'
+        sub_grouped_by:
+          type:
+          - string
+          - 'null'
+        total_count:
+          type: integer
+        next_cursor:
+          type: string
+        prev_cursor:
+          type: string
+        next_page_results:
+          type: boolean
+        prev_page_results:
+          type: boolean
+        count:
+          type: integer
+        total_pages:
+          type: integer
+        total_results:
+          type: integer
+        extra_stats:
+          type:
+          - object
+          - 'null'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Label'
+    CommentPage:
+      type: object
+      required:
+      - results
+      - next_cursor
+      - prev_cursor
+      - next_page_results
+      - prev_page_results
+      - count
+      - total_count
+      - total_pages
+      - total_results
+      properties:
+        grouped_by:
+          type:
+          - string
+          - 'null'
+        sub_grouped_by:
+          type:
+          - string
+          - 'null'
+        total_count:
+          type: integer
+        next_cursor:
+          type: string
+        prev_cursor:
+          type: string
+        next_page_results:
+          type: boolean
+        prev_page_results:
+          type: boolean
+        count:
+          type: integer
+        total_pages:
+          type: integer
+        total_results:
+          type: integer
+        extra_stats:
+          type:
+          - object
+          - 'null'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Comment'
+    LinkPage:
+      type: object
+      required:
+      - results
+      - next_cursor
+      - prev_cursor
+      - next_page_results
+      - prev_page_results
+      - count
+      - total_count
+      - total_pages
+      - total_results
+      properties:
+        grouped_by:
+          type:
+          - string
+          - 'null'
+        sub_grouped_by:
+          type:
+          - string
+          - 'null'
+        total_count:
+          type: integer
+        next_cursor:
+          type: string
+        prev_cursor:
+          type: string
+        next_page_results:
+          type: boolean
+        prev_page_results:
+          type: boolean
+        count:
+          type: integer
+        total_pages:
+          type: integer
+        total_results:
+          type: integer
+        extra_stats:
+          type:
+          - object
+          - 'null'
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Link'
+    CreateWorkItemBody:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description_html:
+          type: string
+          maxLength: 2000
+        state:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: state
+            missing: 00000000-0000-4000-8000-000000000000
+        labels:
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            format: uuid
+            x-mockingbird-resource-ref:
+              type: label
+              missing: 00000000-0000-4000-8000-000000000000
+        priority:
+          type: string
+          enum:
+          - urgent
+          - high
+          - medium
+          - low
+          - none
+    UpdateWorkItemBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        description_html:
+          type: string
+          maxLength: 2000
+        state:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: state
+            missing: 00000000-0000-4000-8000-000000000000
+        labels:
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            format: uuid
+            x-mockingbird-resource-ref:
+              type: label
+              missing: 00000000-0000-4000-8000-000000000000
+        priority:
+          type: string
+          enum:
+          - urgent
+          - high
+          - medium
+          - low
+          - none
+    CreateCommentBody:
+      type: object
+      required:
+      - comment_html
+      properties:
+        comment_html:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        access:
+          type: string
+          enum:
+          - INTERNAL
+          - EXTERNAL
+    CreateLinkBody:
+      type: object
+      required:
+      - url
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: ^https://
+          maxLength: 200
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+    CreateLabelBody:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        color:
+          type: string
+          pattern: ^#[0-9a-fA-F]{6}$
+        description:
+          type: string
+          maxLength: 255
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+        id:
+          type: string
+    ValidationError:
+      type: object
+      additionalProperties:
+        type: array
+        items:
+          type: string

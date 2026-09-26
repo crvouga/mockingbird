@@ -1,0 +1,22 @@
+openapi: 3.1.0
+info:
+  title: AWS Secrets Manager and SSM Parameter Store (Mockingbird subset)
+  version: "2017-10-17"
+  description: AWS JSON contracts used by the pinned Secrets Manager and SSM clients.
+servers:
+  - url: https://secretsmanager.us-east-1.amazonaws.com
+paths:
+  /:
+    post:
+      operationId: AwsSecretsRpc
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: X-Amz-Target, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/x-amz-json-1.1: { schema: { type: object, additionalProperties: true } }
+          application/json: { schema: { type: object, additionalProperties: true } }
+      responses:
+        "200": { description: Operation response, content: { application/x-amz-json-1.1: { schema: { type: object, additionalProperties: true } } } }
+        "400": { description: AWS exception, content: { application/x-amz-json-1.1: { schema: { type: object, additionalProperties: true } } } }

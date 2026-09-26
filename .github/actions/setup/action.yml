@@ -1,0 +1,51 @@
+name: Setup
+description: Bun + cached node_modules + a Turborepo cache kept in the GitHub Actions cache.
+
+# No external services and no secrets: everything here is GitHub-hosted, so forks and new
+# contributors get the same setup as maintainers.
+
+inputs:
+  turbo-cache:
+    description: Restore and save turbo's local cache (.turbo/cache) through actions/cache.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: "1.4.0"
+
+    # node_modules is keyed on the lockfile and manifests. A hit skips `bun install` entirely,
+    # including the slow postinstall (embedded-postgres).
+    - id: deps
+      uses: actions/cache@v4
+      with:
+        path: |
+          node_modules
+          packages/*/node_modules
+          packages/*/*/node_modules
+          sites/*/node_modules
+        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'sites/*/package.json') }}
+
+    - if: steps.deps.outputs.cache-hit != 'true'
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    # Turbo's own content hashes decide what replays, so a stale restore is harmless. Each run
+    # saves under its commit; restore-keys picks the newest entry this ref can see (its own
+    # earlier runs, else main's). GitHub evicts old entries past the repo's cache quota.
+    # Restore only: the job saves with ./.github/actions/turbo-cache-save under `if: always()`,
+    # because actions/cache's post step skips the save when the job fails, and a failed run is
+    # exactly the one whose retry should replay the tasks that already passed.
+    - if: inputs.turbo-cache == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: .turbo/cache
+        key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}
+        restore-keys: |
+          turbo-${{ runner.os }}-${{ github.job }}-
+          turbo-${{ runner.os }}-
+
+    - shell: bash
+      run: echo "TURBO_TELEMETRY_DISABLED=1" >> "$GITHUB_ENV"

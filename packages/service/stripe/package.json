@@ -1,19 +1,29 @@
 {
   "name": "@crvouga/mockingbird-service-stripe",
-  "version": "0.1.0",
-  "description": "Stateful mock of the Stripe API (customers, products, prices) driven by its OpenAPI contract and verified by differential property tests against Stripe test mode.",
+  "version": "0.0.0-development",
+  "description": "Stateful mock of the Stripe API (accounts by key, customers, payments, subscriptions with renewals, invoices, checkout with a hosted page, a Stripe.js stand-in, signed webhooks) at API versions 2024-06-20 and 2025-02-24.acacia, verified by differential property tests against Stripe test mode.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
     }
+  },
+  "bin": {
+    "mockingbird-stripe": "./dist/cli.js"
   },
   "publishConfig": {
     "access": "public",
@@ -28,41 +38,73 @@
   "keywords": [
     "mockingbird",
     "service",
-    "stripe"
+    "stripe",
+    "payments",
+    "checkout",
+    "webhooks",
+    "billing"
   ],
   "mockingbird": {
     "runtime": "portable",
-    "layer": "service"
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "payments",
+    "displayName": "Stripe",
+    "vendor": {
+      "website": "https://stripe.com",
+      "docs": "https://docs.stripe.com/api"
+    },
+    "status": "ready",
+    "playground": {
+      "operation": "PostCustomers",
+      "headers": {
+        "authorization": "Bearer sk_test_mockingbird"
+      }
+    }
   },
   "scripts": {
     "vendor": "bun scripts/vendor.ts",
-    "generate": "mockingbird-codegen",
-    "generate:check": "mockingbird-codegen --check",
-    "openapi:check": "mockingbird-codegen --validate",
-    "build": "tsc -p tsconfig.build.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
+    "mock:server": "bun scripts/server.ts",
+    "client-parity": "bun scripts/client-parity.ts",
     "parity": "bun scripts/parity.ts",
-    "portability": "bun ../../../scripts/portability.ts",
-    "pack:check": "bun ../../../scripts/pack-check.ts"
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "portability": "bun ../../../scripts/portability.ts"
   },
   "dependencies": {
-    "@crvouga/mockingbird-core": "workspace:*",
-    "@crvouga/mockingbird-sqlite": "workspace:*",
-    "@crvouga/mockingbird-openapi": "workspace:*",
-    "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "hono": "4.11.9"
   },
   "devDependencies": {
     "fast-check": "4.9.0",
     "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/sqlite-mem": "1.15.0",
+    "@crvouga/mockingbird-adapter-bun": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@crvouga/mockingbird-parity": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*",
+    "@crvouga/mockingbird-webhook-collector": "workspace:*",
+    "@crvouga/mockingbird-model": "workspace:*",
+    "@crvouga/mockingbird-canonicalize": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
+    "stripe": "16.12.0",
     "yaml": "2.9.0",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
-    "@crvouga/mockingbird-openapi-metadata": "workspace:*"
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-commands": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "stripe-v17": "npm:stripe@17.7.0"
   }
 }

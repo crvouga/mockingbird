@@ -1,19 +1,33 @@
 {
   "name": "@crvouga/mockingbird-service-junction",
-  "version": "0.1.0",
+  "version": "0.0.0-development",
   "description": "Stateful mock of the Junction (Vital) user API driven by its OpenAPI contract and verified by differential property tests against the Junction sandbox.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./corpus": {
+      "types": "./dist/corpus.d.ts",
+      "default": "./dist/corpus.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
     }
+  },
+  "bin": {
+    "mockingbird-junction": "./dist/cli.js"
   },
   "publishConfig": {
     "access": "public",
@@ -33,44 +47,61 @@
   ],
   "mockingbird": {
     "runtime": "portable",
-    "layer": "service"
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "health",
+    "displayName": "Junction",
+    "vendor": {
+      "website": "https://www.junction.com",
+      "docs": "https://docs.junction.com"
+    },
+    "status": "ready"
   },
   "scripts": {
-    "generate": "mockingbird-codegen",
-    "generate:check": "mockingbird-codegen --check",
-    "openapi:check": "mockingbird-codegen --validate",
-    "build": "tsc -p tsconfig.build.json",
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
     "parity": "bun scripts/parity.ts",
+    "mock:server": "bun scripts/server.ts",
+    "mock:serve": "bun scripts/server.ts",
+    "corpus:record": "bun scripts/record-corpus.ts",
     "client-parity": "bun scripts/client-parity.ts",
     "client-parity:live": "JUNCTION_LIVE_PARITY=1 bun scripts/client-parity-live.ts",
     "webhook:dev": "wrangler dev --config webhook-receiver/wrangler.jsonc",
     "webhook:deploy": "wrangler deploy --config webhook-receiver/wrangler.jsonc",
     "webhook:register": "bun scripts/register-webhook.ts",
     "portability": "bun ../../../scripts/portability.ts",
-    "pack:check": "bun ../../../scripts/pack-check.ts"
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "verify": "bun src/cli.ts verify"
   },
   "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "hono": "4.11.9"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260908.1",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@tryvital/vital-node": "3.1.511",
+    "fast-check": "4.9.0",
+    "wrangler": "^4.129.1",
     "@crvouga/mockingbird-core": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
-    "hono": "4.11.9"
-  },
-  "devDependencies": {
-    "@cloudflare/workers-types": "^5.20260908.1",
     "@crvouga/mockingbird-commands": "workspace:*",
-    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
-    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
-    "@crvouga/mockingbird-openbao": "workspace:*",
-    "@crvouga/mockingbird-parity": "workspace:*",
-    "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/sqlite-mem": "1.15.0",
-    "@tryvital/vital-node": "3.1.511",
-    "fast-check": "4.9.0",
-    "wrangler": "^4.129.1"
+    "@crvouga/mockingbird-parity": "workspace:*"
   }
 }

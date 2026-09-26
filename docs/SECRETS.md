@@ -1,72 +1,143 @@
-# Secrets runbook (maintainers)
+# Secrets runbook
 
-`@crvouga/mockingbird` (and the granular `@crvouga/mockingbird-*` packages) publish with
-**npm Trusted Publishing (OIDC)** — not Automation tokens.
+Where every credential lives, who needs it, and how to run live parity without ever holding a sandbox key: GitHub Actions repo secrets are the only secret store.
 
-Live parity sandbox credentials live in the self-hosted Vault / OpenBao at
-`https://vault.chrisvouga.dev` under the flat KV v2 secret `secret/data/secret`
-(shown as `secret/secret` in the UI). CI publish never reads those keys; only
-`bun run parity*` does (via `@crvouga/mockingbird-openbao`).
-
-Inventory:
-
-- [`.vault.yaml`](../.vault.yaml) — Vault address / mount / project / config
-- [`secrets.manifest.yaml`](../secrets.manifest.yaml) — optional local secrets + OIDC checklist
-
-## Quick commands
+There is no self-hosted secret store and no remote build cache to log in to. A fresh clone needs
+nothing but Bun:
 
 ```bash
-# Full report + Trusted Publishing setup links (never prints secret values)
-bun run secrets:doctor
-
-# If the umbrella package is not on npm yet (one-time, uses `npm login` — not a token)
-bun run npm:seed -- --dry-run
-bun run npm:seed -- --yes
-
-# Validate optional Vault keys
-bun run secrets:check
+bun run setup   # install, build, create .env.local from .env.example
+bun test        # no secrets
+bun run check   # every CI gate, no secrets
 ```
 
-## One-time: seed + Trusted Publishing
+Secrets are only involved in three places, and all three run on GitHub with the repo's own
+Actions secrets. Anyone with **write access** to `crvouga/mockingbird` can use them without
+seeing a value (GitHub never returns a secret's value, to anyone):
 
-1. Log in interactively: `npm login --auth-type=web`
-2. `bun run build && bun run npm:seed -- --yes` — publishes `@crvouga/mockingbird@0.1.0` without provenance
-3. For **each** public package on npm, open Trusted Publisher and add:
-   - Organization/user: `crvouga`
-   - Repository: `mockingbird`
-   - Workflow filename: `ci.yml`
-4. Confirm the release job has `permissions.id-token: write` in [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
+| Workflow | Secrets it reads | How to run it |
+| --- | --- | --- |
+| [Parity](../.github/workflows/parity.yml) | the `<SERVICE>_*` keys its live-parity step maps | `bun run parity:remote -- <service…>` or `-- --all` |
+| [Verify](../.github/workflows/verify.yml) | `JUNCTION_API_KEY` | daily, or `gh workflow run verify.yml` |
+| [Release](../.github/workflows/ci.yml) | `NPM_TOKEN` (new packages only) | automatic on merge to `main` |
+
+## Live parity
+
+Each service's `scripts/parity.ts` loads its sandbox credentials from the environment through
+[`@crvouga/mockingbird-credentials`](../packages/auth/credentials). The env var names start
+with the service's name (`STRIPE_SECRET_KEY`, `JUNCTION_API_KEY`), and the GitHub Actions secret
+has the same name.
+
+**On GitHub (no keys needed).** Push your branch, then:
+
+```bash
+bun run parity:remote -- stripe            # one or more services
+bun run parity:remote -- --all             # every service with a parity script
+```
+
+This dispatches the Parity workflow on your branch, which passes the sandbox keys its live-parity
+step maps to the run, and streams the log to your terminal. Needs `gh auth login`. The workflow
+also uploads each service's `corpus/` directory as the `parity-corpus` artifact
+(`gh run download <run-id> -n parity-corpus`), so a live recording can be committed.
+
+**Locally (your own keys).** Put sandbox keys in `.env.local` (gitignored, loaded by Bun
+automatically; `.env.example` lists every name, grouped by service), then:
+
+```bash
+bun run parity:service -- stripe twilio
+bun run parity:stripe                      # the turbo shortcuts work too
+```
+
+A parity script exits 2 when its credentials are missing, and `parity:service` reports that as
+"no credentials", never as a pass.
+
+**Which services are configured?**
+
+```bash
+bun run secrets:doctor
+```
+
+This prints, per service, whether every key it needs is set as a repo secret (runnable with
+`parity:remote`) and in your `.env.local`. It never prints values.
+
+### Adding or rotating a sandbox key
+
+`bun run secrets` is a small CLI over the repo secrets. It sends values to `gh secret set` over
+stdin, so they never appear in output or on a command line:
+
+```bash
+bun run secrets                            # status: set / missing per service, on GitHub and locally
+bun run secrets fill stripe                # prompt (hidden) for each missing key; Enter skips one
+bun run secrets fill                       # ...for every service
+bun run secrets set STRIPE_SECRET_KEY          # prompt for one value (rotate)
+bun run secrets set STRIPE_SECRET_KEY --from-env   # take it from .env.local
+bun run secrets rm STRIPE_OLD_KEY --yes
+```
+
+To upload everything you have set in `.env.local` at once:
+
+```bash
+bun run secrets push -- --dry-run          # which secrets would be set (= secrets:push)
+bun run secrets push -- --yes
+```
+
+A service's secrets are the fields its parity script loads plus the names `.env.example` lists
+under the service's heading; `secrets:doctor` and `secrets:push` read both. The Parity workflow needs one line per secret in the `env:` of its
+live-parity step (`STRIPE_X: ${{ secrets.STRIPE_X }}`). It maps each secret by name
+because GitHub holds a run that dumps the whole `secrets` context as "may be malicious" until
+someone approves it by hand.
+
+## Releasing
+
+The mock services (`@crvouga/mockingbird-service-*`, the only published packages) are released
+automatically on every green push to `main` (see [RELEASING.md](RELEASING.md)) and publish with
+**npm Trusted Publishing (OIDC)**, which needs no stored credential.
+
+OIDC can only publish to packages that already exist on npm and trust this repo. For brand-new
+packages the release job uses the `NPM_TOKEN` repo secret:
+
+- **Automatic release.** A granular npm token with read+write on the `@crvouga` scope is stored as
+  `NPM_TOKEN`. CI creates missing packages, then runs `npm trust github` so later releases use
+  OIDC. A scheduled run every six hours retries interrupted releases.
+- **Setting the token.** `bun run release:bootstrap` prompts for it without echo, validates it with
+  npm, stores it with `gh secret set`, then runs and watches CI on `main`. `-- --replace` rotates it.
+- **Local fallback.** `bun run release:seed` (`-- --dry-run` to preview) runs `npm login` if
+  needed, builds `origin/main` in a temporary worktree and runs `release:publish --local` there:
+  it publishes with your npm login, pushes the tags and GitHub Releases, attaches the Trusted
+  Publishers and deprecates every package no longer published.
+
+```bash
+bun run release:plan                       # what the next release would publish
+bun run release:publish -- --dry-run
+```
+
+### Trusted Publisher settings
+
+Set automatically by the release job when it has npm account credentials. Manual equivalent, per
+package at `https://www.npmjs.com/package/<name>/access`:
+
+- Organization/user: `crvouga`
+- Repository: `mockingbird`
+- Workflow filename: `ci.yml`
+- Environment: (empty)
 
 Docs: https://docs.npmjs.com/trusted-publishers
 
-After that, green pushes to `main` run `bun run release:publish`, which publishes every public
-workspace package whose version is not already on npm (idempotent).
+## Build cache
 
-## Parity credentials (Vault)
-
-| Provider | Vault path (KV v2 under `secret`) | Fields | Env overrides |
-| --- | --- | --- | --- |
-| Stripe | `secret/data/secret` | `MOCKINGBIRD_STRIPE_SECRET_KEY`, `MOCKINGBIRD_STRIPE_PUBLISHABLE_KEY` | `MOCKINGBIRD_STRIPE_SECRET_KEY` |
-| Junction | `secret/data/secret` | `MOCKINGBIRD_JUNCTION_API_KEY` | `MOCKINGBIRD_JUNCTION_API_KEY` |
-| GeneByGene | `secret/data/secret` | `client_id`, `client_secret` | `MOCKINGBIRD_GENEBYGENE_CLIENT_ID`, `MOCKINGBIRD_GENEBYGENE_CLIENT_SECRET` |
-
-Default OpenBao address: `https://vault.chrisvouga.dev` (`MOCKINGBIRD_OPENBAO_ADDR` / `VAULT_ADDR`).
-Auth: `VAULT_TOKEN` / `BAO_TOKEN` / `~/.vault-token`, or JWT (`MOCKINGBIRD_OPENBAO_JWT`).
-
-```bash
-export VAULT_ADDR=https://vault.chrisvouga.dev
-vault login
-bun run parity:stripe
-bun run parity:junction
-bun run parity:genebygene
-```
+Turborepo uses its local cache (`.turbo/cache`) on your machine. In CI,
+[`.github/actions/setup`](../.github/actions/setup/action.yml) keeps that same directory in the
+GitHub Actions cache, so pull requests replay what `main` already built. No token, no server.
 
 ## What exists where
 
-| Credential | Where | Required |
+| Credential | Where | Needed for |
 | --- | --- | --- |
-| npm Trusted Publisher (OIDC) | each package on npm | **Yes** (CI publish) |
-| `GITHUB_TOKEN` | Built into GitHub Actions | Automatic |
-| `GH_PAT` | Optional Vault `personal/prd/github` | No (local only) |
-| Provider sandbox keys | Vault `secret/data/secret` | For live parity only |
-| `NPM_TOKEN` | — | **Not used** |
+| npm Trusted Publisher (OIDC) | each package on npm | CI publish (attached automatically) |
+| `GITHUB_TOKEN` | built into GitHub Actions | automatic |
+| `NPM_TOKEN` | repo secret | creating new packages, deprecations |
+| `<SERVICE>_*` sandbox keys | repo secrets (+ optionally your `.env.local`) | live parity only |
+| `GITGUARDIAN_API_KEY` | your `.env.local` | optional: `pr:ready guardian ignore` |
+
+Inventory: [`secrets.manifest.yaml`](../secrets.manifest.yaml) (non-parity secrets and the
+Trusted Publishing checklist) and [`.env.example`](../.env.example) (every local name).

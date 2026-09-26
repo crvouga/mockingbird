@@ -1,0 +1,334 @@
+openapi: 3.1.0
+info:
+  title: Klaviyo events API (Mockingbird subset)
+  description: |
+    Stateful mock subset of Klaviyo's JSON:API: create an event (what our backend posts for
+    `Ordered Product` and `Placed Order` after checkout), and read events back. Trimmed from
+    Klaviyo's published API (revision 2024-02-15) to what our consumer sends, plus the reads a
+    suite needs to see what landed.
+  version: "2024-02-15"
+  x-mockingbird-upstream:
+    note: >-
+      Trimmed from https://developers.klaviyo.com/en/reference/create_event and get_events,
+      shaped by B/global-services/services/klaviyo/klaviyo.sevice.ts (the only consumer).
+servers:
+  - url: https://a.klaviyo.com
+security:
+  - klaviyoApiKey: []
+paths:
+  /api/events:
+    post:
+      operationId: CreateEvent
+      description: |
+        Create an event for a profile, creating the profile and metric when they do not exist.
+        Answers 202 with no body. An event repeating a metric + profile + `unique_id` is
+        deduplicated (accepted, not stored twice).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EventCreateQuery"
+      responses:
+        "202":
+          description: Accepted (no body)
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+    get:
+      operationId: GetEvents
+      description: Events in the account, oldest first.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: A page of events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, links]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EventResource"
+                  links:
+                    $ref: "#/components/schemas/CollectionLinks"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+  /api/events/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: event
+            missing: 01HZZZZZZZZZZZZZZZZZZZZZZZ
+    get:
+      operationId: GetEvent
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: One event
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/EventResource"
+        "400":
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "401":
+          description: Missing or invalid API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "404":
+          description: No such event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+components:
+  securitySchemes:
+    klaviyoApiKey:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: "`Klaviyo-API-Key <private key>`, plus a `revision: YYYY-MM-DD` header."
+  schemas:
+    EventCreateQuery:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [type, attributes]
+          properties:
+            type:
+              type: string
+              enum: [event]
+            attributes:
+              type: object
+              required: [properties, metric, profile]
+              properties:
+                properties:
+                  type: object
+                  additionalProperties: true
+                time:
+                  type: string
+                  format: date-time
+                value:
+                  type: number
+                  minimum: 0
+                  maximum: 1000000
+                value_currency:
+                  type: string
+                  pattern: "^[A-Z]{3}$"
+                unique_id:
+                  type: string
+                  minLength: 1
+                  maxLength: 64
+                metric:
+                  type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [type, attributes]
+                      properties:
+                        type:
+                          type: string
+                          enum: [metric]
+                        attributes:
+                          type: object
+                          required: [name]
+                          properties:
+                            name:
+                              type: string
+                              minLength: 1
+                              maxLength: 64
+                            service:
+                              type: string
+                              maxLength: 64
+                profile:
+                  type: object
+                  required: [data]
+                  properties:
+                    data:
+                      type: object
+                      required: [type]
+                      properties:
+                        type:
+                          type: string
+                          enum: [profile]
+                        id:
+                          type: string
+                          maxLength: 64
+                        attributes:
+                          type: object
+                          properties:
+                            email:
+                              type: string
+                              format: email
+                              maxLength: 120
+                            phone_number:
+                              type: string
+                              pattern: "^\\+[1-9][0-9]{6,14}$"
+                            external_id:
+                              type: string
+                              maxLength: 64
+                            first_name:
+                              type: string
+                              maxLength: 64
+                            last_name:
+                              type: string
+                              maxLength: 64
+    EventResource:
+      type: object
+      required: [type, id, attributes, relationships, links]
+      properties:
+        type:
+          type: string
+          enum: [event]
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: event
+            identity: true
+        attributes:
+          type: object
+          required: [timestamp, event_properties, datetime, uuid]
+          properties:
+            timestamp:
+              type: integer
+              x-mockingbird-volatile:
+                kind: timestamp
+            event_properties:
+              type: object
+              additionalProperties: true
+            datetime:
+              type: string
+              x-mockingbird-volatile:
+                kind: timestamp
+            uuid:
+              type: string
+              x-mockingbird-volatile:
+                kind: id
+        relationships:
+          type: object
+          required: [profile, metric]
+          properties:
+            profile:
+              $ref: "#/components/schemas/Relationship"
+            metric:
+              $ref: "#/components/schemas/Relationship"
+        links:
+          type: object
+          required: [self]
+          properties:
+            self:
+              type: string
+              x-mockingbird-volatile:
+                kind: url
+    Relationship:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [type, id]
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+              x-mockingbird-volatile:
+                kind: id
+    CollectionLinks:
+      type: object
+      required: [self]
+      properties:
+        self:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        next:
+          type: ["string", "null"]
+        prev:
+          type: ["string", "null"]
+    Errors:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [id, status, code, title, detail]
+            properties:
+              id:
+                type: string
+                x-mockingbird-volatile:
+                  kind: id
+              status:
+                type: integer
+              code:
+                type: string
+              title:
+                type: string
+              detail:
+                type: string
+              source:
+                type: object
+                properties:
+                  pointer:
+                    type: string
+                  parameter:
+                    type: string
+              links:
+                type: object
+              meta:
+                type: object

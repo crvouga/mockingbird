@@ -1,0 +1,21 @@
+-- Nested savepoints: rollback the inner one, release the outer one, commit, then a full rollback.
+CREATE TABLE acct (id int PRIMARY KEY, bal int NOT NULL);
+INSERT INTO acct VALUES (1, 100);
+INSERT INTO acct VALUES (2, 200);
+BEGIN;
+UPDATE acct SET bal = bal - 10 WHERE id = 1;
+SAVEPOINT s1;
+UPDATE acct SET bal = bal + 10 WHERE id = 2;
+SAVEPOINT s2;
+INSERT INTO acct VALUES (3, 300);
+UPDATE acct SET bal = bal * 2 WHERE id = 3;
+ROLLBACK TO SAVEPOINT s2;
+INSERT INTO acct VALUES (4, 400);
+RELEASE SAVEPOINT s1;
+COMMIT;
+SELECT id, bal FROM acct ORDER BY id;
+BEGIN;
+UPDATE acct SET bal = 0 WHERE id = 1;
+DELETE FROM acct WHERE id = 4;
+ROLLBACK;
+SELECT id, bal FROM acct ORDER BY id;

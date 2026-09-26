@@ -1,0 +1,43 @@
+# Differential verification of the Junction mock against the real Junction sandbox:
+# `mockingbird-junction verify` replays the shipped corpus (drift) and a stateful scenario
+# (users, catalog, serviceability, orders) against both and fails on any divergence.
+#
+# Not a required check — it depends on a live vendor. The sandbox key is the
+# JUNCTION_API_KEY repo secret (docs/SECRETS.md). The scenario deletes the
+# user it creates and cancels its order, because it shares the capped sandbox team with
+# everything else.
+name: Verify
+
+on:
+  schedule:
+    - cron: "17 9 * * *" # daily
+  workflow_dispatch:
+
+concurrency:
+  group: verify-junction
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: "0"
+
+jobs:
+  junction:
+    name: Junction sandbox
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup
+
+      - name: mockingbird-junction verify (shipped corpus, with orders)
+        timeout-minutes: 15
+        env:
+          JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
+        run: bun run --cwd packages/service/junction verify -- --sample 60 --orders
+
+      - if: always()
+        uses: ./.github/actions/turbo-cache-save

@@ -1,3 +1,4 @@
+import { addressFromAvailabilityRequest } from "./scheduling.js"
 import type {
   AppointmentModality,
   AppointmentRecord,
@@ -9,7 +10,6 @@ import type {
   UserInfoRecord,
   UserRecord,
 } from "./state.js"
-import { addressFromAvailabilityRequest } from "./scheduling.js"
 
 export type SeedSource = {
   fetch: (request: Request) => Promise<Response>
@@ -139,7 +139,7 @@ const mapUser = (value: unknown): UserRecord | undefined => {
   }
 }
 
-const mapLabTest = (value: unknown): LabTestRecord | undefined => {
+export const mapLabTest = (value: unknown): LabTestRecord | undefined => {
   const record = asRecord(value)
   if (!record) return undefined
   const id = asString(record.id)
@@ -156,7 +156,11 @@ const mapOrder = (value: unknown): OrderRecord | undefined => {
   return clone(record) as OrderRecord
 }
 
-const mapAppointment = (value: unknown, orderId: string, userId: string): AppointmentRecord | undefined => {
+const mapAppointment = (
+  value: unknown,
+  orderId: string,
+  userId: string,
+): AppointmentRecord | undefined => {
   const record = asRecord(value)
   if (!record) return undefined
   const id = asString(record.id)
@@ -232,7 +236,7 @@ const expectedFromMarkers = (labTest: LabTestRecord): ExpectedResult[] => {
   }))
 }
 
-const expectedFromMarkersResponse = async (
+export const expectedFromMarkersResponse = async (
   source: SeedSource,
   test: LabTestRecord,
 ): Promise<ExpectedResult[]> => {
@@ -348,9 +352,7 @@ export const seedFrom = async (
   let cursor: string | null = null
   for (;;) {
     const path =
-      cursor === null
-        ? "/v3/lab_test"
-        : `/v3/lab_test?next_cursor=${encodeURIComponent(cursor)}`
+      cursor === null ? "/v3/lab_test" : `/v3/lab_test?next_cursor=${encodeURIComponent(cursor)}`
     const response = await request(source, "GET", path)
     if (!response.ok) break
     const payload = asRecord(await readJson(response))
@@ -388,8 +390,7 @@ export const seedFrom = async (
     state.replaceCatalog({
       labTests: labTests.length > 0 ? labTests : currentTests,
       labs: labs.length > 0 ? labs : currentLabs,
-      expectedResults:
-        Object.keys(expectedResults).length > 0 ? expectedResults : currentExpected,
+      expectedResults: Object.keys(expectedResults).length > 0 ? expectedResults : currentExpected,
     })
   }
 
@@ -414,16 +415,13 @@ export const seedFrom = async (
       const listedUser = mapUser(entry)
       if (!listedUser) continue
       const detailResponse = await request(source, "GET", `/v2/user/${listedUser.user_id}`)
-      const user =
-        detailResponse.ok ? (mapUser(await readJson(detailResponse)) ?? listedUser) : listedUser
+      const user = detailResponse.ok
+        ? (mapUser(await readJson(detailResponse)) ?? listedUser)
+        : listedUser
       state.insertUser(user)
       users += 1
 
-      const infoResponse = await request(
-        source,
-        "GET",
-        `/v2/user/${user.user_id}/info/latest`,
-      )
+      const infoResponse = await request(source, "GET", `/v2/user/${user.user_id}/info/latest`)
       if (infoResponse.ok) {
         const info = asRecord(await readJson(infoResponse))
         if (info) state.userInfo.insert(user.user_id, info as UserInfoRecord)

@@ -1,0 +1,131 @@
+{
+  "name": "@crvouga/mockingbird-service-sqlite",
+  "version": "0.0.0-development",
+  "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./unstable": {
+      "types": "./dist/unstable.d.ts",
+      "import": "./dist/unstable.js",
+      "default": "./dist/unstable.js"
+    }
+  },
+  "files": [
+    "dist",
+    "AGENTS.md",
+    "COMPATIBILITY.md",
+    "COMPATIBILITY-AUDIT.md",
+    "README.md",
+    "LICENSE",
+    "compat",
+    "CHANGELOG.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/sqlite"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite#readme",
+  "bugs": {
+    "url": "https://github.com/crvouga/mockingbird/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "test": "bun test tests/contract tests/fuzz tests/harness",
+    "test:contract": "bun test tests/contract",
+    "test:fuzz": "bun test tests/fuzz",
+    "test:pbt": "bun test tests/fuzz",
+    "test:pbt:random": "bun run scripts/pbt-random.ts",
+    "test:fuzz:soak": "SQLITE_MEM_MIXED_STEPS=${SQLITE_MEM_MIXED_STEPS:-48} SQLITE_MEM_STATEFUL_STEPS=${SQLITE_MEM_STATEFUL_STEPS:-48} SQLITE_MEM_WALK_STEPS=${SQLITE_MEM_WALK_STEPS:-48} SQLITE_MEM_FUZZ_RUNS=${SQLITE_MEM_FUZZ_RUNS:-40} bun test tests/fuzz/mixed-stateful.test.ts tests/fuzz/stateful.test.ts tests/fuzz/random-walk.test.ts tests/fuzz/metamorphic tests/fuzz/robustness.test.ts tests/fuzz/sqllogictest.test.ts tests/fuzz/corpus.test.ts",
+    "test:metamorphic": "bun test tests/fuzz/metamorphic",
+    "test:sqllogictest": "bun test tests/fuzz/sqllogictest.test.ts",
+    "test:dst": "bun test tests/fuzz/stateful.test.ts tests/fuzz/mixed-stateful.test.ts tests/fuzz/random-walk.test.ts tests/fuzz/corpus.test.ts",
+    "test:walk": "bun test tests/fuzz/random-walk.test.ts",
+    "test:walk:soak": "bun run scripts/random-walk.ts",
+    "import:sqllogictest": "bun run scripts/import-sqllogictest.ts",
+    "example": "bun run --cwd examples/react-vite dev",
+    "benchmark": "bun run benchmarks/run.ts --tier default --engine mem",
+    "benchmark:bun": "bun run benchmarks/run.ts --tier full --engine both",
+    "benchmark:compare": "bun run benchmarks/run.ts --tier default --engine compare --grep compare/ --out benchmarks/results/compare-js.json",
+    "benchmark:compare-js": "bun run benchmarks/run.ts --tier default --engine compare-js --grep compare/js/ --out benchmarks/results/compare-js-only.json",
+    "benchmark:compare-sqlite": "bun run benchmarks/run.ts --tier default --engine compare-sqlite --grep compare/sqlite/ --out benchmarks/results/compare-sqlite.json",
+    "benchmark:ci": "bun run benchmarks/run.ts --tier ci --engine mem --out benchmarks/results/ci-latest.json && bun run benchmarks/compare-ci.ts && bun run benchmarks/check-budgets.ts",
+    "benchmark:memory": "bun run benchmarks/check-budgets.ts",
+    "benchmark:bundle": "bun run build && bun run benchmarks/bundle.ts",
+    "benchmark:report": "bun run benchmarks/report-html.ts",
+    "test:browser": "bun run build && bun run scripts/browser-perf.ts",
+    "test:browser-sql": "bun run build && bun run scripts/browser-sql-smoke.ts",
+    "test:canaries": "bun run scripts/run-canaries.ts",
+    "test:sqlite-compat": "bun run scripts/sqlite-compat-gate.ts && bun run scripts/check-skip-register.ts && bun test tests/contract tests/fuzz tests/harness",
+    "divergences": "bun run scripts/generate-divergences.ts",
+    "fixtures:browser": "bun run scripts/generate-browser-fixtures.ts",
+    "inventory": "bun run scripts/sqlite-inventory.ts",
+    "scenarios": "bun run scripts/sqlite-scenarios.ts",
+    "fts-surface": "bun run scripts/fts-oracle-surface.ts",
+    "requirements": "bun run scripts/sqlite-requirements.ts",
+    "typecheck": "tsc --noEmit",
+    "typecheck:package": "tsc --noEmit -p tsconfig.package.json",
+    "format": "biome format --config-path=biome.json --write .",
+    "format:check": "biome format --config-path=biome.json .",
+    "lint": "biome lint --config-path=biome.json --error-on-warnings .",
+    "lint:fix": "biome lint --config-path=biome.json --write --error-on-warnings .",
+    "clean": "rm -rf dist",
+    "check": "bun run format:check && bun run lint && bun run typecheck && bun run test:sqlite-compat",
+    "check:full": "bun run check && bun run build && bun run pack:check && bun run portability",
+    "verify-package": "bun run scripts/verify-package.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "portability": "bun ../../../scripts/portability.ts",
+    "example:react-vite": "cd examples/react-vite && bun install && bun run dev",
+    "fc": "clear && bun format && bun check:full"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/cli": "^0.18.5",
+    "@biomejs/biome": "^2.5.8",
+    "@types/bun": "latest",
+    "alasql": "^4.17.3",
+    "esbuild": "^0.28.2",
+    "fast-check": "^4.1.1",
+    "publint": "^0.3.23",
+    "sql.js": "^1.14.2",
+    "typescript": "^5.8.3",
+    "wa-sqlite": "^1.0.0"
+  },
+  "engines": {
+    "bun": ">=1.1.0",
+    "node": ">=20"
+  },
+  "keywords": [
+    "mockingbird",
+    "sqlite",
+    "typescript",
+    "in-memory",
+    "database",
+    "sql"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "service",
+    "category": "databases",
+    "displayName": "SQLite",
+    "vendor": {
+      "website": "https://sqlite.org",
+      "docs": "https://sqlite.org/docs.html",
+      "description": "SQLite is a small, fast, self-contained, public-domain SQL database engine, the most widely deployed database in the world."
+    },
+    "status": "ready"
+  }
+}

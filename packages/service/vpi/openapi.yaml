@@ -1,0 +1,1433 @@
+openapi: 3.1.0
+info:
+  title: VPI compounding pharmacy API (Mockingbird subset)
+  description: |
+    Stateful mock subset of the VPI (vpicompounding.net) clinic API our backend drives as a
+    draft-only eRx rail: JWT authentication, product taxonomy/details/discounts, day supply,
+    shipping states and rates, clinic location, providers, patients, the provider-signature
+    duplicate check, saveNewPrescription, and the three paged prescription status lists.
+    Hand-derived from the consumer's zod contracts (the vendor publishes no spec).
+  version: "1"
+  x-mockingbird-upstream:
+    note: >-
+      Hand-derived from apps/backend/src/modules/erx/clients/vpi-api.contracts.ts and the
+      client-local schemas in vpi-api.client.ts (request bodies are exactly what the client
+      sends; responses are what its zod schemas accept).
+servers:
+  - url: https://api.vpicompounding.net
+security:
+  - bearerAuth: []
+paths:
+  /accounts/authenticate:
+    post:
+      operationId: Authenticate
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                password:
+                  type: string
+                  minLength: 1
+                  maxLength: 120
+                isPatientLogin:
+                  type: boolean
+      responses:
+        "200":
+          description: JWT and refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthTokens"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /products/getAllFamiliesAndCategories:
+    get:
+      operationId: GetAllFamiliesAndCategories
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Product families and their categories (subCategory1)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [family, categories]
+                  properties:
+                    family:
+                      type: string
+                    categories:
+                      type: array
+                      items:
+                        type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /products/getProductsByCategory:
+    post:
+      operationId: GetProductsByCategory
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category, subCategory1]
+              examples:
+                - category: Hormone Restoration
+                  subCategory1: Testosterone
+                - category: Weight Management
+                  subCategory1: GLP-1
+              properties:
+                category:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  examples: [Hormone Restoration, Weight Management]
+                subCategory1:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                  examples: [Testosterone, GLP-1]
+      responses:
+        "200":
+          description: Products grouped by subCategory2, then common name
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [subCategory2_item, commonNames]
+                  properties:
+                    subCategory2_item:
+                      type: string
+                    commonNames:
+                      type: array
+                      items:
+                        type: object
+                        required: [commonName, products]
+                        properties:
+                          commonName:
+                            type: string
+                          products:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/ProductSummary"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /products/getProductDetailsByProductId/{productId}:
+    parameters:
+      - name: productId
+        in: path
+        required: true
+        description: The product's Mongo id (`id`), not its catalog code.
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: product
+            missing: 000000000000000000000000
+    get:
+      operationId: GetProductDetailsByProductId
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductDetails"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products/getProductDiscountByProductIds:
+    post:
+      operationId: GetProductDiscountByProductIds
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clinicId, productIds]
+              properties:
+                clinicId:
+                  $ref: "#/components/schemas/ClinicId"
+                productIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items:
+                    type: string
+                    minLength: 1
+                    x-mockingbird-resource-ref:
+                      type: product
+                      missing: 000000000000000000000000
+      responses:
+        "200":
+          description: The clinic's discount for each known product
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProductDiscount"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /products/calculateDaySupply:
+    post:
+      operationId: CalculateDaySupply
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, quantity, sig]
+              properties:
+                productId:
+                  type: string
+                  minLength: 1
+                  x-mockingbird-resource-ref:
+                    type: product
+                    missing: 000000000000000000000000
+                quantity:
+                  type: number
+                  exclusiveMinimum: 0
+                  maximum: 1000
+                sig:
+                  type: string
+                  minLength: 1
+                  maxLength: 500
+      responses:
+        "200":
+          description: Day supply
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [daySupply]
+                properties:
+                  daySupply:
+                    type: integer
+                    minimum: 1
+                  daySupplyReason:
+                    type: ["string", "null"]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /admin/rxOrdering/getShippingStates:
+    get:
+      operationId: GetShippingStates
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: States VPI ships to, by full name
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [states]
+                      properties:
+                        states:
+                          type: array
+                          items:
+                            type: object
+                            required: [name, booleanCheck, nonSterile, sterile]
+                            properties:
+                              name:
+                                type: string
+                              booleanCheck:
+                                type: boolean
+                              nonSterile:
+                                type: boolean
+                              sterile:
+                                type: boolean
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /portal/getShippingRate:
+    post:
+      operationId: GetShippingRate
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clinicId, clinicLocationId, patientId, productIds, shippingState, isRushOrder]
+              properties:
+                clinicId:
+                  $ref: "#/components/schemas/ClinicId"
+                clinicLocationId:
+                  $ref: "#/components/schemas/ClinicLocationId"
+                patientId:
+                  type: string
+                  minLength: 1
+                  x-mockingbird-resource-ref:
+                    type: patient
+                    missing: 000000000000000000000000
+                productIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 5
+                  items:
+                    type: string
+                    minLength: 1
+                    x-mockingbird-resource-ref:
+                      type: product
+                      missing: 000000000000000000000000
+                shippingState:
+                  type: string
+                  pattern: "^[A-Za-z]{2}$"
+                  examples: [AZ, TX, NY]
+                isRushOrder:
+                  type: boolean
+      responses:
+        "200":
+          description: Shipping method and rush cost
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [shippingMethod, rushOrderCost, rushOrderMethod, isSignatureRequired]
+                properties:
+                  shippingMethod:
+                    type: string
+                  rushOrderCost:
+                    type: number
+                    minimum: 0
+                  rushOrderMethod:
+                    type: string
+                  isSignatureRequired:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clinic/rxOrdering/checkProviderSignatureNeededDuplicate:
+    post:
+      operationId: CheckProviderSignatureNeededDuplicate
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clinicId, patientIds, productIds, clinicLocationIds]
+              properties:
+                clinicId:
+                  $ref: "#/components/schemas/ClinicId"
+                patientIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 3
+                  items:
+                    type: string
+                    minLength: 1
+                    x-mockingbird-resource-ref:
+                      type: patient
+                      missing: 000000000000000000000000
+                productIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 3
+                  items:
+                    type: string
+                    minLength: 1
+                    x-mockingbird-resource-ref:
+                      type: product
+                      missing: 000000000000000000000000
+                clinicLocationIds:
+                  type: array
+                  minItems: 1
+                  maxItems: 3
+                  items:
+                    $ref: "#/components/schemas/ClinicLocationId"
+      responses:
+        "200":
+          description: Duplicate and provider-signature flags
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [isDuplicate, isProviderSignatureNeeded]
+                properties:
+                  isDuplicate:
+                    type: boolean
+                  isProviderSignatureNeeded:
+                    type: boolean
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /clinic/rxOrdering/saveNewPrescription:
+    post:
+      operationId: SaveNewPrescription
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SavePrescriptionBody"
+      responses:
+        "200":
+          description: Draft saved (awaiting provider signature)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message, prescriptionId, isRefillRequest, refillFromPrescriptionId]
+                properties:
+                  message:
+                    type: string
+                  prescriptionId:
+                    type: string
+                    x-mockingbird-resource:
+                      type: prescription
+                      identity: true
+                    x-mockingbird-volatile:
+                      kind: id
+                  isRefillRequest:
+                    type: boolean
+                  refillFromPrescriptionId:
+                    type: ["string", "null"]
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          $ref: "#/components/responses/Conflict"
+  /patients/getPatientByPatientId:
+    post:
+      operationId: GetPatientByPatientId
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientLookupBody"
+      responses:
+        "200":
+          description: Patient
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Patient"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /patients/getPatientAddressesByPatientId:
+    post:
+      operationId: GetPatientAddressesByPatientId
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatientLookupBody"
+      responses:
+        "200":
+          description: The patient's addresses
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [addresses]
+                properties:
+                  addresses:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Address"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /patients/getPatientsInClinic:
+    post:
+      operationId: GetPatientsInClinic
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clinicId, userId, limit, currentPage]
+              examples:
+                - clinicId: 65a1c0de00000000000000c1
+                  userId: 65a1c0de00000000000000a1
+                  limit: 100
+                  currentPage: 1
+              properties:
+                clinicId:
+                  $ref: "#/components/schemas/ClinicId"
+                userId:
+                  $ref: "#/components/schemas/UserId"
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 100
+                currentPage:
+                  type: integer
+                  minimum: 1
+                  maximum: 50
+      responses:
+        "200":
+          description: One page of the clinic's patient roster
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [pagination, patients]
+                properties:
+                  pagination:
+                    type: object
+                    required: [hasNextPage]
+                    properties:
+                      hasNextPage:
+                        type: boolean
+                      currentPage:
+                        type: integer
+                      limit:
+                        type: integer
+                      totalCount:
+                        type: integer
+                  patients:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Patient"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /staffs/getAllProvidersByClinicLocationId:
+    post:
+      operationId: GetAllProvidersByClinicLocationId
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clinicLocationId, clinicId]
+              properties:
+                clinicLocationId:
+                  $ref: "#/components/schemas/ClinicLocationId"
+                clinicId:
+                  $ref: "#/components/schemas/ClinicId"
+      responses:
+        "200":
+          description: Providers at the location
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Provider"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clinicLocations/getClinicLocationByClinicLocationId:
+    post:
+      operationId: GetClinicLocationByClinicLocationId
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clinicLocationId]
+              properties:
+                clinicLocationId:
+                  $ref: "#/components/schemas/ClinicLocationId"
+      responses:
+        "200":
+          description: Clinic location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicLocation"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clinic/rxOrdering/getIncompleteSavedPrescriptionsInClinicLocation:
+    post:
+      operationId: GetIncompleteSavedPrescriptionsInClinicLocation
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrescriptionPageBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/PrescriptionRows"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clinic/rxOrdering/getSubmittedPrescriptionsInClinicLocation:
+    post:
+      operationId: GetSubmittedPrescriptionsInClinicLocation
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrescriptionPageBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/PrescriptionRows"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /clinic/rxOrdering/getArchivedPrescriptionsInClinic:
+    post:
+      operationId: GetArchivedPrescriptionsInClinic
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrescriptionPageBody"
+      responses:
+        "200":
+          $ref: "#/components/responses/PrescriptionRows"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  responses:
+    BadRequest:
+      description: Invalid request body
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Unauthorized:
+      description: Missing, invalid or expired JWT (or bad credentials)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    NotFound:
+      description: Unknown clinic, location, patient, product or provider
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    Conflict:
+      description: The request could not be completed right now
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+    PrescriptionRows:
+      description: >-
+        One page of prescription status rows, in one of the four envelopes our client accepts
+        (bare array, {prescriptions}, {message: [...]}, {message: {prescriptions}}).
+      content:
+        application/json:
+          schema:
+            anyOf:
+              - type: array
+                items:
+                  $ref: "#/components/schemas/PrescriptionRow"
+              - type: object
+                required: [prescriptions]
+                properties:
+                  prescriptions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/PrescriptionRow"
+              - type: object
+                required: [message]
+                properties:
+                  message:
+                    anyOf:
+                      - type: array
+                        items:
+                          $ref: "#/components/schemas/PrescriptionRow"
+                      - type: object
+                        required: [prescriptions]
+                        properties:
+                          prescriptions:
+                            type: array
+                            items:
+                              $ref: "#/components/schemas/PrescriptionRow"
+  schemas:
+    ErrorBody:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object
+            required: [path, message]
+            properties:
+              path:
+                type: string
+              message:
+                type: string
+    ClinicId:
+      type: string
+      minLength: 1
+      maxLength: 64
+      examples: [65a1c0de00000000000000c1]
+    ClinicLocationId:
+      type: string
+      minLength: 1
+      maxLength: 64
+      examples: [65a1c0de00000000000000d1]
+    UserId:
+      type: string
+      minLength: 1
+      maxLength: 64
+      examples: [65a1c0de00000000000000a1]
+    AuthTokens:
+      type: object
+      required: [id, jwtToken, refreshToken]
+      properties:
+        id:
+          type: string
+        jwtToken:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        refreshToken:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+    ProductSummary:
+      type: object
+      required:
+        - id
+        - name
+        - unitPrice
+        - productId
+        - productSize
+        - medicalAccessories
+        - coldShipped
+        - controlledSubstance
+        - dispenseType
+        - productType
+        - isReasonForCompoundedMedicationNeeded
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: product
+            identity: true
+        name:
+          type: string
+        unitPrice:
+          type: number
+          minimum: 0
+        productId:
+          type: string
+        productSize:
+          type: string
+        medicalAccessories:
+          type: string
+          enum: ["0", "1"]
+        coldShipped:
+          type: string
+          enum: ["0", "1"]
+        controlledSubstance:
+          type: string
+          enum: ["0", "1"]
+        dispenseType:
+          type: string
+        productType:
+          type: string
+          enum: [S, NS]
+        isReasonForCompoundedMedicationNeeded:
+          type: boolean
+    ProductDetails:
+      type: object
+      required:
+        - id
+        - productId
+        - name
+        - unitPrice
+        - family
+        - subCategory1
+        - subCategory2
+        - commonName
+        - sigOptions
+        - productSize
+        - medicalAccessories
+        - coldShipped
+        - controlledSubstance
+        - dispenseType
+        - isReasonForCompoundedMedicationNeeded
+        - productType
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        name:
+          type: string
+        unitPrice:
+          type: number
+          minimum: 0
+        family:
+          type: string
+        subCategory1:
+          type: string
+        subCategory2:
+          type: string
+        commonName:
+          type: string
+        sigOptions:
+          type: array
+          items:
+            type: string
+        productSize:
+          type: string
+        medicalAccessories:
+          type: string
+          enum: ["0", "1"]
+        coldShipped:
+          type: string
+          enum: ["0", "1"]
+        controlledSubstance:
+          type: string
+          enum: ["0", "1"]
+        dispenseType:
+          type: string
+        reasonForCompoundedMedication:
+          type: ["array", "null"]
+          items:
+            type: string
+        isReasonForCompoundedMedicationNeeded:
+          type: boolean
+        productType:
+          type: string
+          enum: [S, NS]
+        patientPayAmount:
+          type: ["number", "null"]
+        ndc:
+          type: ["number", "null"]
+        isActive:
+          type: boolean
+        isAvailable:
+          type: boolean
+    ProductDiscount:
+      type: object
+      required: [id, productId, discountedPrice, unitPrice, discountedPercentage, controlledSubstance]
+      properties:
+        id:
+          type: string
+        productId:
+          type: string
+        discountedPrice:
+          type: number
+          minimum: 0
+        unitPrice:
+          type: number
+          minimum: 0
+        discountedPercentage:
+          type: number
+          minimum: 0
+          maximum: 100
+        controlledSubstance:
+          type: string
+          enum: ["0", "1"]
+    Patient:
+      type: object
+      required: [id, firstName, lastName, dateOfBirth]
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: patient
+            identity: true
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+        email:
+          type: ["string", "null"]
+        phoneNumber:
+          type: ["string", "null"]
+        cellPhone:
+          type: ["string", "null"]
+    Address:
+      type: object
+      required: [id, addressLine1, addressLine2, city, state, zipcode]
+      properties:
+        id:
+          type: string
+        addressLine1:
+          type: string
+        addressLine2:
+          type: ["string", "null"]
+        city:
+          type: string
+        state:
+          type: string
+        zipcode:
+          type: string
+    Provider:
+      type: object
+      required: [id, firstName, lastName, npi]
+      properties:
+        id:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        npi:
+          type: ["string", "null"]
+        deaInfo:
+          type: array
+          items:
+            type: object
+        providerLicenses:
+          type: array
+          items:
+            type: object
+        allowExostar:
+          type: boolean
+        isSuperUserSameAsProvider:
+          type: boolean
+    ClinicLocation:
+      type: object
+      required: [id, clinicId, locationName]
+      properties:
+        id:
+          type: string
+        clinicId:
+          type: string
+        locationName:
+          type: string
+        email:
+          type: ["string", "null"]
+        fax:
+          type: ["string", "null"]
+        addressLine1:
+          type: ["string", "null"]
+        addressLine2:
+          type: ["string", "null"]
+        city:
+          type: ["string", "null"]
+        zipcode:
+          type: ["string", "null"]
+        state:
+          type: ["string", "null"]
+    PatientLookupBody:
+      type: object
+      required: [patientId, userId]
+      properties:
+        patientId:
+          type: string
+          minLength: 1
+          x-mockingbird-resource-ref:
+            type: patient
+            missing: 000000000000000000000000
+        userId:
+          $ref: "#/components/schemas/UserId"
+    PrescriptionPageBody:
+      type: object
+      required: [clinicLocationId, userId, limit, currentPage]
+      properties:
+        clinicLocationId:
+          $ref: "#/components/schemas/ClinicLocationId"
+        userId:
+          $ref: "#/components/schemas/UserId"
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+        currentPage:
+          type: integer
+          minimum: 1
+          maximum: 50
+    PrescriptionRow:
+      type: object
+      required: [prescriptionStatus]
+      properties:
+        prescriptionId:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        id:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        prescriptionStatus:
+          type: string
+        trackingNumber:
+          type: ["string", "null"]
+        patientId:
+          type: string
+        createdAt:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+    SavePrescriptionProduct:
+      type: object
+      required:
+        - id
+        - productId
+        - name
+        - unitPrice
+        - family
+        - subCategory1
+        - subCategory2
+        - commonName
+        - sigOptions
+        - productSize
+        - medicalAccessories
+        - coldShipped
+        - controlledSubstance
+        - dispenseType
+        - reasonForCompoundedMedication
+        - isReasonForCompoundedMedicationNeeded
+        - productType
+        - patientPay
+        - ndc
+        - quantity
+        - sig
+        - daySupply
+        - daySupplyReason
+        - refills
+        - isCustomSig
+        - discountedPercentage
+        - discountedPrice
+        - displayedGeneratedSig
+      properties:
+        id:
+          type: string
+          minLength: 1
+          x-mockingbird-resource-ref:
+            type: product
+            missing: 000000000000000000000000
+        productId:
+          type: string
+          minLength: 1
+          maxLength: 40
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        unitPrice:
+          type: number
+          minimum: 0
+          maximum: 10000
+        family:
+          type: string
+          minLength: 1
+          maxLength: 80
+        subCategory1:
+          type: string
+          minLength: 1
+          maxLength: 80
+        subCategory2:
+          type: string
+          minLength: 1
+          maxLength: 80
+        commonName:
+          type: string
+          minLength: 1
+          maxLength: 120
+        sigOptions:
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            minLength: 1
+            maxLength: 120
+        productSize:
+          type: string
+          minLength: 1
+          maxLength: 40
+        medicalAccessories:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+        coldShipped:
+          type: string
+          enum: ["0", "1"]
+        controlledSubstance:
+          description: VPI's API rail excludes controlled substances.
+          type: string
+          enum: ["0"]
+        dispenseType:
+          type: string
+          minLength: 1
+          maxLength: 40
+        reasonForCompoundedMedication:
+          type: string
+          maxLength: 200
+        isReasonForCompoundedMedicationNeeded:
+          type: boolean
+        productType:
+          type: string
+          enum: [S, NS]
+        patientPay:
+          type: number
+          minimum: 0
+          maximum: 10000
+        ndc:
+          type: string
+          maxLength: 11
+        quantity:
+          type: number
+          exclusiveMinimum: 0
+          maximum: 1000
+        sig:
+          type: string
+          minLength: 1
+          maxLength: 500
+        daySupply:
+          type: integer
+          minimum: 1
+          maximum: 365
+        daySupplyReason:
+          type: string
+          maxLength: 200
+        refills:
+          type: integer
+          minimum: 0
+          maximum: 12
+        isCustomSig:
+          type: boolean
+        discountedPercentage:
+          type: number
+          minimum: 0
+          maximum: 100
+        discountedPrice:
+          type: number
+          minimum: 0
+          maximum: 10000
+        displayedGeneratedSig:
+          type: string
+          minLength: 1
+          maxLength: 500
+    SavePrescriptionBody:
+      type: object
+      required:
+        - patientIds
+        - clinicLocationId
+        - providerId
+        - clinicId
+        - userId
+        - products
+        - rxPadProducts
+        - shippingInfo
+        - patientNotificationRecipients
+      properties:
+        patientIds:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: string
+            minLength: 1
+            x-mockingbird-resource-ref:
+              type: patient
+              missing: 000000000000000000000000
+        clinicLocationId:
+          $ref: "#/components/schemas/ClinicLocationId"
+        providerId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          examples: [65a1c0de00000000000000e1]
+        clinicId:
+          $ref: "#/components/schemas/ClinicId"
+        userId:
+          $ref: "#/components/schemas/UserId"
+        products:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            $ref: "#/components/schemas/SavePrescriptionProduct"
+        rxPadProducts:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+        shippingInfo:
+          type: object
+          required:
+            - isRushOrder
+            - isSignatureRequired
+            - orderNotes
+            - shipTo
+            - isNewAddressUsed
+            - shippingMethod
+            - shippingAddress
+            - rushOrderCost
+            - rushOrderMethod
+          properties:
+            isRushOrder:
+              type: boolean
+            isSignatureRequired:
+              type: boolean
+            orderNotes:
+              type: string
+              maxLength: 500
+            shipTo:
+              type: string
+              minLength: 1
+              maxLength: 40
+            isNewAddressUsed:
+              type: boolean
+            shippingMethod:
+              type: string
+              minLength: 1
+              maxLength: 40
+            shippingAddress:
+              type: object
+              required: [addressLine1, addressLine2, city, state, zipcode]
+              properties:
+                addressLine1:
+                  type: string
+                  minLength: 1
+                  maxLength: 80
+                addressLine2:
+                  type: string
+                  maxLength: 80
+                city:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
+                state:
+                  description: The canonical full state name (never the 2-letter code).
+                  type: string
+                  enum:
+                    - "Alabama"
+                    - "Alaska"
+                    - "Arizona"
+                    - "Arkansas"
+                    - "California"
+                    - "Colorado"
+                    - "Connecticut"
+                    - "Delaware"
+                    - "Florida"
+                    - "Georgia"
+                    - "Hawaii"
+                    - "Idaho"
+                    - "Illinois"
+                    - "Indiana"
+                    - "Iowa"
+                    - "Kansas"
+                    - "Kentucky"
+                    - "Louisiana"
+                    - "Maine"
+                    - "Maryland"
+                    - "Massachusetts"
+                    - "Michigan"
+                    - "Minnesota"
+                    - "Mississippi"
+                    - "Missouri"
+                    - "Montana"
+                    - "Nebraska"
+                    - "Nevada"
+                    - "New Hampshire"
+                    - "New Jersey"
+                    - "New Mexico"
+                    - "New York"
+                    - "North Carolina"
+                    - "North Dakota"
+                    - "Ohio"
+                    - "Oklahoma"
+                    - "Oregon"
+                    - "Pennsylvania"
+                    - "Rhode Island"
+                    - "South Carolina"
+                    - "South Dakota"
+                    - "Tennessee"
+                    - "Texas"
+                    - "Utah"
+                    - "Vermont"
+                    - "Virginia"
+                    - "Washington"
+                    - "West Virginia"
+                    - "Wisconsin"
+                    - "Wyoming"
+                    - "District of Columbia"
+                    - "American Samoa"
+                    - "Guam"
+                    - "Northern Mariana Islands"
+                    - "Puerto Rico"
+                    - "U.S. Virgin Islands"
+                zipcode:
+                  type: string
+                  minLength: 1
+                  maxLength: 10
+            rushOrderCost:
+              type: number
+              minimum: 0
+              maximum: 1000
+            rushOrderMethod:
+              type: string
+              maxLength: 40
+        creditRequested:
+          type: boolean
+        encryptedBillingInfo:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        patientNotificationRecipients:
+          type: array
+          maxItems: 2
+          items:
+            type: object

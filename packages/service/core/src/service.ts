@@ -14,13 +14,26 @@ import {
   type SqliteClient,
 } from "@crvouga/mockingbird-sqlite"
 import { type Context, Hono } from "hono"
+import { annotateResponse } from "./journal.js"
+import { recordedIssues } from "./validation.js"
+
+/** A rejection carries the issues `bodyIssues` found, for the runtime's log entry. */
+const withIssues = (request: Request, response: Response): Response => {
+  const issues = response.status >= 400 ? recordedIssues(request) : undefined
+  return issues && issues.length > 0 ? annotateResponse(response, { issues }) : response
+}
 
 /** Options every provider constructor accepts. */
 export type APIOptions = {
-  /** Sync SQLite client. Defaults to `@crvouga/sqlite-mem`. */
+  /** Sync SQLite client. Defaults to `@crvouga/mockingbird-service-sqlite`. */
   sqlite?: SqliteClient
   /** Clock used for `created`-style fields. Default `Date.now`. */
   now?: () => number
+  /**
+   * Storage namespace for this instance's records. Instances sharing one SQLite
+   * client stay isolated when their namespaces differ. Defaults to the service name.
+   */
+  namespace?: string
 }
 
 export type OperationContext = {
@@ -36,6 +49,8 @@ export type OperationContext = {
   /** Service namespace used for records / sequences. */
   namespace: string
   operation: Operation
+  /** The vendor contract the service was built from. */
+  document: OpenAPIDocument
   now: () => number
 }
 
@@ -168,11 +183,11 @@ export const createService = (options: ServiceOptions): Service => {
         sqlite: options.sqlite,
         namespace: options.namespace,
         operation,
+        document: options.document,
         now,
       }
       const short = await options.before?.(context)
-      if (short) return short
-      return handler(context)
+      return withIssues(request, short ?? (await handler(context)))
     }
     app.on(operation.method.toUpperCase(), honoPath(operation.path), route)
   }

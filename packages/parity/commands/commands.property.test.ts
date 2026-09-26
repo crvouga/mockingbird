@@ -320,7 +320,7 @@ describe("commandArbitrary", () => {
   test("invalid bodies are produced with nonzero frequency and describe their violation", () => {
     const samples = fc.sample(
       commands.filter((c) => c.operationId === "prices.create"),
-      { numRuns: 200, ...params },
+      { ...params, numRuns: 200 },
     )
     const invalid = samples.filter((c) => c.invalid !== undefined)
     expect(invalid.length).toBeGreaterThan(0)

@@ -1,19 +1,15 @@
 /**
- * Shared helpers for Vault / GitHub secrets tooling.
+ * Shared helpers for GitHub Secrets / .env tooling.
  * Never print secret values — only names, paths, and status.
  */
-import { existsSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { $ } from "bun"
 
 export const root = join(import.meta.dir, "../..")
 
-export type VaultConfig = {
-  addr: string
-  mount: string
-  project: string
-  config: string
-}
+export const ENV_LOCAL_PATH = join(root, ".env.local")
+export const ENV_EXAMPLE_PATH = join(root, ".env.example")
 
 export type SecretObtain = {
   title: string
@@ -25,11 +21,10 @@ export type SecretEntry = {
   id: string
   description: string
   required: boolean
-  vault: { path: string; key: string }
   github: { name: string | null; required: boolean }
   local_env: string[]
   obtain: SecretObtain
-  populate: { vault: string; github: string }
+  populate: { github: string; env_local: string }
 }
 
 export type ChecklistEntry = {
@@ -71,20 +66,6 @@ function parseYaml<T>(text: string): T {
   return parsed as T
 }
 
-export async function loadVaultConfig(): Promise<VaultConfig> {
-  const path = join(root, ".vault.yaml")
-  if (!existsSync(path)) {
-    throw new Error(`Missing ${path}`)
-  }
-  const cfg = parseYaml<VaultConfig>(await Bun.file(path).text())
-  for (const key of ["addr", "mount", "project", "config"] as const) {
-    if (!cfg[key] || typeof cfg[key] !== "string") {
-      throw new Error(`.vault.yaml missing string field: ${key}`)
-    }
-  }
-  return cfg
-}
-
 export async function loadManifest(): Promise<SecretsManifest> {
   const path = join(root, "secrets.manifest.yaml")
   if (!existsSync(path)) {
@@ -98,6 +79,51 @@ export async function loadManifest(): Promise<SecretsManifest> {
     manifest.checklists = []
   }
   return manifest
+}
+
+export type ParityRequirement = { service: string; env: string[] }
+
+const hasParityScript = (service: string): boolean =>
+  existsSync(join(root, "packages/service", service, "scripts/parity.ts"))
+
+/**
+ * Every service with a live-parity script, and the env vars its `loadCredentials({ fields })`
+ * call requires. Read from source so the list never drifts from what the scripts load.
+ */
+export function parityRequirements(): ParityRequirement[] {
+  const servicesDir = join(root, "packages/service")
+  const out: ParityRequirement[] = []
+  for (const service of readdirSync(servicesDir).sort()) {
+    if (!hasParityScript(service)) continue
+    const source = readFileSync(join(servicesDir, service, "scripts/parity.ts"), "utf8")
+    const env = new Set<string>()
+    for (const block of source.matchAll(/fields:\s*\{([^}]*)\}/g)) {
+      for (const name of (block[1] ?? "").matchAll(/:\s*"([A-Z0-9_]+)"/g)) {
+        if (name[1]) env.add(name[1])
+      }
+    }
+    if (env.size > 0) out.push({ service, env: [...env] })
+  }
+  return out
+}
+
+/**
+ * Every live-parity credential and setting: the names `.env.example` lists under a `# <service>`
+ * heading for a service with a parity script. Each is a repo secret of the same name.
+ */
+export function paritySettingNames(): Set<string> {
+  const out = new Set<string>()
+  if (!existsSync(ENV_EXAMPLE_PATH)) return out
+  let inService = false
+  for (const rawLine of readFileSync(ENV_EXAMPLE_PATH, "utf8").split("\n")) {
+    const line = rawLine.trim()
+    const heading = /^#\s*([a-z0-9-]+)$/.exec(line)
+    if (heading?.[1]) inService = hasParityScript(heading[1])
+    else if (line === "") inService = false
+    const key = /^([A-Z_][A-Z0-9_]*)=/.exec(line)?.[1]
+    if (inService && key) out.add(key)
+  }
+  return out
 }
 
 export function hasFlag(argv: string[], flag: string): boolean {
@@ -144,65 +170,6 @@ export async function run(
   }
 }
 
-export function vaultEnv(cfg: VaultConfig): Record<string, string> {
-  return {
-    VAULT_ADDR: process.env.VAULT_ADDR?.trim() || cfg.addr,
-  }
-}
-
-/** Presence check: non-empty field without printing the value. */
-export async function vaultFieldPresent(
-  cfg: VaultConfig,
-  path: string,
-  key: string,
-): Promise<{ present: boolean; error?: string }> {
-  const env = vaultEnv(cfg)
-  const result = await run(["vault", "kv", "get", `-mount=${cfg.mount}`, `-field=${key}`, path], {
-    env,
-  })
-  if (!result.ok) {
-    const err = result.stderr || result.stdout || `exit ${result.exitCode}`
-    return { present: false, error: redactSecrets(err) }
-  }
-  if (!result.stdout.trim()) {
-    return { present: false, error: `Field ${key} is empty at ${path}` }
-  }
-  return { present: true }
-}
-
-/** Read a Vault field for piping into gh secret set. Caller must not log the value. */
-export async function vaultFieldValue(
-  cfg: VaultConfig,
-  path: string,
-  key: string,
-): Promise<{ value?: string; error?: string }> {
-  const env = vaultEnv(cfg)
-  const result = await run(["vault", "kv", "get", `-mount=${cfg.mount}`, `-field=${key}`, path], {
-    env,
-  })
-  if (!result.ok) {
-    return {
-      error: redactSecrets(result.stderr || result.stdout || `exit ${result.exitCode}`),
-    }
-  }
-  const value = result.stdout
-  if (!value.trim()) {
-    return { error: `Field ${key} is empty at ${path}` }
-  }
-  return { value }
-}
-
-export async function vaultTokenOk(cfg: VaultConfig): Promise<{ ok: boolean; error?: string }> {
-  const result = await run(["vault", "token", "lookup"], { env: vaultEnv(cfg) })
-  if (!result.ok) {
-    return {
-      ok: false,
-      error: redactSecrets(result.stderr || result.stdout || "vault token lookup failed"),
-    }
-  }
-  return { ok: true }
-}
-
 export async function ghSecretNames(repo: string): Promise<{ names?: string[]; error?: string }> {
   const result = await run(["gh", "secret", "list", "--repo", repo, "--json", "name"])
   if (!result.ok) {
@@ -235,8 +202,48 @@ export function redactSecrets(text: string): string {
     .replace(/npm_[A-Za-z0-9]{20,}/g, "[REDACTED_NPM_TOKEN]")
     .replace(/ghp_[A-Za-z0-9]{20,}/g, "[REDACTED_GH_TOKEN]")
     .replace(/github_pat_[A-Za-z0-9_]{20,}/g, "[REDACTED_GH_TOKEN]")
-    .replace(/hvs\.[A-Za-z0-9_-]{20,}/g, "[REDACTED_VAULT_TOKEN]")
-    .replace(/s\.[A-Za-z0-9]{20,}/g, "[REDACTED_VAULT_TOKEN]")
+}
+
+/** Read one line from the terminal without echoing it. Rejects when stdin is not a TTY. */
+export async function readSecret(label: string): Promise<string> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("A terminal is required to enter a secret without echo")
+  }
+
+  process.stdout.write(label)
+  process.stdin.setRawMode(true)
+  process.stdin.resume()
+
+  return await new Promise<string>((resolve, reject) => {
+    let value = ""
+    const cleanup = () => {
+      process.stdin.setRawMode(false)
+      process.stdin.pause()
+      process.stdin.off("data", onData)
+    }
+    const onData = (chunk: Buffer) => {
+      for (const byte of chunk) {
+        if (byte === 3) {
+          cleanup()
+          process.stdout.write("\n")
+          reject(new Error("Cancelled"))
+          return
+        }
+        if (byte === 10 || byte === 13) {
+          cleanup()
+          process.stdout.write("\n")
+          resolve(value)
+          return
+        }
+        if (byte === 8 || byte === 127) {
+          value = value.slice(0, -1)
+          continue
+        }
+        value += String.fromCharCode(byte)
+      }
+    }
+    process.stdin.on("data", onData)
+  })
 }
 
 export function printCheck(result: CheckResult): void {
@@ -277,41 +284,14 @@ export function printObtain(entry: SecretEntry | ChecklistEntry): void {
 }
 
 export function printPopulate(entry: SecretEntry): void {
-  console.log("  Populate Vault:")
-  for (const line of entry.populate.vault.trim().split("\n")) {
+  console.log("  Populate .env.local:")
+  for (const line of entry.populate.env_local.trim().split("\n")) {
     console.log(`    ${line}`)
   }
-  console.log("  Populate GitHub / local:")
+  console.log("  Populate GitHub Actions secret:")
   for (const line of entry.populate.github.trim().split("\n")) {
     console.log(`    ${line}`)
   }
-}
-
-export const NPM_PACKAGE = "@crvouga/mockingbird"
-export const NPM_SEED_VERSION = "0.1.0"
-export const NPM_PACKAGE_URL = "https://www.npmjs.com/package/@crvouga/mockingbird"
-export const NPM_TRUSTED_PUBLISHER_URL = "https://www.npmjs.com/package/@crvouga/mockingbird/access"
-
-export async function npmViewVersion(
-  name: string,
-): Promise<{ version?: string; missing: boolean; error?: string }> {
-  const result = await run([
-    "npm",
-    "view",
-    name,
-    "version",
-    "--registry",
-    "https://registry.npmjs.org",
-  ])
-  if (result.ok) {
-    const version = result.stdout.trim()
-    return { version, missing: false }
-  }
-  const text = `${result.stderr}\n${result.stdout}`
-  if (/\bE404\b/.test(text) || /404 Not Found/i.test(text) || /not in this registry/i.test(text)) {
-    return { missing: true }
-  }
-  return { missing: false, error: redactSecrets(text.trim() || `npm view exit ${result.exitCode}`) }
 }
 
 export function localEnvStatus(names: string[]): { set: string[]; unset: string[] } {
@@ -325,4 +305,60 @@ export function localEnvStatus(names: string[]): { set: string[]; unset: string[
     }
   }
   return { set, unset }
+}
+
+/** Parse a dotenv-format file. Minimal: `KEY=value` lines, `#` comments, blank lines skipped. */
+export function parseEnvFile(text: string): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim()
+    if (!line || line.startsWith("#")) continue
+    const eq = line.indexOf("=")
+    if (eq === -1) continue
+    const key = line.slice(0, eq).trim()
+    let value = line.slice(eq + 1).trim()
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1)
+    }
+    out[key] = value
+  }
+  return out
+}
+
+/** Read `.env.local`; returns `{}` if the file does not exist. Values only in memory. */
+export async function readEnvLocal(): Promise<Record<string, string>> {
+  if (!existsSync(ENV_LOCAL_PATH)) return {}
+  return parseEnvFile(await Bun.file(ENV_LOCAL_PATH).text())
+}
+
+/**
+ * Merge `updates` into `.env.local`, preserving existing lines/comments/order and appending
+ * any new keys at the end. Creates the file if it does not exist. Never logs values.
+ */
+export async function upsertEnvLocal(updates: Record<string, string>): Promise<void> {
+  const existing = existsSync(ENV_LOCAL_PATH) ? await Bun.file(ENV_LOCAL_PATH).text() : ""
+  const lines = existing.length > 0 ? existing.split("\n") : []
+  const remaining = new Map(Object.entries(updates))
+
+  const nextLines = lines.map((line) => {
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith("#")) return line
+    const eq = trimmed.indexOf("=")
+    if (eq === -1) return line
+    const key = trimmed.slice(0, eq).trim()
+    if (!remaining.has(key)) return line
+    const value = remaining.get(key) as string
+    remaining.delete(key)
+    return `${key}=${value}`
+  })
+
+  if (nextLines.length > 0 && nextLines.at(-1) !== "") nextLines.push("")
+  for (const [key, value] of remaining) {
+    nextLines.push(`${key}=${value}`)
+  }
+
+  await Bun.write(ENV_LOCAL_PATH, nextLines.join("\n"))
 }

@@ -1,0 +1,76 @@
+# Live parity against the real provider sandboxes, on demand, with the repo's secrets.
+#
+# Sandbox keys are GitHub Actions repo secrets named <SERVICE>_* (docs/SECRETS.md). Nobody
+# has to hand them out: anyone with write access dispatches this workflow, usually through
+#   bun run parity:remote -- stripe twilio      # or --all
+# which runs it on the current branch and streams the log. Values never leave GitHub and are
+# masked in the log.
+#
+# Not a required check — it depends on live vendors.
+name: Parity
+
+on:
+  workflow_dispatch:
+    inputs:
+      services:
+        description: "Services to verify, space-separated (e.g. `stripe junction`), or `--all`"
+        required: true
+        default: junction
+
+concurrency:
+  group: parity-${{ github.ref }}-${{ inputs.services }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: "0"
+
+jobs:
+  parity:
+    name: Live parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup
+
+      - name: Build
+        timeout-minutes: 20
+        run: bunx turbo run build --output-logs=errors-only
+
+      # Sandbox keys, mapped one by one. Dumping the whole secrets context (toJSON(secrets))
+      # makes GitHub hold every run as "may be malicious" until someone approves it by hand.
+      # A service's parity script reads <SERVICE>_*; add its secrets here.
+      - name: Live parity (${{ inputs.services }})
+        # A full default walk against a rate-limited vendor (Gene by Gene: 25 walks at 2 rps with
+        # ~1.6 s median latency, plus its recorded probes) needs most of this.
+        timeout-minutes: 55
+        env:
+          PARITY_SERVICES: ${{ inputs.services }}
+          GENEBYGENE_CLIENT_ID: ${{ secrets.GENEBYGENE_CLIENT_ID }}
+          GENEBYGENE_CLIENT_SECRET: ${{ secrets.GENEBYGENE_CLIENT_SECRET }}
+          JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        # One argument per service; parity-service.ts rejects anything that is not a
+        # service with a parity script.
+        run: |
+          read -ra services <<< "$PARITY_SERVICES"
+          bun run parity:service -- "${services[@]}"
+
+      # What a parity script recorded from the live vendor (e.g. genebygene's
+      # corpus/address-parity.json and src/corpus/live-catalogs.json), so it can be downloaded
+      # and committed.
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parity-corpus
+          path: |
+            packages/service/*/corpus/
+            packages/service/*/src/corpus/
+          if-no-files-found: ignore
+
+      - if: always()
+        uses: ./.github/actions/turbo-cache-save

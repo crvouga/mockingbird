@@ -1,0 +1,129 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import ExampleLauncher from "../../components/ExampleLauncher.astro"
+import Icon from "../../components/Icon.astro"
+import Base from "../../layouts/Base.astro"
+import { APP_EXAMPLES } from "../../lib/appExamples.ts"
+
+const example = APP_EXAMPLES.find((e) => e.slug === "medical-testing")
+if (!example) throw new Error("medical-testing is missing from APP_EXAMPLES")
+
+const servicesByName = new Map(catalog.services.map((s) => [s.name, s]))
+---
+
+<Base title={example.title} description={example.description}>
+  <div class="container">
+    <header class="page-head">
+      <p class="eyebrow"><a href="/examples">Examples</a></p>
+      <h1>{example.title}</h1>
+      <p class="lede">{example.description}</p>
+      <div class="example-services">
+        {
+          example.servicesUsed.map((name) => {
+            const service = servicesByName.get(name)
+            return service ? (
+              <a class="chip" href={`/services/${service.name}`}>{service.displayName}</a>
+            ) : (
+              <span class="chip">{name}</span>
+            )
+          })
+        }
+      </div>
+    </header>
+
+    <section class="live-app">
+      <p class="live-note">
+        Everything in the app — the Google/Apple OAuth sign-in, the shop, the Stripe checkout, the Junction
+        fulfillment, and the Postgres-backed order history — runs entirely in this browser tab, as a fully branded
+        Cove product UI. No server to start, no real network call to Google, Apple, Stripe, or Junction.
+      </p>
+      <ExampleLauncher element="app-example" example={example.slug} title={example.title} launchLabel="Launch the app" fit="app" />
+    </section>
+
+    <section class="run-locally">
+      <h2>Run it locally instead</h2>
+      <p>
+        This is the exact same code as a standalone app you can clone and run with a real dev server, if you'd
+        rather poke at it outside the browser:
+      </p>
+      <pre class="example-run"><code>{example.runCommand}</code></pre>
+      <a class="btn btn-secondary btn-sm" href={`${catalog.repo}/tree/main/${example.packagePath}`} target="_blank" rel="noopener">
+        <Icon name="github" /> Source
+      </a>
+    </section>
+  </div>
+</Base>
+
+<script>
+  import "../../client/appExamples.ts"
+</script>
+
+<style>
+  .page-head {
+    max-width: 720px;
+  }
+  .eyebrow {
+    font-size: 13px;
+    color: var(--fg-muted);
+  }
+  .example-services {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 16px;
+  }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--fg-muted);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+  a.chip:hover {
+    border-color: var(--border-strong);
+    color: var(--fg);
+  }
+  .live-app {
+    margin-top: 40px;
+  }
+  .live-note {
+    font-size: 13.5px;
+    color: var(--fg-muted);
+    max-width: 720px;
+    margin-bottom: 16px;
+  }
+  app-example {
+    display: block;
+    min-width: 0;
+  }
+  .run-locally {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    max-width: 720px;
+  }
+  .run-locally h2 {
+    font-size: 17px;
+    letter-spacing: -0.01em;
+  }
+  .run-locally p {
+    margin-top: 8px;
+    color: var(--fg-muted);
+    font-size: 13.5px;
+  }
+  .example-run {
+    margin: 12px 0;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--bg-subtle);
+    color: var(--fg-muted);
+    font-size: 12.5px;
+    overflow-x: auto;
+  }
+</style>

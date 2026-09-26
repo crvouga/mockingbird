@@ -1,0 +1,84 @@
+# Pull-request gate. A green run of this workflow is the release decision:
+# merging to main publishes (see ci.yml). Do not add a second quality bar there.
+#
+# Every job below is a required status check on main (scripts/pr-ready.ts
+# REQUIRED_CHECKS). Rename a job here and update that list in the same change.
+# GitGuardian Security Checks is the other required check; it is reported by
+# the GitGuardian app, not by a job in this file.
+#
+# Local replica: bun run check:full
+name: CI
+
+on:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: "0"
+
+jobs:
+  commitlint:
+    name: Commitlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "false"
+
+      # Merge commits land on main, and each PR commit drives the release bump.
+      - name: Validate PR commits
+        run: |
+          git rev-list --first-parent --reverse \
+            ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} |
+          while read -r commit; do
+            git show --no-patch --format=%B "$commit" | bunx commitlint --verbose
+          done
+
+      - name: Validate PR title
+        uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          subjectPattern: .+
+          subjectPatternError: |
+            The PR title "{title}" looks empty after the type/scope prefix.
+            Use a Conventional Commits title, e.g. "feat: add junction mock".
+
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    env:
+      FC_NUM_RUNS: "40"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/setup
+
+      - name: Check (format, lint, typecheck, build, test, pack, portability, boundaries)
+        timeout-minutes: 20
+        run: bun run check -- --output-logs=errors-only
+
+      # Pack every public package like the release does and install it into a clean npm project.
+      - name: Consumer smoke (npm install + import + typecheck every published entry point)
+        timeout-minutes: 6
+        run: bun run release:smoke
+
+      - if: always()
+        uses: ./.github/actions/turbo-cache-save

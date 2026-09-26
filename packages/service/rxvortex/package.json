@@ -1,0 +1,92 @@
+{
+  "name": "@crvouga/mockingbird-service-rxvortex",
+  "version": "0.0.0-development",
+  "description": "Stateful mock of the RxVortex (Strive) pharmacy API: OAuth token, order submit, status, cancel, recovery by sender order id, preset catalog, and signed status webhooks.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-rxvortex": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/rxvortex"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/rxvortex#readme",
+  "keywords": [
+    "mockingbird",
+    "service",
+    "rxvortex",
+    "strive",
+    "pharmacy",
+    "erx"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "pharmacy",
+    "displayName": "RxVortex",
+    "vendor": {
+      "website": "https://www.rxvortex.com",
+      "description": "RxVortex is a pharmacy order platform whose API lets telehealth partners submit, track and cancel prescription orders with pharmacies such as Strive."
+    },
+    "status": "ready"
+  },
+  "scripts": {
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "parity": "bun scripts/parity.ts",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "hono": "4.11.9"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*"
+  }
+}

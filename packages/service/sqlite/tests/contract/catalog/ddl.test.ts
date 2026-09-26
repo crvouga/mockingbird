@@ -1,0 +1,195 @@
+import { runCatalog } from "./run.ts";
+
+runCatalog("DDL", [
+  { id: "DDL-ct-01", kind: "exec", sql: "CREATE TABLE IF NOT EXISTS t(a INT)" },
+  {
+    id: "DDL-ct-02",
+    kind: "parity",
+    setup: ['CREATE TABLE "select"("order" INT)', 'INSERT INTO "select" VALUES (1)'],
+    sql: 'SELECT "order" FROM "select"',
+  },
+  {
+    id: "DDL-ct-03",
+    kind: "sequence",
+    steps: [
+      {
+        sql: "CREATE TABLE t(a INTEGER PRIMARY KEY, b TEXT NOT NULL DEFAULT 'x' UNIQUE CHECK (b != 'bad') COLLATE NOCASE)",
+      },
+      { sql: "INSERT INTO t(a) VALUES (1)" },
+      { sql: "SELECT a,b FROM t", query: true },
+    ],
+  },
+  { id: "DDL-ct-04", kind: "exec", sql: "CREATE TABLE t(a INT, b INT, PRIMARY KEY(a,b), UNIQUE(b), CHECK(a<10))" },
+  { id: "DDL-ct-05", kind: "error", setup: ["CREATE TABLE t(a INT)"], sql: "CREATE TABLE t(b INT)" },
+  {
+    id: "DDL-ipk-01",
+    kind: "parity",
+    setup: ["CREATE TABLE t(id INTEGER PRIMARY KEY, v TEXT)", "INSERT INTO t(v) VALUES ('a')"],
+    sql: "SELECT id, rowid FROM t",
+  },
+  {
+    id: "DDL-ipk-02",
+    kind: "parity",
+    setup: ["CREATE TABLE t(id INTEGER PRIMARY KEY DESC, v TEXT)", "INSERT INTO t(v) VALUES ('a'),('b')"],
+    sql: "SELECT v FROM t ORDER BY v",
+  },
+  {
+    id: "DDL-ipk-03",
+    kind: "parity",
+    setup: ["CREATE TABLE t(id INT PRIMARY KEY, v TEXT)", "INSERT INTO t VALUES (1,'a')"],
+    sql: "SELECT v FROM t",
+  },
+  {
+    id: "DDL-auto-01",
+    kind: "sequence",
+    steps: [
+      { sql: "CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)" },
+      { sql: "INSERT INTO t(v) VALUES ('a')" },
+      { sql: "SELECT v FROM t", query: true },
+    ],
+  },
+  {
+    id: "DDL-auto-02",
+    kind: "sequence",
+    setup: ["CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT)", "INSERT INTO t(v) VALUES ('a'),('b')"],
+    steps: [
+      { sql: "DELETE FROM t WHERE id=2" },
+      { sql: "INSERT INTO t(v) VALUES ('c')" },
+      { sql: "SELECT id FROM t ORDER BY id", query: true },
+    ],
+  },
+  {
+    id: "DDL-auto-03",
+    kind: "error",
+    setup: ["CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT)", "INSERT INTO t(id) VALUES (9223372036854775807)"],
+    sql: "INSERT INTO t DEFAULT VALUES",
+    messageTier: "B",
+    notes: "SQLITE_FULL after max signed rowid; message text matches oracle",
+  },
+  { id: "DDL-wor-01", kind: "error", sql: "CREATE TABLE t(a INT) WITHOUT ROWID" },
+  {
+    id: "DDL-wor-02",
+    kind: "error",
+    setup: ["CREATE TABLE t(a INT PRIMARY KEY) WITHOUT ROWID", "INSERT INTO t VALUES (1)"],
+    sql: "SELECT rowid FROM t",
+    query: true,
+  },
+  {
+    id: "DDL-strict-01",
+    kind: "error",
+    setup: ["CREATE TABLE t(a INT, b TEXT) STRICT"],
+    sql: "INSERT INTO t VALUES ('x', 1)",
+  },
+  { id: "DDL-strict-02", kind: "exec", sql: "CREATE TABLE t(a INT PRIMARY KEY)" },
+  {
+    id: "DDL-gen-01",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE t(a INT, b INT GENERATED ALWAYS AS (a+1) VIRTUAL, c INT GENERATED ALWAYS AS (a+2) STORED)",
+      "INSERT INTO t(a) VALUES (1)",
+    ],
+    sql: "SELECT a,b,c FROM t",
+  },
+  {
+    id: "DDL-gen-02",
+    kind: "error",
+    setup: ["CREATE TABLE t(a INT, b INT GENERATED ALWAYS AS (a+1) VIRTUAL)"],
+    sql: "INSERT INTO t(a,b) VALUES (1,2)",
+  },
+  {
+    id: "DDL-ctas-01",
+    kind: "parity",
+    setup: ["CREATE TABLE t(a INT, b TEXT)", "INSERT INTO t VALUES (1,'x')", "CREATE TABLE u AS SELECT a, b FROM t"],
+    sql: "SELECT a, typeof(a), b FROM u",
+  },
+  {
+    id: "DDL-alter-01",
+    kind: "sequence",
+    setup: ["CREATE TABLE t(a INT)"],
+    steps: [
+      { sql: "ALTER TABLE t RENAME TO u" },
+      { sql: "SELECT name FROM sqlite_master WHERE type='table'", query: true },
+    ],
+  },
+  {
+    id: "DDL-alter-02",
+    kind: "sequence",
+    setup: ["CREATE TABLE t(a INT)"],
+    steps: [{ sql: "ALTER TABLE t RENAME COLUMN a TO b" }, { sql: "SELECT b FROM t", query: true }],
+  },
+  {
+    id: "DDL-alter-03",
+    kind: "exec",
+    setup: ["CREATE TABLE t(a INT)"],
+    sql: "ALTER TABLE t ADD COLUMN b TEXT",
+  },
+  {
+    id: "DDL-alter-04",
+    kind: "error",
+    setup: ["CREATE TABLE t(a INT, b INT, PRIMARY KEY(a))", "CREATE INDEX i ON t(b)"],
+    sql: "ALTER TABLE t DROP COLUMN b",
+  },
+  {
+    id: "DDL-idx-01",
+    kind: "error",
+    setup: ["CREATE TABLE t(a INT)", "INSERT INTO t VALUES (1),(1)"],
+    sql: "CREATE UNIQUE INDEX i ON t(a)",
+  },
+  {
+    id: "DDL-idx-02",
+    kind: "parity",
+    setup: [
+      "CREATE TABLE t(a TEXT, b INT)",
+      "CREATE INDEX i ON t(lower(a)) WHERE b>0",
+      "INSERT INTO t VALUES ('A',1),('b',0)",
+    ],
+    sql: "SELECT a FROM t WHERE lower(a)='a'",
+  },
+  {
+    id: "DDL-idx-03",
+    kind: "parity",
+    setup: ["CREATE TABLE t(a INT)", "INSERT INTO t VALUES (2),(1)", "CREATE INDEX i ON t(a)"],
+    sql: "SELECT a FROM t WHERE a>=1 ORDER BY a",
+  },
+  {
+    id: "DDL-view-01",
+    kind: "parity",
+    setup: ["CREATE TABLE t(a INT, b INT)", "INSERT INTO t VALUES (1,2)", "CREATE VIEW v(x,y) AS SELECT a,b FROM t"],
+    sql: "SELECT x,y FROM v",
+  },
+  {
+    id: "DDL-view-02",
+    kind: "error",
+    setup: ["CREATE TABLE t(a INT)", "CREATE VIEW v AS SELECT a FROM t"],
+    sql: "INSERT INTO v VALUES (1)",
+  },
+  {
+    id: "DDL-drop-01",
+    kind: "sequence",
+    setup: [
+      "CREATE TABLE t(a INT)",
+      "CREATE INDEX i ON t(a)",
+      "CREATE TRIGGER g AFTER INSERT ON t BEGIN SELECT 1; END",
+    ],
+    steps: [{ sql: "DROP TABLE IF EXISTS t" }, { sql: "SELECT count(*) FROM sqlite_master", query: true }],
+  },
+  {
+    id: "DDL-master-01",
+    kind: "parity",
+    setup: ["CREATE TABLE t(a INT)"],
+    sql: "SELECT type, name, tbl_name FROM sqlite_master WHERE name='t'",
+  },
+  { id: "DDL-master-02", kind: "error", sql: "INSERT INTO sqlite_master VALUES ('table','x','x',0,'')" },
+  {
+    id: "DDL-temp-01",
+    kind: "parity",
+    setup: ["CREATE TABLE t(a INT)", "INSERT INTO t VALUES (1)"],
+    sql: "SELECT a FROM t",
+  },
+  {
+    id: "DDL-case-01",
+    kind: "parity",
+    setup: ["CREATE TABLE users(id INT)", "INSERT INTO users VALUES (1)"],
+    sql: "SELECT id FROM USERS",
+  },
+]);

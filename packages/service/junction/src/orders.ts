@@ -5,9 +5,20 @@ import {
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
+import { requireUser } from "./fixtures.js"
+import {
+  effectiveBilling,
+  isLinkedToTeam,
+  LAB_ACCOUNT_STATUSES,
+  type LabAccountStatus,
+  renderLabAccount,
+  selectLabAccount,
+} from "./lab-accounts.js"
+import { checkSimulateAllowed } from "./limits.js"
+import { orderMissing } from "./not-found.js"
 import { applySimulateTransition, cascadeCancelAppointments } from "./scheduling.js"
-import type { JunctionState, OrderRecord } from "./state.js"
-import { deterministicUuid, MOCK_TEAM_ID } from "./state.js"
+import type { JunctionState, LabTestRecord, OrderRecord } from "./state.js"
+import { deterministicUuid } from "./state.js"
 
 const RESULT_TYPES = ["numeric", "range", "comment", "coded_value"] as const
 const INTERPRETATIONS = ["normal", "abnormal", "critical", "unknown"] as const
@@ -262,6 +273,129 @@ const uuidError = (value: string, index?: number, loc?: string[]) => {
   }
 }
 
+/** `GET /v3/lab_test/lab_account` query filters: Pydantic-shaped 422s, then exact match. */
+const labAccountIdFilter = (context: OperationContext): string | null => {
+  const raw = context.query.lab_account_id
+  if (raw === undefined) return null
+  if (typeof raw === "string" && isUuid(raw)) return raw
+  throw new HttpError(422, {
+    detail: [
+      uuidError(typeof raw === "string" ? raw : String(raw), undefined, [
+        "query",
+        "lab_account_id",
+      ]),
+    ],
+  })
+}
+
+const labAccountStatusFilter = (context: OperationContext): LabAccountStatus | null => {
+  const raw = context.query.status
+  if (raw === undefined) return null
+  if (typeof raw === "string" && LAB_ACCOUNT_STATUSES.includes(raw as LabAccountStatus)) {
+    return raw as LabAccountStatus
+  }
+  throw new HttpError(422, {
+    detail: [
+      {
+        type: "enum",
+        loc: ["query", "status"],
+        msg: "Input should be 'active', 'pending', 'suspended' or 'ready_to_launch'",
+        input: raw,
+        ctx: { expected: "'active', 'pending', 'suspended' or 'ready_to_launch'" },
+      },
+    ],
+  })
+}
+
+const enumError = (name: string, value: string, allowed: readonly string[]) => {
+  const expected =
+    allowed.length === 1
+      ? `'${allowed[0]}'`
+      : `${allowed
+          .slice(0, -1)
+          .map((entry) => `'${entry}'`)
+          .join(", ")} or '${allowed.at(-1)}'`
+  return {
+    type: "enum",
+    loc: ["query", name],
+    msg: `Input should be ${expected}`,
+    input: value,
+    ctx: { expected },
+  }
+}
+
+/** A list query parameter: repeated (`?a=1&a=2`) or one JSON array, as the Vital SDK sends it. */
+const listParam = (params: URLSearchParams, name: string): string[] | null => {
+  const values = params.getAll(name)
+  if (values.length === 0) return null
+  if (values.length === 1 && values[0]?.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(values[0]) as unknown
+      if (Array.isArray(parsed)) return parsed.map(String)
+    } catch {}
+  }
+  return values
+}
+
+const LAB_TEST_FILTER_ENUMS: Readonly<Record<string, readonly string[]>> = {
+  generation_method: ["auto", "manual", "all"],
+  collection_method: ["testkit", "walk_in_test", "at_home_phlebotomy", "on_site_collection"],
+  status: ["active", "pending_approval", "inactive"],
+  order_key: ["price", "created_at", "updated_at"],
+  order_direction: ["asc", "desc"],
+}
+
+/** `GET /v3/lab_tests` filters. Records carry no timestamps, so date keys keep catalog order. */
+const filterLabTests = (tests: LabTestRecord[], params: URLSearchParams): LabTestRecord[] => {
+  const errors: unknown[] = []
+  const pick = (name: string): string | null => {
+    const value = params.get(name)
+    if (value === null) return null
+    const allowed = LAB_TEST_FILTER_ENUMS[name]
+    if (allowed && !allowed.includes(value)) errors.push(enumError(name, value, allowed))
+    return value
+  }
+  const generation = pick("generation_method") ?? "manual"
+  const collection = pick("collection_method")
+  const status = pick("status")
+  const orderKey = pick("order_key")
+  const direction = pick("order_direction") ?? "asc"
+  const labSlug = params.get("lab_slug")
+  const name = params.get("name")?.toLowerCase() ?? null
+  const markerIds = listParam(params, "marker_ids")
+  const providerIds = listParam(params, "provider_ids")
+  for (const id of markerIds ?? []) {
+    if (!/^-?\d+$/.test(id))
+      errors.push({
+        type: "int_parsing",
+        loc: ["query", "marker_ids", markerIds?.indexOf(id) ?? 0],
+        msg: "Input should be a valid integer, unable to parse string as an integer",
+        input: id,
+      })
+  }
+  if (errors.length > 0) throw new HttpError(422, { detail: errors })
+  const filtered = tests.filter((test) => {
+    if (generation === "manual" && test.auto_generated === true) return false
+    if (generation === "auto" && test.auto_generated !== true) return false
+    if (collection !== null && test.method !== collection) return false
+    if (status !== null && test.status !== status) return false
+    if (labSlug !== null && String(test.lab?.slug ?? "") !== labSlug) return false
+    if (name !== null && !test.name.toLowerCase().includes(name)) return false
+    const markers = test.markers ?? []
+    if (markerIds && !markerIds.every((id) => markers.some((m) => String(m.id) === id)))
+      return false
+    if (
+      providerIds &&
+      !providerIds.every((id) => markers.some((m) => String(m.provider_id ?? "") === id))
+    )
+      return false
+    return true
+  })
+  const ordered =
+    orderKey === "price" ? [...filtered].sort((a, b) => (a.price ?? 0) - (b.price ?? 0)) : filtered
+  return direction === "desc" ? [...ordered].reverse() : ordered
+}
+
 const isValidPhone = (value: string): boolean => {
   const digits = value.replace(/\D/g, "")
   if (digits.length < 10 || digits.length > 15) return false
@@ -296,15 +430,30 @@ const pyIso = (value: string): string => {
   return `${date}T${time.slice(0, 8)}.${ms}+00:00`
 }
 
-const orderValidation = (body: Record<string, unknown>): unknown[] => {
+const orderValidation = (
+  body: Record<string, unknown>,
+  now: () => number = Date.now,
+): unknown[] => {
   const errors: unknown[] = []
   const userId = body.user_id
   if (userId === undefined) errors.push(missingError(["body", "user_id"], body))
   else if (typeof userId !== "string") errors.push(stringTypeError(["body", "user_id"], userId))
   else if (!isUuid(userId)) errors.push(uuidError(userId))
   const labAccountId = body.lab_account_id
-  if (typeof labAccountId === "string" && !isUuid(labAccountId)) {
-    errors.push(uuidError(labAccountId))
+  if (typeof labAccountId === "string" && labAccountId.trim().length === 0) {
+    errors.push({
+      type: "string_too_short",
+      loc: ["body", "lab_account_id"],
+      msg: "String should have at least 1 character",
+      input: labAccountId,
+    })
+  }
+  const labTestId = body.lab_test_id
+  if (labTestId !== undefined && labTestId !== null) {
+    if (typeof labTestId !== "string")
+      errors.push(stringTypeError(["body", "lab_test_id"], labTestId))
+    else if (!isUuid(labTestId))
+      errors.push(uuidError(labTestId, undefined, ["body", "lab_test_id"]))
   }
   const os = body.order_set
   const osWrongType =
@@ -400,7 +549,7 @@ const orderValidation = (body: Record<string, unknown>): unknown[] => {
         const emailError = userEmailError(p[field] as string)
         if (emailError) errors.push(emailError)
       } else if (field === "dob") {
-        const dobError = orderDobError(p[field] as string)
+        const dobError = orderDobError(p[field] as string, now())
         if (dobError) errors.push(dobError)
       } else if (field === "phone_number" && !isValidPhone(p[field] as string)) {
         errors.push(phoneError(["body", "patient_details", "phone_number"], p[field]))
@@ -457,11 +606,11 @@ const userEmailError = (value: string) => {
  * accepted, non-zero times produce `date_from_datetime_inexact` with a normalized input,
  * and unmatchable strings produce the "Could not match" value error.
  */
-const orderDobError = (dob: string) => {
+const orderDobError = (dob: string, nowMs: number) => {
   if (/^\d{4}-\d{2}-\d{2}T/.test(dob)) {
     if (/^\d{4}-\d{2}-\d{2}T00:00:00/.test(dob)) {
       const dateOnly = dob.slice(0, 10)
-      if (new Date(`${dateOnly}T00:00:00Z`).getTime() > Date.now()) {
+      if (new Date(`${dateOnly}T00:00:00Z`).getTime() > nowMs) {
         return {
           type: "value_error",
           loc: ["body", "patient_details", "dob"],
@@ -502,7 +651,7 @@ const orderDobError = (dob: string) => {
         ctx: { error: {} },
       }
     }
-    if (new Date(`${dob}T00:00:00Z`).getTime() > Date.now()) {
+    if (new Date(`${dob}T00:00:00Z`).getTime() > nowMs) {
       return {
         type: "value_error",
         loc: ["body", "patient_details", "dob"],
@@ -693,6 +842,11 @@ export const orderHandlers = (state: JunctionState) => ({
       next_cursor: null,
     }),
 
+  // Deprecated upstream but still what team-catalog readers call: the same records as the
+  // paged `/v3/lab_test`, as a bare array, filtered the way the real endpoint documents.
+  get_lab_tests_for_team_v3_lab_tests_get: async (context: OperationContext) =>
+    jsonRes(200, filterLabTests(state.listLabTests(), context.url.searchParams)),
+
   get_lab_test_for_team_v3_lab_tests__lab_test_id__get: async (context: OperationContext) => {
     const id = context.params.lab_test_id ?? ""
     const test = state.labTestById(id)
@@ -701,6 +855,18 @@ export const orderHandlers = (state: JunctionState) => ({
   },
 
   get_labs_v3_lab_tests_labs_get: async () => jsonRes(200, state.listLabs()),
+
+  get_team_lab_accounts_v3_lab_test_lab_account_get: async (context: OperationContext) => {
+    const requestedId = labAccountIdFilter(context)
+    const status = labAccountStatusFilter(context)
+    const data = state
+      .listLabAccounts()
+      .filter((entry) => isLinkedToTeam(entry, state.teamId))
+      .filter((entry) => requestedId === null || entry.id === requestedId)
+      .filter((entry) => status === null || entry.status === status)
+      .map(renderLabAccount)
+    return jsonRes(200, { data })
+  },
 
   get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get: async (
     context: OperationContext,
@@ -764,7 +930,7 @@ export const orderHandlers = (state: JunctionState) => ({
         })
       }
     }
-    const errors = orderValidation(body)
+    const errors = orderValidation(body, context.now)
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
     const rawAddress = body.patient_address
     if (
@@ -781,8 +947,7 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     const userId = body.user_id
     if (typeof userId !== "string") throw new HttpError(422, { detail: "user_id must be a string" })
-    if (!state.users.has(userId) && !state.deletedUsers.has(userId))
-      notFound("User does not exist on this team")
+    requireUser(state, userId, context)
     const phone = (body.patient_details as Record<string, unknown> | undefined)?.phone_number
     if (typeof phone === "string" && /^\+1\d{10}$/.test(phone) && phone.slice(2, 5) === "555") {
       throw new HttpError(400, { detail: "Phone number is not correct" })
@@ -792,7 +957,10 @@ export const orderHandlers = (state: JunctionState) => ({
     const aoeError = aoeValidationError(state, body)
     if (aoeError) throw new HttpError(400, { detail: aoeError })
     const rawOrderSet = body.order_set
-    if (rawOrderSet === undefined && body.lab_test_id === undefined) {
+    // `lab_test_id` is the deprecated single-test form: it stands for an order set of one
+    // test, and `order_set` wins when both are sent.
+    const singleLabTestId = typeof body.lab_test_id === "string" ? body.lab_test_id : undefined
+    if (rawOrderSet === undefined && singleLabTestId === undefined) {
       throw new HttpError(400, { detail: "Either lab_test_id or order_set must be set" })
     }
     if (
@@ -806,11 +974,15 @@ export const orderHandlers = (state: JunctionState) => ({
     }
     const details = body.patient_details as Record<string, unknown>
     const address = body.patient_address as Record<string, unknown>
-    const labTestIds = Array.isArray(
-      (body.order_set as Record<string, unknown>).lab_test_ids,
-    )
-      ? ((body.order_set as Record<string, unknown>).lab_test_ids as unknown[])
-      : []
+    const orderSetIds =
+      typeof rawOrderSet === "object" && rawOrderSet !== null
+        ? (rawOrderSet as Record<string, unknown>).lab_test_ids
+        : undefined
+    const labTestIds = Array.isArray(orderSetIds)
+      ? (orderSetIds as unknown[])
+      : rawOrderSet === undefined && singleLabTestId !== undefined
+        ? [singleLabTestId]
+        : []
     // Vital: empty lab_test_ids → "No markers found…"; unknown id → "Test does not exist";
     // known panels with markers:null (e.g. Female General Wellness) still create successfully.
     if (labTestIds.length === 0) {
@@ -841,18 +1013,50 @@ export const orderHandlers = (state: JunctionState) => ({
     const stateError = labStateSupportError(labTest, address.state)
     if (stateError) throw new HttpError(400, { detail: stateError })
 
-    const nowIso = state.isoNow(context.now)
-    const nowMicro = new Date(context.now()).toISOString()
+    // Lab-account routing: the account must be active, linked to the team and associated
+    // with the ordered lab; with no explicit id, linked accounts decide the branch.
+    const labSlug = typeof labTest.lab?.slug === "string" ? labTest.lab.slug.toLowerCase() : ""
+    const labAccount = selectLabAccount(
+      labSlug,
+      typeof body.lab_account_id === "string" ? body.lab_account_id : null,
+      state.teamId,
+      state.listLabAccounts(),
+    )
+    const requestedBilling =
+      typeof body.billing_type === "string" && body.billing_type !== ""
+        ? body.billing_type
+        : undefined
+    const billingType = requestedBilling ?? state.defaultBillingTypes[labSlug] ?? "client_bill"
+    const allowedStates = effectiveBilling(labAccount)[billingType]
+    if (!allowedStates)
+      throw new HttpError(400, {
+        // An omitted billing_type that resolves to one the account lacks is reported against
+        // the lab, as the sandbox words it.
+        detail:
+          requestedBilling === undefined
+            ? `Lab ${String(labTest.lab?.id ?? labSlug)} does not support billing type ${billingType}`
+            : `Billing type ${billingType} is not supported by the lab account used for this order`,
+      })
+    const patientState = String(address.state ?? "")
+      .trim()
+      .toUpperCase()
+    if (patientState !== "" && !allowedStates.includes(patientState))
+      throw new HttpError(400, {
+        detail: `Billing type ${billingType} is not available in state ${patientState} for the lab account used for this order`,
+      })
+    const icdCodes = Array.isArray(body.icd_codes) ? ([...body.icd_codes] as string[]) : null
+    if (billingType === "commercial_insurance" && (icdCodes === null || icdCodes.length === 0))
+      throw new HttpError(400, {
+        detail: "Commercial insurance orders require at least one ICD code in icd_codes",
+      })
+
     const orderId = state.nextOrderId()
-    const transactionId = state.transactionIdFor(orderId)
     const method =
       typeof body.collection_method === "string" ? body.collection_method : labTest.method
     // Sandbox: same collection_method as the panel → embed the panel as-is (even when
     // markers are null). Different method requires markers to synthesize auto_generated.
     const nativeMethod =
-      typeof labTest.method === "string" && labTest.method.length > 0
-        ? labTest.method
-        : method
+      typeof labTest.method === "string" && labTest.method.length > 0 ? labTest.method : method
     const markerCount = labTests.reduce((sum, test) => sum + (test.markers?.length ?? 0), 0)
     if (method !== nativeMethod && markerCount === 0) {
       throw new HttpError(400, {
@@ -871,125 +1075,26 @@ export const orderHandlers = (state: JunctionState) => ({
         return jsonRes(200, replay.response)
       }
     }
-    const eventStatus = `received.${method}.ordered`
-    const eventId =
-      Number.parseInt(opaqueToken(`junction:order-event:${orderId}`, 8), 16) % 1_000_000_000 || 1
-    const event = {
-      id: eventId,
-      created_at: nowIso,
-      status: eventStatus,
-      status_detail: null,
-    }
-    let orderLabTest: typeof labTest
-    if (method === nativeMethod) {
-      orderLabTest = labTest
-    } else {
-      const markerFingerprint = (test: { markers?: Array<{ id: number }> | null }) =>
-        (test.markers ?? [])
-          .map((marker) => marker.id)
-          .sort((a, b) => a - b)
-          .join(",")
-      const sourceFingerprint = markerFingerprint(labTest)
-      const existingAuto = state
-        .listLabTests()
-        .find(
-          (test) =>
-            test.auto_generated === true &&
-            test.method === method &&
-            markerFingerprint(test) === sourceFingerprint,
-        )
-      const orderLabTestKey = `${labTest.id}:${method}`
-      const orderLabTestName =
-        existingAuto?.name ?? opaqueToken(`junction:order-lab-name:${orderLabTestKey}`, 16)
-      orderLabTest = existingAuto ?? {
-        ...labTest,
-        id: deterministicUuid(`junction:order-lab-test:${orderLabTestKey}`),
+    const order = buildOrderRecord(
+      state,
+      {
+        orderId,
+        userId,
+        labTest,
         method,
-        auto_generated: true,
-        name: orderLabTestName,
-        slug: `afd62b39-${orderLabTestName}`,
-      }
-    }
-    const order: OrderRecord = {
-      id: orderId,
-      user_id: userId,
-      team_id: MOCK_TEAM_ID,
-      patient_details: patientDetails(details as Record<string, unknown>),
-      patient_address: patientAddress(address as Record<string, unknown>),
-      lab_test: orderLabTest,
-      details: METHOD_DETAILS(method, state.testkitIdFor(orderId), nowIso),
-      sample_id: null,
-      notes: null,
-      clinical_notes: typeof body.clinical_notes === "string" ? body.clinical_notes : null,
-      passthrough: typeof body.passthrough === "string" ? body.passthrough : null,
-      created_at: nowIso,
-      updated_at: nowIso,
-      events: [event],
-      status: "received",
-      last_event: event,
-      physician: PHYSICIAN,
-      health_insurance_id: null,
-      requisition_form_url: null,
-      shipping_details: null,
-      has_abn: false,
-      billing_type: "client_bill",
-      priority: false,
-      activate_by: null,
-      icd_codes: null,
-      interpretation: null,
-      has_missing_results: null,
-      result_types: null,
-      expected_result_by_date: null,
-      worst_case_result_by_date: null,
-      origin: "initial",
-      order_transaction: {
-        id: transactionId,
-        status: "active",
-        orders: [
-          {
-            id: orderId,
-            low_level_status: "ordered",
-            low_level_status_created_at: nowMicro,
-            origin: "initial",
-            parent_id: null,
-            created_at: nowMicro,
-            updated_at: nowMicro,
-          },
-        ],
+        patientDetails: details,
+        patientAddress: address,
+        billingType,
+        icdCodes,
+        clinicalNotes: typeof body.clinical_notes === "string" ? body.clinical_notes : null,
+        passthrough: typeof body.passthrough === "string" ? body.passthrough : null,
       },
-    }
-    state.orders.insert(orderId, order)
-    state.orderByTransaction.insert(transactionId, { order_id: orderId })
-    state.upsertLabTest(
-      orderLabTest,
-      orderLabTest.id === labTest.id
-        ? undefined
-        : state.expectedResultsFor(labTest.id),
+      context.now,
     )
-    const demographics = {
-      first_name: details.first_name ?? null,
-      last_name: details.last_name ?? null,
-      dob: details.dob ?? null,
-      gender: details.gender ?? null,
-      phone_number: details.phone_number ?? null,
-      email: details.email ?? null,
-      gender_identity: null,
-      sexual_orientation: null,
-      race: null,
-      ethnicity: null,
-      medical_proxy: null,
-      address: {
-        first_line: address.first_line ?? "",
-        second_line: typeof address.second_line === "string" ? address.second_line : "",
-        country: address.country ?? "",
-        zip: address.zip ?? "",
-        city: address.city ?? "",
-        state: address.state ?? "",
-        access_notes: null,
-      },
-    }
-    if (state.userInfo.get(userId)) state.userInfo.update(userId, demographics)
-    else state.userInfo.insert(userId, demographics)
+    persistOrderRecord(state, order, labTest, details, address)
+    state.orderLabAccounts.insert(orderId, {
+      lab_account_id: labAccount === "platform" ? null : labAccount.id,
+    })
     const responseOrder = { ...order } as Record<string, unknown>
     if (responseOrder.result_types === null) delete responseOrder.result_types
     const response = {
@@ -1009,8 +1114,7 @@ export const orderHandlers = (state: JunctionState) => ({
 
   cancel_order_v3_order__order_id__cancel_post: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
-    const order = state.orders.get(id)
-    if (!order) notFound("Order doesn't exist")
+    const order = state.orders.get(id) ?? orderMissing(state, context.operation.operationId, id)
     const alreadyCancelled = order.events.some(
       (entry) => typeof entry.status === "string" && entry.status.startsWith("cancelled."),
     )
@@ -1105,8 +1209,8 @@ export const orderHandlers = (state: JunctionState) => ({
         })
       }
     }
-    const order = state.orders.get(id)
-    if (!order) notFound("Order doesn't exist")
+    const order = state.orders.get(id) ?? orderMissing(state, context.operation.operationId, id)
+    checkSimulateAllowed(state.limits, context.request.headers.get("x-vital-api-key"))
     if (
       typeof finalStatus !== "string" ||
       !FINAL_STATUSES.includes(finalStatus as (typeof FINAL_STATUSES)[number])
@@ -1128,13 +1232,11 @@ export const orderHandlers = (state: JunctionState) => ({
 
   get_order_v3_order__order_id__get: async (context: OperationContext) => {
     const id = context.params.order_id ?? ""
-    const order = state.orders.get(id)
-    if (!order) notFound("This order doesn't exist")
+    if (!state.orders.has(id)) orderMissing(state, context.operation.operationId, id)
     state.applyDueSimulateTransitions(context.now(), (due, finalStatus, flags) => {
       applySimulateTransition(state, due, finalStatus, flags, context)
     })
-    const fresh = state.orders.get(id)
-    if (!fresh) notFound("This order doesn't exist")
+    const fresh = state.orders.get(id) ?? orderMissing(state, context.operation.operationId, id)
     const body = { ...fresh } as Record<string, unknown>
     if (body.result_types === null) delete body.result_types
     return jsonRes(200, body)
@@ -1148,15 +1250,15 @@ export const orderHandlers = (state: JunctionState) => ({
     const userId = context.query.user_id
     if (userId !== undefined && typeof userId !== "string")
       throw new HttpError(422, { detail: "user_id must be a string" })
-    if (userId !== undefined && !state.users.has(userId) && !state.deletedUsers.has(userId))
-      notFound("User does not exist on this team")
+    if (userId !== undefined) requireUser(state, userId, context)
     let all = state.orders.list({ order: "oldest" })
     if (userId !== undefined) all = all.filter((entry) => entry.value.user_id === userId)
     // Sandbox lists by updated_at desc (not created_at) — wrong order breaks
     // seedParity identity pairing on list pages, which then poisons get_order.
     all = [...all].sort((left, right) => {
       const leftAt = Date.parse(String(left.value.updated_at ?? left.value.created_at ?? "")) || 0
-      const rightAt = Date.parse(String(right.value.updated_at ?? right.value.created_at ?? "")) || 0
+      const rightAt =
+        Date.parse(String(right.value.updated_at ?? right.value.created_at ?? "")) || 0
       if (rightAt !== leftAt) return rightAt - leftAt
       // Frozen clocks make updated_at ties common; seq matches sandbox insertion order.
       return right.seq - left.seq
@@ -1183,7 +1285,7 @@ export const orderHandlers = (state: JunctionState) => ({
     if (!order) notFound("Order transaction not found")
     return jsonRes(200, {
       id,
-      team_id: MOCK_TEAM_ID,
+      team_id: state.teamId,
       status: order.order_transaction.status,
       orders: [orderSummary(order)],
     })
@@ -1221,6 +1323,170 @@ export const orderHandlers = (state: JunctionState) => ({
     })
   },
 })
+
+/** What an order is built from, once the request (or an admin fixture) has been validated. */
+export type OrderDraft = {
+  orderId: string
+  userId: string
+  /** The catalog lab test ordered; embedded as-is when `method` is its native method. */
+  labTest: LabTestRecord
+  method: string
+  patientDetails: Record<string, unknown>
+  patientAddress: Record<string, unknown>
+  billingType: string
+  icdCodes: string[] | null
+  clinicalNotes: string | null
+  passthrough: string | null
+}
+
+/** The order record `create_order` stores, in its initial `received.<method>.ordered` state. */
+export const buildOrderRecord = (
+  state: JunctionState,
+  draft: OrderDraft,
+  now: () => number,
+): OrderRecord => {
+  const { orderId, userId, labTest, method, billingType, icdCodes } = draft
+  const details = draft.patientDetails
+  const nowIso = state.isoNow(now)
+  const nowMicro = new Date(now()).toISOString()
+  const transactionId = state.transactionIdFor(orderId)
+  const nativeMethod =
+    typeof labTest.method === "string" && labTest.method.length > 0 ? labTest.method : method
+  const eventStatus = `received.${method}.ordered`
+  const eventId =
+    Number.parseInt(opaqueToken(`junction:order-event:${orderId}`, 8), 16) % 1_000_000_000 || 1
+  const event = {
+    id: eventId,
+    created_at: nowIso,
+    status: eventStatus,
+    status_detail: null,
+  }
+  let orderLabTest: typeof labTest
+  if (method === nativeMethod) {
+    orderLabTest = labTest
+  } else {
+    const markerFingerprint = (test: { markers?: Array<{ id: number }> | null }) =>
+      (test.markers ?? [])
+        .map((marker) => marker.id)
+        .sort((a, b) => a - b)
+        .join(",")
+    const sourceFingerprint = markerFingerprint(labTest)
+    const existingAuto = state
+      .listLabTests()
+      .find(
+        (test) =>
+          test.auto_generated === true &&
+          test.method === method &&
+          markerFingerprint(test) === sourceFingerprint,
+      )
+    const orderLabTestKey = `${labTest.id}:${method}`
+    const orderLabTestName =
+      existingAuto?.name ?? opaqueToken(`junction:order-lab-name:${orderLabTestKey}`, 16)
+    orderLabTest = existingAuto ?? {
+      ...labTest,
+      id: deterministicUuid(`junction:order-lab-test:${orderLabTestKey}`),
+      method,
+      auto_generated: true,
+      name: orderLabTestName,
+      slug: `afd62b39-${orderLabTestName}`,
+    }
+  }
+  const order: OrderRecord = {
+    id: orderId,
+    user_id: userId,
+    team_id: state.teamId,
+    patient_details: patientDetails(details),
+    patient_address: patientAddress(draft.patientAddress),
+    lab_test: orderLabTest,
+    details: METHOD_DETAILS(method, state.testkitIdFor(orderId), nowIso),
+    sample_id: null,
+    notes: null,
+    clinical_notes: draft.clinicalNotes,
+    passthrough: draft.passthrough,
+    created_at: nowIso,
+    updated_at: nowIso,
+    events: [event],
+    status: "received",
+    last_event: event,
+    physician: PHYSICIAN,
+    health_insurance_id: null,
+    requisition_form_url: null,
+    shipping_details: null,
+    has_abn: false,
+    billing_type: billingType,
+    priority: false,
+    activate_by: null,
+    icd_codes: icdCodes,
+    interpretation: null,
+    has_missing_results: null,
+    result_types: null,
+    expected_result_by_date: null,
+    worst_case_result_by_date: null,
+    origin: "initial",
+    order_transaction: {
+      id: transactionId,
+      status: "active",
+      orders: [
+        {
+          id: orderId,
+          low_level_status: "ordered",
+          low_level_status_created_at: nowMicro,
+          origin: "initial",
+          parent_id: null,
+          created_at: nowMicro,
+          updated_at: nowMicro,
+        },
+      ],
+    },
+  }
+  return order
+}
+
+/**
+ * Store an order built by {@link buildOrderRecord}: the order, its transaction binding,
+ * the lab test it embeds, and the patient's demographics — everything `create_order`
+ * writes, so an order inserted any other way reads back the same.
+ */
+export const persistOrderRecord = (
+  state: JunctionState,
+  order: OrderRecord,
+  labTest: LabTestRecord,
+  details: Record<string, unknown>,
+  address: Record<string, unknown>,
+): void => {
+  const userId = order.user_id
+  const orderLabTest = order.lab_test
+  state.orders.insert(order.id, order)
+  state.orderByTransaction.insert(order.order_transaction.id, { order_id: order.id })
+  state.upsertLabTest(
+    orderLabTest,
+    orderLabTest.id === labTest.id ? undefined : state.expectedResultsFor(labTest.id),
+  )
+  const demographics = {
+    first_name: details.first_name ?? null,
+    last_name: details.last_name ?? null,
+    dob: details.dob ?? null,
+    gender: details.gender ?? null,
+    phone_number: details.phone_number ?? null,
+    email: details.email ?? null,
+    gender_identity: null,
+    sexual_orientation: null,
+    race: null,
+    ethnicity: null,
+    medical_proxy: null,
+    address: {
+      first_line: address.first_line ?? "",
+      second_line: typeof address.second_line === "string" ? address.second_line : "",
+      country: address.country ?? "",
+      zip: address.zip ?? "",
+      city: address.city ?? "",
+      state: address.state ?? "",
+      access_notes: null,
+    },
+  }
+  if (state.userInfo.get(userId)) state.userInfo.update(userId, demographics)
+  else state.userInfo.insert(userId, demographics)
+}
 
 const orderSummary = (order: OrderRecord) => {
   const transactionOrder = order.order_transaction.orders.find((entry) => entry.id === order.id)

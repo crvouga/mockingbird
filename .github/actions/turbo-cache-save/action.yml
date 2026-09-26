@@ -1,0 +1,10 @@
+name: Save Turborepo cache
+description: "Save .turbo/cache under the key ./.github/actions/setup restores. Run it with `if: always()`."
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache/save@v4
+      with:
+        path: .turbo/cache
+        key: turbo-${{ runner.os }}-${{ github.job }}-${{ github.sha }}

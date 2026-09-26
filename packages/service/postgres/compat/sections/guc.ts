@@ -1,0 +1,27 @@
+import { type CatalogSection, section } from "../scenario-types.ts";
+
+export const GUC_SECTION: CatalogSection = section("GUC", "SET / SHOW session settings", true, [
+  ["set-01", "SET and SHOW application_name"],
+  ["set-02", "SET application_name TO form"],
+  ["set-03", "later SET overwrites the earlier value"],
+  ["reset-01", "RESET returns to the default"],
+  ["reset-02", "SET TO DEFAULT behaves like RESET"],
+  ["reset-03", "RESET ALL restores defaults"],
+  ["local-01", "SET LOCAL reverts after COMMIT"],
+  ["local-02", "SET LOCAL reverts after ROLLBACK"],
+  ["local-03", "SET LOCAL outside a transaction has no lasting effect"],
+  ["txn-01", "SET inside a rolled-back transaction reverts"],
+  ["txn-02", "SET inside a committed transaction persists"],
+  ["fn-01", "set_config sets a GUC and returns the new value"],
+  ["fn-02", "current_setting reads a value set by SET"],
+  ["fn-03", "current_setting missing_ok true returns NULL for unknown GUC"],
+  ["fn-04", "current_setting missing_ok false works for known GUCs"],
+  ["custom-01", "set_config on a custom two-part GUC name"],
+  ["custom-02", "custom GUC readable with missing_ok before and after set"],
+  ["path-01", "search_path readable through current_setting"],
+  ["tz-01", "SET timezone changes timestamptz rendering"],
+  ["tz-02", "SHOW timezone echoes the setting"],
+  ["ver-01", "SHOW server_version matches the oracle"],
+  ["err-01", "current_setting of an unknown GUC fails with 42704"],
+  ["err-02", "SHOW of an unknown GUC fails with 42704"],
+]);

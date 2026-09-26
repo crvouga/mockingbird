@@ -1,0 +1,108 @@
+{
+  "name": "@crvouga/mockingbird-service-oauth",
+  "version": "0.0.0-development",
+  "description": "Portable social-login mock with Google, Apple, Microsoft, GitHub and generic OIDC profiles, private relay identities, reproducible edge cases, signed tokens and an accessible UI.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-oauth": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/oauth"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/oauth#readme",
+  "keywords": [
+    "mockingbird",
+    "oauth",
+    "openid-connect",
+    "google",
+    "apple",
+    "social-login",
+    "mock",
+    "microsoft",
+    "github",
+    "fault-injection"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "identity",
+    "displayName": "OAuth & Social Login",
+    "vendor": {
+      "website": "https://openid.net",
+      "docs": "https://openid.net/specs/openid-connect-core-1_0.html",
+      "name": "OpenID Foundation",
+      "description": "The OpenID Foundation maintains OpenID Connect, the identity layer on OAuth 2.0 used by Google, Apple, Microsoft and other sign-in providers."
+    },
+    "status": "ready",
+    "examples": [
+      {
+        "id": "google-login",
+        "title": "Try a complete OAuth login",
+        "description": "Choose popup or redirect, sign in through OAuth Mock, and return to an example app. The client, Hono server, and provider all run in process.",
+        "entry": "examples/google-login/index.ts",
+        "sources": [
+          "examples/google-login/app.ts",
+          "examples/google-login/transport.ts",
+          "examples/google-login/index.ts"
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test --timeout 30000",
+    "parity": "bun scripts/parity.ts",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "fast-check": "4.5.3",
+    "jose": "6.1.3",
+    "oauth4webapi": "3.8.8",
+    "hono": "4.11.9"
+  }
+}

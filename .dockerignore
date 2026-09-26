@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+**/.turbo
+.git
+.env*
+!.env.example
+.superset
+.mockingbird
+.parity-artifacts
+coverage
+*.log
+*.tgz
+**/*.tmp.ts

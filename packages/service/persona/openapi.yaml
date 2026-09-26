@@ -1,0 +1,452 @@
+openapi: 3.1.0
+info:
+  title: Persona API (Mockingbird subset)
+  description: |
+    Stateful mock subset of Persona's identity-verification API (JSON:API, `Persona-Version:
+    2023-01-05`): create an inquiry, list inquiries by reference id / template / status (the
+    "reusable inquiry" lookup), fetch one inquiry, and the hosted flow page the member is sent
+    to. Hand-authored from the wire shapes our EMR consumer reads and writes
+    (E/services/persona/persona.service.ts, types.ts) and Persona's public API reference.
+  version: "2023-01-05"
+  x-mockingbird-upstream:
+    note: >-
+      Hand-authored: Persona publishes reference docs but no OpenAPI document; the shapes follow
+      https://docs.withpersona.com/reference and our consumer's zod schemas.
+servers:
+  - url: https://withpersona.com/api/v1
+security:
+  - bearerAuth: []
+paths:
+  /inquiries:
+    post:
+      operationId: CreateInquiry
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      parameters:
+        - $ref: "#/components/parameters/PersonaVersion"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInquiryBody"
+      responses:
+        "201":
+          description: Inquiry created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InquiryDocument"
+        "400":
+          description: Malformed request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "401":
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "422":
+          description: Unknown inquiry template
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+    get:
+      operationId: ListInquiries
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - $ref: "#/components/parameters/PersonaVersion"
+        - name: filter[reference-id]
+          in: query
+          schema:
+            type: string
+            enum: [patient-1, patient-2, patient-3]
+        - name: filter[inquiry-template-id]
+          in: query
+          schema:
+            type: string
+            enum: [itmpl_identity, itmpl_phone]
+        - name: filter[status]
+          in: query
+          description: Comma-separated statuses.
+          schema:
+            type: string
+            enum: [created, "created,pending", completed, "approved,declined", needs_review]
+        - name: page[size]
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: page[after]
+          in: query
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: inquiry
+              missing: inq_000000000000000000000000
+      responses:
+        "200":
+          description: A page of inquiries, newest first
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InquiryList"
+        "400":
+          description: Bad page size
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "401":
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+  /inquiries/{inquiryId}:
+    parameters:
+      - name: inquiryId
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: inquiry
+            missing: inq_000000000000000000000000
+    get:
+      operationId: GetInquiry
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - $ref: "#/components/parameters/PersonaVersion"
+      responses:
+        "200":
+          description: The inquiry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InquiryDocument"
+        "401":
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+        "404":
+          description: No such inquiry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Errors"
+  /verify:
+    get:
+      operationId: HostedFlow
+      description: >-
+        The hosted verification page `PERSONA_WEB_INQUIRY_URL` points at
+        (`?inquiry-id=&redirect-uri=`). Opening it starts the inquiry (created → pending); its
+        buttons finish it through `/verify/complete`.
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: A browser page that mutates state; exercised by the acceptance tests.
+      parameters:
+        - name: inquiry-id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: redirect-uri
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The hosted flow page
+          content:
+            text/html:
+              schema:
+                type: string
+        "404":
+          description: No such inquiry
+          content:
+            text/html:
+              schema:
+                type: string
+  /verify/complete:
+    get:
+      operationId: HostedFlowComplete
+      description: >-
+        Finish the hosted flow with an outcome (`approve`, `decline`, `needs_review`, `complete`,
+        `fail`), then redirect to `redirect-uri?inquiry-id=&status=&reference-id=`.
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: A browser redirect that mutates state; exercised by the acceptance tests.
+      parameters:
+        - name: inquiry-id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: outcome
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [approve, decline, needs_review, complete, fail]
+        - name: redirect-uri
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Finished, and no redirect-uri was given
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: Back to the app
+        "404":
+          description: No such inquiry
+          content:
+            text/html:
+              schema:
+                type: string
+        "409":
+          description: The inquiry cannot move to that outcome
+          content:
+            text/html:
+              schema:
+                type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    PersonaVersion:
+      name: Persona-Version
+      in: header
+      schema:
+        type: string
+        enum: ["2023-01-05"]
+  schemas:
+    CreateInquiryBody:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [attributes]
+          properties:
+            type:
+              type: string
+              enum: [inquiry]
+            attributes:
+              type: object
+              properties:
+                inquiry-template-id:
+                  type: string
+                  enum: [itmpl_identity, itmpl_phone]
+                template-id:
+                  type: string
+                  enum: [tmpl_legacy]
+                reference-id:
+                  type: string
+                  enum: [patient-1, patient-2, patient-3]
+                redirect-uri:
+                  type: string
+                  enum: ["http://localhost:3000/verify/done", "acmeapp://verify"]
+                note:
+                  type: string
+                  maxLength: 40
+                platform:
+                  type: string
+                  enum: [web, mobile]
+                fields:
+                  type: object
+                  additionalProperties:
+                    type: string
+                    maxLength: 40
+        meta:
+          type: object
+    Inquiry:
+      type: object
+      required: [type, id, attributes, relationships]
+      properties:
+        type:
+          type: string
+          enum: [inquiry]
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: inquiry
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        attributes:
+          type: object
+          required: [status, reference-id, created-at]
+          properties:
+            status:
+              type: string
+              enum: [created, pending, completed, approved, declined, needs_review, failed, expired]
+            reference-id:
+              type: ["string", "null"]
+            note:
+              type: ["string", "null"]
+            behaviors:
+              type: ["object", "null"]
+            tags:
+              type: array
+              items:
+                type: string
+            creator:
+              type: ["string", "null"]
+            reviewer-comment:
+              type: ["string", "null"]
+            created-at:
+              type: string
+              x-mockingbird-volatile:
+                kind: timestamp
+            started-at:
+              type: ["string", "null"]
+              x-mockingbird-volatile:
+                kind: timestamp
+            completed-at:
+              type: ["string", "null"]
+              x-mockingbird-volatile:
+                kind: timestamp
+            failed-at:
+              type: ["string", "null"]
+              x-mockingbird-volatile:
+                kind: timestamp
+            decisioned-at:
+              type: ["string", "null"]
+              x-mockingbird-volatile:
+                kind: timestamp
+            expired-at:
+              type: ["string", "null"]
+              x-mockingbird-volatile:
+                kind: timestamp
+            redacted-at:
+              type: ["string", "null"]
+            previous-step-name:
+              type: ["string", "null"]
+            next-step-name:
+              type: ["string", "null"]
+            name-first:
+              type: ["string", "null"]
+            name-middle:
+              type: ["string", "null"]
+            name-last:
+              type: ["string", "null"]
+            birthdate:
+              type: ["string", "null"]
+            email-address:
+              type: ["string", "null"]
+            phone-number:
+              type: ["string", "null"]
+            fields:
+              type: object
+              additionalProperties:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  value: {}
+        relationships:
+          type: object
+          required: [inquiry-template]
+          properties:
+            account:
+              type: object
+            template:
+              type: object
+            inquiry-template:
+              type: object
+              properties:
+                data:
+                  type: ["object", "null"]
+                  properties:
+                    type:
+                      type: string
+                    id:
+                      type: string
+            reports:
+              type: object
+            verifications:
+              type: object
+            sessions:
+              type: object
+            documents:
+              type: object
+            selfies:
+              type: object
+    InquiryDocument:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Inquiry"
+        included:
+          type: array
+          items:
+            type: object
+    InquiryList:
+      type: object
+      required: [data, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Inquiry"
+        links:
+          type: object
+          properties:
+            prev:
+              type: ["string", "null"]
+              x-mockingbird-volatile:
+                kind: url
+            next:
+              type: ["string", "null"]
+              x-mockingbird-volatile:
+                kind: url
+    Errors:
+      type: object
+      required: [errors]
+      properties:
+        errors:
+          type: array
+          items:
+            type: object
+            required: [title]
+            properties:
+              title:
+                type: string
+              detail:
+                type: string
+              status:
+                type: string
+              source:
+                type: object

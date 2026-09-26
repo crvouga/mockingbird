@@ -1,0 +1,719 @@
+openapi: 3.1.0
+info:
+  title: Prism Labs body-scan API (Mockingbird subset)
+  description: 'Stateful mock subset of the Prism Labs API (`Accept: application/json;v=1`): subject upsert,
+    scans, the presigned capture upload, per-stage processing states, and the READY-scan results (body
+    composition, measurements, health report, asset URLs). Hand-authored from the consumer''s zod schemas
+    (prism-scan.adapter.ts).
+
+    '
+  version: '1'
+  x-mockingbird-upstream:
+    note: Wire shapes from apps/backend/src/modules/body-scan/adapters/outbound/prism-scan.adapter.ts
+      and packages/body-scan-capture-page/src/main.ts (the PUT upload).
+servers:
+- url: https://sandbox-api.hosted.prismlabs.tech
+security:
+- bearerAuth: []
+paths:
+  /users:
+    post:
+      operationId: UpsertUser
+      description: Create or update the scan subject identified by `token`.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserBody'
+  /scans:
+    post:
+      operationId: CreateScan
+      description: Start a scan for a subject.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+        '400':
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Unknown user token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScanBody'
+  /scans/{scanId}:
+    get:
+      operationId: GetScan
+      description: A scan's status and weight.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: The scan
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Scan'
+        '404': &id001
+          description: Unknown scan, or results not ready yet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - &id002
+        name: scanId
+        in: path
+        required: true
+        schema:
+          type: string
+          x-mockingbird-resource-ref:
+            type: scan
+            missing: 00000000-0000-4000-8000-000000000000
+      - &id003
+        name: unit-system
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - metric
+          - imperial
+  /scans/{scanId}/upload-url:
+    post:
+      operationId: CreateUploadUrl
+      description: A presigned PUT URL for the capture video (15 minutes).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '200':
+          description: Upload target
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadTarget'
+        '404': *id001
+        '409':
+          description: The scan already has its capture
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id002
+  /scans/{scanId}/scan-assets:
+    get:
+      operationId: GetScanAssets
+      description: Per-stage processing states.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: Stage states
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanAssets'
+        '404': *id001
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id002
+  /scans/{scanId}/bodyfat:
+    get:
+      operationId: GetBodyfat
+      description: Body composition (READY scans).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: Body composition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Bodyfat'
+        '404': *id001
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id002
+  /scans/{scanId}/measurements:
+    get:
+      operationId: GetMeasurements
+      description: Circumferences and indices (READY scans).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: Measurements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Measurements'
+        '404': *id001
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id002
+      - *id003
+  /scans/{scanId}/health-report:
+    get:
+      operationId: GetHealthReport
+      description: Health report incl. metabolic age (READY scans).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: Report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthReport'
+        '404': *id001
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id002
+  /scans/{scanId}/asset-urls:
+    get:
+      operationId: GetAssetUrls
+      description: Signed URLs for the scan's 3D assets (READY scans).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        '200':
+          description: URLs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AssetUrls'
+        '404': *id001
+        '401':
+          description: Missing or unknown API key
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - *id002
+  /uploads/{scanId}:
+    put:
+      operationId: UploadCapture
+      description: The presigned upload target (what the capture page PUTs the video to). Moves the scan
+        to PROCESSING.
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: Binary video upload through a presigned URL; covered by acceptance tests.
+      parameters:
+      - name: scanId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: expires
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: signature
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+          video/mp4:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: Stored
+        '403':
+          description: Expired or bad signature (S3-style XML)
+          content:
+            application/xml:
+              schema:
+                type: string
+        '404':
+          description: Unknown scan
+  /assets/{scanId}/{file}:
+    get:
+      operationId: GetAsset
+      description: A signed 3D asset (tiny placeholder bytes).
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: Binary asset bytes; covered by acceptance tests.
+      parameters:
+      - name: scanId
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: file
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Asset bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Unknown asset
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    UserBody:
+      type: object
+      required:
+      - token
+      - sex
+      - region
+      - birthDate
+      - weight
+      - height
+      - researchConsent
+      - termsOfService
+      properties:
+        token:
+          type: string
+          minLength: 1
+          maxLength: 64
+          examples:
+          - user-token-1
+          - user-token-2
+        sex:
+          type: string
+          enum:
+          - male
+          - female
+          - neutral
+          - undefined
+        region:
+          type: string
+          enum:
+          - africa
+          - asia
+          - caribbean
+          - central_america
+          - europe
+          - north_america
+          - oceania
+          - south_america
+        birthDate:
+          type: string
+          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|1[0-9]|2[0-8])$
+        weight:
+          type: object
+          required:
+          - value
+          - unit
+          properties:
+            value:
+              type: number
+              exclusiveMinimum: 0
+              maximum: 400
+            unit:
+              type: string
+              enum:
+              - kg
+              - lb
+        height:
+          type: object
+          required:
+          - value
+          - unit
+          properties:
+            value:
+              type: number
+              exclusiveMinimum: 0
+              maximum: 400
+            unit:
+              type: string
+              enum:
+              - m
+              - in
+        researchConsent:
+          type: boolean
+        termsOfService:
+          type: object
+          required:
+          - accepted
+          - version
+          properties:
+            accepted:
+              type: boolean
+            version:
+              type: string
+              minLength: 1
+              maxLength: 20
+    User:
+      type: object
+      required:
+      - id
+      - token
+      - sex
+      - region
+      - birthDate
+      - weight
+      - height
+      - createdAt
+      properties:
+        id:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        token:
+          type: string
+        sex:
+          type: string
+        region:
+          type: string
+        birthDate:
+          type: string
+        weight:
+          type: object
+        height:
+          type: object
+        researchConsent:
+          type: boolean
+        termsOfService:
+          type: object
+        createdAt: &id004
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        updatedAt: *id004
+    ScanBody:
+      type: object
+      required:
+      - userToken
+      - deviceConfigName
+      - bodyfatMethod
+      properties:
+        userToken:
+          type: string
+          minLength: 1
+          maxLength: 64
+          examples:
+          - user-token-1
+          - user-token-2
+        deviceConfigName:
+          type: string
+          enum:
+          - IPHONE_SCANNER
+          - ANDROID_SCANNER
+        bodyfatMethod:
+          type: string
+          enum:
+          - coco2
+          - coco
+          - army
+          - extended_navy_thinboost
+        assetConfigId:
+          type: string
+          enum:
+          - 25f6d3a6-a634-40c3-8452-0342bee242d0
+          - ee651a9e-6de1-4621-a5c9-5d31ca874718
+    Scan:
+      type: object
+      required:
+      - id
+      - status
+      - userToken
+      - createdAt
+      - updatedAt
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: scan
+            identity: true
+          x-mockingbird-volatile:
+            kind: id
+        status:
+          type: string
+          enum:
+          - CREATED
+          - PROCESSING
+          - READY
+          - FAILED
+        userToken:
+          type: string
+        deviceConfigName:
+          type: string
+        bodyfatMethod:
+          type: string
+        assetConfigId:
+          type:
+          - string
+          - 'null'
+        weight:
+          type:
+          - object
+          - 'null'
+          properties:
+            value: &id007
+              type: number
+            unit:
+              type: string
+        height:
+          type:
+          - object
+          - 'null'
+        createdAt: *id004
+        updatedAt: *id004
+    UploadTarget:
+      type: object
+      required:
+      - url
+      - expirationTime
+      properties:
+        url:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        expirationTime: *id004
+    ScanAssets:
+      type: object
+      properties:
+        captureData: &id005
+          type:
+          - string
+          - 'null'
+          enum:
+          - started
+          - succeeded
+          - failed
+          - null
+        captureDataUpdatedAt: &id006
+          type:
+          - string
+          - 'null'
+          x-mockingbird-volatile:
+            kind: timestamp
+        body: *id005
+        bodyUpdatedAt: *id006
+        fittedBody: *id005
+        fittedBodyUpdatedAt: *id006
+        measurement: *id005
+        measurementUpdatedAt: *id006
+    Bodyfat:
+      type: object
+      required:
+      - bodyfatMethod
+      - bodyfatPercentage
+      - leanMass
+      - fatMass
+      properties:
+        bodyfatMethod:
+          type: string
+        bodyfatPercentage: *id007
+        leanMass: *id007
+        fatMass: *id007
+        skeletalMuscleMass: *id007
+        unit:
+          type: string
+    Measurements:
+      type: object
+      required:
+      - waistFit
+      - hipsFit
+      - chestFit
+      - waistToHipRatio
+      properties:
+        waistFit: *id007
+        hipsFit: *id007
+        chestFit: *id007
+        waistToHipRatio: *id007
+        bodyRoundnessIndex: *id007
+        bmiPredicted: *id007
+        unit:
+          type: string
+    HealthReport:
+      type: object
+      properties:
+        metabolicAgeReport:
+          type:
+          - object
+          - 'null'
+          properties:
+            metabolicAgeYears:
+              type:
+              - number
+              - 'null'
+            chronologicalAgeYears:
+              type:
+              - number
+              - 'null'
+            ageDeltaYears:
+              type:
+              - number
+              - 'null'
+            percentile:
+              type:
+              - number
+              - 'null'
+        bodyShapeReport:
+          type: object
+    AssetUrls:
+      type: object
+      properties:
+        previewImage:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        model:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        canonicalBody:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        texture:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        material:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+        stripes:
+          type: string
+          x-mockingbird-volatile:
+            kind: url
+    Error:
+      type: object
+      required:
+      - message
+      properties:
+        message:
+          type: string
+        errors:
+          type: array
+          items:
+            type: object

@@ -1,0 +1,722 @@
+{
+  "note": "Synthetic survey corpus for the Formbricks mock: invented surveys in the Formbricks 6 survey shape (blocks of elements). No real data.",
+  "surveys": [
+    {
+      "id": "csurveynps000000000000001",
+      "createdAt": "2026-01-05T09:00:00.000Z",
+      "updatedAt": "2026-01-05T09:00:00.000Z",
+      "name": "Net Promoter Score (NPS)",
+      "type": "app",
+      "status": "inProgress",
+      "welcomeCard": {
+        "enabled": false,
+        "headline": {
+          "default": "Welcome!"
+        },
+        "buttonLabel": {
+          "default": "Next"
+        },
+        "timeToFinish": false,
+        "showResponseCount": false
+      },
+      "questions": [],
+      "blocks": [
+        {
+          "id": "npsblockscore0000000000001",
+          "name": "Block 1",
+          "elements": [
+            {
+              "id": "nps_score",
+              "type": "nps",
+              "headline": {
+                "default": "How likely are you to recommend Example App to a friend or colleague?"
+              },
+              "required": true,
+              "lowerLabel": {
+                "default": "Not likely"
+              },
+              "upperLabel": {
+                "default": "Very likely"
+              },
+              "isColorCodingEnabled": true
+            }
+          ],
+          "buttonLabel": {
+            "default": ""
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        },
+        {
+          "id": "npsblockreason000000000001",
+          "name": "Block 2",
+          "elements": [
+            {
+              "id": "nps_reason",
+              "type": "openText",
+              "headline": {
+                "default": "What is the main reason for your score?"
+              },
+              "required": false,
+              "inputType": "text",
+              "charLimit": {
+                "enabled": false
+              }
+            }
+          ],
+          "buttonLabel": {
+            "default": ""
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        },
+        {
+          "id": "npsblockvalue0000000000001",
+          "name": "Block 3",
+          "elements": [
+            {
+              "id": "nps_value",
+              "type": "multipleChoiceMulti",
+              "headline": {
+                "default": "Which parts of Example App do you use most?"
+              },
+              "required": false,
+              "shuffleOption": "none",
+              "choices": [
+                {
+                  "id": "dashboards",
+                  "label": {
+                    "default": "Dashboards"
+                  }
+                },
+                {
+                  "id": "reports",
+                  "label": {
+                    "default": "Reports"
+                  }
+                },
+                {
+                  "id": "integrations",
+                  "label": {
+                    "default": "Integrations"
+                  }
+                },
+                {
+                  "id": "mobile",
+                  "label": {
+                    "default": "Mobile app"
+                  }
+                }
+              ]
+            }
+          ],
+          "buttonLabel": {
+            "default": "Finish"
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        }
+      ],
+      "endings": [
+        {
+          "id": "csurveynps000000000000end",
+          "type": "endScreen",
+          "headline": {
+            "default": "Thank you!"
+          },
+          "subheader": {
+            "default": "We appreciate your feedback."
+          }
+        }
+      ],
+      "hiddenFields": {
+        "enabled": true,
+        "fieldIds": [
+          "accountId"
+        ]
+      },
+      "variables": [],
+      "languages": [],
+      "showLanguageSwitch": null,
+      "autoClose": null,
+      "delay": 0,
+      "displayOption": "displayOnce",
+      "displayLimit": null,
+      "displayPercentage": null,
+      "recontactDays": null,
+      "segment": null,
+      "triggers": [
+        {
+          "actionClass": {
+            "name": "New Session"
+          }
+        }
+      ],
+      "styling": null,
+      "workspaceOverwrites": null,
+      "isBackButtonHidden": false,
+      "recaptcha": {
+        "enabled": false,
+        "threshold": 0.1
+      }
+    },
+    {
+      "id": "csurveyonboarding00000001",
+      "createdAt": "2026-01-12T09:00:00.000Z",
+      "updatedAt": "2026-01-12T09:00:00.000Z",
+      "name": "Onboarding",
+      "type": "app",
+      "status": "inProgress",
+      "welcomeCard": {
+        "enabled": false,
+        "headline": {
+          "default": "Welcome!"
+        },
+        "buttonLabel": {
+          "default": "Next"
+        },
+        "timeToFinish": false,
+        "showResponseCount": false
+      },
+      "questions": [],
+      "blocks": [
+        {
+          "id": "onbblockname0000000000001",
+          "name": "Block 1",
+          "elements": [
+            {
+              "id": "first_name",
+              "type": "openText",
+              "headline": {
+                "default": "First name"
+              },
+              "required": true,
+              "inputType": "text",
+              "charLimit": {
+                "enabled": false
+              }
+            },
+            {
+              "id": "last_name",
+              "type": "openText",
+              "headline": {
+                "default": "Last name"
+              },
+              "required": true,
+              "inputType": "text",
+              "charLimit": {
+                "enabled": false
+              }
+            },
+            {
+              "id": "work_email",
+              "type": "openText",
+              "headline": {
+                "default": "Work email"
+              },
+              "required": true,
+              "inputType": "email",
+              "charLimit": {
+                "enabled": false
+              }
+            },
+            {
+              "id": "phone",
+              "type": "openText",
+              "headline": {
+                "default": "Phone number"
+              },
+              "required": false,
+              "inputType": "phone",
+              "charLimit": {
+                "enabled": false
+              }
+            }
+          ],
+          "buttonLabel": {
+            "default": ""
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        },
+        {
+          "id": "onbblockrole0000000000001",
+          "name": "Block 2",
+          "elements": [
+            {
+              "id": "role",
+              "type": "multipleChoiceSingle",
+              "headline": {
+                "default": "What best describes your role?"
+              },
+              "required": true,
+              "shuffleOption": "none",
+              "choices": [
+                {
+                  "id": "engineering",
+                  "label": {
+                    "default": "Engineering"
+                  }
+                },
+                {
+                  "id": "product",
+                  "label": {
+                    "default": "Product"
+                  }
+                },
+                {
+                  "id": "design",
+                  "label": {
+                    "default": "Design"
+                  }
+                },
+                {
+                  "id": "other",
+                  "label": {
+                    "default": "Other"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "team_size",
+              "type": "multipleChoiceSingle",
+              "headline": {
+                "default": "How big is your team?"
+              },
+              "required": false,
+              "shuffleOption": "none",
+              "choices": [
+                {
+                  "id": "solo",
+                  "label": {
+                    "default": "Just me"
+                  }
+                },
+                {
+                  "id": "small",
+                  "label": {
+                    "default": "2-10"
+                  }
+                },
+                {
+                  "id": "medium",
+                  "label": {
+                    "default": "11-50"
+                  }
+                },
+                {
+                  "id": "large",
+                  "label": {
+                    "default": "51+"
+                  }
+                }
+              ]
+            },
+            {
+              "id": "website",
+              "type": "openText",
+              "headline": {
+                "default": "Company website"
+              },
+              "required": false,
+              "inputType": "url",
+              "charLimit": {
+                "enabled": false
+              }
+            }
+          ],
+          "buttonLabel": {
+            "default": "Finish"
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        }
+      ],
+      "endings": [
+        {
+          "id": "csurveyonboarding00000end",
+          "type": "endScreen",
+          "headline": {
+            "default": "Thank you!"
+          },
+          "subheader": {
+            "default": "We appreciate your feedback."
+          }
+        }
+      ],
+      "hiddenFields": {
+        "enabled": true,
+        "fieldIds": [
+          "accountId"
+        ]
+      },
+      "variables": [],
+      "languages": [],
+      "showLanguageSwitch": null,
+      "autoClose": null,
+      "delay": 0,
+      "displayOption": "displayOnce",
+      "displayLimit": null,
+      "displayPercentage": null,
+      "recontactDays": null,
+      "segment": null,
+      "triggers": [
+        {
+          "actionClass": {
+            "name": "New Session"
+          }
+        }
+      ],
+      "styling": null,
+      "workspaceOverwrites": null,
+      "isBackButtonHidden": false,
+      "recaptcha": {
+        "enabled": false,
+        "threshold": 0.1
+      }
+    },
+    {
+      "id": "csurveyfeedback0000000001",
+      "createdAt": "2026-01-19T09:00:00.000Z",
+      "updatedAt": "2026-01-19T09:00:00.000Z",
+      "name": "Product Feedback",
+      "type": "app",
+      "status": "inProgress",
+      "welcomeCard": {
+        "enabled": false,
+        "headline": {
+          "default": "Welcome!"
+        },
+        "buttonLabel": {
+          "default": "Next"
+        },
+        "timeToFinish": false,
+        "showResponseCount": false
+      },
+      "questions": [],
+      "blocks": [
+        {
+          "id": "fbkblockrating00000000001",
+          "name": "Block 1",
+          "elements": [
+            {
+              "id": "satisfaction",
+              "type": "rating",
+              "headline": {
+                "default": "How satisfied are you with Example App?"
+              },
+              "required": true,
+              "scale": "star",
+              "range": 5,
+              "lowerLabel": {
+                "default": "Not satisfied"
+              },
+              "upperLabel": {
+                "default": "Very satisfied"
+              },
+              "isColorCodingEnabled": false
+            }
+          ],
+          "buttonLabel": {
+            "default": ""
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        },
+        {
+          "id": "fbkblockideas000000000001",
+          "name": "Block 2",
+          "elements": [
+            {
+              "id": "improvement",
+              "type": "openText",
+              "headline": {
+                "default": "What should we improve next?"
+              },
+              "required": false,
+              "inputType": "text",
+              "charLimit": {
+                "enabled": false
+              }
+            }
+          ],
+          "buttonLabel": {
+            "default": ""
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        },
+        {
+          "id": "fbkblockconsent0000000001",
+          "name": "Block 3",
+          "elements": [
+            {
+              "id": "follow_up",
+              "type": "consent",
+              "headline": {
+                "default": "May we contact you about your feedback?"
+              },
+              "label": {
+                "default": "Yes, you may contact me"
+              },
+              "required": false
+            }
+          ],
+          "buttonLabel": {
+            "default": "Finish"
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        }
+      ],
+      "endings": [
+        {
+          "id": "csurveyfeedback0000000end",
+          "type": "endScreen",
+          "headline": {
+            "default": "Thank you!"
+          },
+          "subheader": {
+            "default": "We appreciate your feedback."
+          }
+        }
+      ],
+      "hiddenFields": {
+        "enabled": true,
+        "fieldIds": [
+          "accountId"
+        ]
+      },
+      "variables": [],
+      "languages": [],
+      "showLanguageSwitch": null,
+      "autoClose": null,
+      "delay": 0,
+      "displayOption": "displayOnce",
+      "displayLimit": null,
+      "displayPercentage": null,
+      "recontactDays": null,
+      "segment": null,
+      "triggers": [
+        {
+          "actionClass": {
+            "name": "New Session"
+          }
+        }
+      ],
+      "styling": null,
+      "workspaceOverwrites": null,
+      "isBackButtonHidden": false,
+      "recaptcha": {
+        "enabled": false,
+        "threshold": 0.1
+      }
+    },
+    {
+      "id": "csurveyevent0000000000001",
+      "createdAt": "2026-01-26T09:00:00.000Z",
+      "updatedAt": "2026-01-26T09:00:00.000Z",
+      "name": "Event Registration",
+      "type": "link",
+      "status": "inProgress",
+      "welcomeCard": {
+        "enabled": false,
+        "headline": {
+          "default": "Welcome!"
+        },
+        "buttonLabel": {
+          "default": "Next"
+        },
+        "timeToFinish": false,
+        "showResponseCount": false
+      },
+      "questions": [],
+      "blocks": [
+        {
+          "id": "evtblockattend00000000001",
+          "name": "Block 1",
+          "elements": [
+            {
+              "id": "attendee_email",
+              "type": "openText",
+              "headline": {
+                "default": "Email"
+              },
+              "required": true,
+              "inputType": "email",
+              "charLimit": {
+                "enabled": false
+              }
+            },
+            {
+              "id": "session",
+              "type": "multipleChoiceMulti",
+              "headline": {
+                "default": "Which sessions will you attend?"
+              },
+              "required": true,
+              "shuffleOption": "none",
+              "choices": [
+                {
+                  "id": "keynote",
+                  "label": {
+                    "default": "Keynote"
+                  }
+                },
+                {
+                  "id": "workshop",
+                  "label": {
+                    "default": "Workshop"
+                  }
+                },
+                {
+                  "id": "social",
+                  "label": {
+                    "default": "Evening social"
+                  }
+                }
+              ]
+            }
+          ],
+          "buttonLabel": {
+            "default": "Register"
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        }
+      ],
+      "endings": [
+        {
+          "id": "csurveyevent0000000000end",
+          "type": "endScreen",
+          "headline": {
+            "default": "Thank you!"
+          },
+          "subheader": {
+            "default": "We appreciate your feedback."
+          }
+        }
+      ],
+      "hiddenFields": {
+        "enabled": true,
+        "fieldIds": []
+      },
+      "variables": [],
+      "languages": [],
+      "showLanguageSwitch": null,
+      "autoClose": null,
+      "delay": 0,
+      "displayOption": "displayOnce",
+      "displayLimit": null,
+      "displayPercentage": null,
+      "recontactDays": null,
+      "segment": null,
+      "triggers": [],
+      "styling": null,
+      "workspaceOverwrites": null,
+      "isBackButtonHidden": false,
+      "recaptcha": {
+        "enabled": false,
+        "threshold": 0.1
+      }
+    },
+    {
+      "id": "csurveyexit00000000000001",
+      "createdAt": "2026-02-02T09:00:00.000Z",
+      "updatedAt": "2026-02-02T09:00:00.000Z",
+      "name": "Exit Survey",
+      "type": "app",
+      "status": "paused",
+      "welcomeCard": {
+        "enabled": false,
+        "headline": {
+          "default": "Welcome!"
+        },
+        "buttonLabel": {
+          "default": "Next"
+        },
+        "timeToFinish": false,
+        "showResponseCount": false
+      },
+      "questions": [],
+      "blocks": [
+        {
+          "id": "extblockreason00000000001",
+          "name": "Block 1",
+          "elements": [
+            {
+              "id": "exit_reason",
+              "type": "openText",
+              "headline": {
+                "default": "Why are you leaving?"
+              },
+              "required": true,
+              "inputType": "text",
+              "charLimit": {
+                "enabled": false
+              }
+            }
+          ],
+          "buttonLabel": {
+            "default": "Finish"
+          },
+          "backButtonLabel": {
+            "default": ""
+          }
+        }
+      ],
+      "endings": [
+        {
+          "id": "csurveyexit00000000000end",
+          "type": "endScreen",
+          "headline": {
+            "default": "Thank you!"
+          },
+          "subheader": {
+            "default": "We appreciate your feedback."
+          }
+        }
+      ],
+      "hiddenFields": {
+        "enabled": true,
+        "fieldIds": [
+          "accountId"
+        ]
+      },
+      "variables": [],
+      "languages": [],
+      "showLanguageSwitch": null,
+      "autoClose": null,
+      "delay": 0,
+      "displayOption": "displayOnce",
+      "displayLimit": null,
+      "displayPercentage": null,
+      "recontactDays": null,
+      "segment": null,
+      "triggers": [
+        {
+          "actionClass": {
+            "name": "New Session"
+          }
+        }
+      ],
+      "styling": null,
+      "workspaceOverwrites": null,
+      "isBackButtonHidden": false,
+      "recaptcha": {
+        "enabled": false,
+        "threshold": 0.1
+      }
+    }
+  ]
+}

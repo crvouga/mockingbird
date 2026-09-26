@@ -1,0 +1,21 @@
+{
+  "count": 4,
+  "next": null,
+  "previous": "https://us.posthog.com/api/projects/338122/feature_flags/?limit=100",
+  "results": [
+    {
+      "id": 3,
+      "key": "sample-ramping",
+      "active": true,
+      "updated_at": "2025-02-01T00:00:00Z",
+      "filters": { "groups": [{ "properties": [], "rollout_percentage": 25 }] }
+    },
+    {
+      "id": 4,
+      "key": "sample-retired",
+      "active": false,
+      "created_at": "2025-01-01T00:00:00Z",
+      "filters": { "groups": [{ "properties": [], "rollout_percentage": 0 }] }
+    }
+  ]
+}

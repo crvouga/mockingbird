@@ -1,0 +1,33 @@
+---
+import { installCommand, PACKAGE_MANAGERS } from "../lib/format.ts"
+import Icon from "./Icon.astro"
+
+interface Props {
+  pkg: string
+}
+const { pkg } = Astro.props
+---
+
+<div class="pm">
+  <div class="pm-tabs" role="tablist" aria-label="Package manager">
+    {
+      PACKAGE_MANAGERS.map((pm, i) => (
+        <button type="button" role="tab" data-pm={pm} aria-selected={i === 0 ? "true" : "false"} tabindex={i === 0 ? 0 : -1}>
+          {pm}
+        </button>
+      ))
+    }
+  </div>
+  {
+    PACKAGE_MANAGERS.map((pm, i) => (
+      <div class="cmd" role="tabpanel" data-pm-panel={pm} hidden={i !== 0}>
+        <span class="prompt">$</span>
+        <code>{installCommand(pm, pkg)}</code>
+        <button type="button" class="copy" data-copy={installCommand(pm, pkg)} aria-label="Copy">
+          <Icon name="copy" />
+          <Icon name="check" />
+        </button>
+      </div>
+    ))
+  }
+</div>
