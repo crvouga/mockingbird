@@ -52,6 +52,7 @@
     "@crvouga/mockingbird-service-oauth": "workspace:*",
     "@crvouga/mockingbird-service-odx": "workspace:*",
     "@crvouga/mockingbird-service-otel": "workspace:*",
+    "@crvouga/mockingbird-service-paddle": "workspace:*",
     "@crvouga/mockingbird-service-payload-cms": "workspace:*",
     "@crvouga/mockingbird-service-persona": "workspace:*",
     "@crvouga/mockingbird-service-pharmetika": "workspace:*",
