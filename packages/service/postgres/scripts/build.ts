@@ -22,7 +22,28 @@ const build = Bun.spawn(
 const code = await build.exited;
 if (code !== 0) process.exit(code);
 
+// The wire-protocol server and its CLI need node:net; build them for Node, not the browser.
+const serverBuild = Bun.spawn(
+  [
+    "bunx",
+    "esbuild",
+    "src/server/index.ts",
+    "src/server/cli.ts",
+    "--bundle",
+    "--format=esm",
+    "--outdir=dist/server",
+    "--platform=node",
+    "--target=node20",
+    "--packages=external",
+    "--sourcemap",
+  ],
+  { stdout: "inherit", stderr: "inherit" },
+);
+const serverCode = await serverBuild.exited;
+if (serverCode !== 0) process.exit(serverCode);
+
 await $`tsc -p tsconfig.build.json`;
+await $`tsc -p tsconfig.build.server.json`;
 
 // tsc keeps `.ts` specifiers in .d.ts even with rewriteRelativeImportExtensions
 // when the source uses allowImportingTsExtensions. Consumers resolve `.js` → `.d.ts`.
@@ -51,6 +72,12 @@ if (typeof mod.Database !== "function") {
 const unstable = await import(new URL("../dist/unstable.js", import.meta.url).href);
 if (typeof unstable.parse !== "function") {
   console.error("Build incomplete: unstable.parse export missing at runtime");
+  process.exit(1);
+}
+
+const server = await import(new URL("../dist/server/index.js", import.meta.url).href);
+if (typeof server.serve !== "function") {
+  console.error("Build incomplete: server serve export missing at runtime");
   process.exit(1);
 }
 

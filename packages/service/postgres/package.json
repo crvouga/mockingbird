@@ -22,6 +22,11 @@
       "types": "./dist/unstable.d.ts",
       "import": "./dist/unstable.js",
       "default": "./dist/unstable.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
     }
   },
   "files": [
@@ -49,7 +54,7 @@
   },
   "scripts": {
     "build": "bun run scripts/build.ts",
-    "test": "bun test tests/contract tests/fuzz tests/harness",
+    "test": "bun test tests/contract tests/fuzz tests/harness tests/server",
     "test:contract": "bun test tests/contract",
     "test:fuzz": "bun test tests/fuzz",
     "test:pbt": "bun test tests/fuzz",
@@ -87,7 +92,8 @@
     "portability": "bun ../../../scripts/portability.ts",
     "example:react-vite": "cd examples/react-vite && bun install && bun run dev",
     "fc": "clear && bun format && bun check:full",
-    "test:postgres-native": "bun run scripts/run-postgres-native-tests.ts"
+    "test:postgres-native": "bun run scripts/run-postgres-native-tests.ts",
+    "test:server": "bun test tests/server"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
@@ -124,7 +130,11 @@
       "website": "https://www.postgresql.org",
       "docs": "https://www.postgresql.org/docs/current/"
     },
-    "status": "ready"
+    "status": "ready",
+    "entries": {
+      "server/index": "node",
+      "server/cli": "node"
+    }
   },
   "trustedDependencies": [
     "@embedded-postgres/darwin-arm64",
@@ -135,5 +145,8 @@
     "@embedded-postgres/linux-ppc64",
     "@embedded-postgres/linux-x64",
     "@embedded-postgres/windows-x64"
-  ]
+  ],
+  "bin": {
+    "mockingbird-postgres": "./dist/server/cli.js"
+  }
 }

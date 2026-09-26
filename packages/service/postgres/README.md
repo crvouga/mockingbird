@@ -15,7 +15,7 @@ isolation.
 - **Synchronous**, ESM-only API (no Promises, no `require`)
 - **SQL dialect verified** against real PostgreSQL 18.3 (PGlite by default; optional native server)
   via differential contracts and a fail-closed gate
-- **Not** a drop-in for the `pg` / `postgres.js` client APIs, the wire protocol, or on-disk clusters
+- In-process it is **not** a drop-in for the `pg` / `postgres.js` client APIs or on-disk clusters, but it also ships an **optional wire-protocol server** (`@crvouga/mockingbird-service-postgres/server`, Node/Bun) that unmodified clients connect to over TCP
 - Intentional differences: deterministic `random()` / `now()` by default, and a custom snapshot
   format (not `pg_dump`)
 
@@ -79,7 +79,8 @@ console.log(db2.query(`SELECT count(*) AS n FROM users`), db3.changes) // [{ n: 
 ```
 
 All methods are **synchronous**; do not `await` them. Browser and Node/Bun share the same
-in-memory surface (no filesystem, no server, no wire protocol).
+in-memory surface (no filesystem). For a real TCP listener separate processes can connect to, see
+the [wire-protocol server](#wire-protocol-server-separate-processes) (Node/Bun only).
 
 ### Per-test isolation with snapshots
 
@@ -150,6 +151,53 @@ Differences from node-postgres to account for: timestamps, dates, `numeric` and 
 back as PostgreSQL text (node-postgres parses timestamps to `Date` and JSON to objects);
 `prepare`/`query` accept one statement at a time (use `exec` for scripts); errors are
 `PostgresError` with `code` set to the SQLSTATE, like `pg`'s `DatabaseError.code`.
+
+### Wire-protocol server (separate processes)
+
+When another process must connect over TCP — `pg`, `postgres.js`, a JDBC client, `psql`, a service
+in a local multi-service stack — start the frontend/backend v3 server instead of a shim. It needs
+`node:net`, so it is a separate Node/Bun entry (`/server`) and the main package stays browser-safe.
+
+```ts
+import { serve } from "@crvouga/mockingbird-service-postgres/server"
+
+const server = await serve({ port: 0 }) // 0 → a free port, reported as server.port
+// postgres://postgres@127.0.0.1:${server.port}/db  — no initdb, no OS user, pure TypeScript
+await server.close()
+```
+
+Or from the command line (installs a `mockingbird-postgres` bin):
+
+```bash
+mockingbird-postgres serve --port 55432            # trust auth
+mockingbird-postgres serve --password secret --log # SCRAM-SHA-256, log each statement
+```
+
+`serve({ database })` shares an existing `Database`, and `serve({ database: snapshot })` boots every
+server from one frozen template, so a seeded stack starts from the same bytes each time.
+`server.snapshot()` freezes the live state; `server.fault({ dropConnection | delayStatementMs |
+failCommit })` arms the next statement or connection for a drop, a delay, or a `40001` commit
+failure.
+
+One engine is shared by every connection. The engine runs one statement at a time, so a connection
+inside an explicit `BEGIN` block holds it until `COMMIT`/`ROLLBACK` and other connections queue
+behind it — which keeps read-committed visibility (an uncommitted row is never seen by another
+connection) by serializing transaction blocks rather than by MVCC. Across connections the server
+adds what a single engine does not: per-session advisory locks (`pg_advisory_lock` /
+`pg_try_advisory_lock` / `_xact_` / `_unlock`) with in-order waiters and deadlock detection
+(`40P01`), `LISTEN`/`NOTIFY` delivered to idle listeners, `CancelRequest` (a blocked statement ends
+`57014` and the session stays usable), and per-connection aborted-transaction state (a failed
+statement in a block is `25P02` until `ROLLBACK`, with `ReadyForQuery` reporting `I`/`T`/`E`).
+SCRAM-SHA-256 and trust auth, the extended query protocol (`Parse`/`Bind`/`Describe`/`Execute`/
+`Sync`) with text and binary parameters and results, real type OIDs in `RowDescription`, and
+`23505`/`23502` errors carrying the constraint, table and column the engine names, all work over
+the wire.
+
+**Not modelled by the server:** row-level lock contention, so `SELECT … FOR UPDATE SKIP LOCKED`
+parses and returns rows but does not distribute disjoint rows across concurrent workers (there are
+no row locks); `COPY` streaming (`CopyInResponse`/`CopyData`) — use `copyFrom` on a shared
+`Database`; and the binary parameter formats beyond the common scalar types (a client that sends
+another binary type gets `0A000`, and can switch that parameter to text).
 
 ### Method semantics
 
@@ -247,20 +295,21 @@ Goal: **SQL dialect** behavioural parity vs PostgreSQL **18.3** for the sync API
 [COMPATIBILITY.md](./COMPATIBILITY.md). Contract:
 [DROP-IN-CONTRACT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/docs/DROP-IN-CONTRACT.md).
 
-There is no wire protocol, no async client, no connection pooling, no `pg_dump` codec, and no
-multi-session concurrency. Intentional differences: custom `PGMM` snapshots; seeded `random()` /
-fixed `now()` by default (`{ random: "os" }` / `{ now: "system" }` match PostgreSQL entropy and
-wall clock); single session, no MVCC across connections.
+The in-process API has no async client, no connection pooling and no `pg_dump` codec; the optional
+[wire-protocol server](#wire-protocol-server-separate-processes) adds a TCP listener and coordinates
+several connections over the one engine, but by serializing transaction blocks, not by MVCC.
+Intentional differences: custom `PGMM` snapshots; seeded `random()` / fixed `now()` by default
+(`{ random: "os" }` / `{ now: "system" }` match PostgreSQL entropy and wall clock).
 
 **Thin or partial areas** (do not assume full oracle fidelity):
 
 - `EXPLAIN`: stub plan shapes, not real planner output
-- Failed statements inside `BEGIN` do **not** poison the transaction (`25P02` aborted-state is not implemented)
+- The in-process API does **not** poison a transaction after a failed statement (no `25P02`); the wire-protocol server does, per connection
 - Triggers fire in **creation order** (PostgreSQL: name order); `UPDATE OF` column lists are ignored; `INSTEAD OF` is unsupported
 - `COMMENT ON` parses but comments are not stored
 - `round(float8)` rounds ties away from zero (PostgreSQL: half-to-even); numeric `round()` has full parity
 - `'1e400'::float8` saturates to `Infinity` instead of raising `22003`
-- `MERGE`, `CALL`/procedures, cursors (`DECLARE`/`FETCH`), `LISTEN`/`NOTIFY`, and full PL/pgSQL (packages, NOTICE, cursors) fail loud (`0A000`)
+- In the engine `MERGE`, `CALL`/procedures, cursors (`DECLARE`/`FETCH`), `LISTEN`/`NOTIFY`, and full PL/pgSQL (packages, NOTICE, cursors) fail loud (`0A000`); the wire-protocol server implements `LISTEN`/`NOTIFY` itself
 - `VACUUM` / `ANALYZE` / `CLUSTER` / `REINDEX` / `CHECKPOINT` / `GRANT` / `REVOKE` / `LOCK` are parsed no-ops
 - Collation is `C` semantics (byte order); locale/ICU-dependent ordering is out of scope
 

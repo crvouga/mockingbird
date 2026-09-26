@@ -9,11 +9,14 @@ describe("public API exports", () => {
     expect(Object.keys(postgresMem).sort()).toEqual(["Database", "PostgresError", "Snapshot", "Statement"]);
   });
 
-  test("package.json exports only . and ./unstable", () => {
+  test("package.json exports . , ./server and ./unstable", () => {
     const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../../package.json"), "utf8")) as {
       exports: Record<string, unknown>;
+      mockingbird?: { entries?: Record<string, string> };
     };
-    expect(Object.keys(pkg.exports).sort()).toEqual([".", "./unstable"]);
+    expect(Object.keys(pkg.exports).sort()).toEqual([".", "./server", "./unstable"]);
+    // The wire server is a Node-only entry, so the main and unstable entries stay portable.
+    expect(pkg.mockingbird?.entries).toEqual({ "server/index": "node", "server/cli": "node" });
   });
 });
 
