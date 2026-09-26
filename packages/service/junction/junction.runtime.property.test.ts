@@ -342,13 +342,15 @@ describe("A5 lab accounts", () => {
     const listed = await call(runtime, "GET", "/v3/lab_test/lab_account")
     expect((listed.body.data as Json[]).map((a) => a.id)).toEqual(accounts.map((a) => a.id))
 
+    // Two active Labcorp accounts and no id: placed with the first listed (#136).
     const ambiguous = await createOrder(runtime, "CA")
-    expect(ambiguous.res.status).toBe(400)
-    expect(ambiguous.res.body.detail).toMatch(/Multiple active lab accounts/)
+    expect(ambiguous.res.status).toBe(200)
+    expect(runtime.instance().orderLabAccount(ambiguous.orderId as string)).toBe("acct-labcorp-47")
 
-    const wrongLab = await createOrder(runtime, "CA", { lab_account_id: "acct-quest" })
-    expect(wrongLab.res.status).toBe(400)
-    expect(wrongLab.res.body.detail).toBe("Lab account is not associated with lab labcorp")
+    // Another lab's account by id: placed with it, as the sandbox does (#138).
+    const otherLab = await createOrder(runtime, "CA", { lab_account_id: "acct-quest" })
+    expect(otherLab.res.status).toBe(200)
+    expect(runtime.instance().orderLabAccount(otherLab.orderId as string)).toBe("acct-quest")
 
     const unknown = await createOrder(runtime, "CA", { lab_account_id: "acct-nope" })
     expect(unknown.res.body.detail).toBe("Lab account does not exist")

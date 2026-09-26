@@ -359,6 +359,34 @@ const scenario = (corpus: SealedCorpus, withOrders: boolean): Step[] => {
       },
     )
   }
+  // Several active accounts for one lab with the id omitted: the mock places the order with
+  // the first (a consumer's sandbox team was observed doing so, #136); a team with that layout
+  // checks it here.
+  if (withOrders) {
+    const byLab = new Map<string, number>()
+    for (const account of corpus.labAccounts) {
+      if (account.status !== "active") continue
+      const lab = String(account.lab).toLowerCase()
+      byLab.set(lab, (byLab.get(lab) ?? 0) + 1)
+    }
+    for (const [lab, count] of byLab) {
+      if (count < 2 || lab === String(openAccount?.lab ?? "").toLowerCase()) continue
+      const labTest = corpus.catalog.labTests.find(
+        (test) => String(test.lab?.slug ?? "").toLowerCase() === lab,
+      )
+      if (!labTest) continue
+      steps.push({
+        name: `order.create for ${lab} with lab_account_id omitted (${count} active accounts)`,
+        compare: "shape",
+        request: (ctx) => ({
+          method: "POST",
+          path: "/v3/order",
+          body: orderBody(ctx.userId, labTest.id),
+        }),
+        capture: captureExtraOrder,
+      })
+    }
+  }
   // Which billing_type an order that omits it is evaluated as is not visible from outside
   // (documented: client_bill; one sandbox team evaluated BioReference as
   // patient_bill_passthrough). Order through each active account by id with billing_type

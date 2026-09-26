@@ -50,8 +50,6 @@ const DOCUMENTED_KEYS = [
   "team_id_allowlist",
 ]
 
-const MULTIPLE_ACTIVE =
-  "Multiple active lab accounts are linked to your team for this lab; provide lab_account_id"
 const NO_ACTIVE = "No active lab account is available for this lab"
 
 /** Labs with no shipped catalog test: branch fixtures need a synthetic one to order against. */
@@ -276,9 +274,17 @@ describe("Junction team lab accounts", () => {
 })
 
 describe("Junction order lab-account routing", () => {
-  test("selects the documented account for every branch", async () => {
-    const cases: Array<{ lab: string; id: string | null; status: number; detail?: string }> = [
-      { lab: "nexus", id: null, status: 400, detail: MULTIPLE_ACTIVE },
+  test("selects the account the sandbox would for every branch", async () => {
+    const cases: Array<{
+      lab: string
+      id: string | null
+      status: number
+      detail?: string
+      /** The account the order is placed with when it is not the id sent. */
+      selected?: string
+    }> = [
+      // Several active accounts and no id: the sandbox places the order (#136); the first wins.
+      { lab: "nexus", id: null, status: 200, selected: accountId("nexus") },
       { lab: "nexus", id: accountId("nexus", 1), status: 200 },
       { lab: "mtl", id: null, status: 400, detail: NO_ACTIVE },
       { lab: "mtl", id: accountId("mtl"), status: 400, detail: "Lab account is not active" },
@@ -286,12 +292,9 @@ describe("Junction order lab-account routing", () => {
       { lab: "quest", id: accountId("quest", 1), status: 400, detail: "Lab account is not active" },
       { lab: "quest", id: accountId("quest"), status: 200 },
       { lab: "labcorp", id: null, status: 200 },
-      {
-        lab: "labcorp",
-        id: accountId("quest"),
-        status: 400,
-        detail: "Lab account is not associated with lab labcorp",
-      },
+      // Another lab's account, by id: the sandbox places the order (#138, recorded in
+      // corpus/lab-account-probes.json), whatever the lab-accounts guide says.
+      { lab: "labcorp", id: accountId("quest"), status: 200 },
       {
         lab: "manual",
         id: null,
@@ -304,12 +307,7 @@ describe("Junction order lab-account routing", () => {
         status: 400,
         detail: "Lab account is not linked to your team",
       },
-      {
-        lab: "quest",
-        id: accountId("nexus"),
-        status: 400,
-        detail: "Lab account is not associated with lab quest",
-      },
+      { lab: "quest", id: accountId("nexus"), status: 200 },
     ]
 
     const api = await seededApi()
@@ -332,7 +330,8 @@ describe("Junction order lab-account routing", () => {
           expect(order.billing_type).toBe("client_bill")
           // Junction's order has no lab_account_id; the mock keeps the account it used.
           expect("lab_account_id" in order).toBe(false)
-          if (testCase.id) expect(api.orderLabAccount(order.id as string)).toBe(testCase.id)
+          const selected = testCase.selected ?? testCase.id
+          if (selected) expect(api.orderLabAccount(order.id as string)).toBe(selected)
         } else {
           expect(await errorDetail(response)).toBe(testCase.detail)
         }
