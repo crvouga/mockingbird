@@ -44,6 +44,14 @@ paths:
           schema:
             maxLength: 512
             type: string
+            anyOf:
+              - type: string
+                maxLength: 512
+              - type: string
+                enum:
+                  - ada@example.com
+                  - grace@example.com
+                  - linus@example.com
           style: form
         - in: query
           name: ending_before
@@ -72,6 +80,18 @@ paths:
           required: false
           schema:
             type: integer
+            anyOf:
+              - type: integer
+              - type: integer
+                enum:
+                  - 0
+                  - 1
+                  - 2
+                  - 3
+                  - 5
+                  - 10
+                  - 100
+                  - 101
           style: form
         - in: query
           name: starting_after
@@ -252,8 +272,14 @@ paths:
                   maxLength: 5000
                   type: string
                 email:
-                  maxLength: 512
-                  type: string
+                  anyOf:
+                    - type: string
+                      maxLength: 512
+                    - type: string
+                      enum:
+                        - ada@example.com
+                        - grace@example.com
+                        - linus@example.com
                 expand:
                   items:
                     maxLength: 5000
@@ -327,12 +353,17 @@ paths:
                   type: object
                 metadata:
                   anyOf:
-                    - additionalProperties:
+                    - type: object
+                      additionalProperties:
                         type: string
-                      type: object
-                    - enum:
+                        maxLength: 500
+                      propertyNames:
+                        type: string
+                        minLength: 1
+                        maxLength: 40
+                    - type: string
+                      enum:
                         - ""
-                      type: string
                 name:
                   maxLength: 256
                   type: string
@@ -962,8 +993,14 @@ paths:
                   maxLength: 5000
                   type: string
                 email:
-                  maxLength: 512
-                  type: string
+                  anyOf:
+                    - type: string
+                      maxLength: 512
+                    - type: string
+                      enum:
+                        - ada@example.com
+                        - grace@example.com
+                        - linus@example.com
                 expand:
                   items:
                     maxLength: 5000
@@ -1037,12 +1074,17 @@ paths:
                   type: object
                 metadata:
                   anyOf:
-                    - additionalProperties:
+                    - type: object
+                      additionalProperties:
                         type: string
-                      type: object
-                    - enum:
+                        maxLength: 500
+                      propertyNames:
+                        type: string
+                        minLength: 1
+                        maxLength: 40
+                    - type: string
+                      enum:
                         - ""
-                      type: string
                 name:
                   maxLength: 256
                   type: string
@@ -1242,6 +1284,18 @@ paths:
           required: false
           schema:
             type: integer
+            anyOf:
+              - type: integer
+              - type: integer
+                enum:
+                  - 0
+                  - 1
+                  - 2
+                  - 3
+                  - 5
+                  - 10
+                  - 100
+                  - 101
           style: form
         - explode: true
           in: query
@@ -1249,8 +1303,12 @@ paths:
           required: false
           schema:
             items:
-              type: string
-              maxLength: 5000
+              anyOf:
+                - type: string
+                  maxLength: 5000
+                - type: string
+                  x-mockingbird-scope:
+                    value: walk-start-unix
             type: array
             maxItems: 10
           style: deepObject
@@ -1503,12 +1561,21 @@ paths:
                   x-mockingbird-unsupported:
                     reason: the mock never expands
                 lookup_key:
-                  maxLength: 200
-                  type: string
+                  anyOf:
+                    - type: string
+                      maxLength: 200
+                    - type: string
+                      x-mockingbird-scope:
+                        value: walk-start-unix
                 metadata:
+                  type: object
                   additionalProperties:
                     type: string
-                  type: object
+                    maxLength: 500
+                  propertyNames:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
                 nickname:
                   maxLength: 5000
                   type: string
@@ -1526,10 +1593,17 @@ paths:
                       deprecated: true
                       maxLength: 5000
                       type: string
+                      x-mockingbird-unsupported:
+                        reason: caller-chosen ids are not modelled
                     metadata:
+                      type: object
                       additionalProperties:
                         type: string
-                      type: object
+                        maxLength: 500
+                      propertyNames:
+                        type: string
+                        minLength: 1
+                        maxLength: 40
                     name:
                       maxLength: 5000
                       type: string
@@ -1539,6 +1613,8 @@ paths:
                     tax_code:
                       maxLength: 5000
                       type: string
+                      x-mockingbird-unsupported:
+                        reason: tax codes are not modelled
                     unit_label:
                       maxLength: 12
                       type: string
@@ -1546,8 +1622,6 @@ paths:
                     - name
                   title: inline_product_params
                   type: object
-                  x-mockingbird-unsupported:
-                    reason: inline product creation is not modelled
                 recurring:
                   properties:
                     interval:
@@ -1616,8 +1690,6 @@ paths:
                     reason: tiered billing is not modelled
                 transfer_lookup_key:
                   type: boolean
-                  x-mockingbird-unsupported:
-                    reason: lookup key transfer is not modelled
                 transform_quantity:
                   properties:
                     divide_by:
@@ -1842,16 +1914,25 @@ paths:
                   x-mockingbird-unsupported:
                     reason: the mock never expands
                 lookup_key:
-                  maxLength: 200
-                  type: string
+                  anyOf:
+                    - type: string
+                      maxLength: 200
+                    - type: string
+                      x-mockingbird-scope:
+                        value: walk-start-unix
                 metadata:
                   anyOf:
-                    - additionalProperties:
+                    - type: object
+                      additionalProperties:
                         type: string
-                      type: object
-                    - enum:
+                        maxLength: 500
+                      propertyNames:
+                        type: string
+                        minLength: 1
+                        maxLength: 40
+                    - type: string
+                      enum:
                         - ""
-                      type: string
                 nickname:
                   maxLength: 5000
                   type: string
@@ -1863,8 +1944,6 @@ paths:
                   type: string
                 transfer_lookup_key:
                   type: boolean
-                  x-mockingbird-unsupported:
-                    reason: lookup key transfer is not modelled
               type: object
         required: false
       responses:
@@ -1969,6 +2048,18 @@ paths:
           required: false
           schema:
             type: integer
+            anyOf:
+              - type: integer
+              - type: integer
+                enum:
+                  - 0
+                  - 1
+                  - 2
+                  - 3
+                  - 5
+                  - 10
+                  - 100
+                  - 101
           style: form
         - in: query
           name: shippable
@@ -1992,6 +2083,13 @@ paths:
           schema:
             maxLength: 5000
             type: string
+            anyOf:
+              - type: string
+                maxLength: 5000
+              - type: string
+                enum:
+                  - https://example.com/products/alpha
+                  - https://example.com/products/beta
           style: form
       requestBody:
         content:
@@ -2227,9 +2325,14 @@ paths:
                         type: string
                         maxLength: 5000
                 metadata:
+                  type: object
                   additionalProperties:
                     type: string
-                  type: object
+                    maxLength: 500
+                  propertyNames:
+                    type: string
+                    minLength: 1
+                    maxLength: 40
                 name:
                   maxLength: 5000
                   type: string
@@ -2263,8 +2366,13 @@ paths:
                   maxLength: 12
                   type: string
                 url:
-                  maxLength: 5000
-                  type: string
+                  anyOf:
+                    - type: string
+                      maxLength: 5000
+                    - type: string
+                      enum:
+                        - https://example.com/products/alpha
+                        - https://example.com/products/beta
               required:
                 - name
               type: object
@@ -2512,12 +2620,17 @@ paths:
                         - ""
                 metadata:
                   anyOf:
-                    - additionalProperties:
+                    - type: object
+                      additionalProperties:
                         type: string
-                      type: object
-                    - enum:
+                        maxLength: 500
+                      propertyNames:
+                        type: string
+                        minLength: 1
+                        maxLength: 40
+                    - type: string
+                      enum:
                         - ""
-                      type: string
                 name:
                   maxLength: 5000
                   type: string
@@ -2564,10 +2677,16 @@ paths:
                       type: string
                 url:
                   anyOf:
+                    - anyOf:
+                        - type: string
+                          maxLength: 5000
+                        - type: string
+                          enum:
+                            - https://example.com/products/alpha
+                            - https://example.com/products/beta
                     - type: string
-                    - enum:
+                      enum:
                         - ""
-                      type: string
               type: object
         required: false
       responses:
@@ -3059,7 +3178,7 @@ components:
             type: price
             identity: true
         description:
-          maxLength: 5000
+          maxLength: 40000
           type:
             - string
             - "null"

@@ -69,6 +69,42 @@ const LOCALE_ITEM: Schema = {
   enum: ["en", "en-US", "en-GB", "fr", "fr-CA", "de", "es", "ja", "pt-BR"],
 }
 
+/**
+ * Fixed pools mixed into free-form fields so list filters (`email`, `url`, `lookup_keys`) match
+ * something during a walk instead of always returning empty pages.
+ */
+const EMAIL_POOL = ["ada@example.com", "grace@example.com", "linus@example.com"]
+const URL_POOL = ["https://example.com/products/alpha", "https://example.com/products/beta"]
+const withPool = (schema: Schema, pool: string[]): Schema => ({
+  anyOf: [schema, { type: "string", enum: pool }],
+})
+/**
+ * Lookup keys are unique per account, so walks share one key derived from the walk start
+ * (unique across walks) and collide on purpose; `""` leaves the key unset.
+ */
+const LOOKUP_KEY: Schema = {
+  anyOf: [
+    { type: "string", maxLength: 200 },
+    { type: "string", ...scope("walk-start-unix") },
+  ],
+}
+const LOOKUP_KEY_ITEM: Schema = {
+  anyOf: [
+    { type: "string", maxLength: 5000 },
+    { type: "string", ...scope("walk-start-unix") },
+  ],
+}
+/** Page sizes: a random integer (Stripe clamps to 1..100) mixed with small pages that paginate. */
+const LIMIT: Schema = {
+  anyOf: [{ type: "integer" }, { type: "integer", enum: [0, 1, 2, 3, 5, 10, 100, 101] }],
+}
+/** Stripe's documented metadata limits: 40-character keys, 500-character values. */
+const METADATA: Schema = {
+  type: "object",
+  additionalProperties: { type: "string", maxLength: 500 },
+  propertyNames: { type: "string", minLength: 1, maxLength: 40 },
+}
+
 const idOnly = (extra: Json = {}): Schema => ({ maxLength: 5000, type: "string", ...extra })
 const nullableIdOnly = (extra: Json = {}): Schema => ({
   maxLength: 5000,
@@ -105,6 +141,8 @@ const RESPONSE_SHAPES: Record<string, Shape> = {
     id: identity("product"),
     // Returned by the pinned API version although absent from the published schema.
     attributes: { type: "array", items: { type: "string" } },
+    // The request schema allows 40000 characters; the published response schema still says 5000.
+    description: { maxLength: 40000, type: ["string", "null"] },
     tax_details: { type: "null" },
     type: { type: "string", enum: ["good", "service"] },
     created: volatile("timestamp"),
@@ -151,6 +189,8 @@ const unsettable = (schema: Schema): Schema => ({
 const BODY_SHAPES: Record<string, Shape> = {
   PostCustomers: {
     "preferred_locales[]": LOCALE_ITEM,
+    email: withPool({ type: "string", maxLength: 512 }, EMAIL_POOL),
+    metadata: unsettable(METADATA),
     business_name: unsupported("not returned by the pinned API version"),
     cash_balance: unsupported("cash balance settings are not modelled"),
     expand: unsupported("the mock never expands"),
@@ -169,6 +209,8 @@ const BODY_SHAPES: Record<string, Shape> = {
   },
   PostCustomersCustomer: {
     "preferred_locales[]": LOCALE_ITEM,
+    email: withPool({ type: "string", maxLength: 512 }, EMAIL_POOL),
+    metadata: unsettable(METADATA),
     bank_account: unsupported("payment sources are not modelled"),
     card: unsupported("payment sources are not modelled"),
     business_name: unsupported("not returned by the pinned API version"),
@@ -191,6 +233,8 @@ const BODY_SHAPES: Record<string, Shape> = {
   PostProducts: {
     images: IMAGES,
     marketing_features: MARKETING_FEATURES,
+    metadata: METADATA,
+    url: withPool({ type: "string", maxLength: 5000 }, URL_POOL),
     default_price_data: unsupported("inline price creation is not modelled"),
     expand: unsupported("the mock never expands"),
     id: unsupported("caller-chosen ids are not modelled"),
@@ -199,29 +243,35 @@ const BODY_SHAPES: Record<string, Shape> = {
   PostProductsId: {
     images: unsettable(IMAGES),
     marketing_features: unsettable(MARKETING_FEATURES),
+    metadata: unsettable(METADATA),
+    url: unsettable(withPool({ type: "string", maxLength: 5000 }, URL_POOL)),
     default_price: unsupported("default price assignment is not modelled"),
     expand: unsupported("the mock never expands"),
     tax_code: unsupported("tax codes are not modelled"),
   },
   PostPrices: {
     currency: CURRENCY,
+    lookup_key: LOOKUP_KEY,
+    metadata: METADATA,
     "recurring.interval_count": { type: "integer", minimum: 1 },
     billing_scheme: unsupported("tiered billing is not modelled"),
     currency_options: unsupported("multi-currency prices are not modelled"),
     custom_unit_amount: unsupported("customer-chosen amounts are not modelled"),
     expand: unsupported("the mock never expands"),
     product: ref("product", MISSING.product),
-    product_data: unsupported("inline product creation is not modelled"),
+    "product_data.id": unsupported("caller-chosen ids are not modelled"),
+    "product_data.metadata": METADATA,
+    "product_data.tax_code": unsupported("tax codes are not modelled"),
     tiers: unsupported("tiered billing is not modelled"),
     tiers_mode: unsupported("tiered billing is not modelled"),
-    transfer_lookup_key: unsupported("lookup key transfer is not modelled"),
     transform_quantity: unsupported("quantity transforms are not modelled"),
     "recurring.meter": unsupported("billing meters are not modelled"),
   },
   PostPricesPrice: {
+    lookup_key: LOOKUP_KEY,
+    metadata: unsettable(METADATA),
     currency_options: unsupported("multi-currency prices are not modelled"),
     expand: unsupported("the mock never expands"),
-    transfer_lookup_key: unsupported("lookup key transfer is not modelled"),
   },
 }
 
@@ -229,6 +279,8 @@ const BODY_SHAPES: Record<string, Shape> = {
 const QUERY_SHAPES: Record<string, Shape> = {
   GetCustomers: {
     "created.gte": scope("walk-start-unix"),
+    email: withPool({ type: "string", maxLength: 512 }, EMAIL_POOL),
+    limit: LIMIT,
     ending_before: ref("customer", MISSING.customer),
     starting_after: ref("customer", MISSING.customer),
     expand: unsupported("the mock never expands"),
@@ -237,6 +289,8 @@ const QUERY_SHAPES: Record<string, Shape> = {
   GetCustomersCustomer: { expand: unsupported("the mock never expands") },
   GetProducts: {
     "created.gte": scope("walk-start-unix"),
+    limit: LIMIT,
+    url: withPool({ type: "string", maxLength: 5000 }, URL_POOL),
     ending_before: ref("product", MISSING.product),
     starting_after: ref("product", MISSING.product),
     "ids[]": ref("product", MISSING.product),
@@ -245,7 +299,8 @@ const QUERY_SHAPES: Record<string, Shape> = {
   GetProductsId: { expand: unsupported("the mock never expands") },
   GetPrices: {
     currency: CURRENCY,
-    lookup_keys: { type: "array", maxItems: 10, items: { type: "string", maxLength: 5000 } },
+    limit: LIMIT,
+    lookup_keys: { type: "array", maxItems: 10, items: LOOKUP_KEY_ITEM },
     "created.gte": scope("walk-start-unix"),
     ending_before: ref("price", MISSING.price),
     starting_after: ref("price", MISSING.price),

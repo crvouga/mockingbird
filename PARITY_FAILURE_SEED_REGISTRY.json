@@ -35,7 +35,7 @@
       "provider": "junction",
       "seed": 2058813869,
       "status": "fixed",
-      "failure": "create_user real=503 after negative-limit get_teams_users — sandbox rate limit from aggressive per-walk clearSandboxUsers"
+      "failure": "create_user real=503 after negative-limit get_teams_users \u2014 sandbox rate limit from aggressive per-walk clearSandboxUsers"
     },
     {
       "provider": "junction",
@@ -54,6 +54,30 @@
       "seed": 10416389,
       "status": "fixed",
       "failure": "get_teams_users polluted by leftover sandbox users: real total/users=2 mock=1 after single create; cleanup only deleted table-tracked users"
+    },
+    {
+      "provider": "stripe",
+      "seed": 1530596075,
+      "status": "fixed",
+      "failure": "PostProducts mock-conformance: a 40000-character description (allowed by the request schema) failed the vendored product response schema, which still capped description at 5000"
+    },
+    {
+      "provider": "stripe",
+      "seed": 0,
+      "status": "fixed",
+      "failure": "no seed (found by probing): every anyOf(object|\"\") and anyOf(array|\"\") body field answered a scalar with 'Invalid <field>: must be one of ' instead of 'Invalid object' / 'Invalid array'; the shared form parser picked the enum-[\"\"] branch"
+    },
+    {
+      "provider": "stripe",
+      "seed": 0,
+      "status": "fixed",
+      "failure": "no seed (found by the request-envelope property): an unauthenticated request to an unknown path answered 404 instead of Stripe's 401"
+    },
+    {
+      "provider": "stripe",
+      "seed": 0,
+      "status": "fixed",
+      "failure": "harness gap, no seed: invalid bodies were never generated for form-encoded operations (the form root was skipped instead of only its wrong-type site), and optional properties were absent 100% of the time inside invalid bodies (fc.option nil frequency inverted)"
     }
   ]
 }

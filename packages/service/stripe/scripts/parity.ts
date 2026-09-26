@@ -9,6 +9,23 @@ const STRIPE_HOST = "api.stripe.com"
 const TEST_KEY_PREFIXES = ["sk_test_", "rk_test_"]
 const DEFAULT_MIN_INTERVAL_MS = 40
 
+/**
+ * Same walk shape as the self-parity suite (`stripe.property.test.ts`), so a seed that fails
+ * here replays there: producers weighted up, coverage bias, tracked deletions and a third of
+ * bodies violating one constraint. Override runs/steps with FC_NUM_RUNS / MOCKINGBIRD_MAX_COMMANDS.
+ */
+const WALK = {
+  maxCommands: 40,
+  coverageBias: 10,
+  weights: { PostCustomers: 3, PostProducts: 4, PostPrices: 4 },
+  deletionTypes: { DeleteCustomersCustomer: ["customer"], DeleteProductsId: ["product"] },
+  invalidProbability: 0.35,
+  missingProbability: 0.15,
+  deletedRefProbability: 0.3,
+  /** The mock answers in-process; anything slower than Stripe over the network is a regression. */
+  latencyToleranceMs: 0,
+} as const
+
 const readTokenFile = async () => {
   try {
     return await readFile(join(homedir(), ".vault-token"), "utf8")
@@ -51,6 +68,7 @@ try {
       create: () => new StripeAPI(),
       headers: () => ({ authorization: "Bearer sk_test_mockingbird" }),
     },
+    ...WALK,
     redact: createRedactor(credentials.secrets),
     cleanup: async ({ table, real }) => {
       const del = (path: string) =>

@@ -9,7 +9,7 @@ import {
 } from "./fields.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams, SUPPORTED_CURRENCIES } from "./params.js"
-import { requireProduct } from "./products.js"
+import { createProduct, requireProduct, validateInlineProduct } from "./products.js"
 import { type PriceRecord, type Recurring, type StripeState, seconds } from "./state.js"
 
 /** Stripe caps recurring periods at three years. */
@@ -82,17 +82,21 @@ const parseRecurring = (raw: unknown): Recurring => {
   return { interval: input.interval, interval_count, usage_type }
 }
 
-const assertLookupKeyFree = async (
-  state: StripeState,
-  lookupKey: string,
-  selfId: string | undefined,
-) => {
-  const clashes = await state.prices.list({
+const lookupKeyClashes = (state: StripeState, lookupKey: string, selfId: string) =>
+  state.prices.list({
     where: (price) => price.lookup_key === lookupKey && price.id !== selfId,
   })
-  const clash = clashes[0]
+
+const assertLookupKeyFree = async (state: StripeState, lookupKey: string, selfId: string) => {
+  const clash = (await lookupKeyClashes(state, lookupKey, selfId))[0]
   if (clash)
     throw invalidRequest(`A price (\`${clash.id}\`) already uses that lookup key.`, "lookup_key")
+}
+
+/** `transfer_lookup_key=true`: the key moves from whichever price held it to this one. */
+const transferLookupKey = async (state: StripeState, lookupKey: string, selfId: string) => {
+  for (const clash of await lookupKeyClashes(state, lookupKey, selfId))
+    await state.prices.update(clash.id, { ...clash.value, lookup_key: null })
 }
 
 const applyShared = async (
@@ -105,8 +109,11 @@ const applyShared = async (
   if (params.lookup_key !== undefined)
     next.lookup_key =
       strip(params.lookup_key as string) === "" ? null : (params.lookup_key as string)
-  if (next.lookup_key !== null && next.lookup_key !== current.lookup_key)
-    await assertLookupKeyFree(state, next.lookup_key, current.id)
+  if (next.lookup_key !== null && next.lookup_key !== current.lookup_key) {
+    if (params.transfer_lookup_key === true)
+      await transferLookupKey(state, next.lookup_key, current.id)
+    else await assertLookupKeyFree(state, next.lookup_key, current.id)
+  }
   next.metadata = mergeMetadata(current.metadata, params.metadata)
   if (params.nickname !== undefined) next.nickname = strip(params.nickname as string)
   if (params.tax_behavior !== undefined)
@@ -117,12 +124,23 @@ const applyShared = async (
 export const priceHandlers = (state: StripeState) => ({
   PostPrices: async (context: OperationContext) => {
     const params = bodyParams(context)
-    if (params.product === undefined)
+    const hasProduct = params.product !== undefined
+    const hasProductData = params.product_data !== undefined
+    if (hasProduct && hasProductData)
+      throw invalidRequest(
+        "You may only specify one of these parameters: product, product_data.",
+        "product",
+      )
+    if (!hasProduct && !hasProductData)
       throw invalidRequest(
         "You must specify either `product` or `product_data` when creating a price.",
       )
     if (params.product === "") throw parameterInvalidEmpty("product")
-    const product = await requireProduct(state, params.product as string, "product", 400)
+    if (params.product_data === "") throw parameterInvalidEmpty("product_data")
+    const inline = hasProductData ? validateInlineProduct(params.product_data as Params) : undefined
+    const existing = hasProduct
+      ? await requireProduct(state, params.product as string, "product", 400)
+      : undefined
     const currency = normalizeCurrency(params.currency as string)
     const hasAmount = params.unit_amount !== undefined
     const hasDecimal = params.unit_amount_decimal !== undefined
@@ -159,12 +177,14 @@ export const priceHandlers = (state: StripeState) => ({
       lookup_key: null,
       metadata: {},
       nickname: null,
-      product: product.id,
+      product: existing?.id ?? "",
       recurring,
       tax_behavior: "unspecified",
       unit_amount_decimal,
     }
     const price = await applyShared(state, base, params)
+    // Every complaint has been raised by now, so the inline product can be created atomically.
+    if (inline) price.product = (await createProduct(state, seconds(context.now), inline)).id
     await state.prices.insert(id, price)
     return jsonResponse(200, renderPrice(price))
   },

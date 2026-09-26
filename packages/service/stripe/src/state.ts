@@ -78,16 +78,27 @@ export type PriceRecord = {
   unit_amount_decimal: string
 }
 
+/** First response seen for an `Idempotency-Key`, replayed verbatim for identical retries. */
+export type IdempotencyRecord = {
+  /** Method, path, query and raw body of the first request. */
+  fingerprint: string
+  status: number
+  contentType: string | null
+  body: string
+}
+
 export class StripeState {
   readonly customers: Collection<CustomerEntry>
   readonly products: Collection<ProductRecord>
   readonly prices: Collection<PriceRecord>
+  readonly idempotency: Collection<IdempotencyRecord>
   readonly ids: IdSequence
 
   constructor(sqlite: SqliteClient, namespace: string) {
     this.customers = new Collection(sqlite, namespace, "customers")
     this.products = new Collection(sqlite, namespace, "products")
     this.prices = new Collection(sqlite, namespace, "prices")
+    this.idempotency = new Collection(sqlite, namespace, "idempotency")
     this.ids = new IdSequence(sqlite, namespace, "stripe")
   }
 

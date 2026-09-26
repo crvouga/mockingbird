@@ -60,35 +60,52 @@ const PRODUCT_PARAM_ORDER = [
   "marketing_features",
 ]
 
+/** Parameter path as Stripe reports it: `name` at the top level, `product_data[name]` nested. */
+const paramPath = (prefix: string, key: string) => (prefix === "" ? key : `${prefix}[${key}]`)
+
 const productValidators = (
   mode: "create" | "update",
   current: ProductRecord | undefined,
+  prefix = "",
 ): Record<string, (params: Params) => void> => {
+  const at = (key: string) => paramPath(prefix, key)
   const notEmpty = (key: string) => (params: Params) => {
     if (params[key] === "" && (mode === "create" ? CREATE_NON_UNSETTABLE.has(key) : false))
-      throw parameterInvalidEmpty(key)
+      throw parameterInvalidEmpty(at(key))
   }
   return {
     name: (params) => {
-      if (mode === "create" && params.name === undefined) throw parameterMissing("name")
+      if (mode === "create" && params.name === undefined) throw parameterMissing(at("name"))
       if (typeof params.name === "string" && strip(params.name) === "")
-        throw parameterInvalidEmpty("name")
+        throw parameterInvalidEmpty(at("name"))
     },
     description: notEmpty("description"),
     unit_label: notEmpty("unit_label"),
     images: (params) => {
       if (!Array.isArray(params.images)) return
       params.images.forEach((image, index) => {
-        if (typeof image === "string") validateUrl(image, `images[${index}]`)
+        if (typeof image === "string") validateUrl(image, `${at("images")}[${index}]`)
       })
     },
     url: notEmpty("url"),
     statement_descriptor: (params) => {
       const descriptor = params.statement_descriptor
       if (typeof descriptor !== "string" || descriptor === "") return
-      if (descriptor !== current?.statement_descriptor) validateStatementDescriptor(descriptor)
+      if (descriptor !== current?.statement_descriptor)
+        validateStatementDescriptor(descriptor, at("statement_descriptor"))
     },
   }
+}
+
+/**
+ * Semantic checks for a `product_data` hash already parsed against its schema (so unknown
+ * keys, missing `name` and lengths were reported with their nested paths). Runs in Stripe's
+ * parameter order and throws the first complaint; nothing is stored.
+ */
+export const validateInlineProduct = (data: Params): Params => {
+  const validators = productValidators("create", undefined, "product_data")
+  for (const key of PRODUCT_PARAM_ORDER) validators[key]?.(data)
+  return data
 }
 
 /** Stripe validates the URL itself only after every other parameter has been accepted. */
@@ -134,6 +151,30 @@ export const requireProduct = async (
   return product
 }
 
+/** Insert a product from validated create parameters. */
+export const createProduct = async (state: StripeState, now: number, params: Params) => {
+  const id = await state.ids.next("prod_")
+  const base: ProductRecord = {
+    id,
+    active: true,
+    created: now,
+    description: null,
+    images: [],
+    marketing_features: [],
+    metadata: {},
+    name: "",
+    package_dimensions: null,
+    shippable: null,
+    statement_descriptor: null,
+    unit_label: null,
+    updated: now,
+    url: null,
+  }
+  const product = apply(base, params, now)
+  await state.products.insert(id, product)
+  return product
+}
+
 export const productHandlers = (state: StripeState) => ({
   PostProducts: async (context: OperationContext) => {
     const params = bodyParams(context, {
@@ -141,26 +182,7 @@ export const productHandlers = (state: StripeState) => ({
       validate: productValidators("create", undefined),
       after: validateProductUrl,
     })
-    const now = seconds(context.now)
-    const id = await state.ids.next("prod_")
-    const base: ProductRecord = {
-      id,
-      active: true,
-      created: now,
-      description: null,
-      images: [],
-      marketing_features: [],
-      metadata: {},
-      name: "",
-      package_dimensions: null,
-      shippable: null,
-      statement_descriptor: null,
-      unit_label: null,
-      updated: now,
-      url: null,
-    }
-    const product = apply(base, params, now)
-    await state.products.insert(id, product)
+    const product = await createProduct(state, seconds(context.now), params)
     return jsonResponse(200, renderProduct(product))
   },
 

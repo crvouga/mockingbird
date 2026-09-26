@@ -5,6 +5,8 @@ export type StripeErrorInit = {
   message: string
   code?: string
   param?: string
+  /** Defaults to `invalid_request_error`. */
+  type?: "invalid_request_error" | "idempotency_error"
 }
 
 /** Codes that Stripe documents; these carry a `doc_url`. */
@@ -20,7 +22,7 @@ export const stripeErrorBody = (init: StripeErrorInit, requestLogUrl: string) =>
   error.message = init.message
   if (init.param !== undefined) error.param = init.param
   error.request_log_url = requestLogUrl
-  error.type = "invalid_request_error"
+  error.type = init.type ?? "invalid_request_error"
   return { error }
 }
 
@@ -72,6 +74,14 @@ export const parameterInvalidEmpty = (param: string) =>
     code: "parameter_invalid_empty",
     message: `You passed an empty string for '${param}'. We assume empty values are an attempt to unset a parameter; however '${param}' cannot be unset. You should remove '${param}' from your request or supply a non-empty value.`,
     param,
+  })
+
+/** Same `Idempotency-Key`, different request: Stripe refuses rather than replaying. */
+export const idempotencyKeyReused = (key: string) =>
+  new StripeError({
+    status: 400,
+    type: "idempotency_error",
+    message: `Keys for idempotent requests can only be used with the same parameters they were first used with. Try using a key other than '${key}' if you meant to execute a different request.`,
   })
 
 /** Stripe lists alternatives as "a, b, or c" (or "a or b"). */

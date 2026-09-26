@@ -10,6 +10,7 @@ import {
   parameterUnknown,
   StripeError,
 } from "./errors.js"
+import { METADATA_MAX_VALUE_LENGTH_MESSAGE } from "./fields.js"
 import { document } from "./generated/openapi.js"
 
 /** Stripe words enum alternatives in its own order, not the spec's alphabetical one. */
@@ -78,6 +79,8 @@ export const issueToError = (issue: FormIssue): StripeError => {
     }
     case "too-long": {
       const leaf = leafName(issue.path)
+      if (/(^|\])metadata\[[^\]]*\]$/.test(issue.path))
+        return invalidRequest(METADATA_MAX_VALUE_LENGTH_MESSAGE(issue.raw))
       if (leaf === "statement_descriptor")
         return invalidRequest(
           `The statement descriptor must be at most ${issue.limit} characters. ${issue.raw} is ${[...issue.raw].length} characters long.`,

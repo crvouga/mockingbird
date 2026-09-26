@@ -24,9 +24,7 @@ export const mergeMetadata = (
         `Metadata keys can have up to ${METADATA_MAX_KEY_LENGTH} characters, but you passed in a key that is ${length(key)} characters. Invalid key: ${key}`,
       )
     if (length(value) > METADATA_MAX_VALUE_LENGTH)
-      throw invalidRequest(
-        `Metadata values can have up to ${METADATA_MAX_VALUE_LENGTH} characters, but you passed in a value that is ${length(value)} characters. Invalid value: ${value}`,
-      )
+      throw invalidRequest(METADATA_MAX_VALUE_LENGTH_MESSAGE(value))
     if (value === "") delete next[key]
     else next[key] = value
   }
@@ -92,21 +90,21 @@ export const validateEmail = (value: string) => {
 
 const STATEMENT_DESCRIPTOR_FORBIDDEN = ["<", ">", "\\", '"', "'"]
 
-export const validateStatementDescriptor = (value: string) => {
+export const validateStatementDescriptor = (value: string, param = "statement_descriptor") => {
   for (const char of STATEMENT_DESCRIPTOR_FORBIDDEN) {
     if (value.includes(char))
-      throw invalidRequest(
-        `The statement descriptor cannot include ${char}.`,
-        "statement_descriptor",
-      )
+      throw invalidRequest(`The statement descriptor cannot include ${char}.`, param)
   }
   if (!/[A-Za-z]/.test(value))
     throw invalidRequest(
       "The statement descriptor must contain at least one Latin character.",
-      "statement_descriptor",
+      param,
     )
   return value
 }
+
+export const METADATA_MAX_VALUE_LENGTH_MESSAGE = (value: string) =>
+  `Metadata values can have up to ${METADATA_MAX_VALUE_LENGTH} characters, but you passed in a value that is ${length(value)} characters. Invalid value: ${value}`
 
 /** Stripe echoes decimals back the way Ruby's BigDecimal#to_s prints them (`0.15e1`). */
 export const rubyBigDecimal = (raw: string) => {

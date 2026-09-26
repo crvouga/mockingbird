@@ -12,6 +12,35 @@ const AUTH = { authorization: "Bearer sk_test_mockingbird" }
 const now = () => 1_700_000_000_000
 
 /**
+ * Walk shape shared by every self-parity run. Mirrors `scripts/parity.ts` so a divergence found
+ * here reproduces there with the same seed:
+ * - producers weighted up so walks accumulate customers, products and prices early;
+ * - coverage bias so every operation is reached within a walk instead of only the cheap ones;
+ * - deletions tracked so later references deliberately hit tombstoned customers and gone
+ *   products (404s, 400s and the deleted-customer shape);
+ * - a third of bodies violate one schema constraint, so every validation branch is compared.
+ */
+const WALK = {
+  maxCommands: 40,
+  coverageBias: 10,
+  weights: { PostCustomers: 3, PostProducts: 4, PostPrices: 4 },
+  deletionTypes: { DeleteCustomersCustomer: ["customer"], DeleteProductsId: ["product"] },
+  invalidProbability: 0.35,
+  missingProbability: 0.15,
+  deletedRefProbability: 0.3,
+  /**
+   * Both sides are the same implementation on one scheduler, so latency here only measures GC
+   * and OS noise; the gate exists for live parity and is effectively disabled for self-parity.
+   */
+  latencyToleranceMs: 1_000,
+} as const
+
+/** Every operation must run several times per suite, or the walk shape has regressed. */
+const MIN_HITS_PER_OPERATION = 3
+/** Ineligible commands are skipped, so the executed depth is what matters, not `maxCommands`. */
+const MIN_MEAN_OPERATIONS_PER_WALK = 8
+
+/**
  * Two independent StripeAPI instances given the same random walk must behave identically after
  * canonicalization, and every response must conform to the vendored OpenAPI contract. This is
  * the network-free half of the differential suite; `parity.ts` runs the same walks against Stripe.
@@ -28,10 +57,7 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: async (request) => {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            return reference.fetch(request)
-          },
+          fetch: (request) => reference.fetch(request),
         },
         mock: {
           create: () => new StripeAPI({ now }),
@@ -41,19 +67,20 @@ describe("StripeAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
-        numRuns: params.numRuns ?? 40,
-        maxCommands: 25,
+        numRuns: params.numRuns ?? 150,
+        ...WALK,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
         log: () => {},
       })
       expect(report.walks).toBeGreaterThan(0)
-      expect(new Set(Object.keys(report.exercised)).size).toBeGreaterThan(
-        supportedOperationIds.length / 2,
-      )
+      expect(report.planned.sort()).toEqual([...supportedOperationIds].sort())
+      for (const operationId of supportedOperationIds)
+        expect(report.exercised[operationId] ?? 0).toBeGreaterThanOrEqual(MIN_HITS_PER_OPERATION)
+      expect(report.operations / report.walks).toBeGreaterThanOrEqual(MIN_MEAN_OPERATIONS_PER_WALK)
     },
-    { timeout: 60_000 },
+    { timeout: 120_000 },
   )
 
   test(
@@ -67,10 +94,7 @@ describe("StripeAPI", () => {
           baseUrl: `https://${MOCK_HOST}`,
           allowedHosts: [MOCK_HOST],
           headers: () => AUTH,
-          fetch: async (request) => {
-            await new Promise((resolve) => setTimeout(resolve, 10))
-            return reference.fetch(request)
-          },
+          fetch: (request) => reference.fetch(request),
         },
         mock: {
           create: () => new StripeAPI({ sqlite: new Database(), now }),
@@ -80,8 +104,8 @@ describe("StripeAPI", () => {
         cleanup: async () => {
           await reference.reset()
         },
-        numRuns: params.numRuns ?? 10,
-        maxCommands: 15,
+        numRuns: params.numRuns ?? 20,
+        ...WALK,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
@@ -89,7 +113,7 @@ describe("StripeAPI", () => {
       })
       expect(report.walks).toBeGreaterThan(0)
     },
-    { timeout: 30_000 },
+    { timeout: 60_000 },
   )
 
   test(
