@@ -37,12 +37,13 @@ npx mockingbird-paddle serve --port 8795 --fixtures \
 PADDLE_API_BASE_URL=http://127.0.0.1:8795 node app.js
 ```
 
-```ts
+```js
 import { createServer } from "@crvouga/mockingbird-service-paddle/server"
-import { type Environment, Paddle } from "@paddle/paddle-node-sdk"
+import { Paddle } from "@paddle/paddle-node-sdk"
 
 const mock = await createServer({ paymentLink: "https://pay.example.com/checkout" })
-const paddle = new Paddle("pdl_sdbx_apikey_test", { environment: mock.url as Environment })
+// In TypeScript: `{ environment: mock.url as Environment }`.
+const paddle = new Paddle("pdl_sdbx_apikey_test", { environment: mock.url })
 
 const product = await paddle.products.create({ name: "Pro plan", taxCategory: "saas" })
 const price = await paddle.prices.create({
