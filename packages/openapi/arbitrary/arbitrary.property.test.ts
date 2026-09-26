@@ -176,3 +176,69 @@ test("override hook replaces generation at the addressed path", () => {
     { ...params, numRuns: 20 },
   )
 })
+
+test("unsettable unions (`anyOf: [object, enum ['']]`) expose their nested constraints to mutation", () => {
+  fc.assert(
+    fc.property(
+      fc.integer({ min: 1, max: 12 }),
+      fc.stringMatching(/^[a-z]{1,8}$/),
+      (maxLength, name) => {
+        const s: SchemaObject = {
+          anyOf: [
+            { type: "object", properties: { [name]: { type: "string", maxLength } } },
+            { type: "string", enum: [""] },
+          ],
+        }
+        const sites = mutationSites(document, s)
+        expect(sites.some((site) => site.valuePath.join("/") === name)).toBe(true)
+        const samples = fc.sample(invalidSchemaArbitrary(s, { document }), {
+          numRuns: 120,
+          seed: params.seed ?? 1,
+        })
+        expect(samples.some((sample) => sample.mutation.valuePath[0] === name)).toBe(true)
+        for (const sample of samples)
+          expect(validateValue(document, s, sample.value).length).toBeGreaterThan(0)
+      },
+    ),
+    { ...params, numRuns: params.numRuns ?? 20 },
+  )
+})
+
+test("optional properties are present at the requested rate (fc.option takes the nil frequency)", () => {
+  fc.assert(
+    fc.property(fc.constantFrom(0.1, 0.5, 0.9), (optionalProbability) => {
+      const s: SchemaObject = { type: "object", properties: { a: { type: "boolean" } } }
+      const samples = fc.sample(schemaArbitrary(s, { document, optionalProbability }), {
+        numRuns: 400,
+        seed: params.seed ?? 1,
+      })
+      const present = samples.filter((v) => "a" in (v as object)).length / samples.length
+      expect(Math.abs(present - optionalProbability)).toBeLessThan(0.12)
+    }),
+    { ...params, numRuns: 3 },
+  )
+})
+
+test("`exclude` drops individual sites but keeps descending; `skip` prunes the subtree", () => {
+  fc.assert(
+    fc.property(fc.stringMatching(/^[a-z]{1,6}$/), (name) => {
+      const s: SchemaObject = {
+        type: "object",
+        required: [name],
+        properties: { [name]: { type: "object", properties: { x: { type: "integer" } } } },
+      }
+      const all = mutationSites(document, s)
+      const excluded = mutationSites(document, s, {
+        exclude: (site) => site.valuePath.length === 0 && site.violation === "wrong-type",
+      })
+      expect(
+        excluded.some((site) => site.valuePath.length === 0 && site.violation === "wrong-type"),
+      ).toBe(false)
+      expect(excluded.some((site) => site.valuePath.join("/") === `${name}/x`)).toBe(true)
+      expect(excluded.length).toBe(all.length - 1)
+      const pruned = mutationSites(document, s, { skip: (_schema, path) => path.length === 0 })
+      expect(pruned).toEqual([])
+    }),
+    { ...params, numRuns: 10 },
+  )
+})

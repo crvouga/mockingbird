@@ -9,7 +9,7 @@ import { mergeMetadata, optionalBoolean, parseUnitAmountDecimal, strip } from ".
 import { changedFields, type RequestScope, requestScope, type Services } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, type Params, queryParams, SUPPORTED_CURRENCIES } from "./params.js"
-import { requireProduct } from "./products.js"
+import { createProduct, requireProduct, validateInlineProduct } from "./products.js"
 import { renderPrice, renderProduct } from "./render.js"
 import { type PriceRecord, type Recurring, seconds } from "./state.js"
 
@@ -102,12 +102,25 @@ export const priceHandlers = (services: Services): Record<string, OperationHandl
     PostPrices: async (context: OperationContext) => {
       const scope = requestScope(services, context)
       const params = bodyParams(context)
-      if (params.product === undefined)
+      const hasProduct = params.product !== undefined
+      const hasProductData = params.product_data !== undefined
+      if (hasProduct && hasProductData)
+        throw invalidRequest(
+          "You may only specify one of these parameters: product, product_data.",
+          "product",
+        )
+      if (!hasProduct && !hasProductData)
         throw invalidRequest(
           "You must specify either `product` or `product_data` when creating a price.",
         )
       if (params.product === "") throw parameterInvalidEmpty("product")
-      const product = requireProduct(scope, params.product as string, "product", 400)
+      if (params.product_data === "") throw parameterInvalidEmpty("product_data")
+      const inline = hasProductData
+        ? validateInlineProduct(params.product_data as Params)
+        : undefined
+      const existing = hasProduct
+        ? requireProduct(scope, params.product as string, "product", 400)
+        : undefined
       const currency = normalizeCurrency(params.currency as string)
       const hasAmount = params.unit_amount !== undefined
       const hasDecimal = params.unit_amount_decimal !== undefined
@@ -144,12 +157,18 @@ export const priceHandlers = (services: Services): Record<string, OperationHandl
         lookup_key: null,
         metadata: {},
         nickname: null,
-        product: product.id,
+        product: existing?.id ?? "",
         recurring,
         tax_behavior: "unspecified",
         unit_amount_decimal,
       }
       const price = applyShared(scope, base, params)
+      // Every complaint has been raised by now, so the inline product can be created atomically.
+      if (inline) {
+        const product = createProduct(scope, seconds(scope.now), inline)
+        price.product = product.id
+        scope.emit("product.created", renderProduct(product))
+      }
       scope.account.prices.insert(id, price)
       scope.emit("price.created", render(scope, price, params))
       return jsonResponse(200, render(scope, price, params))

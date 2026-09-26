@@ -56,6 +56,30 @@
       "failure": "get_teams_users polluted by leftover sandbox users: real total/users=2 mock=1 after single create; cleanup only deleted table-tracked users"
     },
     {
+      "provider": "stripe",
+      "seed": 1530596075,
+      "status": "fixed",
+      "failure": "PostProducts mock-conformance: a 40000-character description (allowed by the request schema) failed the vendored product response schema, which still capped description at 5000"
+    },
+    {
+      "provider": "stripe",
+      "seed": 0,
+      "status": "fixed",
+      "failure": "no seed (found by probing): every anyOf(object|\"\") and anyOf(array|\"\") body field answered a scalar with 'Invalid <field>: must be one of ' instead of 'Invalid object' / 'Invalid array'; the shared form parser picked the enum-[\"\"] branch"
+    },
+    {
+      "provider": "stripe",
+      "seed": 0,
+      "status": "fixed",
+      "failure": "no seed (found by the request-envelope property): an unauthenticated request to an unknown path answered 404 instead of Stripe's 401"
+    },
+    {
+      "provider": "stripe",
+      "seed": 0,
+      "status": "fixed",
+      "failure": "harness gap, no seed: invalid bodies were never generated for form-encoded operations (the form root was skipped instead of only its wrong-type site), and optional properties were absent 100% of the time inside invalid bodies (fc.option nil frequency inverted)"
+    },
+    {
       "provider": "genebygene",
       "seed": 1383450894,
       "status": "fixed",
@@ -222,6 +246,12 @@
       "seed": 1422048242,
       "status": "fixed",
       "failure": "ListFulfillments orderLineId=a: a sent orderLineId replaces staging's orderId filter even when it is ignored, so the orderId narrowing leaked 12936 fulfillments; the mock and the narrowing now follow that precedence"
+    },
+    {
+      "provider": "medplum",
+      "seed": 1537483448,
+      "status": "fixed",
+      "failure": "CreatePatient name=[false] (reachable once invalid bodies carry optional properties): the server's validator accepts a boolean or number in a name slot and echoes it, and any string in family/given; the response contract still required the request-side HumanName enums. Probed against the oracle: Patient.name items are now HumanNameOutput | null | boolean | number, and an emptied given part echoes as null"
     }
   ]
 }

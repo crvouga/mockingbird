@@ -33,14 +33,19 @@ type Site = Mutation & { schema: SchemaObject }
 
 const FORMATS_WITH_SYNTAX = new Set(["uuid", "date", "date-time", "email", "uri", "ipv4"])
 
+export type MutationSiteOptions = {
+  mode?: "request" | "response"
+  /** Leave this node and everything below it alone (e.g. symbolic references). */
+  skip?: (schema: SchemaObject, path: SchemaPath) => boolean
+  /** Drop individual sites while still descending (e.g. no wrong-type at a form body's root). */
+  exclude?: (site: Mutation) => boolean
+}
+
 /** Enumerate every way a value for `schema` could break one constraint. */
 export const mutationSites = (
   document: OpenAPIDocument,
   schema: SchemaObject,
-  options: {
-    mode?: "request" | "response"
-    skip?: (schema: SchemaObject, path: SchemaPath) => boolean
-  } = {},
+  options: MutationSiteOptions = {},
 ): Site[] => {
   const sites: Site[] = []
   const seen = new Set<SchemaObject>()
@@ -58,8 +63,10 @@ export const mutationSites = (
       seen.delete(resolved)
       return
     }
-    const add = (violation: Violation, detail: string) =>
+    const add = (violation: Violation, detail: string) => {
+      if (options.exclude?.({ valuePath, violation, detail })) return
       sites.push({ schema: resolved, valuePath, violation, detail })
+    }
     const types = schemaTypes(resolved)
     if (resolved.enum && resolved.enum.length > 0)
       add("not-in-enum", `enum ${JSON.stringify(resolved.enum)}`)
@@ -89,8 +96,7 @@ export const mutationSites = (
       if (resolved.items) go(resolved.items, [...schemaPath, "items"], [...valuePath, 0], depth + 1)
     }
     if (types.includes("object") || resolved.properties) {
-      for (const name of resolved.required ?? [])
-        sites.push({ schema: resolved, valuePath, violation: "missing-required", detail: name })
+      for (const name of resolved.required ?? []) add("missing-required", name)
       if (resolved.additionalProperties === false)
         add("unexpected-property", "additionalProperties: false")
       for (const [name, property] of Object.entries(resolved.properties ?? {})) {
@@ -99,9 +105,16 @@ export const mutationSites = (
         go(property, [...schemaPath, "properties", name], [...valuePath, name], depth + 1)
       }
     }
+    // Every branch is a site: a value that breaks one branch may still satisfy another, so the
+    // final `validateValue` check below decides whether the mutation counts.
     const union = resolved.oneOf ?? resolved.anyOf
-    if (union && union.length === 1 && union[0])
-      go(union[0], [...schemaPath, resolved.oneOf ? "oneOf" : "anyOf", "0"], valuePath, depth + 1)
+    for (const [index, branch] of (union ?? []).entries())
+      go(
+        branch,
+        [...schemaPath, resolved.oneOf ? "oneOf" : "anyOf", String(index)],
+        valuePath,
+        depth + 1,
+      )
     for (const branch of resolved.allOf ?? [])
       go(branch, [...schemaPath, "allOf"], valuePath, depth + 1)
     seen.delete(resolved)
@@ -192,11 +205,12 @@ const setAt = (
  */
 export const invalidSchemaArbitrary = (
   schema: SchemaObject,
-  options: SchemaArbitraryOptions & { skip?: (schema: SchemaObject, path: SchemaPath) => boolean },
+  options: SchemaArbitraryOptions & MutationSiteOptions,
 ): fc.Arbitrary<InvalidValue> => {
   const sites = mutationSites(options.document, schema, {
     ...(options.mode ? { mode: options.mode } : {}),
     ...(options.skip ? { skip: options.skip } : {}),
+    ...(options.exclude ? { exclude: options.exclude } : {}),
   })
   if (sites.length === 0) {
     return fc

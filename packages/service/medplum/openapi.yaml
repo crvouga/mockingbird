@@ -669,6 +669,8 @@ components:
       properties:
         versionId: { type: string, x-mockingbird-volatile: { kind: id } }
         lastUpdated: { type: string, format: date-time, x-mockingbird-volatile: { kind: timestamp } }
+    # Request side: the enums and caps narrow what the walker generates, not what the server
+    # takes; any non-blank string and any number of parts are accepted and echoed as sent.
     HumanName:
       type: object
       additionalProperties: false
@@ -676,6 +678,14 @@ components:
       properties:
         family: { type: string, enum: [Lovelace, Turing, Zola, Hopper] }
         given: { type: array, minItems: 1, maxItems: 2, items: { type: string, enum: [Ada, Alan, Grace, Emile] } }
+    # Response side: what the server echoes. An emptied part ({} or []) inside `given` comes
+    # back as null, like an emptied name slot (probed against the oracle, v5.1.37).
+    HumanNameOutput:
+      type: object
+      additionalProperties: false
+      properties:
+        family: { type: string }
+        given: { type: array, items: { anyOf: [{ type: string }, { type: "null" }] } }
     PatientInput:
       type: object
       required: [resourceType]
@@ -698,8 +708,17 @@ components:
         active: { type: boolean }
         gender: { type: string }
         birthDate: { type: string }
-        # The server strips empty values, so an emptied name array slot serializes as null.
-        name: { type: array, items: { anyOf: [{ $ref: "#/components/schemas/HumanName" }, { type: "null" }] } }
+        # The server strips empty values, so an emptied name array slot serializes as null. Its
+        # validator only inspects an element's keys, so a boolean or number in a slot (nothing to
+        # check) is accepted and echoed back as sent (probed against the oracle, v5.1.37).
+        name:
+          type: array
+          items:
+            anyOf:
+              - { $ref: "#/components/schemas/HumanNameOutput" }
+              - { type: "null" }
+              - { type: boolean }
+              - { type: number }
     PatientBundle:
       type: object
       required: [resourceType, type]

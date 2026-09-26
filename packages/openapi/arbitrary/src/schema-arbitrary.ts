@@ -38,6 +38,10 @@ const SAFE_INTEGER_BOUND = Number.MAX_SAFE_INTEGER
 
 const uniq = <T>(items: T[]) => [...new Set(items)]
 
+/** `fc.option` takes the frequency of the *nil* value: present with probability `p` ⇒ nil once in `1/(1-p)`. */
+const nilFrequency = (presentProbability: number) =>
+  Math.max(1, Math.round(1 / Math.max(1 - presentProbability, 0.01)))
+
 /** Weighted mix of a schema's exact boundaries and values just inside them. */
 const boundaryIntegers = (min: number, max: number) =>
   uniq(
@@ -379,7 +383,7 @@ export const schemaArbitrary = (
       } else if (depth < maxDepth) {
         fields[name] = fc.option(arbitrary, {
           nil: undefined,
-          freq: Math.max(1, Math.round(1 / Math.max(optionalProbability, 0.01))),
+          freq: nilFrequency(optionalProbability),
         })
       }
     }
