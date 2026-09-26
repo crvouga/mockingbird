@@ -184,6 +184,7 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
           entry.kind === "live" &&
           matchesCreated(entry.customer.created, params.created) &&
           (email === undefined || email === "" || entry.customer.email === email),
+        exists: (entry) => entry.kind === "live",
         render: (entry) => (entry.kind === "live" ? renderCustomer(entry.customer) : undefined),
       })
       return jsonResponse(200, applyExpand(page, params.expand, expanders(scope)))

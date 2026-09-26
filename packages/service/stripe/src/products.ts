@@ -49,38 +49,55 @@ const PRODUCT_PARAM_ORDER = [
   "marketing_features",
 ]
 
+/** Parameter path as Stripe reports it: `name` at the top level, `product_data[name]` nested. */
+const paramPath = (prefix: string, key: string) => (prefix === "" ? key : `${prefix}[${key}]`)
+
 const productValidators = (
   mode: "create" | "update",
   current: ProductRecord | undefined,
+  prefix = "",
 ): Record<string, (params: Params) => void> => {
+  const at = (key: string) => paramPath(prefix, key)
   const notEmpty = (key: string) => (params: Params) => {
     if (params[key] === "" && (mode === "create" ? CREATE_NON_UNSETTABLE[key] === true : false))
-      throw parameterInvalidEmpty(key)
+      throw parameterInvalidEmpty(at(key))
   }
   return {
     name: (params) => {
-      if (mode === "create" && params.name === undefined) throw parameterMissing("name")
+      if (mode === "create" && params.name === undefined) throw parameterMissing(at("name"))
       if (typeof params.name === "string" && strip(params.name) === "")
-        throw parameterInvalidEmpty("name")
+        throw parameterInvalidEmpty(at("name"))
     },
     description: notEmpty("description"),
     metadata: (params) => {
-      if (mode === "create" && params.metadata === "") throw parameterInvalidEmpty("metadata")
+      if (mode === "create" && params.metadata === "") throw parameterInvalidEmpty(at("metadata"))
     },
     unit_label: notEmpty("unit_label"),
     images: (params) => {
       if (!Array.isArray(params.images)) return
       params.images.forEach((image, index) => {
-        if (typeof image === "string") validateUrl(image, `images[${index}]`)
+        if (typeof image === "string") validateUrl(image, `${at("images")}[${index}]`)
       })
     },
     url: notEmpty("url"),
     statement_descriptor: (params) => {
       const descriptor = params.statement_descriptor
       if (typeof descriptor !== "string" || descriptor === "") return
-      if (descriptor !== current?.statement_descriptor) validateStatementDescriptor(descriptor)
+      if (descriptor !== current?.statement_descriptor)
+        validateStatementDescriptor(descriptor, at("statement_descriptor"))
     },
   }
+}
+
+/**
+ * Semantic checks for a `product_data` hash already parsed against its schema (so unknown
+ * keys, missing `name` and lengths were reported with their nested paths). Runs in Stripe's
+ * parameter order and throws the first complaint; nothing is stored.
+ */
+export const validateInlineProduct = (data: Params): Params => {
+  const validators = productValidators("create", undefined, "product_data")
+  for (const key of PRODUCT_PARAM_ORDER) validators[key]?.(data)
+  return data
 }
 
 /** Stripe validates the URL itself only after every other parameter has been accepted. */
@@ -134,6 +151,34 @@ export const requireProduct = (
   return product
 }
 
+/** Insert a product from validated create parameters. */
+export const createProduct = (
+  scope: RequestScope,
+  now: number,
+  params: Params,
+  id = scope.ids.next("prod_"),
+): ProductRecord => {
+  const base: ProductRecord = {
+    id,
+    active: true,
+    created: now,
+    description: null,
+    images: [],
+    marketing_features: [],
+    metadata: {},
+    name: "",
+    package_dimensions: null,
+    shippable: null,
+    statement_descriptor: null,
+    unit_label: null,
+    updated: now,
+    url: null,
+  }
+  const product = apply(base, params, now)
+  scope.account.products.insert(id, product)
+  return product
+}
+
 const expanders = (scope: RequestScope): ExpandResolvers => ({
   default_price: (id) => {
     const price = scope.account.prices.get(id)
@@ -162,25 +207,7 @@ export const productHandlers = (services: Services): Record<string, OperationHan
           message: "Product already exists.",
           param: "id",
         })
-      const id = requested ?? scope.ids.next("prod_")
-      const base: ProductRecord = {
-        id,
-        active: true,
-        created: now,
-        description: null,
-        images: [],
-        marketing_features: [],
-        metadata: {},
-        name: "",
-        package_dimensions: null,
-        shippable: null,
-        statement_descriptor: null,
-        unit_label: null,
-        updated: now,
-        url: null,
-      }
-      const product = apply(base, params, now)
-      scope.account.products.insert(id, product)
+      const product = createProduct(scope, now, params, requested ?? scope.ids.next("prod_"))
       scope.emit("product.created", render(scope, product, params))
       return jsonResponse(200, render(scope, product, params))
     },

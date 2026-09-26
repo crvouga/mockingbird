@@ -24139,8 +24139,6 @@ paths:
                     - name
                   title: inline_product_params
                   type: object
-                  x-mockingbird-unsupported:
-                    reason: inline product creation is not modelled
                 recurring:
                   properties:
                     interval:
