@@ -1722,6 +1722,31 @@ describe("staging's error shapes and query validation (corpus/live-errors.json)"
       else expect(body).toEqual(recorded)
     })
   }
+  // How staging binds a POST body by its media type (#150): the byte-identical JSON with the
+  // right, a missing and a text content-type, an empty body and malformed JSON. A byte body
+  // sends no content-type of its own (a string body would be sent as text/plain).
+  for (const probe of liveErrors.bodies) {
+    test(`POST ${probe.path} ${probe.contentType ?? "(no content-type)"} ${JSON.stringify(probe.body)} → ${probe.status}`, async () => {
+      const h = await harness({ subscribe: false })
+      const token = await h.auth.getAccessToken()
+      const response = await h.runtime.fetch(
+        new Request(`${API}${probe.path}`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${token}`,
+            accept: "application/json",
+            ...(probe.contentType === null ? {} : { "content-type": probe.contentType }),
+          },
+          body: new TextEncoder().encode(probe.body),
+        }),
+      )
+      expect(response.status).toBe(probe.status)
+      const { traceId, ...body } = (await response.json()) as Json & { traceId?: unknown }
+      const { traceId: _recorded, ...recorded } = probe.response as Json & { traceId?: unknown }
+      expect(typeof traceId).toBe("string")
+      expect(body).toEqual(recorded)
+    })
+  }
   // A probe staging never answered in time records "timeout": nothing to replay.
   // productCode and products' productType are not modelled (staging's SQL LIKE collation).
   const replayed = liveErrors.queries.filter(

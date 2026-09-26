@@ -10,10 +10,15 @@ Guidance for humans and coding agents editing this repository. For install and c
 
 1. Custom snapshot codec (`PGMM`), not `pg_dump` / on-disk clusters
 2. Deterministic `random()` / `gen_random_uuid()` and fixed `now()` by default (injectable)
-3. Single-session engine: no MVCC across connections, no wire protocol, no aborted-transaction (`25P02`) state
+3. Single-session **engine**: no MVCC across connections, no aborted-transaction (`25P02`) state in the sync API
 4. `NOT APPLICABLE` items: roles/auth enforcement, replication, VACUUM internals, storage params, full PL/pgSQL
 
-**Non-goals:** speaking the wire protocol, matching `pg`/`postgres.js` client APIs, full PL/pgSQL, or multi-session concurrency.
+**Non-goals:** matching `pg`/`postgres.js` **client APIs**, full PL/pgSQL, or MVCC. The optional
+wire-protocol server (`src/wire/`, a Node/Bun-only entry over the one engine) is in scope: it
+speaks frontend/backend v3 and coordinates connections by serializing transaction blocks, adding
+advisory locks, `LISTEN`/`NOTIFY`, `CancelRequest` and per-connection `25P02`. It deliberately does
+**not** add row-level lock contention (`SELECT … FOR UPDATE SKIP LOCKED` distribution) or `COPY`
+streaming.
 
 ## SQL pipeline
 
@@ -49,6 +54,7 @@ Everything is **typed values** (`TypedValue = { t: TypeId, v: Datum }` in [`src/
 | `transactions/` | BEGIN / COMMIT / SAVEPOINT (clones state + PRNG) |
 | `runtime/` | Clock, PRNG, `DatabaseOptions` |
 | `serialization/` | `PGMM` snapshot codec |
+| `wire/` | Wire-protocol (frontend/backend v3) TCP server: `serve()`, CLI, per-connection state machine, cross-connection `Cluster` (Node/Bun only) |
 | `tsearch/` | `tsvector` / `tsquery` text search |
 | `errors/` | `PostgresError` with SQLSTATE, `unsupported()` |
 

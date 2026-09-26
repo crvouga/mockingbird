@@ -450,6 +450,42 @@ const probe = async (method: string, path: string, token = realToken) => {
     ),
   }
 }
+/**
+ * A POST whose body can never place an order (`items` is required and must not be empty), to
+ * record how staging binds it: the byte-identical JSON with the right, a missing and a text
+ * `content-type`, an empty body, and malformed JSON. A byte body sends no `content-type` of
+ * its own (a string body would be sent as `text/plain`).
+ */
+const probeBody = async (path: string, body: string, contentType: string | undefined) => {
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${realToken}`,
+    accept: "application/json",
+  }
+  if (contentType !== undefined) headers["content-type"] = contentType
+  const bytes = new TextEncoder().encode(body)
+  const response = await live(
+    new Request(`${baseUrl}${path}`, { method: "POST", headers, body: bytes }),
+  )
+  const text = await response.text()
+  await Bun.sleep(500)
+  let answer: unknown = text
+  try {
+    answer = text.length > 0 ? JSON.parse(text) : null
+  } catch {}
+  return {
+    method: "POST",
+    path,
+    contentType: contentType ?? null,
+    bodyBytes: bytes.byteLength,
+    body,
+    status: response.status,
+    responseContentType: response.headers.get("content-type"),
+    response: ((b: unknown) =>
+      b !== null && typeof b === "object" && "traceId" in b ? { ...b, traceId: "<volatile>" } : b)(
+      JSON.parse(redact(JSON.stringify(answer))),
+    ),
+  }
+}
 const catalogs = {
   source: new URL(baseUrl).host,
   note: "Recorded by scripts/parity.ts from the live tenant: the event types, attribute definitions and product catalog it lists. Vendor catalog metadata only, no tenant data.",
@@ -470,6 +506,19 @@ const shapes = {
     await probe("GET", `/api/v2/orderLines/${ZERO}`),
     await probe("GET", `/api/v2/notificationSubscriptions/${ZERO}`),
     await probe("GET", "/api/v2/results/results/presignedUrl?kitNumber=WB000000&resultType=x"),
+  ],
+  // How the model binder answers a body by its media type (the mock's 415 / 400 rules replay
+  // these): none of them names a product, so none can place an order.
+  bodies: [
+    await probeBody("/api/v2/orders", '{"items":[]}', "application/json"),
+    await probeBody("/api/v2/orders", '{"items":[]}', "application/json; charset=utf-8"),
+    await probeBody("/api/v2/orders", '{"items":[]}', undefined),
+    await probeBody("/api/v2/orders", '{"items":[]}', "text/plain"),
+    await probeBody("/api/v2/orders", '{"items":[]}', "application/x-www-form-urlencoded"),
+    await probeBody("/api/v2/orders", '{"items":[]}', "application/vnd.api+json"),
+    await probeBody("/api/v2/orders", "", "application/json"),
+    await probeBody("/api/v2/orders", "", undefined),
+    await probeBody("/api/v2/orders", "{", "application/json"),
   ],
 }
 // Query validation: each list parameter with a junk value, and the candidate values of the

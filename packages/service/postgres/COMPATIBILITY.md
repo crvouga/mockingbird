@@ -25,7 +25,7 @@ Intentional differences are finite and machine-readable in `compat/divergences.j
 | **VERIFIED** | Differential contracts (+ fuzz where applicable) cover happy path **and** meaningful edges vs oracle |
 | **PARTIALLY VERIFIED** | Implemented; coverage thin or known edges remain |
 | **UNSUPPORTED** | Missing from SQL surface (must fail loud; gate fails if oracle-exposed and unregistered) |
-| **NOT APPLICABLE** | Outside the in-memory single-session dialect surface (roles/auth, replication, storage, wire protocol) |
+| **NOT APPLICABLE** | Outside the SQL-dialect surface (roles/auth, replication, storage). The wire protocol is provided by the optional `/server` entry, documented in the README. |
 
 ## Scope bound
 

@@ -112,6 +112,177 @@
       }
     }
   ],
+  "bodies": [
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": "application/json",
+      "bodyBytes": 12,
+      "body": "{\"items\":[]}",
+      "status": 400,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "errors": {
+          "": [
+            "'' must be between 1 and 5. You entered 0."
+          ],
+          "items": [
+            "'Items' must not be empty."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": "application/json; charset=utf-8",
+      "bodyBytes": 12,
+      "body": "{\"items\":[]}",
+      "status": 400,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "errors": {
+          "": [
+            "'' must be between 1 and 5. You entered 0."
+          ],
+          "items": [
+            "'Items' must not be empty."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": null,
+      "bodyBytes": 12,
+      "body": "{\"items\":[]}",
+      "status": 415,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.16",
+        "title": "Unsupported Media Type",
+        "status": 415,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": "text/plain",
+      "bodyBytes": 12,
+      "body": "{\"items\":[]}",
+      "status": 415,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.16",
+        "title": "Unsupported Media Type",
+        "status": 415,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": "application/x-www-form-urlencoded",
+      "bodyBytes": 12,
+      "body": "{\"items\":[]}",
+      "status": 415,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.16",
+        "title": "Unsupported Media Type",
+        "status": 415,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": "application/vnd.api+json",
+      "bodyBytes": 12,
+      "body": "{\"items\":[]}",
+      "status": 400,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "errors": {
+          "": [
+            "'' must be between 1 and 5. You entered 0."
+          ],
+          "items": [
+            "'Items' must not be empty."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": "application/json",
+      "bodyBytes": 0,
+      "body": "",
+      "status": 400,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "errors": {
+          "": [
+            "A non-empty request body is required."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": null,
+      "bodyBytes": 0,
+      "body": "",
+      "status": 415,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.16",
+        "title": "Unsupported Media Type",
+        "status": 415,
+        "traceId": "<volatile>"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v2/orders",
+      "contentType": "application/json",
+      "bodyBytes": 1,
+      "body": "{",
+      "status": 400,
+      "responseContentType": "application/json; charset=utf-8",
+      "response": {
+        "errors": {
+          "": [
+            "Unexpected end when reading JSON. Path '', line 1, position 1."
+          ]
+        },
+        "type": "https://tools.ietf.org/html/rfc9110#section-15.5.1",
+        "title": "One or more validation errors occurred.",
+        "status": 400,
+        "traceId": "<volatile>"
+      }
+    }
+  ],
   "queries": [
     {
       "path": "/api/v2/attributes",

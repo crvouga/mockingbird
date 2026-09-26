@@ -478,6 +478,195 @@ const clearLastFailedSeed = async () => {
   await rm(LAST_FAILED_SEED_PATH, { force: true })
 }
 
+// ── lab-account routing probes ───────────────────────────────────────────────────────────────
+// What the sandbox does with an order that names another lab's account (#138), that omits
+// `lab_account_id` while several active accounts are linked for the lab (#136), and that names
+// an account with an empty `team_id_allowlist` (README open question). A control order through
+// the test's own lab account shows the body itself is orderable. Every order is cancelled and
+// the user deleted afterwards. Recorded (ids replaced) to corpus/lab-account-probes.json.
+type ProbeAccount = {
+  id: string
+  lab: string
+  status: string
+  org_id: string | null
+  team_id_allowlist: string[]
+}
+type ProbeTest = { id: string; lab?: { slug?: string }; is_active?: boolean; method?: string }
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi
+const probeLabAccounts = async () => {
+  const redact = createRedactor(credentials.secrets)
+  const scrub = (value: unknown): unknown =>
+    JSON.parse(redact(JSON.stringify(value ?? null)).replace(UUID, "<uuid>"))
+  const call = async (method: string, path: string, body?: unknown) => {
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        ...authHeaders,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+    const text = await response.text()
+    let json: unknown = text
+    try {
+      json = text.length > 0 ? JSON.parse(text) : null
+    } catch {}
+    await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * 4)
+    return { status: response.status, body: json }
+  }
+  const accounts = (
+    (await call("GET", "/v3/lab_test/lab_account")).body as { data?: ProbeAccount[] }
+  ).data
+  const tests = ((await call("GET", "/v3/lab_test")).body as { data?: ProbeTest[] }).data
+  if (!Array.isArray(accounts) || !Array.isArray(tests)) {
+    console.warn("junction lab-account probes: could not list lab accounts or lab tests")
+    return
+  }
+  const active = accounts.filter((account) => account.status === "active")
+  const labOf = (test: ProbeTest) => String(test.lab?.slug ?? "").toLowerCase()
+  const orderable = tests.filter((test) => test.is_active !== false && labOf(test) !== "")
+  const testFor = (lab: string) => orderable.find((test) => labOf(test) === lab)
+  const byLab = new Map<string, ProbeAccount[]>()
+  for (const account of active) {
+    byLab.set(account.lab, [...(byLab.get(account.lab) ?? []), account])
+  }
+  const probes: {
+    name: string
+    issue: string | null
+    lab: string
+    account: { lab: string; org_id: string | null; team_id_allowlist: string[] } | null
+    request: { lab_account_id: "<uuid>" | undefined }
+    status: number
+    body: unknown
+  }[] = []
+  const created = await call("POST", "/v2/user", {
+    client_user_id: `mockingbird-lab-account-probe-${Date.now().toString(36)}`,
+  })
+  const userId = (created.body as { user_id?: string } | null)?.user_id
+  if (typeof userId !== "string") {
+    console.warn(`junction lab-account probes: could not create a user (${created.status})`)
+    return
+  }
+  const orders: string[] = []
+  const order = async (
+    name: string,
+    issue: string | null,
+    test: ProbeTest,
+    account: ProbeAccount | null,
+    withId: boolean,
+  ) => {
+    const reply = await call("POST", "/v3/order", {
+      user_id: userId,
+      patient_details: {
+        first_name: "Mockingbird",
+        last_name: "Probe",
+        dob: "1990-01-01",
+        gender: "female",
+        phone_number: "+14155551234",
+        email: "probe@example.com",
+      },
+      patient_address: {
+        first_line: "1 Main St",
+        city: "San Diego",
+        state: "CA",
+        zip: "92101",
+        country: "US",
+      },
+      order_set: { lab_test_ids: [test.id] },
+      ...(withId && account ? { lab_account_id: account.id } : {}),
+    })
+    const id = (reply.body as { order?: { id?: unknown } } | null)?.order?.id
+    if (typeof id === "string") orders.push(id)
+    probes.push({
+      name,
+      issue,
+      lab: labOf(test),
+      account: account
+        ? {
+            lab: account.lab,
+            org_id: account.org_id === null ? null : "<uuid>",
+            team_id_allowlist: account.team_id_allowlist.map(() => "<uuid>"),
+          }
+        : null,
+      request: { lab_account_id: withId ? "<uuid>" : undefined },
+      status: reply.status,
+      body: scrub(reply.body),
+    })
+    console.log(
+      `junction lab-account probe: ${name} → ${reply.status} ${JSON.stringify(scrub(reply.body)).slice(0, 200)}`,
+    )
+  }
+  try {
+    // Control: the test's own lab account, named.
+    const own = active
+      .map((account) => [account, testFor(account.lab)] as const)
+      .find(([, test]) => test)
+    if (own?.[1]) await order("own-lab account by id", null, own[1], own[0], true)
+    // #138: another lab's account named for this test.
+    const cross = orderable
+      .map((test) => [test, active.find((account) => account.lab !== labOf(test))] as const)
+      .find(([, account]) => account)
+    if (cross?.[1]) await order("another lab's account by id", "#138", cross[0], cross[1], true)
+    // #136: id omitted while several active accounts are linked for the lab.
+    const several = [...byLab.entries()].find(([lab, list]) => list.length > 1 && testFor(lab))
+    if (several) {
+      const test = testFor(several[0]) as ProbeTest
+      await order(
+        `id omitted with ${several[1].length} active accounts for ${several[0]}`,
+        "#136",
+        test,
+        null,
+        false,
+      )
+    }
+    // Open question: an account with an empty allowlist, by id and with the id omitted.
+    const open = active
+      .filter((account) => account.team_id_allowlist.length === 0)
+      .map((account) => [account, testFor(account.lab)] as const)
+      .find(([, test]) => test)
+    if (open?.[1]) {
+      await order("empty-allowlist account by id", null, open[1], open[0], true)
+      await order(
+        `id omitted for ${open[0].lab} (${(byLab.get(open[0].lab) ?? []).length} active)`,
+        null,
+        open[1],
+        open[0],
+        false,
+      )
+    }
+  } finally {
+    for (const id of orders) await call("POST", `/v3/order/${id}/cancel`).catch(() => undefined)
+    await call("DELETE", `/v2/user/${userId}`).catch(() => undefined)
+  }
+  const recorded = {
+    source: new URL(baseUrl).host,
+    note: "Recorded by scripts/parity.ts: how the sandbox routes create-order by lab account (ids replaced). Orders were cancelled and the user deleted in the same run.",
+    accounts: active.map((account) => ({
+      lab: account.lab,
+      org_id: account.org_id === null ? null : "<uuid>",
+      team_id_allowlist: account.team_id_allowlist.map(() => "<uuid>"),
+    })),
+    labs: [...new Set(orderable.map(labOf))].sort(),
+    probes,
+  }
+  const corpusDir = join(import.meta.dir, "..", "corpus")
+  await mkdir(corpusDir, { recursive: true })
+  await writeFile(
+    join(corpusDir, "lab-account-probes.json"),
+    `${JSON.stringify(recorded, null, 2)}\n`,
+  )
+  console.log(
+    `junction lab-account probes: wrote corpus/lab-account-probes.json (${probes.length} probes)`,
+  )
+}
+try {
+  await probeLabAccounts()
+} catch (error) {
+  console.warn(
+    `junction lab-account probes: skipped (${error instanceof Error ? error.message : String(error)})`,
+  )
+}
+
 const lastFailedSeed = envSeed === undefined ? await readLastFailedSeed() : undefined
 const seeds =
   envSeed !== undefined ? [envSeed] : lastFailedSeed !== undefined ? [lastFailedSeed] : PARITY_SEEDS

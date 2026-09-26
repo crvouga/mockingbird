@@ -2,8 +2,9 @@
  * Team-level lab-account fixtures.
  *
  * Mirrors https://docs.junction.com/lab/overview/lab-accounts for a team-scoped API key:
- * the `ClientFacingLabAccount` shape, the account filters, the four documented selection
- * branches when `lab_account_id` is omitted, and the `allowed_billing` rules.
+ * the `ClientFacingLabAccount` shape, the account filters, the selection when
+ * `lab_account_id` is omitted (as the sandbox applies it, see `selectLabAccount`), and the
+ * `allowed_billing` rules.
  *
  * No fixture is placed on `ussl` — an account there would flip that lab from the
  * platform branch to the linked branches and change shipped order behavior. The
@@ -162,8 +163,8 @@ const account = (
 })
 
 export const TEAM_LAB_ACCOUNTS: readonly LabAccountRecord[] = [
-  // Branch 2: exactly one active account linked for `quest`; the commercial-insurance
-  // state rule lives on this account.
+  // Exactly one active account linked for `quest`; the commercial-insurance state rule
+  // lives on this account.
   account("quest-primary", "quest", {
     status: "active",
     account_name: "Quest Diagnostics — primary",
@@ -181,7 +182,7 @@ export const TEAM_LAB_ACCOUNTS: readonly LabAccountRecord[] = [
     allowed_billing: CLIENT_BILL_ONLY,
     team_id_allowlist: [MOCK_TEAM_ID],
   }),
-  // Branch 3: multiple active accounts linked for `nexus`.
+  // Several active accounts linked for `nexus`: an omitted id selects the first.
   account("nexus-a", "nexus", {
     status: "active",
     account_name: "Nexus — A",
@@ -194,7 +195,7 @@ export const TEAM_LAB_ACCOUNTS: readonly LabAccountRecord[] = [
     allowed_billing: CLIENT_BILL_ONLY,
     team_id_allowlist: [MOCK_TEAM_ID],
   }),
-  // Branch 4: linked accounts, none active.
+  // Linked accounts, none active.
   account("mtl-suspended", "mtl", {
     status: "suspended",
     account_name: "Molecular Testing Labs — suspended",
@@ -232,9 +233,9 @@ export const labAccountById = (
 
 /**
  * Whether `teamId` may use an account. An empty `team_id_allowlist` counts as linked:
- * a real team's listing returns such accounts (observed — Junction's own Quest, Labcorp
- * and BioReference accounts carry `[]`), so the mock treats them as the team's. Whether
- * ordering through one by explicit id behaves the same is unverified; SUPPORT.md tracks it.
+ * a real team's listing returns such accounts (Junction's own Quest, Labcorp and
+ * BioReference accounts carry `[]`), and the sandbox places an order that names one by id
+ * (corpus/lab-account-probes.json), so the mock treats them as the team's.
  */
 export const isLinkedToTeam = (entry: LabAccountRecord, teamId: string): boolean =>
   entry.team_id_allowlist.length === 0 || entry.team_id_allowlist.includes(teamId)
@@ -253,9 +254,13 @@ export const effectiveBilling = (
   account === "platform" ? PLATFORM_BILLING : account.allowed_billing
 
 /**
- * The documented selection rules, in order: an explicit id must exist, be linked to the
- * team, match the ordered lab and be active; with no id, linked accounts are evaluated
- * against the four documented branches.
+ * The selection rules as the sandbox applies them. An explicit id must exist, be linked to
+ * the team and be active; the sandbox does **not** require it to belong to the ordered lab
+ * (recorded in corpus/lab-account-probes.json: a Labcorp test ordered through Junction's
+ * BioReference account was placed), although the lab-accounts guide says it must. With no id,
+ * one active linked account for the lab is selected, several select the first in listing
+ * order (a sandbox team with several was observed placing such an order, where the guide says
+ * it "may be rejected"), and a lab with none falls back to Junction's platform account.
  */
 export const selectLabAccount = (
   labSlug: string,
@@ -268,8 +273,6 @@ export const selectLabAccount = (
     if (!linked) throw new HttpError(400, { detail: "Lab account does not exist" })
     if (!isLinkedToTeam(linked, teamId))
       throw new HttpError(400, { detail: "Lab account is not linked to your team" })
-    if (linked.lab !== labSlug)
-      throw new HttpError(400, { detail: `Lab account is not associated with lab ${labSlug}` })
     if (linked.status !== "active")
       throw new HttpError(400, { detail: "Lab account is not active" })
     return linked
@@ -279,13 +282,8 @@ export const selectLabAccount = (
     if (PLATFORM_ACCOUNT_LABS.includes(labSlug)) return "platform"
     throw new HttpError(400, { detail: `No active lab account is available for lab ${labSlug}` })
   }
-  const active = candidates.filter((entry) => entry.status === "active")
-  if (active.length === 1) return active[0] as LabAccountRecord
-  if (active.length > 1)
-    throw new HttpError(400, {
-      detail:
-        "Multiple active lab accounts are linked to your team for this lab; provide lab_account_id",
-    })
+  const active = candidates.find((entry) => entry.status === "active")
+  if (active) return active
   throw new HttpError(400, { detail: "No active lab account is available for this lab" })
 }
 

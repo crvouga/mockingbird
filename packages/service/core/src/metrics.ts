@@ -1,3 +1,18 @@
+import type { BodyIssue } from "./validation.js"
+
+/**
+ * What the mock received from a request it rejected, so a 4xx can be attributed after the
+ * fact (an empty body, a missing `content-type`, a schema violation) without logging the body.
+ */
+export type RejectedRequest = {
+  /** The raw `content-type` header, or `null` when the request sent none. */
+  contentType: string | null
+  /** Bytes of body received from `content-length` (`0` for none), or `null` when the client sent no length (a streamed / chunked body). */
+  bodyBytes: number | null
+  /** The raw `transfer-encoding` header (`chunked`), or `null`. */
+  transferEncoding: string | null
+}
+
 /** One handled request, as the structured log sees it. */
 export type RequestLog = {
   service: string
@@ -15,6 +30,10 @@ export type RequestLog = {
   ids?: Record<string, string>
   /** Set when the service created a resource the request referred to but that did not exist. */
   adopted?: boolean
+  /** Set on a rejection (status ≥ 400) the mock produced itself, never on a scripted fault. */
+  request?: RejectedRequest
+  /** The validation issues behind a rejection, when the service found any. */
+  issues?: BodyIssue[]
 }
 
 export type MetricsReport = {

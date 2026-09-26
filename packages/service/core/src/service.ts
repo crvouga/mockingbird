@@ -14,6 +14,14 @@ import {
   type SqliteClient,
 } from "@crvouga/mockingbird-sqlite"
 import { type Context, Hono } from "hono"
+import { annotateResponse } from "./journal.js"
+import { recordedIssues } from "./validation.js"
+
+/** A rejection carries the issues `bodyIssues` found, for the runtime's log entry. */
+const withIssues = (request: Request, response: Response): Response => {
+  const issues = response.status >= 400 ? recordedIssues(request) : undefined
+  return issues && issues.length > 0 ? annotateResponse(response, { issues }) : response
+}
 
 /** Options every provider constructor accepts. */
 export type APIOptions = {
@@ -179,8 +187,7 @@ export const createService = (options: ServiceOptions): Service => {
         now,
       }
       const short = await options.before?.(context)
-      if (short) return short
-      return handler(context)
+      return withIssues(request, short ?? (await handler(context)))
     }
     app.on(operation.method.toUpperCase(), honoPath(operation.path), route)
   }

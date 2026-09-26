@@ -336,11 +336,23 @@ invented.
 
 ## Lab accounts
 
-`create_order` routes, accepts and rejects `lab_account_id` against the team's lab accounts,
-following Junction's documented rules: an explicit id must exist, be linked to the team, belong to
-the ordered lab and be active; with no id, one active account for the lab is selected, several are
-an error, and a lab with none falls back to Junction's platform account. The billing type must be
-allowed in the patient's state by the account's `allowed_billing`.
+`create_order` routes, accepts and rejects `lab_account_id` against the team's lab accounts, the
+way the sandbox does: an explicit id must exist, be linked to the team and be active; with no id,
+one active account for the lab is selected, several select the first listed, and a lab with none
+falls back to Junction's platform account. The billing type must be allowed in the patient's
+state by the account's `allowed_billing`.
+
+Two of Junction's documented rules are **not** enforced by the sandbox, so the mock does not
+enforce them either. An id naming another lab's account is accepted and the order is placed with
+that account (the guide says it must be "associated with the lab selected for the order"):
+recorded in `corpus/lab-account-probes.json`, where a Labcorp test ordered through Junction's
+BioReference account was placed, and reported live by a consumer's team
+([#138](https://github.com/crvouga/mockingbird/issues/138)). An omitted id while several active
+accounts are linked for the lab places the order (the guide says it "may be rejected"): reported
+live by a consumer's team ([#136](https://github.com/crvouga/mockingbird/issues/136)); the
+sandbox team the parity run uses has one account per lab, so `verify --orders` checks it whenever
+a corpus has such a lab. Which of the several accounts the sandbox bills through is not visible
+from outside; the mock uses the first listed.
 
 Junction's order (`ClientFacingOrder`) has no `lab_account_id`, so neither does the mock's: not on
 the create response, `GET /v3/order/{id}`, `GET /v3/orders` or webhooks. The account an order was
@@ -367,7 +379,7 @@ const junction = createRuntime({
 console.log(junction.instance().labAccounts().length) // 3
 ```
 
-Rejections keep Junction's body shape, `400 {"detail": "Lab account is not associated with lab labcorp"}`.
+Rejections keep Junction's body shape, `400 {"detail": "Lab account is not linked to your team"}`.
 `delegated_flow` is stored and listed, but see [not modelled](#what-is-and-is-not-modelled).
 
 Availability reads that take a `lab_account_id` (`GET /v3/order/area/info`) check it against the
@@ -451,21 +463,12 @@ linked to answers `400 {"detail": "Lab account is not linked to your team"}` exa
 live. A version-1 corpus (no `teamId`) still loads and behaves as 0.2.0 did: every recorded account
 is also linked to the mock team.
 
-**Open question — empty allowlists.** Junction's own Quest, Labcorp and BioReference accounts carry
+**Empty allowlists.** Junction's own Quest, Labcorp and BioReference accounts carry
 `team_id_allowlist: []`, and a real team's listing returns them, so the mock lists them and treats
-them as linked. Whether *ordering* through one — by explicit id, or when it is one of several
-active accounts for a lab with the id omitted — behaves the same live is **not verified**.
-`verify --orders` checks it whenever the corpus has such an account; until a run records the
-answer, a suite that depends on it should run against the sandbox too.
-
-Two sandbox observations disagree with Junction's lab-accounts guide and are **not** modelled
-until a probe settles which account the sandbox used: an order with `lab_account_id` omitted
-while several active accounts are linked for the lab was placed (the guide says Junction "does
-not select an account" and the order "may be rejected"; the mock rejects), and an order naming
-another lab's platform account was placed (the guide says the account must "be associated with
-the lab selected for the order"; the mock rejects with `Lab account is not associated with lab …`).
-Tracked in [#136](https://github.com/crvouga/mockingbird/issues/136) and
-[#138](https://github.com/crvouga/mockingbird/issues/138).
+them as linked. Ordering through one by explicit id, and with the id omitted when it is the lab's
+only active account, places the order on the sandbox (`corpus/lab-account-probes.json`, recorded
+by the parity run), as the mock does. `verify --orders` re-checks it whenever the corpus has such
+an account.
 
 ## Sandbox limits
 
@@ -708,8 +711,8 @@ A mock that is silent about its gaps is how a green suite starts lying. Specific
     accounts is not reproduced. Run `verify --orders` with your team's corpus to check what you rely on.
   - Rate limits and outages, except when injected as faults or switched on as
     [limits](#sandbox-limits).
-  - Whether an account with an empty `team_id_allowlist` can be ordered through (see
-    [Team identity](#team-identity)); the mock assumes it can.
+  - Which of several active accounts for a lab the sandbox bills an order through when
+    `lab_account_id` is omitted (see [Lab accounts](#lab-accounts)); the mock uses the first listed.
   - Adopted users (`adopt-users`) have `client_user_id` equal to their `user_id`; nothing in
     Junction corresponds to adoption.
   - Real 429 / 5xx bodies: the presets are plausible, not recorded.
