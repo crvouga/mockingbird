@@ -76,10 +76,17 @@ describe.skipIf(!existsSync(cli))("mockingbird-medplum serve", () => {
     child.stderr?.on("data", (chunk) => {
       output += String(chunk)
     })
+    // Ready only once /health answers AND the startup announcement has reached this process:
+    // `output` is filled by async stdout events, so waiting on health alone races the pipe under
+    // load and can leave `output` empty when the synchronous assertion below runs.
     const deadline = Date.now() + 30_000
     while (Date.now() < deadline) {
       try {
-        if ((await fetch(`http://127.0.0.1:${port}/health`)).ok) return
+        if (
+          (await fetch(`http://127.0.0.1:${port}/health`)).ok &&
+          output.includes("mock listening on")
+        )
+          return
       } catch {
         // not up yet
       }
