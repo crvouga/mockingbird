@@ -17,6 +17,7 @@ import {
   type S3Target,
   type Service,
   toBase64,
+  unsupportedMediaType,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
@@ -262,6 +263,7 @@ const tokenClaims = (token: string) => {
 const PROBLEM_TYPES: Record<number, string> = {
   400: "https://tools.ietf.org/html/rfc9110#section-15.5.1",
   404: "https://tools.ietf.org/html/rfc9110#section-15.5.5",
+  415: "https://tools.ietf.org/html/rfc9110#section-15.5.16",
   422: "https://tools.ietf.org/html/rfc4918#section-11.2",
 }
 
@@ -319,11 +321,75 @@ const unauthorized = () =>
     headers: { "www-authenticate": 'Bearer error="invalid_token"' },
   })
 
+/**
+ * Newtonsoft.Json's reader message for a body that is not JSON (recorded for `{`:
+ * `Unexpected end when reading JSON. Path '', line 1, position 1.`). A body that only stops
+ * early is "unexpected end" at its length; any other is the reader's message for the first
+ * character it cannot place, which staging has not been asked about.
+ */
+const jsonReaderMessage = (text: string): string => {
+  const stack: string[] = []
+  let position = -1
+  let quoted = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] as string
+    if (quoted) {
+      if (c === "\\") i++
+      else if (c === '"') quoted = false
+      continue
+    }
+    if (c === '"') quoted = true
+    else if (c === "{" || c === "[") stack.push(c === "{" ? "}" : "]")
+    else if (c === "}" || c === "]") {
+      if (stack.pop() !== c) {
+        position = i
+        break
+      }
+    }
+  }
+  if (position === -1) {
+    try {
+      JSON.parse(text + (quoted ? '"' : "") + [...stack].reverse().join(""))
+      return `Unexpected end when reading JSON. Path '', line 1, position ${text.length}.`
+    } catch {}
+    position = Math.max(0, text.search(/[^\s{[",:\d.\-+eEtrufalsn\]}]/))
+  }
+  return `Unexpected character encountered while parsing value: ${text[position] ?? ""}. Path '', line 1, position ${position}.`
+}
+
 /** Model-binding style errors, keyed like ASP.NET does (`items[0].productId`). */
 const validationErrors = (context: OperationContext) => {
   const issues = bodyIssues(context)
   if (issues.length === 0) return undefined
   const errors: Record<string, string[]> = {}
+  // The body as a whole (recorded in corpus/live-errors.json `bodies`): the model binder's
+  // message for an empty body and the JSON reader's for one it cannot parse, both keyed "".
+  const whole = issues.find((issue) => issue.kind === "required" || issue.kind === "syntax")
+  if (whole) {
+    return problem(400, "One or more validation errors occurred.", {
+      errors: {
+        "": [
+          whole.kind === "required"
+            ? "A non-empty request body is required."
+            : jsonReaderMessage(context.body.kind === "invalid" ? context.body.text : ""),
+        ],
+      },
+    })
+  }
+  // CreateOrder's FluentValidation rules, as staging words them for an empty `items`.
+  const body = record(context)
+  if (
+    context.operation.operationId === "CreateOrder" &&
+    Array.isArray(body?.items) &&
+    body.items.length === 0
+  ) {
+    return problem(400, "One or more validation errors occurred.", {
+      errors: {
+        "": ["'' must be between 1 and 5. You entered 0."],
+        items: ["'Items' must not be empty."],
+      },
+    })
+  }
   for (const issue of issues) {
     const missing = /^missing required property (.+)$/.exec(issue.message)
     const segments = issue.path.split(".").filter(Boolean)
@@ -689,6 +755,11 @@ export class GeneByGeneAPI implements FetchAPI {
         ) {
           return unauthorized()
         }
+        // ASP.NET Core's input formatters: a body whose content-type is missing or not one the
+        // action reads is 415, never a model-binding 400 (a JSON body sent as text/plain, or with
+        // no header at all, must not read as "request body is required").
+        if (unsupportedMediaType(context, { includeEmpty: true }))
+          return problem(415, "Unsupported Media Type")
         return undefined
       },
     })

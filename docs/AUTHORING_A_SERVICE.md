@@ -44,7 +44,8 @@ packages/service/<name>/
 | Outbound webhooks | `createWebhookHub({ signer, endpoints, retryDelaysMs?, fetch? })` passed as `webhooks:`; adds `/__admin/webhooks`, `/webhooks/events`, `/webhooks/:id/replay`, `/webhooks/flush`, `/webhooks/faults`, `/webhook-endpoints`; presets can carry `webhook: {mode: duplicate\|reorder\|drop}`. Signers: `signers.svix()`, `signers.timestamped(header)`, `signers.twilio()`, `signers.header(name, fmt)`, `signers.custom(fn)`; primitives `hmac`, `signSvix`, `signTimestamped`, `signTwilio`. Timestamps are wall clock. |
 | Outbox (comms vendors) | `OutboxStore` in your state + `outboxAdminRoutes(runtime, (api) => api.outbox, filter?)` → `GET /__admin/outbox?to=&since=`; `extractLinks(html)`, `extractCodes(text, len)` |
 | Idempotency keys | `IdempotencyStore.run(key, requestFingerprint(method, path, body), {mismatch, conflict}, handler)` |
-| Request-body validation against your contract | `bodyIssues(context)` → `[{path, message}]`; `issuesByField(issues)` for Laravel-style `errors` |
+| Request-body validation against your contract | `bodyIssues(context)` → `[{path, message, kind}]`; `issuesByField(issues)` for Laravel-style `errors`; `unsupportedMediaType(context)` for the vendor's `415` when a body's `content-type` is missing or not in the contract (never reported as "body required") |
+| Rejections in the log and journal | automatic: an entry with status ≥ 400 that the mock produced itself (not a fault) carries `request: {contentType, bodyBytes, transferEncoding}` and the `issues` `bodyIssues` found, never the body |
 | Write an object into the stack's S3 (s3rver) | `putObject({endpoint, bucket}, key, body, contentType)` (SigV4) |
 
 Handlers are keyed by `operationId` (`defineOperations<SupportedOperationId>({...})`). Use

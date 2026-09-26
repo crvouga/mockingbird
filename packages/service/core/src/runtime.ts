@@ -12,7 +12,7 @@ import {
   type FaultRule,
 } from "./faults.js"
 import { createJournal, DEFAULT_JOURNAL_SIZE, type Journal, responseNotes } from "./journal.js"
-import { createMetrics, type Metrics, type RequestLog } from "./metrics.js"
+import { createMetrics, type Metrics, type RejectedRequest, type RequestLog } from "./metrics.js"
 import { createRng, type Rng, seedFrom } from "./rng.js"
 import { bootSqlite } from "./service.js"
 import { type NamespaceSnapshot, restoreNamespace, snapshotNamespace } from "./snapshot.js"
@@ -551,8 +551,25 @@ export const createRuntime = <T extends ServiceInstance>(
       const started = monotonicNow()
       const url = new URL(request.url)
       const operationId = operationIdFor(request, url.pathname)
+      // The body is buffered so a rejection can record how many bytes arrived (never what).
+      const received: RejectedRequest = {
+        contentType: request.headers.get("content-type"),
+        bodyBytes: 0,
+        transferEncoding: request.headers.get("transfer-encoding"),
+      }
+      if (request.method !== "GET" && request.method !== "HEAD" && request.body !== null) {
+        const bytes = await request.arrayBuffer()
+        received.bodyBytes = bytes.byteLength
+        request = new Request(request.url, {
+          method: request.method,
+          headers: request.headers,
+          body: bytes,
+          signal: request.signal,
+        })
+      }
       const log = (status: number, faultId?: string, response?: Response) => {
         const noted = response ? responseNotes(response) : undefined
+        const rejected = status >= 400 && faultId === undefined
         const entry: RequestLog = {
           service: options.name,
           namespace,
@@ -565,6 +582,10 @@ export const createRuntime = <T extends ServiceInstance>(
           ...(faultId !== undefined ? { faultId } : {}),
           ...(noted?.ids && Object.keys(noted.ids).length > 0 ? { ids: noted.ids } : {}),
           ...(noted?.adopted ? { adopted: true } : {}),
+          ...(rejected ? { request: { ...received } } : {}),
+          ...(rejected && noted?.issues && noted.issues.length > 0
+            ? { issues: noted.issues.map((issue) => ({ ...issue })) }
+            : {}),
         }
         metrics.record(entry)
         journal.record({ ...entry, at: new Date(clock.now()).toISOString() })

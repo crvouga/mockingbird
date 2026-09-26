@@ -51,7 +51,7 @@ export {
   DEFAULT_JOURNAL_SIZE,
   responseNotes,
 } from "./journal.js"
-export type { Metrics, MetricsReport, RequestLog } from "./metrics.js"
+export type { Metrics, MetricsReport, RejectedRequest, RequestLog } from "./metrics.js"
 export { createMetrics } from "./metrics.js"
 export type { OutboxItem, OutboxQuery } from "./outbox.js"
 export {
@@ -115,8 +115,8 @@ export {
 } from "./signing.js"
 export type { NamespaceSnapshot } from "./snapshot.js"
 export { restoreNamespace, snapshotNamespace, withNamespaceRollback } from "./snapshot.js"
-export type { BodyIssue } from "./validation.js"
-export { bodyIssues, issuesByField } from "./validation.js"
+export type { BodyIssue, UnsupportedMediaType } from "./validation.js"
+export { bodyIssues, issuesByField, recordedIssues, unsupportedMediaType } from "./validation.js"
 export { PACKAGE_VERSION, UNRELEASED_VERSION } from "./version.js"
 export type {
   PublishInput,

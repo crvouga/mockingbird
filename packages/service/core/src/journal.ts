@@ -1,4 +1,5 @@
 import type { RequestLog } from "./metrics.js"
+import type { BodyIssue } from "./validation.js"
 
 /** One journal entry: a request log stamped with when (on the mock clock) it was handled. */
 export type JournalEntry = RequestLog & { at: string }
@@ -82,6 +83,8 @@ export type ResponseNotes = {
   ids?: Record<string, string>
   /** Set when the handler created a resource the request referred to but did not exist. */
   adopted?: boolean
+  /** The body validation issues behind a rejection; the runtime logs them, never the body. */
+  issues?: BodyIssue[]
 }
 
 const notes = new WeakMap<Response, ResponseNotes>()

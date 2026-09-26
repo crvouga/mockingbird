@@ -119,7 +119,7 @@ the body is read.
 | `MOCKINGBIRD_HEADER` | `"x-mockingbird"` | Set by `createRuntime` on every response: `<service>@<version>; ns=<namespace>`. |
 | `PACKAGE_VERSION` / `UNRELEASED_VERSION` | `string` | The bundled service's version (stamped by `release:publish`); `"0.0.0-development"` from source. |
 | `createJournal` | `(size = 1000) => Journal` | Per-namespace ring buffer of request logs behind `GET /__admin/requests`. |
-| `annotateResponse` / `responseNotes` | `(response, { ids?, adopted? }) => Response` | Attach the ids a handler touched to a response for the journal and log, without changing what the client sees. |
+| `annotateResponse` / `responseNotes` | `(response, { ids?, adopted?, issues? }) => Response` | Attach the ids a handler touched (and, on a rejection, the body issues behind it) to a response for the journal and log, without changing what the client sees. |
 | `createRuntime` | `(options: RuntimeOptions) => ServiceRuntime` | Wrap a service in the full contract: `/health`, `/__admin/*`, namespaces (header, `/ns/<name>/…` prefix, or `credential`-mapped via `PUT /__admin/credentials`), clock, faults and `presets`, metrics, journal, optional `webhooks` hub. |
 | `BRANCH_HEADER` / `AT_HEADER` / `CHECKPOINT_HEADER` | HTTP header constants | `x-mockingbird-branch` selects an isolated branch; `x-mockingbird-at` reads/forks from a checkpoint; successful mutations return `x-mockingbird-checkpoint`. Omitting them preserves normal behavior. |
 | `faultEffect` / `faultEffects` | `(request, name?) => params \| list` | The `effect` fault rules that fired for a request, so a handler can switch on a named vendor misbehaviour. |
@@ -133,7 +133,8 @@ the body is read.
 | `OutboxStore` / `outboxAdminRoutes` / `parseSince` | | What a comms mock "sent", per namespace, and `GET /__admin/outbox?to=&since=`. |
 | `extractLinks` / `extractCodes` | `(html) => string[]`, `(text, length?) => string[]` | Links and numeric codes in a message. |
 | `IdempotencyStore` / `requestFingerprint` / `stableStringify` | | Idempotency keys: replay, mismatch error, in-flight conflict. |
-| `bodyIssues` / `issuesByField` | `(context) => BodyIssue[]` | Validate a JSON body against the operation's contract schema; group issues Laravel-style. |
+| `bodyIssues` / `issuesByField` | `(context) => BodyIssue[]` | Validate the body against the operation's contract schema for the media type it sent; group issues Laravel-style. Each issue has a `kind`: `media_type` (a present body whose `content-type` is missing or not one the contract lists — never "required"), `syntax`, `required` (an empty body), `schema`. |
+| `unsupportedMediaType` | `(context, { includeEmpty? }) => { mediaType, accepted } \| undefined` | The `415` case on its own: the request's media type and the ones the operation accepts (`application/*+json` wildcards understood). `includeEmpty` treats an empty body the way ASP.NET Core does (the header alone decides). |
 | `putObject` / `signV4` | | SigV4-signed S3 `PutObject` (for vendors that hand the app an `s3://` object). |
 
 Types:

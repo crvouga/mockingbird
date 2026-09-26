@@ -164,8 +164,20 @@ const formatLog = (format: LogFormat) => {
     const ns = entry.namespace === "default" ? "" : ` [${entry.namespace}]`
     const fault = entry.faultId ? ` fault=${entry.faultId}` : ""
     const adopted = entry.adopted ? " adopted" : ""
+    // A rejection says what arrived (never the body) and why the service refused it.
+    const received = entry.request
+      ? ` received=${entry.request.bodyBytes}B ct=${entry.request.contentType ?? "-"}${
+          entry.request.transferEncoding ? ` te=${entry.request.transferEncoding}` : ""
+        }`
+      : ""
+    const issues = entry.issues?.length
+      ? ` issues=${entry.issues
+          .slice(0, 3)
+          .map((issue) => `${issue.path || "$"}: ${issue.message}`)
+          .join("; ")}${entry.issues.length > 3 ? ` (+${entry.issues.length - 3})` : ""}`
+      : ""
     console.log(
-      `${entry.service} ${entry.method} ${entry.path} ${entry.status} ${op} ${entry.durationMs}ms${ns}${fault}${adopted}`,
+      `${entry.service} ${entry.method} ${entry.path} ${entry.status} ${op} ${entry.durationMs}ms${ns}${fault}${adopted}${received}${issues}`,
     )
   }
 }
