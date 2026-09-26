@@ -62,6 +62,10 @@ const allowsEmptyString = (document: OpenAPIDocument, schema: SchemaObject): boo
 
 const codePoints = (value: string) => [...value].length
 
+/** `{ enum: [""] }`: the branch form-encoded APIs use to let a field be cleared with `""`. */
+const isUnsetMarker = (schema: SchemaObject): boolean =>
+  Array.isArray(schema.enum) && schema.enum.length === 1 && schema.enum[0] === ""
+
 /**
  * Coerce a bracket-decoded form value against an OpenAPI schema the way form-encoded APIs do:
  * every leaf arrives as a string, so integers/numbers/booleans are parsed, unknown keys are
@@ -103,7 +107,10 @@ const walk = (
         return (
           !types.includes("object") &&
           !types.includes("array") &&
-          !(types.length === 1 && types[0] === "null")
+          !(types.length === 1 && types[0] === "null") &&
+          // An `enum: [""]` branch only models "unset"; a real scalar must fall through to the
+          // structural branch so the caller reports "invalid object"/"invalid array".
+          !isUnsetMarker(branch)
         )
       }) ?? undefined
     if (!pick) {

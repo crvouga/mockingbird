@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { type OpenAPIDocument, parseOpenAPIDocument } from "@crvouga/mockingbird-openapi"
+import {
+  type OpenAPIDocument,
+  parseOpenAPIDocument,
+  type SchemaObject,
+} from "@crvouga/mockingbird-openapi"
 import { createDefaultSqlite, type SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
@@ -14,6 +18,7 @@ import {
   type OperationHandlers,
   OperationRegistryError,
   opaqueToken,
+  parseForm,
   verifyOperations,
 } from "./src/index.js"
 
@@ -266,6 +271,65 @@ describe("coerce", () => {
         expect(coerce.enumeration(s, ["a", "b"]).ok).toBe(s === "a" || s === "b")
       }),
       params,
+    )
+  })
+})
+
+describe("parseForm", () => {
+  const key = fc.stringMatching(/^[a-z][a-z0-9_]{0,7}$/)
+  const scalar = fc.oneof(
+    fc.stringMatching(/^[a-zA-Z0-9 ]{1,12}$/),
+    fc.integer().map(String),
+    fc.boolean().map(String),
+  )
+
+  test("an `enum: ['']` branch only ever accepts the empty string; other scalars are reported against the structural branch", () => {
+    fc.assert(
+      fc.property(key, key, scalar, fc.boolean(), (field, inner, raw, array) => {
+        const structural: SchemaObject = array
+          ? { type: "array", items: { type: "string" } }
+          : { type: "object", properties: { [inner]: { type: "string" } } }
+        const schema: SchemaObject = {
+          type: "object",
+          properties: { [field]: { anyOf: [structural, { type: "string", enum: [""] }] } },
+        }
+        const cleared = parseForm(document, schema, { [field]: "" })
+        expect(cleared.issues).toEqual([])
+        expect(cleared.value).toEqual({ [field]: "" })
+        const wrong = parseForm(document, schema, { [field]: raw })
+        expect(wrong.issues).toEqual([
+          { kind: array ? "invalid-array" : "invalid-object", path: field, raw },
+        ])
+        const shaped = parseForm(document, schema, { [field]: array ? [raw] : { [inner]: raw } })
+        expect(shaped.issues).toEqual([])
+      }),
+      { ...params, numRuns: params.numRuns ?? 100 },
+    )
+  })
+
+  test("a scalar union without an unset marker still picks its first scalar branch", () => {
+    fc.assert(
+      fc.property(key, fc.integer({ min: 1, max: 20 }), scalar, (field, maxLength, raw) => {
+        const schema: SchemaObject = {
+          type: "object",
+          properties: {
+            [field]: {
+              anyOf: [
+                { type: "string", maxLength },
+                { type: "string", enum: ["x"] },
+              ],
+            },
+          },
+        }
+        const parsed = parseForm(document, schema, { [field]: raw })
+        if ([...raw].length <= maxLength) {
+          expect(parsed.issues).toEqual([])
+          expect(parsed.value).toEqual({ [field]: raw })
+        } else {
+          expect(parsed.issues.map((issue) => issue.kind)).toEqual(["too-long"])
+        }
+      }),
+      { ...params, numRuns: params.numRuns ?? 100 },
     )
   })
 })
