@@ -166,7 +166,7 @@ const formatLog = (format: LogFormat) => {
     const adopted = entry.adopted ? " adopted" : ""
     // A rejection says what arrived (never the body) and why the service refused it.
     const received = entry.request
-      ? ` received=${entry.request.bodyBytes}B ct=${entry.request.contentType ?? "-"}${
+      ? ` received=${entry.request.bodyBytes === null ? "?" : `${entry.request.bodyBytes}B`} ct=${entry.request.contentType ?? "-"}${
           entry.request.transferEncoding ? ` te=${entry.request.transferEncoding}` : ""
         }`
       : ""

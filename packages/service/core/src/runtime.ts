@@ -551,21 +551,15 @@ export const createRuntime = <T extends ServiceInstance>(
       const started = monotonicNow()
       const url = new URL(request.url)
       const operationId = operationIdFor(request, url.pathname)
-      // The body is buffered so a rejection can record how many bytes arrived (never what).
+      // What a rejection records about the body. The runtime never reads the request stream —
+      // consuming it would break a streaming request (e.g. a bidirectional model stream) — so the
+      // byte count comes from `content-length` when the client sent it, and is null otherwise.
+      const contentLength = request.headers.get("content-length")
       const received: RejectedRequest = {
         contentType: request.headers.get("content-type"),
-        bodyBytes: 0,
+        bodyBytes:
+          contentLength !== null && /^\d+$/.test(contentLength) ? Number(contentLength) : null,
         transferEncoding: request.headers.get("transfer-encoding"),
-      }
-      if (request.method !== "GET" && request.method !== "HEAD" && request.body !== null) {
-        const bytes = await request.arrayBuffer()
-        received.bodyBytes = bytes.byteLength
-        request = new Request(request.url, {
-          method: request.method,
-          headers: request.headers,
-          body: bytes,
-          signal: request.signal,
-        })
       }
       const log = (status: number, faultId?: string, response?: Response) => {
         const noted = response ? responseNotes(response) : undefined

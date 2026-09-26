@@ -45,7 +45,7 @@ packages/service/<name>/
 | Outbox (comms vendors) | `OutboxStore` in your state + `outboxAdminRoutes(runtime, (api) => api.outbox, filter?)` → `GET /__admin/outbox?to=&since=`; `extractLinks(html)`, `extractCodes(text, len)` |
 | Idempotency keys | `IdempotencyStore.run(key, requestFingerprint(method, path, body), {mismatch, conflict}, handler)` |
 | Request-body validation against your contract | `bodyIssues(context)` → `[{path, message, kind}]`; `issuesByField(issues)` for Laravel-style `errors`; `unsupportedMediaType(context)` for the vendor's `415` when a body's `content-type` is missing or not in the contract (never reported as "body required") |
-| Rejections in the log and journal | automatic: an entry with status ≥ 400 that the mock produced itself (not a fault) carries `request: {contentType, bodyBytes, transferEncoding}` and the `issues` `bodyIssues` found, never the body |
+| Rejections in the log and journal | automatic: an entry with status ≥ 400 that the mock produced itself (not a fault) carries `request: {contentType, bodyBytes, transferEncoding}` (byte count from `content-length`, `null` for a streamed body) and the `issues` `bodyIssues` found, never the body |
 | Write an object into the stack's S3 (s3rver) | `putObject({endpoint, bucket}, key, body, contentType)` (SigV4) |
 
 Handlers are keyed by `operationId` (`defineOperations<SupportedOperationId>({...})`). Use

@@ -7,8 +7,8 @@ import type { BodyIssue } from "./validation.js"
 export type RejectedRequest = {
   /** The raw `content-type` header, or `null` when the request sent none. */
   contentType: string | null
-  /** Bytes of body received (`0` for none). */
-  bodyBytes: number
+  /** Bytes of body received from `content-length` (`0` for none), or `null` when the client sent no length (a streamed / chunked body). */
+  bodyBytes: number | null
   /** The raw `transfer-encoding` header (`chunked`), or `null`. */
   transferEncoding: string | null
 }

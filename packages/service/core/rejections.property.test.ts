@@ -126,6 +126,10 @@ const send = (
       headers: {
         ...headers,
         ...(contentType === undefined ? {} : { "content-type": contentType }),
+        // The client's own length, which the runtime reads without consuming the body.
+        ...(body === undefined
+          ? {}
+          : { "content-length": String(new TextEncoder().encode(body).byteLength) }),
       },
       // Bytes, so no content-type is invented for the request (a string body would be text/plain).
       ...(body === undefined ? {} : { body: new TextEncoder().encode(body) }),
@@ -296,7 +300,7 @@ describe("rejected requests in the log", () => {
           }
           expect(entry.request).toEqual({
             contentType: type ?? null,
-            bodyBytes: body === undefined ? 0 : new TextEncoder().encode(body).byteLength,
+            bodyBytes: body === undefined ? null : new TextEncoder().encode(body).byteLength,
             transferEncoding: null,
           })
           expect(entry.issues).toEqual(answer.issues)
@@ -310,6 +314,40 @@ describe("rejected requests in the log", () => {
       ),
       params,
     )
+  })
+
+  test("the runtime does not consume a streamed request body, and reports bodyBytes null without content-length", async () => {
+    const entries: RequestLog[] = []
+    const runtime = createRuntime({
+      name: "shop",
+      document,
+      create: validating,
+      onLog: (entry) => entries.push(entry),
+    })
+    // A streamed body with no content-length: if the runtime read it to count bytes, the handler
+    // would see an empty body. text/plain is unsupported here, so the handler must still 415 it,
+    // proving the body reached the handler intact.
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(VALID))
+        controller.close()
+      },
+    })
+    const res = await runtime.fetch(
+      new Request("http://mock.local/v1/orders", {
+        method: "POST",
+        headers: { "content-type": "text/plain" },
+        body: stream,
+        duplex: "half",
+      } as RequestInit & { duplex: "half" }),
+    )
+    expect(res.status).toBe(415)
+    expect((await res.json()).media).toEqual({ mediaType: "text/plain", accepted: ACCEPTED })
+    expect(entries[0]?.request).toEqual({
+      contentType: "text/plain",
+      bodyBytes: null,
+      transferEncoding: null,
+    })
   })
 
   test("a rejection outside any operation (an unknown path) still records what arrived", async () => {
@@ -332,7 +370,7 @@ describe("rejected requests in the log", () => {
             unmatched: true,
             request: {
               contentType: type ?? null,
-              bodyBytes: body === undefined ? 0 : new TextEncoder().encode(body).byteLength,
+              bodyBytes: body === undefined ? null : new TextEncoder().encode(body).byteLength,
               transferEncoding: null,
             },
           })
