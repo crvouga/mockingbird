@@ -16,9 +16,9 @@ export type {
   WeightedPlan,
 } from "./explore.js"
 export {
-  JUNCTION_CONTINUATIONS,
   createExploreRng,
   defaultDynamicWeight,
+  JUNCTION_CONTINUATIONS,
   pickWeightedIndex,
   pushHistory,
   resourceCountsFrom,

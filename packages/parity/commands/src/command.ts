@@ -132,9 +132,10 @@ export const planCommandArbitrary = (
     if (arbitrary === "omit") continue
     const always =
       parameter.in === "path" || parameter.required === true || carriesScope(document, parameter)
+    // `fc.option` takes the frequency of the nil value, so present-with-p means nil once in 1/(1-p).
     fields[parameter.name] = always
       ? arbitrary
-      : fc.option(arbitrary, { nil: undefined, freq: frequencyOf(optionalProbability) })
+      : fc.option(arbitrary, { nil: undefined, freq: frequencyOf(1 - optionalProbability) })
   }
   const parameters = fc.record(fields).map((record) => {
     const out: Record<string, unknown> = {}
@@ -144,8 +145,16 @@ export const planCommandArbitrary = (
 
   const override = (node: SchemaObject) => placeholderFor(schemaMetadata(node), missingProbability)
   const formBody = plan.body?.mediaType === FORM_MEDIA_TYPE
-  const skip = (node: SchemaObject, path: string[]) =>
-    (formBody && path.length === 0) || isSymbolic(schemaMetadata(resolveSchema(document, node)))
+  const skip = (node: SchemaObject) => isSymbolic(schemaMetadata(resolveSchema(document, node)))
+  // A form body is always an object on the wire, so a wrong-typed root cannot be encoded; every
+  // other root site (missing required key, unknown key) is a real provider error path. A body
+  // schema without properties (Stripe's GET/DELETE stubs) has nothing worth mutating.
+  const bodyHasProperties =
+    plan.body !== undefined &&
+    Object.keys(resolveSchema(document, plan.body.schema).properties ?? {}).length > 0
+  const exclude = (site: Mutation) =>
+    site.valuePath.length === 0 &&
+    ((formBody && site.violation === "wrong-type") || !bodyHasProperties)
 
   let body: fc.Arbitrary<{ value: unknown; invalid: Mutation | undefined }> = fc.constant({
     value: undefined,
@@ -156,13 +165,13 @@ export const planCommandArbitrary = (
       value,
       invalid: undefined,
     }))
-    const invalid = invalidSchemaArbitrary(plan.body.schema, { document, override, skip }).map(
-      (result) => ({
-        value: result.value,
-        invalid: result.mutation,
-      }),
-    )
-    const canMutate = mutationSites(document, plan.body.schema, { skip }).length > 0
+    const invalid = invalidSchemaArbitrary(plan.body.schema, {
+      document,
+      override,
+      skip,
+      exclude,
+    }).map((result) => ({ value: result.value, invalid: result.mutation }))
+    const canMutate = mutationSites(document, plan.body.schema, { skip, exclude }).length > 0
     const present =
       invalidProbability > 0 && canMutate
         ? fc.oneof(
