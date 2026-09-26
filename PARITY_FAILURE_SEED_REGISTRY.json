@@ -35,7 +35,7 @@
       "provider": "junction",
       "seed": 2058813869,
       "status": "fixed",
-      "failure": "create_user real=503 after negative-limit get_teams_users \u2014 sandbox rate limit from aggressive per-walk clearSandboxUsers"
+      "failure": "create_user real=503 after negative-limit get_teams_users — sandbox rate limit from aggressive per-walk clearSandboxUsers"
     },
     {
       "provider": "junction",
@@ -179,19 +179,19 @@
       "provider": "genebygene",
       "seed": 1402714997,
       "status": "fixed",
-      "failure": "ListProducts productType=\u33de: real lists all 3 (SQL LIKE under a collation that ignores the character); productType on products is now marked unsupported"
+      "failure": "ListProducts productType=㏞: real lists all 3 (SQL LIKE under a collation that ignores the character); productType on products is now marked unsupported"
     },
     {
       "provider": "genebygene",
       "seed": 1405240703,
       "status": "fixed",
-      "failure": "ListOrders orderId=\u2047: staging ignores a non-GUID id filter and listed the shared tenant's 14381 orders; the mock filtered to none"
+      "failure": "ListOrders orderId=⁇: staging ignores a non-GUID id filter and listed the shared tenant's 14381 orders; the mock filtered to none"
     },
     {
       "provider": "genebygene",
       "seed": 1416601298,
       "status": "fixed",
-      "failure": "ListKitOrderLineKits attributesFilter=aaa\u2026 pageSize=0: staging validates the query (pageSize) before the filter; the mock answered the filter's 400 first"
+      "failure": "ListKitOrderLineKits attributesFilter=aaa… pageSize=0: staging validates the query (pageSize) before the filter; the mock answered the filter's 400 first"
     },
     {
       "provider": "genebygene",
@@ -203,7 +203,7 @@
       "provider": "genebygene",
       "seed": 1417917287,
       "status": "fixed",
-      "failure": "ListEventTypes name=\u10f7: real lists all 12 (SQL LIKE under a collation that ignores the character); the name filter is now marked unsupported"
+      "failure": "ListEventTypes name=ჷ: real lists all 12 (SQL LIKE under a collation that ignores the character); the name filter is now marked unsupported"
     },
     {
       "provider": "genebygene",
@@ -227,7 +227,7 @@
       "provider": "genebygene",
       "seed": 1420005841,
       "status": "fixed",
-      "failure": "ListFulfillments orderLineId=\u0ede: the narrowing orderId was the all-zero GUID, which staging reads as no filter, so the shared tenant's 14466 fulfillments were listed"
+      "failure": "ListFulfillments orderLineId=ໞ: the narrowing orderId was the all-zero GUID, which staging reads as no filter, so the shared tenant's 14466 fulfillments were listed"
     },
     {
       "provider": "genebygene",
