@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { connect, type Socket } from "node:net";
 import pg from "pg";
 import { Database } from "../../src/index.ts";
-import { type PostgresServer, serve } from "../../src/server/index.ts";
+import { type PostgresServer, serve } from "../../src/wire/index.ts";
 
 // Real node-postgres against the wire server, so the surface tested is the protocol, not the API.
 

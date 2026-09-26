@@ -15,7 +15,7 @@ isolation.
 - **Synchronous**, ESM-only API (no Promises, no `require`)
 - **SQL dialect verified** against real PostgreSQL 18.3 (PGlite by default; optional native server)
   via differential contracts and a fail-closed gate
-- In-process it is **not** a drop-in for the `pg` / `postgres.js` client APIs or on-disk clusters, but it also ships an **optional wire-protocol server** (`@crvouga/mockingbird-service-postgres/server`, Node/Bun) that unmodified clients connect to over TCP
+- In-process it is **not** a drop-in for the `pg` / `postgres.js` client APIs or on-disk clusters, but it also ships an **optional wire-protocol server** (`@crvouga/mockingbird-service-postgres/wire`, Node/Bun) that unmodified clients connect to over TCP
 - Intentional differences: deterministic `random()` / `now()` by default, and a custom snapshot
   format (not `pg_dump`)
 
@@ -156,10 +156,10 @@ back as PostgreSQL text (node-postgres parses timestamps to `Date` and JSON to o
 
 When another process must connect over TCP — `pg`, `postgres.js`, a JDBC client, `psql`, a service
 in a local multi-service stack — start the frontend/backend v3 server instead of a shim. It needs
-`node:net`, so it is a separate Node/Bun entry (`/server`) and the main package stays browser-safe.
+`node:net`, so it is a separate Node/Bun entry (`/wire`) and the main package stays browser-safe.
 
 ```ts
-import { serve } from "@crvouga/mockingbird-service-postgres/server"
+import { serve } from "@crvouga/mockingbird-service-postgres/wire"
 
 const server = await serve({ port: 0 }) // 0 → a free port, reported as server.port
 // postgres://postgres@127.0.0.1:${server.port}/db  — no initdb, no OS user, pure TypeScript

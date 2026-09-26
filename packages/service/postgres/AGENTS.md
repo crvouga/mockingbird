@@ -14,7 +14,7 @@ Guidance for humans and coding agents editing this repository. For install and c
 4. `NOT APPLICABLE` items: roles/auth enforcement, replication, VACUUM internals, storage params, full PL/pgSQL
 
 **Non-goals:** matching `pg`/`postgres.js` **client APIs**, full PL/pgSQL, or MVCC. The optional
-wire-protocol server (`src/server/`, a Node/Bun-only entry over the one engine) is in scope: it
+wire-protocol server (`src/wire/`, a Node/Bun-only entry over the one engine) is in scope: it
 speaks frontend/backend v3 and coordinates connections by serializing transaction blocks, adding
 advisory locks, `LISTEN`/`NOTIFY`, `CancelRequest` and per-connection `25P02`. It deliberately does
 **not** add row-level lock contention (`SELECT … FOR UPDATE SKIP LOCKED` distribution) or `COPY`
@@ -54,7 +54,7 @@ Everything is **typed values** (`TypedValue = { t: TypeId, v: Datum }` in [`src/
 | `transactions/` | BEGIN / COMMIT / SAVEPOINT (clones state + PRNG) |
 | `runtime/` | Clock, PRNG, `DatabaseOptions` |
 | `serialization/` | `PGMM` snapshot codec |
-| `server/` | Wire-protocol (frontend/backend v3) TCP server: `serve()`, CLI, per-connection state machine, cross-connection `Cluster` (Node/Bun only) |
+| `wire/` | Wire-protocol (frontend/backend v3) TCP server: `serve()`, CLI, per-connection state machine, cross-connection `Cluster` (Node/Bun only) |
 | `tsearch/` | `tsvector` / `tsquery` text search |
 | `errors/` | `PostgresError` with SQLSTATE, `unsupported()` |
 

@@ -13,7 +13,7 @@
  *
  * @example
  * ```ts
- * import { serve } from "@crvouga/mockingbird-service-postgres/server";
+ * import { serve } from "@crvouga/mockingbird-service-postgres/wire";
  *
  * const server = await serve({ port: 0 });
  * // new pg.Pool({ connectionString: `postgres://postgres@127.0.0.1:${server.port}/db` })

@@ -1,9 +1,0 @@
-{
-  "extends": "./tsconfig.build.json",
-  "compilerOptions": {
-    "types": ["node"],
-    "lib": ["ES2022", "DOM"]
-  },
-  "include": ["src/server/**/*"],
-  "exclude": ["node_modules", "dist", "tests"]
-}

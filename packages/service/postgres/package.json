@@ -23,10 +23,10 @@
       "import": "./dist/unstable.js",
       "default": "./dist/unstable.js"
     },
-    "./server": {
-      "types": "./dist/server/index.d.ts",
-      "import": "./dist/server/index.js",
-      "default": "./dist/server/index.js"
+    "./wire": {
+      "types": "./dist/wire/index.d.ts",
+      "import": "./dist/wire/index.js",
+      "default": "./dist/wire/index.js"
     }
   },
   "files": [
@@ -132,8 +132,8 @@
     },
     "status": "ready",
     "entries": {
-      "server/index": "node",
-      "server/cli": "node"
+      "wire/index": "node",
+      "wire/cli": "node"
     }
   },
   "trustedDependencies": [
@@ -147,6 +147,6 @@
     "@embedded-postgres/windows-x64"
   ],
   "bin": {
-    "mockingbird-postgres": "./dist/server/cli.js"
+    "mockingbird-postgres": "./dist/wire/cli.js"
   }
 }
