@@ -1,0 +1,302 @@
+{
+  "oracle": "Docker Engine",
+  "expectedVersion": "29.8.0",
+  "comparisonApi": "1.52",
+  "runId": "mb-oracle-ab4aefb9657d4b6993bc5f5273593796",
+  "image": "sha256:dbbd346860d29f1543e991f30f3284bf4ab5f096d049ecc3426528f20b1b6e6b",
+  "comparisons": [
+    {
+      "label": "attach: create status",
+      "actual": 201,
+      "modeled": 201,
+      "equal": true
+    },
+    {
+      "label": "attach: execution",
+      "actual": {
+        "status": "created",
+        "running": false,
+        "exitCode": 0
+      },
+      "modeled": {
+        "status": "created",
+        "running": false,
+        "exitCode": 0
+      },
+      "equal": true
+    },
+    {
+      "label": "attach: start status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "attach: execution",
+      "actual": {
+        "status": "running",
+        "running": true,
+        "exitCode": 0
+      },
+      "modeled": {
+        "status": "running",
+        "running": true,
+        "exitCode": 0
+      },
+      "equal": true
+    },
+    {
+      "label": "attach: upgrade",
+      "actual": {
+        "status": 101,
+        "type": "application/vnd.docker.multiplexed-stream",
+        "upgrade": "tcp"
+      },
+      "modeled": {
+        "status": 101,
+        "type": "application/vnd.docker.multiplexed-stream",
+        "upgrade": "tcp"
+      },
+      "equal": true
+    },
+    {
+      "label": "attach: stdin",
+      "actual": "oracle-probe\n",
+      "modeled": "oracle-probe\n",
+      "equal": true
+    },
+    {
+      "label": "attach: normalized channel bytes (base64)",
+      "actual": {
+        "stdout": "b3JhY2xlLXByb2JlCg==",
+        "stderr": "b3JhY2xlLXN0ZGVycgo="
+      },
+      "modeled": {
+        "stdout": "b3JhY2xlLXByb2JlCg==",
+        "stderr": "b3JhY2xlLXN0ZGVycgo="
+      },
+      "equal": true
+    },
+    {
+      "label": "attach: wait status code",
+      "actual": 7,
+      "modeled": 7,
+      "equal": true
+    },
+    {
+      "label": "attach: execution",
+      "actual": {
+        "status": "exited",
+        "running": false,
+        "exitCode": 7
+      },
+      "modeled": {
+        "status": "exited",
+        "running": false,
+        "exitCode": 7
+      },
+      "equal": true
+    },
+    {
+      "label": "attach: remove status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "attach: removed inspection",
+      "actual": 404,
+      "modeled": 404,
+      "equal": true
+    },
+    {
+      "label": "stop: create status",
+      "actual": 201,
+      "modeled": 201,
+      "equal": true
+    },
+    {
+      "label": "stop: execution",
+      "actual": {
+        "status": "created",
+        "running": false,
+        "exitCode": 0
+      },
+      "modeled": {
+        "status": "created",
+        "running": false,
+        "exitCode": 0
+      },
+      "equal": true
+    },
+    {
+      "label": "stop: start status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "stop: execution",
+      "actual": {
+        "status": "running",
+        "running": true,
+        "exitCode": 0
+      },
+      "modeled": {
+        "status": "running",
+        "running": true,
+        "exitCode": 0
+      },
+      "equal": true
+    },
+    {
+      "label": "stop: termination status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "stop: wait status code",
+      "actual": 137,
+      "modeled": 137,
+      "equal": true
+    },
+    {
+      "label": "stop: execution",
+      "actual": {
+        "status": "exited",
+        "running": false,
+        "exitCode": 137
+      },
+      "modeled": {
+        "status": "exited",
+        "running": false,
+        "exitCode": 137
+      },
+      "equal": true
+    },
+    {
+      "label": "stop: remove status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "stop: removed inspection",
+      "actual": 404,
+      "modeled": 404,
+      "equal": true
+    },
+    {
+      "label": "kill: create status",
+      "actual": 201,
+      "modeled": 201,
+      "equal": true
+    },
+    {
+      "label": "kill: execution",
+      "actual": {
+        "status": "created",
+        "running": false,
+        "exitCode": 0
+      },
+      "modeled": {
+        "status": "created",
+        "running": false,
+        "exitCode": 0
+      },
+      "equal": true
+    },
+    {
+      "label": "kill: start status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "kill: execution",
+      "actual": {
+        "status": "running",
+        "running": true,
+        "exitCode": 0
+      },
+      "modeled": {
+        "status": "running",
+        "running": true,
+        "exitCode": 0
+      },
+      "equal": true
+    },
+    {
+      "label": "kill: termination status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "kill: wait status code",
+      "actual": 137,
+      "modeled": 137,
+      "equal": true
+    },
+    {
+      "label": "kill: execution",
+      "actual": {
+        "status": "exited",
+        "running": false,
+        "exitCode": 137
+      },
+      "modeled": {
+        "status": "exited",
+        "running": false,
+        "exitCode": 137
+      },
+      "equal": true
+    },
+    {
+      "label": "kill: remove status",
+      "actual": 204,
+      "modeled": 204,
+      "equal": true
+    },
+    {
+      "label": "kill: removed inspection",
+      "actual": 404,
+      "modeled": 404,
+      "equal": true
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "mb-oracle-ab4aefb9657d4b6993bc5f5273593796-attach",
+      "status": "absent"
+    },
+    {
+      "name": "mb-oracle-ab4aefb9657d4b6993bc5f5273593796-stop",
+      "status": "absent"
+    },
+    {
+      "name": "mb-oracle-ab4aefb9657d4b6993bc5f5273593796-kill",
+      "status": "absent"
+    }
+  ],
+  "gaps": [
+    "No daemon restart or live-restore scenario executed",
+    "Transport response-loss evidence is synthetic and recorded separately in US-008/US-012",
+    "No host enforcement, SDK or external consumer policy verification"
+  ],
+  "passed": true,
+  "version": {
+    "version": "29.8.0",
+    "api": "1.56",
+    "minimumApi": "1.40",
+    "os": "linux",
+    "arch": "arm64",
+    "gitCommit": "3ce5872"
+  },
+  "omittedImageMetadata": ["ArgsEscaped", "ExposedPorts"],
+  "imagePlatform": {
+    "os": "linux",
+    "architecture": "arm64"
+  }
+}

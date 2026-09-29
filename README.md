@@ -6,7 +6,7 @@
 
 **Mock the APIs you depend on, with the behavior they really have.**
 
-[![Ready](https://img.shields.io/badge/Ready-11-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-40-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
+[![Ready](https://img.shields.io/badge/Ready-11-2ea44f)](#ready) [![Work in progress](https://img.shields.io/badge/In_progress-43-e36209)](#work-in-progress) [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-5b4fe0)](#license)
 
 [Quick start](#quick-start) · [Services](#services) · [Why](docs/WHY.md) · [Guides](#guides) · [llms.txt](llms.txt)
 
@@ -63,10 +63,10 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 
 ## Services
 
-51 services, each its own npm package. Every service declares a release tier:
+54 services, each its own npm package. Every service declares a release tier:
 
 - **Ready** (11): Complete, checked against the vendor, and kept stable. Use it in your test suite.
-- **Work in progress** (40): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
+- **Work in progress** (43): Usable, but incomplete: operations, response shapes and options can still change between releases. Pin an exact version.
 
 ### Ready
 
@@ -111,6 +111,9 @@ The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
 | [Amazon Cognito](packages/service/cognito) | [aws.amazon.com](https://aws.amazon.com/cognito/) · [API docs](https://docs.aws.amazon.com/cognito-user-identity-pools/latest/APIReference/) | Identity | [`@crvouga/mockingbird-service-cognito`](https://www.npmjs.com/package/@crvouga/mockingbird-service-cognito) | Stateful Amazon Cognito User Pools mock for AWS SDK and browser authentication tests. |
 | [AWS Secrets Manager & SSM](packages/service/aws-secrets) | [aws.amazon.com](https://aws.amazon.com/secrets-manager/) · [API docs](https://docs.aws.amazon.com/secretsmanager/latest/apireference/) | Identity | [`@crvouga/mockingbird-service-aws-secrets`](https://www.npmjs.com/package/@crvouga/mockingbird-service-aws-secrets) | Stateful AWS Secrets Manager and SSM Parameter Store mock with versions, stages, rotation, and redacted controls. |
 | [Persona](packages/service/persona) | [withpersona.com](https://withpersona.com) · [API docs](https://docs.withpersona.com) | Identity | [`@crvouga/mockingbird-service-persona`](https://www.npmjs.com/package/@crvouga/mockingbird-service-persona) | Stateful mock of the Persona identity-verification API: inquiry create, list (reusable lookup), get, a hosted flow page, admin lifecycle transitions, and Persona-Signature webhooks. |
+| [Docker Engine](packages/service/docker) | [docker.com](https://www.docker.com) · [API docs](https://docs.docker.com/reference/api/engine/version/v1.52/) | Infrastructure | [`@crvouga/mockingbird-service-docker`](https://www.npmjs.com/package/@crvouga/mockingbird-service-docker) | Stateful Docker Engine API v1.52 mock with portable controls and Node transport. |
+| [GitHub](packages/service/github) | [github.com](https://github.com) · [API docs](https://docs.github.com/en/rest) | Infrastructure | [`@crvouga/mockingbird-service-github`](https://www.npmjs.com/package/@crvouga/mockingbird-service-github) | Stateful GitHub REST API 2026-03-10 mock for repository, reference and pull-request scenarios. |
+| [Hermes Agent](packages/service/hermes) | [hermes-agent.nousresearch.com](https://hermes-agent.nousresearch.com) · [API docs](https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/) | Infrastructure | [`@crvouga/mockingbird-service-hermes`](https://www.npmjs.com/package/@crvouga/mockingbird-service-hermes) | Hermes peer-run API mock with portable scripted lifecycle controls. |
 | [EasyPost](packages/service/easypost) | [easypost.com](https://www.easypost.com) · [API docs](https://docs.easypost.com/docs/trackers) | Maps & logistics | [`@crvouga/mockingbird-service-easypost`](https://www.npmjs.com/package/@crvouga/mockingbird-service-easypost) | Stateful mock of the EasyPost trackers API: create/re-use trackers, EasyPost's test tracking codes, admin status transitions and EasyPost's error envelope. |
 | [Google Maps](packages/service/google-maps) | [mapsplatform.google.com](https://mapsplatform.google.com) · [API docs](https://developers.google.com/maps/documentation/places/web-service) | Maps & logistics | [`@crvouga/mockingbird-service-google-maps`](https://www.npmjs.com/package/@crvouga/mockingbird-service-google-maps) | Mock of Google Places Autocomplete / Details / Find Place, the Geocoding API, a Maps JavaScript (places) shim and the Address Validation API (USPS CASS/DPV verdicts), over a QA address corpus, with Google's status codes and fault presets. |
 | [Customer.io](packages/service/customerio) | [customer.io](https://customer.io) · [API docs](https://docs.customer.io/api/) | Marketing | [`@crvouga/mockingbird-service-customerio`](https://www.npmjs.com/package/@crvouga/mockingbird-service-customerio) | Stateful mock of Customer.io: Segment-compatible CDP (identify/track/batch, SDK drop-in), App API transactional email/SMS/inbox sends with an outbox, message catalog, link-click tracking, and signed reporting webhooks. |
@@ -185,6 +188,7 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | [Reporting issues](docs/REPORTING_ISSUES.md) | How coding agents in other projects file a GitHub issue when a mock diverges from its oracle, lacks a feature they call, or breaks, or when they need a service mocked that the catalog does not have yet. Agents in this repository pick the issues up and resolve them. |
 | [Releasing](docs/RELEASING.md) | How packages get from `main` to npm. Once the `NPM_TOKEN` repo secret is set, releases run automatically. |
 | [Secrets runbook](docs/SECRETS.md) | Where every credential lives, who needs it, and how to run live parity without ever holding a sandbox key: GitHub Actions repo secrets are the only secret store. |
+| [Infrastructure and orchestration mocks](docs/INFRASTRUCTURE_MOCKS.md) | This document defines the boundaries and planned evidence for the Docker Engine, Hermes peer-run, and GitHub REST packages. |
 
 ## License
 

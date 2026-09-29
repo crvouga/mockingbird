@@ -5,6 +5,8 @@
 
 /** `x-mockingbird` on an operation. */
 export type OperationExtension = {
+  /** Opt in to a terminal path parameter spanning slash-separated segments. */
+  path?: { parameter: string; allowEmpty?: boolean }
   /** `false` marks an operation the mock explicitly does not implement. Default `true`. */
   supported?: boolean
   /** Human explanation, required when `supported: false` or `parity.enabled: false`. */
@@ -19,6 +21,7 @@ export type OperationExtension = {
 }
 
 export type OperationMetadata = {
+  path?: { parameter: string; allowEmpty?: boolean }
   supported: boolean
   reason: string | undefined
   parity: { enabled: boolean; safe: boolean; reason: string | undefined }

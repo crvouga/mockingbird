@@ -3,6 +3,7 @@
  * The build fails if a service names a slug that is not listed here.
  */
 export const CATEGORIES = {
+  infrastructure: { label: "Infrastructure", blurb: "Container engines and orchestration APIs." },
   payments: { label: "Payments", blurb: "Charges, subscriptions, checkout and HSA/FSA billing." },
   health: {
     label: "Health & labs",

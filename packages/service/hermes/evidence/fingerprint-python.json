@@ -1,0 +1,156 @@
+{
+  "python": "3.9.6",
+  "source": "Python stdlib json.loads then json.dumps(sort_keys=True,separators=(comma,colon),ensure_ascii=False), hashlib.sha256; synthetic vectors only, not Hermes runtime parity",
+  "vectors": [
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":0}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "aaeab5b9f20e2225d067bd7d2b74e09331d4f7f953e66fb776080c2ce1a96ba1"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":-0}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "aaeab5b9f20e2225d067bd7d2b74e09331d4f7f953e66fb776080c2ce1a96ba1"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1},\"gateway_session_key\":\"memory\"}",
+      "sha256": "6815ed8cd8e4c7d8561b93c876872bf24e79a8bda3d93dcc1acd0ace74ac294d"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1.0}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1.0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "62063cfbbe0f1196c0b71c1c8f4f8ef04235c176b31a189c49feb9af44597d69"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e0}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1.0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "62063cfbbe0f1196c0b71c1c8f4f8ef04235c176b31a189c49feb9af44597d69"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":-0.0}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":-0.0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "d6573c7b98ddbac56c313fc35b88a54e7e3b6f5bf921cc26a331a135b4fea1a8"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":9007199254740993}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":9007199254740993},\"gateway_session_key\":\"memory\"}",
+      "sha256": "82da8ef7b7d902f1a56e42c75f792c31d01c76a685f710f479d512d687511161"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":9007199254740993.0}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":9007199254740992.0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "672fa65312aa3eb3e4d9e321d0e8ca6c631d77643a85a91027521a51bba2aa4d"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e-5}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1e-05},\"gateway_session_key\":\"memory\"}",
+      "sha256": "8f414a542bed02ff95f05c4602f9db1fb5ffbfb4dea1e38dfd50552145ec0584"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e-4}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":0.0001},\"gateway_session_key\":\"memory\"}",
+      "sha256": "f950154f785259dd6fbb662ed27b6071f24ecca95765d6b73ea2e0942ddbd406"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e15}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1000000000000000.0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "d04ae13f5410e5606bd6e849cd565f8eb54ec1a52a5efd8658e7f4d1bb8f4b02"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e16}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1e+16},\"gateway_session_key\":\"memory\"}",
+      "sha256": "09a921462b28c41400fafddb3a9a3ca45bcd42a06b2c623144fe5876cbf9e70c"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e20}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1e+20},\"gateway_session_key\":\"memory\"}",
+      "sha256": "f27e880c47156b3eccdc3392336f549123d881677ca5984813d4076ded68ba5b"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e21}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1e+21},\"gateway_session_key\":\"memory\"}",
+      "sha256": "2612bb589df1a9c2663f2719246c78ebf2b8f16a73958673209452ff1390c3d1"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e23}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1e+23},\"gateway_session_key\":\"memory\"}",
+      "sha256": "ddb64a43f39cb6d2f784d193c8cc6aae898fa4e39d963c7cad8a2adbcf3fda38"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":5e-324}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":5e-324},\"gateway_session_key\":\"memory\"}",
+      "sha256": "b07012b8e069e9a4d8064c5253a8b667dbdaec589f051c46c1159267ffad08c6"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":2.2250738585072014e-308}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":2.2250738585072014e-308},\"gateway_session_key\":\"memory\"}",
+      "sha256": "3cdf28007cbe7bd7d9b36eaacaede1ef2dbb47419b6d2c2c0f6be0395fc4726d"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1.7976931348623157e308}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":1.7976931348623157e+308},\"gateway_session_key\":\"memory\"}",
+      "sha256": "d709b205848808fa3eab862055591bb130496c9de1cd574257feb7b8c2c1f331"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e999}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":Infinity},\"gateway_session_key\":\"memory\"}",
+      "sha256": "930504d6c73d2dfbaf4d3377e60cafe0ee32ed9a7bbeee059ef889f9effdb4ad"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":-1e999}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":-Infinity},\"gateway_session_key\":\"memory\"}",
+      "sha256": "58a02e1eb88d2f46f69f13ee3d3ac49fbbc20654c30f6625856f6518b2a7e684"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"n\":1e-999}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"n\":0.0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "01c35824622b47e5987bd79cfeedd886284f6830b713f3d3f85cda30399ba310"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"\\ue000\":1,\"\\ud800\\udc00\":2}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"\ue000\":1,\"\ud800\udc00\":2},\"gateway_session_key\":\"memory\"}",
+      "sha256": "ddb8538c9fdbd563e6e06c99658667688b5bcc3b47862e970126afaeb1a7ae13"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"s\":\"\\u00e9\\n\\t\\b\\u0000\"}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"s\":\"\u00e9\\n\\t\\b\\u0000\"},\"gateway_session_key\":\"memory\"}",
+      "sha256": "ec78e03acb5969df233c65e47fb7e7b06e9fdad16caa29a346a151ac9220628f"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"x\":1,\"x\":2.0}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"input\":\"synthetic\",\"x\":2.0},\"gateway_session_key\":\"memory\"}",
+      "sha256": "39c29b7c83b333a8fe3fb7521a6c62adbcbf9492a7c928c640771e816783bed5"
+    },
+    {
+      "raw": "{\"input\":\"synthetic\",\"__proto__\":{\"value\":true}}",
+      "memoryKey": "memory",
+      "canonical": "{\"body\":{\"__proto__\":{\"value\":true},\"input\":\"synthetic\"},\"gateway_session_key\":\"memory\"}",
+      "sha256": "8092945bbe6c1b66dc606f1fc6617f7bef3ec78d2d7a9ca463949559a2f68462"
+    }
+  ]
+}

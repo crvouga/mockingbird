@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "patterns": [],
+  "suppressions": [
+    {
+      "fingerprint": "creation-entrypoint-drops-image-cmd|packages/service/docker/src/creation.ts",
+      "reason": "Pinned Docker Engine 29.1.0 commit 710302ecf2e958db92cb7d92f8838ea063a31765 daemon/commit.go lines72\u201379 merges image Cmd only when request Entrypoint has zero length. The US-005 explicit-entrypoint characterization passes and targeted review accepted this evidence.",
+      "scope": ["packages/service/docker/src/creation.ts"],
+      "last_reviewed_story": "US-005"
+    },
+    {
+      "fingerprint": "runs-model-falsy-default|packages/service/hermes/src/runs.ts",
+      "reason": "Pinned Hermes commit29112bef099274229cadff79cdff7bf7b99c4b77 api_server_runs.py line650 uses body.get(\"model\", self._model_name): only an absent key defaults. Explicit null and other falsy values remain supplied. US-017 characterization and targeted review confirm this behavior.",
+      "scope": ["packages/service/hermes/src/runs.ts"],
+      "last_reviewed_story": "US-017"
+    },
+    {
+      "fingerprint": "idempotency-submit-validates-after-pruning-and-lookup|packages/service/hermes/src/idempotency.ts",
+      "reason": "US-020 staged source calls runs.validate(body) before durable pruning and lookup. Regression verifies invalid keyed input returns400 and leaves expired durable history retrievable after logical restart; same-session targeted review passed. Reevaluate if this ordering changes.",
+      "scope": ["packages/service/hermes/src/idempotency.ts"],
+      "last_reviewed_story": "US-020"
+    },
+    {
+      "fingerprint": "pulls-list-updated-default-direction|packages/service/github/src/pulls.ts",
+      "reason": "Pinned GitHub2026-03-10 schema and official pulls documentation default direction to desc only for created or unspecified sort, otherwise asc. US027 attempt2 review passed and explicitly accepted this contradiction to the earlier finding.",
+      "scope": ["packages/service/github/src/pulls.ts"],
+      "last_reviewed_story": "US-027"
+    }
+  ]
+}

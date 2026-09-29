@@ -29,6 +29,7 @@ export const operationMetadata = (operation: OperationObject): OperationMetadata
   const supported = ext.supported ?? true
   const parity = ext.parity ?? {}
   return {
+    ...(ext.path === undefined ? {} : { path: ext.path }),
     supported,
     reason: typeof ext.reason === "string" ? ext.reason : undefined,
     parity: {

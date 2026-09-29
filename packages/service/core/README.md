@@ -164,3 +164,40 @@ enforces this rule.
 - `@crvouga/mockingbird-adapter-node` / `@crvouga/mockingbird-adapter-bun`: serve the result over HTTP.
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).
+
+### Accepted mutations and response loss
+
+Providers may call `markMutationAccepted(request, notes)` immediately after a
+mutation commits. The runtime captures that state once per active mutating request,
+before reply delivery, and records `accepted` and the acceptance `checkpoint` in
+the journal. An exception still propagates (dropped connection status 0, other
+exceptions status 500). Unmarked errors do not create checkpoints. Successful
+replies reuse the acceptance checkpoint when stored state and RNG are unchanged;
+subsequent state changes retain normal success checkpointing. The journal's
+checkpoint identifies acceptance, not necessarily final reply state.
+
+`forwardRequestContext(source, target)` preserves fault effects and the acceptance
+signal when a provider rebuilds a Request. Signals outside an active runtime
+request are no-ops. Mark only committed mutations, not validation or mere receipt.
+The optional synchronous `beforeRestore(instance)` runtime hook releases transient
+handles before replacing that instance's storage on checkout or snapshot restore.
+Hooks should not throw or mutate durable state; handles themselves are not stored.
+
+### Node upgrade admission notes
+
+A Node-only transport may annotate its internal 200 response carrier with
+`{wireStatus: 101}` after admitting an upgrade. The shared runtime uses that
+status for metrics/journal and avoids automatic mutation checkpointing for the
+read-only upgrade. The transport must emit the actual 101 and keep ordinary
+Fetch callers out of this admission path; Web Response cannot represent 101.
+The annotation is private object metadata, not a client-controlled header.
+
+### Slash-bearing terminal path parameters
+
+Operations can opt into a terminal parameter spanning multiple path segments with
+`x-mockingbird: { path: { parameter: "ref" } }`. The named placeholder must be the
+last entire segment of the OpenAPI path. Add `allowEmpty: true` when the provider
+also accepts an omitted suffix (with or without its preceding slash). The handler
+receives the decoded parameter, or an empty string for that omitted suffix.
+Dispatch and runtime operation matching share this contract, including fault rules
+and journals. Unannotated parameters continue to match one segment.

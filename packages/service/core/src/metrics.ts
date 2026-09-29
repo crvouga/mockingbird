@@ -30,6 +30,10 @@ export type RequestLog = {
   ids?: Record<string, string>
   /** Set when the service created a resource the request referred to but that did not exist. */
   adopted?: boolean
+  /** Explicit durable acceptance, independent of response delivery. */
+  accepted?: boolean
+  /** Checkpoint captured at explicit acceptance. */
+  checkpoint?: string
   /** Set on a rejection (status ≥ 400) the mock produced itself, never on a scripted fault. */
   request?: RejectedRequest
   /** The validation issues behind a rejection, when the service found any. */

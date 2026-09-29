@@ -105,6 +105,22 @@
     "logo": "/brands/daily.png",
     "logoSource": "site"
   },
+  "docker": {
+    "vendor": "Docker",
+    "website": "https://www.docker.com",
+    "docs": "https://docs.docker.com/reference/api/engine/version/v1.52/",
+    "description": "Docker Engine provides a public API for container lifecycle and attached streams.",
+    "input": {
+      "website": "https://www.docker.com",
+      "docs": "https://docs.docker.com/reference/api/engine/version/v1.52/",
+      "description": "Docker Engine provides a public API for container lifecycle and attached streams.",
+      "name": "Docker",
+      "icon": "docker"
+    },
+    "color": "#2496ED",
+    "logo": "/brands/docker.svg",
+    "logoSource": "simple-icons"
+  },
   "dynamodb": {
     "vendor": "Amazon DynamoDB",
     "website": "https://aws.amazon.com/dynamodb/",
@@ -209,6 +225,20 @@
     "logo": "/brands/genebygene.png",
     "logoSource": "site"
   },
+  "github": {
+    "vendor": "GitHub",
+    "website": "https://github.com",
+    "docs": "https://docs.github.com/en/rest",
+    "description": "GitHub provides repository, Git reference and pull-request REST APIs.",
+    "input": {
+      "website": "https://github.com",
+      "docs": "https://docs.github.com/en/rest",
+      "description": "GitHub provides repository, Git reference and pull-request REST APIs."
+    },
+    "color": "#181717",
+    "logo": "/brands/github.svg",
+    "logoSource": "simple-icons"
+  },
   "google-calendar": {
     "vendor": "Google Calendar",
     "website": "https://workspace.google.com/products/calendar/",
@@ -246,6 +276,20 @@
     },
     "color": null,
     "logo": "/brands/healthie.png",
+    "logoSource": "site"
+  },
+  "hermes": {
+    "vendor": "Hermes Agent",
+    "website": "https://hermes-agent.nousresearch.com",
+    "docs": "https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/",
+    "description": "Hermes Agent exposes asynchronous public peer-run APIs.",
+    "input": {
+      "website": "https://hermes-agent.nousresearch.com",
+      "docs": "https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/",
+      "description": "Hermes Agent exposes asynchronous public peer-run APIs."
+    },
+    "color": "#0000F2",
+    "logo": "/brands/hermes.ico",
     "logoSource": "site"
   },
   "intercom": {

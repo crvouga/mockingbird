@@ -81,7 +81,9 @@ export {
   DroppedConnectionError,
   faultEffect,
   faultEffects,
+  forwardRequestContext,
   MOCKINGBIRD_HEADER,
+  markMutationAccepted,
 } from "./runtime.js"
 export type { S3Target } from "./s3.js"
 export { putObject, signV4 } from "./s3.js"

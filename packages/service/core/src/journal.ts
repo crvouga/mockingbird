@@ -79,6 +79,8 @@ export const createJournal = (size: number = DEFAULT_JOURNAL_SIZE): Journal => {
 
 /** What a service knows about a request that the runtime cannot see from outside. */
 export type ResponseNotes = {
+  /** Node upgrade admission: actual wire status; the Fetch carrier remains 200. */
+  wireStatus?: 101
   /** Resource ids the handler touched, e.g. `{ userId, orderId }`. */
   ids?: Record<string, string>
   /** Set when the handler created a resource the request referred to but did not exist. */

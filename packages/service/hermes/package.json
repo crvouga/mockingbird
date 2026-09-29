@@ -1,0 +1,92 @@
+{
+  "name": "@crvouga/mockingbird-service-hermes",
+  "version": "0.0.0-development",
+  "description": "Hermes peer-run API mock with portable scripted lifecycle controls.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "API_EVIDENCE.md",
+    "SUPPORT.md",
+    "oracle",
+    "evidence"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-hermes": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/hermes"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/hermes#readme",
+  "keywords": [
+    "mockingbird",
+    "service",
+    "hermes",
+    "peer-runs"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "infrastructure",
+    "displayName": "Hermes Agent",
+    "vendor": {
+      "website": "https://hermes-agent.nousresearch.com",
+      "docs": "https://hermes-agent.nousresearch.com/docs/user-guide/features/api-server/",
+      "description": "Hermes Agent exposes asynchronous public peer-run APIs."
+    },
+    "status": "wip",
+    "playground": {
+      "operation": "RunCreate"
+    }
+  },
+  "scripts": {
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "hono": "4.11.9"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "name": "@crvouga/mockingbird-service-docker",
+  "version": "0.0.0-development",
+  "description": "Stateful Docker Engine API v1.52 mock with portable controls and Node transport.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "API_EVIDENCE.md",
+    "SUPPORT.md",
+    "ORACLE.md",
+    "evidence",
+    "scripts"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-docker": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/docker"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/docker#readme",
+  "keywords": [
+    "mockingbird",
+    "service",
+    "docker",
+    "containers"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "infrastructure",
+    "displayName": "Docker Engine",
+    "vendor": {
+      "website": "https://www.docker.com",
+      "docs": "https://docs.docker.com/reference/api/engine/version/v1.52/",
+      "description": "Docker Engine provides a public API for container lifecycle and attached streams.",
+      "name": "Docker",
+      "icon": "docker"
+    },
+    "status": "wip",
+    "playground": {
+      "operation": "SystemVersion"
+    }
+  },
+  "scripts": {
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "hono": "4.11.9"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*"
+  }
+}

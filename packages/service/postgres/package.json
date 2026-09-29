@@ -97,16 +97,16 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@biomejs/biome": "^2.5.8",
-    "@electric-sql/pglite": "^0.5.5",
+    "@biomejs/biome": "^2.5.14",
+    "@electric-sql/pglite": "^0.5.8",
     "@types/bun": "latest",
     "@types/pg": "^8.23.1",
     "embedded-postgres": "18.3.0-beta.17",
     "esbuild": "^0.28.2",
-    "fast-check": "^4.1.1",
+    "fast-check": "^4.10.2",
     "pg": "^8.23.0",
-    "publint": "^0.3.23",
-    "typescript": "^5.8.3"
+    "publint": "^0.3.24",
+    "typescript": "^5.9.3"
   },
   "engines": {
     "bun": ">=1.1.0",

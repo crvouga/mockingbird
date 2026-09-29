@@ -94,14 +94,14 @@
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
-    "@biomejs/biome": "^2.5.8",
+    "@biomejs/biome": "^2.5.14",
     "@types/bun": "latest",
-    "alasql": "^4.17.3",
+    "alasql": "^4.19.1",
     "esbuild": "^0.28.2",
-    "fast-check": "^4.1.1",
-    "publint": "^0.3.23",
+    "fast-check": "^4.10.2",
+    "publint": "^0.3.24",
     "sql.js": "^1.14.2",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "wa-sqlite": "^1.0.0"
   },
   "engines": {

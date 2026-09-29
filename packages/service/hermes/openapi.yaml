@@ -1,0 +1,342 @@
+openapi: 3.1.0
+info:
+  title: Hermes Agent peer runs (Mockingbird)
+  version: "2026.8.31"
+  description: Pinned public peer-run submission and polling with explicit synthetic
+    observations. No agent or inference executes.
+  x-mockingbird-upstream:
+    url: https://github.com/NousResearch/hermes-agent/blob/29112bef099274229cadff79cdff7bf7b99c4b77/gateway/platforms/api_server_runs.py
+    note: Pinned v2026.8.31 route inventory; see API_EVIDENCE.md for researched behavior.
+servers:
+  - url: http://hermes.mock
+paths:
+  /v1/runs:
+    post:
+      operationId: RunCreate
+      summary: Admit a synthetic tracked run
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            example:
+              input: synthetic playground prompt
+            schema:
+              type: object
+              required: [input]
+              properties:
+                input: {}
+                model: {}
+                session_id: {}
+                instructions: {}
+                conversation_history: {}
+                previous_response_id: {}
+              additionalProperties: true
+      responses:
+        "202":
+          description: Admission accepted; execution is still queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [run_id, status, replayed]
+                properties:
+                  run_id:
+                    type: string
+                    x-mockingbird-resource:
+                      type: run
+                      identity: true
+                  status:
+                    type: string
+                    enum: [started, queued, running, waiting_for_approval, stopping, completed, failed, cancelled, interrupted]
+                  replayed:
+                    type: boolean
+        "400":
+          description: Pinned submission validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesError"
+        "409":
+          description: Idempotency key reused with a different request fingerprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesError"
+        "429":
+          description: Pinned capacity throttle, available as an explicit fault scenario
+          headers:
+            Retry-After:
+              schema:
+                type: string
+                const: "1"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThrottleError"
+        "503":
+          description: Pinned gateway-draining envelope, available as an explicit fault scenario
+          headers:
+            Retry-After:
+              schema:
+                type: string
+                const: "1"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesError"
+        "501":
+          description: Explicit unsupported request outside the implemented subset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MockError"
+  /v1/runs/{run_id}:
+    get:
+      operationId: RunGet
+      summary: Poll a tracked run without advancing execution
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: run
+      responses:
+        "200":
+          description: Current public run observation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Run"
+        "404":
+          description: Run not found in the selected namespace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesError"
+  /v1/runs/{run_id}/stop:
+    post:
+      operationId: RunStop
+      summary: Request run interruption without assuming execution has settled
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+            x-mockingbird-resource-ref:
+              type: run
+      responses:
+        "200":
+          description: Stop accepted, or an unchanged terminal observation
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [run_id, status]
+                    additionalProperties: false
+                    properties:
+                      run_id:
+                        type: string
+                      status:
+                        type: string
+                        const: stopping
+                  - $ref: "#/components/schemas/Run"
+        "404":
+          description: Run missing or inaccessible in the selected synthetic scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesError"
+        "409":
+          description: Active run belongs to a different live modeled gateway
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HermesError"
+  /v1/runs/{run_id}/events:
+    get:
+      operationId: RunEvents
+      summary: Stream run events
+      x-mockingbird:
+        supported: false
+        reason: SSE is outside the public peer-run mock subset.
+        parity:
+          enabled: false
+          reason: No provider operation is implemented in the scaffold.
+          safe: true
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Explicit Mockingbird-only unsupported operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MockError"
+  /v1/runs/{run_id}/approval:
+    post:
+      operationId: RunApproval
+      summary: Resolve run approval
+      x-mockingbird:
+        supported: false
+        reason: Host tool approval execution is outside this mock.
+        parity:
+          enabled: false
+          reason: No provider operation is implemented in the scaffold.
+          safe: false
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Explicit Mockingbird-only unsupported operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MockError"
+  /v1/runs/{run_id}/steer:
+    post:
+      operationId: RunSteer
+      summary: Steer active execution
+      x-mockingbird:
+        supported: false
+        reason: Agent execution and steering are outside this mock.
+        parity:
+          enabled: false
+          reason: No provider operation is implemented in the scaffold.
+          safe: false
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "501":
+          description: Explicit Mockingbird-only unsupported operation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MockError"
+components:
+  schemas:
+    HermesError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, type, param, code]
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+              const: invalid_request_error
+            param:
+              type: "null"
+            code:
+              type: [string, "null"]
+    ThrottleError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, type, param, code]
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+              const: rate_limit_error
+            param:
+              type: "null"
+            code:
+              type: string
+              const: rate_limit_exceeded
+    Run:
+      type: object
+      required: [object, run_id, status, created_at, updated_at, session_id, model]
+      properties:
+        object:
+          type: string
+          const: hermes.run
+        run_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, waiting_for_approval, stopping, completed, failed, cancelled, interrupted]
+        created_at:
+          type: number
+        updated_at:
+          type: number
+        session_id: {}
+        model: {}
+        last_event:
+          type: string
+        output:
+          type: string
+        error:
+          type: string
+        pending_steer:
+          type: string
+        approval:
+          type: object
+          additionalProperties: true
+        usage:
+          type: object
+          required: [input_tokens, output_tokens, total_tokens]
+          properties:
+            input_tokens:
+              type: integer
+              minimum: 0
+            output_tokens:
+              type: integer
+              minimum: 0
+            total_tokens:
+              type: integer
+              minimum: 0
+    MockError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, type, param, code]
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+              const: mockingbird_unsupported
+            param:
+              type: "null"
+            code:
+              type: string
+              const: operation_not_implemented

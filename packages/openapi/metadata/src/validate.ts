@@ -66,6 +66,17 @@ export const validateMetadata = (document: OpenAPIDocument): string[] => {
     const raw = operation.operation[EXTENSION_KEYS.operation]
     if (raw !== undefined && !isRecord(raw))
       issues.push(`${label}: ${EXTENSION_KEYS.operation} must be an object`)
+    if (isRecord(raw) && raw.path !== undefined) {
+      const path = raw.path
+      if (
+        !isRecord(path) ||
+        typeof path.parameter !== "string" ||
+        !path.parameter ||
+        !operation.path.endsWith(`/{${path.parameter}}`) ||
+        (path.allowEmpty !== undefined && typeof path.allowEmpty !== "boolean")
+      )
+        issues.push(`${label}: path needs a terminal { parameter, allowEmpty?: boolean }`)
+    }
     const meta = operationMetadata(operation.operation)
     if (!meta.supported && meta.reason === undefined)
       issues.push(`${label}: unsupported operations need a reason`)

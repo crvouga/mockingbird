@@ -1,0 +1,616 @@
+{
+  "release": "v2026.8.31",
+  "commit": "29112bef099274229cadff79cdff7bf7b99c4b77",
+  "sources": {
+    "api_server_runs.py": {
+      "path": "gateway/platforms/api_server_runs.py",
+      "sha256": "048ae843592d701ff47437bd8edd47cd64ca6c0fdf88a71045bdb6fb337fbc63"
+    },
+    "api_server_run_idempotency.py": {
+      "path": "gateway/platforms/api_server_run_idempotency.py",
+      "sha256": "746904b3b6ed45d8359655b2e87c1f101394b13f6253e718ac9a83acd46174f2"
+    },
+    "api_server.py": {
+      "path": "gateway/platforms/api_server.py",
+      "sha256": "6aec6687d47c81b3567e930882a499c5c5c041ecbe40e1d08f93038212401962"
+    },
+    "hermes_state.py": {
+      "path": "hermes_state.py",
+      "sha256": "696fd2d37d66a599228f5b1be5d5b76423b744149c83a2fbd59bf3f45a5f3891"
+    },
+    "sqlite_runtime.py": {
+      "path": "hermes_cli/sqlite_runtime.py",
+      "sha256": "682ae7f6a783673b7687377a37f210f5b1f86f54d227baed95df279bdd561310"
+    },
+    "agent_redact.py": {
+      "path": "agent/redact.py",
+      "sha256": "db98c5b9cf5727abbb471b5009d19d3f8230863869cde207d53c5e5d8d4831f0"
+    },
+    "file_safety.py": {
+      "path": "agent/file_safety.py",
+      "sha256": "f2cb782cda3f091acba507e3af6a31e7326770dfc6b75657cd5adb1006521db9"
+    },
+    "interrupt_compat.py": {
+      "path": "agent/interrupt_compat.py",
+      "sha256": "f10ecfe97b6be6d150c3e41d5d377a9ca845e74d454240f2d6506f753dc23441"
+    },
+    "room_grants.py": {
+      "path": "gateway/platforms/api_server_room_grants.py",
+      "sha256": "d6e51eae92043ed8ab116e4f555db3c100829c93b61d516e31fc239ff90da204"
+    },
+    "gateway_status.py": {
+      "path": "gateway/status.py",
+      "sha256": "c7f2615117643f536f4d678a185dc1f9e6e407daea79e85f351613efac0ecefd"
+    },
+    "pyproject.toml": {
+      "path": "pyproject.toml",
+      "sha256": "c70c8b52f6cc08a4e65f0fc1713c26814fd4f19811bc7e01de645009b2a76600"
+    }
+  },
+  "epochs": [
+    {
+      "commit": "29112bef099274229cadff79cdff7bf7b99c4b77",
+      "python": "3.11.16",
+      "aiohttp": "3.14.3",
+      "sqlite": "3.53.1",
+      "pid": 86135,
+      "journal_mode": "wal",
+      "dependencies": {
+        "aiohttp": "3.14.3",
+        "aiohappyeyeballs": "2.7.1",
+        "aiosignal": "1.4.0",
+        "attrs": "26.1.0",
+        "frozenlist": "1.8.0",
+        "idna": "3.20",
+        "multidict": "6.9.1",
+        "propcache": "0.5.4",
+        "typing-extensions": "4.16.0",
+        "yarl": "1.25.1"
+      },
+      "definitions": {
+        "file_safety.py": ["_BLOCKED_PROJECT_ENV_BASENAMES"],
+        "hermes_state.py": [
+          "WalUnsupportedError",
+          "_WAL_INCOMPAT_MARKERS",
+          "_WAL_SIZE_LIMIT_BYTES",
+          "_apply_delete_for_wal_reset_bug",
+          "_apply_macos_checkpoint_barrier",
+          "_apply_wal_size_limit",
+          "_database_has_content",
+          "_delete_overridden_warned_lock",
+          "_delete_overridden_warned_paths",
+          "_enforce_macos_synchronous_full",
+          "_journal_upgrade_warned_lock",
+          "_journal_upgrade_warned_paths",
+          "_log_configured_delete_overridden_once",
+          "_log_journal_mode_upgrade_once",
+          "_log_wal_fallback_once",
+          "_log_wal_reset_bug_once",
+          "_on_disk_journal_mode",
+          "_set_journal_mode_no_wait",
+          "_wal_fallback_warned_lock",
+          "_wal_fallback_warned_paths",
+          "_wal_reset_bug_warned_lock",
+          "_wal_reset_bug_warned_paths",
+          "_wal_reset_repair_hint",
+          "apply_wal_with_fallback",
+          "is_sqlite_wal_reset_vulnerable",
+          "resolve_journal_mode"
+        ],
+        "gateway_status.py": [
+          "_IS_WINDOWS",
+          "_get_process_start_time",
+          "_pid_exists",
+          "get_process_start_time"
+        ],
+        "api_server.py": [
+          "_api_request_profile",
+          "_approval_event_choices",
+          "_check_auth",
+          "_clean_request_string",
+          "_expected_api_key",
+          "_openai_error",
+          "_parse_session_key_header",
+          "_redact_api_error_text",
+          "_request_agent_overrides"
+        ],
+        "room_grants.py": ["_room_grant_token"]
+      }
+    },
+    {
+      "commit": "29112bef099274229cadff79cdff7bf7b99c4b77",
+      "python": "3.11.16",
+      "aiohttp": "3.14.3",
+      "sqlite": "3.53.1",
+      "pid": 86144,
+      "journal_mode": "wal",
+      "dependencies": {
+        "aiohttp": "3.14.3",
+        "aiohappyeyeballs": "2.7.1",
+        "aiosignal": "1.4.0",
+        "attrs": "26.1.0",
+        "frozenlist": "1.8.0",
+        "idna": "3.20",
+        "multidict": "6.9.1",
+        "propcache": "0.5.4",
+        "typing-extensions": "4.16.0",
+        "yarl": "1.25.1"
+      },
+      "definitions": {
+        "file_safety.py": ["_BLOCKED_PROJECT_ENV_BASENAMES"],
+        "hermes_state.py": [
+          "WalUnsupportedError",
+          "_WAL_INCOMPAT_MARKERS",
+          "_WAL_SIZE_LIMIT_BYTES",
+          "_apply_delete_for_wal_reset_bug",
+          "_apply_macos_checkpoint_barrier",
+          "_apply_wal_size_limit",
+          "_database_has_content",
+          "_delete_overridden_warned_lock",
+          "_delete_overridden_warned_paths",
+          "_enforce_macos_synchronous_full",
+          "_journal_upgrade_warned_lock",
+          "_journal_upgrade_warned_paths",
+          "_log_configured_delete_overridden_once",
+          "_log_journal_mode_upgrade_once",
+          "_log_wal_fallback_once",
+          "_log_wal_reset_bug_once",
+          "_on_disk_journal_mode",
+          "_set_journal_mode_no_wait",
+          "_wal_fallback_warned_lock",
+          "_wal_fallback_warned_paths",
+          "_wal_reset_bug_warned_lock",
+          "_wal_reset_bug_warned_paths",
+          "_wal_reset_repair_hint",
+          "apply_wal_with_fallback",
+          "is_sqlite_wal_reset_vulnerable",
+          "resolve_journal_mode"
+        ],
+        "gateway_status.py": [
+          "_IS_WINDOWS",
+          "_get_process_start_time",
+          "_pid_exists",
+          "get_process_start_time"
+        ],
+        "api_server.py": [
+          "_api_request_profile",
+          "_approval_event_choices",
+          "_check_auth",
+          "_clean_request_string",
+          "_expected_api_key",
+          "_openai_error",
+          "_parse_session_key_header",
+          "_redact_api_error_text",
+          "_request_agent_overrides"
+        ],
+        "room_grants.py": ["_room_grant_token"]
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "label": "cancelled:admission",
+      "status": 202,
+      "observation": {
+        "run_id": "cancelled",
+        "status": "started",
+        "replayed": false
+      }
+    },
+    {
+      "label": "cancelled:running",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "cancelled",
+        "status": "running",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "cancelled",
+        "model": "hermes-agent"
+      }
+    },
+    {
+      "label": "active replay",
+      "status": 202,
+      "observation": {
+        "run_id": "cancelled",
+        "status": "running",
+        "replayed": true
+      }
+    },
+    {
+      "label": "changed body conflicts",
+      "status": 409,
+      "observation": {
+        "error": {
+          "message": "Idempotency-Key was already used with a different request payload",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "idempotency_key_conflict"
+        }
+      }
+    },
+    {
+      "label": "cancelled:stop",
+      "status": 200,
+      "observation": {
+        "run_id": "cancelled",
+        "status": "stopping"
+      }
+    },
+    {
+      "label": "cancelled:cancelled",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "cancelled",
+        "status": "cancelled",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "cancelled",
+        "model": "hermes-agent",
+        "last_event": "run.cancelled"
+      }
+    },
+    {
+      "label": "terminal replay",
+      "status": 202,
+      "observation": {
+        "run_id": "cancelled",
+        "status": "cancelled",
+        "replayed": true
+      }
+    },
+    {
+      "label": "completion-race:admission",
+      "status": 202,
+      "observation": {
+        "run_id": "completion-race",
+        "status": "started",
+        "replayed": false
+      }
+    },
+    {
+      "label": "completion-race:running",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "completion-race",
+        "status": "running",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "completion-race",
+        "model": "hermes-agent"
+      }
+    },
+    {
+      "label": "completion-race:stop",
+      "status": 200,
+      "observation": {
+        "run_id": "completion-race",
+        "status": "stopping"
+      }
+    },
+    {
+      "label": "completion-race:completed",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "completion-race",
+        "status": "completed",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "completion-race",
+        "model": "hermes-agent",
+        "last_event": "run.completed",
+        "output": "synthetic output",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0
+        }
+      }
+    },
+    {
+      "label": "failure:admission",
+      "status": 202,
+      "observation": {
+        "run_id": "failure",
+        "status": "started",
+        "replayed": false
+      }
+    },
+    {
+      "label": "failure:running",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "failure",
+        "status": "running",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "failure",
+        "model": "hermes-agent"
+      }
+    },
+    {
+      "label": "failure:failed",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "failure",
+        "status": "failed",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "failure",
+        "model": "hermes-agent",
+        "error": "synthetic failure",
+        "last_event": "run.failed"
+      }
+    },
+    {
+      "label": "cache-boundary:admission",
+      "status": 202,
+      "observation": {
+        "run_id": "cache-boundary",
+        "status": "started",
+        "replayed": false
+      }
+    },
+    {
+      "label": "cache-boundary:running",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "cache-boundary",
+        "status": "running",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "cache-boundary",
+        "model": "hermes-agent"
+      }
+    },
+    {
+      "label": ":completed",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "cache-boundary",
+        "status": "completed",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "cache-boundary",
+        "model": "hermes-agent",
+        "output": "synthetic output",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0
+        },
+        "last_event": "run.completed"
+      }
+    },
+    {
+      "label": "cache TTL equality retains keyless terminal observation",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "cache-boundary",
+        "status": "completed",
+        "updated_at": 1700000000,
+        "created_at": 1700000000,
+        "session_id": "cache-boundary",
+        "model": "hermes-agent",
+        "output": "synthetic output",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0
+        },
+        "last_event": "run.completed"
+      }
+    },
+    {
+      "label": "cache TTL strictly greater expires keyless terminal observation",
+      "status": 404,
+      "observation": {
+        "error": {
+          "message": "Run not found: cache-boundary",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "run_not_found"
+        }
+      }
+    },
+    {
+      "label": "unfinished:admission",
+      "status": 202,
+      "observation": {
+        "run_id": "unfinished",
+        "status": "started",
+        "replayed": false
+      }
+    },
+    {
+      "label": "unfinished:running",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "unfinished",
+        "status": "running",
+        "updated_at": 1700003600.001,
+        "created_at": 1700003600.001,
+        "session_id": "unfinished",
+        "model": "hermes-agent"
+      }
+    },
+    {
+      "label": "keyless:admission",
+      "status": 202,
+      "observation": {
+        "run_id": "keyless",
+        "status": "started",
+        "replayed": false
+      }
+    },
+    {
+      "label": "keyless:running",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "keyless",
+        "status": "running",
+        "updated_at": 1700003600.001,
+        "created_at": 1700003600.001,
+        "session_id": "keyless",
+        "model": "hermes-agent"
+      }
+    },
+    {
+      "label": "terminal survives real process restart",
+      "status": 200,
+      "observation": {
+        "created_at": 1700000000,
+        "last_event": "run.completed",
+        "model": "hermes-agent",
+        "object": "hermes.run",
+        "output": "synthetic output",
+        "run_id": "completion-race",
+        "session_id": "completion-race",
+        "status": "completed",
+        "updated_at": 1700000000,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0
+        }
+      }
+    },
+    {
+      "label": "unfinished run interrupted after real process restart",
+      "status": 200,
+      "observation": {
+        "created_at": 1700003600.001,
+        "model": "hermes-agent",
+        "object": "hermes.run",
+        "run_id": "unfinished",
+        "session_id": "unfinished",
+        "status": "interrupted",
+        "updated_at": 1700003600.001,
+        "error": "The gateway restarted before this run settled.",
+        "last_event": "run.interrupted"
+      }
+    },
+    {
+      "label": "keyless run lost after real process restart",
+      "status": 404,
+      "observation": {
+        "error": {
+          "message": "Run not found: keyless",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "run_not_found"
+        }
+      }
+    },
+    {
+      "label": "interrupted reservation replay",
+      "status": 202,
+      "observation": {
+        "run_id": "unfinished",
+        "status": "interrupted",
+        "replayed": true
+      }
+    },
+    {
+      "label": "durable TTL equality retains reservation",
+      "status": 202,
+      "observation": {
+        "run_id": "completion-race",
+        "status": "completed",
+        "replayed": true
+      }
+    },
+    {
+      "label": "GET alone does not prune durable history",
+      "status": 200,
+      "observation": {
+        "created_at": 1700000000,
+        "last_event": "run.completed",
+        "model": "hermes-agent",
+        "object": "hermes.run",
+        "output": "synthetic output",
+        "run_id": "completion-race",
+        "session_id": "completion-race",
+        "status": "completed",
+        "updated_at": 1700000000,
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0
+        }
+      }
+    },
+    {
+      "label": "renewed:admission",
+      "status": 202,
+      "observation": {
+        "run_id": "renewed",
+        "status": "started",
+        "replayed": false
+      }
+    },
+    {
+      "label": "renewed:running",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "renewed",
+        "status": "running",
+        "updated_at": 1700086400.001,
+        "created_at": 1700086400.001,
+        "session_id": "renewed",
+        "model": "hermes-agent"
+      }
+    },
+    {
+      "label": "pruned and swept result returns ordinary404",
+      "status": 404,
+      "observation": {
+        "error": {
+          "message": "Run not found: completion-race",
+          "type": "invalid_request_error",
+          "param": null,
+          "code": "run_not_found"
+        }
+      }
+    },
+    {
+      "label": "completion-race:completed",
+      "status": 200,
+      "observation": {
+        "object": "hermes.run",
+        "run_id": "renewed",
+        "status": "completed",
+        "updated_at": 1700086400.001,
+        "created_at": 1700086400.001,
+        "session_id": "renewed",
+        "model": "hermes-agent",
+        "output": "synthetic output",
+        "usage": {
+          "input_tokens": 0,
+          "output_tokens": 0,
+          "total_tokens": 0
+        },
+        "last_event": "run.completed"
+      }
+    }
+  ],
+  "limitations": [
+    "scripted executor; no inference",
+    "ordinary default test listener; no credential enforcement claim",
+    "routing/session/approval/process-tool integrations substituted; no hosted rooms",
+    "controlled clock and explicit sweep; no background timing claim"
+  ]
+}
