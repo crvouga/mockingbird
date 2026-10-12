@@ -50,24 +50,33 @@ default.
 | Both webhook receivers | `INTERCOM_WEBHOOK_SECRET` = `--webhook-secret` |
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-intercom"
+import { IntercomClient } from "intercom-client"
+import { createServer } from "@crvouga/mockingbird-service-intercom/server"
 
-const intercom = createRuntime({
+const emulator = await createServer({
   webhooks: {
     urls: ["http://127.0.0.1:3000/messaging/webhook", "http://127.0.0.1:4000/v1/webhooks/intercom"],
     secret: "whsec-test",
   },
 })
-// …the member opens a conversation through the app (POST /conversations)…
 
-// Support answers: appends an admin comment and fires the signed conversation.admin.replied.
-await intercom.fetch(
-  new Request("http://intercom.test/__admin/conversations/215470000000001/admin-reply", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ adminId: "1000001", body: "Your results are in" }),
-  }),
-)
+// The application's Intercom client. Only baseUrl changes.
+const intercom = new IntercomClient({ token: "any-token", baseUrl: emulator.url })
+const contact = await intercom.contacts.create({ role: "user", external_id: "1652", email: "ada@example.com" })
+// The member opens a conversation through the app.
+const message = await intercom.conversations.create({
+  from: { type: "user", id: contact.id ?? "" },
+  body: "Are my results in?",
+})
+
+// Test control. Support answers: appends an admin comment and fires the signed conversation.admin.replied.
+await fetch(`${emulator.url}/__admin/conversations/${message.conversation_id}/admin-reply`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ adminId: "1000001", body: "Your results are in" }),
+})
+
+await emulator.close()
 ```
 
 ### Routes

@@ -2,6 +2,7 @@ import { listOperations, type OpenAPIDocument } from "@crvouga/mockingbird-opena
 import { operationMetadata } from "@crvouga/mockingbird-openapi-metadata"
 import { type APIOptions, bootSqlite, requestBaseUrl } from "@crvouga/mockingbird-service"
 import { clearNamespace, type SqliteClient } from "@crvouga/mockingbird-sqlite"
+import { useRandom, withRandom } from "./vendor/core/crypto.js"
 import {
   type AppEnv,
   cors,
@@ -30,6 +31,11 @@ export type ProviderOptions = APIOptions & {
   fallbackUser?: AuthFallback
   publicNamespace?: string
   adminPrefix?: string
+  /**
+   * A seeded stream of `[0, 1)` that ids and tokens are minted from, so a run replays from
+   * its seed. Default: the platform's randomness.
+   */
+  random?: () => number
 }
 
 const fallbackUsers: Record<string, AuthFallback> = {
@@ -87,6 +93,11 @@ export class ProviderAPI {
   }
   private buildApp(baseUrl: string): Hono<AppEnv> {
     const app = new Hono<AppEnv>()
+    // Whatever this request mints comes from this instance's stream, not the last caller's.
+    app.use("*", async (_c, next) => {
+      useRandom(this.options.random)
+      await next()
+    })
     const docs = `https://docs.mockingbird.dev/services/${this.plugin.name}`
     app.onError(createApiErrorHandler(docs))
     app.use("*", cors())
@@ -105,7 +116,9 @@ export class ProviderAPI {
     return app
   }
   private initialize(): void {
-    this.plugin.seed?.(this.store, this.options.baseUrl ?? this.activeBaseUrl)
+    withRandom(this.options.random, () =>
+      this.plugin.seed?.(this.store, this.options.baseUrl ?? this.activeBaseUrl),
+    )
     for (const [token, user] of Object.entries(this.options.tokens ?? {}))
       this.tokenMap.set(token, user)
     this.store.setData("tokens", serializeTokenMap(this.tokenMap))
@@ -114,7 +127,9 @@ export class ProviderAPI {
   }
   /** Persist seed configuration before the shared runtime captures its initial checkpoint. */
   seed(config: unknown, apply: (store: Store, baseUrl: string, config: never) => void): void {
-    apply(this.store, this.options.baseUrl ?? this.activeBaseUrl, config as never)
+    withRandom(this.options.random, () =>
+      apply(this.store, this.options.baseUrl ?? this.activeBaseUrl, config as never),
+    )
     this.store.flush()
   }
   configureFixtures(

@@ -42,26 +42,41 @@ npx mockingbird-pharmetika serve --port 8801 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-pharmetika"
+import { createServer } from "@crvouga/mockingbird-service-pharmetika/server"
 
-const pmk = createRuntime({
+// Test setup: a local Pharmetika that posts its status webhooks to the app.
+const server = await createServer({
   webhooks: { url: "http://127.0.0.1:3000/prescriptions/webhooks/pharmetika", secret: "whsec" },
 })
-const admin = (path: string, body: unknown) =>
-  pmk.fetch(
-    new Request(`http://pharmetika.test/__admin${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  )
+const baseUrl = server.url // the app's PHARMETIKA_API_URL
 
-// …the app validates and submits PUT /api/v5/provider_portal/medication_order/id/<uuid>/submit…
+// Application code: the order it submits to Pharmetika.
+const id = "0192f0c8-7a3e-7cc1-9f5d-3b2a1c4d5e6f"
+await fetch(`${baseUrl}/api/v5/provider_portal/medication_order/id/${id}/submit`, {
+  method: "PUT",
+  headers: { "x-pmk-authentication-token": "pmk_test", "content-type": "application/json" },
+  body: JSON.stringify({
+    clinic_identifier: "clinic-acme-0001",
+    medication_order_identifier: id,
+    patient: { identification: { patient_id: 1 } },
+    medication_requests: [
+      { product_identification: { product_identifier: "PMK-ENCLO-25" }, quantity_authorized: 1, sig: "daily" },
+    ],
+  }),
+})
 
-// Move the order the way the pharmacy would; each step posts the status webhook.
-await admin("/orders/<uuid>/transition", { to: "data_entry" })
-await admin("/orders/<uuid>/transition", { to: "shipped", tracking_id: "1Z999" })
-await admin("/orders/<uuid>/transition", { to: "completed" })
+// Test control: move the order the way the pharmacy would; each step posts the status webhook.
+const transition = (body: unknown) =>
+  fetch(`${baseUrl}/__admin/orders/${id}/transition`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+await transition({ to: "data_entry" })
+await transition({ to: "shipped", tracking_id: "1Z999" })
+await transition({ to: "completed" })
+
+await server.close()
 ```
 
 ### Routes

@@ -7,10 +7,31 @@ Stateful local emulator of Amazon Systems Manager Parameter Store. ESM; Node 22+
 ## Usage
 
 ```ts
+import { GetParameterCommand, PutParameterCommand, SSMClient } from "@aws-sdk/client-ssm"
 import { createServer } from "@crvouga/mockingbird-service-ssm/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: start the emulator and point the SDK's endpoint at it.
+const server = await createServer()
+const ssm = new SSMClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the SSM SDK calls it already makes.
+await ssm.send(
+  new PutParameterCommand({
+    Name: "/app/database-url",
+    Value: "postgres://localhost/app",
+    Type: "SecureString",
+  }),
+)
+const { Parameter } = await ssm.send(
+  new GetParameterCommand({ Name: "/app/database-url", WithDecryption: true }),
+)
+console.log(Parameter?.Value, Parameter?.Version) // postgres://localhost/app 1
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

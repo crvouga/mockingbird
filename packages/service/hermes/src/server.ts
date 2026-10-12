@@ -23,6 +23,7 @@ export const serveTarget: ServeTarget = {
   create: (_values, common) =>
     createRuntime({
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
+      ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),
       ...(common.seed !== undefined ? { seed: common.seed } : {}),
       ...(common.onLog ? { onLog: common.onLog } : {}),
     }),

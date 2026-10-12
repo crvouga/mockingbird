@@ -7,10 +7,39 @@ Stateful local emulator of Amazon Resource Groups. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import {
+  CreateGroupCommand,
+  GetTagsCommand,
+  ResourceGroupsClient,
+} from "@aws-sdk/client-resource-groups"
 import { createServer } from "@crvouga/mockingbird-service-resource-groups/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the Resource Groups client your application already uses, pointed at the emulator.
+const server = await createServer()
+const resourceGroups = new ResourceGroupsClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code, unchanged.
+const { Group } = await resourceGroups.send(
+  new CreateGroupCommand({
+    Name: "checkout",
+    ResourceQuery: {
+      Type: "TAG_FILTERS_1_0",
+      Query: JSON.stringify({
+        ResourceTypeFilters: ["AWS::AllSupported"],
+        TagFilters: [{ Key: "team", Values: ["checkout"] }],
+      }),
+    },
+    Tags: { team: "checkout" },
+  }),
+)
+const { Tags } = await resourceGroups.send(new GetTagsCommand({ Arn: Group?.GroupArn }))
+// Tags is { team: "checkout" }
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

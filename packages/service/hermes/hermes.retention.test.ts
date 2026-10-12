@@ -150,7 +150,8 @@ test("Timeline restores cache, durable reservation, scheduler and clock together
   expect(
     (await call(runtime, "/__admin/branches/main/checkout", { checkpoint: cp.id })).status,
   ).toBe(200)
-  expect(clock.now()).toBe(base)
+  // The checkout rewinds the namespace's own clock; the base clock is not its to move.
+  expect(runtime.namespaceClock("a").now()).toBe(base)
   expect(await start(runtime, "timeline")).toEqual({
     run_id: run.run_id,
     status: "completed",

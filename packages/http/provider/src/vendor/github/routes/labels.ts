@@ -1,4 +1,5 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
+import { random } from "../../core/crypto.js";
 import type { Context } from "../../core/index.js";
 import type { RouteContext } from "../../core/index.js";
 import { ApiError, parseJsonBody, parsePagination, setLinkHeader } from "../../core/index.js";
@@ -80,7 +81,7 @@ function insertIssueEvent(
 }
 
 function randomLabelColor(): string {
-  return Math.floor(Math.random() * 0xffffff)
+  return Math.floor(random() * 0xffffff)
     .toString(16)
     .padStart(6, "0");
 }

@@ -13,17 +13,26 @@ bun add @crvouga/mockingbird-service-vibe
 ## Usage
 
 ```ts
-import { createRuntime, DEFAULT_ADVERTISER } from "@crvouga/mockingbird-service-vibe"
-const vibe = createRuntime({ rows: [{
-  advertiser_id: DEFAULT_ADVERTISER, impression_date: "2026-01-01", spend: "12.50",
+import { DEFAULT_ADVERTISER } from "@crvouga/mockingbird-service-vibe"
+import { createServer } from "@crvouga/mockingbird-service-vibe/server"
+
+// Test setup: a local Vibe with one spend row for the default client's advertiser.
+const advertiserId = DEFAULT_ADVERTISER
+const server = await createServer({ rows: [{
+  advertiser_id: advertiserId, impression_date: "2026-01-01", spend: "12.50",
 }] })
-const response = await vibe.fetch(new Request("http://vibe.test/reports", {
+const baseUrl = server.url
+
+// Application code: the report request it sends to Vibe.
+const response = await fetch(`${baseUrl}/reports`, {
   method: "POST",
   headers: { authorization: "Bearer mock_vibe_token", "x-vibe-revision": "2026-06-01", "content-type": "application/json" },
-  body: JSON.stringify({ start_date: "2026-01-01", end_date: "2026-01-02", advertiser_ids: [DEFAULT_ADVERTISER], dimensions: ["impression_date"], metrics: ["spend"] }),
-}))
+  body: JSON.stringify({ start_date: "2026-01-01", end_date: "2026-01-02", advertiser_ids: [advertiserId], dimensions: ["impression_date"], metrics: ["spend"] }),
+})
 const report = await response.json()
 console.log(report.id, report.status)
+
+await server.close()
 ```
 
 Run `mockingbird-vibe serve --port 12128`, then inject `http://localhost:12128` as the

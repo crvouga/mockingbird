@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -36,6 +37,8 @@ export type WorkOSRuntimeOptions = Omit<WorkOSAPIOptions, "namespace" | "now"> &
   seed?: string | number
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type WorkOSRuntime = ServiceRuntime<WorkOSAPI>

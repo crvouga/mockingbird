@@ -78,7 +78,10 @@ describe("the Mockingbird contract", () => {
     const listed = (await (await runtime.fetch(admin("/faults/presets"))).json()) as {
       presets: { name: string }[]
     }
-    expect(listed.presets.map((p) => p.name).sort()).toEqual(Object.keys(BEDROCK_PRESETS).sort())
+    // The emulator's own presets, beside the standard ones every emulator has.
+    expect(listed.presets.map((p) => p.name)).toEqual(
+      expect.arrayContaining(Object.keys(BEDROCK_PRESETS)),
+    )
     await runtime.fetch(
       admin("/faults", { preset: "throttling", count: 1 }, "POST", {
         "x-mockingbird-namespace": "w1",

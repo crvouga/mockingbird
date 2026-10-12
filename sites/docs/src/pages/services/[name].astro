@@ -425,6 +425,12 @@ const toc = [
     min-width: 12ch;
   }
 
+  /* An id may break anywhere, so on a phone the column needs a floor: the table
+     scrolls sideways instead of stacking the id two letters to a line. */
+  .ops-table td:nth-child(3) {
+    min-width: 180px;
+  }
+
   .op-id {
     display: block;
     font-family: var(--font-mono);

@@ -37,16 +37,24 @@ npx mockingbird-edamam serve --port 8824
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-edamam"
+import { createServer } from "@crvouga/mockingbird-service-edamam/server"
 
-const edamam = createRuntime()
-const parsed = await edamam.fetch(
-  new Request(
-    "http://edamam.test/api/food-database/v2/parser?app_id=a&app_key=k&ingr=2%20large%20eggs&nutrition-type=logging",
-  ),
-)
+// Test setup: the emulator. The application gets EDAMAM_BASE_URL = server.url.
+const server = await createServer()
+const baseUrl = server.url
+
+// Application code: the Food Database request it sends to api.edamam.com.
+const query = new URLSearchParams({
+  app_id: "a",
+  app_key: "k",
+  ingr: "2 large eggs",
+  "nutrition-type": "logging",
+})
+const response = await fetch(`${baseUrl}/api/food-database/v2/parser?${query}`)
+const parsed = await response.json()
 // → {text, parsed: [{food: {foodId: "food_egg", label: "Egg", nutrients: {ENERC_KCAL: 143, …}},
 //     quantity: 2, measure: {uri: "…#Measure_large", label: "Large", weight: 50}}], hints: […]}
+await server.close()
 ```
 
 ### Routes

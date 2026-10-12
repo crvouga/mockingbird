@@ -15,22 +15,30 @@ bun add @crvouga/mockingbird-service-recaptcha
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-recaptcha"
+import { createServer } from "@crvouga/mockingbird-service-recaptcha/server"
 
-const runtime = createRuntime()
-const issued = await runtime.fetch(new Request("http://mock.test/__admin/issue", {
+// Test setup: a local reCAPTCHA, and a token like the one grecaptcha.execute hands the browser.
+const server = await createServer()
+const issued = await fetch(`${server.url}/__admin/issue`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ siteKey: "mock_site", action: "login", hostname: "app.example" }),
-}))
+})
 const { token } = await issued.json()
-const verified = await runtime.fetch(new Request("http://mock.test/recaptcha/api/siteverify", {
+
+// Application code: the Siteverify call it makes to Google, sent to the emulator's URL.
+const siteverifyUrl = `${server.url}/recaptcha/api/siteverify`
+const verified = await fetch(siteverifyUrl, {
   method: "POST",
   body: new URLSearchParams({ secret: "mock_secret", response: token }),
-}))
+})
+const { success, score, action } = await verified.json()
+
+await server.close()
 ```
 
-For HTTP, use `createServer` from the `/server` entry or `mockingbird-recaptcha serve`.
+`mockingbird-recaptcha serve` runs the same server standalone; `createRuntime` from the main
+entry is the in-process form.
 Override the browser script URL to `/recaptcha/api.js?render=mock_site` and the server
 verification URL to `/recaptcha/api/siteverify` on the local origin. The browser shim
 uses a local `/__admin/issue` request to obtain tokens; an admin-key-protected runtime

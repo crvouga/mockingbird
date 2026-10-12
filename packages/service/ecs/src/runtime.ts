@@ -1,6 +1,7 @@
 import {
   type Clock,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   createRuntime as serviceRuntime,
@@ -31,6 +32,8 @@ export type ECSRuntimeOptions = Omit<ECSAPIOptions, "namespace" | "now"> & {
   seed?: string | number
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type ECSRuntime = ServiceRuntime<ECSAPI>

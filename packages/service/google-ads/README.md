@@ -15,27 +15,24 @@ bun add @crvouga/mockingbird-service-google-ads
 ## Usage
 
 ```ts
-import {
-  createRuntime,
-  DEFAULT_CUSTOMER,
-  DEFAULT_TOKEN,
-} from "@crvouga/mockingbird-service-google-ads"
+import { OAuth2Client } from "google-auth-library"
+import { DEFAULT_CUSTOMER, DEFAULT_TOKEN } from "@crvouga/mockingbird-service-google-ads"
+import { createServer } from "@crvouga/mockingbird-service-google-ads/server"
 
-const emulator = createRuntime()
-const response = await emulator.fetch(
-  new Request(`http://emulator.local/v25/customers/${DEFAULT_CUSTOMER}/googleAds:search`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${DEFAULT_TOKEN}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      query: "SELECT campaign.id, campaign.name, metrics.clicks FROM campaign",
-    }),
-  }),
-)
+const emulator = await createServer()
 
-console.log(await response.json())
+// Google publishes no Node client for the Ads API, so the application calls REST through
+// google-auth-library. Only the base URL and the fixture token change.
+const client = new OAuth2Client()
+client.setCredentials({ access_token: DEFAULT_TOKEN })
+const response = await client.request({
+  url: `${emulator.url}/v25/customers/${DEFAULT_CUSTOMER}/googleAds:search`,
+  method: "POST",
+  data: { query: "SELECT campaign.id, campaign.name, metrics.clicks FROM campaign" },
+})
+console.log(response.data)
+
+await emulator.close()
 ```
 
 The Ads and Analytics Data routes use OAuth Bearer credentials. Measurement Protocol routes use

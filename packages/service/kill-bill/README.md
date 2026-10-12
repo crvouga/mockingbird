@@ -15,10 +15,24 @@ ESM only. Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { AccountApi, Configuration, apiKey } from "killbill"
 import { createServer } from "@crvouga/mockingbird-service-kill-bill/server"
 
 const emulator = await createServer()
-process.env.KILL_BILL_URL = emulator.url
+
+// The Kill Bill client your application already uses. Only its basePath changes.
+const config = new Configuration({
+  basePath: emulator.url,
+  username: "admin",
+  password: "password",
+  apiKey: apiKey("bob", "lazar"),
+})
+const accounts = new AccountApi(config)
+await accounts.createAccount({ name: "Synthetic Customer", externalKey: "customer-1", currency: "USD" }, "example")
+const { data: account } = await accounts.getAccountByKey("customer-1")
+console.log(account.accountId, account.currency) // acc-… USD
+
+await emulator.close()
 ```
 
 The default credentials are Basic auth `admin:password` plus tenant headers `X-Killbill-ApiKey: bob` and `X-Killbill-ApiSecret: lazar`. Mutations also require `X-Killbill-CreatedBy`; optional reason and comment headers are recorded in the audit journal.

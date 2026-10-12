@@ -11,7 +11,14 @@ import { HermesError } from "./runs.js"
 
 export type HermesRuntimeOptions = Pick<
   RuntimeOptions<HermesAPI>,
-  "sqlite" | "clock" | "seed" | "adminKey" | "onLog" | "journalSize" | "maxCheckpoints"
+  | "sqlite"
+  | "clock"
+  | "seed"
+  | "adminKey"
+  | "adminControls"
+  | "onLog"
+  | "journalSize"
+  | "maxCheckpoints"
 >
 export type HermesRuntime = ServiceRuntime<HermesAPI>
 

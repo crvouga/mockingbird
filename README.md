@@ -24,7 +24,7 @@ Each emulator is its own npm package. The catalog — names, parity, and what ea
 npm install -D @crvouga/mockingbird-service-postgres @crvouga/mockingbird-service-stripe
 ```
 
-Build a checkout with a PostgreSQL product catalog and a Stripe payment. Save these three files together, then run `bun client.ts` (or `npx tsx client.ts` with Node).
+Build a checkout with a PostgreSQL product catalog and a Stripe payment. Save these three files together, then run `bun client.ts` (or `npx tsx client.ts` with Node). The API calls the `stripe` SDK your application already depends on; in an empty project, install it first.
 
 ### Data · `data.ts`
 
@@ -49,13 +49,21 @@ console.log(db.query("SELECT name, price FROM products"))
 
 ### API · `api.ts`
 
-Read a product, charge through the Stripe emulator, and persist the order.
+Read a product, charge it with the Stripe SDK, and persist the order. The emulator answers the SDK in this process.
 
 ```ts
+import Stripe from "stripe"
 import { createRuntime } from "@crvouga/mockingbird-service-stripe"
 import { db } from "./data.ts"
 
-export const stripe = createRuntime()
+// The Stripe SDK your application already uses. Only its HTTP client changes:
+// requests reach the emulator in this process instead of api.stripe.com.
+const emulator = createRuntime()
+export const stripe = new Stripe("sk_test_mockingbird", {
+  httpClient: Stripe.createFetchHttpClient((url: string, init: RequestInit) =>
+    emulator.fetch(new Request(url, init)),
+  ),
+})
 
 export const api = {
   async fetch(request: Request) {
@@ -68,16 +76,10 @@ export const api = {
     )
     if (!product) return Response.json({ error: "Product not found" }, { status: 404 })
 
-    const payment = await stripe.fetch(new Request("https://api.stripe.com/v1/payment_intents", {
-      method: "POST",
-      headers: { authorization: "Bearer sk_test_mockingbird" },
-      body: new URLSearchParams({
-        amount: String(product.price), currency: "usd",
-        payment_method: "pm_card_visa", confirm: "true",
-      }),
-    }))
-    if (!payment.ok) return payment
-    const intent = await payment.json()
+    const intent = await stripe.paymentIntents.create({
+      amount: product.price, currency: "usd",
+      payment_method: "pm_card_visa", confirm: true,
+    })
     if (intent.status !== "succeeded") {
       return Response.json({ paymentStatus: intent.status }, { status: 402 })
     }
@@ -120,9 +122,79 @@ Every package is self-contained ESM with TypeScript types. Every emulator is iso
 - **Checked against the real thing.** Random walks generated from each vendored OpenAPI contract run against two emulator instances in CI, and against the live sandbox when credentials exist.
 - **No network, no waiting.** Everything runs in your test process. No sandbox keys, rate limits, shared test accounts or flaky round trips.
 - **Runs anywhere JavaScript runs.** Every emulator is isomorphic: the same package runs in Node, Bun, browsers, and Workers. The playgrounds on this site run that package in your browser tab.
-- **One contract for every service.** Every HTTP emulator shares `/__admin/health`, `/__admin` reset, snapshots, clock control, fault injection, request journals, collection introspection, an admin UI, and per-namespace isolation.
+- **One set of controls for every service.** Every HTTP emulator takes the same admin controls: isolation by key, reset, snapshot and restore, time travel, faults, latency and timeouts, all replayed from a seed. Set them at boot, through `/__admin`, or in a request header.
 
 The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).
+
+## Admin controls
+
+**Put any emulator in any state. Then do it again.**
+
+Every HTTP emulator answers the same admin controls. Isolate state by key, reset it, snapshot and restore it, move the clock, and inject faults, latency and timeouts. Each one is a field in a single document that means the same thing at boot, over `/__admin`, and in a request header, and all of it replays from a seed.
+
+- **[Isolation by key](docs/admin-controls/NAMESPACES.md).** `x-mockingbird-namespace: worker-3` gives a request its own records, clock, random streams, faults, latency, journal and snapshots. Parallel workers share one process and never see each other.
+- **[Reset](docs/admin-controls/RESET.md).** `POST /__admin/reset` returns a namespace to its boot state: seed data, clock, faults and ids. A reset namespace cannot be told apart from a new one.
+- **[Snapshot and restore](docs/admin-controls/SNAPSHOT_AND_RESTORE.md).** `POST /__admin/snapshots` captures records, the clock, the random streams and the fault counters. Restore it, export it as JSON, commit it, or boot another process from it.
+- **[Time travel](docs/admin-controls/CLOCK.md).** Freeze the clock, set it, or advance it by `15m`. Expiries and retry windows arrive in milliseconds. Read state as it was at any checkpoint, or branch from one.
+- **[Faults](docs/admin-controls/FAULTS.md).** Answer `503`, drop the connection, or cut a response off mid-body. Match by operation, path or header; fire on the third request, every fifth, for the next five minutes, or at a seeded rate.
+- **[Latency and timeouts](docs/admin-controls/LATENCY_AND_TIMEOUTS.md).** Give every response a delay with seeded jitter, or make one request hang. With `virtualTime` the wait is spent on the mock clock, so a thirty-second timeout costs no test time.
+
+At boot:
+
+```ts
+const stripe = createRuntime({
+  seed: 7,
+  adminControls: {
+    clock: {
+      now: "2030-01-01T00:00:00Z",
+      frozen: true,
+    },
+    latency: "40ms",
+    faults: [{ preset: "rate_limited" }],
+  },
+})
+```
+
+Over /__admin:
+
+```bash
+curl -X POST :8787/__admin/snapshots \
+  -d '{"name": "base"}'
+curl -X POST :8787/__admin/clock \
+  -d '{"advance": "15m"}'
+curl -X POST :8787/__admin/faults \
+  -d '{"status": 503, "count": 2}'
+curl -X POST :8787/__admin/snapshots/base/restore
+```
+
+In a request header:
+
+```http
+POST /v1/charges
+x-mockingbird-namespace: worker-3
+x-mockingbird-time: 2030-01-01T00:00:00Z
+x-mockingbird-fault: status=503; delay=2s
+```
+
+The same seed and the same requests give the same bytes: ids, timestamps, which requests a `rate` fault hits, and the request journal. Reset and restore rewind the random streams with the state, so a test passes or fails the same way whether it runs first or last, alone or beside forty workers.
+
+Start at [docs/ADMIN_CONTROLS.md](docs/ADMIN_CONTROLS.md). Each control has its own page, with its routes, body fields, headers, boot options and errors:
+
+| Control | |
+| --- | --- |
+| [Namespaces](docs/admin-controls/NAMESPACES.md) | A namespace is an isolation key. Each key has its own records, clock, random streams, faults, latency, journal, metrics and snapshots, so parallel test workers share one emulator without seeing each other. |
+| [Reset](docs/admin-controls/RESET.md) | Reset returns a namespace to exactly the state it booted in: records, ids, clock, seed, faults, latency, snapshots, journal and metrics. A reset namespace cannot be told apart from a new one, which is what makes a test independent of the tests before it. |
+| [Snapshot and restore](docs/admin-controls/SNAPSHOT_AND_RESTORE.md) | A snapshot is a saved copy of a whole namespace. Take one after setting up the state a test needs, and restore it before each test: the namespace goes back to exactly that state, so the requests that follow give the same responses every time. |
+| [Clock](docs/admin-controls/CLOCK.md) | Every timestamp an emulator writes reads from its clock. Set it, freeze it or move it, and expiries, retry windows and renewals arrive in milliseconds instead of being waited for. |
+| [Checkpoints and branches](docs/admin-controls/CHECKPOINTS_AND_BRANCHES.md) | Every successful write checkpoints the namespace. Read the namespace as it was at any checkpoint, or branch from one and take a different path, without touching the main line. |
+| [Faults](docs/admin-controls/FAULTS.md) | A fault makes the emulator fail on purpose: answer `503`, drop the connection, cut a response off mid-body, or hold it back. It is how a test reaches a vendor's failure modes without the vendor. |
+| [Latency and timeouts](docs/admin-controls/LATENCY_AND_TIMEOUTS.md) | Make responses slow, or make them never arrive. Latency is how long every request takes; a timeout holds a request and then drops it. With virtual time, the waits are spent on the mock clock and cost no test time. |
+| [Seed and determinism](docs/admin-controls/SEED_AND_DETERMINISM.md) | Given the same boot controls and the same requests in the same order, an emulator answers the same bytes: ids, timestamps, which requests a fault hits, jitter, and the journal. The seed is what fixes every random choice. |
+| [The control document](docs/admin-controls/CONTROL_DOCUMENT.md) | Every control is described once, as JSON. The same document boots an emulator, is read and written over the admin API, and is what the request headers stand for. This page is its schema. |
+| [Boot](docs/admin-controls/BOOT.md) | An emulator starts with whatever controls you give it. That starting point is also what a reset returns to. |
+| [Request headers](docs/admin-controls/REQUEST_HEADERS.md) | A request can carry its own controls. Nothing needs to be set up first, and a client that can only set default headers still reaches every control. |
+| [Journal, metrics and state](docs/admin-controls/JOURNAL_AND_STATE.md) | Three ways to see what an emulator did and what it holds: the journal lists every request it received, metrics count them, and state reads and edits the stored rows directly. |
+| [Reference](docs/admin-controls/REFERENCE.md) | Every admin route, every control header, the error shape and how access is guarded, on one page. Each row links to the page that defines it. |
 
 ## One contract for every HTTP service
 
@@ -137,11 +209,12 @@ npx mockingbird-junction serve --config mockingbird.json  # every service in the
 | --- | --- |
 | `createRuntime()` · `createServer()` (`./server`) · `mockingbird-<service> serve` | The emulator as one runtime-neutral `fetch`, or a listening server from Node or the CLI |
 | `GET /__admin/health` | Unauthenticated readiness probe, outside the vendor's auth gate |
-| `/__admin/*` (`x-mockingbird-admin-key` optional) | Reset, snapshot and restore, clock control, fault injection, a request journal, metrics with unmatched-route counts, plus service-specific routes |
+| `/__admin/*` (`x-mockingbird-admin-key` optional) | The [admin controls](docs/ADMIN_CONTROLS.md): reset, snapshot and restore, clock, faults, latency, a request journal, metrics with unmatched-route counts, plus service-specific routes. `GET /__admin` lists every route and header |
 | `GET /__admin/state` | The collections in the selected namespace: declared shape, live `Collection` fields, and stored rows. Create, replace, merge, and delete records through the same paths on every emulator |
 | `GET /__admin/ui` | The shared admin UI. An emulator can add panels or replace the document; the shell still reads the same state API. Its header fetches that service's logo, website, and docs from the docs site when the page opens |
-| `x-mockingbird-namespace` | Per-request isolation: parallel workers share one process without sharing data |
-| `--seed`, clock control | Seeded randomness and an injectable clock, so a run replays exactly |
+| `x-mockingbird-namespace` | Per-request isolation: parallel workers share one process without sharing data, clocks, faults or ids |
+| `adminControls` · `--admin-controls` · `x-mockingbird-*` | The same control document at boot, on the command line, and in request headers |
+| `--seed`, a frozen clock, `virtualTime` | Seeded randomness, a clock that moves only when told to, and waits that cost no time, so a run replays byte for byte |
 | `--log json` | One structured line per request: operation id, status, duration, namespace, fault |
 
 ```json
@@ -176,6 +249,7 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | Guide | |
 | --- | --- |
 | [Getting started](docs/GETTING_STARTED.md) | Install a Mockingbird emulator, create a runtime, and send vendor-compatible requests. Each service is a self-contained TypeScript package with its own coverage matrix and integration guide. |
+| [Admin controls](docs/ADMIN_CONTROLS.md) | Every Mockingbird HTTP emulator answers the same controls: isolate state by key, reset it, snapshot and restore it, move the clock, inject faults, latency and timeouts, and replay all of it from a seed. They are the same on every emulator, and the same whether you set them at boot, call the admin API, or send a request header. |
 | [Why Mockingbird](docs/WHY.md) | Mockingbird gives applications local, stateful emulators for the vendor APIs and databases they depend on. Run integrations inside your process, control the state and clock, and inspect exactly which vendor operations each emulator supports. |
 | [Testing and parity](docs/TESTING.md) | How every emulator is proven to behave like its vendor: differential contracts, property-based walks, and live parity against real sandboxes. |
 | [Authoring a Mockingbird service](docs/AUTHORING_A_SERVICE.md) | How to add a vendor emulator to this repo. The reference implementation is [`packages/service/rxvortex`](../packages/service/rxvortex): copy its layout and patterns. |

@@ -96,14 +96,16 @@ test("shared Timeline checkpoints restore stored records and clock without cross
   expect(checkpoint.id).toMatch(/^cp_/)
   a.update("item", { value: "changed" })
   await request(runtime, "/__admin/clock", "a", { advance: 60_000 })
-  expect(clock.now()).toBe(1_700_000_060_000)
+  // A namespace's clock is its own: moving it leaves the base clock where it was.
+  expect(runtime.namespaceClock("a").now()).toBe(1_700_000_060_000)
+  expect(clock.now()).toBe(1_700_000_000_000)
   expect(
     (await request(runtime, "/__admin/branches/main/checkout", "a", { checkpoint: checkpoint.id }))
       .status,
   ).toBe(200)
   expect(a.get("item")).toEqual({ value: "original" })
   expect(b.get("item")).toEqual({ value: "other namespace" })
-  expect(clock.now()).toBe(1_700_000_000_000)
+  expect(runtime.namespaceClock("a").now()).toBe(1_700_000_000_000)
   expect(
     (await request(runtime, "/__admin/branches/main/checkout", "b", { checkpoint: checkpoint.id }))
       .status,

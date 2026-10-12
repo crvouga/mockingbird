@@ -3,7 +3,7 @@ import catalog from "virtual:mockingbird/catalog"
 import BirdMark from "../components/BirdMark.astro"
 import Icon from "../components/Icon.astro"
 import Sprite from "../components/Sprite.astro"
-import { IDENTITY, MARK_HREF, RISK_DISCLAIMER } from "../lib/content.ts"
+import { IDENTITY, MARK_HREF, RISK_DISCLAIMER, SOCIAL_CARD } from "../lib/content.ts"
 import { inline } from "../lib/inline.ts"
 import "../styles/global.css"
 
@@ -12,24 +12,38 @@ interface Props {
   description?: string
   /** A markdown twin of this page, advertised to agents with `rel="alternate"`. */
   markdown?: string
+  /** Open Graph type: `article` for a guide, `website` for everything else. */
+  type?: "website" | "article"
+  /** Keep the page out of search results and link previews (the 404, unlisted pages). */
+  noindex?: boolean
 }
 
 const {
   title,
   description = `Stateful emulators for ${catalog.totals.services} third-party APIs and SQL databases. Every emulator runs in Node, Bun, browsers, and Workers.`,
   markdown,
+  type = "website",
+  noindex = false,
 } = Astro.props
 const fullTitle = title
   ? `${title} · Mockingbird`
   : "Mockingbird · Stateful emulators for the APIs you depend on"
 const path = Astro.url.pathname.replace(/\/$/, "") || "/"
+// Crawlers need absolute URLs, and the same page must not be shared under two addresses.
+const canonical = new URL(path, IDENTITY.docs).href
+const socialImage = new URL(SOCIAL_CARD.href, IDENTITY.docs).href
 const nav = [
   { href: "/services", label: "Emulators" },
   { href: "/examples", label: "Examples" },
   { href: "/coverage", label: "Coverage" },
   { href: "/docs", label: "Guides" },
+  { href: "/docs/admin-controls", label: "Controls" },
   { href: "/why", label: "Why" },
 ]
+// `/docs` is a prefix of `/docs/admin-controls`, so the longest match is the one that's current.
+const currentNav = nav
+  .filter((item) => path === item.href || path.startsWith(`${item.href}/`))
+  .sort((a, b) => b.href.length - a.href.length)[0]?.href
 ---
 
 <!doctype html>
@@ -37,11 +51,27 @@ const nav = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- iOS turns digit runs in API samples into phone links unless told not to. -->
+    <meta name="format-detection" content="telephone=no" />
     <title>{fullTitle}</title>
     <meta name="description" content={description} />
+    {noindex ? <meta name="robots" content="noindex" /> : <link rel="canonical" href={canonical} />}
+    <meta property="og:site_name" content={IDENTITY.name} />
     <meta property="og:title" content={fullTitle} />
     <meta property="og:description" content={description} />
-    <meta property="og:type" content="website" />
+    <meta property="og:type" content={type} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:image" content={socialImage} />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content={String(SOCIAL_CARD.width)} />
+    <meta property="og:image:height" content={String(SOCIAL_CARD.height)} />
+    <meta property="og:image:alt" content={SOCIAL_CARD.alt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={fullTitle} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={socialImage} />
+    <meta name="twitter:image:alt" content={SOCIAL_CARD.alt} />
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href={MARK_HREF} />
@@ -76,14 +106,18 @@ const nav = [
           <BirdMark />
           <span class="wordmark">Mockingbird</span>
         </a>
-        <nav class="nav" aria-label="Primary">
+        <nav class="nav" id="site-nav" aria-label="Primary" data-nav>
           {
             nav.map((item) => (
-              <a href={item.href} aria-current={path === item.href || path.startsWith(`${item.href}/`) ? "page" : undefined}>
+              <a href={item.href} aria-current={item.href === currentNav ? "page" : undefined}>
                 {item.label}
               </a>
             ))
           }
+          <a class="nav-gh" href={catalog.repo} target="_blank" rel="noopener">
+            <Icon name="github" />
+            GitHub
+          </a>
         </nav>
         <div class="header-actions">
           <button class="search-trigger" type="button" data-palette-open aria-label="Search documentation">
@@ -113,6 +147,17 @@ const nav = [
               <button type="button" role="menuitemradio" data-theme-mode="dark" aria-checked="false">Dark</button>
             </div>
           </div>
+          <button
+            class="icon-btn nav-toggle"
+            type="button"
+            data-nav-toggle
+            aria-controls="site-nav"
+            aria-expanded="false"
+            aria-label="Open menu"
+          >
+            <Icon name="menu" />
+            <Icon name="x" />
+          </button>
         </div>
       </div>
     </header>

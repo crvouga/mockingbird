@@ -9,7 +9,8 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { IDENTITY, PITCH } from "../sites/docs/src/lib/content.ts"
+import { ADMIN_CONTROLS, GUIDE_CHILDREN, IDENTITY, PITCH } from "../sites/docs/src/lib/content.ts"
+import { guideInfo } from "../sites/docs/src/lib/guides.ts"
 import { discoverPackages, REPO, root } from "./release/lib.ts"
 
 const RAW = `https://raw.githubusercontent.com/${REPO}/main`
@@ -59,6 +60,17 @@ const body = [
   `The sentence above is the product's identity. The rules for the mark, the colors, and where that sentence has to appear: [Design](${RAW}/docs/DESIGN.md).`,
   "",
   "Each service declares its own parity: a short statement of the vendor surface it keeps in step. Read that statement, and the package README, before you depend on an emulator.",
+  "",
+  "## Admin controls",
+  "",
+  "Every HTTP emulator takes the same controls, and each means the same thing at boot (`createRuntime({ adminControls })`, `serve --admin-controls`), over `/__admin`, and in a request header: isolate state by key (`x-mockingbird-namespace`), reset to boot (`POST /__admin/reset`), snapshot and restore (`POST /__admin/snapshots`), move the clock (`POST /__admin/clock`, `x-mockingbird-time`), inject faults (`POST /__admin/faults`, `x-mockingbird-fault`), and add latency or timeouts (`PUT /__admin/latency`, `x-mockingbird-delay`, `x-mockingbird-timeout`). The same seed and the same requests give the same bytes. `GET /__admin` on a running emulator lists every route and header.",
+  "",
+  `- [Admin controls](${RAW}/docs/ADMIN_CONTROLS.md): where each control is, the three ways to set one, and what holds for all of them.`,
+  ...GUIDE_CHILDREN.ADMIN_CONTROLS.map((name) => {
+    const path = `${ADMIN_CONTROLS.pages}/${name}.md`
+    const page = guideInfo({ file: name, markdown: readFileSync(join(root, path), "utf8") })
+    return `- [${page.title}](${RAW}/${path}): ${page.summary}`
+  }),
   "",
   "## Reporting issues and requesting services",
   "",

@@ -22,6 +22,8 @@ export type S3APIOptions = APIOptions & {
   objects?: readonly S3SeedObject[]
   credentials?: Readonly<Record<string, string>>
   onNotification?: (event: S3Notification) => void
+  /** A seeded stream of `[0, 1)` for request ids, so an error body replays from its seed. */
+  random?: () => number
 }
 export type S3Notification = {
   eventName:
@@ -47,7 +49,9 @@ const metadata = (headers: Headers) =>
       .filter(([name]) => name.startsWith("x-amz-meta-"))
       .map(([name, value]) => [name.slice(11), value]),
   )
-const requestId = () => crypto.randomUUID().replace(/-/g, "").slice(0, 16).toUpperCase()
+const HEX = "0123456789ABCDEF"
+const requestId = (random: () => number = Math.random) =>
+  Array.from({ length: 16 }, () => HEX.charAt(Math.floor(random() * 16))).join("")
 const hex = (bytes: ArrayBuffer | Uint8Array) =>
   [...new Uint8Array(bytes instanceof Uint8Array ? bytes : bytes)]
     .map((value) => value.toString(16).padStart(2, "0"))
@@ -126,7 +130,7 @@ export class S3API {
     return object
   }
   private error(code: string, message: string, status: number, resource: string) {
-    const id = requestId()
+    const id = requestId(this.options.random)
     return xml(
       `<Error><Code>${code}</Code><Message>${xmlEscape(message)}</Message><Resource>${xmlEscape(resource)}</Resource><RequestId>${id}</RequestId><HostId>mockingbird</HostId></Error>`,
       status,

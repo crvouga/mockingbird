@@ -121,7 +121,10 @@ describe("service contract", () => {
     const listed = (await (await call(runtime, "/__admin/faults/presets")).json()) as {
       presets: { name: string }[]
     }
-    expect(listed.presets.map((p) => p.name).sort()).toEqual(Object.keys(FLEX_PRESETS).sort())
+    // The emulator's own presets, beside the standard ones every emulator has.
+    expect(listed.presets.map((p) => p.name)).toEqual(
+      expect.arrayContaining(Object.keys(FLEX_PRESETS)),
+    )
     expect(
       (await call(runtime, "/__admin/faults", { body: { preset: "create_4xx", count: 1 } })).status,
     ).toBe(201)

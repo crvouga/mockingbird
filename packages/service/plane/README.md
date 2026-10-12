@@ -33,29 +33,30 @@ validates).
 npx mockingbird-plane serve --port 8821 --rate-limit 60
 ```
 
+In a test, the application's Plane SDK (`@makeplane/plane-node-sdk`) takes the emulator's URL as
+its `baseUrl`:
+
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-plane"
+import { PlaneClient } from "@makeplane/plane-node-sdk"
+import { createServer } from "@crvouga/mockingbird-service-plane/server"
 
-const plane = createRuntime()
-const base = "http://plane.test/api/v1/workspaces/acme/projects/33333333-3333-4333-8333-333333333333"
-const headers = { "x-api-key": "plane_api_test", "content-type": "application/json" }
+// Test setup: a local Plane.
+const server = await createServer()
 
-const created = await plane.fetch(
-  new Request(`${base}/work-items/`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ name: "Checkout fails on Safari" }),
-  }),
-)
-const item = (await created.json()) as { id: string }
-// Resolve it the way a teammate would; the resolution watcher then sees group "completed".
-await plane.fetch(
-  new Request(`http://plane.test/__admin/work-items/${item.id}/state`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ state: "Done" }),
-  }),
-)
+// Application code: Plane's SDK. Only its base URL changes.
+const plane = new PlaneClient({ baseUrl: server.url, apiKey: "plane_api_test" })
+const projectId = "33333333-3333-4333-8333-333333333333"
+const item = await plane.workItems.create("acme", projectId, { name: "Checkout fails on Safari" })
+
+// Test control: resolve it the way a teammate would; the resolution watcher then sees group
+// "completed".
+await fetch(`${server.url}/__admin/work-items/${item.id}/state`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ state: "Done" }),
+})
+
+await server.close()
 ```
 
 ### Routes

@@ -15,10 +15,16 @@ bun add -d @crvouga/mockingbird-service-checkr
 
 ```ts
 import { createServer } from "@crvouga/mockingbird-service-checkr/server"
+
+// Test setup: the emulator. The application's Checkr origin becomes server.url.
 const server = await createServer()
-const response = await fetch(`${server.url}/v1/packages`, {
+const baseUrl = server.url
+
+// Application code: the request it sends to api.checkr.com, Basic auth with the API key.
+const response = await fetch(`${baseUrl}/v1/packages`, {
   headers: { authorization: `Basic ${btoa("mock_checkr_key:")}` },
 })
+const packages = (await response.json()) as { data: { slug: string }[] }
 await server.close()
 ```
 

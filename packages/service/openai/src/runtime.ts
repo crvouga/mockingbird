@@ -4,6 +4,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -78,6 +79,8 @@ export type OpenAIRuntimeOptions = Omit<
   clock?: Clock
   seed?: number | string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type OpenAIRuntime = ServiceRuntime<OpenAIAPI>
@@ -159,6 +162,7 @@ export const createRuntime = (options: OpenAIRuntimeOptions = {}): OpenAIRuntime
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     adminKey,
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
       new OpenAIAPI({ ...options, sqlite, namespace, publicNamespace, now: clock.now, vaultKey }),

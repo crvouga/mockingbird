@@ -3,6 +3,7 @@ import {
   type Clock,
   createWebhookHub,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   createRuntime as serviceRuntime,
@@ -44,6 +45,8 @@ export type LiveKitRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   keys?: Readonly<Record<string, string>>
   webhooks?: {
@@ -179,6 +182,7 @@ export const createRuntime = (options: LiveKitRuntimeOptions = {}): LiveKitRunti
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, clock }) =>
       new LiveKitAPI({

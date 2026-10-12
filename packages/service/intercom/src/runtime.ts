@@ -6,6 +6,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   hmac,
+  type MockControls,
   outboxAdminRoutes,
   type RequestLog,
   type ServiceRuntime,
@@ -115,6 +116,8 @@ export type IntercomRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   admins?: readonly AdminRecord[]
   settings?: Partial<Settings>
@@ -301,6 +304,7 @@ export const createRuntime = (options: IntercomRuntimeOptions = {}): IntercomRun
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: bearerToken,
     presets: INTERCOM_PRESETS,

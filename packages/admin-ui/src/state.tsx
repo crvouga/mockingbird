@@ -15,7 +15,7 @@ import {
   Typography,
 } from "antd"
 import { useState } from "react"
-import { DataTable, ErrorNotice, Refresh, useAction, useResource } from "./components.js"
+import { DataTable, ErrorNotice, Refresh, useAction, useResource, ViewTitle } from "./components.js"
 import type { Api, StatePage, StateRecord, StateView } from "./model.js"
 import { isRecord, pretty } from "./model.js"
 
@@ -38,9 +38,7 @@ export function StateExplorer({
   return (
     <Flex vertical gap="large">
       <Flex gap="middle" wrap align="center" justify="space-between">
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          State
-        </Typography.Title>
+        <ViewTitle page="journal-and-state">State</ViewTitle>
         <Refresh loading={shape.loading} onClick={shape.reload} />
       </Flex>
       <ErrorNotice error={shape.error} retry={shape.reload} />

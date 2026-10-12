@@ -393,6 +393,9 @@ describe("contract", () => {
     expect(health.headers.get("x-mockingbird")).toMatch(/^aws-speech@/)
     expect(((await health.json()) as { service: string }).service).toBe("aws-speech")
     const listed = (await admin("/faults/presets")) as { presets: { name: string }[] }
-    expect(listed.presets.map((p) => p.name).sort()).toEqual(Object.keys(SPEECH_PRESETS).sort())
+    // The emulator's own presets, beside the standard ones every emulator has.
+    expect(listed.presets.map((p) => p.name)).toEqual(
+      expect.arrayContaining(Object.keys(SPEECH_PRESETS)),
+    )
   })
 })

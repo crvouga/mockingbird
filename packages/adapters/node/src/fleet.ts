@@ -2,7 +2,13 @@ import { randomUUID } from "node:crypto"
 import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import type { Clock, ServiceInstance, ServiceRuntime } from "@crvouga/mockingbird-service"
-import { createClock, parseDuration, resolveAdminPrefix } from "@crvouga/mockingbird-service"
+import {
+  createClock,
+  normalizeBootControls,
+  parseDuration,
+  resolveAdminPrefix,
+  restoreClock,
+} from "@crvouga/mockingbird-service"
 import type { CommonServeOptions, ConfigService, MockingbirdConfig, ServeTarget } from "./cli.js"
 import type { EndpointManifest } from "./fleet-manifest.js"
 import { type Listening, listen } from "./listen.js"
@@ -109,11 +115,11 @@ const httpChild = async (
     adminKey: entry.adminKey,
     seed: entry.seed,
     onLog: options.onLog,
+    ...(entry.adminControls !== undefined ? { adminControls: entry.adminControls } : {}),
     ...(entry.fixtures !== undefined ? { fixtures: entry.fixtures } : {}),
     ...(entry.baseUrl !== undefined ? { baseUrl: entry.baseUrl } : {}),
   })
   const adminPrefix = resolveAdminPrefix(entry.adminPrefix)
-  runtime.isolateNamespaces()
   const locked = new Set<string>()
   const active = new Map<string, number>()
   const api: FetchAPI = {
@@ -418,17 +424,11 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
         if (typeof frozen !== "boolean") return json(400, { error: "freeze must be boolean" })
         const response = await transaction(namespace, selected, async (_name, child) => {
           const childClock = child.clock(namespace)
-          childClock.freeze()
-          childClock.set(target)
-          if (!frozen) childClock.unfreeze()
+          restoreClock(childClock, { now: target, frozen })
           await child.settle?.(namespace)
           return childClock.state()
         })
-        if (response.ok) {
-          current.freeze()
-          current.set(target)
-          if (!frozen) current.unfreeze()
-        }
+        if (response.ok) restoreClock(current, { now: target, frozen })
         return response
       }
       if (!route) return json(404, { error: "not found" })
@@ -450,12 +450,7 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
         const response = await transaction(namespace, restored, async (name, child) =>
           child.restore(namespace, point.values.get(name)),
         )
-        if (response.ok) {
-          const current = clock(namespace)
-          current.freeze()
-          current.set(point.clock.now)
-          if (!point.clock.frozen) current.unfreeze()
-        }
+        if (response.ok) restoreClock(clock(namespace), point.clock)
         return response
       }
       const snapshotId = randomUUID()
@@ -479,6 +474,12 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
       throw new Error("config must contain at least one service")
     for (const [name, entry] of Object.entries(config.services)) {
       if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) throw new Error("invalid service name")
+      // Checked before the child starts, so a bad document is reported by name.
+      if (config.adminControls !== undefined || entry.adminControls !== undefined)
+        normalizeBootControls(
+          { ...config.adminControls, ...entry.adminControls },
+          `services.${name}.adminControls`,
+        )
       try {
         const target = await options.load(name)
         if (entry.protocol && entry.protocol !== ("protocol" in target ? target.protocol : "http"))
@@ -493,6 +494,10 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
                   ...entry,
                   adminPrefix: resolveAdminPrefix(entry.adminPrefix ?? adminPrefix),
                   ...(adminKey !== undefined ? { adminKey } : {}),
+                  // Fleet-wide controls, with the service's own keys replacing them.
+                  ...(config.adminControls !== undefined || entry.adminControls !== undefined
+                    ? { adminControls: { ...config.adminControls, ...entry.adminControls } }
+                    : {}),
                 },
                 options,
               )

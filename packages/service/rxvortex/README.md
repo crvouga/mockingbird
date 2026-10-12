@@ -41,28 +41,31 @@ response loads as-is. Only `catalog_id` and `medication_name` are required. `POS
 returns to these rows. Pass `--unknown-presets accept` to take any well-formed preset id instead.
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-rxvortex"
+import { createServer } from "@crvouga/mockingbird-service-rxvortex/server"
 
-const rx = createRuntime({
+// Test setup: a local RxVortex that posts its status webhooks to the app.
+const server = await createServer({
   webhooks: { url: "http://127.0.0.1:3000/prescriptions/webhooks/rxvortex", secret: "whsec-test" },
 })
+const baseUrl = server.url // the app's RXVORTEX_API_URL
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-  rx.fetch(
-    new Request(`http://rxvortex.test${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    }),
-  )
+  fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  })
 
+// Application code: the requests it sends to RxVortex.
 const { access_token } = (await (
   await post("/api/v1/generate-access-token", { client_id: "acme", client_secret: "s" })
 ).json()) as { access_token: string }
-// …the app submits POST /api/v1/orders with Authorization: Bearer <access_token>…
+// …then POST /api/v1/orders with Authorization: Bearer <access_token> and sender_order_id "pay_123"…
 
-// Move an order the way the pharmacy would; each step emits the signed status webhook.
+// Test control: move that order the way the pharmacy would; each step emits the signed status webhook.
 await post("/__admin/orders/pay_123/transition", { to: "Shipping", trackingnumber: "1Z999" })
 await post("/__admin/orders/pay_123/transition", { to: "Delivered" })
+
+await server.close()
 ```
 
 ### Routes

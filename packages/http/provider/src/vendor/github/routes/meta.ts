@@ -1,4 +1,5 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
+import { random } from "../../core/crypto.js";
 import type { RouteContext } from "../../core/index.js";
 
 export function metaRoutes({ app, baseUrl }: RouteContext): void {
@@ -98,7 +99,7 @@ export function metaRoutes({ app, baseUrl }: RouteContext): void {
       "Favor focus over features.",
       "Avoid administrative distraction.",
     ];
-    return c.text(phrases[Math.floor(Math.random() * phrases.length)]);
+    return c.text(phrases[Math.floor(random() * phrases.length)]);
   });
 
   app.get("/versions", (c) => {

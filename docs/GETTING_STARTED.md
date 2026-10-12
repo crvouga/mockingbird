@@ -60,13 +60,21 @@ console.log(db.query("SELECT name, price FROM products"))
 
 ### API · `api.ts`
 
-Read a product, charge through the Stripe emulator, and persist the order.
+Read a product, charge it with the Stripe SDK, and persist the order. The emulator answers the SDK in this process.
 
 ```ts
+import Stripe from "stripe"
 import { createRuntime } from "@crvouga/mockingbird-service-stripe"
 import { db } from "./data.ts"
 
-export const stripe = createRuntime()
+// The Stripe SDK your application already uses. Only its HTTP client changes:
+// requests reach the emulator in this process instead of api.stripe.com.
+const emulator = createRuntime()
+export const stripe = new Stripe("sk_test_mockingbird", {
+  httpClient: Stripe.createFetchHttpClient((url: string, init: RequestInit) =>
+    emulator.fetch(new Request(url, init)),
+  ),
+})
 
 export const api = {
   async fetch(request: Request) {
@@ -79,16 +87,10 @@ export const api = {
     )
     if (!product) return Response.json({ error: "Product not found" }, { status: 404 })
 
-    const payment = await stripe.fetch(new Request("https://api.stripe.com/v1/payment_intents", {
-      method: "POST",
-      headers: { authorization: "Bearer sk_test_mockingbird" },
-      body: new URLSearchParams({
-        amount: String(product.price), currency: "usd",
-        payment_method: "pm_card_visa", confirm: "true",
-      }),
-    }))
-    if (!payment.ok) return payment
-    const intent = await payment.json()
+    const intent = await stripe.paymentIntents.create({
+      amount: product.price, currency: "usd",
+      payment_method: "pm_card_visa", confirm: true,
+    })
     if (intent.status !== "succeeded") {
       return Response.json({ paymentStatus: intent.status }, { status: 402 })
     }
@@ -129,7 +131,7 @@ bun client.ts
 # Node: npx tsx client.ts
 ```
 
-The client prints `201` and `succeeded`. The paid order remains in PostgreSQL, and the payment remains in the Stripe runtime. The vendor URL identifies the route; `stripe.fetch` handles it locally. Use fresh emulators or reset their state between independent tests.
+The client prints `201` and `succeeded`. The paid order remains in PostgreSQL, and the payment remains in the Stripe emulator. The Stripe SDK builds the same request it sends to `api.stripe.com`; its HTTP client hands that request to the emulator in this process, so the application code calling the SDK does not change. Use fresh emulators or reset their state between independent tests.
 
 When your SDK accepts a Fetch implementation, inject the emulator's handler as documented in the service guide. When the SDK requires a base URL, start a listening server.
 
@@ -139,15 +141,61 @@ When your SDK accepts a Fetch implementation, inject the emulator's handler as d
 npx mockingbird-stripe serve --port 8787
 ```
 
-Point your SDK's base URL at the printed endpoint. HTTP emulators share health, state,
-request journals, and an admin UI under `/__admin`:
+Point your SDK's base URL at the printed endpoint. HTTP emulators share the same
+[admin controls](ADMIN_CONTROLS.md) under `/__admin`:
 
 | Route | Purpose |
 | --- | --- |
 | `GET /__admin/health` | Readiness |
-| `GET /__admin/state` | Collections and stored records |
+| `GET /__admin` | Every route and control header, with a summary each |
+| `GET /__admin/controls` | The namespace's seed, clock, latency, faults and snapshots. [Control document](admin-controls/CONTROL_DOCUMENT.md) |
+| `POST /__admin/reset` | Return the namespace to its boot state. [Reset](admin-controls/RESET.md) |
+| `POST /__admin/snapshots` | Save the namespace. [Snapshot and restore](admin-controls/SNAPSHOT_AND_RESTORE.md) |
+| `POST /__admin/snapshots/<id>/restore` | Put that namespace back. Same page: the admin screen is **Snapshot & restore** |
+| `POST /__admin/clock` | Set, freeze or advance time. [Clock](admin-controls/CLOCK.md) |
+| `POST /__admin/faults` | Make requests fail. [Faults](admin-controls/FAULTS.md) |
+| `GET /__admin/state` | Collections and stored records. [Journal, metrics and state](admin-controls/JOURNAL_AND_STATE.md) |
 | `GET /__admin/requests` | Request journal |
 | `GET /__admin/ui` | Interactive runtime administration |
+
+## Control an emulator
+
+The same controls apply at boot, over `/__admin`, and in request headers. Start with a frozen
+clock and a seed, then let each test isolate, shape and rewind its own state:
+
+```bash
+npx mockingbird-stripe serve --port 8787 --seed 7 --clock 2030-01-01T00:00:00Z --freeze
+```
+
+```ts
+// Each worker gets its own records, clock, faults and ids.
+const headers = { "x-mockingbird-namespace": `worker-${workerId}` }
+
+// Fail the next charge, then prove the retry works.
+await fetch("http://localhost:8787/__admin/faults", {
+  method: "POST",
+  headers: { ...headers, "content-type": "application/json" },
+  body: JSON.stringify({ preset: "rate_limited", count: 1 }),
+})
+
+// Or shape one request from its own headers.
+await fetch("http://localhost:8787/v1/customers", {
+  headers: { ...headers, authorization: "Bearer sk_test_mockingbird", "x-mockingbird-delay": "2s" },
+})
+
+// Between tests: back to exactly the boot state.
+await fetch("http://localhost:8787/__admin/reset", { method: "POST", headers })
+```
+
+Each control has its own page with its full interface:
+[namespaces](admin-controls/NAMESPACES.md), [reset](admin-controls/RESET.md),
+[snapshot and restore](admin-controls/SNAPSHOT_AND_RESTORE.md) (`POST /__admin/snapshots/<id>/restore`, or **Restore** on the **Snapshot & restore** screen), [clock](admin-controls/CLOCK.md),
+[checkpoints and branches](admin-controls/CHECKPOINTS_AND_BRANCHES.md),
+[faults](admin-controls/FAULTS.md), [latency and timeouts](admin-controls/LATENCY_AND_TIMEOUTS.md),
+[seed and determinism](admin-controls/SEED_AND_DETERMINISM.md),
+[boot](admin-controls/BOOT.md) and [request headers](admin-controls/REQUEST_HEADERS.md).
+[Admin controls](ADMIN_CONTROLS.md) is the map, and the
+[reference](admin-controls/REFERENCE.md) lists every route and header.
 
 Use `adminPrefix` or `--admin-prefix` to relocate the control routes. Configure an admin
 key when you need one; see [Authoring a service](AUTHORING_A_SERVICE.md) for the shared

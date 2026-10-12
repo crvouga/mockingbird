@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -55,6 +56,8 @@ export type AppStoreConnectRuntimeOptions = Omit<
   clock?: Clock
   seed?: string | number
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type AppStoreConnectRuntime = ServiceRuntime<AppStoreConnectAPI>

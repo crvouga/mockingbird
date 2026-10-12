@@ -14,7 +14,7 @@ interface Props {
 const { guide } = Astro.props
 ---
 
-<Base title={guide.title} description={guide.summary} markdown={`/docs/${guide.slug}.md`}>
+<Base title={guide.title} description={guide.summary} markdown={`/docs/${guide.slug}.md`} type="article">
   <div class="container">
     <GuideArticle guide={guide} repo={catalog.repo} />
   </div>

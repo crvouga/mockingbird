@@ -3,6 +3,7 @@ import {
   type Clock,
   createWebhookHub,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type S3Target,
   type ServiceRuntime,
@@ -45,6 +46,8 @@ export type MediaConvertRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   region?: string
   accountId?: string
@@ -121,6 +124,7 @@ export const createRuntime = (options: MediaConvertRuntimeOptions = {}): MediaCo
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: accessKeyCredential,
     create: ({ sqlite, namespace, clock }) =>

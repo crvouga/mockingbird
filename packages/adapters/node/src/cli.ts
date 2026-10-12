@@ -4,8 +4,17 @@ import { createRequire } from "node:module"
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
 import { type ParseArgsConfig, parseArgs } from "node:util"
-import type { RequestLog, ServiceInstance, ServiceRuntime } from "@crvouga/mockingbird-service"
-import { resolveAdminPrefix } from "@crvouga/mockingbird-service"
+import type {
+  MockControls,
+  RequestLog,
+  ServiceInstance,
+  ServiceRuntime,
+} from "@crvouga/mockingbird-service"
+import {
+  normalizeBootControls,
+  parseFaultHeader,
+  resolveAdminPrefix,
+} from "@crvouga/mockingbird-service"
 import { type FleetTarget, startFleet } from "./fleet.js"
 import { type Listening, listen } from "./listen.js"
 
@@ -116,6 +125,8 @@ export type CommonServeOptions = {
   adminKey: string | undefined
   seed: string | undefined
   onLog: ((entry: RequestLog) => void) | undefined
+  /** Admin controls to boot with: clock, latency, faults, a starting snapshot. */
+  adminControls?: MockControls
   /** Synthetic provider fixture objects supplied by a fleet entry. */
   fixtures?: Record<string, unknown>
   baseUrl?: string
@@ -154,7 +165,53 @@ const COMMON_SERVE_OPTIONS: Record<string, CliOption> = {
     value: "<key>",
     description: "Require x-mockingbird-admin-key on /__admin/* (env MOCKINGBIRD_ADMIN_KEY)",
   },
-  seed: { type: "string", value: "<seed>", description: "Seed for every random choice" },
+  seed: {
+    type: "string",
+    value: "<seed>",
+    description: "Seed for every random choice (env MOCKINGBIRD_SEED)",
+  },
+  "admin-controls": {
+    type: "string",
+    value: "<json|file>",
+    description:
+      "Admin controls to boot with, as JSON or a JSON file: clock, latency, faults, snapshot, namespaces (env MOCKINGBIRD_ADMIN_CONTROLS)",
+  },
+  clock: {
+    type: "string",
+    value: "<instant>",
+    description: "Start the clock at this instant (epoch ms or ISO-8601)",
+  },
+  freeze: { type: "boolean", description: "Freeze the clock: it moves only when told to" },
+  "auto-advance": {
+    type: "string",
+    value: "<duration>",
+    description: "Step the clock this much before every request (e.g. 1s)",
+  },
+  latency: {
+    type: "string",
+    value: "<duration>",
+    description: "Baseline response time for every request (e.g. 250ms)",
+  },
+  jitter: {
+    type: "string",
+    value: "<duration>",
+    description: "Seeded extra latency between 0 and this",
+  },
+  "virtual-time": {
+    type: "boolean",
+    description: "Spend latency, delays and timeouts on the mock clock instead of really waiting",
+  },
+  fault: {
+    type: "string",
+    value: "<fault>",
+    description:
+      'A fault to boot with, as in x-mockingbird-fault: 503, rate_limited, "status=503; delay=2s"',
+  },
+  snapshot: {
+    type: "string",
+    value: "<file>",
+    description: "Start from a snapshot document (GET /__admin/snapshots/:id)",
+  },
   log: {
     type: "string",
     value: "<pretty|json|off>",
@@ -216,6 +273,76 @@ const formatLog = (format: LogFormat) => {
 const asString = (value: string | boolean | undefined): string | undefined =>
   typeof value === "string" ? value : undefined
 
+const readJsonFile = async (path: string, label: string): Promise<unknown> => {
+  try {
+    return JSON.parse(await readFile(path, "utf8")) as unknown
+  } catch (error) {
+    throw new Error(
+      `${label}: cannot read ${path}: ${error instanceof Error ? error.message : error}`,
+    )
+  }
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+/**
+ * The boot controls a `serve` invocation asks for: `--admin-controls` (or `MOCKINGBIRD_ADMIN_CONTROLS`) as
+ * the base document, with the single-purpose flags on top. Checked here, so a bad value stops
+ * the command before a port is bound. `undefined` when nothing was asked for.
+ */
+export const resolveServeControls = async (
+  values: CliValues,
+  env: Record<string, string | undefined> = process.env,
+  base?: unknown,
+): Promise<MockControls | undefined> => {
+  const source = asString(values["admin-controls"]) ?? env.MOCKINGBIRD_ADMIN_CONTROLS
+  let document: Record<string, unknown> = isObject(base) ? { ...base } : {}
+  if (source !== undefined && source.trim() !== "") {
+    let parsed: unknown
+    if (source.trim().startsWith("{")) {
+      try {
+        parsed = JSON.parse(source)
+      } catch {
+        throw new Error("--admin-controls: not valid JSON")
+      }
+    } else parsed = await readJsonFile(source, "--admin-controls")
+    if (!isObject(parsed)) throw new Error("--admin-controls: expected a JSON object")
+    document = { ...document, ...parsed }
+  }
+  const clock: Record<string, unknown> = isObject(document.clock) ? { ...document.clock } : {}
+  const now = asString(values.clock)
+  if (now !== undefined) clock.now = now
+  if (values.freeze === true) clock.frozen = true
+  const autoAdvance = asString(values["auto-advance"])
+  if (autoAdvance !== undefined) clock.autoAdvance = autoAdvance
+  if (Object.keys(clock).length > 0) document.clock = clock
+  const delay = asString(values.latency)
+  const jitter = asString(values.jitter)
+  if (delay !== undefined || jitter !== undefined) {
+    const latency: Record<string, unknown> = isObject(document.latency)
+      ? { ...document.latency }
+      : document.latency !== undefined
+        ? { delay: document.latency }
+        : {}
+    if (delay !== undefined) latency.delay = delay
+    if (jitter !== undefined) latency.jitter = jitter
+    document.latency = latency
+  }
+  if (values["virtual-time"] === true) document.virtualTime = true
+  const fault = asString(values.fault)
+  if (fault !== undefined)
+    document.faults = [
+      ...(Array.isArray(document.faults) ? document.faults : []),
+      parseFaultHeader(fault, "--fault"),
+    ]
+  const snapshot = asString(values.snapshot)
+  if (snapshot !== undefined) document.snapshot = await readJsonFile(snapshot, "--snapshot")
+  if (Object.keys(document).length === 0) return undefined
+  normalizeBootControls(document, "adminControls")
+  return document as MockControls
+}
+
 /** A service entry in `mockingbird.json`. */
 export type ConfigService = {
   protocol?: "http" | "postgres" | "redis"
@@ -224,6 +351,8 @@ export type ConfigService = {
   adminPrefix?: string
   adminKey?: string
   seed?: string
+  /** Admin controls this service boots with. A key given here replaces the fleet-wide one. */
+  adminControls?: MockControls
   fixtures?: Record<string, unknown>
   baseUrl?: string
   password?: string
@@ -241,6 +370,8 @@ export type MockingbirdConfig = {
   log?: LogFormat
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls every HTTP service in the fleet boots with. */
+  adminControls?: MockControls
   namespace?: string
   control?: { host?: string; port?: number }
 }
@@ -279,6 +410,7 @@ const start = async (
     adminPrefix?: string
     adminKey?: string
     seed?: string
+    adminControls?: MockControls
     log: LogFormat
   },
 ): Promise<Listening> => {
@@ -288,6 +420,7 @@ const start = async (
     adminKey: config.adminKey,
     seed: config.seed,
     onLog: formatLog(config.log),
+    ...(config.adminControls !== undefined ? { adminControls: config.adminControls } : {}),
   })
   const listening = await listen(runtime, { port: config.port, host: config.host })
   target.listening?.(listening)
@@ -338,6 +471,9 @@ export const serveCommand = (target: FleetTarget): CliCommand => ({
         const adminKey =
           config.adminKey ?? asString(values["admin-key"]) ?? process.env.MOCKINGBIRD_ADMIN_KEY
         if (adminKey !== undefined) config.adminKey = adminKey
+        // Flags and MOCKINGBIRD_ADMIN_CONTROLS apply on top of the config file's own controls.
+        const adminControls = await resolveServeControls(values, process.env, config.adminControls)
+        if (adminControls !== undefined) config.adminControls = adminControls
         const fleet = await startFleet(config, {
           load: (name) => loadTarget(name, target),
           onLog: formatLog(config.log ?? log),
@@ -364,10 +500,12 @@ export const serveCommand = (target: FleetTarget): CliCommand => ({
     }
     const port = asString(values.port)
     const adminKey = asString(values["admin-key"]) ?? process.env.MOCKINGBIRD_ADMIN_KEY
-    const seed = asString(values.seed)
+    const seed = asString(values.seed) ?? process.env.MOCKINGBIRD_SEED
     let listening: Listening
     try {
+      const adminControls = await resolveServeControls(values)
       listening = await start(target, values, {
+        ...(adminControls !== undefined ? { adminControls } : {}),
         adminPrefix: resolveAdminPrefix(
           asString(values["admin-prefix"]) ?? process.env.MOCKINGBIRD_ADMIN_PREFIX,
         ),

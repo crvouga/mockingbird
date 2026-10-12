@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   outboxAdminRoutes,
   type RequestLog,
   type ServiceRuntime,
@@ -85,6 +86,8 @@ export type KlaviyoRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Base URL used in response `links` (default `https://a.klaviyo.com`). */
   baseUrl?: string
@@ -132,6 +135,7 @@ export const createRuntime = (options: KlaviyoRuntimeOptions = {}): KlaviyoRunti
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: klaviyoApiKey,
     presets: KLAVIYO_PRESETS,

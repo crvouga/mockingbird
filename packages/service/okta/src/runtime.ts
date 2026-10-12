@@ -11,6 +11,7 @@ export type OktaRuntimeOptions = Pick<
   | "seed"
   | "adminPrefix"
   | "adminKey"
+  | "adminControls"
   | "onLog"
   | "journalSize"
   | "maxCheckpoints"
@@ -22,13 +23,14 @@ export function createRuntime(options: OktaRuntimeOptions = {}): OktaRuntime {
     ...options,
     name: OKTA_NAMESPACE,
     document,
-    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock, rng }) =>
       new OktaAPI({
         sqlite,
         namespace,
         publicNamespace,
         adminPrefix,
         now: clock.now,
+        random: rng.next,
         ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         ...(options.tokens ? { tokens: options.tokens } : {}),

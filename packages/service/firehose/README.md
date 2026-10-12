@@ -7,10 +7,31 @@ Stateful local emulator of Amazon Data Firehose. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import {
+  CreateDeliveryStreamCommand,
+  FirehoseClient,
+  PutRecordCommand,
+} from "@aws-sdk/client-firehose"
 import { createServer } from "@crvouga/mockingbird-service-firehose/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the Firehose client your application already uses, pointed at the emulator.
+const server = await createServer()
+const firehose = new FirehoseClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code, unchanged.
+await firehose.send(new CreateDeliveryStreamCommand({ DeliveryStreamName: "orders" }))
+const { RecordId } = await firehose.send(
+  new PutRecordCommand({
+    DeliveryStreamName: "orders",
+    Record: { Data: new TextEncoder().encode('{"id":"order-1"}\n') },
+  }),
+)
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

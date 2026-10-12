@@ -11,11 +11,19 @@ WIP Oura v2 collection and OAuth emulator for synthetic wearable synchronization
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-oura"
-const runtime = createRuntime({ pageSize: 2 })
-const response = await runtime.fetch(new Request("http://oura.test/v2/usercollection/workout", {
+import { createServer } from "@crvouga/mockingbird-service-oura/server"
+
+// Test setup: a local Oura. Its URL replaces https://api.ouraring.com in the application.
+const server = await createServer({ pageSize: 2 })
+const baseUrl = server.url
+
+// Application code: the request it sends to Oura.
+const response = await fetch(`${baseUrl}/v2/usercollection/workout`, {
   headers: { authorization: "Bearer mock_oura_token" },
-}))
+})
+const { data, next_token } = await response.json()
+
+await server.close()
 ```
 
 Run `mockingbird-oura serve --port 12128`; inject this origin into the consumer's API and OAuth configuration (the issue's provider strategies otherwise hard-code production). Acceptance tests use a Fetch port. `bun scripts/python-smoke.ts` (requires `uv`) additionally exercises the actual requests 2.32.5 and httpx 0.28.1 libraries over local HTTP, including token refresh and error handling; it does not exercise private consumer source.

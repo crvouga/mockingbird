@@ -15,20 +15,29 @@ bun add -d @crvouga/mockingbird-service-sentry
 ## Usage
 
 ```ts
-import { createRuntime, DEFAULT_PROJECT } from "@crvouga/mockingbird-service-sentry"
+import * as Sentry from "@sentry/node"
+import { DEFAULT_PROJECT } from "@crvouga/mockingbird-service-sentry"
+import { createServer } from "@crvouga/mockingbird-service-sentry/server"
 
-const sentry = createRuntime()
-const response = await sentry.fetch(new Request(
-  `http://sentry.local/api/1/store/?sentry_key=${DEFAULT_PROJECT.publicKey}&sentry_version=7`,
-  { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ message: "Fixture failure", fingerprint: ["fixture-group"] }) },
-))
-console.log(response.status) // 200
+// Test setup: the emulator, and a DSN that points the Sentry SDK at it.
+const server = await createServer()
+const dsn = `${server.url.replace("://", `://${DEFAULT_PROJECT.publicKey}@`)}/1`
+
+// The app's own Sentry calls.
+Sentry.init({ dsn })
+Sentry.captureMessage("Fixture failure", { fingerprint: ["fixture-group"] })
+await Sentry.flush(2000)
+
+// The test asserts on what the emulator captured.
+const captured = await (await fetch(`${server.url}/__admin/events?project=1`)).json()
+console.log(captured.events.length) // 1
+await Sentry.close()
+await server.close()
 ```
 
-For the official `@sentry/nextjs` or `@sentry/node` SDK, start `createServer()` from the `/server`
-entry and set `SENTRY_DSN` to `http://<DEFAULT_PROJECT.publicKey>@127.0.0.1:<port>/1`, or give that
-DSN to `init`/`NodeClient`. Both SDKs are tested at **11.4.0** (the report supplied no pinned version).
+The official `@sentry/nextjs` and `@sentry/node` SDKs both take that DSN: start `createServer()` from
+the `/server` entry and set `SENTRY_DSN` to `http://<DEFAULT_PROJECT.publicKey>@127.0.0.1:<port>/1`, or
+give it to `init`/`NodeClient`. Both SDKs are tested at **11.4.0** (the report supplied no pinned version).
 Use SDK `flush()` to finish submission, then `POST /__admin/flush {"eventIds": […], "count": n}`
 for an immediate assertion: `flushed: false` means the condition is not met; it never sleeps.
 

@@ -210,13 +210,27 @@ export function generateDraftId(clockNow: () => number = Date.now): string {
   return `r-${clockNow()}${entropy}`;
 }
 
-export function generateHistoryId(clockNow: () => number = Date.now): string {
+/**
+ * Mockingbird: with a store, the id only has to exceed that store's own history, so it
+ * replays with the store's state instead of depending on what another mailbox minted.
+ */
+export function generateHistoryId(clockNow: () => number = Date.now, gs?: GoogleStore): string {
   const entropy = randomBytes(3).readUIntBE(0, 3).toString().padStart(8, "0");
   let next = BigInt(`${clockNow()}${entropy}`);
-  if (next <= lastGeneratedHistoryId) {
-    next = lastGeneratedHistoryId + 1n;
+  let last = lastGeneratedHistoryId;
+  if (gs) {
+    last = 0n;
+    for (const id of [
+      ...gs.messages.all().map((message) => message.history_id),
+      ...gs.history.all().map((event) => event.gmail_id),
+    ]) {
+      if (id && /^\d+$/.test(id) && BigInt(id) > last) last = BigInt(id);
+    }
   }
-  lastGeneratedHistoryId = next;
+  if (next <= last) {
+    next = last + 1n;
+  }
+  if (!gs) lastGeneratedHistoryId = next;
   return next.toString();
 }
 
@@ -499,7 +513,7 @@ export function createStoredMessage(
       date_header: new Date(internalDateMs).toUTCString(),
     }, clockNow);
 
-  const historyId = generateHistoryId(clockNow);
+  const historyId = generateHistoryId(clockNow, gs);
   const message = gs.messages.insert({
     gmail_id: gmailId,
     thread_id: threadId,
@@ -584,7 +598,7 @@ export function updateStoredMessage(
   const updated =
     gs.messages.update(message.id, {
       thread_id: input.thread_id ?? message.thread_id,
-      history_id: generateHistoryId(clockNow),
+      history_id: generateHistoryId(clockNow, gs),
       internal_date: String(internalDateMs),
       raw,
       label_ids: labelIds,
@@ -986,7 +1000,7 @@ export function markMessageModified(gs: GoogleStore, message: GoogleMessage, nex
     return message;
   }
 
-  const historyId = generateHistoryId(clockNow);
+  const historyId = generateHistoryId(clockNow, gs);
   const addedLabelIds = dedupedLabelIds.filter((labelId) => !message.label_ids.includes(labelId));
   const removedLabelIds = message.label_ids.filter((labelId) => !dedupedLabelIds.includes(labelId));
   const updated =
@@ -1029,7 +1043,7 @@ export function markMessageModified(gs: GoogleStore, message: GoogleMessage, nex
 }
 
 export function deleteMessage(gs: GoogleStore, message: GoogleMessage, clockNow: () => number = Date.now): boolean {
-  const historyId = generateHistoryId(clockNow);
+  const historyId = generateHistoryId(clockNow, gs);
   recordHistoryEvents(gs, message.user_email, historyId, [
     {
       change_type: "messageDeleted",

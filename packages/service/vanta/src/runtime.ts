@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -50,6 +51,8 @@ export type VantaRuntimeOptions = Omit<VantaAPIOptions, "now" | "namespace"> & {
   seed?: string | number
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type VantaRuntime = ServiceRuntime<VantaAPI>
@@ -64,6 +67,7 @@ export const createRuntime = (options: VantaRuntimeOptions = {}): VantaRuntime =
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, clock }) =>
       new VantaAPI({ ...options, sqlite, namespace, now: clock.now }),

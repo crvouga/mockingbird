@@ -13,9 +13,30 @@ npm install @crvouga/mockingbird-service-apple
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-apple"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://appleid.apple.com"))
+import * as oidc from "openid-client"
+import { createServer } from "@crvouga/mockingbird-service-apple/server"
+
+const server = await createServer({ seed: 1 })
+const redirect_uri = "http://localhost:3000/callback"
+
+// The OpenID Connect client your application already uses. Only the issuer changes: the
+// emulator instead of https://appleid.apple.com (allowInsecureRequests permits plain http).
+const apple = await oidc.discovery(new URL(server.url), "com.example.web", "mock-client-secret", undefined, {
+  execute: [oidc.allowInsecureRequests],
+})
+const signIn = oidc.buildAuthorizationUrl(apple, { redirect_uri, scope: "openid email name" })
+
+// Test setup: stand in for the user choosing an account on the emulator's sign-in page.
+const chosen = await fetch(`${server.url}/auth/authorize/callback`, {
+  method: "POST",
+  redirect: "manual",
+  body: new URLSearchParams({ ...Object.fromEntries(signIn.searchParams), email: "testuser@icloud.com" }),
+})
+
+const tokens = await oidc.authorizationCodeGrant(apple, new URL(chosen.headers.get("location") ?? ""))
+console.log(tokens.claims()?.email) // testuser@icloud.com
+
+await server.close()
 ```
 
 ## API

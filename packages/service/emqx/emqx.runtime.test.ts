@@ -226,7 +226,10 @@ describe("fault presets", () => {
       const { presets } = (await (await admin("GET", "/faults/presets")).json()) as {
         presets: { name: string }[]
       }
-      expect(presets.map((each) => each.name).sort()).toEqual(Object.keys(EMQX_PRESETS).sort())
+      // The emulator's own presets, beside the standard ones every emulator has.
+      expect(presets.map((each) => each.name)).toEqual(
+        expect.arrayContaining(Object.keys(EMQX_PRESETS)),
+      )
       expect(Object.keys(EMQX_PRESETS).sort()).toEqual([
         "api_unauthorized",
         "connect_bad_credentials",

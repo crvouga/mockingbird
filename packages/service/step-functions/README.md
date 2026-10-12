@@ -17,9 +17,11 @@ ESM only. Node 22+ or Bun 1.2+.
 Point the SFN client's `endpoint` option at the emulator. Fixture SigV4 credentials are accepted.
 
 ```ts
+import { DescribeExecutionCommand, SFNClient, StartExecutionCommand } from "@aws-sdk/client-sfn"
 import { createServer } from "@crvouga/mockingbird-service-step-functions/server"
 
-const emulator = await createServer({
+// Test setup: start the emulator with a scripted state machine and point the SDK's endpoint at it.
+const server = await createServer({
   stateMachines: [
     {
       name: "jobs",
@@ -27,7 +29,27 @@ const emulator = await createServer({
     },
   ],
 })
-const health = await fetch(`${emulator.url}/__admin/health`)
+const sfn = new SFNClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the SFN SDK calls it already makes.
+const { executionArn } = await sfn.send(
+  new StartExecutionCommand({
+    stateMachineArn: "arn:aws:states:us-east-1:000000000000:stateMachine:jobs",
+    input: JSON.stringify({ id: 1 }),
+  }),
+)
+
+// Test control: move the emulator clock past the script's `afterMs` instead of sleeping.
+await fetch(`${server.url}/__admin/clock`, { method: "POST", body: JSON.stringify({ advance: 1000 }) })
+
+const execution = await sfn.send(new DescribeExecutionCommand({ executionArn }))
+console.log(execution.status, execution.output) // SUCCEEDED {"ok":true}
+
+await server.close()
 ```
 
 Supported operations are StartExecution, DescribeExecution, StopExecution, GetExecutionHistory, SendTaskSuccess, SendTaskFailure, and SendTaskHeartbeat. Running executions are idempotent by state-machine ARN, name, and exact input. Closed-name reuse and conflicting running input return ExecutionAlreadyExists. JSON input/output remain strings at the wire.

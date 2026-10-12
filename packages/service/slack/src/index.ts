@@ -56,7 +56,7 @@ export { DEFAULT_CHANNELS, DEFAULT_FILES, DEFAULT_SETTINGS, DEFAULT_USERS } from
 export const SLACK_NAMESPACE = "slack"
 
 export type SlackAPIOptions = APIOptions &
-  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix"> & {
+  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix" | "random"> & {
     fixtures?: SlackSeedConfig
     /** Initial per-namespace settings (workspace identity, accepted tokens, strict channels). */
     settings?: Partial<Settings>
@@ -266,6 +266,7 @@ export class SlackAPI implements FetchAPI {
       {
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         ...(options.tokens ? { tokens: options.tokens } : {}),
+        ...(options.random ? { random: options.random } : {}),
         ...(options.publicNamespace !== undefined
           ? { publicNamespace: options.publicNamespace }
           : {}),

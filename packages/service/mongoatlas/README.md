@@ -13,9 +13,21 @@ npm install @crvouga/mockingbird-service-mongoatlas
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-mongoatlas"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://cloud.mongodb.com"))
+import { createServer } from "@crvouga/mockingbird-service-mongoatlas/server"
+
+const server = await createServer({ seed: 1 })
+
+// Atlas publishes no JavaScript SDK for the Admin API, so the application calls it over HTTP.
+// Only the base URL changes: the emulator instead of https://cloud.mongodb.com.
+const atlas = (path: string) =>
+  fetch(`${server.url}/api/atlas/v2${path}`, {
+    headers: { accept: "application/vnd.atlas.2025-03-12+json", authorization: "Bearer mock_atlas_token" },
+  })
+const projects = (await (await atlas("/groups")).json()) as { results: { id: string; name: string }[] }
+const clusters = await atlas(`/groups/${projects.results[0]?.id}/clusters`)
+console.log(projects.results[0]?.name, clusters.status) // Project0 200
+
+await server.close()
 ```
 
 ## API

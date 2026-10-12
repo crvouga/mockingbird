@@ -57,6 +57,7 @@ const client = await mqtt.connectAsync(emqx.mqttUrl, {
 })
 await client.subscribeAsync("space:example", { qos: 1 })
 
+// EMQX publishes no JavaScript SDK for its REST API, so the publisher calls it over HTTP.
 await fetch(`${emqx.url}/api/v5/publish`, {
   method: "POST",
   headers: {
@@ -66,7 +67,7 @@ await fetch(`${emqx.url}/api/v5/publish`, {
   body: JSON.stringify({ topic: "space:example", payload: "hello", qos: 1, retain: false }),
 })
 
-// Move time instead of waiting for a session to expire.
+// Test control: move time instead of waiting for a session to expire.
 await fetch(`${emqx.url}/__admin/clock`, { method: "POST", body: '{"advance": "600s"}' })
 
 await client.endAsync()

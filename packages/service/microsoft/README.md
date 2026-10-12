@@ -13,10 +13,29 @@ npm install @crvouga/mockingbird-service-microsoft
 ## Usage
 
 ```ts
+import { AuthenticationHandler, Client, type Context } from "@microsoft/microsoft-graph-client"
 import { createRuntime } from "@crvouga/mockingbird-service-microsoft"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://login.microsoftonline.com"))
+
+// The Microsoft Graph SDK your application already uses. Only the last middleware changes:
+// requests reach the emulator in this process instead of graph.microsoft.com.
+const emulator = createRuntime({ seed: 1 })
+const graph = Client.initWithMiddleware({
+  middleware: [
+    new AuthenticationHandler({ getAccessToken: async () => "mock_access_token" }),
+    {
+      execute: async (context: Context) => {
+        context.response = await emulator.fetch(new Request(context.request, context.options))
+      },
+    },
+  ],
+})
+
+const me = await graph.api("/me").get()
+console.log(me.displayName, me.mail) // Test User testuser@outlook.com
 ```
+
+For sign-in, serve the emulator (`createServer` from `/server`) and give your OpenID Connect
+client the issuer `<server.url>/9188040d-6c67-4c5b-b112-36a304b66dad/v2.0` (the default tenant).
 
 ## API
 

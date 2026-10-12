@@ -1,6 +1,7 @@
 import {
   type Clock,
   type FaultPreset,
+  type MockControls,
   type ServiceRuntime,
   createRuntime as serviceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -34,6 +35,8 @@ export type OAuthRuntimeOptions = Omit<OAuthAPIOptions, "namespace" | "now" | "p
   clock?: Clock
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   seed?: number | string
   sqlite?: SqliteClient
   /** Internal storage/runtime name. Multi-mount composition assigns a unique value. */
@@ -49,6 +52,7 @@ export function createRuntime(options: OAuthRuntimeOptions = {}): OAuthRuntime {
     ...(options.clock ? { clock: options.clock } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
       new OAuthAPI({ ...options, sqlite, namespace, publicNamespace, adminPrefix, now: clock.now }),

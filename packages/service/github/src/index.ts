@@ -36,7 +36,7 @@ export type { Commit, Repository } from "./state.js"
 export const GITHUB_NAMESPACE = "github"
 export const GITHUB_API_VERSION = "2026-03-10"
 export type GitHubAPIOptions = APIOptions &
-  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix"> & {
+  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix" | "random"> & {
     fixtures?: GitHubSeedConfig
   }
 export type GitHubFixtures = GitHubSeedConfig
@@ -105,6 +105,7 @@ export class GitHubAPI implements FetchAPI {
       {
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         ...(options.tokens ? { tokens: options.tokens } : {}),
+        ...(options.random ? { random: options.random } : {}),
         sqlite: this.sqlite,
         namespace: this.namespace,
         ...(options.publicNamespace !== undefined

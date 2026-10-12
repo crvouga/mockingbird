@@ -7,10 +7,26 @@ Stateful local emulator of Amazon Key Management Service. ESM; Node 22+ or Bun 1
 ## Usage
 
 ```ts
+import { CreateKeyCommand, DecryptCommand, EncryptCommand, KMSClient } from "@aws-sdk/client-kms"
 import { createServer } from "@crvouga/mockingbird-service-kms/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the KMS client your application already uses, pointed at the emulator.
+const server = await createServer()
+const kms = new KMSClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code, unchanged.
+const { KeyMetadata } = await kms.send(new CreateKeyCommand({ Description: "orders" }))
+const { CiphertextBlob } = await kms.send(
+  new EncryptCommand({ KeyId: KeyMetadata?.KeyId, Plaintext: new TextEncoder().encode("secret") }),
+)
+const { Plaintext } = await kms.send(new DecryptCommand({ CiphertextBlob }))
+// new TextDecoder().decode(Plaintext) === "secret"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

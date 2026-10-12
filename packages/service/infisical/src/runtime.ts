@@ -4,6 +4,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -55,6 +56,8 @@ export type InfisicalRuntimeOptions = Omit<
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type InfisicalRuntime = ServiceRuntime<InfisicalAPI>
@@ -112,7 +115,7 @@ const routes = (runtime: InfisicalRuntime): AdminRoutes => ({
       {
         ...metadata,
         version: secret.version + 1,
-        updatedAt: new Date(runtime.clock.now()).toISOString(),
+        updatedAt: new Date(runtime.namespaceClock(namespace).now()).toISOString(),
       },
       clear,
     )
@@ -132,7 +135,10 @@ const routes = (runtime: InfisicalRuntime): AdminRoutes => ({
     const api = runtime.instance(namespace)
     const token = api.state.tokens.get(params.id ?? "")
     if (!token) return adminError(404, "Unknown token")
-    api.state.tokens.update(token.id, { ...token, expiresAt: runtime.clock.now() })
+    api.state.tokens.update(token.id, {
+      ...token,
+      expiresAt: runtime.namespaceClock(namespace).now(),
+    })
     return Response.json({ id: token.id, expired: true })
   },
   "POST /tokens/:id/revoke": ({ namespace, params }) => {
@@ -191,6 +197,7 @@ export const createRuntime = (options: InfisicalRuntimeOptions = {}): InfisicalR
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     adminKey,
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
       new InfisicalAPI({

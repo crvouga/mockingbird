@@ -41,23 +41,27 @@ npx mockingbird-odx serve --port 8817 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-odx"
+import { createServer } from "@crvouga/mockingbird-service-odx/server"
 
-const odx = createRuntime({ webhook: { url: "http://127.0.0.1:3000/odx/webhook" } })
-const call = (path: string, body?: unknown) =>
-  odx.fetch(
-    new Request(`http://odx.test${path}`, {
-      method: body === undefined ? "GET" : "POST",
-      headers: { ApiKey: "any", "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }),
-  )
+// Test setup: the emulator, with the backend's webhook pre-registered.
+const server = await createServer({ webhook: { url: "http://127.0.0.1:3000/odx/webhook" } })
 
-const patient = await (
-  await call("/v1/practice/p1/patient", { firstName: "Ada", lastName: "Lovelace", gender: "Female", email: "ada@example.com" })
-).json()
+// Application code: OPTIMAL_URL is server.url; any OPTIMAL_API_KEY and practice id.
+const baseUrl = server.url
+const created = await fetch(`${baseUrl}/v1/practice/p1/patient`, {
+  method: "POST",
+  headers: { ApiKey: "any", "content-type": "application/json" },
+  body: JSON.stringify({
+    firstName: "Ada",
+    lastName: "Lovelace",
+    gender: "Female",
+    email: "ada@example.com",
+  }),
+})
+const patient = (await created.json()) as { patientId: number }
 // …the app posts HL7 to /v1/practice/p1/patient/{patientId}/test; the emulator answers the parsed
 // PatientTest and posts a signed `Created` webhook to /odx/webhook.
+await server.close()
 ```
 
 ### Routes

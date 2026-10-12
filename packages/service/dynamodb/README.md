@@ -17,8 +17,11 @@ ESM only. Node 22+ or Bun 1.2+.
 Point the SDK's `endpoint` option at the emulator. Fixture SigV4 credentials are accepted.
 
 ```ts
+import { DynamoDBClient } from "@aws-sdk/client-dynamodb"
+import { DynamoDBDocumentClient, GetCommand } from "@aws-sdk/lib-dynamodb"
 import { createServer } from "@crvouga/mockingbird-service-dynamodb/server"
 
+// Test setup: seed the emulator and point the AWS SDK client your application uses at it.
 const emulator = await createServer({
   tables: [
     {
@@ -28,7 +31,19 @@ const emulator = await createServer({
     },
   ],
 })
-const health = await fetch(`${emulator.url}/__admin/health`)
+const db = DynamoDBDocumentClient.from(
+  new DynamoDBClient({
+    endpoint: emulator.url,
+    region: "us-east-1",
+    credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+  }),
+)
+
+// Application code: ordinary SDK calls.
+const { Item } = await db.send(new GetCommand({ TableName: "records", Key: { pk: "fixture" } }))
+// Item: { pk: "fixture", status: "ready" }
+
+await emulator.close() // after the test
 ```
 
 Supported operations are CreateTable, DescribeTable, GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan, BatchGetItem, BatchWriteItem, TransactGetItems, and TransactWriteItems. The expression subset includes expression name/value aliases, SET/ADD/REMOVE/DELETE, `if_not_exists`, `attribute_exists`, `attribute_not_exists`, `begins_with`, comparisons, BETWEEN, AND/OR, projection, conditions, limits, cursors, index ordering, and return values.

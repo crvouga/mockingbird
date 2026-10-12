@@ -7,10 +7,25 @@ Stateful local emulator of Amazon Simple Notification Service. ESM; Node 22+ or 
 ## Usage
 
 ```ts
+import { CreateTopicCommand, PublishCommand, SNSClient } from "@aws-sdk/client-sns"
 import { createServer } from "@crvouga/mockingbird-service-sns/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: start the emulator and point the SDK's endpoint at it.
+const server = await createServer()
+const sns = new SNSClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the SNS SDK calls it already makes.
+const { TopicArn } = await sns.send(new CreateTopicCommand({ Name: "orders" }))
+const published = await sns.send(
+  new PublishCommand({ TopicArn, Message: JSON.stringify({ orderId: "ord_1" }) }),
+)
+console.log(TopicArn, published.MessageId) // arn:aws:sns:us-east-1:000000000000:orders <message id>
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

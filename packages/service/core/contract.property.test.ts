@@ -190,7 +190,9 @@ describe("fault presets, effects, drops and latency", () => {
     const presets = (await (await runtime.fetch(admin("/faults/presets"))).json()) as {
       presets: { name: string }[]
     }
-    expect(presets.presets.map((p) => p.name)).toEqual(["outage", "mangled", "doubled"])
+    // The service's own presets come first; the standard ones every mock has follow.
+    expect(presets.presets.map((p) => p.name).slice(0, 3)).toEqual(["outage", "mangled", "doubled"])
+    expect(presets.presets.map((p) => p.name)).toContain("rate_limited")
     expect(
       (await runtime.fetch(admin("/faults", { method: "POST", body: '{"preset":"nope"}' }))).status,
     ).toBe(404)

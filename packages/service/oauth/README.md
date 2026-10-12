@@ -13,8 +13,10 @@ npm install @crvouga/mockingbird-service-oauth
 ## Usage
 
 ```ts
+import * as oauth from "oauth4webapi"
 import { createRuntime } from "@crvouga/mockingbird-service-oauth"
 
+// Test setup: the identity provider, its test accounts and your registered client.
 const identity = createRuntime({
   provider: "google", // "apple", "microsoft", "github" or "oidc"
   accounts: [
@@ -29,10 +31,17 @@ const identity = createRuntime({
   }],
 })
 
-const discovery = await identity.fetch(
-  new Request("http://localhost:8810/.well-known/openid-configuration"),
+// Application code: the OIDC client it already uses (here oauth4webapi). Only its fetch
+// changes: requests reach the emulator in this process instead of the real issuer.
+const issuer = new URL("https://identity.test")
+const options = {
+  [oauth.customFetch]: (url: string, init: RequestInit) => identity.fetch(new Request(url, init)),
+}
+const as = await oauth.processDiscoveryResponse(
+  issuer,
+  await oauth.discoveryRequest(issuer, options),
 )
-console.log(await discovery.json())
+console.log(as.authorization_endpoint, as.token_endpoint, as.jwks_uri)
 
 // The same interface can be mounted in Bun, Deno, a worker or an HTTP adapter.
 // Browser execution needs a secure context for Web Crypto.
@@ -43,11 +52,20 @@ void fetchHandler
 Serve from Node (also works in Bun):
 
 ```ts
+import * as oauth from "oauth4webapi"
 import { createServer } from "@crvouga/mockingbird-service-oauth/server"
 
 const server = await createServer({ port: 8810, provider: "apple" })
-console.log(server.url)
 // Register clients and seed accounts through /__admin, or pass them to createServer.
+
+// Application code: its OIDC client, with the issuer set to server.url.
+const issuer = new URL(server.url)
+const as = await oauth.processDiscoveryResponse(
+  issuer,
+  // oauth4webapi requires HTTPS unless allowInsecureRequests is set; loopback needs it.
+  await oauth.discoveryRequest(issuer, { [oauth.allowInsecureRequests]: true }),
+)
+console.log(as.authorization_endpoint) // http://127.0.0.1:8810/auth/authorize
 await server.close()
 ```
 
@@ -78,6 +96,7 @@ The issuer defaults to the incoming origin (and `/__admin/ns/<name>` when used).
 `createMultiRuntime({ mounts })` and `createMultiServer({ mounts })` mount independent providers at exact paths on one origin. Discovery, endpoint URLs, token issuers, signing keys, clients, grants, sessions, faults, journals, and namespace state remain isolated per mount.
 
 ```ts
+import * as oauth from "oauth4webapi"
 import { createMultiServer } from "@crvouga/mockingbird-service-oauth/server"
 
 const accounts = [{ id: "ada", name: "Ada Lovelace", email: "ada@example.test" }]
@@ -91,6 +110,15 @@ const server = await createMultiServer({
     { path: "/oauth2", provider: "microsoft", clients, accounts },
   ],
 })
+
+// Application code: each mount is its own issuer for the app's OIDC client.
+const google = new URL(`${server.url}/google`)
+const as = await oauth.processDiscoveryResponse(
+  google,
+  await oauth.discoveryRequest(google, { [oauth.allowInsecureRequests]: true }),
+)
+console.log(as.token_endpoint) // http://127.0.0.1:<port>/google/token
+await server.close()
 ```
 
 Use `/__admin/ns/<name>/<mount>/…` for URL-selected namespaces. `GET /__admin/health` reports every mount; `POST /__admin/reset?all=1` resets them atomically. Other aggregate admin requests select a runtime with `?mount=/google`, while mount-scoped controls are also available at `/google/__admin/*`. Duplicate or unsafe mount paths, duplicate explicit issuers, and duplicate client/key IDs within a mount fail before the listener starts.

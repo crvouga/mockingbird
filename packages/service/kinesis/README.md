@@ -7,10 +7,32 @@ Stateful local emulator of Amazon Kinesis Data Streams. ESM; Node 22+ or Bun 1.2
 ## Usage
 
 ```ts
+import { CreateStreamCommand, KinesisClient, PutRecordCommand } from "@aws-sdk/client-kinesis"
+import { NodeHttpHandler } from "@smithy/node-http-handler"
 import { createServer } from "@crvouga/mockingbird-service-kinesis/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the Kinesis client your application already uses, pointed at the emulator.
+// The client defaults to HTTP/2 on Node; the emulator serves HTTP/1.1, so pass NodeHttpHandler.
+const server = await createServer()
+const kinesis = new KinesisClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+  requestHandler: new NodeHttpHandler(),
+})
+
+// Application code, unchanged.
+await kinesis.send(new CreateStreamCommand({ StreamName: "orders", ShardCount: 1 }))
+const { ShardId, SequenceNumber } = await kinesis.send(
+  new PutRecordCommand({
+    StreamName: "orders",
+    PartitionKey: "order-1",
+    Data: new TextEncoder().encode('{"id":"order-1"}'),
+  }),
+)
+// ShardId === "shardId-000000000000"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

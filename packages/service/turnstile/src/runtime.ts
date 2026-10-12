@@ -2,6 +2,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -32,6 +33,8 @@ export type TurnstileRuntimeOptions = {
   seed?: string | number
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   sites?: Site[]
   tokens?: Token[]
@@ -47,6 +50,7 @@ export const createRuntime = (options: TurnstileRuntimeOptions = {}): TurnstileR
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, clock }) =>
       new TurnstileAPI({

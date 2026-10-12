@@ -172,13 +172,15 @@ describe("A7 error shapes and faults", () => {
       if (typeof preset !== "object" || preset === null || !("name" in preset)) return []
       return typeof preset.name === "string" ? [preset.name] : []
     })
-    expect(names).toEqual([
+    // Junction's own presets lead the list; the standard ones it does not replace follow.
+    expect(names.slice(0, 5)).toEqual([
       "sandbox_user_quota",
       "rate_limited",
       "server_error",
       "bad_gateway",
       "unavailable",
     ])
+    expect(names).toContain("timeout")
   })
 
   test("unknown-user 404 bodies are Junction's exact bytes, per route", async () => {

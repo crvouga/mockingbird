@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type OutboxItem,
   type OutboxStore,
   outboxAdminRoutes,
@@ -103,6 +104,8 @@ export type SlackRuntimeOptions = Pick<SlackAPIOptions, "fixtures" | "baseUrl" |
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   settings?: Partial<Settings>
 }
@@ -216,7 +219,7 @@ const adminRoutes = (runtime: ServiceRuntime<SlackAPI>): AdminRoutes => ({
         is_private: entry.is_private === true,
         is_archived: entry.is_archived === true,
         is_member: entry.is_member !== false,
-        created: Math.floor(runtime.clock.now() / 1000),
+        created: Math.floor(runtime.namespaceClock(namespace).now() / 1000),
       }
       api.state.channels.insert(channel.id, channel)
       return channel
@@ -268,7 +271,7 @@ const adminRoutes = (runtime: ServiceRuntime<SlackAPI>): AdminRoutes => ({
         mimetype: typeof entry.mimetype === "string" ? entry.mimetype : "application/octet-stream",
         filetype: typeof entry.filetype === "string" ? entry.filetype : "binary",
         size: typeof entry.size === "number" ? entry.size : 0,
-        created: Math.floor(runtime.clock.now() / 1000),
+        created: Math.floor(runtime.namespaceClock(namespace).now() / 1000),
       }
       api.state.files.insert(id, file)
       return file
@@ -361,10 +364,11 @@ export const createRuntime = (options: SlackRuntimeOptions = {}): SlackRuntime =
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: (request) => slackCredential(request, options.adminPrefix),
     presets: SLACK_PRESETS,
-    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock, rng }) =>
       new SlackAPI({
         ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
@@ -374,6 +378,7 @@ export const createRuntime = (options: SlackRuntimeOptions = {}): SlackRuntime =
         publicNamespace,
         adminPrefix,
         now: clock.now,
+        random: rng.next,
         ...(options.settings ? { settings: options.settings } : {}),
       }),
     admin: adminRoutes,

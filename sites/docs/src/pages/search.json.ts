@@ -2,6 +2,7 @@ import catalog from "virtual:mockingbird/catalog"
 import type { APIRoute } from "astro"
 import { CATEGORIES, type CategorySlug } from "../lib/categories.ts"
 import { initials } from "../lib/format.ts"
+import { plainSummary } from "../lib/guides.ts"
 
 export interface PaletteEntry {
   kind: "service" | "page"
@@ -15,8 +16,17 @@ export interface PaletteEntry {
   featured: boolean
   hue: number
   logo: string | null
+  /** A guide page's own subject: its search words and the interface it defines. */
+  keywords: string
   text: string
 }
+
+const codeSpans = (markdown: string): string[] =>
+  [...markdown.matchAll(/`([^`\n]+)`/g)].map(([, code]) => code as string)
+
+/** A page's `## Interface` section: the routes, headers and options that page defines. */
+const interfaceOf = (markdown: string): string =>
+  /^## Interface\n([\s\S]*?)(?=^## )/m.exec(markdown)?.[1] ?? ""
 
 const PAGES: [string, string, string][] = [
   ["/services", "Emulators", "Browse and filter every emulator"],
@@ -40,6 +50,7 @@ export const GET: APIRoute = () => {
       featured: s.featured,
       hue: s.hue,
       logo: s.brand.logo,
+      keywords: "",
       text: [
         s.packageName,
         s.description,
@@ -51,19 +62,22 @@ export const GET: APIRoute = () => {
         ...s.operations.map((o) => o.id),
       ].join(" "),
     })),
+    // Each page of a guide is an entry of its own. It is found first by its title, then by
+    // the words people look for it by and the interface it defines, then by what it mentions.
     ...catalog.guides.map((g) => ({
       kind: "page" as const,
       href: `/docs/${g.slug}`,
       name: `docs/${g.slug}`,
       displayName: g.title,
       initials: "",
-      subtitle: g.summary,
+      subtitle: plainSummary(g.summary),
       category: "",
       parity: "",
       featured: false,
       hue: 0,
       logo: null,
-      text: `${g.summary} ${g.toc.map((t) => t.text).join(" ")}`,
+      keywords: [g.keywords, ...codeSpans(interfaceOf(g.markdown))].join(" "),
+      text: [g.summary, ...g.toc.map((t) => t.text), ...codeSpans(g.markdown)].join(" "),
     })),
     ...PAGES.map(([href, displayName, subtitle]) => ({
       kind: "page" as const,
@@ -77,6 +91,7 @@ export const GET: APIRoute = () => {
       featured: false,
       hue: 0,
       logo: null,
+      keywords: "",
       text: subtitle,
     })),
   ]

@@ -1,6 +1,8 @@
 /** These three modules are highlighted and executed together during the docs build. */
 export const CHECKOUT = {
   packages: ["@crvouga/mockingbird-service-postgres", "@crvouga/mockingbird-service-stripe"],
+  /** The vendor SDK the API calls, exactly as the application would. Not a Mockingbird package. */
+  sdk: "stripe",
   steps: [
     {
       id: "data",
@@ -26,11 +28,20 @@ console.log(db.query("SELECT name, price FROM products"))
       id: "api",
       title: "API",
       file: "api.ts",
-      description: "Read a product, charge through the Stripe emulator, and persist the order.",
-      code: `import { createRuntime } from "@crvouga/mockingbird-service-stripe"
+      description:
+        "Read a product, charge it with the Stripe SDK, and persist the order. The emulator answers the SDK in this process.",
+      code: `import Stripe from "stripe"
+import { createRuntime } from "@crvouga/mockingbird-service-stripe"
 import { db } from "./data.ts"
 
-export const stripe = createRuntime()
+// The Stripe SDK your application already uses. Only its HTTP client changes:
+// requests reach the emulator in this process instead of api.stripe.com.
+const emulator = createRuntime()
+export const stripe = new Stripe("sk_test_mockingbird", {
+  httpClient: Stripe.createFetchHttpClient((url: string, init: RequestInit) =>
+    emulator.fetch(new Request(url, init)),
+  ),
+})
 
 export const api = {
   async fetch(request: Request) {
@@ -43,16 +54,10 @@ export const api = {
     )
     if (!product) return Response.json({ error: "Product not found" }, { status: 404 })
 
-    const payment = await stripe.fetch(new Request("https://api.stripe.com/v1/payment_intents", {
-      method: "POST",
-      headers: { authorization: "Bearer sk_test_mockingbird" },
-      body: new URLSearchParams({
-        amount: String(product.price), currency: "usd",
-        payment_method: "pm_card_visa", confirm: "true",
-      }),
-    }))
-    if (!payment.ok) return payment
-    const intent = await payment.json()
+    const intent = await stripe.paymentIntents.create({
+      amount: product.price, currency: "usd",
+      payment_method: "pm_card_visa", confirm: true,
+    })
     if (intent.status !== "succeeded") {
       return Response.json({ paymentStatus: intent.status }, { status: 402 })
     }

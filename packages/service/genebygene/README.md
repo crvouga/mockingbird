@@ -62,28 +62,44 @@ npx mockingbird-genebygene serve --port 8788 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-genebygene"
+import { createServer } from "@crvouga/mockingbird-service-genebygene/server"
 
-const gxg = createRuntime({ webhooks: { url: "http://127.0.0.1:3000/webhooks/gene-by-gene", secret: "kv-secret" } })
-const call = (path: string, init: RequestInit = {}) => gxg.fetch(new Request(`http://gxg.test${path}`, init))
-
-const { access_token } = (await (
-  await call("/connect/token", {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ grant_type: "client_credentials", client_id: "id", client_secret: "s" }),
-  })
-).json()) as { access_token: string }
-// …the app quotes, then places POST /api/v2/orders with Authorization: Bearer <access_token>;
-// orderLines[].kitNumbers carry the new kit (Order.Created + KitNumbersGenerated are sent)…
-
+// Test setup: the emulator (API and auth host on one port) and its admin controls.
+const server = await createServer({
+  webhooks: { url: "http://127.0.0.1:3000/webhooks/gene-by-gene", secret: "kv-secret" },
+})
 const admin = (path: string, body: unknown, method = "POST") =>
-  call(`/__admin${path}`, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) })
+  fetch(`${server.url}/__admin${path}`, {
+    method,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
 await admin("/settings", { catalog: "production", kitAssociation: "deferred" }, "PUT")
+
+// Application code: GENE_BY_GENE_API_URL is server.url, the token URL its /connect/token.
+const baseUrl = server.url
+const token = await fetch(`${baseUrl}/connect/token`, {
+  method: "POST",
+  body: new URLSearchParams({ grant_type: "client_credentials", client_id: "id", client_secret: "s" }),
+})
+const { access_token } = (await token.json()) as { access_token: string }
+const placed = await fetch(`${baseUrl}/api/v2/orders`, {
+  method: "POST",
+  headers: { authorization: `Bearer ${access_token}`, "content-type": "application/json" },
+  body: JSON.stringify({
+    items: [{ productId: "a5190f53-01c8-4966-aead-adbf20f0dbf6", placerOrderNumber: "PO-1", quantity: 1 }],
+  }),
+})
+// orderLines[].kitNumbers carry the new kit (Order.Created + KitNumbersGenerated are sent).
+const order = (await placed.json()) as { id: string; orderLines: { kitNumbers: string[] }[] }
+const [kitNumber] = order.orderLines[0].kitNumbers
+
+// Test control: classify an address, then move the order and its kit as the lab would.
 await admin("/addresses/classify", { addressLine1: "501 N 5th St", city: "Phoenix", stateOrRegion: "AZ", postalCode: "85004", countryCode: "US", recipientName: "T", phone: "+15555550100" })
 // → {quote: "options", place: "address-not-found", zone: 5, codes: [...], prices: {...}}
-await admin("/scenario/happy-path", { orderId: "<orderId>" }) // associate → ship → … → Results Completed
-await admin("/kits/WB3K9Q2X/transition", { to: "Error", errorCode: 19 }) // Kit.Error (new collection)
+await admin("/scenario/happy-path", { orderId: order.id }) // associate → ship → … → Results Completed
+await admin(`/kits/${kitNumber}/transition`, { to: "Error", errorCode: 19 }) // Kit.Error (new collection)
+await server.close()
 ```
 
 ### Routes (vendor)

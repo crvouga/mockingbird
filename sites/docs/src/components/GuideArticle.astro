@@ -1,6 +1,7 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
 import type { Guide } from "../lib/types.ts"
+import ControlDirectory from "./ControlDirectory.astro"
 import Icon from "./Icon.astro"
 
 interface Props {
@@ -8,13 +9,46 @@ interface Props {
   repo: string
 }
 const { guide, repo } = Astro.props
+
+const guides = catalog.guides
+const parent = guide.parent ? guides.find((g) => g.slug === guide.parent) : undefined
+const pagesOf = (slug: string) => guides.filter((g) => g.parent === slug)
+/** A guide and its pages read as one sequence, so each page offers the one before and after. */
+const sequence = parent ? [parent, ...pagesOf(parent.slug)] : [guide, ...pagesOf(guide.slug)]
+const at = sequence.findIndex((g) => g.slug === guide.slug)
+const previous = sequence.length > 1 ? sequence[at - 1] : undefined
+const next = sequence.length > 1 ? sequence[at + 1] : undefined
+const controlsGuide = guide.slug === "admin-controls" || guide.parent === "admin-controls"
 ---
 
 <div class="guide">
   <nav class="guide-nav" aria-label="Documentation">
     <a class="guide-nav-home" href="/docs"><Icon name="file" /> Documentation</a>
     <p>Guides</p>
-    <ul>{catalog.guides.map((item) => <li><a href={`/docs/${item.slug}`} aria-current={item.slug === guide.slug ? "page" : undefined}>{item.title}</a></li>)}</ul>
+    <ul>
+      {
+        guides
+          .filter((item) => !item.parent)
+          .map((item) => (
+            <li>
+              <a href={`/docs/${item.slug}`} aria-current={item.slug === guide.slug ? "page" : undefined}>
+                {item.title}
+              </a>
+              {pagesOf(item.slug).length > 0 && (
+                <ul class="guide-pages">
+                  {pagesOf(item.slug).map((page) => (
+                    <li>
+                      <a href={`/docs/${page.slug}`} aria-current={page.slug === guide.slug ? "page" : undefined}>
+                        {page.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          ))
+      }
+    </ul>
     <p>Reference</p>
     <a href="/services">Emulator catalog</a>
     <a href="/coverage">Operation coverage</a>
@@ -27,6 +61,14 @@ const { guide, repo } = Astro.props
       <nav class="crumbs" aria-label="Breadcrumb">
         <a href="/docs">Docs</a>
         <Icon name="chevron" />
+        {
+          parent && (
+            <>
+              <a href={`/docs/${parent.slug}`}>{parent.title}</a>
+              <Icon name="chevron" />
+            </>
+          )
+        }
         <span aria-current="page">{guide.title}</span>
       </nav>
       <h1>{guide.title}</h1>
@@ -36,7 +78,32 @@ const { guide, repo } = Astro.props
         <a href={`/docs/${guide.slug}.md`}>Markdown</a>
       </p>
     </header>
+    {
+      controlsGuide && (
+        <ControlDirectory current={guide.slug} variant={guide.parent ? "strip" : "full"} />
+      )
+    }
     <div class="prose" set:html={guide.html} />
+    {
+      (previous || next) && (
+        <nav class="pager" aria-label="More in this guide">
+          {previous ? (
+            <a href={`/docs/${previous.slug}`} rel="prev">
+              <span>Previous</span>
+              <strong>{previous.title}</strong>
+            </a>
+          ) : (
+            <span />
+          )}
+          {next && (
+            <a href={`/docs/${next.slug}`} rel="next">
+              <span>Next</span>
+              <strong>{next.title}</strong>
+            </a>
+          )}
+        </nav>
+      )
+    }
     <slot />
   </article>
   {
@@ -81,6 +148,14 @@ const { guide, repo } = Astro.props
   .guide-nav a:hover { color: var(--fg); background: var(--bg-subtle); }
   .guide-nav a[aria-current="page"] { background: var(--accent-soft); color: var(--highlight); font-weight: 600; }
   .guide-nav .guide-nav-home { color: var(--fg); font-weight: 600; }
+  .guide-nav .guide-pages { margin: 2px 0 6px 10px; padding-left: 6px; border-left: 1px solid var(--border); }
+  .guide-nav .guide-pages a { padding: 5px 10px; font-size: 12.5px; }
+  .pager { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 48px; }
+  .pager a { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); transition: border-color 0.15s var(--ease); }
+  .pager a:hover { border-color: var(--highlight); }
+  .pager a[rel="next"] { text-align: right; }
+  .pager span { color: var(--fg-subtle); font-size: 12px; }
+  .pager strong { font-size: 14px; }
   .guide-body {
     min-width: 0;
     max-width: 780px;

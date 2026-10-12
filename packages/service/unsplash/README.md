@@ -13,22 +13,26 @@ bun add @crvouga/mockingbird-service-unsplash
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-unsplash"
+import { createApi } from "unsplash-js"
+import { createServer } from "@crvouga/mockingbird-service-unsplash/server"
 
-const unsplash = createRuntime()
-const response = await unsplash.fetch(new Request(
-  "http://unsplash.test/search/photos?query=mock&orientation=landscape&per_page=9&page=1",
-  { headers: { authorization: "Client-ID mock_unsplash_key" } },
-))
-const { results } = await response.json()
-const image = await unsplash.fetch(new Request(results[0].urls.regular))
+const server = await createServer()
+
+// The Unsplash SDK your application already uses. Only its base URL changes.
+const unsplash = createApi({ accessKey: "mock_unsplash_key", baseUrl: server.url })
+const { data } = await unsplash.GET("/search/photos", {
+  params: { query: { query: "mock", orientation: "landscape", per_page: 9, page: 1 } },
+})
+const image = await fetch(data?.results[0]?.urls.regular ?? "") // synthetic local image bytes
+
+await server.close()
 ```
 
 For a separate application process, run `mockingbird-unsplash serve --port 12125`.
-Replace the consumer's search origin with `http://localhost:12125`; no standard vendor
-base-URL environment variable exists. Accepts `client_id=mock_unsplash_key` or
-`Authorization: Client-ID mock_unsplash_key`. Configure other synthetic keys with
-`accessKeys`. There is no official SDK drop-in requirement: the reported client is raw fetch.
+Set the SDK's `baseUrl` (or a raw-fetch client's search origin) to `http://localhost:12125`;
+no standard vendor base-URL environment variable exists. Accepts `client_id=mock_unsplash_key`
+or `Authorization: Client-ID mock_unsplash_key`. Configure other synthetic keys with
+`accessKeys`.
 
 ### Routes and fixtures
 

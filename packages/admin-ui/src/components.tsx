@@ -8,6 +8,27 @@ import { errorMessage, pretty, text } from "./model.js"
 
 const LIVE_REFRESH_MS = 1_500
 
+/** The admin controls guide. Each control has a page of its own under it. */
+const GUIDE = "https://mockingbird.chrisvouga.dev/docs/admin-controls"
+
+/** A view's heading, with a link to the page of the guide that defines what the view controls. */
+export function ViewTitle({ page, children }: { page?: string; children: ReactNode }) {
+  return (
+    <Flex align="baseline" gap="middle">
+      <Typography.Title level={3} style={{ margin: 0 }}>
+        {children}
+      </Typography.Title>
+      <Typography.Link
+        href={page === undefined ? GUIDE : `${GUIDE}/${page}`}
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        Docs
+      </Typography.Link>
+    </Flex>
+  )
+}
+
 /**
  * Admin reads stay live while their view is mounted. Polling is deliberately
  * quiet: it preserves the last successful payload and only shows the spinner
@@ -74,11 +95,13 @@ export const Json = ({ value }: { value: unknown }) => (
   />
 )
 
-type Row = { key: string; value: Record<string, unknown> }
+type Row = { key: string; index: number; value: Record<string, unknown> }
 type GridProps = {
   rows: Record<string, unknown>[]
   columns?: readonly string[]
   rowKeys?: readonly string[]
+  /** Column widths in pixels, by name. Default: 200. */
+  widths?: Readonly<Record<string, number>>
   loading?: boolean
   total?: number
   page?: number
@@ -87,6 +110,8 @@ type GridProps = {
   pagination?: false
   action?: (row: Record<string, unknown>, index: number) => ReactNode
   actionWidth?: number
+  /** What an expanded row shows. Default: the row itself. */
+  detail?: (row: Record<string, unknown>, index: number) => unknown
 }
 
 /** Structured data uses Ant Design's sizing, sorting, expansion, and pagination. */
@@ -94,6 +119,7 @@ export function DataTable({
   rows,
   columns,
   rowKeys,
+  widths,
   loading = false,
   total,
   page,
@@ -102,10 +128,15 @@ export function DataTable({
   pagination,
   action,
   actionWidth = 100,
+  detail,
 }: GridProps) {
   const [search, setSearch] = useState("")
   const names = columns ?? [...new Set(rows.flatMap((row) => Object.keys(row)))]
-  const data = rows.map((value, index) => ({ key: rowKeys?.[index] ?? String(index), value }))
+  const data = rows.map((value, index) => ({
+    key: rowKeys?.[index] ?? String(index),
+    index,
+    value,
+  }))
   const query = search.toLocaleLowerCase()
   const filtered = data.filter(
     (row) => !query || text(row.value).toLocaleLowerCase().includes(query),
@@ -113,7 +144,7 @@ export function DataTable({
   const tableColumns: TableProps<Row>["columns"] = names.map((name) => ({
     key: name,
     title: name,
-    width: 200,
+    width: widths?.[name] ?? 200,
     ellipsis: { showTitle: true },
     sorter: (a, b) =>
       text(a.value[name]).localeCompare(text(b.value[name]), undefined, { numeric: true }),
@@ -132,11 +163,7 @@ export function DataTable({
       title: "Actions",
       fixed: "right",
       width: actionWidth,
-      render: (_, row) =>
-        action(
-          row.value,
-          data.findIndex((item) => item.key === row.key),
-        ),
+      render: (_, row) => action(row.value, row.index),
     })
   return (
     <Flex vertical gap="middle" style={{ minWidth: 0 }}>
@@ -157,7 +184,12 @@ export function DataTable({
         dataSource={filtered}
         loading={loading}
         tableLayout="fixed"
-        scroll={{ x: Math.max(600, names.length * 200 + (action ? actionWidth : 0)) }}
+        scroll={{
+          x: Math.max(
+            600,
+            names.reduce((sum, name) => sum + (widths?.[name] ?? 200), action ? actionWidth : 0),
+          ),
+        }}
         pagination={
           pagination === false
             ? false
@@ -181,7 +213,11 @@ export function DataTable({
             />
           ),
         }}
-        expandable={{ expandedRowRender: (row) => <Json value={row.value} /> }}
+        expandable={{
+          expandedRowRender: (row) => (
+            <Json value={detail ? detail(row.value, row.index) : row.value} />
+          ),
+        }}
       />
     </Flex>
   )

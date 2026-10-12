@@ -779,8 +779,9 @@ describe("test controls", () => {
     const listed = (await (await admin("/faults/presets")).json()) as {
       presets: { name: string }[]
     }
-    expect(listed.presets.map((preset) => preset.name).sort()).toEqual(
-      [
+    // Tempo's own presets, beside the standard ones every emulator has.
+    expect(listed.presets.map((preset) => preset.name)).toEqual(
+      expect.arrayContaining([
         "ingest_dropped",
         "ingest_rate_limited",
         "ingest_server_error",
@@ -791,10 +792,10 @@ describe("test controls", () => {
         "query_timeout",
         "query_unavailable",
         "unauthorized",
-      ].sort(),
+      ]),
     )
-    expect(Object.keys(TEMPO_PRESETS).sort()).toEqual(
-      listed.presets.map((preset) => preset.name).sort(),
+    expect(listed.presets.map((preset) => preset.name)).toEqual(
+      expect.arrayContaining(Object.keys(TEMPO_PRESETS)),
     )
   })
 

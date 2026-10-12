@@ -11,11 +11,18 @@ WIP Airtable OAuth and forms-integration emulator. Only synthetic fixtures belon
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-airtable"
-const runtime = createRuntime()
-const response = await runtime.fetch(new Request("http://airtable.test/v0/meta/bases", {
+import { createServer } from "@crvouga/mockingbird-service-airtable/server"
+
+const server = await createServer()
+
+// The application's own HTTP call (airtable.js has no metadata API). Only the origin changes.
+const response = await fetch(`${server.url}/v0/meta/bases`, {
   headers: { authorization: "Bearer mock_airtable_token" },
-}))
+})
+const { bases } = (await response.json()) as { bases: { id: string; name: string }[] }
+console.log(bases.map((base) => base.id)) // ["appMockBase"]
+
+await server.close()
 ```
 
 Run `mockingbird-airtable serve --port 12130`. Inject its origin for both the API and OAuth origin in the optional integration; consumer endpoint wiring is separate.

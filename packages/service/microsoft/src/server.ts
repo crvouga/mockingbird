@@ -29,6 +29,7 @@ export const serveTarget: ServeTarget = {
       ...(common.seed !== undefined ? { seed: common.seed } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
+      ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),
       ...(common.onLog ? { onLog: common.onLog } : {}),
     }),
   banner: () => ["Native Mockingbird namespaces and /__admin controls"],

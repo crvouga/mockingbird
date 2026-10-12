@@ -13,13 +13,20 @@ bun add @crvouga/mockingbird-service-vanta
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-vanta"
-const vanta = createRuntime()
-const response = await vanta.fetch(new Request("http://vanta.test/v1/people?pageSize=10", {
+import { createServer } from "@crvouga/mockingbird-service-vanta/server"
+
+// Test setup: a local Vanta. Its URL replaces https://api.vanta.com in the application.
+const server = await createServer()
+const baseUrl = server.url
+
+// Application code: the request it sends to Vanta.
+const response = await fetch(`${baseUrl}/v1/people?pageSize=10`, {
   headers: { authorization: "Bearer mock_vanta_token" },
-}))
+})
 const { results } = await response.json()
 console.log(results.pageInfo)
+
+await server.close()
 ```
 
 Run `mockingbird-vanta serve --port 12129` and inject `http://localhost:12129` as the

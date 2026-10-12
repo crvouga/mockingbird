@@ -11,11 +11,19 @@ WIP WHOOP v2 emulator for synthetic workout, sleep, recovery and cycle synchroni
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-whoop"
-const runtime = createRuntime()
-const response = await runtime.fetch(new Request("http://whoop.test/developer/v2/activity/workout", {
+import { createServer } from "@crvouga/mockingbird-service-whoop/server"
+
+// Test setup: a local WHOOP. The application's API base is its URL plus /developer.
+const server = await createServer()
+const baseUrl = `${server.url}/developer`
+
+// Application code: the request it sends to WHOOP.
+const response = await fetch(`${baseUrl}/v2/activity/workout`, {
   headers: { authorization: "Bearer mock_whoop_token" },
-}))
+})
+const { records } = await response.json()
+
+await server.close()
 ```
 
 Run `mockingbird-whoop serve --port 12129`. Inject the local origin plus `/developer` as the consumer API base, and the origin alone as OAuth base. Consumer endpoint wiring is separate from this emulator.

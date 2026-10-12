@@ -5,6 +5,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   HttpError,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -128,6 +129,8 @@ export type FullscriptRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   settings?: Partial<Settings>
   orders?: readonly SeedOrder[]
@@ -191,7 +194,7 @@ const adminRoutes =
         api.state.clinics.insert(body.clinicId, {
           id: body.clinicId,
           name: typeof body.clinicName === "string" ? body.clinicName : body.clinicId,
-          created_at: new Date(runtime.clock.now()).toISOString(),
+          created_at: new Date(runtime.namespaceClock(namespace).now()).toISOString(),
         })
       }
       const practitioner = {
@@ -321,6 +324,7 @@ export const createRuntime = (options: FullscriptRuntimeOptions = {}): Fullscrip
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: tokenCredential,
     presets: FULLSCRIPT_PRESETS,

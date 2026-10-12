@@ -41,22 +41,29 @@ npx mockingbird-google-maps serve --port 8814 --api-key "$PLACES_KEY"
 ```
 
 ```ts
+import { Client, PlaceAutocompleteType } from "@googlemaps/google-maps-services-js"
 import { createRuntime } from "@crvouga/mockingbird-service-google-maps"
 
-const maps = createRuntime()
-const get = async (path: string) =>
-  (await maps.fetch(new Request(`http://maps.test${path}`))).json()
+// The Maps client your application already uses. Only its HTTP layer changes: axios's
+// fetch adapter reaches the emulator in this process instead of maps.googleapis.com.
+const emulator = createRuntime()
+const maps = new Client({
+  config: {
+    adapter: "fetch",
+    env: { fetch: (url: string | URL | Request, init?: RequestInit) => emulator.fetch(new Request(url, init)) },
+  },
+})
 
-const { predictions } = await get(
-  "/maps/api/place/autocomplete/json?input=1625%20N%20Central&types=address&components=country:us&key=k",
-)
-const details = await get(
-  `/maps/api/place/details/json?place_id=${predictions[0].place_id}&fields=address_component&key=k`,
-)
-// details.result.address_components → 1625 / N Central Ave / Phoenix / AZ / 85004
+const { data } = await maps.placeAutocomplete({
+  params: { input: "1625 N Central", types: PlaceAutocompleteType.address, components: ["country:us"], key: "k" },
+})
+const details = await maps.placeDetails({
+  params: { place_id: data.predictions[0]?.place_id ?? "", fields: ["address_component"], key: "k" },
+})
+// details.data.result.address_components → 1625 / N Central Ave / Phoenix / AZ / 85004
 
-// Make the next two autocomplete calls fail, as QA's manual-entry fallback expects.
-maps.applyPreset("autocomplete_over_query_limit", "default", { count: 2 })
+// Test control: make the next two autocomplete calls fail, as QA's manual-entry fallback expects.
+emulator.applyPreset("autocomplete_over_query_limit", "default", { count: 2 })
 ```
 
 ### Address Validation
@@ -66,30 +73,37 @@ not collide, so one emulator serves both. Point the server-side client's Address
 at the emulator (or at `<emulator>/__admin/ns/<namespace>`), with the key as `?key=` (or `X-Goog-Api-Key`).
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-google-maps"
+import { AddressValidationClient } from "@googlemaps/addressvalidation"
+import { createServer } from "@crvouga/mockingbird-service-google-maps/server"
 
-const maps = createRuntime()
-const response = await maps.fetch(
-  new Request("http://maps.test/v1:validateAddress?key=k", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      address: {
-        regionCode: "US",
-        addressLines: ["1625 N Central Ave"],
-        locality: "Phoenix",
-        administrativeArea: "AZ",
-        postalCode: "85004",
-      },
-      enableUspsCass: true,
-    }),
-  }),
-)
-const { result } = await response.json()
-// result.verdict → PREMISE / addressComplete / ACCEPT; result.uspsData.dpvConfirmation → "Y"
+const server = await createServer()
+const { hostname, port } = new URL(server.url)
 
-// Force the USPS "not deliverable" answer on the next call.
-maps.applyPreset("address_validation_dpv_n", "default", { count: 1 })
+// The application's client, in REST mode. Only the endpoint changes.
+const client = new AddressValidationClient({
+  fallback: true,
+  protocol: "http",
+  apiEndpoint: hostname,
+  port: Number(port),
+  apiKey: "k",
+})
+const [{ result }] = await client.validateAddress({
+  address: {
+    regionCode: "US",
+    addressLines: ["1625 N Central Ave"],
+    locality: "Phoenix",
+    administrativeArea: "AZ",
+    postalCode: "85004",
+  },
+  enableUspsCass: true,
+})
+// result.verdict → PREMISE / addressComplete; result.uspsData.dpvConfirmation → "Y"
+
+// Test control: force the USPS "not deliverable" answer on the next call.
+server.runtime.applyPreset("address_validation_dpv_n", "default", { count: 1 })
+
+await client.close()
+await server.close()
 ```
 
 On web, load `<emulator>/maps/api/js?key=…&libraries=places` exactly as the app loads Google's

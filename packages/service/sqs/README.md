@@ -17,12 +17,31 @@ ESM only. Node 22+ or Bun 1.2+.
 Point `SQS_ENDPOINT_URL` or the AWS SDK `endpoint` option at the served emulator. Fixture SigV4 credentials are accepted.
 
 ```ts
+import {
+  GetQueueUrlCommand,
+  ReceiveMessageCommand,
+  SendMessageCommand,
+  SQSClient,
+} from "@aws-sdk/client-sqs"
 import { createServer } from "@crvouga/mockingbird-service-sqs/server"
 
-const emulator = await createServer({
+// Test setup: start the emulator with a seeded queue and point the SDK's endpoint at it.
+const server = await createServer({
   queues: [{ name: "jobs", attributes: { VisibilityTimeout: "30" } }],
 })
-const health = await fetch(`${emulator.url}/__admin/health`)
+const sqs = new SQSClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the SQS SDK calls it already makes.
+const { QueueUrl } = await sqs.send(new GetQueueUrlCommand({ QueueName: "jobs" }))
+await sqs.send(new SendMessageCommand({ QueueUrl, MessageBody: JSON.stringify({ job: "resize" }) }))
+const { Messages } = await sqs.send(new ReceiveMessageCommand({ QueueUrl }))
+console.log(Messages?.[0]?.Body) // {"job":"resize"}
+
+await server.close()
 ```
 
 Supported operations are CreateQueue, GetQueueUrl, GetQueueAttributes, SendMessage, SendMessageBatch, ReceiveMessage, DeleteMessage, ChangeMessageVisibility, and PurgeQueue. Receive honors maximum messages, visibility timeout, system attribute selection, and message attribute selection. The injected shared clock controls visibility expiry and redrive without sleeps.

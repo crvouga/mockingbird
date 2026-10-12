@@ -7,10 +7,23 @@ Transport scaffold for Amazon API Gateway REST API. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { APIGatewayClient, GetRestApisCommand } from "@aws-sdk/client-api-gateway"
 import { createServer } from "@crvouga/mockingbird-service-apigateway/server"
+
+// Test setup: start the emulator and point the AWS SDK client your application uses at it.
 const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+const apigateway = new APIGatewayClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// No operation is implemented yet, so every SDK call rejects. The emulator answers 400
+// UnknownOperationException as XML, which this REST JSON client reports as a parse error.
+const failure = await apigateway.send(new GetRestApisCommand({})).catch((error: Error) => error)
+// failure instanceof Error
+
+await emulator.close() // after the test
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

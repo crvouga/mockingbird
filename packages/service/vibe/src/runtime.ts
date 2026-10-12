@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -49,6 +50,8 @@ export type VibeRuntimeOptions = Omit<VibeAPIOptions, "now" | "namespace" | "pub
   clock?: Clock
   seed?: string | number
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type VibeRuntime = ServiceRuntime<VibeAPI>
@@ -63,6 +66,7 @@ export const createRuntime = (options: VibeRuntimeOptions = {}): VibeRuntime =>
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, clock, publicNamespace, adminPrefix }) =>
       new VibeAPI({ ...options, sqlite, namespace, publicNamespace, adminPrefix, now: clock.now }),

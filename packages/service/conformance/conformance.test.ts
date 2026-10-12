@@ -109,3 +109,186 @@ for (const adminPrefix of ["/__admin", "/_control/mock"])
     },
     { timeout: 180_000 },
   )
+
+const KEY = "conformance-fixture-admin"
+const T0 = Date.parse("2030-01-01T00:00:00.000Z")
+const bootControls = {
+  clock: { now: T0, frozen: true },
+  latency: "5ms",
+  virtualTime: true,
+  faults: [{ id: "probe", pathPrefix: "/conformance-fault-probe", status: 503 }],
+}
+
+type ControlsBody = {
+  clock?: { now?: number; frozen?: boolean }
+  latency?: { delayMs?: number }
+  virtualTime?: boolean
+  faults?: { id: string }[]
+  snapshots?: unknown[]
+}
+
+type ControlledMock = {
+  fetch(request: Request): Promise<Response>
+  stop?: () => void
+}
+
+const loadMock = async (name: string) =>
+  (await import(`../${name}/src/index.ts`)) as {
+    createRuntime: (options?: {
+      seed?: number
+      adminKey?: string
+      adminControls?: typeof bootControls
+    }) => ControlledMock
+  }
+
+const sendTo = (
+  runtime: ControlledMock,
+  method: string,
+  path: string,
+  headers: Record<string, string> = {},
+  body?: unknown,
+) =>
+  runtime.fetch(
+    new Request(`http://mock.local${path}`, {
+      method,
+      headers: { "content-type": "application/json", "x-mockingbird-admin-key": KEY, ...headers },
+      ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    }),
+  )
+
+test(
+  "every HTTP mock takes the same admin controls at boot, over /__admin, and in request headers",
+  async () => {
+    const failures: string[] = []
+    for (const name of httpMocks()) {
+      let runtime: ControlledMock | undefined
+      const expectThat = (label: string, ok: boolean) => {
+        if (!ok) failures.push(`${name}: ${label}`)
+      }
+      try {
+        const mod = await loadMock(name)
+        runtime = mod.createRuntime({ seed: 1, adminKey: KEY, adminControls: bootControls })
+        const controls = async (namespace?: string) =>
+          (await (
+            await sendTo(
+              runtime as ControlledMock,
+              "GET",
+              `/__admin/controls${namespace ? `?namespace=${namespace}` : ""}`,
+            )
+          ).json()) as ControlsBody
+
+        // Boot.
+        const booted = await controls()
+        expectThat("boot clock", booted.clock?.now === T0 && booted.clock?.frozen === true)
+        expectThat("boot latency", booted.latency?.delayMs === 5)
+        expectThat("boot virtual time", booted.virtualTime === true)
+        expectThat("boot fault", booted.faults?.map((fault) => fault.id).join() === "probe")
+        const faulted = await sendTo(runtime, "GET", "/conformance-fault-probe/x")
+        expectThat(
+          `boot fault fires (${faulted.status})`,
+          faulted.status === 503 && faulted.headers.get("x-mockingbird-fault") === "probe",
+        )
+
+        // Request headers, in a namespace of their own.
+        const scripted = await sendTo(runtime, "GET", "/conformance-header-probe", {
+          "x-mockingbird-namespace": "conformance",
+          "x-mockingbird-time": "2031-06-01T00:00:00Z",
+          "x-mockingbird-fault": "418",
+        })
+        expectThat(`header fault (${scripted.status})`, scripted.status === 418)
+        expectThat(
+          "header time is per namespace",
+          // The pinned instant, plus this request's 5ms of virtual latency.
+          (await controls("conformance")).clock?.now === Date.parse("2031-06-01T00:00:00Z") + 5 &&
+            (await controls()).clock?.now === T0 + 5,
+        )
+        const unkeyed = await runtime.fetch(
+          new Request("http://mock.local/conformance-header-probe", {
+            headers: { "x-mockingbird-fault": "418" },
+          }),
+        )
+        expectThat(`control headers need the admin key (${unkeyed.status})`, unkeyed.status === 401)
+        const malformed = await sendTo(runtime, "GET", "/conformance-header-probe", {
+          "x-mockingbird-delay": "soon",
+        })
+        expectThat(`a bad control header is a 400 (${malformed.status})`, malformed.status === 400)
+
+        // The admin API.
+        await sendTo(runtime, "PUT", "/__admin/latency", {}, { delay: "2s" })
+        await sendTo(runtime, "POST", "/__admin/faults", {}, { preset: "rate_limited" })
+        await sendTo(runtime, "POST", "/__admin/clock", {}, { advance: "1h" })
+        const snapshot = await sendTo(runtime, "POST", "/__admin/snapshots", {}, { name: "taken" })
+        expectThat(`snapshot (${snapshot.status})`, snapshot.status === 201)
+        const exported = (await (
+          await sendTo(runtime, "GET", "/__admin/snapshots/taken")
+        ).json()) as { format?: string; service?: string }
+        expectThat("snapshot exports", exported.format === "mockingbird.snapshot/v1")
+        const changed = await controls()
+        await sendTo(runtime, "DELETE", "/__admin/controls")
+        expectThat("DELETE /controls returns to boot", (await controls()).latency?.delayMs === 5)
+        const restored = await sendTo(runtime, "POST", "/__admin/snapshots/taken/restore")
+        expectThat(`restore (${restored.status})`, restored.status === 200)
+        expectThat(
+          "restore brings the controls back",
+          JSON.stringify(await controls()) === JSON.stringify(changed),
+        )
+
+        // Reset is the boot state again, exactly.
+        const reset = await sendTo(runtime, "POST", "/__admin/reset")
+        expectThat(`reset (${reset.status})`, reset.status === 200)
+        // The fault's counters moved when it fired; everything else matches boot.
+        const after = await controls()
+        expectThat(
+          "reset returns the controls to boot",
+          JSON.stringify({ ...after, faults: [] }) === JSON.stringify({ ...booted, faults: [] }) &&
+            after.faults?.length === 1 &&
+            after.snapshots?.length === 0,
+        )
+      } catch (error) {
+        failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        runtime?.stop?.()
+      }
+    }
+    expect(failures).toEqual([])
+  },
+  { timeout: 300_000 },
+)
+
+/**
+ * Mocks whose boot state holds real key material, which comes from the platform's CSPRNG by
+ * design and is pinned with a fixture (`vaultKey`), never with the seed.
+ */
+const CRYPTOGRAPHIC_BOOT_STATE: Record<string, string> = {
+  infisical: "seals its seeded secrets and tokens with a random vault key and nonces",
+}
+
+test(
+  "every HTTP mock boots into the same state from the same seed and clock",
+  async () => {
+    const failures: string[] = []
+    for (const name of httpMocks()) {
+      if (CRYPTOGRAPHIC_BOOT_STATE[name]) continue
+      const made: ControlledMock[] = []
+      try {
+        const mod = await loadMock(name)
+        const fingerprint = async () => {
+          const runtime = mod.createRuntime({ seed: 1, adminKey: KEY, adminControls: bootControls })
+          made.push(runtime)
+          const snapshot = await sendTo(runtime, "POST", "/__admin/snapshots", {}, { name: "boot" })
+          if (snapshot.status !== 201) return `snapshot ${snapshot.status}`
+          return (await sendTo(runtime, "GET", "/__admin/snapshots/boot")).text()
+        }
+        const first = await fingerprint()
+        const second = await fingerprint()
+        if (first !== second) failures.push(name)
+      } catch (error) {
+        failures.push(`${name}: ${error instanceof Error ? error.message : String(error)}`)
+      } finally {
+        for (const runtime of made) runtime.stop?.()
+      }
+    }
+    expect(failures).toEqual([])
+  },
+  { timeout: 300_000 },
+)

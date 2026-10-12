@@ -20,6 +20,7 @@ import {
   createRuntime as createServiceRuntime,
   type FaultPreset,
   type FaultRule,
+  type MockControls,
   type RequestLog,
   resolveAdminPrefix,
   type ServiceRuntime,
@@ -88,6 +89,8 @@ export type AwsIotRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** IAM credentials, authorizer entries and the session quota every namespace starts with. */
   settings?: SettingsPatch
@@ -144,8 +147,11 @@ const adminRoutes = (runtime: ServiceRuntime<AwsIotAPI>): AdminRoutes => ({
 export const createRuntime = (options: AwsIotRuntimeOptions = {}): AwsIotRuntime => {
   const adminPrefix = resolveAdminPrefix(options.adminPrefix)
   const endpoints: AwsIotRuntime["endpoints"] = {}
+  // Boot controls can move the clock while the runtime is still being built.
+  let built: ServiceRuntime<AwsIotAPI> | undefined
   const each = (visit: (api: AwsIotAPI) => void) => {
-    for (const name of runtime.namespaces()) visit(runtime.instance(name))
+    if (!built) return
+    for (const name of built.namespaces()) visit(built.instance(name))
   }
   const runtime: ServiceRuntime<AwsIotAPI> = createServiceRuntime<AwsIotAPI>({
     name: AWS_IOT_NAMESPACE,
@@ -155,7 +161,12 @@ export const createRuntime = (options: AwsIotRuntimeOptions = {}): AwsIotRuntime
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
+    // A namespace's own clock moving expires that namespace's sessions and messages at once.
+    onClockChange: (namespace) => {
+      if (built?.namespaces().includes(namespace)) built.instance(namespace).broker.sweep()
+    },
     credential: accessKeyCredential,
     presets: AWS_IOT_PRESETS,
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
@@ -172,6 +183,7 @@ export const createRuntime = (options: AwsIotRuntimeOptions = {}): AwsIotRuntime
     describe: () => ({ ...endpoints }),
     admin: adminRoutes,
   })
+  built = runtime
   return Object.assign(runtime, {
     endpoints,
     attach: (transport: Transport, info: TransportInfo = { kind: "memory" }, namespace?: string) =>

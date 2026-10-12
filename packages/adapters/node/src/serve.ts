@@ -38,11 +38,13 @@ export const serve = async (api: FetchAPI, options: NodeServeOptions = {}) => {
     try {
       response = await api.fetch(request)
     } catch (error) {
-      // A `drop` fault: destroy the socket so the client sees the connection die.
+      // A `drop` or `timeout` fault: destroy the socket so the client sees the connection die.
       if ((error as { code?: string }).code === "MOCKINGBIRD_DROP") {
         req.socket.destroy()
         return
       }
+      // The client hung up while its request was being held: there is nobody to answer.
+      if (aborted.signal.aborted) return
       res.writeHead(500, { "content-type": "application/json" })
       res.end(
         JSON.stringify({
@@ -75,6 +77,9 @@ export const serve = async (api: FetchAPI, options: NodeServeOptions = {}) => {
       }
       res.end()
     } catch {
+      // The body failed partway (a `truncate` fault, or the service's own stream). Let what
+      // was already written leave first, so the client sees a response that dies mid-body.
+      await new Promise<void>((resolve) => setImmediate(resolve))
       res.destroy()
     } finally {
       reader.releaseLock()

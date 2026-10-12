@@ -115,7 +115,7 @@ export type SendOutcomeEvent = {
 }
 
 export type ResendAPIOptions = APIOptions &
-  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix"> & {
+  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix" | "random"> & {
     fixtures?: ResendSeedConfig
     /** The public namespace name, for `/__admin/ns/<name>` download URLs. Default: the default namespace. */
     adminPrefix?: string
@@ -280,6 +280,7 @@ export class ResendAPI implements FetchAPI {
       {
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         ...(options.tokens ? { tokens: options.tokens } : {}),
+        ...(options.random ? { random: options.random } : {}),
         ...(options.publicNamespace !== undefined
           ? { publicNamespace: options.publicNamespace }
           : {}),

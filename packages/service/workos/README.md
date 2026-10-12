@@ -14,13 +14,38 @@ bun add -d @crvouga/mockingbird-service-workos
 ## Usage
 
 ```ts
+import { WorkOS } from "@workos-inc/node"
 import { createServer } from "@crvouga/mockingbird-service-workos/server"
+
 const server = await createServer()
-// Set AuthKit WORKOS_API_HOSTNAME/WORKOS_API_PORT from server.url and WORKOS_API_HTTPS=false.
-// WORKOS_API_KEY=mock_workos_key, WORKOS_CLIENT_ID=client_mock.
-// Register your callback in the clients seed and use a local WORKOS_COOKIE_PASSWORD.
+const url = new URL(server.url)
+
+// The app's own WorkOS client. Only its API host changes.
+const workos = new WorkOS("mock_workos_key", {
+  clientId: "client_mock",
+  apiHostname: url.hostname,
+  port: Number(url.port),
+  https: false,
+})
+const authorizationUrl = workos.userManagement.getAuthorizationUrl({
+  provider: "authkit",
+  clientId: "client_mock",
+  redirectUri: "http://localhost:3000/callback",
+})
+
+// The test stands in for the browser: the emulator signs in the seeded user and redirects with a code.
+const redirect = await fetch(authorizationUrl, { redirect: "manual" })
+const code = new URL(redirect.headers.get("location") ?? "").searchParams.get("code") ?? ""
+
+const { user } = await workos.userManagement.authenticateWithCode({ code })
+const { data: users } = await workos.userManagement.listUsers({ email: user.email })
+console.log(users[0]?.id === user.id) // true
 await server.close()
 ```
+
+For AuthKit, set `WORKOS_API_HOSTNAME`/`WORKOS_API_PORT` from `server.url` and
+`WORKOS_API_HTTPS=false`, with `WORKOS_API_KEY=mock_workos_key` and `WORKOS_CLIENT_ID=client_mock`.
+Register your callback in the clients seed and use a local `WORKOS_COOKIE_PASSWORD`.
 
 `createRuntime().fetch(Request)` supports in-process adapters. Raw user mirrors should use
 the server URL in place of `https://api.workos.com`. The default registered callback is

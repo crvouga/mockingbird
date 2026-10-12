@@ -173,7 +173,10 @@ describe("fault presets", () => {
       const { presets } = (await (await admin("GET", "/faults/presets")).json()) as {
         presets: { name: string }[]
       }
-      expect(presets.map((each) => each.name).sort()).toEqual(Object.keys(AWS_IOT_PRESETS).sort())
+      // The emulator's own presets, beside the standard ones every emulator has.
+      expect(presets.map((each) => each.name)).toEqual(
+        expect.arrayContaining(Object.keys(AWS_IOT_PRESETS)),
+      )
       expect(Object.keys(AWS_IOT_PRESETS).sort()).toEqual([
         "connect_bad_credentials",
         "connect_not_authorized",

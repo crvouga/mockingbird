@@ -6,6 +6,7 @@ import {
   createWebhookHub,
   extractLinks,
   type FaultPreset,
+  type MockControls,
   outboxAdminRoutes,
   type RequestLog,
   resolveAdminPrefix,
@@ -135,6 +136,8 @@ export type ForwardTarget = {
   adminPrefix?: string
   /** Its `x-mockingbird-admin-key`, when it has one. */
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   /** Give up on a forward after this long (the send still succeeds). Default 2000 ms. */
   timeoutMs?: number
   fetch?: (request: Request) => Promise<Response>
@@ -186,6 +189,8 @@ export type ResendRuntimeOptions = Pick<ResendAPIOptions, "fixtures" | "baseUrl"
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /**
    * Where `email.received` webhooks go (`POST /messaging/inbound/email`), signed with the
@@ -309,11 +314,12 @@ export const createRuntime = (options: ResendRuntimeOptions = {}): ResendRuntime
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: bearerToken,
     presets: RESEND_PRESETS,
     webhooks: hub,
-    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock, rng }) =>
       new ResendAPI({
         ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
@@ -323,6 +329,7 @@ export const createRuntime = (options: ResendRuntimeOptions = {}): ResendRuntime
         publicNamespace,
         adminPrefix,
         now: clock.now,
+        random: rng.next,
         onOutcome: (event) => recordOutcome(event),
         ...(target
           ? {
@@ -366,7 +373,10 @@ export const createRuntime = (options: ResendRuntimeOptions = {}): ResendRuntime
     }
     // Preserve provider outcome detail in the journal. The shared runtime counts
     // dropped attempts and successful replays once each in request metrics.
-    runtime.journal.record({ ...entry, at: new Date(runtime.clock.now()).toISOString() })
+    runtime.journal.record({
+      ...entry,
+      at: new Date(runtime.namespaceClock(event.namespace).now()).toISOString(),
+    })
     options.onLog?.(entry)
   }
   return Object.assign(runtime, { webhooks: hub, forwarding: () => ({ ...stats }) })

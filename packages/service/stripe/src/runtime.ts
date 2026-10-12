@@ -6,6 +6,7 @@ import {
   createRuntime as createServiceRuntime,
   createWebhookHub,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -144,6 +145,8 @@ export type StripeRuntimeOptions = {
   adminPrefix?: string
   /** Require `x-mockingbird-admin-key` on `/__admin/*`. */
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Called in-process with every event the mock records. */
   onWebhook?: StripeAPIOptions["onWebhook"]
@@ -520,7 +523,12 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
+    // A namespace's own clock moving runs that namespace's renewals and expiries at once.
+    onClockChange: (namespace) => {
+      if (runtimeRef?.namespaces().includes(namespace)) runtimeRef.instance(namespace).tick(true)
+    },
     credential: bearerToken,
     presets: STRIPE_PRESETS,
     webhooks: stripeHub,

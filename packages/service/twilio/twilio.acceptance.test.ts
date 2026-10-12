@@ -637,14 +637,14 @@ describe("SMS delivery ambiguity", () => {
     expect(unavailable.headers.get("retry-after")).toBe("30")
     expect(await unavailable.json()).toMatchObject({ code: 20503, status: 503 })
     const faults = (await admin("/faults")).body.faults as {
-      preset?: string
+      fromPreset?: string
       hits: number
       remaining: number | null
-      latencyMs?: number
+      delayMs?: number
       namespace: string
     }[]
-    const rateLimit = faults.find((fault) => fault.preset === "sms_429" && fault.latencyMs === 30)
-    expect(rateLimit).toMatchObject({ hits: 1, remaining: 0, latencyMs: 30, namespace: "default" })
+    const rateLimit = faults.find((fault) => fault.fromPreset === "sms_429" && fault.delayMs === 30)
+    expect(rateLimit).toMatchObject({ hits: 1, remaining: 0, delayMs: 30, namespace: "default" })
     const stored = (await outboxOf(admin)).map((item) => item.body)
     expect(stored).toContain("stored-ok")
     expect(stored).not.toContain("rate-limited")

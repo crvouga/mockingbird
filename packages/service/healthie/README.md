@@ -54,35 +54,39 @@ npx mockingbird-healthie serve --port 8816 \
 ```
 
 ```ts
+import { GraphQLClient, gql } from "graphql-request"
 import { createRuntime, SEED } from "@crvouga/mockingbird-service-healthie"
 
-const healthie = createRuntime({
+// Test setup: the emulator, in this process.
+const emulator = createRuntime({
   settings: { orgApiKeys: ["gh_sbox_test_org"] },
   webhooks: { baseUrl: "http://127.0.0.1:3000", ip: "18.206.70.225" },
 })
-const graphql = (query: string, variables: object, key?: string) =>
-  healthie.fetch(
-    new Request("http://healthie.test/graphql", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        AuthorizationSource: "API",
-        ...(key ? { authorization: `Basic ${key}` } : {}),
-      },
-      body: JSON.stringify({ query, variables }),
-    }),
-  )
+
+// Application code: the GraphQL client the app already uses (here graphql-request). Only its
+// fetch changes: requests reach the emulator instead of api.gethealthie.com.
+const healthie = new GraphQLClient("https://api.gethealthie.com/graphql", {
+  headers: { AuthorizationSource: "API" },
+  fetch: ((url: RequestInfo | URL, init?: RequestInit) =>
+    emulator.fetch(new Request(url, init))) as typeof fetch,
+})
 
 // The seeded demo patient signs in and gets an API key, as the member app does.
-const signedIn = await graphql(
-  `mutation($e: String, $p: String) {
-     signIn(input: { email: $e, password: $p, generate_api_token: true }) { api_key user { id active } }
-   }`,
+const signedIn = await healthie.request<{ signIn: { api_key: string; user: { id: string } } }>(
+  gql`
+    mutation ($e: String, $p: String) {
+      signIn(input: { email: $e, password: $p, generate_api_token: true }) {
+        api_key
+        user { id active }
+      }
+    }
+  `,
   { e: SEED.patientEmail, p: SEED.patientPassword },
 )
 
-// Ask Healthie to request a form from the patient; POST /forms/webhooks/status follows.
-await healthie.fetch(
+// Test control: ask Healthie to request a form from the patient. POST /forms/webhooks/status
+// follows.
+await emulator.fetch(
   new Request("http://healthie.test/__admin/requested-forms", {
     method: "POST",
     headers: { "content-type": "application/json" },

@@ -111,6 +111,10 @@ export interface Guide {
   slug: string
   title: string
   summary: string
+  /** Slug of the guide this is a page of, for the pages of a guide that has them. */
+  parent?: string
+  /** Extra words the page is found by. */
+  keywords: string
   markdown: string
   html: string
   toc: TocEntry[]

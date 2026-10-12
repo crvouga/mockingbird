@@ -126,7 +126,7 @@ with each emulator package (`exec`, `prepare(sql).run/all/get`, `transaction`). 
 one database between several emulators (each keeps its records under its own namespace, e.g.
 `"stripe"`, `"junction"`), to inspect what an emulator stored, or to snapshot a warmed-up emulator:
 
-```js
+```ts
 import { Database } from "@crvouga/mockingbird-service-sqlite"
 import { StripeAPI } from "@crvouga/mockingbird-service-stripe"
 import { JunctionAPI } from "@crvouga/mockingbird-service-junction"

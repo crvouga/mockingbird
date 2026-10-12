@@ -36,25 +36,36 @@ npx mockingbird-firstpromoter serve --port 8812 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-firstpromoter"
+import { createServer } from "@crvouga/mockingbird-service-firstpromoter/server"
 
-const fp = createRuntime({
+// Test setup: the emulator, an existing affiliate, and a click on their link.
+const server = await createServer({
   webhooks: { url: "http://127.0.0.1:3000/users/webhooks/first-promoter", secret: "user:pass" },
 })
 const admin = (path: string, body: unknown) =>
-  fp.fetch(
-    new Request(`http://fp.test/__admin${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  )
-
-// An existing affiliate, and a click on their link: the tid checkout stores as fp_tid.
+  fetch(`${server.url}/__admin${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
 await admin("/promoters", { email: "nate@example.com", ref_token: "nate91" })
+// The tid checkout stores as fp_tid.
 const { tid } = (await (await admin("/clicks", { ref_token: "nate91" })).json()) as { tid: string }
-// …the app's invoice handler posts POST /v2/track/signup {email, tid}; the emulator converts the
-// referral and posts lead_becomes_referral to the backend with Authorization: Basic…
+
+// Application code: FIRST_PROMOTER_API_URL is server.url. The invoice handler tracks the signup.
+const baseUrl = server.url
+const tracked = await fetch(`${baseUrl}/v2/track/signup`, {
+  method: "POST",
+  headers: {
+    authorization: "Bearer fp-api-key",
+    "Account-ID": "acct_1",
+    "content-type": "application/json",
+  },
+  body: JSON.stringify({ email: "customer@example.com", tid }),
+})
+// The emulator converts the referral and posts lead_becomes_referral to the backend with
+// Authorization: Basic…
+await server.close()
 ```
 
 ### Routes

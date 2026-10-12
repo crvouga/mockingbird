@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs"
-import { join } from "node:path"
+import { join, posix } from "node:path"
 import { pathToFileURL } from "node:url"
 import { CATEGORIES, isCategory } from "../../src/lib/categories.ts"
 import { QUICK_START } from "../../src/lib/content.ts"
@@ -32,9 +32,16 @@ export function watchedFiles({ repoRoot }: CatalogPaths): string[] {
         join(dir, name, f),
       ),
     ),
-    ...readdirSync(join(repoRoot, "docs"))
-      .filter((f) => f.endsWith(".md"))
-      .map((f) => join(repoRoot, "docs", f)),
+    // Guides, and the pages of a guide one directory down.
+    ...readdirSync(join(repoRoot, "docs"), { withFileTypes: true }).flatMap((entry) =>
+      entry.isDirectory()
+        ? readdirSync(join(repoRoot, "docs", entry.name))
+            .filter((f) => f.endsWith(".md"))
+            .map((f) => join(repoRoot, "docs", entry.name, f))
+        : entry.name.endsWith(".md")
+          ? [join(repoRoot, "docs", entry.name)]
+          : [],
+    ),
     join(repoRoot, "llms.txt"),
     join(docsRootOf(repoRoot), BRANDS),
     join(docsRootOf(repoRoot), "src/lib/quick-start.ts"),
@@ -249,18 +256,32 @@ export async function loadCatalog({ repoRoot, docsRoot }: CatalogPaths): Promise
     .map(([slug, c]) => ({ slug, ...c, count: services.filter((s) => s.category === slug).length }))
     .filter((c) => c.count > 0)
 
+  // `docs/*.md` are the guides. A guide's pages sit in the directory named after its slug:
+  // `docs/ADMIN_CONTROLS.md` and `docs/admin-controls/*.md`.
+  const guideFiles = readdirSync(join(repoRoot, "docs"), { withFileTypes: true }).flatMap(
+    (entry) =>
+      entry.isDirectory()
+        ? readdirSync(join(repoRoot, "docs", entry.name))
+            .filter((f) => f.endsWith(".md"))
+            .map((f) => `${entry.name}/${f}`)
+        : entry.name.endsWith(".md")
+          ? [entry.name]
+          : [],
+  )
   const guides = await Promise.all(
     sortGuides(
-      readdirSync(join(repoRoot, "docs"))
-        .filter((f) => f.endsWith(".md"))
-        .map((f) => ({
-          file: f.slice(0, -3),
-          markdown: readFileSync(join(repoRoot, "docs", f), "utf8"),
-        })),
+      guideFiles.map((f) => ({
+        file: f.slice(0, -3),
+        markdown: readFileSync(join(repoRoot, "docs", f), "utf8"),
+      })),
     ).map(async (source) => ({
       ...guideInfo(source),
       markdown: source.markdown,
-      ...(await renderMarkdown(source.markdown, { dir: "docs", repo, services: names })),
+      ...(await renderMarkdown(source.markdown, {
+        dir: posix.dirname(`docs/${source.file}`),
+        repo,
+        services: names,
+      })),
     })),
   )
 

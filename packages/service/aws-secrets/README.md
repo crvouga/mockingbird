@@ -17,13 +17,31 @@ ESM only. Node 22+ or Bun 1.2+.
 Point both clients' `endpoint` option at the same emulator URL. Fixture SigV4 credentials are accepted.
 
 ```ts
+import { GetSecretValueCommand, SecretsManagerClient } from "@aws-sdk/client-secrets-manager"
+import { GetParameterCommand, SSMClient } from "@aws-sdk/client-ssm"
 import { createServer } from "@crvouga/mockingbird-service-aws-secrets/server"
 
+// Test setup: seed the emulator and point the AWS SDK clients your application uses at it.
 const emulator = await createServer({
   secrets: [{ name: "database/password", value: "fixture-password" }],
   parameters: [{ name: "/app/region", value: "us-east-1" }],
 })
-const health = await fetch(`${emulator.url}/__admin/health`)
+const config = {
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+}
+const secrets = new SecretsManagerClient(config)
+const ssm = new SSMClient(config)
+
+// Application code: ordinary SDK calls.
+const { SecretString } = await secrets.send(
+  new GetSecretValueCommand({ SecretId: "database/password" }),
+) // "fixture-password"
+const { Parameter } = await ssm.send(new GetParameterCommand({ Name: "/app/region" }))
+// Parameter.Value === "us-east-1"
+
+await emulator.close() // after the test
 ```
 
 Secrets Manager supports CreateSecret, PutSecretValue, GetSecretValue, and DescribeSecret by name or ARN, including VersionId, VersionStage, SecretString, and SecretBinary. SSM supports PutParameter, GetParameter, and GetParameters with String, StringList, SecureString, WithDecryption, versions, ARNs, and data types.

@@ -4,6 +4,7 @@ import {
   createRuntime as createServiceRuntime,
   type FaultPreset,
   type FaultRule,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -86,6 +87,8 @@ export type VpiRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Replace the seeded clinic, providers, products or patients. */
   data?: Seed
@@ -233,6 +236,7 @@ export const createRuntime = (options: VpiRuntimeOptions = {}): VpiRuntime =>
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: tokenCredential,
     presets: VPI_PRESETS,

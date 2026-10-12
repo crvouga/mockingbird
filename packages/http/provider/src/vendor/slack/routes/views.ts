@@ -1,4 +1,5 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
+import { random } from "../../core/crypto.js";
 import type { Context, RouteContext } from "../../core/index.js";
 import type { SlackJsonObject, SlackToken, SlackView, SlackViewType } from "../entities.js";
 import { getSlackStore } from "../store.js";
@@ -349,7 +350,7 @@ function nowSeconds(clockNow: () => number = Date.now): number {
 
 function generateTriggerId(clockNow: () => number = Date.now): string {
   const first = Math.floor(clockNow() / 1000);
-  const second = Math.floor(Math.random() * 1_000_000)
+  const second = Math.floor(random() * 1_000_000)
     .toString()
     .padStart(6, "0");
   return `${first}.${second}.${generateSlackId("trg").toLowerCase()}`;

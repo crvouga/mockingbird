@@ -1,35 +1,53 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
 import { highlightSource } from "../../integrations/catalog/markdown.ts"
+import ControlDirectory from "../components/ControlDirectory.astro"
 import Icon from "../components/Icon.astro"
 import Install from "../components/Install.astro"
+import BeforeAfter from "../components/landing/BeforeAfter.astro"
 import BrowserStack from "../components/landing/BrowserStack.astro"
-import EmulatedServices from "../components/landing/EmulatedServices.astro"
 import Monogram from "../components/Monogram.astro"
 import QuickStart from "../components/QuickStart.astro"
 import ServiceCard from "../components/ServiceCard.astro"
 import Base from "../layouts/Base.astro"
-import { AGENTS, CONTRACT, FEATURES, HEADLINE, PITCH, QUICK_START } from "../lib/content.ts"
+import {
+  ADMIN_CONTROLS,
+  AGENTS,
+  CONTRACT,
+  FEATURES,
+  HEADLINE,
+  PITCH,
+  QUICK_START,
+} from "../lib/content.ts"
+import { guideSlug } from "../lib/guides.ts"
 import { inline } from "../lib/inline.ts"
 
 const { totals } = catalog
 const featured = catalog.services.filter((s) => s.featured)
-const request = `import { createRuntime } from
+const request = `import Stripe from "stripe"
+import { createRuntime } from
   "@crvouga/mockingbird-service-stripe"
 
-const stripe = createRuntime()
+const emulator = createRuntime()
 
-const response = await stripe.fetch(
-  new Request("https://api.stripe.com/v1/customers", {
-    method: "POST",
-    headers: {
-      authorization: "Bearer sk_test_mockingbird",
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: "email=ada@example.com",
-  }),
-)`
+// Your Stripe SDK. Only its HTTP client changes.
+const stripe = new Stripe("sk_test_mockingbird", {
+  httpClient: Stripe.createFetchHttpClient(
+    (url: string, init: RequestInit) =>
+      emulator.fetch(new Request(url, init)),
+  ),
+})
+
+const customer = await stripe.customers.create({
+  email: "ada@example.com",
+})`
 const requestHtml = await highlightSource(request, "ts")
+const carriers = await Promise.all(
+  ADMIN_CONTROLS.carriers.map(async (carrier) => ({
+    ...carrier,
+    html: await highlightSource(carrier.code, carrier.lang),
+  })),
+)
 ---
 
 <Base>
@@ -41,11 +59,12 @@ const requestHtml = await highlightSource(request, "ts")
       <div class="hero-actions">
         <a class="btn btn-primary" href="/docs/getting-started">Get started <Icon name="arrow-right" /></a>
         <a class="btn btn-secondary" href="/services">Explore emulators</a>
+        <a class="btn btn-secondary" href="#admin-controls">Admin controls</a>
       </div>
       <div class="hero-install"><Install pkg={QUICK_START.package} /></div>
       <p class="runtime-list">Node.js <span>·</span> Bun <span>·</span> Browser <span>·</span> Workers</p>
     </div>
-    <div class="runtime-panel" aria-label="Stripe emulator request example">
+    <div class="runtime-panel" aria-label="The Stripe SDK calling the in-process emulator">
       <div class="panel-bar"><Icon name="terminal" /><span>stripe.test.ts</span><span class="badge badge-ok">In-process</span></div>
       <Fragment set:html={requestHtml} />
       <div class="response-line"><span class="method" data-m="POST">POST</span><code>/v1/customers</code><span class="badge badge-ok">200 OK</span></div>
@@ -61,22 +80,22 @@ const requestHtml = await highlightSource(request, "ts")
     </section>
   </div>
 
-  <section class="section container" id="quick-start">
-    <div class="section-head">
-      <span class="eyebrow">01 / Quick start</span>
-      <h2>From product data to a paid order.</h2>
-      <p>Build a checkout with PostgreSQL and Stripe emulators. Seed the data, write an API, and place an order from a client. Every step runs in your process.</p>
-    </div>
-    <QuickStart />
-  </section>
-
   <section class="section container">
     <div class="section-head">
-      <span class="eyebrow">02 / Architecture</span>
-      <h2>Your application. Your SDKs. Local emulators.</h2>
-      <p>Each emulator implements the vendor's request and response shapes inside your process. Inject its Fetch handler or serve it on a local port.</p>
+      <span class="eyebrow">01 / Before and after</span>
+      <h2>A test environment with nothing outside it.</h2>
+      <p>Tests that call live sandboxes wait on every vendor and fail when one is slow or down. Mockingbird runs an emulator of each service inside your process, so there is no network left to wait on.</p>
     </div>
-    <EmulatedServices />
+    <BeforeAfter />
+  </section>
+
+  <section class="section container" id="quick-start">
+    <div class="section-head">
+      <span class="eyebrow">02 / Quick start</span>
+      <h2>From product data to a paid order.</h2>
+      <p>Build a checkout with PostgreSQL and Stripe emulators. Seed the data, write an API against the unmodified Stripe SDK, and place an order from a client. Every step runs in your process.</p>
+    </div>
+    <QuickStart />
   </section>
 
   <section class="section container">
@@ -96,9 +115,44 @@ const requestHtml = await highlightSource(request, "ts")
     </div>
   </section>
 
+  <section class="section container" id="admin-controls">
+    <div class="section-head">
+      <span class="eyebrow">04 / Admin controls</span>
+      <h2>{ADMIN_CONTROLS.title}</h2>
+      <p set:html={inline(ADMIN_CONTROLS.intro)} />
+    </div>
+    <ControlDirectory />
+    <div class="carriers">
+      {carriers.map((carrier) => (
+        <div class="runtime-panel carrier" aria-label={`Admin controls: ${carrier.label}`}>
+          <div class="panel-bar"><Icon name="terminal" /><span>{carrier.file}</span><span class="badge badge-accent">{carrier.label}</span></div>
+          <Fragment set:html={carrier.html} />
+        </div>
+      ))}
+    </div>
+    <div class="features controls">
+      {ADMIN_CONTROLS.controls.map((control) => (
+        <div class="feature">
+          <span class="feature-icon"><Icon name={control.icon} /></span>
+          <h3><a href={`/docs/admin-controls/${guideSlug(control.page)}`}>{control.title}</a></h3>
+          <p set:html={inline(control.body)} />
+          <a class="text-link control-link" href={`/docs/admin-controls/${guideSlug(control.page)}`}>Interface <Icon name="arrow-right" /></a>
+        </div>
+      ))}
+    </div>
+    <div class="determinism">
+      <span class="feature-icon"><Icon name="shield" /></span>
+      <div>
+        <h3>Deterministic, down to the journal</h3>
+        <p set:html={inline(ADMIN_CONTROLS.determinism)} />
+      </div>
+      <a class="btn btn-secondary" href="/docs/admin-controls">Admin controls guide <Icon name="arrow-right" /></a>
+    </div>
+  </section>
+
   <section class="section container">
     <div class="section-head section-head-row">
-      <div><span class="eyebrow">04 / Emulator catalog</span><h2>Find your application's dependencies.</h2></div>
+      <div><span class="eyebrow">05 / Emulator catalog</span><h2>Find your application's dependencies.</h2></div>
       <a class="text-link" href="/services">All {totals.services} emulators <Icon name="arrow-right" /></a>
     </div>
     <div class="featured-head"><h3><Icon name="star" /> Featured emulators</h3><a class="text-link" href="/services?featured=1">View featured <Icon name="arrow-right" /></a></div>
@@ -120,7 +174,7 @@ const requestHtml = await highlightSource(request, "ts")
 
   <section class="section container">
     <div class="section-head">
-      <span class="eyebrow">05 / Interactive example</span>
+      <span class="eyebrow">06 / Interactive example</span>
       <h2>A complete application, running in your browser.</h2>
       <p>The client, server, database emulator, and API emulators share one browser tab. Explore the application and its state without configuring a server.</p>
     </div>
@@ -129,7 +183,7 @@ const requestHtml = await highlightSource(request, "ts")
 
   <section class="section container">
     <div class="section-head">
-      <span class="eyebrow">06 / Service interface</span>
+      <span class="eyebrow">07 / Service interface</span>
       <h2>A shared control plane for every HTTP emulator.</h2>
       <p set:html={inline(CONTRACT.intro)} />
     </div>
@@ -195,6 +249,19 @@ const requestHtml = await highlightSource(request, "ts")
   .feature-icon { display: inline-flex; padding: 8px; margin-bottom: 18px; border: 1px solid var(--border); border-radius: var(--radius); color: var(--highlight); }
   .feature h3 { font-size: 16px; font-weight: 650; }
   .feature p { margin-top: 10px; font-size: 14px; line-height: 1.65; color: var(--fg-muted); }
+  .carriers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .section :global(.control-directory) { margin-bottom: 28px; }
+  .carrier { box-shadow: none; }
+  .carrier :global(pre) { padding: 18px 16px; font-size: 11.5px; line-height: 1.75; }
+  .features.controls { margin-top: 14px; border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .feature h3 a { color: inherit; }
+  .feature h3 a:hover { color: var(--highlight); }
+  .control-link { margin-top: 14px; }
+  .determinism { display: flex; align-items: center; gap: 20px; padding: 24px 28px; border: 1px solid var(--border); border-top: 0; border-radius: 0 0 var(--radius-lg) var(--radius-lg); background: var(--bg-subtle); }
+  .determinism .feature-icon { margin-bottom: 0; flex: none; background: var(--bg-elevated); }
+  .determinism h3 { font-size: 16px; font-weight: 650; }
+  .determinism p { margin-top: 6px; font-size: 14px; line-height: 1.65; color: var(--fg-muted); }
+  .determinism .btn { flex: none; margin-left: auto; }
   .section-head-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 20px; }
   .section-head-row h2 { margin-top: 8px; }
   .text-link { display: inline-flex; align-items: center; gap: 8px; color: var(--highlight); font-size: 13px; }
@@ -216,7 +283,7 @@ const requestHtml = await highlightSource(request, "ts")
   .agent-docs a > span { flex: 1; color: var(--fg-subtle); font-size: 12px; }
   .agent-docs strong { display: block; font-family: var(--font-mono); color: var(--fg); font-size: 13px; margin-bottom: 4px; }
   .agent-docs a:hover strong { color: var(--highlight); }
-  @media (max-width: 1000px) { .hero { gap: 32px; } .features, .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 1000px) { .hero { gap: 32px; } .features, .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); } .carriers { grid-template-columns: minmax(0, 1fr); } .determinism { flex-wrap: wrap; } .determinism .btn { margin-left: 0; } }
   @media (max-width: 800px) { .hero { grid-template-columns: minmax(0, 1fr); padding-block: 40px; } .hero h1 { font-size: clamp(36px, 7vw, 52px); } .agent-docs { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px; } }
   @media (max-width: 560px) { .features, .categories { grid-template-columns: minmax(0, 1fr); } .runtime-list { font-size: 10px; } .runtime-list span { padding-inline: 4px; } .panel-foot-end { display: none; } .stats { grid-template-columns: minmax(0, 1fr); } .stats > * + * { border-left: 0; border-top: 1px solid var(--border); } .stats > * { padding: 16px; } .stats strong { min-width: 4ch; } }
 </style>

@@ -187,7 +187,10 @@ describe("contract: presets, journal, admin errors", () => {
     const listed = (await (await admin("/faults/presets")).json()) as {
       presets: { name: string }[]
     }
-    expect(listed.presets.map((p) => p.name).sort()).toEqual(Object.keys(POSTHOG_PRESETS).sort())
+    // The emulator's own presets, beside the standard ones every emulator has.
+    expect(listed.presets.map((p) => p.name)).toEqual(
+      expect.arrayContaining(Object.keys(POSTHOG_PRESETS)),
+    )
     const body = { token: "t", distinct_id: "1" }
     const cases: [string, (r: Response) => Promise<void>][] = [
       ["flags_5xx", async (r) => expect(r.status).toBe(500)],

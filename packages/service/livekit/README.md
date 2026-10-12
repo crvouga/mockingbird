@@ -15,12 +15,20 @@ ESM only. Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { RoomServiceClient } from "livekit-server-sdk"
 import { createServer } from "@crvouga/mockingbird-service-livekit/server"
 
+// Test setup: the emulator, with the API key and secret the application signs with.
 const emulator = await createServer({
   keys: { fixture: "fixture-secret-that-is-at-least-32-chars" },
 })
-const health = await fetch(`${emulator.url}/__admin/health`)
+
+// The application's client. Only the host changes.
+const rooms = new RoomServiceClient(emulator.url, "fixture", "fixture-secret-that-is-at-least-32-chars")
+const room = await rooms.createRoom({ name: "consult", emptyTimeout: 60, maxParticipants: 4 })
+const listed = await rooms.listRooms() // [room]
+
+await emulator.close()
 ```
 
 Point `RoomServiceClient` at `emulator.url`. Supported RoomService calls include CreateRoom, ListRooms, DeleteRoom, UpdateRoomMetadata, ListParticipants, GetParticipant, RemoveParticipant, UpdateParticipant, MutePublishedTrack, and SendData. Room creation is idempotent by name and participant identity is unique within a room.

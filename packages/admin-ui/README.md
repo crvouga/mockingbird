@@ -25,5 +25,6 @@ render service actions with the shared prebuilt request form and response viewer
 the built-in Plane action uses this instead of shipping a custom HTML form.
 
 SQL engines use the same UI as HTTP services. SQL changes remain in the live
-database. State writes, clock controls, fault injection, journals, route execution,
-namespaces, keys, branches, and checkpoints retain their existing server contracts.
+database. State writes, clock controls, latency, fault injection, snapshots, journals,
+route execution, namespaces, keys, branches, and checkpoints retain their existing server
+contracts.

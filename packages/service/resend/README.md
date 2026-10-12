@@ -37,13 +37,15 @@ npx mockingbird-resend serve --port 8794 \
 RESEND_BASE_URL=http://127.0.0.1:8794 node app.js
 ```
 
-```js
+```ts
 import { createServer } from "@crvouga/mockingbird-service-resend/server"
 
+// Test setup: the emulator, and the base URL the Resend SDK reads at import.
 const emulator = await createServer()
 process.env.RESEND_BASE_URL = emulator.url
 const { Resend } = await import("resend")
 
+// The app's own Resend call.
 await new Resend("re_test").emails.send({
   from: "Acme <no-reply@acme.example>",
   to: ["invitee@example.com"],
@@ -51,23 +53,31 @@ await new Resend("re_test").emails.send({
   html: '<a href="https://app.test/family/invitations/claim?token=abc">Join</a>',
 })
 
+// The test reads the mail back from the outbox.
 const { messages } = await (await fetch(`${emulator.url}/__admin/outbox?to=invitee@example.com`)).json()
 const { links } = await (await fetch(`${emulator.url}/__admin/outbox/${messages[0].id}/links`)).json()
 // links[0] === "https://app.test/family/invitations/claim?token=abc"
+await emulator.close()
 ```
 
-Whatever sends the mail (the SDK above, or raw HTTP), the outbox is the assertion surface:
+The outbox is the assertion surface for every send. An `idempotencyKey` replay returns the first
+send's id and leaves one message in it:
 
 ```ts
 import { createServer } from "@crvouga/mockingbird-service-resend/server"
 
 const emulator = await createServer()
-await fetch(`${emulator.url}/emails`, {
-  method: "POST",
-  headers: { "content-type": "application/json", authorization: "Bearer re_test" },
-  body: JSON.stringify({ from: "no-reply@example.com", to: ["invitee@example.com"], subject: "Hi", text: "Hello" }),
-})
+process.env.RESEND_BASE_URL = emulator.url
+const { Resend } = await import("resend")
+
+const resend = new Resend("re_test")
+const email = { from: "no-reply@example.com", to: ["invitee@example.com"], subject: "Hi", text: "Hello" }
+const first = await resend.emails.send(email, { idempotencyKey: "invite-1" })
+const retry = await resend.emails.send(email, { idempotencyKey: "invite-1" })
+// retry.data?.id === first.data?.id
+
 const sent = await (await fetch(`${emulator.url}/__admin/outbox?to=invitee@example.com`)).json()
+// sent.messages.length === 1
 await emulator.close()
 ```
 

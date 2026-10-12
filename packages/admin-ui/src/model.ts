@@ -45,7 +45,32 @@ export type StatePage = {
   records: StateRecord[]
   next: number | null
 }
-export type Clock = { now: number; frozen: boolean; offsetMs: number }
+export type Clock = {
+  now: number
+  iso: string
+  frozen: boolean
+  offsetMs: number
+  autoAdvanceMs: number
+}
+export type LatencyRule = { delayMs: number; jitterMs: number }
+export type Latency = LatencyRule & { operations: Record<string, LatencyRule> }
+export type Snapshot = {
+  id: string
+  namespace: string
+  records: number
+  at: number
+  portable: boolean
+}
+export type Controls = {
+  namespace: string
+  seed: number | string
+  clock: Clock
+  virtualTime: boolean
+  latency: Latency
+  faults: Record<string, unknown>[]
+  snapshots: Snapshot[]
+}
+export type FaultPreset = { name: string; description: string; rules?: Record<string, unknown>[] }
 export type Journal = { requests: Record<string, unknown>[] }
 export type Panel = {
   kind?: "panel"

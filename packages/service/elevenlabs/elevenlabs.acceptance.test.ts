@@ -567,7 +567,8 @@ describe("test controls", () => {
     const listed = (await admin("/faults/presets")).body.presets.map(
       (preset: { name: string }) => preset.name,
     )
-    expect(listed.sort()).toEqual(Object.keys(ELEVENLABS_PRESETS).sort())
+    // The emulator's own presets, beside the standard ones every emulator has.
+    expect(listed).toEqual(expect.arrayContaining(Object.keys(ELEVENLABS_PRESETS)))
     expect(Object.keys(ELEVENLABS_PRESETS).sort()).toEqual(
       [...Object.keys(expected), "network_reset", "slow_response"].sort(),
     )

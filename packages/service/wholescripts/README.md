@@ -33,33 +33,36 @@ npx mockingbird-wholescripts serve --port 8803 --auto-advance "2000:Processing,C
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-wholescripts"
+import { createServer } from "@crvouga/mockingbird-service-wholescripts/server"
 
-const ws = createRuntime()
-const auth = { authorization: `Basic ${btoa("acme:secret")}`, "content-type": "application/json" }
+// Test setup: a local Wholescripts.
+const server = await createServer()
+const baseUrl = server.url // the app's WHOLESCRIPTS_API_URL
 
-const submitted = (await (
-  await ws.fetch(
-    new Request("http://wholescripts.test/api/Orders/Submit", {
-      method: "POST",
-      headers: auth,
-      body: JSON.stringify({
-        ShippingAddress: { FName: "Ada", LName: "L", Address1: "1 Main St", City: "Phoenix", State: "AZ", Zip: "85004" },
-        Items: [{ Sku: "SKU001", Quantity: 1 }],
-        ShippingMethod: "Ground",
-      }),
-    }),
-  )
-).json()) as { orderNumber: string }
-
-// Ship it the way the vendor would; the next GET /api/Orders/Status poll sees it.
-await ws.fetch(
-  new Request(`http://wholescripts.test/__admin/orders/${submitted.orderNumber}/transition`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ to: "Complete", trackingNumber: "1Z999", carrier: "UPS" }),
+// Application code: the order it submits to Wholescripts.
+const headers = { authorization: `Basic ${btoa("acme:secret")}`, "content-type": "application/json" }
+const response = await fetch(`${baseUrl}/api/Orders/Submit`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    ShippingAddress: { FName: "Ada", LName: "L", Address1: "1 Main St", City: "Phoenix", State: "AZ", Zip: "85004" },
+    Items: [{ Sku: "SKU001", Quantity: 1 }],
+    ShippingMethod: "Ground",
   }),
-)
+})
+const submitted = (await response.json()) as { orderNumber: string }
+
+// Test control: ship it the way the vendor would.
+await fetch(`${baseUrl}/__admin/orders/${submitted.orderNumber}/transition`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ to: "Complete", trackingNumber: "1Z999", carrier: "UPS" }),
+})
+
+// Application code: its next status poll sees the shipment.
+await fetch(`${baseUrl}/api/Orders/Status?ordernum=${submitted.orderNumber}`, { headers })
+
+await server.close()
 ```
 
 ### Routes

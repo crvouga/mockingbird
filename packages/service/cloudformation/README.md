@@ -7,10 +7,24 @@ Transport scaffold for Amazon CloudFormation. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { CloudFormationClient, DescribeStacksCommand } from "@aws-sdk/client-cloudformation"
 import { createServer } from "@crvouga/mockingbird-service-cloudformation/server"
+
+// Test setup: start the emulator and point the AWS SDK client your application uses at it.
 const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+const cloudformation = new CloudFormationClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// No operation is implemented yet, so every SDK call rejects.
+const failure = await cloudformation
+  .send(new DescribeStacksCommand({}))
+  .catch((error: Error) => error)
+// failure.name === "UnknownOperationException"
+
+await emulator.close() // after the test
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

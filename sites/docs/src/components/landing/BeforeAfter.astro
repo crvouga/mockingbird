@@ -1,0 +1,763 @@
+---
+/**
+ * Landing figure: one test suite, run twice. Before, each test calls a vendor's live sandbox,
+ * so the suite crawls through them one at a time and some of them fail. After, the same tests
+ * call emulators in the same process and all of them pass at once.
+ *
+ * Both cards are the same markup over different data. The page renders each run finished; the
+ * script below replays them side by side from the same data when the figure is on screen.
+ */
+import catalog from "virtual:mockingbird/catalog"
+import {
+  type Attempt,
+  formatDuration,
+  noteOf,
+  type Outcome,
+  outcomeOf,
+  summarize,
+} from "../../lib/test-run.ts"
+import Icon from "../Icon.astro"
+import VendorLogo from "./VendorLogo.astro"
+
+/**
+ * Each test, the service it calls, what the call costs against the live sandbox, and the
+ * milliseconds it takes against an emulator. Illustrative, not measured.
+ */
+const TESTS: { service: string; name: string; live: Attempt[]; local: number }[] = [
+  {
+    service: "stripe",
+    name: "charges the card",
+    live: [{ shown: 480, play: 900, end: "passed" }],
+    local: 2,
+  },
+  {
+    service: "twilio",
+    name: "texts the receipt",
+    live: [{ shown: 1200, play: 1200, end: "passed" }],
+    local: 1,
+  },
+  {
+    service: "openai",
+    name: "summarizes the order",
+    live: [{ shown: 6400, play: 2200, end: "passed" }],
+    local: 3,
+  },
+  {
+    service: "slack",
+    name: "posts to #orders",
+    live: [
+      { shown: 900, play: 900, end: "failed", note: "429" },
+      { shown: 2000, play: 1300, end: "passed" },
+    ],
+    local: 1,
+  },
+  {
+    service: "resend",
+    name: "emails the invoice",
+    live: [{ shown: 730, play: 900, end: "passed" }],
+    local: 2,
+  },
+  {
+    service: "s3",
+    name: "stores the PDF",
+    live: [{ shown: 30_000, play: 3000, end: "failed", note: "timeout" }],
+    local: 3,
+  },
+]
+
+const tests = TESTS.map((test) => {
+  const service = catalog.services.find((s) => s.name === test.service)
+  if (!service) throw new Error(`the landing figure names ${test.service}, not in the catalog`)
+  return { ...test, service }
+})
+
+const card = (
+  kind: "before" | "after",
+  title: string,
+  link: string,
+  attemptsOf: (test: (typeof tests)[number]) => Attempt[],
+) => {
+  const rows = tests.map((test) => {
+    const attempts = attemptsOf(test)
+    return {
+      ...test,
+      attempts,
+      outcome: outcomeOf(attempts),
+      note: noteOf(attempts),
+      total: attempts.reduce((sum, attempt) => sum + attempt.shown, 0),
+    }
+  })
+  const counts: Record<Outcome, number> = { passed: 0, flaky: 0, failed: 0 }
+  for (const row of rows) counts[row.outcome]++
+  return {
+    kind,
+    title,
+    link,
+    rows,
+    summary: summarize(counts),
+    total: rows.reduce((sum, row) => sum + row.total, 0),
+    state: counts.failed > 0 ? "failed" : "passed",
+  }
+}
+
+const cards = [
+  card("before", "Tests call live sandboxes", "network", (test) => test.live),
+  // Quick enough to read as instant, slow enough that the eye sees the rows land in order.
+  card("after", "Tests call emulators, in process", "in process", (test) => [
+    { shown: test.local, play: 120, end: "passed" },
+  ]),
+]
+const [before, after] = cards
+
+const vendors = tests.map((test) => test.service.brand.vendor).join(", ")
+---
+
+<figure
+  class="figure"
+  data-before-after
+  aria-label={`The same ${tests.length} tests, which call ${vendors}, run twice. Before, against live sandboxes: ${before?.summary} in ${formatDuration(before?.total ?? 0)}. After, against emulators in the same process: ${after?.summary} in ${formatDuration(after?.total ?? 0)}.`}
+>
+  {
+    cards.map((each, index) => (
+      <>
+        {index > 0 && (
+          <div class="versus" aria-hidden="true">
+            <span>vs</span>
+          </div>
+        )}
+        <section class="card" data-kind={each.kind}>
+          <header class="head">
+            <span class:list={["badge", each.kind === "before" ? "badge-warn" : "badge-ok"]}>
+              {each.kind}
+            </span>
+            <span class="title">{each.title}</span>
+          </header>
+
+          <div class="env" aria-hidden="true">
+            <span class="node">Your app</span>
+            <span class="link">
+              <em>{each.link}</em>
+              <i />
+            </span>
+            <span class="node deps">
+              {each.rows.map((row) => (
+                <VendorLogo service={row.service} size={28} />
+              ))}
+            </span>
+          </div>
+
+          <div class="suite">
+            <div class="command">
+              <span>$</span> bun test checkout.test.ts
+            </div>
+            <ol class="tests">
+              {each.rows.map((row) => (
+                <li class="test" data-state={row.outcome} data-attempts={JSON.stringify(row.attempts)}>
+                  <span class="mark" aria-hidden="true">
+                    <Icon name="check" />
+                    <Icon name="x" />
+                    <i class="spin" />
+                  </span>
+                  <span class="name">{row.name}</span>
+                  <span class="dep">
+                    <VendorLogo service={row.service} size={20} />
+                    <span>{row.service.brand.vendor}</span>
+                  </span>
+                  <span class="note">{row.note}</span>
+                  <span class="time">{formatDuration(row.total)}</span>
+                </li>
+              ))}
+            </ol>
+            <footer class="result" data-state={each.state}>
+              <span class="summary">{each.summary}</span>
+              <span class="bar" aria-hidden="true">
+                <i />
+              </span>
+              <span class="total">{formatDuration(each.total)}</span>
+            </footer>
+          </div>
+        </section>
+      </>
+    ))
+  }
+  <figcaption>The same tests in both runs. Timings are illustrative.</figcaption>
+</figure>
+
+<script>
+  import {
+    type Attempt,
+    formatDuration,
+    noteOf,
+    type Outcome,
+    outcomeOf,
+    summarize,
+  } from "../../lib/test-run.ts"
+
+  /** How long both finished runs stay on screen before they start over. */
+  const HOLD_MS = 3500
+  /** How long a failed try shows its reason before the retry starts. */
+  const FAILED_MS = 500
+
+  const still = matchMedia("(prefers-reduced-motion: reduce)")
+  const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+  /** Call `paint` with 0 → 1 over `ms`, on animation frames. */
+  const tween = (ms: number, paint: (progress: number) => void) =>
+    new Promise<void>((resolve) => {
+      const started = performance.now()
+      const frame = (now: number) => {
+        const progress = Math.min(1, (now - started) / ms)
+        paint(progress)
+        if (progress < 1) requestAnimationFrame(frame)
+        else resolve()
+      }
+      requestAnimationFrame(frame)
+    })
+
+  const suite = (card: HTMLElement) => {
+    const rows = [...card.querySelectorAll<HTMLElement>(".test")].map((el) => ({
+      el,
+      attempts: JSON.parse(el.dataset.attempts ?? "[]") as Attempt[],
+      note: el.querySelector(".note") as HTMLElement,
+      time: el.querySelector(".time") as HTMLElement,
+    }))
+    const result = card.querySelector(".result") as HTMLElement
+    const summary = card.querySelector(".summary") as HTMLElement
+    const total = card.querySelector(".total") as HTMLElement
+    const fill = card.querySelector(".bar i") as HTMLElement
+
+    /** Play the run from the top. `current` turns false when a newer run has replaced this one. */
+    return async (current: () => boolean) => {
+      const counts: Record<Outcome, number> = { passed: 0, flaky: 0, failed: 0 }
+      let elapsed = 0
+      for (const row of rows) {
+        row.el.dataset.state = "queued"
+        row.note.textContent = ""
+        row.time.textContent = ""
+      }
+      result.dataset.state = "running"
+      summary.textContent = `0 of ${rows.length}`
+      total.textContent = formatDuration(0)
+      // Empty at once: only progress eases, not the rewind.
+      fill.style.transition = "none"
+      fill.style.setProperty("--done", "0")
+      void fill.offsetWidth
+      fill.style.transition = ""
+
+      for (const [index, row] of rows.entries()) {
+        let spent = 0
+        for (const [tries, attempt] of row.attempts.entries()) {
+          row.el.dataset.state = tries === 0 ? "running" : "retrying"
+          row.note.textContent = tries === 0 ? "" : `retry ${tries}`
+          await tween(attempt.play, (progress) => {
+            row.time.textContent = formatDuration(spent + attempt.shown * progress)
+            total.textContent = formatDuration(elapsed + attempt.shown * progress)
+          })
+          if (!current()) return
+          spent += attempt.shown
+          elapsed += attempt.shown
+          if (attempt.end === "failed" && tries < row.attempts.length - 1) {
+            row.el.dataset.state = "failed"
+            row.note.textContent = attempt.note ?? ""
+            await wait(FAILED_MS)
+            if (!current()) return
+          }
+        }
+        const outcome = outcomeOf(row.attempts)
+        counts[outcome]++
+        row.el.dataset.state = outcome
+        row.note.textContent = noteOf(row.attempts)
+        summary.textContent = `${index + 1} of ${rows.length}`
+        fill.style.setProperty("--done", String((index + 1) / rows.length))
+        if (counts.failed > 0) result.dataset.state = "failing"
+      }
+      result.dataset.state = counts.failed > 0 ? "failed" : "passed"
+      summary.textContent = summarize(counts)
+    }
+  }
+
+  for (const figure of document.querySelectorAll<HTMLElement>("[data-before-after]")) {
+    const runs = [...figure.querySelectorAll<HTMLElement>(".card")].map(suite)
+    let visible = false
+    let looping = false
+    let generation = 0
+    // Both runs start together and start over together, so the gap between them is the point.
+    const loop = async () => {
+      if (looping) return
+      looping = true
+      while (visible && !still.matches) {
+        const mine = ++generation
+        await Promise.all(runs.map((run) => run(() => mine === generation)))
+        await wait(HOLD_MS)
+      }
+      looping = false
+    }
+    new IntersectionObserver(
+      ([entry]) => {
+        visible = entry?.isIntersecting ?? false
+        if (visible) void loop()
+      },
+      { threshold: 0.3 },
+    ).observe(figure)
+    still.addEventListener("change", () => void loop())
+  }
+</script>
+
+<style>
+  .figure {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    margin: 0;
+  }
+
+  /* ---- the split ---- */
+
+  .versus {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 64px;
+  }
+
+  .versus span {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border: 1px solid var(--border-strong);
+    border-radius: 50%;
+    background: var(--bg);
+    color: var(--fg-muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ---- one card, twice ---- */
+
+  /* Each card lays itself out by its own width: side by side it is narrower than on a phone. */
+  .card {
+    container-type: inline-size;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+    padding: 20px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-elevated);
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .head .badge {
+    flex: none;
+    text-transform: capitalize;
+  }
+
+  .title {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  /* ---- where the tests' calls go ---- */
+
+  /* The same frame on both sides. Before it is dashed: a boundary the calls run straight
+     through. After it is solid: one line around everything a test touches. */
+  .env {
+    display: grid;
+    grid-template-columns: auto minmax(48px, 1fr) auto;
+    align-items: center;
+    padding: 16px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius);
+    background: var(--bg);
+  }
+
+  .card[data-kind="after"] .env {
+    border-style: solid;
+  }
+
+  .node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 52px;
+    padding: 0 18px;
+    border: 1px solid var(--fg);
+    border-radius: var(--radius);
+    background: var(--bg-elevated);
+    font-size: 15px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .deps {
+    padding: 0 12px;
+  }
+
+  /* Before, the services are somewhere else, and not yours. */
+  .card[data-kind="before"] .deps {
+    border-style: dashed;
+    border-color: var(--border-strong);
+  }
+
+  .link {
+    position: relative;
+  }
+
+  .link i {
+    display: block;
+    height: 2px;
+    background: var(--ok);
+  }
+
+  .link em {
+    position: absolute;
+    bottom: 9px;
+    left: 50%;
+    color: var(--ok);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 650;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    transform: translateX(-50%);
+  }
+
+  .card[data-kind="before"] .link em {
+    color: var(--warn);
+  }
+
+  /* A call out over the network: dashed, and in no hurry. */
+  .card[data-kind="before"] .link i {
+    background: repeating-linear-gradient(90deg, var(--warn) 0 5px, transparent 5px 10px);
+    animation: crawl 1.6s linear infinite;
+  }
+
+  @keyframes crawl {
+    to {
+      background-position-x: 10px;
+    }
+  }
+
+  /* ---- the run ---- */
+
+  .suite {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    font-family: var(--font-mono);
+    font-size: 12.5px;
+  }
+
+  .command {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--fg-muted);
+    white-space: nowrap;
+  }
+
+  .command span {
+    margin-right: 4px;
+    color: var(--fg-faint);
+  }
+
+  .tests {
+    flex: 1;
+    margin: 0;
+    padding: 4px 0;
+    list-style: none;
+  }
+
+  /* Fixed columns, so the logos, notes and times line up down the list and across the cards. */
+  .test {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) 104px 52px 60px;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding: 0 14px;
+  }
+
+  .name {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .dep {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--fg-subtle);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .note {
+    font-size: 11px;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .time {
+    color: var(--fg-subtle);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* The mark holds every state's glyph; the row's state shows one. */
+  .mark {
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+  }
+
+  .mark > :global(*) {
+    grid-area: 1 / 1;
+    display: none;
+  }
+
+  .mark :global(.i) {
+    width: 14px;
+    height: 14px;
+  }
+
+  .spin {
+    width: 12px;
+    height: 12px;
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--fg-muted);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(1turn);
+    }
+  }
+
+  .test[data-state="queued"] .mark::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--border-strong);
+  }
+
+  .test[data-state="queued"] .name {
+    color: var(--fg-faint);
+  }
+
+  .test[data-state="queued"] .dep {
+    opacity: 0.45;
+  }
+
+  .test:is([data-state="running"], [data-state="retrying"]) .spin {
+    display: block;
+  }
+
+  .test[data-state="retrying"] .spin {
+    border-top-color: var(--warn);
+  }
+
+  .test:is([data-state="retrying"], [data-state="flaky"]) .note {
+    color: var(--warn);
+  }
+
+  .test:is([data-state="passed"], [data-state="flaky"]) .mark :global(.i-check) {
+    display: block;
+    color: var(--ok);
+  }
+
+  .test[data-state="flaky"] .mark :global(.i-check),
+  .test[data-state="flaky"] .time {
+    color: var(--warn);
+  }
+
+  .test[data-state="failed"] .mark :global(.i-x) {
+    display: block;
+  }
+
+  .test[data-state="failed"] :is(.mark, .name, .note, .time) {
+    color: var(--err);
+  }
+
+  /* Passing is not the same as fast: a live call that came back still cost its seconds. */
+  .card[data-kind="before"] .test[data-state="passed"] .time {
+    color: var(--warn);
+  }
+
+  .card[data-kind="after"] .test[data-state="passed"] .time {
+    color: var(--ok);
+  }
+
+  .result {
+    display: grid;
+    grid-template-columns: auto minmax(24px, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-top: 1px solid var(--border);
+    color: var(--fg-muted);
+    white-space: nowrap;
+  }
+
+  .summary,
+  .total {
+    font-weight: 600;
+  }
+
+  .total {
+    min-width: 60px;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--bg-muted);
+    overflow: hidden;
+  }
+
+  .bar i {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: currentColor;
+    transform: scaleX(var(--done, 1));
+    transform-origin: left;
+    transition: transform 0.2s var(--ease);
+  }
+
+  .result[data-state="passed"] {
+    color: var(--ok);
+  }
+
+  .result:is([data-state="failing"], [data-state="failed"]) {
+    color: var(--err);
+  }
+
+  figcaption {
+    grid-column: 1 / -1;
+    margin-top: 14px;
+    color: var(--fg-faint);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .card[data-kind="before"] .link i,
+    .spin {
+      animation: none;
+    }
+  }
+
+  @media (max-width: 900px) {
+    .figure {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .versus {
+      width: auto;
+      height: 56px;
+    }
+  }
+
+  @container (max-width: 440px) {
+    .card {
+      padding: 14px;
+    }
+    .title {
+      font-size: 14px;
+    }
+    .env {
+      grid-template-columns: auto minmax(36px, 1fr) auto;
+      padding: 10px;
+    }
+    .node {
+      gap: 2px;
+      height: 42px;
+      padding: 0 8px;
+      font-size: 13px;
+    }
+    .deps {
+      padding: 0 6px;
+    }
+    /* The logo sets its own size inline; a narrow card needs all six on one line. */
+    .deps :global(.vendor-logo) {
+      --size: 20px !important;
+    }
+    .link em {
+      bottom: 7px;
+      font-size: 9px;
+      letter-spacing: 0.04em;
+    }
+    .suite {
+      font-size: 12px;
+    }
+    .command,
+    .result {
+      padding-inline: 10px;
+    }
+    /* The logo moves ahead of the test's name and the service's name goes, so the logos
+       still line up and a name is only cut short on a row that has a note to show. */
+    .test {
+      grid-template-columns: 16px 20px minmax(0, 1fr) auto 52px;
+      gap: 8px;
+      padding: 0 10px;
+    }
+    .test > * {
+      grid-row: 1;
+    }
+    .mark {
+      grid-column: 1;
+    }
+    .dep {
+      grid-column: 2;
+    }
+    .name {
+      grid-column: 3;
+    }
+    .note {
+      grid-column: 4;
+    }
+    .time {
+      grid-column: 5;
+    }
+    .dep > span:last-child {
+      display: none;
+    }
+    /* The bar takes a line of its own, so the longest summary still fits beside the total. */
+    .result {
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px 12px;
+    }
+    .bar {
+      grid-column: 1 / -1;
+      grid-row: 1;
+    }
+  }
+</style>

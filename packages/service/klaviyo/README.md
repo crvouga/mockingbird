@@ -32,14 +32,33 @@ npx mockingbird-klaviyo serve --port 8811
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-klaviyo"
+import { ApiKeySession, EventEnum, EventsApi, MetricEnum, ProfileEnum } from "klaviyo-api"
+import { createServer } from "@crvouga/mockingbird-service-klaviyo/server"
 
-const klaviyo = createRuntime()
-// …the app posts POST /api/events/ with Authorization: Klaviyo-API-Key <key>, revision: 2024-02-15…
-const response = await klaviyo.fetch(
-  new Request("http://klaviyo.test/__admin/outbox?to=ada@example.com&metric=Placed%20Order"),
-)
+const klaviyo = await createServer()
+
+// The application's Klaviyo client. Only basePath changes.
+const events = new EventsApi(new ApiKeySession("any-key"))
+events.basePath = klaviyo.url
+await events.createEvent({
+  data: {
+    type: EventEnum.Event,
+    attributes: {
+      properties: { OrderId: "1001" },
+      value: 29,
+      uniqueId: "order-1001",
+      metric: { data: { type: MetricEnum.Metric, attributes: { name: "Placed Order" } } },
+      profile: { data: { type: ProfileEnum.Profile, attributes: { email: "ada@example.com" } } },
+    },
+  },
+})
+
+// Test assertion: the outbox holds what the emulator accepted.
+const response = await fetch(`${klaviyo.url}/__admin/outbox?to=ada@example.com&metric=Placed%20Order`)
 const { messages } = (await response.json()) as { messages: { metric: string; value: number }[] }
+// messages → [{ metric: "Placed Order", value: 29, … }]
+
+await klaviyo.close()
 ```
 
 ### Routes

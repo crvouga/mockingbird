@@ -12,10 +12,28 @@ containers. Wire contract follows [RunTask](https://docs.aws.amazon.com/AmazonEC
 ## Usage
 
 ```ts
+import { ECSClient, RunTaskCommand } from "@aws-sdk/client-ecs"
 import { createServer } from "@crvouga/mockingbird-service-ecs/server"
+
+// Test setup: the ECS client your application already uses, pointed at the emulator.
 const server = await createServer()
-// boto3.client("ecs", endpoint_url=server.url, region_name="us-east-1",
-//              aws_access_key_id="fixture", aws_secret_access_key="fixture")
+const ecs = new ECSClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code, unchanged. Cluster default and task definition fixture:1 are the fixtures.
+const { tasks, failures } = await ecs.send(
+  new RunTaskCommand({
+    cluster: "default",
+    taskDefinition: "fixture:1",
+    launchType: "FARGATE",
+    networkConfiguration: { awsvpcConfiguration: { subnets: ["subnet-fixture"] } },
+  }),
+)
+// tasks[0].lastStatus === "PROVISIONING"; failures is []
+
 await server.close()
 ```
 

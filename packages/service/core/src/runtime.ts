@@ -9,8 +9,16 @@ import {
 import { listOperations, type OpenAPIDocument } from "@crvouga/mockingbird-openapi"
 import { clearNamespace, type SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { adminUiRoutes } from "./admin-ui.js"
-import { type Clock, createClock } from "./clock.js"
 import {
+  type Clock,
+  type ClockState,
+  createClock,
+  type DerivedClock,
+  deriveClock,
+  restoreClock,
+} from "./clock.js"
+import {
+  ADMIN_KEY_HEADER,
   ADMIN_PREFIX,
   type AdminRoutes,
   assertAdminPrefixAvailable,
@@ -19,15 +27,36 @@ import {
   matchNamespacePath,
   NAMESPACE_HEADER,
   resolveAdminPrefix,
+  type SnapshotInfo,
+  type SnapshotStore,
 } from "./control.js"
+import {
+  CONTROL_HEADERS,
+  ControlError,
+  type ControlHeaderInput,
+  type ControlPlan,
+  controlHeaders,
+  isRecord,
+  KEY_PATTERN,
+  type MockControls,
+  type NamespaceControls as NamespaceControlsInput,
+  normalizeBootControls,
+  normalizeClock,
+  normalizeControls,
+  normalizeLatency,
+  normalizeSeed,
+  parseControlHeaders,
+  type RequestControls,
+  SNAPSHOT_FORMAT,
+  type SnapshotDocument,
+} from "./controls.js"
 import { type CredentialRegistry, createCredentialRegistry, maskCredential } from "./credentials.js"
 import {
-  createFaultRegistry,
   type FaultHit,
   type FaultPreset,
-  type FaultPresetList,
   type FaultRegistry,
   type FaultRule,
+  normalizeFault,
 } from "./faults.js"
 import {
   createJournal,
@@ -36,7 +65,15 @@ import {
   type ResponseNotes,
   responseNotes,
 } from "./journal.js"
+import type { LatencyRegistry } from "./latency.js"
 import { createMetrics, type Metrics, type RejectedRequest, type RequestLog } from "./metrics.js"
+import {
+  type BootScope,
+  type ControlSettings,
+  type ControlState,
+  type ControlsSnapshot,
+  createNamespaceControls,
+} from "./namespace-controls.js"
 import { operationPath } from "./path.js"
 import { createRng, type Rng, seedFrom } from "./rng.js"
 import { bootSqlite } from "./service.js"
@@ -57,11 +94,15 @@ import { type WebhookHub, webhookAdminRoutes } from "./webhooks.js"
  */
 export const MOCKINGBIRD_HEADER = "x-mockingbird"
 /** Selects a named copy-on-write history branch. `main` is the compatibility default. */
-export const BRANCH_HEADER = "x-mockingbird-branch"
+export const BRANCH_HEADER = CONTROL_HEADERS.branch
 /** Reads a historical checkpoint. With a branch header, initializes that branch from it. */
-export const AT_HEADER = "x-mockingbird-at"
+export const AT_HEADER = CONTROL_HEADERS.at
 /** Identifies the resulting checkpoint on successful mutations. */
 export const CHECKPOINT_HEADER = "x-mockingbird-checkpoint"
+/** On a response a fault rule answered or shaped: that rule's id. */
+export const FAULT_HEADER = CONTROL_HEADERS.fault
+/** On a response to a request that asked for a snapshot: the snapshot's id. */
+export const SNAPSHOT_HEADER = CONTROL_HEADERS.snapshot
 
 /** What the runtime needs from a service: a Fetch handler it can reset. */
 export type ServiceInstance = FetchAPI & { reset(): Promise<void> }
@@ -89,14 +130,26 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   sqlite?: SqliteClient
   /** Defaults to a live clock over `Date.now`. */
   clock?: Clock
-  /** Seeds every random choice the runtime makes (fault rates). Default `0`. */
+  /** Seeds every random choice the runtime makes (fault rates, jitter). Default `0`. */
   seed?: number | string
+  /**
+   * Admin controls to boot with: clock, latency, faults, a starting snapshot, credential
+   * mappings and per-namespace overrides. `reset` returns a namespace to exactly this.
+   */
+  adminControls?: MockControls
   /** Extra `GET /__admin/health` fields, such as the loaded corpus version. */
   describe?: () => Record<string, unknown>
   /** Service-specific admin routes, given the runtime so they can reach any namespace. */
   admin?: (runtime: ServiceRuntime<T>) => AdminRoutes
   /** Reserved tree for every internal HTTP endpoint, UI and namespace carrier. Default /__admin. */
   adminPrefix?: string
+  /**
+   * A namespace's clock was moved — by `/__admin/clock`, a header, a restore, a reset, or a
+   * wait spent in virtual time. Run whatever the service schedules by that clock, so what
+   * came due is seen at once and not on the next request. Moving the base clock in process
+   * (`runtime.clock`) is the caller's own doing and is not reported here.
+   */
+  onClockChange?: (namespace: string) => void
   /** Invalidate transient handles before replacing an existing instance's stored state. */
   beforeRestore?: (instance: T) => void
   /** Require this value in `x-mockingbird-admin-key` on admin data routes. */
@@ -114,7 +167,10 @@ export type RuntimeOptions<T extends ServiceInstance> = {
    * `sigV4AccessKeyId`.
    */
   credential?: (request: Request) => string | undefined
-  /** Named faults, switched on with `POST /__admin/faults {"preset": "<name>"}`. */
+  /**
+   * Named faults, switched on with `POST /__admin/faults {"preset": "<name>"}`. They join the
+   * standard presets every mock has; one with a standard name replaces it.
+   */
   presets?: Record<string, FaultPreset>
   /** Outbound webhooks; adds the `/__admin/webhooks*` routes and clears on reset. */
   webhooks?: WebhookHub
@@ -138,12 +194,14 @@ export type RuntimeOptions<T extends ServiceInstance> = {
 export type RuntimeIO = {
   wallNow(): number
   monotonicNow(): number
-  sleep(ms: number): Promise<void>
+  /** Wait on the wall clock. Rejects with the signal's reason when it aborts first. */
+  sleep(ms: number, signal?: AbortSignal): Promise<void>
 }
 
 export type ServiceTimelineState = Readonly<{
   snapshot: NamespaceSnapshot
-  clock: Readonly<ReturnType<Clock["state"]>>
+  /** `pinned`: the namespace's clock was frozen itself, not just following a frozen base. */
+  clock: Readonly<ClockState & { pinned?: boolean }>
   rngState: number
 }>
 
@@ -158,14 +216,18 @@ export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   readonly sqlite: SqliteClient
   readonly clock: Clock
   readonly faults: FaultRegistry
+  /** Baseline response time per namespace. */
+  readonly latency: LatencyRegistry
   readonly metrics: Metrics
   readonly journal: Journal
   readonly rng: Rng
   readonly credentials: CredentialRegistry
   /** The webhook hub, when the service has outbound webhooks. */
   readonly webhooks: WebhookHub | undefined
-  /** Enable independent namespace clocks and PRNGs before serving a fleet. */
-  isolateNamespaces(): void
+  /**
+   * A namespace's clock. Each follows the base clock, {@link ServiceRuntime.clock}, with an
+   * offset and a freeze of its own, so moving one never moves another.
+   */
   namespaceClock(namespace?: string): Clock
   namespaceOf(request: Request): string
   /** Opaque in-process checkpoint including records, controls and webhook history. */
@@ -177,8 +239,34 @@ export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   instance(namespace?: string): T
   /** Public names of every namespace created so far. */
   namespaces(): string[]
-  /** Reset one namespace, or every namespace with `"*"`. */
+  /** Return one namespace to its boot state, or every namespace with `"*"`. */
   reset(namespace?: string): Promise<void>
+  /** Reset a namespace and forget it, releasing everything it held. */
+  dropNamespace(namespace: string): Promise<void>
+  /** A namespace's controls: seed, clock, virtual time, latency, faults and snapshots. */
+  controls(namespace?: string): ControlState & { snapshots: SnapshotInfo[] }
+  /** Apply a control document to a namespace. A given key replaces that control. */
+  configure(
+    controls: NamespaceControlsInput,
+    namespace?: string,
+  ): ControlState & { snapshots: SnapshotInfo[] }
+  /** Named snapshots of a namespace: records, clock, random streams, faults and latency. */
+  readonly snapshots: {
+    /** Capture the namespace now. Reusing a name replaces that snapshot. */
+    create(options?: { name?: string; namespace?: string }): SnapshotInfo
+    list(namespace?: string): SnapshotInfo[]
+    /** The snapshot as portable JSON, to commit beside a suite or boot another mock from. */
+    export(id: string, namespace?: string): SnapshotDocument
+    /** Store a document as a snapshot without restoring it. */
+    import(
+      document: SnapshotDocument,
+      options?: { name?: string; namespace?: string },
+    ): SnapshotInfo
+    restore(id: string, namespace?: string): void
+    delete(id: string, namespace?: string): boolean
+  }
+  /** Request headers that carry controls, checked: spread them into a `fetch` or an SDK's defaults. */
+  headers(input: ControlHeaderInput): Record<string, string>
   snapshot(namespace?: string): NamespaceSnapshot
   restore(snapshot: NamespaceSnapshot, namespace?: string): void
   /** Capture the current branch. Mutating HTTP calls do this automatically. */
@@ -200,10 +288,6 @@ void mockSurfaceProof
 /** The namespace used when a request names none. */
 export const DEFAULT_NAMESPACE = "default"
 
-const NAMESPACE_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/
-
-/** `/__admin/ns/<namespace>/…`: the namespace carrier for SDKs that only take a base URL. */
-const BRANCH_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 
 const effects = new WeakMap<Request, FaultHit["effect"][]>()
@@ -270,11 +354,74 @@ export const faultEffect = (request: Request, name: string): Record<string, unkn
  */
 export class DroppedConnectionError extends TypeError {
   readonly code = "MOCKINGBIRD_DROP"
-  constructor() {
-    super("fetch failed: connection dropped by Mockingbird fault")
+  /** Why the connection died: a `drop`, a `timeout` that ran out, or a `truncate`d body. */
+  readonly reason: "drop" | "timeout" | "truncate"
+  constructor(reason: "drop" | "timeout" | "truncate" = "drop") {
+    super(
+      reason === "timeout"
+        ? "fetch failed: request timed out by Mockingbird fault"
+        : reason === "truncate"
+          ? "fetch failed: response truncated by Mockingbird fault"
+          : "fetch failed: connection dropped by Mockingbird fault",
+    )
     this.name = "TypeError"
+    this.reason = reason
   }
 }
+
+const realSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(signal.reason)
+      return
+    }
+    const abort = () => {
+      clearTimeout(timer)
+      reject(signal?.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort)
+      resolve()
+    }, ms)
+    signal?.addEventListener("abort", abort, { once: true })
+  })
+
+const NULL_BODY_STATUS = new Set([101, 204, 205, 304])
+
+/** Let `bytes` of the body through, then fail the stream the way a dying connection does. */
+const truncateResponse = (response: Response, bytes: number): Response => {
+  if (NULL_BODY_STATUS.has(response.status)) return response
+  const reader = response.body?.getReader()
+  let sent = 0
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const chunk = sent < bytes && reader ? await reader.read() : undefined
+      if (!chunk || chunk.done) {
+        await reader?.cancel().catch(() => {})
+        controller.error(new DroppedConnectionError("truncate"))
+        return
+      }
+      const part = chunk.value.subarray(0, bytes - sent)
+      sent += part.length
+      controller.enqueue(part)
+    },
+    cancel: (reason) => reader?.cancel(reason),
+  })
+  const headers = new Headers(response.headers)
+  headers.delete("content-length")
+  return new Response(body, { status: response.status, statusText: response.statusText, headers })
+}
+
+/** What a snapshot holds for one namespace. Only `records` is always there. */
+type Kept = {
+  records: NamespaceSnapshot
+  clock?: { now: number; frozen: boolean; pinned?: boolean }
+  /** Where the service's own random stream stands. */
+  rngState?: number
+  controls: ControlsSnapshot
+  webhooks?: unknown
+}
+type Stored = Kept & { info: SnapshotInfo }
 
 type Matcher = { operationId: string; method: string; pattern: RegExp; params: number }
 
@@ -329,46 +476,98 @@ export const createRuntime = <T extends ServiceInstance>(
     return undefined
   }
   assertAdminUi(options.adminUi)
+  const boot = normalizeBootControls(options.adminControls, "adminControls")
+  const seed = normalizeSeed(options.seed ?? boot.shared.seed ?? 0)
+  // Named outright, the seed is a boot control like any other: it wins over a boot snapshot's.
+  if (options.seed !== undefined) boot.shared.seed = seed
   const sqlite = bootSqlite(options.sqlite)
   const clock = options.clock ?? createClock()
-  const rng = createRng(options.seed ?? 0)
+  // The shared boot clock is the base clock, which every namespace follows. What a namespace
+  // keeps of it for itself is how far its own clock steps before each request.
+  const { now: bootNow, frozen: bootFrozen, ...stepping } = boot.shared.clock ?? {}
+  if (bootFrozen === true) clock.freeze()
+  if (bootNow !== undefined) clock.set(bootNow)
+  if (bootFrozen === false) clock.unfreeze()
+  const bootClockGiven = bootNow !== undefined || bootFrozen !== undefined
+  if (stepping.autoAdvanceMs !== undefined) boot.shared.clock = stepping
+  else delete boot.shared.clock
+  /** Where the base clock stood when the runtime was created: what a full reset returns it to. */
+  const bootClock = clock.state()
+  const rng = createRng(seed)
   const wallNow = options.io?.wallNow ?? Date.now
   const monotonicNow = options.io?.monotonicNow ?? (() => performance.now())
-  const sleep =
-    options.io?.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)))
-  const faults = createFaultRegistry(createRng(options.seed ?? 0), sleep)
+  const sleep = options.io?.sleep ?? realSleep
   const metrics = createMetrics()
   const journal = createJournal(options.journalSize ?? DEFAULT_JOURNAL_SIZE)
   const version = options.version ?? PACKAGE_VERSION
   const instances = new Map<string, T>()
   const publicNamespaces = new Set<string>()
-  const branchRngs = new Map<string, Rng>()
-  const namespaceClocks = new Map<string, Clock>()
+  /** The service's own random stream, by storage key. `default` uses {@link rng}. */
+  const rngs = new Map<string, Rng>()
+  const namespaceClocks = new Map<string, DerivedClock>()
   const namespaceForStorage = new Map<string, string>()
-  let isolatedNamespaces = false
-  const namespaceClock = (name = DEFAULT_NAMESPACE): Clock => {
-    if (!isolatedNamespaces || name === DEFAULT_NAMESPACE) return clock
+  /**
+   * Every namespace has a clock of its own that follows the base clock. Moving one never
+   * moves another; moving the base (`runtime.clock`) moves every namespace that is not frozen.
+   */
+  const namespaceClock = (name = DEFAULT_NAMESPACE): DerivedClock => {
     let found = namespaceClocks.get(name)
     if (!found) {
-      found = createClock()
+      found = deriveClock(clock, () => options.onClockChange?.(name))
       namespaceClocks.set(name, found)
     }
     return found
   }
-  const fleetPoints = new WeakMap<
-    object,
-    {
-      namespace: string
-      state: ServiceTimelineState
-      faults: ReturnType<FaultRegistry["snapshot"]>
-      webhooks: unknown
-    }
-  >()
+  const fleetPoints = new WeakMap<object, { namespace: string } & Kept>()
   const timelines = new Map<string, Timeline<ServiceTimelineState>>()
   const branchStorage = new Map<string, string>()
   const captured = new Map<string, NamespaceSnapshot>()
   const credentials = createCredentialRegistry()
+  for (const [credential, target] of Object.entries(boot.credentials))
+    credentials.set(credential, target)
   const operationIdFor = options.document ? operationMatcher(options.document) : () => undefined
+
+  const controls = createNamespaceControls({
+    seed,
+    clock: namespaceClock,
+    boot,
+    ...(options.presets ? { presets: options.presets } : {}),
+    sleep: (ms) => sleep(ms),
+    onReseed: (namespace, next) => {
+      rngFor(namespace).reseed(next)
+      for (const [mapping, storage] of branchStorage)
+        if (mapping.startsWith(`${namespace}\0`)) rngs.get(storage)?.reseed(next)
+    },
+    onPreset: (preset, namespace, overrides) => {
+      if (preset.webhook)
+        options.webhooks?.fault(namespace, {
+          ...preset.webhook,
+          ...(overrides.count !== undefined ? { count: overrides.count } : {}),
+        })
+    },
+    restoreDocument: (namespace, document, scope) => {
+      const { clock: carried, ...point } = fromDocument(namespace, document)
+      // A boot clock named outright is the base clock's; the snapshot's does not override it.
+      restoreAll(
+        namespace,
+        bootClockGiven || !carried ? point : { ...point, clock: carried },
+        scope,
+      )
+    },
+  })
+  const { faults, latency } = controls
+
+  /** The random stream behind a storage key, created at its namespace's seed. */
+  const rngFor = (storage: string): Rng => {
+    if (storage === DEFAULT_NAMESPACE) return rng
+    let found = rngs.get(storage)
+    if (!found) {
+      found = createRng(seed)
+      rngs.set(storage, found)
+    }
+    return found
+  }
+  const seedOf = (namespace: string): number | string => controls.settings(namespace).seed
 
   const storageNamespace = (name: string) =>
     name === DEFAULT_NAMESPACE ? options.name : `${options.name}:${name}`
@@ -376,31 +575,41 @@ export const createRuntime = <T extends ServiceInstance>(
   const instanceFor = (key: string, publicNamespace = key, isolatedRng?: Rng): T => {
     const existing = instances.get(key)
     if (existing) return existing
-    if (!NAMESPACE_PATTERN.test(key) || !NAMESPACE_PATTERN.test(publicNamespace)) {
+    if (!KEY_PATTERN.test(key) || !KEY_PATTERN.test(publicNamespace)) {
       throw new RangeError(
-        `namespace must match ${NAMESPACE_PATTERN}: ${JSON.stringify(publicNamespace)}`,
+        `namespace must match ${KEY_PATTERN}: ${JSON.stringify(publicNamespace)}`,
       )
     }
-    const createdContextRng =
-      isolatedRng ??
-      (isolatedNamespaces && key !== DEFAULT_NAMESPACE ? createRng(options.seed ?? 0) : rng)
+    if (isolatedRng) rngs.set(key, isolatedRng)
     const created = options.create({
       namespace: storageNamespace(key),
       publicNamespace,
       adminPrefix,
       sqlite,
       clock: namespaceClock(publicNamespace),
-      rng: createdContextRng,
+      rng: rngFor(key),
     })
     instances.set(key, created)
     namespaceForStorage.set(key, publicNamespace)
     publicNamespaces.add(publicNamespace)
-    if (isolatedRng) branchRngs.set(key, isolatedRng)
-    else if (isolatedNamespaces && key !== DEFAULT_NAMESPACE) branchRngs.set(key, createdContextRng)
+    // A namespace starts from its boot controls and, when one is given, its boot snapshot.
+    if (key === publicNamespace) controls.ensure(key)
     return created
   }
 
   const instance = (name: string = DEFAULT_NAMESPACE): T => instanceFor(name)
+
+  /** A namespace's clock as a checkpoint keeps it, and how one is put back. */
+  const clockOf = (namespace: string): ServiceTimelineState["clock"] => {
+    const own = namespaceClock(namespace)
+    return Object.freeze({ ...own.state(), pinned: own.pinned() })
+  }
+  const placeClock = (
+    namespace: string,
+    state: { now: number; frozen: boolean; pinned?: boolean },
+  ): void =>
+    // A document only says frozen or not; frozen there means frozen at that instant.
+    namespaceClock(namespace).place({ now: state.now, pinned: state.pinned ?? state.frozen })
 
   const capture = (storage: string): ServiceTimelineState => {
     const fresh = snapshotNamespace(sqlite, storageNamespace(storage))
@@ -440,8 +649,8 @@ export const createRuntime = <T extends ServiceInstance>(
     captured.set(storage, snapshot)
     return Object.freeze({
       snapshot,
-      clock: Object.freeze(namespaceClock(namespaceForStorage.get(storage) ?? storage).state()),
-      rngState: (branchRngs.get(storage) ?? rng).state(),
+      clock: clockOf(namespaceForStorage.get(storage) ?? storage),
+      rngState: rngFor(storage).state(),
     })
   }
 
@@ -476,18 +685,15 @@ export const createRuntime = <T extends ServiceInstance>(
   }
 
   const ensureBranch = (namespace: string, branch: string, at?: string): string => {
-    if (!BRANCH_PATTERN.test(branch)) throw new RangeError(`branch must match ${BRANCH_PATTERN}`)
+    if (!KEY_PATTERN.test(branch)) throw new RangeError(`branch must match ${KEY_PATTERN}`)
     const history = timeline(namespace)
     if (branch === "main") {
       if (at !== undefined) {
         const point = history.checkout("main", at)
         restoreStorage(namespace, point.value.snapshot)
         captured.set(namespace, point.value.snapshot)
-        ;(branchRngs.get(namespace) ?? rng).setState(point.value.rngState)
-        const selectedClock = namespaceClock(namespace)
-        selectedClock.set(point.value.clock.now)
-        if (point.value.clock.frozen) selectedClock.freeze()
-        else selectedClock.unfreeze()
+        rngFor(namespace).setState(point.value.rngState)
+        placeClock(namespace, point.value.clock)
       }
       return namespace
     }
@@ -496,7 +702,7 @@ export const createRuntime = <T extends ServiceInstance>(
       // Capture unobserved background work before branching from the current main head.
       if (at === undefined) history.commit(capture(namespace))
       const point = history.fork(branch, at === undefined ? {} : { from: at })
-      const branchRng = createRng(options.seed ?? 0)
+      const branchRng = createRng(seedOf(namespace))
       if (point) branchRng.setState(point.value.rngState)
       instanceFor(storage, namespace, branchRng)
       if (point) restoreStorage(storage, point.value.snapshot)
@@ -504,17 +710,17 @@ export const createRuntime = <T extends ServiceInstance>(
     } else if (at !== undefined && history.head(branch)?.id !== at) {
       const point = history.checkout(branch, at)
       if (!instances.has(storage)) {
-        const branchRng = createRng(options.seed ?? 0)
+        const branchRng = createRng(seedOf(namespace))
         branchRng.setState(point.value.rngState)
         instanceFor(storage, namespace, branchRng)
       }
-      branchRngs.get(storage)?.setState(point.value.rngState)
+      rngFor(storage).setState(point.value.rngState)
       restoreStorage(storage, point.value.snapshot)
       captured.set(storage, point.value.snapshot)
     } else {
       if (!instances.has(storage)) {
         const point = history.head(branch)
-        const branchRng = createRng(options.seed ?? 0)
+        const branchRng = createRng(seedOf(namespace))
         if (point) branchRng.setState(point.value.rngState)
         instanceFor(storage, namespace, branchRng)
       }
@@ -549,30 +755,33 @@ export const createRuntime = <T extends ServiceInstance>(
     const storage = ensureBranch(namespace, branchName)
     restoreStorage(storage, point.value.snapshot)
     captured.set(storage, point.value.snapshot)
-    const selectedClock = namespaceClock(namespace)
-    selectedClock.set(point.value.clock.now)
-    if (point.value.clock.frozen) selectedClock.freeze()
-    else selectedClock.unfreeze()
-    ;(branchRngs.get(storage) ?? rng).setState(point.value.rngState)
+    placeClock(namespace, point.value.clock)
+    rngFor(storage).setState(point.value.rngState)
   }
 
   const reset = async (name: string = DEFAULT_NAMESPACE): Promise<void> => {
     if (name === "*") {
       options.webhooks?.clear()
       for (const each of instances.values()) await each.reset()
-      for (const each of branchRngs.values()) each.reset()
       timelines.clear()
       for (const storage of branchStorage.values()) {
         instances.delete(storage)
-        branchRngs.delete(storage)
+        rngs.delete(storage)
         namespaceForStorage.delete(storage)
       }
       branchStorage.clear()
       captured.clear()
-      faults.clear()
-      clock.reset()
-      rng.reset()
-      for (const each of namespaceClocks.values()) each.reset()
+      snapshotStore.clear()
+      journal.clear()
+      metrics.reset()
+      // The base clock goes back to where the runtime found it; a live one keeps running.
+      if (bootClock.frozen) restoreClock(clock, bootClock)
+      else {
+        clock.reset()
+        clock.advance(bootClock.offsetMs)
+      }
+      controls.rebootAll()
+      for (const each of new Set([DEFAULT_NAMESPACE, ...publicNamespaces])) controls.ensure(each)
       return
     }
     options.webhooks?.clear(name)
@@ -587,17 +796,290 @@ export const createRuntime = <T extends ServiceInstance>(
       branchStorage.delete(mapping)
       instances.delete(storage)
       namespaceForStorage.delete(storage)
-      branchRngs.delete(storage)
+      rngs.delete(storage)
       captured.delete(storage)
     }
     timelines.delete(name)
     captured.delete(name)
-    faults.restore(name, { rules: [], rngState: createRng(options.seed ?? 0).state() })
-    namespaceClock(name).reset()
-    ;(branchRngs.get(name) ?? rng).reset()
+    snapshotStore.clear(name)
     journal.clear(name)
     metrics.reset(name)
+    // Seed, clock, faults, latency and every stream, then the boot snapshot and controls again.
+    controls.reboot(name)
   }
+
+  const dropNamespace = async (name: string): Promise<void> => {
+    await reset(name)
+    if (name === DEFAULT_NAMESPACE) return
+    instances.delete(name)
+    namespaceForStorage.delete(name)
+    publicNamespaces.delete(name)
+    rngs.delete(name)
+    namespaceClocks.delete(name)
+    controls.forget(name)
+  }
+
+  /** Everything a namespace is: records, clock, random streams, faults, latency, webhooks. */
+  const captureAll = (namespace: string): Kept => {
+    instance(namespace)
+    const state = capture(namespace)
+    return {
+      records: state.snapshot,
+      clock: state.clock,
+      rngState: state.rngState,
+      controls: controls.snapshot(namespace),
+      webhooks: options.webhooks?.snapshot(namespace),
+    }
+  }
+
+  /** Put back what `point` holds. What it does not hold stays as it is. */
+  const restoreAll = (namespace: string, point: Kept, scope: BootScope = "all"): void => {
+    instance(namespace)
+    if (scope === "all") {
+      restoreStorage(namespace, point.records)
+      captured.set(namespace, point.records)
+    }
+    if (point.clock) placeClock(namespace, point.clock)
+    // Controls before the service's stream: a restored seed restarts it, then it is placed.
+    controls.restore(namespace, point.controls)
+    if (point.rngState !== undefined) rngFor(namespace).setState(point.rngState)
+    if (scope !== "all") return
+    if (point.webhooks !== undefined) options.webhooks?.restore(namespace, point.webhooks)
+    // History continues from the restored state instead of being rewritten.
+    timelines.get(namespace)?.commit(capture(namespace), { branch: "main" })
+  }
+
+  const toDocument = (point: Kept): SnapshotDocument => {
+    const { settings, streams, faults: rules, latency: waits } = point.controls
+    return {
+      format: SNAPSHOT_FORMAT,
+      service: options.name,
+      records: point.records.records.map((row) => {
+        // A Collection row is stored as `{seq, value}`; anything else travels as its raw text.
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(row.value)
+        } catch {
+          parsed = undefined
+        }
+        const base = { collection: row.collection, id: row.id, seq: row.seq }
+        return isRecord(parsed) &&
+          "value" in parsed &&
+          JSON.stringify({ seq: row.seq, value: parsed.value }) === row.value
+          ? { ...base, value: parsed.value }
+          : { ...base, raw: row.value }
+      }),
+      sequences: point.records.sequences.map((row) => ({ ...row })),
+      ...(point.clock
+        ? {
+            clock: {
+              now: point.clock.now,
+              frozen: point.clock.frozen,
+              ...(settings?.autoAdvanceMs !== undefined
+                ? { autoAdvanceMs: settings.autoAdvanceMs }
+                : {}),
+            },
+          }
+        : {}),
+      ...(settings?.seed !== undefined ? { seed: settings.seed } : {}),
+      ...(point.rngState !== undefined ? { rng: { state: point.rngState, ...streams } } : {}),
+      ...(rules ? { faults: rules } : {}),
+      ...(waits ? { latency: waits } : {}),
+      ...(settings?.virtualTime !== undefined ? { virtualTime: settings.virtualTime } : {}),
+    }
+  }
+
+  const position = (value: unknown, label: string): number => {
+    if (
+      typeof value !== "number" ||
+      !Number.isSafeInteger(value) ||
+      value < 0 ||
+      value > 0xffffffff
+    )
+      throw new ControlError(`${label}: expected an unsigned 32-bit integer`)
+    return value
+  }
+
+  /** A document as restorable state. Checks all of it; touches nothing. */
+  const fromDocument = (namespace: string, document: SnapshotDocument): Kept => {
+    if (document.service !== undefined && document.service !== options.name)
+      throw new ControlError(`snapshot was taken from ${document.service}, not ${options.name}`)
+    const highest = new Map<string, number>()
+    const seen = new Set<string>()
+    const records = document.records.map((row) => {
+      const key = `${row.collection}\0${row.id}`
+      if (seen.has(key))
+        throw new ControlError(`snapshot.records: duplicate ${row.collection}/${row.id}`)
+      seen.add(key)
+      const seq = row.seq ?? (highest.get(row.collection) ?? 0) + 1
+      highest.set(row.collection, Math.max(highest.get(row.collection) ?? 0, seq))
+      return Object.freeze({
+        collection: row.collection,
+        id: row.id,
+        seq,
+        value: typeof row.raw === "string" ? row.raw : JSON.stringify({ seq, value: row.value }),
+      })
+    })
+    records.sort((left, right) =>
+      left.collection < right.collection
+        ? -1
+        : left.collection > right.collection
+          ? 1
+          : left.seq - right.seq,
+    )
+    const sequences = new Map<string, { name: string; kind: string; value: number }>()
+    for (const row of document.sequences ?? [])
+      sequences.set(`${row.name}\0${row.kind}`, { ...row })
+    // A collection's counter never trails its rows, so the next insert cannot reuse a seq.
+    for (const [collection, seq] of highest) {
+      const key = `${collection}\0collection`
+      if ((sequences.get(key)?.value ?? 0) < seq)
+        sequences.set(key, { name: collection, kind: "collection", value: seq })
+    }
+    const stored: NamespaceSnapshot = Object.freeze({
+      namespace: storageNamespace(namespace),
+      records: Object.freeze(records) as NamespaceSnapshot["records"],
+      sequences: Object.freeze(
+        [...sequences.values()]
+          .sort((left, right) =>
+            left.name < right.name
+              ? -1
+              : left.name > right.name
+                ? 1
+                : left.kind < right.kind
+                  ? -1
+                  : left.kind > right.kind
+                    ? 1
+                    : 0,
+          )
+          .map((row) => Object.freeze(row)),
+      ) as NamespaceSnapshot["sequences"],
+    })
+
+    const settings: Partial<ControlSettings> = {}
+    if (document.seed !== undefined) settings.seed = normalizeSeed(document.seed, "snapshot.seed")
+    if (document.virtualTime !== undefined) {
+      if (typeof document.virtualTime !== "boolean")
+        throw new ControlError("snapshot.virtualTime: expected a boolean")
+      settings.virtualTime = document.virtualTime
+    }
+    const stepping =
+      document.clock?.autoAdvanceMs !== undefined
+        ? normalizeClock({ autoAdvance: document.clock.autoAdvanceMs }, "snapshot.clock")
+            .autoAdvanceMs
+        : undefined
+    if (stepping !== undefined) settings.autoAdvanceMs = stepping
+    const held: ControlsSnapshot = {}
+    if (Object.keys(settings).length > 0) held.settings = settings
+    if (document.rng?.faults !== undefined || document.rng?.latency !== undefined)
+      held.streams = {
+        ...(document.rng.faults !== undefined
+          ? { faults: position(document.rng.faults, "snapshot.rng.faults") }
+          : {}),
+        ...(document.rng.latency !== undefined
+          ? { latency: position(document.rng.latency, "snapshot.rng.latency") }
+          : {}),
+      }
+    if (document.faults !== undefined) {
+      const given = document.faults
+      if (!isRecord(given) || !Array.isArray(given.rules))
+        throw new ControlError("snapshot.faults: expected {rules: [...]}")
+      held.faults = {
+        rules: given.rules.map((each: unknown) => {
+          const rule = normalizeFault(each)
+          const kept = each as Record<string, unknown>
+          return {
+            ...rule,
+            remaining: typeof kept.remaining === "number" ? kept.remaining : (rule.count ?? null),
+            hits: typeof kept.hits === "number" ? kept.hits : 0,
+            seen: typeof kept.seen === "number" ? kept.seen : 0,
+            ...(typeof kept.position === "number" ? { position: kept.position } : {}),
+          }
+        }),
+        nextId: typeof given.nextId === "number" ? given.nextId : 0,
+      }
+    }
+    if (document.latency !== undefined)
+      held.latency = normalizeLatency(document.latency, "snapshot.latency")
+    return {
+      records: stored,
+      ...(document.clock
+        ? { clock: { now: document.clock.now, frozen: document.clock.frozen } }
+        : {}),
+      ...(document.rng?.state !== undefined
+        ? { rngState: position(document.rng.state, "snapshot.rng.state") }
+        : {}),
+      controls: held,
+    }
+  }
+
+  const kept = new Map<string, Map<string, Stored>>()
+  const snapshotCounters = new Map<string, number>()
+  const keep = (namespace: string, given: string | undefined, point: Kept): SnapshotInfo => {
+    let store = kept.get(namespace)
+    if (!store) {
+      store = new Map()
+      kept.set(namespace, store)
+    }
+    let id = given
+    if (id === undefined) {
+      let next = snapshotCounters.get(namespace) ?? 0
+      do id = `snap_${++next}`
+      while (store.has(id))
+      snapshotCounters.set(namespace, next)
+    }
+    const info: SnapshotInfo = {
+      id,
+      namespace,
+      records: point.records.records.length,
+      at: point.clock?.now ?? namespaceClock(namespace).now(),
+      portable: true,
+    }
+    store.set(id, { ...point, info })
+    return info
+  }
+  /** Named snapshots, kept per namespace so two workers never see each other's ids. */
+  const snapshotStore: SnapshotStore = {
+    create: (namespace, id) => keep(namespace, id, captureAll(namespace)),
+    list: (namespace) => [...(kept.get(namespace)?.values() ?? [])].map((each) => each.info),
+    get: (namespace, id) => kept.get(namespace)?.get(id)?.info,
+    export(namespace, id) {
+      const found = kept.get(namespace)?.get(id)
+      return found ? toDocument(found) : undefined
+    },
+    import: (namespace, id, document) => keep(namespace, id, fromDocument(namespace, document)),
+    restore(namespace, id) {
+      const found = kept.get(namespace)?.get(id)
+      if (!found) return false
+      restoreAll(namespace, found)
+      return true
+    },
+    remove: (namespace, id) => kept.get(namespace)?.delete(id) ?? false,
+    clear(namespace) {
+      if (namespace === undefined) {
+        kept.clear()
+        snapshotCounters.clear()
+        return
+      }
+      kept.delete(namespace)
+      snapshotCounters.delete(namespace)
+    },
+  }
+
+  const applyControls = (namespace: string, plan: ControlPlan): void => {
+    const { snapshot: document, ...rest } = plan
+    // Everything is checked before anything is touched: a rejected document changes nothing.
+    controls.check(rest)
+    const point = document ? fromDocument(namespace, document) : undefined
+    // The snapshot first, so a control given beside it wins over the one it carries.
+    if (point) restoreAll(namespace, point)
+    controls.apply(namespace, rest)
+  }
+
+  const describeControls = (namespace: string) => ({
+    ...controls.describe(namespace),
+    snapshots: snapshotStore.list(namespace),
+  })
 
   const snapshot = (name: string = DEFAULT_NAMESPACE): NamespaceSnapshot => {
     return checkpoint(name, "main").value.snapshot
@@ -640,17 +1122,12 @@ export const createRuntime = <T extends ServiceInstance>(
     sqlite,
     clock,
     faults,
+    latency,
     metrics,
     journal,
     rng,
     credentials,
     webhooks: options.webhooks,
-    isolateNamespaces() {
-      if (publicNamespaces.size > 1)
-        throw new Error("enable namespace isolation before creating named namespaces")
-      isolatedNamespaces = true
-      faults.isolateNamespaces()
-    },
     namespaceClock,
     namespaceOf(request) {
       const url = new URL(request.url)
@@ -668,54 +1145,46 @@ export const createRuntime = <T extends ServiceInstance>(
       )
     },
     fleetSnapshot(namespace) {
-      instance(namespace)
       const handle = {}
-      fleetPoints.set(handle, {
-        namespace,
-        state: capture(namespace),
-        faults: faults.snapshot(namespace),
-        webhooks: options.webhooks?.snapshot(namespace),
-      })
+      fleetPoints.set(handle, { namespace, ...captureAll(namespace) })
       return handle
     },
     fleetRestore(handle, namespace) {
       const point =
         typeof handle === "object" && handle !== null ? fleetPoints.get(handle) : undefined
       if (!point || point.namespace !== namespace) throw new Error("invalid fleet checkpoint")
-      restoreNamespace(sqlite, storageNamespace(namespace), point.state.snapshot)
-      captured.set(namespace, point.state.snapshot)
-      const selectedClock = namespaceClock(namespace)
-      selectedClock.freeze()
-      selectedClock.set(point.state.clock.now)
-      if (!point.state.clock.frozen) selectedClock.unfreeze()
-      ;(branchRngs.get(namespace) ?? rng).setState(point.state.rngState)
-      faults.restore(namespace, point.faults)
-      if (point.webhooks !== undefined) options.webhooks?.restore(namespace, point.webhooks)
+      restoreAll(namespace, point)
       timelines.delete(namespace)
     },
-    applyPreset: (name, namespace = DEFAULT_NAMESPACE, overrides = {}) => {
-      const preset = options.presets?.[name]
-      if (!preset) throw new RangeError(`no fault preset ${JSON.stringify(name)}`)
-      const added = (preset.rules ?? []).map((rule, index) =>
-        faults.add({
-          namespace,
-          ...rule,
-          ...overrides,
-          preset: name,
-          id: `${overrides.id ?? name}${(preset.rules ?? []).length > 1 ? `_${index + 1}` : ""}`,
-        } as FaultRule),
-      )
-      if (preset.webhook && options.webhooks) {
-        options.webhooks.fault(namespace, {
-          ...preset.webhook,
-          ...(overrides.count !== undefined ? { count: overrides.count } : {}),
-        })
-      }
-      return added
-    },
+    applyPreset: (name, namespace = DEFAULT_NAMESPACE, overrides = {}) =>
+      controls.addFault(namespace, { ...overrides, preset: name }),
     instance,
     namespaces: () => [...publicNamespaces].sort(),
     reset,
+    dropNamespace,
+    controls: (namespace = DEFAULT_NAMESPACE) => describeControls(namespace),
+    configure(document, namespace = DEFAULT_NAMESPACE) {
+      applyControls(namespace, normalizeControls(document))
+      return describeControls(namespace)
+    },
+    snapshots: {
+      create: (given = {}) =>
+        snapshotStore.create(given.namespace ?? DEFAULT_NAMESPACE, given.name),
+      list: (namespace = DEFAULT_NAMESPACE) => snapshotStore.list(namespace),
+      export(id, namespace = DEFAULT_NAMESPACE) {
+        const document = snapshotStore.export(namespace, id)
+        if (!document) throw new RangeError(`no snapshot ${id} in namespace ${namespace}`)
+        return document
+      },
+      import: (document, given = {}) =>
+        snapshotStore.import(given.namespace ?? DEFAULT_NAMESPACE, given.name, document),
+      restore(id, namespace = DEFAULT_NAMESPACE) {
+        if (!snapshotStore.restore(namespace, id))
+          throw new RangeError(`no snapshot ${id} in namespace ${namespace}`)
+      },
+      delete: (id, namespace = DEFAULT_NAMESPACE) => snapshotStore.remove(namespace, id),
+    },
+    headers: controlHeaders,
     snapshot,
     restore,
     checkpoint,
@@ -768,7 +1237,7 @@ export const createRuntime = <T extends ServiceInstance>(
       const at = request.headers.get(AT_HEADER) ?? undefined
       const stamp = (response: Response): Response => {
         // An invalid namespace is not echoed back.
-        const value = NAMESPACE_PATTERN.test(namespace)
+        const value = KEY_PATTERN.test(namespace)
           ? `${options.name}@${version}; ns=${namespace}`
           : `${options.name}@${version}`
         try {
@@ -790,6 +1259,11 @@ export const createRuntime = <T extends ServiceInstance>(
       const operationId = operationIdFor(request, url.pathname)
       let accepted: ServiceCheckpoint | undefined
       let acceptedNotes: ResponseNotes | undefined
+      // Injected wait this request spent: latency, fault delays, a timeout.
+      let waitedMs = 0
+      // With virtual time the wait is the whole duration, so a journal replays byte for byte.
+      let virtualTime = false
+      let requestClock = clock
       // What a rejection records about the body. The runtime never reads the request stream —
       // consuming it would break a streaming request (e.g. a bidirectional model stream) — so the
       // byte count comes from `content-length` when the client sent it, and is null otherwise.
@@ -810,9 +1284,10 @@ export const createRuntime = <T extends ServiceInstance>(
           method: request.method,
           path: url.pathname,
           status,
-          durationMs: Math.round((monotonicNow() - started) * 100) / 100,
+          durationMs: virtualTime ? waitedMs : Math.round((monotonicNow() - started) * 100) / 100,
           unmatched: options.document !== undefined && operationId === undefined,
           ...(faultId !== undefined ? { faultId } : {}),
+          ...(waitedMs > 0 ? { delayMs: waitedMs } : {}),
           ...(noted?.ids && Object.keys(noted.ids).length > 0 ? { ids: noted.ids } : {}),
           ...(noted?.adopted ? { adopted: true } : {}),
           ...(accepted ? { accepted: true, checkpoint: accepted.id } : {}),
@@ -822,26 +1297,83 @@ export const createRuntime = <T extends ServiceInstance>(
             : {}),
         }
         metrics.record(entry)
-        journal.record({ ...entry, at: new Date(clock.now()).toISOString() })
+        journal.record({ ...entry, at: new Date(requestClock.now()).toISOString() })
         options.onLog?.(entry)
       }
-      if (!NAMESPACE_PATTERN.test(namespace)) {
+      if (!KEY_PATTERN.test(namespace)) {
         log(400)
         return stamp(
           new Response(
             JSON.stringify({
               error: {
                 type: "mockingbird_admin",
-                message: `${NAMESPACE_HEADER} must match ${NAMESPACE_PATTERN}`,
+                message: `${NAMESPACE_HEADER} must match ${KEY_PATTERN}`,
               },
             }),
             { status: 400, headers: { "content-type": "application/json; charset=utf-8" } },
           ),
         )
       }
-      if (!BRANCH_PATTERN.test(selectedBranch)) {
+      if (!KEY_PATTERN.test(selectedBranch)) {
         log(400)
-        return stamp(adminFail(400, `${BRANCH_HEADER} must match ${BRANCH_PATTERN}`))
+        return stamp(adminFail(400, `${BRANCH_HEADER} must match ${KEY_PATTERN}`))
+      }
+      requestClock = namespaceClock(namespace)
+      const refuse = (status: number, message: string): Response => {
+        log(status)
+        return stamp(adminFail(status, message))
+      }
+      // Controls carried by this request. Whatever could refuse the request is checked before
+      // anything is applied, so a request that is refused has changed nothing.
+      let requested: RequestControls | undefined
+      let scripted: FaultRule[] = []
+      try {
+        requested = parseControlHeaders(request.headers)
+        if (requested)
+          scripted = controls.scriptFaults(namespace, {
+            ...(requested.fault ? { fault: requested.fault } : {}),
+            ...(requested.timeout !== undefined ? { timeoutMs: requested.timeout } : {}),
+          })
+        const lost = requested?.restore !== undefined ? CONTROL_HEADERS.restore : at && AT_HEADER
+        if (requested?.reset && lost)
+          throw new ControlError(
+            `${CONTROL_HEADERS.reset}: a reset discards snapshots and history, so ${lost} cannot follow it`,
+          )
+      } catch (error) {
+        if (error instanceof ControlError) return refuse(400, error.message)
+        throw error
+      }
+      // A write that names a checkpoint on `main` first moves `main` back to it. That changes
+      // the namespace, so it is guarded like the headers that say so outright.
+      const rewinds =
+        at !== undefined && selectedBranch === "main" && MUTATING_METHODS.has(request.method)
+      if (
+        (requested || rewinds) &&
+        options.adminKey !== undefined &&
+        request.headers.get(ADMIN_KEY_HEADER) !== options.adminKey
+      )
+        return refuse(401, `control headers need ${ADMIN_KEY_HEADER}`)
+      controls.ensure(namespace)
+      if (requested?.restore !== undefined && !snapshotStore.get(namespace, requested.restore))
+        return refuse(404, `no snapshot ${requested.restore} in namespace ${namespace}`)
+      if (at !== undefined) {
+        try {
+          timeline(namespace).get(at)
+        } catch (error) {
+          return refuse(409, error instanceof Error ? error.message : String(error))
+        }
+      }
+      if (requested) {
+        // The order the guide lists them in: reset, restore, seed, time, advance, virtual time.
+        if (requested.reset) await reset(namespace)
+        if (requested.restore !== undefined) snapshotStore.restore(namespace, requested.restore)
+        if (requested.seed !== undefined) controls.reseed(namespace, requested.seed)
+        if (requested.time !== undefined)
+          controls.changeClock(namespace, { frozen: true, now: requested.time })
+        if (requested.advance !== undefined)
+          controls.changeClock(namespace, { advanceMs: requested.advance })
+        if (requested.virtualTime !== undefined)
+          controls.apply(namespace, { virtualTime: requested.virtualTime })
       }
       let storage: string
       try {
@@ -852,9 +1384,9 @@ export const createRuntime = <T extends ServiceInstance>(
         ) {
           const point = timeline(namespace).get(at)
           storage = physicalBranch(namespace, `at_${at}`)
-          let viewRng = branchRngs.get(storage)
+          let viewRng = rngs.get(storage)
           if (!viewRng) {
-            viewRng = createRng(options.seed ?? 0)
+            viewRng = createRng(seedOf(namespace))
             instanceFor(storage, namespace, viewRng)
           }
           viewRng.setState(point.value.rngState)
@@ -867,20 +1399,61 @@ export const createRuntime = <T extends ServiceInstance>(
         log(409)
         return stamp(adminFail(409, error instanceof Error ? error.message : String(error)))
       }
-      const hits = await faults.take({
+      const settings = controls.settings(namespace)
+      virtualTime = settings.virtualTime
+      if (settings.autoAdvanceMs > 0) requestClock.advance(settings.autoAdvanceMs)
+      const wait = async (ms: number): Promise<void> => {
+        if (!(ms > 0)) return
+        waitedMs += ms
+        // Virtual: the mock clock pays for the wait and the request carries on at once.
+        if (virtualTime) requestClock.advance(ms)
+        else await sleepUnlessAborted(ms, request.signal)
+      }
+      const candidate = {
         operationId,
         method: request.method,
         path: url.pathname,
         namespace,
-      })
+        headers: request.headers,
+        query: url.searchParams,
+        wait,
+      }
+      let hits: FaultHit[]
+      try {
+        await wait(latency.take(namespace, operationId) + (requested?.delay ?? 0))
+        hits = scripted.length > 0 ? await faults.fire(scripted, candidate) : []
+        if (!hits.some((hit) => hit.drop || hit.response))
+          hits.push(...(await faults.take({ ...candidate, now: requestClock.now() })))
+      } catch (error) {
+        // The client gave up while the request was being held.
+        log(0)
+        throw error
+      }
       const final = hits.find((hit) => hit.drop || hit.response)
+      /** A response is done: cut it short if asked to, name the fault, take the snapshot. */
+      const finish = (response: Response): Response => {
+        let out = response
+        const truncate = hits.find((hit) => hit.truncate !== undefined)?.truncate
+        if (truncate !== undefined) out = truncateResponse(out, truncate)
+        // The rule the journal names: the one that answered, or the first that shaped it.
+        const shaped = final ?? hits[0]
+        if (shaped) {
+          out = mutableResponse(out)
+          out.headers.set(FAULT_HEADER, shaped.id)
+        }
+        if (requested?.snapshot !== undefined) {
+          out = mutableResponse(out)
+          out.headers.set(SNAPSHOT_HEADER, snapshotStore.create(namespace, requested.snapshot).id)
+        }
+        return stamp(out)
+      }
       if (final?.drop) {
         log(0, final.id)
-        throw new DroppedConnectionError()
+        throw new DroppedConnectionError(final.timeout ? "timeout" : "drop")
       }
       if (final?.response) {
         log(final.response.status, final.id)
-        return stamp(final.response)
+        return finish(final.response)
       }
       const fired = hits.filter((hit) => hit.effect !== undefined)
       if (fired.length > 0)
@@ -898,7 +1471,7 @@ export const createRuntime = <T extends ServiceInstance>(
       try {
         response = await instanceFor(storage, namespace).fetch(request)
       } catch (error) {
-        log(error instanceof DroppedConnectionError ? 0 : 500, fired[0]?.id)
+        log(error instanceof DroppedConnectionError ? 0 : 500, hits[0]?.id)
         throw error
       } finally {
         active = false
@@ -928,23 +1501,44 @@ export const createRuntime = <T extends ServiceInstance>(
         response = mutableResponse(response)
         response.headers.set(AT_HEADER, at)
       }
-      log(wireStatus, fired[0]?.id, response)
-      return stamp(response)
+      log(wireStatus, hits[0]?.id, response)
+      return finish(response)
     },
+  }
+
+  /** Wait on the wall clock, giving up the moment the caller does. */
+  const sleepUnlessAborted = async (ms: number, signal: AbortSignal | undefined): Promise<void> => {
+    if (!signal) return sleep(ms)
+    if (signal.aborted) throw signal.reason
+    let stop = () => {}
+    const aborted = new Promise<never>((_, reject) => {
+      const abort = () => reject(signal.reason)
+      signal.addEventListener("abort", abort, { once: true })
+      stop = () => signal.removeEventListener("abort", abort)
+    })
+    try {
+      await Promise.race([sleep(ms, signal), aborted])
+    } finally {
+      stop()
+    }
   }
 
   const control = createControlPlane({
     name: options.name,
+    version,
     startedAt: wallNow(),
     wallNow,
     clock,
     namespaceClock,
-    faults,
     metrics,
     journal,
     defaultNamespace: DEFAULT_NAMESPACE,
     namespaces: runtime.namespaces,
     reset,
+    dropNamespace,
+    controls,
+    snapshots: snapshotStore,
+    applyControls,
     timeTravel: {
       checkpoint: (name, branchName) => {
         const point = checkpoint(name, branchName)
@@ -979,19 +1573,10 @@ export const createRuntime = <T extends ServiceInstance>(
       },
     },
     describe: options.describe ?? (() => ({})),
-    ...(options.presets
-      ? {
-          applyPreset: (name: string, namespace: string, overrides: Partial<FaultRule>) =>
-            runtime.applyPreset(name, namespace, overrides),
-        }
-      : {}),
     routes: {
       ...credentialRoutes(credentials),
       ...(options.webhooks ? webhookAdminRoutes(options.webhooks) : {}),
       ...(options.admin?.(runtime) ?? {}),
-      // Shell routes win a colliding key. Fault presets are one of them: the admin page
-      // maps `presets`, and a service route must not replace that list with a record.
-      ...(options.presets ? presetRoutes(options.presets, runtime, adminPrefix) : {}),
       ...stateAdminRoutes({
         open: stateScope,
         afterWrite: (namespace) => {
@@ -1004,6 +1589,8 @@ export const createRuntime = <T extends ServiceInstance>(
     adminKey: options.adminKey,
   })
 
+  // The default namespace boots now, so its rules precede anything a caller adds later.
+  controls.ensure(DEFAULT_NAMESPACE)
   return defineMock(runtime)
 }
 
@@ -1026,9 +1613,6 @@ const adminJson = (status: number, body: unknown): Response =>
 const adminFail = (status: number, message: string): Response =>
   adminJson(status, { error: { type: "mockingbird_admin", message } })
 
-const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-
 /**
  * `PUT /__admin/credentials` accepts `{ credentials: { "<credential>": "<namespace>" } }`,
  * `[{ credential, namespace }]`, or `{ credentials: ["<credential>"] }` with `?namespace=`
@@ -1045,30 +1629,30 @@ const credentialRoutes = (registry: CredentialRegistry): AdminRoutes => ({
     }),
   "PUT /credentials": ({ body, namespace }) => {
     const pairs: [string, string][] = []
-    const list = Array.isArray(body) ? body : isObject(body) ? body.credentials : undefined
+    const list = Array.isArray(body) ? body : isRecord(body) ? body.credentials : undefined
     if (Array.isArray(list)) {
       for (const each of list) {
         if (typeof each === "string") pairs.push([each, namespace])
-        else if (isObject(each) && typeof each.credential === "string") {
+        else if (isRecord(each) && typeof each.credential === "string") {
           pairs.push([
             each.credential,
             typeof each.namespace === "string" ? each.namespace : namespace,
           ])
         } else return adminFail(400, "each entry is a credential string or {credential, namespace}")
       }
-    } else if (isObject(list)) {
+    } else if (isRecord(list)) {
       for (const [credential, target] of Object.entries(list)) {
         if (typeof target !== "string")
           return adminFail(400, `namespace for ${credential} must be a string`)
         pairs.push([credential, target])
       }
-    } else if (isObject(body) && typeof body.credential === "string") {
+    } else if (isRecord(body) && typeof body.credential === "string") {
       pairs.push([body.credential, typeof body.namespace === "string" ? body.namespace : namespace])
     } else {
       return adminFail(400, 'expected {"credentials": {"<credential>": "<namespace>"}}')
     }
     for (const [credential, target] of pairs) {
-      if (!NAMESPACE_PATTERN.test(target))
+      if (!KEY_PATTERN.test(target))
         return adminFail(400, `bad namespace ${JSON.stringify(target)}`)
       registry.set(credential, target)
     }
@@ -1079,25 +1663,5 @@ const credentialRoutes = (registry: CredentialRegistry): AdminRoutes => ({
     if (credential === null) registry.clear()
     else registry.remove(credential)
     return adminJson(200, { status: "ok" })
-  },
-})
-
-const presetRoutes = <T extends ServiceInstance>(
-  presets: Record<string, FaultPreset>,
-  runtime: ServiceRuntime<T>,
-  adminPrefix: string,
-): AdminRoutes => ({
-  "GET /faults/presets": () => {
-    const body: FaultPresetList = {
-      presets: Object.entries(presets).map(([name, preset]) => ({ name, ...preset })),
-    }
-    return adminJson(200, body)
-  },
-  "POST /faults/presets/:name": ({ params, body, namespace }) => {
-    const name = params.name as string
-    if (!presets[name])
-      return adminFail(404, `no fault preset ${name}; GET ${adminPrefix}/faults/presets`)
-    const overrides = isObject(body) ? (body as Partial<FaultRule>) : {}
-    return adminJson(201, { preset: name, rules: runtime.applyPreset(name, namespace, overrides) })
   },
 })

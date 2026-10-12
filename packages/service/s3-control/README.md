@@ -7,10 +7,27 @@ Transport scaffold for Amazon S3 Control. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { ListAccessPointsCommand, S3ControlClient } from "@aws-sdk/client-s3-control"
 import { createServer } from "@crvouga/mockingbird-service-s3-control/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: start the emulator and point the SDK's endpoint at it. The S3 Control SDK
+// prefixes the account ID to the endpoint host, so listen on a name, not an IP address.
+const server = await createServer({ host: "localhost" })
+const s3control = new S3ControlClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the S3 Control SDK calls it already makes.
+// No operation is implemented yet, so every call rejects.
+try {
+  await s3control.send(new ListAccessPointsCommand({ AccountId: "000000000000" }))
+} catch (error) {
+  console.log((error as Error).name) // UnknownOperationException
+}
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

@@ -8,7 +8,7 @@ const guide = catalog.guides.find((g) => g.file === "WHY")
 if (!guide) throw new Error("docs/WHY.md is missing: the /why page renders it")
 ---
 
-<Base title={guide.title} description={guide.summary} markdown={`/docs/${guide.slug}.md`}>
+<Base title={guide.title} description={guide.summary} markdown={`/docs/${guide.slug}.md`} type="article">
   <div class="container">
     <GuideArticle guide={guide} repo={catalog.repo}>
       <div class="why-cta">

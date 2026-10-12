@@ -7,10 +7,37 @@ Stateful local emulator of Amazon EventBridge Scheduler. ESM; Node 22+ or Bun 1.
 ## Usage
 
 ```ts
+import {
+  CreateScheduleCommand,
+  GetScheduleCommand,
+  SchedulerClient,
+} from "@aws-sdk/client-scheduler"
 import { createServer } from "@crvouga/mockingbird-service-scheduler/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: start the emulator and point the SDK's endpoint at it.
+const server = await createServer()
+const scheduler = new SchedulerClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the Scheduler SDK calls it already makes.
+await scheduler.send(
+  new CreateScheduleCommand({
+    Name: "nightly-report",
+    ScheduleExpression: "cron(0 2 * * ? *)",
+    FlexibleTimeWindow: { Mode: "OFF" },
+    Target: {
+      Arn: "arn:aws:lambda:us-east-1:000000000000:function:report",
+      RoleArn: "arn:aws:iam::000000000000:role/scheduler",
+    },
+  }),
+)
+const schedule = await scheduler.send(new GetScheduleCommand({ Name: "nightly-report" }))
+console.log(schedule.State, schedule.ScheduleExpression) // ENABLED cron(0 2 * * ? *)
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

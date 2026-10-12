@@ -15,15 +15,39 @@ ESM only. Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { AnalyzeDocumentCommand, TextractClient } from "@aws-sdk/client-textract"
 import { createServer } from "@crvouga/mockingbird-service-textract/server"
 
-const emulator = await createServer({
-  corpora: [{ bucket: "fixtures", name: "invoice.pdf", pages: 1, blocks: [] }],
+// Test setup: start the emulator with a seeded document and point the SDK's endpoint at it.
+const server = await createServer({
+  corpora: [
+    {
+      bucket: "fixtures",
+      name: "invoice.pdf",
+      pages: 1,
+      blocks: [{ id: "line-1", blockType: "LINE", page: 1, text: "Total due 42.00", confidence: 99 }],
+    },
+  ],
 })
-const health = await fetch(`${emulator.url}/__admin/health`)
+const textract = new TextractClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the Textract SDK calls it already makes.
+const analysis = await textract.send(
+  new AnalyzeDocumentCommand({
+    Document: { S3Object: { Bucket: "fixtures", Name: "invoice.pdf" } },
+    FeatureTypes: ["FORMS"],
+  }),
+)
+console.log(analysis.Blocks?.map((block) => block.Text)) // [ "Total due 42.00" ]
+
+await server.close()
 ```
 
-Point `TextractClient.endpoint` at `emulator.url` with fixture SigV4 credentials. Supported operations are AnalyzeDocument, StartDocumentAnalysis, and GetDocumentAnalysis. Block records retain PAGE, LINE, WORD, KEY_VALUE_SET, TABLE, CELL, and SELECTION_ELEMENT graph fields including Geometry, Confidence, EntityTypes, Text, and Relationships.
+Point `TextractClient.endpoint` at `server.url` with fixture SigV4 credentials. Supported operations are AnalyzeDocument, StartDocumentAnalysis, and GetDocumentAnalysis. Block records retain PAGE, LINE, WORD, KEY_VALUE_SET, TABLE, CELL, and SELECTION_ELEMENT graph fields including Geometry, Confidence, EntityTypes, Text, and Relationships.
 
 ## Controls
 

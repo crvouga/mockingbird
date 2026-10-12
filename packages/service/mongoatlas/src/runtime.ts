@@ -16,6 +16,7 @@ export type MongoAtlasRuntimeOptions = Pick<
   | "seed"
   | "adminPrefix"
   | "adminKey"
+  | "adminControls"
   | "onLog"
   | "journalSize"
   | "maxCheckpoints"
@@ -27,13 +28,14 @@ export function createRuntime(options: MongoAtlasRuntimeOptions = {}): MongoAtla
     ...options,
     name: MONGOATLAS_NAMESPACE,
     document,
-    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock, rng }) =>
       new MongoAtlasAPI({
         sqlite,
         namespace,
         publicNamespace,
         adminPrefix,
         now: clock.now,
+        random: rng.next,
         ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         ...(options.tokens ? { tokens: options.tokens } : {}),
