@@ -41,25 +41,29 @@ npx mockingbird-persona serve --port 8815 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-persona"
+import { createServer } from "@crvouga/mockingbird-service-persona/server"
 
-const persona = createRuntime({
+// Test setup: a local Persona that posts its signed events to the app's webhook route.
+const server = await createServer({
   webhooks: { url: "http://127.0.0.1:4000/v1/identify-verification/webhook", secret: "wbhsec_test" },
 })
-const created = await persona.fetch(
-  new Request("http://persona.test/inquiries", {
-    method: "POST",
-    headers: { authorization: "Bearer persona_sandbox_x", "content-type": "application/json" },
-    body: JSON.stringify({
-      data: { type: "inquiry", attributes: { "inquiry-template-id": "itmpl_identity", "reference-id": "patient-1" } },
-    }),
+const baseUrl = server.url // the app's PERSONA_API_URL
+
+// Application code: the request it sends to Persona.
+const created = await fetch(`${baseUrl}/inquiries`, {
+  method: "POST",
+  headers: { authorization: "Bearer persona_sandbox_x", "content-type": "application/json" },
+  body: JSON.stringify({
+    data: { type: "inquiry", attributes: { "inquiry-template-id": "itmpl_identity", "reference-id": "patient-1" } },
   }),
-)
+})
 const { data } = (await created.json()) as { data: { id: string } }
 
-// Finish it the way a member and Persona's workflow would: started → completed → approved,
-// one signed event per step.
-await persona.fetch(new Request(`http://persona.test/__admin/inquiries/${data.id}/approve`, { method: "POST" }))
+// Test control: finish it the way a member and Persona's workflow would: started → completed →
+// approved, one signed event per step.
+await fetch(`${baseUrl}/__admin/inquiries/${data.id}/approve`, { method: "POST" })
+
+await server.close()
 ```
 
 ### Routes

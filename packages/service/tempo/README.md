@@ -39,44 +39,34 @@ npx mockingbird-tempo serve --basic-auth 123456:fixture-token --multitenancy
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-tempo"
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http"
+import { resourceFromAttributes } from "@opentelemetry/resources"
+import { BasicTracerProvider, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base"
+import { createServer } from "@crvouga/mockingbird-service-tempo/server"
 
-const tempo = createRuntime()
-const call = (path: string, init?: RequestInit) =>
-  tempo.fetch(new Request(`http://tempo.test${path}`, init))
+const server = await createServer()
 
-// What an OTLP/HTTP exporter posts (protobuf works the same way).
-await call("/v1/traces", {
-  method: "POST",
-  headers: { "content-type": "application/json" },
-  body: JSON.stringify({
-    resourceSpans: [
-      {
-        resource: { attributes: [{ key: "service.name", value: { stringValue: "checkout" } }] },
-        scopeSpans: [
-          {
-            spans: [
-              {
-                traceId: "5b8efff798038103d269b633813fc7a1",
-                spanId: "eee19b7ec3c1b101",
-                name: "POST /checkout",
-                startTimeUnixNano: "1700000000000000000",
-                endTimeUnixNano: "1700000001500000000",
-                attributes: [{ key: "user.id", value: { stringValue: "user-1" } }],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-  }),
+// The OpenTelemetry SDK your application already uses. Only the exporter's URL changes
+// (the protobuf exporter works the same way).
+const provider = new BasicTracerProvider({
+  resource: resourceFromAttributes({ "service.name": "checkout" }),
+  spanProcessors: [new SimpleSpanProcessor(new OTLPTraceExporter({ url: `${server.url}/v1/traces` }))],
 })
+const span = provider.getTracer("checkout").startSpan("POST /checkout", {
+  startTime: new Date(1_700_000_000_000),
+  attributes: { "user.id": "user-1" },
+})
+span.end(new Date(1_700_000_001_500))
+await provider.forceFlush()
 
-// What the trace reader sends.
+// What the trace reader sends (Tempo's query API is plain HTTP).
 const q = encodeURIComponent('{ .user.id = "user-1" }')
-const search = await call(`/api/search?q=${q}&start=1699999990&end=1700000010&limit=50`)
+const search = await fetch(`${server.url}/api/search?q=${q}&start=1699999990&end=1700000010&limit=50`)
 const { traces } = (await search.json()) as { traces: { traceID: string }[] }
-const trace = await call(`/api/traces/${traces[0]?.traceID}`)
+const trace = await fetch(`${server.url}/api/traces/${traces[0]?.traceID}`)
+
+await provider.shutdown()
+await server.close()
 ```
 
 ### Routes

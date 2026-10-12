@@ -12,8 +12,8 @@ export {
   decodeAwsQuery,
 } from "./aws-protocol.js"
 export { awsParseXml, awsXml, awsXmlEscape } from "./aws-xml.js"
-export type { Clock, ClockState } from "./clock.js"
-export { createClock } from "./clock.js"
+export type { Clock, ClockState, DerivedClock } from "./clock.js"
+export { createClock, deriveClock, restoreClock } from "./clock.js"
 export type { ListRecordsOptions, Stored } from "./collection.js"
 export { Collection } from "./collection.js"
 export type {
@@ -22,8 +22,12 @@ export type {
   AdminRoutes,
   ControlContext,
   ControlPlane,
+  SnapshotInfo,
+  SnapshotStore,
 } from "./control.js"
 export {
+  ADMIN_CONTROL_PAGES,
+  ADMIN_DOCS_URL,
   ADMIN_KEY_HEADER,
   ADMIN_PREFIX,
   assertAdminPrefixAvailable,
@@ -35,6 +39,35 @@ export {
   parseDuration,
   resolveAdminPrefix,
 } from "./control.js"
+export type {
+  ClockControls,
+  ControlHeaderInput,
+  ControlHeaderName,
+  Duration,
+  FaultInput,
+  Instant,
+  LatencyControls,
+  LatencyRule,
+  LatencyRuleInput,
+  LatencyState,
+  MockControls,
+  NamespaceControls as NamespaceControlsInput,
+  RequestControls,
+  SnapshotDocument,
+} from "./controls.js"
+export {
+  assertSnapshotDocument,
+  CONTROL_HEADER_REFERENCE,
+  CONTROL_HEADERS,
+  ControlError,
+  controlHeaders,
+  normalizeBootControls,
+  normalizeControls,
+  parseControlHeaders,
+  parseFaultHeader,
+  parseInstant,
+  SNAPSHOT_FORMAT,
+} from "./controls.js"
 export type {
   BasicCredentials,
   CredentialRegistry,
@@ -50,12 +83,14 @@ export {
 export type {
   FaultCandidate,
   FaultHit,
+  FaultListing,
   FaultPreset,
   FaultPresetList,
   FaultRegistry,
   FaultRule,
+  FaultSnapshot,
 } from "./faults.js"
-export { createFaultRegistry } from "./faults.js"
+export { createFaultRegistry, normalizeFault, STANDARD_FAULT_PRESETS } from "./faults.js"
 export type { FormIssue, ParsedForm } from "./form-schema.js"
 export { parseForm, sortIssues } from "./form-schema.js"
 export type { FieldResult } from "./http.js"
@@ -70,8 +105,17 @@ export {
   DEFAULT_JOURNAL_SIZE,
   responseNotes,
 } from "./journal.js"
+export type { LatencyRegistry } from "./latency.js"
+export { createLatencyRegistry } from "./latency.js"
 export type { Metrics, MetricsReport, RejectedRequest, RequestLog } from "./metrics.js"
 export { createMetrics } from "./metrics.js"
+export type {
+  ControlClock,
+  ControlSettings,
+  ControlState,
+  NamespaceControls,
+} from "./namespace-controls.js"
+export { createNamespaceControls } from "./namespace-controls.js"
 export type { OutboxItem, OutboxQuery } from "./outbox.js"
 export {
   extractCodes,
@@ -98,11 +142,13 @@ export {
   createRuntime,
   DEFAULT_NAMESPACE,
   DroppedConnectionError,
+  FAULT_HEADER,
   faultEffect,
   faultEffects,
   forwardRequestContext,
   MOCKINGBIRD_HEADER,
   markMutationAccepted,
+  SNAPSHOT_HEADER,
 } from "./runtime.js"
 export type { S3Target } from "./s3.js"
 export { putObject, signV4 } from "./s3.js"
@@ -152,12 +198,19 @@ export type {
   AdminPanel,
   AdminUi,
   MockCheckpoint,
+  MockControlState,
   MockCreateOptions,
   MockInstanceSurface,
+  MockSnapshotInfo,
   MockSurface,
   StandardAdminRoute,
 } from "./surface.js"
-export { assertAdminUi, defineMock, STANDARD_ADMIN_ROUTES } from "./surface.js"
+export {
+  ADMIN_ROUTE_REFERENCE,
+  assertAdminUi,
+  defineMock,
+  STANDARD_ADMIN_ROUTES,
+} from "./surface.js"
 export type { BodyIssue, UnsupportedMediaType } from "./validation.js"
 export { bodyIssues, issuesByField, recordedIssues, unsupportedMediaType } from "./validation.js"
 export { PACKAGE_VERSION, UNRELEASED_VERSION } from "./version.js"

@@ -50,10 +50,18 @@ function render(query: string) {
       .filter((r): r is { entry: PaletteEntry; rank: number } => r.rank !== null)
       .sort((a, b) => a.rank - b.rank || a.entry.displayName.localeCompare(b.entry.displayName))
       .map((r) => r.entry)
-    groups = [
-      ["Emulators", ranked.filter((e) => e.kind === "service").slice(0, 12)],
-      ["Pages", ranked.filter((e) => e.kind === "page")],
-    ]
+    const pages = ranked.filter((e) => e.kind === "page")
+    const services = ranked.filter((e) => e.kind === "service").slice(0, 12)
+    // A page whose title matches ("Snapshot and restore") comes before an emulator that
+    // only mentions the word ("backup and restore" on S3).
+    const pageRank = pages[0] ? score(q, pages[0]) : null
+    const serviceRank = services[0] ? score(q, services[0]) : null
+    const pageGroup: [string, PaletteEntry[]] = ["Pages", pages]
+    const serviceGroup: [string, PaletteEntry[]] = ["Emulators", services]
+    groups =
+      pageRank !== null && (serviceRank === null || pageRank <= serviceRank)
+        ? [pageGroup, serviceGroup]
+        : [serviceGroup, pageGroup]
   }
   groups = groups.filter(([, items]) => items.length > 0)
   results = groups.flatMap(([, items]) => items)

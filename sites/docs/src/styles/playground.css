@@ -590,8 +590,9 @@
 }
 
 @media (max-width: 860px) {
+  /* minmax(0, …): a bare 1fr track grows to fit the longest path, past the card's clipped edge. */
   .pg-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .pg-ops {
     border-right: 0;

@@ -19,6 +19,7 @@ import {
   createClock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   resolveAdminPrefix,
   type ServiceRuntime,
@@ -76,6 +77,8 @@ export type EmqxRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** API keys, MQTT users and the JWT authenticator every namespace starts with and resets to. */
   settings?: SettingsPatch
@@ -202,8 +205,11 @@ const adminRoutes = (runtime: ServiceRuntime<EmqxAPI>): AdminRoutes => ({
 export const createRuntime = (options: EmqxRuntimeOptions = {}): EmqxRuntime => {
   const adminPrefix = resolveAdminPrefix(options.adminPrefix)
   const endpoints: EmqxRuntime["endpoints"] = {}
+  // Boot controls can move the clock while the runtime is still being built.
+  let built: ServiceRuntime<EmqxAPI> | undefined
   const each = (visit: (api: EmqxAPI) => void) => {
-    for (const name of runtime.namespaces()) visit(runtime.instance(name))
+    if (!built) return
+    for (const name of built.namespaces()) visit(built.instance(name))
   }
   const runtime: ServiceRuntime<EmqxAPI> = createServiceRuntime<EmqxAPI>({
     name: EMQX_NAMESPACE,
@@ -213,7 +219,12 @@ export const createRuntime = (options: EmqxRuntimeOptions = {}): EmqxRuntime => 
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
+    // A namespace's own clock moving expires that namespace's sessions and messages at once.
+    onClockChange: (namespace) => {
+      if (built?.namespaces().includes(namespace)) built.instance(namespace).broker.sweep()
+    },
     credential: apiKeyCredential,
     presets: EMQX_PRESETS,
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
@@ -229,6 +240,7 @@ export const createRuntime = (options: EmqxRuntimeOptions = {}): EmqxRuntime => 
     describe: () => ({ ...endpoints }),
     admin: adminRoutes,
   })
+  built = runtime
   return Object.assign(runtime, {
     endpoints,
     attach: (transport: Transport, info: TransportInfo = { kind: "memory" }, namespace?: string) =>

@@ -10,9 +10,11 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import {
+  ADMIN_CONTROLS,
   AGENTS,
   CONTRACT,
   FEATURES,
+  GUIDE_CHILDREN,
   HEADLINE,
   IDENTITY,
   MARK_REPO_PATH,
@@ -57,6 +59,17 @@ const guides = sortGuides(
     ),
 )
 
+/** The admin controls guide's pages, one per control, in the order the docs site shows them. */
+const controlPages = GUIDE_CHILDREN.ADMIN_CONTROLS.map((name) => {
+  const path = `${ADMIN_CONTROLS.pages}/${name}.md`
+  return {
+    name,
+    path,
+    ...guideInfo({ file: name, markdown: readFileSync(join(root, path), "utf8") }),
+  }
+})
+const controlPath = (name: string) => `${ADMIN_CONTROLS.pages}/${name}.md`
+
 const cell = (s: string) => s.replace(/\|/g, "\\|")
 const badge = (label: string, message: string | number, color: string) =>
   `https://img.shields.io/badge/${encodeURIComponent(label.replace(/-/g, "--").replace(/ /g, "_"))}-${encodeURIComponent(String(message))}-${color}`
@@ -94,7 +107,7 @@ const body = [
   `npm install -D ${QUICK_START.packages.join(" ")}`,
   "```",
   "",
-  "Build a checkout with a PostgreSQL product catalog and a Stripe payment. Save these three files together, then run `bun client.ts` (or `npx tsx client.ts` with Node).",
+  `Build a checkout with a PostgreSQL product catalog and a Stripe payment. Save these three files together, then run \`bun client.ts\` (or \`npx tsx client.ts\` with Node). The API calls the \`${QUICK_START.sdk}\` SDK your application already depends on; in an empty project, install it first.`,
   "",
   ...QUICK_START.steps.flatMap((step) => [
     `### ${step.title} · \`${step.file}\``,
@@ -113,6 +126,32 @@ const body = [
   ...FEATURES.map((f) => `- **${f.title}.** ${f.body}`),
   "",
   "The full rationale, and when not to use it: [docs/WHY.md](docs/WHY.md).",
+  "",
+  "## Admin controls",
+  "",
+  `**${ADMIN_CONTROLS.title}**`,
+  "",
+  ADMIN_CONTROLS.intro,
+  "",
+  ...ADMIN_CONTROLS.controls.map(
+    (control) => `- **[${control.title}](${controlPath(control.page)}).** ${control.body}`,
+  ),
+  "",
+  ...ADMIN_CONTROLS.carriers.flatMap((carrier) => [
+    `${carrier.label}:`,
+    "",
+    `\`\`\`${carrier.lang}`,
+    carrier.code,
+    "```",
+    "",
+  ]),
+  ADMIN_CONTROLS.determinism,
+  "",
+  `Start at [${ADMIN_CONTROLS.guide}](${ADMIN_CONTROLS.guide}). Each control has its own page, with its routes, body fields, headers, boot options and errors:`,
+  "",
+  "| Control | |",
+  "| --- | --- |",
+  ...controlPages.map((page) => `| [${cell(page.title)}](${page.path}) | ${cell(page.summary)} |`),
   "",
   "## One contract for every HTTP service",
   "",

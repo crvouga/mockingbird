@@ -15,12 +15,44 @@ ESM only. Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import {
+  CreateJobCommand,
+  DescribeEndpointsCommand,
+  MediaConvertClient,
+} from "@aws-sdk/client-mediaconvert"
 import { createServer } from "@crvouga/mockingbird-service-mediaconvert/server"
 
-const emulator = await createServer()
-// Point the discovery MediaConvertClient at emulator.url. DescribeEndpoints returns
-// emulator.url for constructing the second client used to submit jobs.
-const health = await fetch(`${emulator.url}/__admin/health`)
+// Test setup: start the emulator and point the discovery client at it.
+const server = await createServer()
+const aws = {
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+}
+const discovery = new MediaConvertClient({ ...aws, endpoint: server.url })
+
+// Application code, unchanged. DescribeEndpoints returns the emulator URL, which the
+// second client uses to submit jobs.
+const { Endpoints } = await discovery.send(new DescribeEndpointsCommand({}))
+const mediaConvert = new MediaConvertClient({ ...aws, endpoint: Endpoints?.[0]?.Url })
+const { Job } = await mediaConvert.send(
+  new CreateJobCommand({
+    Role: "arn:aws:iam::000000000000:role/MediaConvert",
+    Settings: {
+      Inputs: [{ FileInput: "s3://inputs/source.mp4" }],
+      OutputGroups: [
+        {
+          OutputGroupSettings: {
+            Type: "FILE_GROUP_SETTINGS",
+            FileGroupSettings: { Destination: "s3://outputs/video/" },
+          },
+        },
+      ],
+    },
+  }),
+)
+// Job.Status === "SUBMITTED"
+
+await server.close()
 ```
 
 Supported operations are DescribeEndpoints, CreateJob, GetJob, and CancelJob. CreateJob retains Role, Queue, UserMetadata, and the complete nested Settings structure. A repeated ClientRequestToken returns the original job.

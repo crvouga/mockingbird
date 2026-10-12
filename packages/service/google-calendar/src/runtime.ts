@@ -4,6 +4,7 @@ import {
   createRuntime as createServiceRuntime,
   createWebhookHub,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -140,6 +141,8 @@ export type GoogleCalendarRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   settings?: Partial<Settings>
   /** Push delivery: retry schedule and transport (default: global fetch, Google-like backoff). */
@@ -284,6 +287,7 @@ export const createRuntime = (
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: accessTokenCredential,
     presets: GOOGLE_CALENDAR_PRESETS,

@@ -42,30 +42,56 @@ npx mockingbird-aha serve --port 8799 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-aha"
+import { createHmac } from "node:crypto"
+import { createServer } from "@crvouga/mockingbird-service-aha/server"
 
-const aha = createRuntime({
+// Test setup: the emulator, posting order-status webhooks to the app's handler.
+const server = await createServer({
   webhooks: { url: "http://127.0.0.1:3000/bloodwork/aha-webhook", secret: "aha-webhook-secret" },
 })
-const admin = (path: string, body: unknown) =>
-  aha.fetch(
-    new Request(`http://aha.test/__admin${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  )
 
-// …the app's checkout calls POST /v1/acme/create-order for AC-101…
+// Application code: its usual signed request, with AHA_API_URL set to server.url.
+const [apiUrl, apiKey, apiSecret] = [server.url, "aha-key", "aha-secret"]
+const path = "/v1/acme/create-order"
+const timestamp = Date.now().toString()
+const signature = createHmac("sha256", apiSecret)
+  .update(`${apiKey}:${path}:${timestamp}`)
+  .digest("base64")
+const created = await fetch(`${apiUrl}${path}`, {
+  method: "POST",
+  headers: {
+    "content-type": "application/json",
+    "X-API-KEY": apiKey,
+    "X-TIMESTAMP": timestamp,
+    "X-SIGNATURE": signature,
+  },
+  body: JSON.stringify({
+    partner_order_id: "AC-101", patient_id: "pat-1", biological_sex: "Female",
+    patient_first_name: "Ada", patient_last_name: "Lovelace", patient_dob: "1990-12-10",
+    patient_phone_number: "5555550100", patient_address_line1: "501 N 5th St",
+    patient_city: "Phoenix", patient_state: "AZ", patient_zipcode: "85004",
+    service_type: "Full Service", npi: "1234567893", ordering_physician: "Dr. Grace Hopper",
+    test_codes: [{ test_code: "CBC", test_description: "Complete blood count" }],
+  }),
+})
+// → {content: {partner_order_id: "AC-101", order_number: "AHA-…"}, message, status: "SUCCESS"}
 
+// Test control: move the order as AHA would. Each transition posts a webhook to the app.
+const transition = (body: unknown) =>
+  fetch(`${server.url}/__admin/orders/AC-101/transition`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
 // AHA books the draw: our handler books the EMR appointment for 10:30 Denver time.
-await admin("/orders/AC-101/transition", {
+await transition({
   status: "Scheduled",
   scheduledAt: "2026-10-01T16:30:00Z",
   timeZone: "America/Denver",
 })
 // The phlebotomist checks out with a sample: our handler sets vitalBloodDrawn.
-await admin("/orders/AC-101/transition", { status: "Check Out", drawStatus: "Sample Collected" })
+await transition({ status: "Check Out", drawStatus: "Sample Collected" })
+await server.close()
 ```
 
 ### Routes
@@ -136,15 +162,39 @@ only the path after it), or by API key:
 `createAhaSftpServer` from `./sftp` starts a real SSH/SFTP server on an ephemeral port and shares order state with `createRuntime`. It supports password or public-key authentication, host-key verification, `list`/`stat`, binary upload/download, atomic temp-file rename, delete, nested directories, stable POSIX permissions and emulator-clock timestamps. The deterministic Ed25519 host key is stable between runs.
 
 ```ts
+import { Client } from "ssh2"
 import { createRuntime } from "@crvouga/mockingbird-service-aha"
 import { createAhaSftpServer } from "@crvouga/mockingbird-service-aha/sftp"
 
+// Test setup: the SFTP endpoint, sharing order state with the HTTP emulator, and one result.
 const runtime = createRuntime()
 const sftp = await createAhaSftpServer({
   runtime,
   accounts: [{ username: "aha", password: "local-test-password" }],
 })
-console.log(sftp.host, sftp.port, sftp.hostPublicKey)
+sftp.seed("/outbox/AHA-1001_result.pdf", new TextEncoder().encode("%PDF-1.4"))
+
+// Application code: the ssh2 client it already uses. Only host, port and host key change.
+const client = new Client()
+await new Promise<void>((resolve, reject) =>
+  client.once("ready", resolve).once("error", reject).connect({
+    host: sftp.host,
+    port: sftp.port,
+    username: "aha",
+    password: "local-test-password",
+    hostVerifier: (key: Buffer) => key.equals(sftp.hostPublicKey),
+  }),
+)
+const pdf = await new Promise<Buffer>((resolve, reject) =>
+  client.sftp((error, session) => {
+    if (error) return reject(error)
+    session.readFile("/outbox/AHA-1001_result.pdf", (error, bytes) =>
+      error ? reject(error) : resolve(bytes),
+    )
+  }),
+)
+client.end()
+await sftp.close()
 ```
 
 Use `seed()` to install arbitrary binary fixtures or `publishResult(orderId, bytes)` to place a stable `AHA-…_result.pdf` in `/outbox`. The first complete download moves the linked HTTP order to `Lab Testing In Progress` and emits its webhook; repeat polling/download does not repeat that transition. `fault()` forces the next operation to disconnect, deny permission, report disk-full, or accept only part of a write. `journal()` exposes paths, operation names, byte counts, and outcomes—never credentials or file contents. `reset(namespace?)` clears deterministic filesystem state. Duplicate destination names fail, so `.tmp` → final rename is atomic.

@@ -26,6 +26,22 @@ closes listeners that already started, and exits nonzero. SIGINT/SIGTERM closes 
 mockingbird-stripe serve --config mockingbird.json --ready-file ready.json --ready-json
 ```
 
+Set top-level `adminControls` to boot every HTTP service with the same
+[admin controls](admin-controls/BOOT.md) (clock, latency, faults, a starting snapshot); a service
+entry's own `adminControls` replaces the keys it names. `--admin-controls`, `--clock`,
+`--freeze`, `--latency`, `--fault` and `MOCKINGBIRD_ADMIN_CONTROLS` apply on top of the file.
+A document that cannot be read stops the fleet before any listener opens, and names the service.
+
+```json
+{
+  "adminControls": { "clock": { "now": "2030-01-01T00:00:00Z", "frozen": true } },
+  "services": {
+    "stripe": { "port": 0, "seed": "fixture", "adminControls": { "latency": "40ms" } },
+    "resend": { "port": 0 }
+  }
+}
+```
+
 Set top-level `adminPrefix` (default `/__admin`) to move the aggregate API and all
 HTTP children together. A service entry may override `adminPrefix`. CLI
 `--admin-prefix` and `MOCKINGBIRD_ADMIN_PREFIX` also apply; ready manifests always

@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   NAMESPACE_HEADER,
   type RequestLog,
   type ServiceRuntime,
@@ -93,6 +94,8 @@ export type MedplumRuntimeOptions = Omit<
   adminPrefix?: string
   /** Require `x-mockingbird-admin-key` on `/__admin/*`. */
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Requests each namespace's journal keeps (`GET /__admin/requests`). Default 1000. */
   journalSize?: number
@@ -225,7 +228,17 @@ const adminRoutes = (runtime: ServiceRuntime<MedplumAPI>): AdminRoutes => ({
  * Runtime-neutral: serve it with any Fetch-native server (`./server` for Node).
  */
 export const createRuntime = (options: MedplumRuntimeOptions = {}): MedplumRuntime => {
-  const { sqlite, clock, seed, adminKey, adminPrefix, onLog, journalSize, ...apiOptions } = options
+  const {
+    sqlite,
+    clock,
+    seed,
+    adminKey,
+    adminPrefix,
+    adminControls,
+    onLog,
+    journalSize,
+    ...apiOptions
+  } = options
   const runtime: ServiceRuntime<MedplumAPI> = createServiceRuntime<MedplumAPI>({
     name: MEDPLUM_NAMESPACE,
     document,
@@ -234,6 +247,7 @@ export const createRuntime = (options: MedplumRuntimeOptions = {}): MedplumRunti
     ...(seed !== undefined ? { seed } : {}),
     ...(adminPrefix !== undefined ? { adminPrefix } : {}),
     ...(adminKey !== undefined ? { adminKey } : {}),
+    ...(adminControls !== undefined ? { adminControls } : {}),
     ...(onLog ? { onLog } : {}),
     ...(journalSize !== undefined ? { journalSize } : {}),
     credential: credentialOf,

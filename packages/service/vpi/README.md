@@ -43,28 +43,31 @@ npx mockingbird-vpi serve --port 8802
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-vpi"
+import { createServer } from "@crvouga/mockingbird-service-vpi/server"
 
-const vpi = createRuntime()
+// Test setup: a local VPI.
+const server = await createServer()
+const baseUrl = server.url // the app's VPI_API_URL
 const post = (path: string, body: unknown, headers: Record<string, string> = {}) =>
-  vpi.fetch(
-    new Request(`http://vpi.test${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(body),
-    }),
-  )
+  fetch(`${baseUrl}${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  })
 
+// Application code: the requests it sends to VPI.
 const { jwtToken } = (await (
   await post("/accounts/authenticate", { email: "clinic@example.com", password: "x" })
 ).json()) as { jwtToken: string }
-// …the app saves a draft with POST /clinic/rxOrdering/saveNewPrescription (Bearer jwtToken)…
+// …then POST /clinic/rxOrdering/saveNewPrescription (Bearer jwtToken) saves a draft…
 
-// Move it the way the pharmacy would; our poller maps each status.
+// Test control: move it the way the pharmacy would; our poller maps each status.
 await post("/__admin/prescriptions/66b200000000000000000001/transition", {
   to: "Order Completed",
   trackingNumber: "1Z999",
 })
+
+await server.close()
 ```
 
 ### Seed data

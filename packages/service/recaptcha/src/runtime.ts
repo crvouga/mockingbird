@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -58,6 +59,8 @@ export type RecaptchaRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   settings?: Partial<Settings>
 }
@@ -129,6 +132,7 @@ export const createRuntime = (options: RecaptchaRuntimeOptions = {}): RecaptchaR
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, clock, adminPrefix, publicNamespace }) =>
       new RecaptchaAPI({

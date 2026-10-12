@@ -31,6 +31,12 @@ and other site surfaces; the generated README uses the same emoji in its title.
 `MARK_REPO_PATH` and `MARK_HREF` identify that asset, and `check:readme` requires it to exist.
 Keep the interface focused on developer documentation: code, API routes, diagrams, and runtime state.
 
+Link previews (X, Slack, iMessage, LinkedIn) show `sites/docs/public/identity/social-card.png`,
+described by `SOCIAL_CARD`. X does not render SVG, so the card is a 1200×630 PNG: a screenshot of
+`/identity/social-card`, which draws it from the shared copy. Retake the screenshot when the
+headline or mark changes. X overlays the page title on the card's bottom-left corner, so that
+corner stays empty.
+
 ## Color
 
 | Token | Light | Dark | Role |
@@ -81,6 +87,11 @@ and vendor boundaries. Coverage and state indicators use text labels alongside c
 Keep forms, navigation, search, and dialogs usable by keyboard. Honor reduced-motion
 preferences and provide accessible labels for icon controls.
 
+Pages are read inside in-app browsers on phones, so nothing may widen the page: wide tables and
+code scroll inside their own panel. At 900px and below the header collapses its links into a menu,
+and touch targets are at least 40px. Text fields render at 16px on touch devices, because iOS
+zooms the page when a focused field is smaller.
+
 Every HTML surface starts from `packages/ui`: full documents include `CSS_RESET`; embedded
 widgets use `scopeReset(root)`. Add surface-specific styles after the reset.
 
@@ -98,5 +109,8 @@ widgets use `scopeReset(root)`. Add surface-specific styles after the reset.
 ## Adding a page
 
 Use `Base`, `BirdMark`, and the shared `.eyebrow`, `.btn`, `.badge`, and `.prose` classes.
+`Base` writes the canonical URL and the Open Graph and X card tags from `title` and
+`description`, so give every page both; pass `type="article"` for a guide and `noindex` for a
+page that should not be shared or indexed.
 Build layouts with the existing tokens. Describe behavior in emulator terminology and
 link to the relevant package guide or coverage evidence. Document any new token here.

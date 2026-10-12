@@ -14,25 +14,26 @@ bun add @crvouga/mockingbird-service-notion
 ## Usage
 
 ```ts
+import { Client } from "@notionhq/client"
 import { createRuntime } from "@crvouga/mockingbird-service-notion"
 
-const notion = createRuntime()
-const result = await notion.fetch(new Request("http://notion.test/v1/search", {
-  method: "POST",
-  headers: {
-    authorization: "Bearer mock_notion_token",
-    "notion-version": "2022-06-28",
-    "content-type": "application/json",
-  },
-  body: JSON.stringify({ filter: { property: "object", value: "database" }, page_size: 100 }),
-}))
-const { results } = await result.json()
-console.log(results[0].properties)
+// The app's own Notion client. Only its fetch changes: requests reach the
+// emulator in this process instead of api.notion.com.
+const emulator = createRuntime()
+const notion = new Client({
+  auth: "mock_notion_token",
+  notionVersion: "2022-06-28",
+  fetch: (url: string, init?: RequestInit) => emulator.fetch(new Request(url, init)),
+})
+const { results } = await notion.search({ filter: { property: "object", value: "database" }, page_size: 100 })
+const [database] = results
+if (database?.object === "database") console.log(database.properties)
 ```
 
-Run `mockingbird-notion serve --port 12127` and inject `http://localhost:12127` as the
-consumer's API origin. Keep `/v1` in request paths. No universal vendor environment variable
-exists for this origin override. The reported integration uses raw fetch.
+The example uses `@notionhq/client@2.2.15`, the SDK line for this API version. Run
+`mockingbird-notion serve --port 12127` and inject `http://localhost:12127` as the
+consumer's API origin (the SDK's `baseUrl`). Keep `/v1` in raw request paths. No universal vendor
+environment variable exists for this origin override. The reported integration uses raw fetch.
 
 ### Contract
 

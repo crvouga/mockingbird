@@ -12,7 +12,14 @@ import { DockerInputError, isRunning, record } from "./state.js"
 
 export type DockerRuntimeOptions = Pick<
   RuntimeOptions<DockerAPI>,
-  "sqlite" | "clock" | "seed" | "adminKey" | "onLog" | "journalSize" | "maxCheckpoints"
+  | "sqlite"
+  | "clock"
+  | "seed"
+  | "adminKey"
+  | "adminControls"
+  | "onLog"
+  | "journalSize"
+  | "maxCheckpoints"
 > &
   Pick<DockerAPIOptions, "onAttach">
 export type DockerRuntime = ServiceRuntime<DockerAPI> & { close(): void }

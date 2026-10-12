@@ -5,6 +5,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   hmac,
+  type MockControls,
   opaqueToken,
   type RequestLog,
   type ServiceRuntime,
@@ -87,6 +88,8 @@ export type OdxRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   settings?: Partial<Settings>
   /**
@@ -186,6 +189,7 @@ export const createRuntime = (options: OdxRuntimeOptions = {}): OdxRuntime => {
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: apiKeyCredential,
     presets: ODX_PRESETS,

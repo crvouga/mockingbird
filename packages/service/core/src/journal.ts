@@ -8,6 +8,12 @@ export type JournalQuery = {
   /** Only this namespace. Omit for every namespace, oldest first across all of them. */
   namespace?: string
   operationId?: string
+  /** Only this HTTP method, case-insensitive. */
+  method?: string
+  /** Only this exact path. */
+  path?: string
+  /** Only requests this fault rule answered or shaped. */
+  faultId?: string
   status?: number
   /** Only entries at or after this instant (epoch ms). */
   since?: number
@@ -65,10 +71,16 @@ export const createJournal = (size: number = DEFAULT_JOURNAL_SIZE): Journal => {
       const matched = source.filter(
         (entry) =>
           (query.operationId === undefined || entry.operationId === query.operationId) &&
+          (query.method === undefined ||
+            entry.method.toUpperCase() === query.method.toUpperCase()) &&
+          (query.path === undefined || entry.path === query.path) &&
+          (query.faultId === undefined || entry.faultId === query.faultId) &&
           (query.status === undefined || entry.status === query.status) &&
           (query.since === undefined || Date.parse(entry.at) >= query.since),
       )
-      return query.limit !== undefined ? matched.slice(-Math.max(0, query.limit)) : matched
+      if (query.limit === undefined) return matched
+      // `slice(-0)` is the whole list, so no entries has to be said outright.
+      return query.limit <= 0 ? [] : matched.slice(-query.limit)
     },
     clear(namespace) {
       if (namespace === undefined) rings.clear()

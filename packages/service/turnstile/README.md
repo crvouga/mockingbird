@@ -13,18 +13,24 @@ bun add @crvouga/mockingbird-service-turnstile
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-turnstile"
+import { createServer } from "@crvouga/mockingbird-service-turnstile/server"
 
-const turnstile = createRuntime()
-const { token } = await turnstile.instance().issue({
+// Test setup: a local Siteverify, and a token like the one the widget hands the browser.
+const server = await createServer()
+const { token } = await server.runtime.instance().issue({
   hostname: "app.example.test", action: "signup",
 }).json()
-const result = await turnstile.fetch(new Request("http://turnstile.test/turnstile/v0/siteverify", {
+
+// Application code: the Siteverify call it makes to Cloudflare, sent to the emulator's URL.
+const siteverifyUrl = `${server.url}/turnstile/v0/siteverify`
+const result = await fetch(siteverifyUrl, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ secret: "mock_secret", response: token }),
-}))
+})
 console.log(await result.json()) // success, challenge_ts, hostname, action, cdata
+
+await server.close()
 ```
 
 Run `mockingbird-turnstile serve --port 12126`, then override the consumer's Siteverify URL

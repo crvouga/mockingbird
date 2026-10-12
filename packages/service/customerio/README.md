@@ -37,36 +37,48 @@ npx mockingbird-customerio serve --port 8810 \
   --webhook-secret "$CUSTOMERIO_REPORTING_WEBHOOK_SIGNING_KEY"
 ```
 
-```js
+```ts
 import { Analytics } from "@customerio/cdp-analytics-node"
 import { createServer } from "@crvouga/mockingbird-service-customerio/server"
 
 const cio = await createServer({
   webhooks: { url: "http://127.0.0.1:3000/v1/customer-io/reporting-webhook", secret: "k".repeat(32) },
 })
+
+// The application's CDP client. Only its host changes.
 const analytics = new Analytics({ writeKey: "wk", host: cio.url, maxEventsInBatch: 1 })
 analytics.identify({ userId: "42", traits: { email: "ada@example.com" } })
 await analytics.closeAndFlush()
 
-// The member unsubscribes in Customer.io: the signed reporting event reaches the backend.
+// Test control. The member unsubscribes in Customer.io: the signed reporting event reaches the backend.
 await fetch(`${cio.url}/__admin/reporting-events`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ metric: "unsubscribed", userId: "42", objectType: "customer" }),
 })
+await cio.close()
 ```
 
-Without the SDK, drive the emulator directly and read back what the app sent:
+Transactional sends go through the App API client (`customerio-node`), pointed at the same
+emulator. The test then reads back what the app sent:
 
 ```ts
+import { Analytics } from "@customerio/cdp-analytics-node"
+import { APIClient, SendEmailRequest } from "customerio-node"
 import { createServer } from "@crvouga/mockingbird-service-customerio/server"
 
 const cio = await createServer()
-await fetch(`${cio.url}/v1/identify`, {
-  method: "POST",
-  headers: { "content-type": "application/json", authorization: `Basic ${btoa("wk:")}` },
-  body: JSON.stringify({ userId: "42", traits: { email: "ada@example.com" } }),
-})
+
+// The application's clients. Only the CDP host and the App API url change.
+const analytics = new Analytics({ writeKey: "wk", host: cio.url, maxEventsInBatch: 1 })
+const api = new APIClient("app-key", { url: `${cio.url}/v1` })
+analytics.identify({ userId: "42", traits: { email: "ada@example.com" } })
+await analytics.closeAndFlush()
+await api.sendEmail(
+  new SendEmailRequest({ transactional_message_id: 1, identifiers: { id: "42" }, to: "ada@example.com" }),
+)
+
+// Test assertions read the emulator's state.
 const profiles = await (await fetch(`${cio.url}/__admin/profiles`)).json()
 const deliveries = await (await fetch(`${cio.url}/__admin/outbox?userId=42`)).json()
 await cio.close()

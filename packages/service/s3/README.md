@@ -17,14 +17,27 @@ ESM only. Node 22+ or Bun 1.2+.
 Point the SDK endpoint at the emulator and enable path-style addressing. Fixture credentials are validated for presigned requests; the default pair is `fixture` / `fixture`.
 
 ```ts
+import { CreateBucketCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 import { createServer } from "@crvouga/mockingbird-service-s3/server"
 
-const emulator = await createServer()
-await fetch(`${emulator.url}/fixtures`, { method: "PUT" })
-await fetch(`${emulator.url}/fixtures/result.bin`, {
-  method: "PUT",
-  body: new Uint8Array([0, 255]),
+// Test setup: start the emulator and point the SDK's endpoint at it.
+const server = await createServer()
+const s3 = new S3Client({
+  endpoint: server.url,
+  region: "us-east-1",
+  forcePathStyle: true,
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
 })
+
+// Application code: the S3 SDK calls it already makes.
+await s3.send(new CreateBucketCommand({ Bucket: "fixtures" }))
+await s3.send(
+  new PutObjectCommand({ Bucket: "fixtures", Key: "result.bin", Body: new Uint8Array([0, 255]) }),
+)
+const object = await s3.send(new GetObjectCommand({ Bucket: "fixtures", Key: "result.bin" }))
+console.log(await object.Body?.transformToByteArray()) // Uint8Array(2) [ 0, 255 ]
+
+await server.close()
 ```
 
 Set an application's S3 endpoint environment variable to the server URL and its region to `us-east-1`. Supported REST operations are CreateBucket, HeadBucket, PutObject, GetObject, HeadObject, DeleteObject, DeleteObjects, CopyObject, ListObjectsV2, and multipart create/upload/complete/abort. SDK `GetObject` bodies retain its streaming helpers.

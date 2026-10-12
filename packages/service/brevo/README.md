@@ -13,20 +13,31 @@ bun add @crvouga/mockingbird-service-brevo
 ## Usage
 
 ```ts
+import { BrevoClient } from "@getbrevo/brevo"
 import { createRuntime } from "@crvouga/mockingbird-service-brevo"
 
-const brevo = createRuntime()
-const response = await brevo.fetch(new Request("http://brevo.test/v3/contacts", {
-  method: "POST",
-  headers: { "content-type": "application/json", "api-key": "mock_brevo_key" },
-  body: JSON.stringify({ email: "synthetic@example.invalid", ext_id: "mock-contact", listIds: [1], updateEnabled: false }),
-}))
-console.log(await response.json()) // { id: 1 }
+// The Brevo SDK your application already uses. Only its fetch changes: requests reach the
+// emulator in this process instead of api.brevo.com.
+const emulator = createRuntime()
+const brevo = new BrevoClient({
+  apiKey: "mock_brevo_key",
+  fetch: ((url: RequestInfo | URL, init?: RequestInit) =>
+    emulator.fetch(new Request(url, init))) as typeof fetch,
+})
+
+const created = await brevo.contacts.createContact({
+  email: "synthetic@example.invalid",
+  ext_id: "mock-contact",
+  listIds: [1],
+  updateEnabled: false,
+})
+console.log(created) // { id: 1 }
 ```
 
-Run `mockingbird-brevo serve --port 12124` for a separate application process. Replace
-the client's `https://api.brevo.com` origin with `http://localhost:12124`; the consumer must
-make its base URL injectable (the vendor does not define a standard environment variable).
+Run `mockingbird-brevo serve --port 12124` for a separate application process and set the
+SDK's `baseUrl` to `http://localhost:12124/v3` (`@getbrevo/brevo`; a raw HTTP client replaces
+its `https://api.brevo.com` origin). The consumer must make that base URL injectable (the
+vendor does not define a standard environment variable).
 Use the synthetic `api-key: mock_brevo_key`, or configure `apiKeys` in `createRuntime`.
 
 ### Routes

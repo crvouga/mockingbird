@@ -17,6 +17,7 @@ export type GitHubRuntimeOptions = Pick<
   | "seed"
   | "adminPrefix"
   | "adminKey"
+  | "adminControls"
   | "onLog"
   | "journalSize"
   | "maxCheckpoints"
@@ -82,13 +83,14 @@ export const createRuntime = (options: GitHubRuntimeOptions = {}): GitHubRuntime
         }
       },
     }),
-    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock, rng }) =>
       new GitHubAPI({
         sqlite,
         namespace,
         publicNamespace,
         adminPrefix,
         now: clock.now,
+        random: rng.next,
         ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         ...(options.tokens ? { tokens: options.tokens } : {}),

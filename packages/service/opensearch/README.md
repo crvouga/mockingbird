@@ -7,10 +7,22 @@ Transport scaffold for Amazon OpenSearch Service. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { ListDomainNamesCommand, OpenSearchClient } from "@aws-sdk/client-opensearch"
 import { createServer } from "@crvouga/mockingbird-service-opensearch/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the OpenSearch client your application already uses, pointed at the emulator.
+const server = await createServer()
+const opensearch = new OpenSearchClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// No OpenSearch Service operation is implemented yet, so every command rejects.
+const outcome = await opensearch.send(new ListDomainNamesCommand({})).catch(() => "rejected")
+// "rejected"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

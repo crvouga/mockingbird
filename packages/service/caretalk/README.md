@@ -34,29 +34,29 @@ npx mockingbird-caretalk serve --port 8823 --api-user "$CARETALK_USERNAME:$CARET
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-caretalk"
+import { createServer } from "@crvouga/mockingbird-service-caretalk/server"
 
-const caretalk = createRuntime()
-const call = (path: string, init: RequestInit = {}) =>
-  caretalk.fetch(new Request(`http://caretalk.test${path}`, init))
+// Test setup: the emulator. The application gets CARETALK_API_URL = server.url.
+const server = await createServer()
+const baseUrl = server.url
 
-const { token } = (await (
-  await call("/externalapi/Auth/client-login", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    // Any credentials log in unless --api-user pins them.
-    body: JSON.stringify({ userName: "acme-api", password: crypto.randomUUID() }),
-  })
-).json()) as { token: string }
-const [form] = (await (
-  await call("/externalapi/Forms/GetForm/health-history", {
-    headers: { authorization: `Bearer ${token}` },
-  })
-).json()) as { fullFormDto: { id: number } }[]
-// After the app's form-submission queue runs, assert what reached CareTalk:
-const { submissions } = (await (await call("/__admin/form-submissions")).json()) as {
-  submissions: unknown[]
-}
+// Application code: log in, then read a form with the token.
+const login = await fetch(`${baseUrl}/externalapi/Auth/client-login`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  // Any credentials log in unless --api-user pins them.
+  body: JSON.stringify({ userName: "acme-api", password: crypto.randomUUID() }),
+})
+const { token } = (await login.json()) as { token: string }
+const forms = await fetch(`${baseUrl}/externalapi/Forms/GetForm/health-history`, {
+  headers: { authorization: `Bearer ${token}` },
+})
+const [form] = (await forms.json()) as { fullFormDto: { id: number } }[]
+
+// Test control: after the app's form-submission queue runs, assert what reached CareTalk.
+const saved = await fetch(`${baseUrl}/__admin/form-submissions`)
+const { submissions } = (await saved.json()) as { submissions: unknown[] }
+await server.close()
 ```
 
 ### Routes

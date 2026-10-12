@@ -7,10 +7,26 @@ Transport scaffold for Amazon Simple Workflow Service. ESM; Node 22+ or Bun 1.2+
 ## Usage
 
 ```ts
+import { ListDomainsCommand, SWFClient } from "@aws-sdk/client-swf"
 import { createServer } from "@crvouga/mockingbird-service-swf/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: start the emulator and point the SDK's endpoint at it.
+const server = await createServer()
+const swf = new SWFClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the SWF SDK calls it already makes.
+// No operation is implemented yet, so every call rejects.
+try {
+  await swf.send(new ListDomainsCommand({ registrationStatus: "REGISTERED" }))
+} catch (error) {
+  console.log((error as Error).name) // UnknownOperationException
+}
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

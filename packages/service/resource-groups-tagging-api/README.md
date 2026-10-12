@@ -7,10 +7,31 @@ Stateful local emulator of Amazon Resource Groups Tagging API. ESM; Node 22+ or 
 ## Usage
 
 ```ts
+import {
+  GetResourcesCommand,
+  ResourceGroupsTaggingAPIClient,
+  TagResourcesCommand,
+} from "@aws-sdk/client-resource-groups-tagging-api"
 import { createServer } from "@crvouga/mockingbird-service-resource-groups-tagging-api/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the tagging client your application already uses, pointed at the emulator.
+const server = await createServer()
+const tagging = new ResourceGroupsTaggingAPIClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code, unchanged.
+await tagging.send(
+  new TagResourcesCommand({ ResourceARNList: ["arn:aws:s3:::orders"], Tags: { team: "checkout" } }),
+)
+const { ResourceTagMappingList } = await tagging.send(
+  new GetResourcesCommand({ TagFilters: [{ Key: "team", Values: ["checkout"] }] }),
+)
+// ResourceTagMappingList[0].ResourceARN === "arn:aws:s3:::orders"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

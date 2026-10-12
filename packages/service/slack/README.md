@@ -40,24 +40,24 @@ npx mockingbird-slack serve --port 8808
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-slack"
+import { IncomingWebhook } from "@slack/webhook"
+import { WebClient } from "@slack/web-api"
+import { createServer } from "@crvouga/mockingbird-service-slack/server"
 
-const slack = createRuntime()
-await slack.fetch(
-  new Request("http://slack.test/services/T000/B000/XXXX", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text: "reconcile failed", blocks: [{ type: "divider" }] }),
-  }),
-) // 200 "ok"
+const server = await createServer()
 
-// Make the next post fail the way Slack does under load; our clients retry at 0/2/8 s.
-slack.applyPreset("rate_limited", "default", { count: 1 })
+// The app's own Slack clients. Only the URLs they are given change.
+const webhook = new IncomingWebhook(`${server.url}/services/T000/B000/XXXX`)
+await webhook.send({ text: "reconcile failed", blocks: [{ type: "divider" }] }) // { text: "ok" }
+const slack = new WebClient("xoxb-fixture", { slackApiUrl: `${server.url}/api/` })
+await slack.chat.postMessage({ channel: "#alerts", text: "deploy finished" }) // { ok: true, ts, … }
 
-const outbox = await slack.fetch(
-  new Request("http://slack.test/__admin/outbox?webhook=/services/T000/B000/XXXX"),
-)
+// Test controls. Make the next post fail the way Slack does under load; our clients retry at 0/2/8 s.
+server.runtime.applyPreset("rate_limited", "default", { count: 1 })
+
+const outbox = await fetch(`${server.url}/__admin/outbox?webhook=/services/T000/B000/XXXX`)
 // { messages: [{ text: "reconcile failed", blocks: [...], ts: "1700000000.000001", thread_ts: null, … }] }
+await server.close()
 ```
 
 ### Routes

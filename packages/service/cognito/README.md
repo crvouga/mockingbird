@@ -17,9 +17,14 @@ ESM only. Node 22+ or Bun 1.2+.
 Point `COGNITO_ENDPOINT` or the AWS SDK `endpoint` option at the served emulator. Fixture SigV4 credentials are accepted for admin operations. Public user-pool operations work without IAM credentials, matching Cognito's client-facing API.
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-cognito"
+import {
+  CognitoIdentityProviderClient,
+  InitiateAuthCommand,
+} from "@aws-sdk/client-cognito-identity-provider"
+import { createServer } from "@crvouga/mockingbird-service-cognito/server"
 
-const cognito = createRuntime({
+// Test setup: seed the emulator and point the AWS SDK client your application uses at it.
+const emulator = await createServer({
   poolId: "us-east-1_mockingbird",
   clientId: "mockingbird-client",
   users: [
@@ -31,9 +36,26 @@ const cognito = createRuntime({
     },
   ],
 })
+const cognito = new CognitoIdentityProviderClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: ordinary SDK calls.
+const { AuthenticationResult } = await cognito.send(
+  new InitiateAuthCommand({
+    AuthFlow: "USER_PASSWORD_AUTH",
+    ClientId: "mockingbird-client",
+    AuthParameters: { USERNAME: "ada@example.test", PASSWORD: "Password1" },
+  }),
+)
+// AuthenticationResult: { AccessToken, IdToken, RefreshToken, ExpiresIn, TokenType }
+
+await emulator.close() // after the test
 ```
 
-The Node adapter is `createServer()` from `./server`; the CLI is `npx mockingbird-cognito serve --port 8811 --pool-id us-east-1_mockingbird --client-id mockingbird-client`.
+`createServer()` from `./server` is the Node adapter; `createRuntime()` takes the same options in process. The CLI is `npx mockingbird-cognito serve --port 8811 --pool-id us-east-1_mockingbird --client-id mockingbird-client`.
 
 ### AWS JSON operations
 

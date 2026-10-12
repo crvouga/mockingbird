@@ -18,11 +18,17 @@ bun add @crvouga/mockingbird-service-docker
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-docker"
+import { DockerClient } from "@docker/node-sdk"
+import { createServer } from "@crvouga/mockingbird-service-docker/server"
 
-const docker = createRuntime({ seed: 42 })
-const response = await docker.fetch(new Request("http://docker.mock/_ping"))
-console.log(await response.text()) // OK
+// Docker's Node SDK, as your application uses it (run with Node; its transport does not
+// work under Bun). Only the Docker host changes.
+const server = await createServer({ seed: 42 })
+const docker = await DockerClient.fromDockerHost(`tcp://${server.host}:${server.port}`)
+console.log(await docker.systemPing()) // 1.52
+
+await docker.close()
+await server.close()
 ```
 
 Use `DockerAPI` for the provider-only Fetch surface, or `createRuntime` for health,
@@ -49,14 +55,15 @@ Run this with Node against the built package. The server uses an ephemeral
 loopback port and synthetic state; no Docker installation is needed.
 
 ```ts
+import { DockerClient } from "@docker/node-sdk"
 import { createServer } from "@crvouga/mockingbird-service-docker/server"
 
 const server = await createServer({ seed: 42 })
+const docker = await DockerClient.fromDockerHost(`tcp://${server.host}:${server.port}`)
 try {
-  const response = await fetch(`${server.url}/v1.52/version`)
-  if (!response.ok) throw new Error(`Docker mock returned ${response.status}`)
-  console.log(await response.json())
+  console.log(await docker.systemVersion())
 } finally {
+  await docker.close()
   await server.close()
 }
 ```
@@ -71,10 +78,13 @@ adapter; use `createServer` for Docker's attach and Unix-socket transport.
 namespace. It never downloads an image or starts a process. For example:
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-docker"
+import { DockerClient } from "@docker/node-sdk"
+import { createServer } from "@crvouga/mockingbird-service-docker/server"
 
-const docker = createRuntime({ seed: 42 })
-await docker.fetch(new Request("http://docker.mock/__admin/docker/seed", {
+const server = await createServer({ seed: 42 })
+
+// Test setup: seed synthetic observations.
+await fetch(`${server.url}/__admin/docker/seed`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
@@ -85,7 +95,15 @@ await docker.fetch(new Request("http://docker.mock/__admin/docker/seed", {
     }],
     daemon: { rootless: true },
   }),
-}))
+})
+
+// The application sees them through Docker's SDK.
+const docker = await DockerClient.fromDockerHost(`tcp://${server.host}:${server.port}`)
+const [worker] = await docker.containerList({ all: true })
+console.log(worker?.Names, worker?.State) // [ '/worker' ] running
+
+await docker.close()
+await server.close()
 ```
 
 Image IDs are immutable SHA-256 strings; container IDs are separate 64-character

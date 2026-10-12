@@ -51,16 +51,18 @@ Mockingbird-specific paths into the vendor contract without that annotation.
 
 | Contract item | How |
 | --- | --- |
-| `GET /__admin/health`, `/__admin/*`, reset, Timeline checkpoints/branches (including legacy snapshot aliases), clock, metrics (with unmatched paths), journal (`GET /__admin/requests`), `x-mockingbird` response header | automatic |
+| `GET /__admin/health`, `/__admin/*`, reset, snapshots, Timeline checkpoints/branches, clock, latency, metrics (with unmatched paths), journal (`GET /__admin/requests`), `x-mockingbird` response header | automatic. The user-facing guide is [Admin controls](ADMIN_CONTROLS.md), with a page per control in `docs/admin-controls/`; `ADMIN_ROUTE_REFERENCE`, `CONTROL_HEADER_REFERENCE` and `ADMIN_CONTROL_PAGES` are the lists, and a test fails when a page misses a route or a header, or shows an example the runtime does not answer that way. |
+| Boot controls (`adminControls`), control headers (`x-mockingbird-time`, `-fault`, `-delay`, …) | automatic once your `createRuntime` forwards `adminControls` beside `adminKey` and `seed`, and your `./server` forwards `common.adminControls`. `packages/service/conformance` boots every emulator with them and fails when one does not. |
+| Determinism | read time only from the `clock` (`now: clock.now`) and randomness only from the `rng` in the instance context. Both are per namespace, restored by a snapshot and rewound by reset. In an admin route use `runtime.namespaceClock(namespace)`, never `runtime.clock`, which is the base clock every namespace follows. If your service keeps a schedule (renewals, expiries, session sweeps), pass `onClockChange: (namespace) => …` and run it there: it is called whenever a namespace's clock is moved by a control, so what came due is seen at once. Conformance boots each emulator twice from one seed and compares the state. Key material that must be random is the only exception; list the emulator in `CRYPTOGRAPHIC_BOOT_STATE` with the reason. |
 | State introspection | automatic. `GET /__admin/state` lists every collection: ones you declare with `state:`, every `Collection` hanging off the instance, and every name already stored. `POST /__admin/state/:collection` with `{ id?, value }` creates a row; `PUT` replaces, `PATCH` shallow-merges an object, `DELETE` removes it. A successful write checkpoints `main`. The same view is `runtime.state(namespace?)`. |
 | Admin UI | automatic at `GET /__admin/ui` (the HTML shell is not behind the admin key; `/__admin/ui/manifest` and the data routes are). Pass `adminUi.panels` to add a view (`id`, `title`, `html`, optional `script` called as `(root, api) => void`). Pass `adminUi.render({ service, defaultHtml })` to replace the document; call `defaultHtml()` to keep the shared shell. [`packages/service/plane`](../packages/service/plane) is the bespoke-panel example. |
 | Namespaces by header | automatic (`x-mockingbird-namespace`) |
 | Namespaces by path prefix | automatic: `/__admin/ns/<name>/…` is stripped and selects `<name>` |
 | Namespaces by credential | pass `credential: (request) => string \| undefined` (`bearerToken`, `basicAuth(r)?.username`, `sigV4AccessKeyId`, or your own); suites map credentials with `PUT /__admin/credentials {"credentials": {"<cred>": "<ns>"}}` |
-| Fault injection | automatic (`POST /__admin/faults {operationId?, method?, pathPrefix?, status?, body?, count?, rate?, latencyMs?, drop?, effect?}`) |
-| Fault presets | pass `presets: Record<string, FaultPreset>`; `POST /__admin/faults {"preset": "name", "count"?: n}`, `GET /__admin/faults/presets` |
+| Fault injection | automatic (`POST /__admin/faults`): match on `operationId`, `method`, `path`, `pathPrefix`, `pathPattern`, `requestHeaders`, `query`; schedule with `after`, `every`, `count`, `rate`, `from`, `until`; act with `status`, `body`, `headers`, `delay`, `jitter`, `timeout`, `drop`, `truncate`, `effect` |
+| Fault presets | every emulator has the standard ones (`rate_limited`, `unavailable`, `timeout`, …). Pass `presets: Record<string, FaultPreset>` to add your vendor's failure modes, and reuse a standard name to give it the vendor's own error body; `POST /__admin/faults {"preset": "name", "count"?: n}`, `GET /__admin/faults/presets` |
 | Vendor misbehaviour a canned response can't express | a preset rule with `effect: "<name>"`; the handler checks `faultEffect(request, "<name>")` |
-| Socket drop ("unknown outcome") | a rule with `drop: true` (in-process `fetch` rejects with `TypeError`; served emulator destroys the socket) |
+| Socket drop ("unknown outcome") | a rule with `drop: true`, or `timeout: "30s"` to hold the request first (in-process `fetch` rejects with `TypeError`; served emulator destroys the socket) |
 | Outbound webhooks | `createWebhookHub({ signer, endpoints, retryDelaysMs?, fetch? })` passed as `webhooks:`; adds `/__admin/webhooks`, `/webhooks/events`, `/webhooks/:id/replay`, `/webhooks/flush`, `/webhooks/faults`, `/webhook-endpoints`; presets can carry `webhook: {mode: duplicate\|reorder\|drop}`. Signers: `signers.svix()`, `signers.timestamped(header)`, `signers.twilio()`, `signers.header(name, fmt)`, `signers.custom(fn)`; primitives `hmac`, `signSvix`, `signTimestamped`, `signTwilio`. Timestamps are wall clock. |
 | Outbox (comms vendors) | `OutboxStore` in your state + `outboxAdminRoutes(runtime, (api) => api.outbox, filter?)` → `GET /__admin/outbox?to=&since=`; `extractLinks(html)`, `extractCodes(text, len)` |
 | Idempotency keys | `IdempotencyStore.run(key, requestFingerprint(method, path, body), {mismatch, conflict}, handler)` |
@@ -73,7 +75,8 @@ Handlers are keyed by `operationId` (`defineOperations<SupportedOperationId>({..
 directories) stay on the value; removing a shared member fails the typecheck.
 `packages/service/conformance` imports every HTTP emulator's `createRuntime` and checks it is
 `(options?: MockCreateOptions) => MockSurface`, then probes `/__admin/health`, `/__admin`, `/__admin/ui`,
-and `/__admin/state`. A new emulator has to be added there. `defineMock` is the same check for a
+and `/__admin/state`, then the admin controls at boot, over `/__admin` and in request headers, and
+that two boots from one seed hold the same state. A new emulator has to be added there. `defineMock` is the same check for a
 runtime you build by hand. Service admin routes add keys beside the standard ones; a standard key
 keeps the shared handler.
 
@@ -148,6 +151,16 @@ line). It must also contain `## Install`, `## Usage` (with a ```ts example), and
 listing **every runtime export** of every entry point. Also document: how to point the app at
 it (env vars), routes, webhooks, admin routes, presets, namespace carriers, and a **Deliberately
 not modelled** section.
+
+Examples show the application's code, not the emulator's. Call the vendor through its official
+SDK, the way the application already does, and keep Mockingbird to the setup lines that point
+that SDK at the emulator: inject `(url, init) => emulator.fetch(new Request(url, init))` where the
+SDK accepts a fetch implementation or HTTP client, otherwise pass `createServer().url` as its base
+URL or endpoint. Where the vendor publishes no JS SDK, use plain `fetch` against `server.url`.
+Never call `runtime.fetch(new Request(...))` as if it were application code. Admin routes, seeds
+and presets have no SDK equivalent; group them as test setup, apart from the application's calls.
+Run every example before committing it, and add any package it imports to `README_SDKS` in
+`scripts/release/consumer-smoke.ts`, which type-checks every ```ts block in every README.
 
 The docs site (`sites/docs`, `bun docs`) is built from the package itself: the README is the
 service page, the contract gives the operations list and coverage, and the built module runs in

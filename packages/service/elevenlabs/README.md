@@ -35,9 +35,10 @@ npx mockingbird-elevenlabs serve --port 8841 \
   --models eleven_multilingual_v2,eleven_flash_v2_5
 ```
 
-In-process, pass `runtime.fetch` as the adapter's `fetch`:
+In-process, pass the emulator as the `fetch` of the official SDK (`@elevenlabs/elevenlabs-js`):
 
 ```ts
+import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js"
 import {
   createRuntime,
   DEFAULT_API_KEY,
@@ -45,32 +46,31 @@ import {
   mp3Audio,
 } from "@crvouga/mockingbird-service-elevenlabs"
 
-// A reply the test controls: exact bytes for one text. Here they are a valid MP3, but any
-// bytes are returned as given.
+// Test setup. A reply the test controls: exact bytes for one text. Here they are a valid MP3,
+// but any bytes are returned as given.
 const scripted = mp3Audio(44_100, 128, 500, 9)
-const elevenlabs = createRuntime({
+const emulator = createRuntime({
   scripts: [{ match: { text: "Welcome back." }, audio: scripted }],
 })
 
-const speak = (text: string, outputFormat: string) =>
-  elevenlabs.fetch(
-    new Request(
-      `http://elevenlabs.test/v1/text-to-speech/${DEFAULT_VOICES[0]?.voice_id}?output_format=${outputFormat}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json", "xi-api-key": DEFAULT_API_KEY },
-        body: JSON.stringify({ text, model_id: "eleven_multilingual_v2" }),
-      },
-    ),
-  )
+// The ElevenLabs SDK your application already uses. Only its fetch changes: requests reach
+// the emulator in this process instead of api.elevenlabs.io.
+const elevenlabs = new ElevenLabsClient({
+  apiKey: DEFAULT_API_KEY,
+  fetch: ((url: RequestInfo | URL, init?: RequestInit) =>
+    emulator.fetch(new Request(url, init))) as typeof fetch,
+})
+const voiceId = DEFAULT_VOICES[0]?.voice_id ?? ""
 
-const welcome = await speak("Welcome back.", "mp3_44100_128")
-console.log(welcome.status, welcome.headers.get("content-type")) // 200 audio/mpeg
-console.log(new Uint8Array(await welcome.arrayBuffer()).length === scripted.length) // true
+const welcome = await elevenlabs.textToSpeech
+  .convert(voiceId, { text: "Welcome back.", modelId: "eleven_multilingual_v2", outputFormat: "mp3_44100_128" })
+  .withRawResponse()
+console.log(welcome.rawResponse.status, welcome.rawResponse.headers.get("content-type")) // 200 audio/mpeg
+console.log((await new Response(welcome.data).arrayBuffer()).byteLength === scripted.length) // true
 
 // Unscripted requests get generated audio: raw 16-bit mono samples for pcm_44100.
-const pcm = await speak("Anything else.", "pcm_44100")
-console.log(pcm.headers.get("content-type"), (await pcm.arrayBuffer()).byteLength) // audio/pcm 61740
+const pcm = await elevenlabs.textToSpeech.convert(voiceId, { text: "Anything else.", outputFormat: "pcm_44100" })
+console.log((await new Response(pcm).arrayBuffer()).byteLength) // 61740
 ```
 
 ### Routes

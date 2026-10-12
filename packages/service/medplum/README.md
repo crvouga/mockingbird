@@ -99,11 +99,14 @@ It prints the listening address and the seeded client credentials. Point `Medplu
 
 ```ts
 import { MedplumClient } from "@medplum/core"
+import { DEFAULT_CLIENT_ID, DEFAULT_CLIENT_SECRET } from "@crvouga/mockingbird-service-medplum"
 import { createServer } from "@crvouga/mockingbird-service-medplum/server"
 
 const server = await createServer() // any free port; the base URL is the listening address
 const medplum = new MedplumClient({ baseUrl: `${server.url}/` })
-// ...
+await medplum.startClientLogin(DEFAULT_CLIENT_ID, DEFAULT_CLIENT_SECRET)
+const patient = await medplum.createResource({ resourceType: "Patient", active: true })
+console.log(patient.id) // "<uuid>"
 await server.close()
 ```
 

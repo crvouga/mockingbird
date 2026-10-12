@@ -4,6 +4,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   NAMESPACE_HEADER,
   parseSince,
   type RequestLog,
@@ -83,6 +84,8 @@ export type PostHogRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Flags every namespace starts with (and returns to on reset). */
   flags?: Record<string, FlagSpec>
@@ -258,6 +261,7 @@ export const createRuntime = (options: PostHogRuntimeOptions = {}): PostHogRunti
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: (request) => tokens.get(request),
     presets: POSTHOG_PRESETS,

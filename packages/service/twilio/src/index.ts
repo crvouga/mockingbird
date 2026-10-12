@@ -67,7 +67,7 @@ export const TWILIO_NAMESPACE = "twilio"
 export const DEFAULT_ACCOUNT_SID = "AC00000000000000000000000000000000"
 
 export type TwilioAPIOptions = APIOptions &
-  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix"> & {
+  Pick<ProviderOptions, "tokens" | "baseUrl" | "publicNamespace" | "adminPrefix" | "random"> & {
     fixtures?: TwilioSeedConfig
     /** Initial Verify settings for the namespace (fixed code, expiry, attempt limits). */
     verify?: Partial<VerifySettings>
@@ -236,6 +236,7 @@ export class TwilioAPI implements FetchAPI {
       {
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         ...(options.tokens ? { tokens: options.tokens } : {}),
+        ...(options.random ? { random: options.random } : {}),
         sqlite,
         namespace,
         now: this.now,

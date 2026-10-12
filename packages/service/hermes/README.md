@@ -17,19 +17,29 @@ bun add @crvouga/mockingbird-service-hermes
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-hermes"
+import { createServer } from "@crvouga/mockingbird-service-hermes/server"
 
-const hermes = createRuntime({ seed: 42 })
-const response = await hermes.fetch(new Request("http://hermes.mock/__admin/health"))
-console.log(await response.json())
+// Test setup: the emulator on an ephemeral loopback port.
+const server = await createServer({ seed: 42 })
+
+// Application code: the peer HTTP client's base URL is server.url.
+const baseUrl = server.url
+const accepted = await fetch(`${baseUrl}/v1/runs`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ input: "synthetic prompt" }),
+})
+console.log(await accepted.json()) // { run_id, status: "started", replayed: false }
+await server.close()
 ```
 
 Use the portable `HermesAPI` class for provider routes alone. `createRuntime`
 adds health, namespaces, admin controls, faults, clock, metrics, metadata-only
 request journal, and shared Timeline checkpoints. It needs no Hermes installation,
-provider account, prompt data, API key, or local service.
+provider account, prompt data, API key, or local service. Without a listener,
+`createRuntime().fetch(request)` serves the same routes in-process.
 
-For an HTTP endpoint:
+The admin controls share the origin:
 
 ```ts
 import { createServer } from "@crvouga/mockingbird-service-hermes/server"
@@ -94,22 +104,31 @@ The executable `mockingbird-hermes` provides `serve`.
 ## Script a run
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-hermes"
+import { createServer } from "@crvouga/mockingbird-service-hermes/server"
 
-const hermes = createRuntime({ seed: 42 })
-const accepted = await hermes.fetch(new Request("http://hermes.mock/v1/runs", {
+const server = await createServer({ seed: 42 })
+const baseUrl = server.url
+const json = { "content-type": "application/json" }
+
+// Application code: submit a run.
+const accepted = await fetch(`${baseUrl}/v1/runs`, {
   method: "POST",
-  headers: { "content-type": "application/json" },
+  headers: json,
   body: JSON.stringify({ input: "synthetic prompt" }),
-}))
-const { run_id } = await accepted.json()
-await hermes.fetch(new Request(`http://hermes.mock/__admin/hermes/runs/${run_id}/observe`, {
+})
+const { run_id } = (await accepted.json()) as { run_id: string }
+
+// Test control: script the outcome. No agent runs, so nothing moves until you do.
+await fetch(`${baseUrl}/__admin/hermes/runs/${run_id}/observe`, {
   method: "POST",
-  headers: { "content-type": "application/json" },
+  headers: json,
   body: JSON.stringify({ status: "completed", output: "synthetic result" }),
-}))
-const status = await hermes.fetch(new Request(`http://hermes.mock/v1/runs/${run_id}`))
+})
+
+// Application code: poll the run.
+const status = await fetch(`${baseUrl}/v1/runs/${run_id}`)
 console.log(await status.json())
+await server.close()
 ```
 
 Admission returns 202 `{ run_id, status: "started", replayed: false }`. The stored

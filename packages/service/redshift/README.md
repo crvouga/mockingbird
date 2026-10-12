@@ -7,10 +7,24 @@ Transport scaffold for Amazon Redshift. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { DescribeClustersCommand, RedshiftClient } from "@aws-sdk/client-redshift"
 import { createServer } from "@crvouga/mockingbird-service-redshift/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the Redshift client your application already uses, pointed at the emulator.
+const server = await createServer()
+const redshift = new RedshiftClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// No Redshift operation is implemented yet, so every command rejects.
+const failure = await redshift
+  .send(new DescribeClustersCommand({}))
+  .catch((error: Error) => error.name)
+// "UnknownOperationException"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

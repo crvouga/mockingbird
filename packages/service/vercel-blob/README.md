@@ -14,39 +14,23 @@ bun add @crvouga/mockingbird-service-vercel-blob
 
 ## Usage
 
+The example uses `@vercel/blob@2.8.0`. It is an optional consumer dependency, not a runtime
+dependency of the emulator.
+
 ```ts
-import { createRuntime, DEFAULT_TOKEN } from "@crvouga/mockingbird-service-vercel-blob"
-
-const emulator = createRuntime()
-const uploaded = await emulator.fetch(new Request("http://emulator.local/api/blob/?pathname=fixture.txt", {
-  method: "PUT",
-  headers: {
-    authorization: `Bearer ${DEFAULT_TOKEN}`,
-    "x-vercel-blob-access": "public",
-    "x-content-type": "text/plain",
-  },
-  body: "fixture bytes",
-}))
-const result = await uploaded.json() as { url: string }
-const downloaded = await emulator.fetch(new Request(result.url))
-console.log(await downloaded.text())
-```
-
-For the SDK example, also install `@vercel/blob@2.8.0`. It is an optional consumer dependency,
-not a runtime dependency of the emulator.
-
-```js
-import { put, del } from "@vercel/blob"
+import { del, put } from "@vercel/blob"
 import { createServer } from "@crvouga/mockingbird-service-vercel-blob/server"
 import { DEFAULT_TOKEN } from "@crvouga/mockingbird-service-vercel-blob"
 
+// Test setup: the emulator, and the two variables the Blob SDK reads.
 const server = await createServer()
 process.env.VERCEL_BLOB_API_URL = `${server.url}/api/blob`
-const blob = await put("fixture.txt", "fixture bytes", {
-  access: "public", token: DEFAULT_TOKEN, addRandomSuffix: false,
-})
-console.log(await (await fetch(blob.url)).text())
-await del(blob.url, { token: DEFAULT_TOKEN })
+process.env.BLOB_READ_WRITE_TOKEN = DEFAULT_TOKEN
+
+// The app's own Blob calls, unchanged.
+const blob = await put("fixture.txt", "fixture bytes", { access: "public", addRandomSuffix: false })
+console.log(await (await fetch(blob.url)).text()) // "fixture bytes"
+await del(blob.url)
 await server.close()
 ```
 

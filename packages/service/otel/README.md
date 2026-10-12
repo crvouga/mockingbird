@@ -37,44 +37,51 @@ npx mockingbird-otel serve --ingest-basic-auth "$OTLP_INSTANCE_ID:$OTLP_TOKEN"
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-otel"
+import { SeverityNumber } from "@opentelemetry/api-logs"
+import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http"
+import { resourceFromAttributes } from "@opentelemetry/resources"
+import { LoggerProvider, SimpleLogRecordProcessor } from "@opentelemetry/sdk-logs"
+import { createServer } from "@crvouga/mockingbird-service-otel/server"
 
-const otel = createRuntime()
-const call = (path: string, init: RequestInit) => otel.fetch(new Request(`http://otel.test${path}`, init))
+const server = await createServer()
 
-// What @opentelemetry/exporter-logs-otlp-http sends for one winston/pino event log.
-await call("/v1/logs", {
-  method: "POST",
-  headers: { "content-type": "application/json", authorization: "Bearer ingest-token" },
-  body: JSON.stringify({
-    resourceLogs: [{
-      resource: { attributes: [{ key: "service.name", value: { stringValue: "backend" } }] },
-      scopeLogs: [{ logRecords: [{
-        severityText: "info",
-        body: { stringValue: "reconcile done" }, // dropped: bodies are never stored
-        attributes: [
-          { key: "event", value: { stringValue: "initial_credit_reconcile_completed" } },
-          { key: "granted", value: { intValue: "1" } },
-        ],
-      }] }],
-    }],
-  }),
+// The OpenTelemetry SDK your application already uses. Only the exporter's URL changes.
+const exporter = new OTLPLogExporter({
+  url: `${server.url}/v1/logs`,
+  headers: { authorization: "Bearer ingest-token" },
 })
+const loggerProvider = new LoggerProvider({
+  resource: resourceFromAttributes({ "service.name": "backend" }),
+  processors: [new SimpleLogRecordProcessor(exporter)],
+})
+loggerProvider.getLogger("backend").emit({
+  severityNumber: SeverityNumber.INFO,
+  severityText: "info",
+  body: "reconcile done", // dropped: bodies are never stored
+  attributes: { event: "initial_credit_reconcile_completed", granted: 1 },
+})
+await loggerProvider.forceFlush()
 
-// Long-poll until it lands, then query it the way our O2 clients do.
-await call("/__admin/wait", {
+// Test control: long-poll until the event lands.
+await fetch(`${server.url}/__admin/wait`, {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ kind: "log", where: { event: "initial_credit_reconcile_completed" } }),
 })
-const search = await call("/api/30rBqcDevOrg7Hn2KmQ4xW9sLtY/_search", {
+
+// Then query it the way our O2 clients do (OpenObserve's search API is plain HTTP).
+const search = await fetch(`${server.url}/api/30rBqcDevOrg7Hn2KmQ4xW9sLtY/_search`, {
   method: "POST",
   headers: { "content-type": "application/json", authorization: `Basic ${btoa("agent:pw")}` },
   body: JSON.stringify({
     query: { sql: `SELECT * FROM "default" WHERE event = 'initial_credit_reconcile_completed'` },
   }),
 })
+console.log(await search.json())
 // { hits: [{ service_name: "backend", event: "…", granted: 1, severity_text: "info", _timestamp }], … }
+
+await loggerProvider.shutdown()
+await server.close()
 ```
 
 ### Receiver

@@ -7,10 +7,23 @@ Stateful local emulator of Amazon Identity and Access Management. ESM; Node 22+ 
 ## Usage
 
 ```ts
+import { CreateUserCommand, IAMClient, ListUsersCommand } from "@aws-sdk/client-iam"
 import { createServer } from "@crvouga/mockingbird-service-iam/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the IAM client your application already uses, pointed at the emulator.
+const server = await createServer()
+const iam = new IAMClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code, unchanged.
+await iam.send(new CreateUserCommand({ UserName: "deploy-bot" }))
+const { Users } = await iam.send(new ListUsersCommand({}))
+// Users[0].Arn === "arn:aws:iam::000000000000:user/deploy-bot"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

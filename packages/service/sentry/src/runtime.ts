@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -38,6 +39,8 @@ export type SentryRuntimeOptions = Omit<SentryAPIOptions, "now" | "namespace"> &
   clock?: Clock
   seed?: number | string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type SentryRuntime = ServiceRuntime<SentryAPI>
@@ -153,6 +156,7 @@ export const createRuntime = (options: SentryRuntimeOptions = {}): SentryRuntime
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, clock, adminPrefix }) =>
       new SentryAPI({ ...options, sqlite, namespace, now: clock.now, adminPrefix, captureKey }),

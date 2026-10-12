@@ -20,36 +20,36 @@ ESM only. Node >= 22 or Bun >= 1.2. No native dependencies. Serve it with `npx m
 `firebase-admin` hardcodes `https://fcm.googleapis.com`. Point it at the emulator with `createAdminTransport` (an `https.Agent` that dials the emulator) and call `enableLegacyHttpTransport()` so multicast sends honor that agent. `send` is already HTTP/1.1. The fixture project is `demo-project`, the fixture device token is `fixture-device-token`, and any bearer is accepted until you turn on `strict`.
 
 ```ts
+import { deleteApp, initializeApp } from "firebase-admin/app"
+import { getMessaging } from "firebase-admin/messaging"
 import { createServer } from "@crvouga/mockingbird-service-fcm/server"
 import { createAdminTransport } from "@crvouga/mockingbird-service-fcm/admin"
 
+// Test setup: the emulator, plus a credential and an agent that reach it.
 const fcm = await createServer()
 const transport = await createAdminTransport({ origin: fcm.url, token: "fixture-token" })
-// initializeApp({ projectId: "demo-project", credential: transport.credential, httpAgent: transport.agent })
-// getMessaging(app).enableLegacyHttpTransport()
+
+// The application's firebase-admin app. Only its credential and httpAgent change.
+const app = initializeApp({
+  projectId: "demo-project",
+  credential: transport.credential,
+  httpAgent: transport.agent,
+})
+const messaging = getMessaging(app)
+messaging.enableLegacyHttpTransport()
+const name = await messaging.send({
+  token: "fixture-device-token",
+  notification: { title: "Hello", body: "World" },
+})
+// name → "projects/demo-project/messages/<id>"
+
+// Test control: every message the emulator accepted.
+const outbox = await (await fetch(`${fcm.url}/__admin/outbox`)).json()
+void outbox
+
+await deleteApp(app)
 await transport.close()
 await fcm.close()
-```
-
-Without the SDK, `POST` the wire body and read the outbox:
-
-```ts
-import { createRuntime, FCM_FIXTURE_PROJECT, FCM_FIXTURE_TOKEN } from "@crvouga/mockingbird-service-fcm"
-
-const fcm = createRuntime()
-const response = await fcm.fetch(
-  new Request(`http://fcm.test/v1/projects/${FCM_FIXTURE_PROJECT}/messages:send`, {
-    method: "POST",
-    headers: { authorization: "Bearer fixture-token", "content-type": "application/json" },
-    body: JSON.stringify({
-      message: { token: FCM_FIXTURE_TOKEN, notification: { title: "Hello", body: "World" } },
-    }),
-  }),
-)
-const body = (await response.json()) as { name: string }
-const outbox = await (await fcm.fetch(new Request("http://fcm.test/__admin/outbox"))).json()
-void body
-void outbox
 ```
 
 ### Routes

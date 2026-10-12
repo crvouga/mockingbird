@@ -7,10 +7,27 @@ Stateful local emulator of Amazon CloudWatch Logs. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import {
+  CloudWatchLogsClient,
+  CreateLogGroupCommand,
+  DescribeLogGroupsCommand,
+} from "@aws-sdk/client-cloudwatch-logs"
 import { createServer } from "@crvouga/mockingbird-service-cloudwatch-logs/server"
+
+// Test setup: start the emulator and point the AWS SDK client your application uses at it.
 const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+const logs = new CloudWatchLogsClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: ordinary SDK calls.
+await logs.send(new CreateLogGroupCommand({ logGroupName: "/app/api" }))
+const { logGroups } = await logs.send(new DescribeLogGroupsCommand({}))
+// logGroups[0].logGroupName === "/app/api"
+
+await emulator.close() // after the test
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

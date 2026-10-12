@@ -21,10 +21,13 @@ Make the Graph origin injectable and point it at the emulator. Any non-empty syn
 `access_token` query value authenticates unless `/__admin/settings` restricts tokens.
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-meta"
+import { createServer } from "@crvouga/mockingbird-service-meta/server"
 
-const meta = createRuntime()
-const response = await meta.fetch(new Request("http://meta.test/v26.0/pixel_test/events", {
+const server = await createServer()
+
+// The application's own Conversions API request. Only the Graph origin changes:
+// server.url instead of https://graph.facebook.com.
+const response = await fetch(`${server.url}/v26.0/pixel_test/events`, {
   method: "POST",
   headers: { authorization: "Bearer meta_test", "content-type": "application/json" },
   body: JSON.stringify({ data: [{
@@ -35,8 +38,11 @@ const response = await meta.fetch(new Request("http://meta.test/v26.0/pixel_test
     user_data: { em: ["a".repeat(64)] },
     custom_data: { currency: "USD", value: 42 },
   }] }),
-}))
+})
+console.log(await response.json())
 // → {events_received: 1, messages: [], fbtrace_id: "trace_…"}
+
+await server.close()
 ```
 
 ### Routes

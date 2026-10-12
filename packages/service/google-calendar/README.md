@@ -38,19 +38,21 @@ posts pushes to whatever `address` the app registers (http is allowed unless
 npx mockingbird-google-calendar serve --port 8820 --client "$GOOGLE_CLIENT_ID:$GOOGLE_CLIENT_SECRET"
 ```
 
-```js
+```ts
 import { auth, calendar } from "@googleapis/calendar"
 import { OAuth2Client } from "google-auth-library"
 import { createServer } from "@crvouga/mockingbird-service-google-calendar/server"
 
 const google = await createServer()
+
+// The application's OAuth and Calendar clients. Only their URLs change.
 const oauth = new OAuth2Client({
   clientId: "c",
   clientSecret: "s",
   redirectUri: "postmessage",
   endpoints: { oauth2TokenUrl: `${google.url}/token`, oauth2RevokeUrl: `${google.url}/revoke` },
 })
-// Authorization code "4/emulator-<name>" signs in <name>@example.com ("4/emulator-<email>" for others).
+// Authorization code "4/mock-<name>" signs in <name>@example.com ("4/mock-<email>" for others).
 const { tokens } = await oauth.getToken("4/mock-dr.house")
 const client = new auth.OAuth2()
 client.setCredentials({ access_token: tokens.access_token ?? null })
@@ -59,14 +61,20 @@ await cal.events.insert({
   calendarId: "primary",
   requestBody: { summary: "Rounds", start: { dateTime: "2026-10-01T15:00:00Z" }, end: { dateTime: "2026-10-01T16:00:00Z" } },
 })
+
+await google.close()
 ```
 
 An event created "in Google's UI" (admin route) is what the app then lists and syncs:
 
 ```ts
+import { auth, calendar } from "@googleapis/calendar"
+import { OAuth2Client } from "google-auth-library"
 import { createServer } from "@crvouga/mockingbird-service-google-calendar/server"
 
 const google = await createServer()
+
+// Test control: the practitioner adds an event in Google's UI.
 await fetch(`${google.url}/__admin/events`, {
   method: "POST",
   headers: { "content-type": "application/json" },
@@ -75,7 +83,21 @@ await fetch(`${google.url}/__admin/events`, {
     event: { summary: "Rounds", start: { dateTime: "2026-10-01T15:00:00Z" }, end: { dateTime: "2026-10-01T16:00:00Z" } },
   }),
 })
-const stored = await (await fetch(`${google.url}/__admin/events?email=dr.house@example.com`)).json()
+
+// The application lists it through the Calendar client.
+const oauth = new OAuth2Client({
+  clientId: "c",
+  clientSecret: "s",
+  redirectUri: "postmessage",
+  endpoints: { oauth2TokenUrl: `${google.url}/token` },
+})
+const { tokens } = await oauth.getToken("4/mock-dr.house")
+const client = new auth.OAuth2()
+client.setCredentials({ access_token: tokens.access_token ?? null })
+const cal = calendar({ version: "v3", auth: client, rootUrl: `${google.url}/` })
+const { data } = await cal.events.list({ calendarId: "primary" })
+console.log(data.items?.map((event) => event.summary)) // ["Rounds"]
+
 await google.close()
 ```
 

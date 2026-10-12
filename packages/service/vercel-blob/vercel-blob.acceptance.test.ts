@@ -273,8 +273,9 @@ test("vendor error envelopes, every catalog preset, custom reserved prefix, jour
     const presets = await json<{ presets: { name: string }[] }>(
       await admin(runtime, "/faults/presets"),
     )
-    expect(presets.presets.map((p) => p.name).sort()).toEqual(
-      Object.keys(VERCEL_BLOB_PRESETS).sort(),
+    // The emulator's own presets, beside the standard ones every emulator has.
+    expect(presets.presets.map((p) => p.name)).toEqual(
+      expect.arrayContaining(Object.keys(VERCEL_BLOB_PRESETS)),
     )
     for (const [name, status] of [
       ["conflict", 400],

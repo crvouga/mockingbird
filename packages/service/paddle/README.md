@@ -39,13 +39,13 @@ npx mockingbird-paddle serve --port 8795 --fixtures \
 PADDLE_API_BASE_URL=http://127.0.0.1:8795 node app.js
 ```
 
-```js
+```ts
 import { createServer } from "@crvouga/mockingbird-service-paddle/server"
-import { Paddle } from "@paddle/paddle-node-sdk"
+import { type Environment, Paddle } from "@paddle/paddle-node-sdk"
 
 const emulator = await createServer({ paymentLink: "https://pay.example.com/checkout" })
-// In TypeScript: `{ environment: emulator.url as Environment }`.
-const paddle = new Paddle("pdl_sdbx_apikey_test", { environment: emulator.url })
+// The app's own Paddle client. Only its environment changes.
+const paddle = new Paddle("pdl_sdbx_apikey_test", { environment: emulator.url as Environment })
 
 const product = await paddle.products.create({ name: "Pro plan", taxCategory: "saas" })
 const price = await paddle.prices.create({
@@ -71,22 +71,27 @@ const [subscription] = await paddle.subscriptions.list({ customerId: [customer.i
 await emulator.close()
 ```
 
-Without the SDK, the same over HTTP:
+With `fixtures: true` the catalog is already seeded, and one admin call completes a checkout:
 
 ```ts
 import { createServer } from "@crvouga/mockingbird-service-paddle/server"
+import { type Environment, Paddle } from "@paddle/paddle-node-sdk"
 
 const emulator = await createServer({ fixtures: true })
-const headers = { authorization: "Bearer pdl_sdbx_apikey_test", "content-type": "application/json" }
-const { data: products } = await (await fetch(`${emulator.url}/products?include=prices`, { headers })).json()
-const checkout = await (
-  await fetch(`${emulator.url}/__admin/checkout`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ email: "new@example.com", items: [{ price_id: products[0].prices[0].id }] }),
-  })
-).json()
-// checkout.transaction.status === "completed", checkout.subscription.status === "active"
+const paddle = new Paddle("pdl_sdbx_apikey_test", { environment: emulator.url as Environment })
+const [product] = await paddle.products.list({ include: ["prices"] }).next()
+
+// Test setup: one admin call stands in for a customer completing the hosted checkout.
+const completed = await fetch(`${emulator.url}/__admin/checkout`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ email: "new@example.com", items: [{ price_id: product?.prices?.[0]?.id }] }),
+})
+const checkout = (await completed.json()) as { transaction: { id: string }; subscription: { id: string } }
+
+const transaction = await paddle.transactions.get(checkout.transaction.id)
+const subscription = await paddle.subscriptions.get(checkout.subscription.id)
+// transaction.status === "completed", subscription.status === "trialing" (the fixture price has a trial)
 await emulator.close()
 ```
 

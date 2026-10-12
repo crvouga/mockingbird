@@ -44,25 +44,22 @@ npx mockingbird-flex serve --port 8792 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-flex"
+import { createServer } from "@crvouga/mockingbird-service-flex/server"
 
-const flex = createRuntime({
+// Test setup: the emulator, posting signed webhooks to the app's handler.
+const server = await createServer({
   webhooks: {
     url: "http://127.0.0.1:3000/billing/webhooks/flex",
     secret: "fwhsec_ZmxleC1tb2NrLXNpZ25pbmcta2V5",
   },
 })
-const post = (path: string, body: unknown) =>
-  flex.fetch(
-    new Request(`http://flex.test${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: "Bearer fsk_test_suite" },
-      body: JSON.stringify(body),
-    }),
-  )
 
-const { checkout_session } = (await (
-  await post("/v1/checkout/sessions", {
+// Application code: FLEX_API_BASE_URL is server.url, FLEX_API_KEY any fsk_test_ key.
+const baseUrl = server.url
+const created = await fetch(`${baseUrl}/v1/checkout/sessions`, {
+  method: "POST",
+  headers: { "content-type": "application/json", authorization: "Bearer fsk_test_suite" },
+  body: JSON.stringify({
     checkout_session: {
       success_url: "https://app.test/done?session_id={CHECKOUT_SESSION_ID}",
       cancel_url: "https://app.test/cart",
@@ -71,10 +68,17 @@ const { checkout_session } = (await (
         { price_data: { product: "fprod_01m0tgysj4ahvf8fas60c2ef2d", unit_amount: 4500 }, quantity: 1 },
       ],
     },
-  })
-).json()) as { checkout_session: { checkout_session_id: string; url: string } }
-// …open checkout_session.url in the browser and pay with 4000 0512 3000 0072, or:
-await post(`/__admin/sessions/${checkout_session.checkout_session_id}/complete`, {})
+  }),
+})
+const { checkout_session } = (await created.json()) as {
+  checkout_session: { checkout_session_id: string; url: string }
+}
+
+// Test control: open checkout_session.url in the browser and pay with 4000 0512 3000 0072, or:
+await fetch(`${baseUrl}/__admin/sessions/${checkout_session.checkout_session_id}/complete`, {
+  method: "POST",
+})
+await server.close()
 ```
 
 ### Browser E2E suites

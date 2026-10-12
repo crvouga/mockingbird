@@ -7,10 +7,27 @@ Transport scaffold for Amazon Route 53 Resolver. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import {
+  ListResolverEndpointsCommand,
+  Route53ResolverClient,
+} from "@aws-sdk/client-route53resolver"
 import { createServer } from "@crvouga/mockingbird-service-route53resolver/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the Route 53 Resolver client your application already uses, pointed at the emulator.
+const server = await createServer()
+const resolver = new Route53ResolverClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// No Route 53 Resolver operation is implemented yet, so every command rejects.
+const failure = await resolver
+  .send(new ListResolverEndpointsCommand({}))
+  .catch((error: Error) => error.name)
+// "UnknownOperationException"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

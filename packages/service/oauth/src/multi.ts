@@ -3,6 +3,7 @@ import {
   type Clock,
   createClock,
   isAdminPath,
+  type MockControls,
   matchNamespacePath,
   resolveAdminPrefix,
 } from "@crvouga/mockingbird-service"
@@ -25,6 +26,8 @@ export type OAuthMultiRuntimeOptions = {
   sqlite?: SqliteClient
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   seed?: number | string
 }
 
@@ -103,6 +106,9 @@ export function createMultiRuntime(options: OAuthMultiRuntimeOptions): OAuthMult
       ...((runtimeOptions.seed ?? options.seed) !== undefined
         ? { seed: runtimeOptions.seed ?? options.seed }
         : {}),
+      ...((runtimeOptions.adminControls ?? options.adminControls) !== undefined
+        ? { adminControls: runtimeOptions.adminControls ?? options.adminControls }
+        : {}),
       mountPath: path,
       runtimeName: `oauth@${path}`,
     })
@@ -154,6 +160,17 @@ export function createMultiRuntime(options: OAuthMultiRuntimeOptions): OAuthMult
               "default")
         await reset(namespace)
         return json({ status: "ok", mounts: [...runtimes.keys()], namespace })
+      }
+      if (url.pathname === `${adminPrefix}/clock` && request.method === "POST") {
+        // One time for every mount: a provider's tokens are checked against another's clock.
+        url.searchParams.delete("mount")
+        const body = await request.text()
+        const answers = await Promise.all(
+          [...runtimes.values()].map((runtime) =>
+            runtime.fetch(new Request(url, { method: "POST", headers: request.headers, body })),
+          ),
+        )
+        return answers.find((answer) => !answer.ok) ?? (answers[0] as Response)
       }
       if (
         isAdminPath(url.pathname, adminPrefix) &&

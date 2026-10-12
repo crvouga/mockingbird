@@ -37,24 +37,32 @@ Point the app at it:
 | Python chat service (`llama_cloud_services`) | `LLAMA_CLOUD_BASE_URL=http://127.0.0.1:8805` (no `/api/v1`; verified below, no code change needed) |
 
 ```ts
+import LlamaCloud from "@llamaindex/llama-cloud"
 import { createRuntime } from "@crvouga/mockingbird-service-llamacloud"
 
-const llama = createRuntime({ pipelines: [{ name: "acme-member-kb-v1", projectName: "Default" }] })
-const admin = (path: string, body: unknown) =>
-  llama.fetch(
-    new Request(`http://llamacloud.test/__admin${path}`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+// Test setup: a pipeline, and what retrieval answers for queries mentioning "apob".
+// Anything else is ranked by term overlap over the documents the app upserted.
+const emulator = createRuntime({ pipelines: [{ name: "acme-member-kb-v1", projectName: "Default" }] })
+await emulator.fetch(
+  new Request("http://llamacloud.test/__admin/retrieval", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      match: { contains: "apob" },
+      nodes: [{ text: "ApoB counts atherogenic particles.", score: 0.92, metadata: { file_name: "apob.md" } }],
     }),
-  )
+  }),
+)
 
-// Script what the chat tool retrieves for queries mentioning "apob"…
-await admin("/retrieval", {
-  match: { contains: "apob" },
-  nodes: [{ text: "ApoB counts atherogenic particles.", score: 0.92, metadata: { file_name: "apob.md" } }],
+// The LlamaCloud SDK your application already uses. Only its fetch changes: requests reach
+// the emulator in this process instead of api.cloud.llamaindex.ai.
+const llama = new LlamaCloud({
+  apiKey: "llx-mockingbird",
+  fetch: (url: RequestInfo | URL, init?: RequestInit) => emulator.fetch(new Request(url, init)),
 })
-// …anything else is ranked by term overlap over the documents the app upserted.
+const [pipeline] = await llama.pipelines.list({ project_name: "Default", pipeline_name: "acme-member-kb-v1" })
+const { retrieval_nodes } = await llama.pipelines.retrieve(pipeline?.id ?? "", { query: "What does ApoB measure?" })
+console.log(retrieval_nodes[0]?.node.text, retrieval_nodes[0]?.score) // ApoB counts atherogenic particles. 0.92
 ```
 
 ### Routes

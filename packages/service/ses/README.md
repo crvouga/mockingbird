@@ -7,10 +7,29 @@ Stateful local emulator of Amazon Simple Email Service. ESM; Node 22+ or Bun 1.2
 ## Usage
 
 ```ts
+import { SendEmailCommand, SESClient, VerifyEmailIdentityCommand } from "@aws-sdk/client-ses"
 import { createServer } from "@crvouga/mockingbird-service-ses/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: start the emulator and point the SDK's endpoint at it.
+const server = await createServer()
+const ses = new SESClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the SES SDK calls it already makes.
+await ses.send(new VerifyEmailIdentityCommand({ EmailAddress: "billing@example.com" }))
+const sent = await ses.send(
+  new SendEmailCommand({
+    Source: "billing@example.com",
+    Destination: { ToAddresses: ["ada@example.com"] },
+    Message: { Subject: { Data: "Receipt" }, Body: { Text: { Data: "Thanks for your order." } } },
+  }),
+)
+console.log(sent.MessageId) // an emulator-issued message id
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

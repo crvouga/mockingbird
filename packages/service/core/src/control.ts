@@ -1,7 +1,26 @@
 import type { Clock } from "./clock.js"
-import type { FaultRegistry, FaultRule } from "./faults.js"
+import {
+  assertSnapshotDocument,
+  CONTROL_HEADER_REFERENCE,
+  CONTROL_HEADERS,
+  ControlError,
+  type ControlPlan,
+  durationMs,
+  isRecord,
+  KEY_PATTERN,
+  normalizeClock,
+  normalizeControls,
+  normalizeLatency,
+  parseInstant,
+  type SnapshotDocument,
+} from "./controls.js"
+import type { FaultPresetList } from "./faults.js"
 import type { Journal } from "./journal.js"
 import type { Metrics } from "./metrics.js"
+import { createNamespaceControls, type NamespaceControls } from "./namespace-controls.js"
+import { ADMIN_ROUTE_REFERENCE } from "./surface.js"
+
+export { parseDuration } from "./controls.js"
 
 /** Unauthenticated readiness probe, served ahead of every vendor auth gate. */
 export const HEALTH_PATH = "/__admin/health"
@@ -44,9 +63,93 @@ export const assertAdminPrefixAvailable = (prefix: string, paths: readonly strin
 }
 
 /** Carries the admin key, which is separate from any vendor credential. */
-export const ADMIN_KEY_HEADER = "x-mockingbird-admin-key"
+export const ADMIN_KEY_HEADER = CONTROL_HEADERS.adminKey
 /** Selects the isolated namespace a request reads and writes. */
-export const NAMESPACE_HEADER = "x-mockingbird-namespace"
+export const NAMESPACE_HEADER = CONTROL_HEADERS.namespace
+/** Where the admin controls are documented, for people and agents. */
+export const ADMIN_DOCS_URL = "https://mockingbird.chrisvouga.dev/docs/admin-controls"
+
+/**
+ * The guide's page for each control, with the shared routes (by first path segment) and the
+ * request headers that page defines. `GET /__admin` links every route and header to its page,
+ * and the guide in `docs/admin-controls/` is checked against this list.
+ */
+export const ADMIN_CONTROL_PAGES: readonly {
+  page: string
+  title: string
+  routes: readonly string[]
+  headers: readonly string[]
+}[] = [
+  {
+    page: "namespaces",
+    title: "Namespaces",
+    routes: ["/namespaces", "/credentials"],
+    headers: [CONTROL_HEADERS.namespace],
+  },
+  { page: "reset", title: "Reset", routes: ["/reset"], headers: [CONTROL_HEADERS.reset] },
+  {
+    page: "snapshot-and-restore",
+    title: "Snapshot and restore",
+    routes: ["/snapshots"],
+    headers: [CONTROL_HEADERS.restore, CONTROL_HEADERS.snapshot],
+  },
+  {
+    page: "clock",
+    title: "Clock",
+    routes: ["/clock"],
+    headers: [CONTROL_HEADERS.time, CONTROL_HEADERS.advance],
+  },
+  {
+    page: "checkpoints-and-branches",
+    title: "Checkpoints and branches",
+    routes: ["/timeline", "/checkpoints", "/branches"],
+    headers: [CONTROL_HEADERS.branch, CONTROL_HEADERS.at],
+  },
+  { page: "faults", title: "Faults", routes: ["/faults"], headers: [CONTROL_HEADERS.fault] },
+  {
+    page: "latency-and-timeouts",
+    title: "Latency and timeouts",
+    routes: ["/latency"],
+    headers: [CONTROL_HEADERS.delay, CONTROL_HEADERS.timeout, CONTROL_HEADERS.virtualTime],
+  },
+  {
+    page: "seed-and-determinism",
+    title: "Seed and determinism",
+    routes: [],
+    headers: [CONTROL_HEADERS.seed],
+  },
+  { page: "control-document", title: "The control document", routes: ["/controls"], headers: [] },
+  { page: "boot", title: "Boot", routes: [], headers: [] },
+  { page: "request-headers", title: "Request headers", routes: [], headers: [] },
+  {
+    page: "journal-and-state",
+    title: "Journal, metrics and state",
+    routes: ["/requests", "/metrics", "/state", "/ui"],
+    headers: [],
+  },
+  {
+    page: "reference",
+    title: "Reference",
+    routes: ["/", "/health"],
+    headers: [CONTROL_HEADERS.adminKey],
+  },
+]
+
+const pageUrl = (page: string): string => `${ADMIN_DOCS_URL}/${page}`
+
+/** The guide page that defines a shared route (`"GET /snapshots/:id"`), if it is one. */
+const routeDocs = (route: string): string | undefined => {
+  if (!Object.hasOwn(ADMIN_ROUTE_REFERENCE, route)) return undefined
+  const path = route.slice(route.indexOf(" ") + 1)
+  const segment = `/${path.split("/")[1] ?? ""}`
+  const found = ADMIN_CONTROL_PAGES.find((each) => each.routes.includes(segment))
+  return found && pageUrl(found.page)
+}
+
+const headerDocs = (header: string): string | undefined => {
+  const found = ADMIN_CONTROL_PAGES.find((each) => each.headers.includes(header))
+  return found && pageUrl(found.page)
+}
 
 export type AdminRequest = {
   request: Request
@@ -67,13 +170,41 @@ export type AdminRoute = (request: AdminRequest) => Response | Promise<Response>
  */
 export type AdminRoutes = Record<string, AdminRoute>
 
+/** What `GET /__admin/snapshots` lists for each snapshot. */
+export type SnapshotInfo = {
+  id: string
+  namespace: string
+  /** Stored rows in the snapshot. */
+  records: number
+  /** The namespace clock when it was taken, epoch ms. */
+  at: number
+  /** Whether `GET /snapshots/:id` can return it as a {@link SnapshotDocument}. */
+  portable: boolean
+}
+
+/** Named snapshots of a namespace. Ids are unique within a namespace, never across them. */
+export type SnapshotStore = {
+  /** Capture the namespace now. Reusing an id replaces that snapshot. */
+  create(namespace: string, id?: string): SnapshotInfo
+  list(namespace: string): SnapshotInfo[]
+  get(namespace: string, id: string): SnapshotInfo | undefined
+  /** The snapshot as portable JSON; `undefined` when there is none or it cannot leave the process. */
+  export(namespace: string, id: string): SnapshotDocument | undefined
+  /** Store a document as a snapshot without restoring it. Throws {@link ControlError}. */
+  import(namespace: string, id: string | undefined, document: SnapshotDocument): SnapshotInfo
+  /** Replace the namespace with the snapshot. `false` when there is none. */
+  restore(namespace: string, id: string): boolean
+  remove(namespace: string, id: string): boolean
+  /** Forget one namespace's snapshots, or every namespace's. */
+  clear(namespace?: string): void
+}
+
 export type ControlContext = {
   name: string
   startedAt: number
   wallNow: () => number
   clock: Clock
   namespaceClock?(namespace: string): Clock
-  faults: FaultRegistry
   metrics: Metrics
   journal: Journal
   defaultNamespace: string
@@ -101,8 +232,19 @@ export type ControlContext = {
   routes: AdminRoutes
   adminPrefix?: string
   adminKey: string | undefined
-  /** Expand a named fault preset; enables `POST /faults {"preset": "<name>"}`. */
-  applyPreset?(name: string, namespace: string, overrides: Partial<FaultRule>): FaultRule[]
+  /** Reported by `GET /__admin`. */
+  version?: string
+  /**
+   * Per-namespace seed, clock settings, latency and faults. Default: controls over this
+   * context's clock, with the standard presets and no boot controls.
+   */
+  controls?: NamespaceControls
+  /** Named snapshots. Default: pinned `timeTravel` checkpoints, which are not portable. */
+  snapshots?: SnapshotStore
+  /** Apply a control document, including its `snapshot`. Default: `controls.apply`. */
+  applyControls?(namespace: string, plan: ControlPlan): void
+  /** Reset a namespace and forget it. Default: reset. */
+  dropNamespace?(namespace: string): Promise<void>
 }
 
 export type ControlPlane = {
@@ -114,6 +256,9 @@ export type ControlPlane = {
    * silently reroute a request.
    */
   namespaceOf(request: Request): string
+  /** The per-namespace controls behind the routes. */
+  readonly controls: NamespaceControls
+  readonly snapshots: SnapshotStore
 }
 
 const json = (status: number, body: unknown): Response =>
@@ -123,33 +268,11 @@ const json = (status: number, body: unknown): Response =>
   })
 
 /** Admin errors use one documented shape, distinct from any vendor's error body. */
-const adminError = (status: number, message: string): Response =>
+export const adminError = (status: number, message: string): Response =>
   json(status, { error: { type: "mockingbird_admin", message } })
 
-const UNITS: Record<string, number> = {
-  ms: 1,
-  s: 1000,
-  m: 60_000,
-  h: 3_600_000,
-  d: 86_400_000,
-}
-
-/** Milliseconds from a number, or a duration like `"90s"`, `"15m"`, `"2h"`, `"3d"`. */
-export const parseDuration = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value !== "string") return undefined
-  const match = /^(-?\d+(?:\.\d+)?)\s*(ms|s|m|h|d)$/.exec(value.trim())
-  if (!match) return undefined
-  return Number(match[1]) * (UNITS[match[2] as string] as number)
-}
-
-/** Epoch milliseconds from a number or an ISO-8601 string. */
-const parseInstant = (value: unknown): number | undefined => {
-  if (typeof value === "number" && Number.isFinite(value)) return value
-  if (typeof value !== "string") return undefined
-  const parsed = Date.parse(value)
-  return Number.isNaN(parsed) ? undefined : parsed
-}
+/** Parameters before literals lose, so `/faults/presets` is never read as `/faults/:id`. */
+const paramCount = (pattern: string): number => (pattern.match(/\/:/g) ?? []).length
 
 const matchRoute = (pattern: string, path: string): Record<string, string> | undefined => {
   const want = pattern.split("/").filter(Boolean)
@@ -171,20 +294,100 @@ const readJson = async (request: Request): Promise<unknown> => {
   return JSON.parse(text) as unknown
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+/** Snapshots as pinned Timeline checkpoints, for engines whose state is not rows of JSON. */
+const timelineSnapshots = (timeTravel: ControlContext["timeTravel"]): SnapshotStore => {
+  const stored = new Map<string, Map<string, { checkpoint: string; info: SnapshotInfo }>>()
+  const counters = new Map<string, number>()
+  const of = (namespace: string) => {
+    let found = stored.get(namespace)
+    if (!found) {
+      found = new Map()
+      stored.set(namespace, found)
+    }
+    return found
+  }
+  const remove = (namespace: string, id: string): boolean => {
+    const found = stored.get(namespace)?.get(id)
+    if (!found) return false
+    stored.get(namespace)?.delete(id)
+    timeTravel.release(namespace, found.checkpoint)
+    return true
+  }
+  return {
+    create(namespace, given) {
+      const point = timeTravel.checkpoint(namespace, "main")
+      timeTravel.retain(namespace, point.id)
+      let id = given
+      if (id === undefined) {
+        let next = counters.get(namespace) ?? 0
+        do id = `snap_${++next}`
+        while (of(namespace).has(id))
+        counters.set(namespace, next)
+      } else remove(namespace, id)
+      const info = { id, namespace, records: point.records ?? 0, at: point.at, portable: false }
+      of(namespace).set(id, { checkpoint: point.id, info })
+      return info
+    },
+    list: (namespace) => [...(stored.get(namespace)?.values() ?? [])].map((each) => each.info),
+    get: (namespace, id) => stored.get(namespace)?.get(id)?.info,
+    export: () => undefined,
+    import() {
+      throw new ControlError("this emulator's snapshots cannot be imported or exported")
+    },
+    restore(namespace, id) {
+      const found = stored.get(namespace)?.get(id)
+      if (!found) return false
+      timeTravel.checkout(found.checkpoint, { namespace, branch: "main" })
+      return true
+    },
+    remove,
+    clear(namespace) {
+      for (const [name, snapshots] of stored) {
+        if (namespace !== undefined && name !== namespace) continue
+        for (const id of [...snapshots.keys()]) {
+          try {
+            remove(name, id)
+          } catch {
+            // The checkpoint went with the history a reset discarded.
+            snapshots.delete(id)
+          }
+        }
+        stored.delete(name)
+        counters.delete(name)
+      }
+    },
+  }
+}
 
 export const createControlPlane = (context: ControlContext): ControlPlane => {
   const adminPrefix = resolveAdminPrefix(context.adminPrefix)
-  // Legacy snapshot ids are opaque aliases to pinned Timeline checkpoints. Timeline remains the
-  // only history owner; this map carries no state value and can be removed with the alias.
-  const snapshots = new Map<string, { namespace: string; checkpoint: string }>()
-  let snapshotCounter = 0
+  const controls =
+    context.controls ??
+    createNamespaceControls({
+      seed: 0,
+      clock: (namespace) => context.namespaceClock?.(namespace) ?? context.clock,
+    })
+  const { faults } = controls
+  const snapshots = context.snapshots ?? timelineSnapshots(context.timeTravel)
+  /** A store the runtime owns is cleared by the runtime's own reset. */
+  const forgetSnapshots = (namespace?: string) => {
+    if (!context.snapshots) snapshots.clear(namespace)
+  }
+  const applyControls =
+    context.applyControls ??
+    ((namespace: string, plan: ControlPlan) => {
+      if (plan.snapshot !== undefined)
+        throw new ControlError("this emulator cannot start from a snapshot document")
+      controls.apply(namespace, plan)
+    })
 
   const headerNamespace = (request: Request): string =>
     request.headers.get(NAMESPACE_HEADER) ?? context.defaultNamespace
   const adminNamespace = (request: Request, url: URL): string =>
     url.searchParams.get("namespace") ?? headerNamespace(request)
+  /** Whether the caller named a namespace, as opposed to landing on the default one. */
+  const explicitNamespace = (request: Request, url: URL): boolean =>
+    url.searchParams.has("namespace") || request.headers.has(NAMESPACE_HEADER)
 
   const health = (): Response => {
     return json(200, {
@@ -199,118 +402,204 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
     })
   }
 
+  const describe = (namespace: string) => ({
+    ...controls.describe(namespace),
+    snapshots: snapshots.list(namespace),
+  })
+
+  /** Run a control change, answering `400` for a {@link ControlError}. */
+  const guard = (run: () => Response): Response => {
+    try {
+      return run()
+    } catch (error) {
+      if (error instanceof ControlError) return adminError(400, error.message)
+      throw error
+    }
+  }
+
+  const presetList = (): FaultPresetList => ({
+    presets: Object.entries(controls.presets).map(([name, preset]) => ({ name, ...preset })),
+  })
+
+  const removeFault = (id: string, namespace: string, everyNamespace: boolean): Response =>
+    faults.remove(id, everyNamespace ? undefined : namespace)
+      ? json(200, { status: "ok" })
+      : adminError(404, `no fault ${id}`)
+
   const builtin: AdminRoutes = {
     "GET /health": health,
-    "GET /": () =>
-      json(200, {
+    "GET /": ({ namespace }) => {
+      const routes = [...Object.keys(builtin), ...Object.keys(context.routes)].sort()
+      const reference: Record<string, string> = ADMIN_ROUTE_REFERENCE
+      return json(200, {
         service: context.name,
-        routes: [...Object.keys(builtin), ...Object.keys(context.routes)].sort(),
+        ...(context.version !== undefined ? { version: context.version } : {}),
+        namespace,
+        adminPrefix,
+        docs: ADMIN_DOCS_URL,
+        guide: ADMIN_CONTROL_PAGES.map((each) => ({ title: each.title, docs: pageUrl(each.page) })),
+        routes,
+        reference: routes.map((route) => {
+          const docs = routeDocs(route)
+          return {
+            route,
+            summary: reference[route] ?? `Specific to ${context.name}.`,
+            ...(docs !== undefined ? { docs } : {}),
+          }
+        }),
+        headers: CONTROL_HEADER_REFERENCE.map((each) => ({
+          ...each,
+          docs: headerDocs(each.header) ?? ADMIN_DOCS_URL,
+        })),
+      })
+    },
+
+    "GET /controls": ({ namespace }) => json(200, describe(namespace)),
+    "PUT /controls": ({ body, namespace }) =>
+      guard(() => {
+        applyControls(namespace, normalizeControls(body ?? {}, "controls"))
+        return json(200, describe(namespace))
       }),
+    "DELETE /controls": ({ namespace }) => {
+      controls.reboot(namespace, "controls")
+      return json(200, describe(namespace))
+    },
 
     "POST /reset": async ({ url, namespace }) => {
       const target = url.searchParams.get("all") === "1" ? "*" : namespace
       await context.reset(target)
+      forgetSnapshots(target === "*" ? undefined : target)
       return json(200, { status: "ok", reset: target === "*" ? context.namespaces() : [target] })
     },
 
     "GET /namespaces": () =>
       json(200, { default: context.defaultNamespace, namespaces: context.namespaces() }),
-
-    "GET /clock": ({ namespace }) =>
-      json(200, (context.namespaceClock?.(namespace) ?? context.clock).state()),
-    "POST /clock": ({ body, namespace }) => {
-      const clock = context.namespaceClock?.(namespace) ?? context.clock
-      if (!isRecord(body)) return adminError(400, "expected a JSON object")
-      if (body.reset === true) clock.reset()
-      // Freeze before applying mutations so a compound `{ set, freeze: true }` request is
-      // atomic. Setting a live clock adjusts its offset; freezing it afterward would read the
-      // wall clock again and could pin it a millisecond past the requested instant.
-      if (body.freeze === true) clock.freeze()
-      if (body.set !== undefined) {
-        const instant = parseInstant(body.set)
-        if (instant === undefined) return adminError(400, "set: expected epoch ms or ISO-8601")
-        clock.set(instant)
-      }
-      if (body.advance !== undefined) {
-        const delta = parseDuration(body.advance)
-        if (delta === undefined) return adminError(400, 'advance: expected ms or "15m"-style')
-        clock.advance(delta)
-      }
-      if (body.freeze === false) clock.unfreeze()
-      return json(200, clock.state())
+    "DELETE /namespaces/:name": async ({ params }) => {
+      const name = params.name as string
+      if (!KEY_PATTERN.test(name)) return adminError(400, "invalid namespace")
+      if (context.dropNamespace) await context.dropNamespace(name)
+      else await context.reset(name)
+      forgetSnapshots(name)
+      return json(200, { status: "ok", namespaces: context.namespaces() })
     },
 
-    "GET /faults": () => json(200, { faults: context.faults.list() }),
-    "POST /faults": ({ body, namespace }) => {
-      if (isRecord(body) && typeof body.preset === "string") {
-        if (!context.applyPreset) return adminError(400, `${context.name} has no fault presets`)
-        const { preset, ...overrides } = body
-        try {
-          return json(201, {
-            preset,
-            rules: context.applyPreset(preset, namespace, overrides as Partial<FaultRule>),
-          })
-        } catch (error) {
-          return adminError(404, error instanceof Error ? error.message : String(error))
-        }
-      }
-      if (
-        !isRecord(body) ||
-        (typeof body.status !== "number" &&
-          typeof body.delayMs !== "number" &&
-          typeof body.latencyMs !== "number" &&
-          body.drop !== true &&
-          typeof body.effect !== "string")
-      ) {
-        return adminError(
-          400,
-          "a fault needs a numeric status, a delayMs/latencyMs, drop: true, an effect, or a preset",
+    "GET /clock": ({ namespace }) => json(200, controls.clock(namespace)),
+    "POST /clock": ({ body, namespace }) =>
+      guard(() => {
+        if (!isRecord(body)) return adminError(400, "expected a JSON object")
+        const { advance, reset, ...rest } = body
+        if (reset !== undefined && typeof reset !== "boolean")
+          return adminError(400, "reset: expected a boolean")
+        return json(
+          200,
+          controls.changeClock(namespace, {
+            ...normalizeClock(rest),
+            ...(advance !== undefined ? { advanceMs: durationMs(advance, "advance", true) } : {}),
+            ...(reset === true ? { reset: true } : {}),
+          }),
         )
-      }
-      const rule = {
-        // Scoped to the caller's namespace unless it asks for every one, so one worker's
-        // injected failure never lands on another's request.
-        namespace,
-        ...body,
-        id: typeof body.id === "string" ? body.id : `fault_${context.faults.list().length + 1}`,
-      } as FaultRule
-      return json(201, context.faults.add(rule))
+      }),
+
+    "GET /latency": ({ namespace }) => {
+      controls.ensure(namespace)
+      return json(200, controls.latency.get(namespace))
     },
-    "DELETE /faults": ({ url }) => {
-      const id = url.searchParams.get("id")
-      if (id === null) {
-        context.faults.clear()
-        return json(200, { status: "ok" })
-      }
-      return context.faults.remove(id)
-        ? json(200, { status: "ok" })
-        : adminError(404, `no fault ${id}`)
+    "PUT /latency": ({ body, namespace }) =>
+      guard(() => {
+        controls.ensure(namespace)
+        return json(200, controls.latency.set(namespace, normalizeLatency(body ?? {})))
+      }),
+    "DELETE /latency": ({ namespace }) => {
+      controls.ensure(namespace)
+      controls.latency.clear(namespace)
+      return json(200, controls.latency.get(namespace))
     },
 
-    "POST /snapshots": ({ namespace }) => {
-      const point = context.timeTravel.checkpoint(namespace, "main")
-      context.timeTravel.retain(namespace, point.id)
-      snapshotCounter++
-      const id = `snap_${snapshotCounter}`
-      snapshots.set(id, { namespace, checkpoint: point.id })
-      return json(201, { id, namespace, records: point.records ?? 0 })
+    "GET /faults": ({ url, namespace }) => {
+      controls.ensure(namespace)
+      return json(200, {
+        faults: faults.list(url.searchParams.get("all") === "1" ? undefined : namespace),
+      })
     },
-    "POST /snapshots/:id/restore": ({ params, namespace }) => {
-      const alias = snapshots.get(params.id as string)
-      if (!alias) return adminError(404, `no snapshot ${params.id}`)
-      if (alias.namespace !== namespace) {
-        return adminError(409, `snapshot ${params.id} belongs to namespace ${alias.namespace}`)
-      }
-      context.timeTravel.checkout(alias.checkpoint, { namespace, branch: "main" })
-      return json(200, { status: "ok", id: params.id, namespace })
-    },
-    "DELETE /snapshots/:id": ({ params }) => {
-      const id = params.id as string
-      const alias = snapshots.get(id)
-      if (!alias) return adminError(404, `no snapshot ${id}`)
-      snapshots.delete(id)
-      context.timeTravel.release(alias.namespace, alias.checkpoint)
+    "POST /faults": ({ body, namespace }) =>
+      guard(() => {
+        const preset = isRecord(body) && typeof body.preset === "string" ? body.preset : undefined
+        if (preset !== undefined && !controls.presets[preset])
+          return adminError(
+            404,
+            `no fault preset ${JSON.stringify(preset)}; GET ${adminPrefix}/faults/presets`,
+          )
+        const added = controls.addFault(namespace, body)
+        return preset !== undefined ? json(201, { preset, rules: added }) : json(201, added[0])
+      }),
+    "PUT /faults": ({ body, namespace }) =>
+      guard(() => {
+        const list = isRecord(body) ? body.faults : undefined
+        if (!Array.isArray(list)) return adminError(400, 'expected {"faults": [...]}')
+        controls.apply(namespace, normalizeControls({ faults: list }))
+        return json(200, { faults: faults.list(namespace) })
+      }),
+    "DELETE /faults": ({ url, namespace }) => {
+      controls.ensure(namespace)
+      const everyNamespace = url.searchParams.get("all") === "1"
+      const id = url.searchParams.get("id")
+      if (id !== null) return removeFault(id, namespace, everyNamespace)
+      faults.clear(everyNamespace ? undefined : namespace)
       return json(200, { status: "ok" })
+    },
+    "GET /faults/presets": () => json(200, presetList()),
+    "POST /faults/presets/:name": ({ params, body, namespace }) =>
+      guard(() => {
+        const name = params.name as string
+        if (!controls.presets[name])
+          return adminError(404, `no fault preset ${name}; GET ${adminPrefix}/faults/presets`)
+        return json(201, {
+          preset: name,
+          rules: controls.addFault(namespace, { ...(isRecord(body) ? body : {}), preset: name }),
+        })
+      }),
+    "GET /faults/:id": ({ params, namespace }) => {
+      controls.ensure(namespace)
+      const found = faults.get(params.id as string, namespace)
+      return found ? json(200, found) : adminError(404, `no fault ${params.id}`)
+    },
+    "DELETE /faults/:id": ({ params, url, namespace }) => {
+      controls.ensure(namespace)
+      return removeFault(params.id as string, namespace, url.searchParams.get("all") === "1")
+    },
+
+    "GET /snapshots": ({ namespace }) => json(200, { snapshots: snapshots.list(namespace) }),
+    "POST /snapshots": ({ body, namespace }) =>
+      guard(() => {
+        const id = isRecord(body) ? body.name : undefined
+        if (id !== undefined && (typeof id !== "string" || !KEY_PATTERN.test(id)))
+          return adminError(400, `name: must match ${KEY_PATTERN}`)
+        return json(201, snapshots.create(namespace, id))
+      }),
+    "GET /snapshots/:id": ({ params, namespace }) => {
+      const id = params.id as string
+      const info = snapshots.get(namespace, id)
+      if (!info) return adminError(404, `no snapshot ${id} in namespace ${namespace}`)
+      return json(200, snapshots.export(namespace, id) ?? info)
+    },
+    "PUT /snapshots/:id": ({ params, body, namespace }) =>
+      guard(() => {
+        const id = params.id as string
+        if (!KEY_PATTERN.test(id)) return adminError(400, `id: must match ${KEY_PATTERN}`)
+        return json(200, snapshots.import(namespace, id, assertSnapshotDocument(body)))
+      }),
+    "POST /snapshots/:id/restore": ({ params, namespace }) =>
+      guard(() => {
+        const id = params.id as string
+        if (!snapshots.restore(namespace, id))
+          return adminError(404, `no snapshot ${id} in namespace ${namespace}`)
+        return json(200, { status: "ok", id, namespace })
+      }),
+    "DELETE /snapshots/:id": ({ params, namespace }) => {
+      const id = params.id as string
+      return snapshots.remove(namespace, id)
+        ? json(200, { status: "ok" })
+        : adminError(404, `no snapshot ${id} in namespace ${namespace}`)
     },
 
     "GET /timeline": ({ namespace }) => json(200, context.timeTravel.inspect(namespace)),
@@ -355,21 +644,27 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
       const status = url.searchParams.get("status")
       const since = url.searchParams.get("since")
       const limit = url.searchParams.get("limit")
-      const sinceMs =
-        since === null ? undefined : parseInstant(/^\d+$/.test(since) ? Number(since) : since)
+      const sinceMs = since === null ? undefined : parseInstant(since)
       if (since !== null && sinceMs === undefined) {
         return adminError(400, "since: expected epoch ms or ISO-8601")
       }
-      if (status !== null && !/^\d{3}$/.test(status))
-        return adminError(400, "status: expected an HTTP status")
+      // `0` is a status here: it is how the journal records a dropped connection.
+      if (status !== null && !/^(0|\d{3})$/.test(status))
+        return adminError(400, "status: expected an HTTP status, or 0 for a dropped connection")
       if (limit !== null && !/^\d+$/.test(limit)) return adminError(400, "limit: expected a count")
       const operationId = url.searchParams.get("operationId")
+      const method = url.searchParams.get("method")
+      const path = url.searchParams.get("path")
+      const faultId = url.searchParams.get("faultId")
       const everyNamespace = url.searchParams.get("all") === "1"
       return json(200, {
         size: context.journal.size,
         requests: context.journal.list({
           ...(everyNamespace ? {} : { namespace }),
           ...(operationId !== null ? { operationId } : {}),
+          ...(method !== null ? { method } : {}),
+          ...(path !== null ? { path } : {}),
+          ...(faultId !== null ? { faultId } : {}),
           ...(status !== null ? { status: Number(status) } : {}),
           ...(sinceMs !== undefined ? { since: sinceMs } : {}),
           ...(limit !== null ? { limit: Number(limit) } : {}),
@@ -381,9 +676,11 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
       return json(200, { status: "ok" })
     },
 
-    "GET /metrics": () => json(200, context.metrics.report()),
-    "DELETE /metrics": () => {
-      context.metrics.reset()
+    // Totals across every namespace, unless the caller names one.
+    "GET /metrics": ({ request, url, namespace }) =>
+      json(200, context.metrics.report(explicitNamespace(request, url) ? namespace : undefined)),
+    "DELETE /metrics": ({ request, url, namespace }) => {
+      context.metrics.reset(explicitNamespace(request, url) ? namespace : undefined)
       return json(200, { status: "ok" })
     },
   }
@@ -394,15 +691,18 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
     if (isAdminPath(path, "/ns") || isAdminPath(path, "/blobs"))
       throw new Error(`admin route ${key} overlaps an internal transport`)
   }
-  const routes = [...Object.entries(builtin), ...Object.entries(context.routes)].map(
-    ([key, handler]) => {
+  const routes = [...Object.entries(builtin), ...Object.entries(context.routes)]
+    .map(([key, handler]) => {
       const space = key.indexOf(" ")
       return { method: key.slice(0, space), pattern: key.slice(space + 1), handler }
-    },
-  )
+    })
+    // Stable: among equally specific routes the shared ones still come first.
+    .sort((a, b) => paramCount(a.pattern) - paramCount(b.pattern))
 
   return {
     namespaceOf: headerNamespace,
+    controls,
+    snapshots,
     async handle(request) {
       const url = new URL(request.url)
       if (url.pathname === `${adminPrefix}/health` && request.method === "GET") {
@@ -437,7 +737,7 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
           return adminError(400, "request body is not valid JSON")
         }
         const namespace = adminNamespace(request, url)
-        if (!/^[A-Za-z0-9_.-]{1,64}$/.test(namespace)) return adminError(400, "invalid namespace")
+        if (!KEY_PATTERN.test(namespace)) return adminError(400, "invalid namespace")
         return route.handler({
           request,
           url,

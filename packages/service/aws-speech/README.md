@@ -34,17 +34,54 @@ export AWS_ENDPOINT_URL_TRANSCRIBE=http://127.0.0.1:8797
 ```
 
 ```ts
+import { PollyClient, SynthesizeSpeechCommand } from "@aws-sdk/client-polly"
+import {
+  StartStreamTranscriptionCommand,
+  TranscribeStreamingClient,
+} from "@aws-sdk/client-transcribe-streaming"
 import { createServer } from "@crvouga/mockingbird-service-aws-speech/server"
 
-const speech = await createServer({ port: 8797 })
-// What the next voice session "hears": partials while audio streams in, then the final.
-await fetch(`${speech.url}/__admin/transcripts`, {
+// Test setup: start the emulator and script what the next voice session "hears":
+// partials while audio streams in, then the final.
+const emulator = await createServer()
+await fetch(`${emulator.url}/__admin/transcripts`, {
   method: "PUT",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({ match: { any: true }, partials: ["I have", "I have a headache"], final: "I have a headache." }),
 })
-// …the backend's /v2/chatbot/voice turn transcribes, replies, and speaks through Polly…
-await speech.close()
+
+// The AWS SDK clients your application uses; only the endpoint changes.
+const config = {
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+}
+const transcribe = new TranscribeStreamingClient(config)
+const polly = new PollyClient(config)
+
+// Application code: a voice turn transcribes the member's audio, then speaks the reply.
+const { TranscriptResultStream } = await transcribe.send(
+  new StartStreamTranscriptionCommand({
+    LanguageCode: "en-US",
+    MediaEncoding: "pcm",
+    MediaSampleRateHertz: 16_000,
+    AudioStream: (async function* () {
+      yield { AudioEvent: { AudioChunk: new Uint8Array(3_200) } }
+    })(),
+  }),
+)
+const heard: string[] = []
+for await (const event of TranscriptResultStream ?? []) {
+  for (const result of event.TranscriptEvent?.Transcript?.Results ?? [])
+    heard.push(result.Alternatives?.[0]?.Transcript ?? "")
+}
+// heard: ["I have", "I have a headache", "I have a headache."]
+const { AudioStream } = await polly.send(
+  new SynthesizeSpeechCommand({ VoiceId: "Matthew", OutputFormat: "mp3", Text: "Rest and drink water." }),
+)
+const audio = await AudioStream?.transformToByteArray() // deterministic MP3 frames
+
+await emulator.close() // after the test
 ```
 
 ### Protocols

@@ -41,22 +41,42 @@ npx mockingbird-fullscript serve --port 8819 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-fullscript"
+import { createServer } from "@crvouga/mockingbird-service-fullscript/server"
 
-const fullscript = createRuntime({
+// Test setup: the emulator, a lab order moved to results, and the code an OAuth redirect delivers.
+const server = await createServer({
   webhooks: { url: "http://127.0.0.1:4000/v1/fullscript/webhooks", secret: "whsec", challenge: "chal" },
 })
 const admin = (path: string, body: unknown) =>
-  fullscript.fetch(
-    new Request(`https://fullscript.test/__admin${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  )
+  fetch(`${server.url}/__admin${path}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
 const order = (await (await admin("/lab-orders", { patientId: "fs_pat_1", treatmentPlanId: "tp_1" })).json()) as { id: string }
 await admin(`/lab-orders/${order.id}/transition`, { to: "purchased" }) // order.placed + lab_order.updated
 await admin(`/lab-orders/${order.id}/transition`, { to: "results_ready" }) // results + PDF URLs
+const { code } = (await (await admin("/oauth/codes", { clientId: "emr-client" })).json()) as { code: string }
+
+// Application code: FULLSCRIPT_API_URL is server.url. Exchange the code, then read the order.
+const apiUrl = server.url
+const token = await fetch(`${apiUrl}/api/oauth/token`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    grant_type: "authorization_code",
+    client_id: "emr-client",
+    client_secret: "emr-secret",
+    code,
+  }),
+})
+const { oauth } = (await token.json()) as { oauth: { access_token: string } }
+const read = await fetch(`${apiUrl}/api/clinic/labs/orders/${order.id}`, {
+  headers: { authorization: `Bearer ${oauth.access_token}` },
+})
+const { order: labOrder } = (await read.json()) as { order: { state: string } }
+// labOrder.state is "results_ready"; labOrder.results[].pdf_url are served by the emulator.
+await server.close()
 ```
 
 ### Routes

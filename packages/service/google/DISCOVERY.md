@@ -34,6 +34,7 @@ repository; live parity is an additional oracle check, not a substitute for the 
 
 - `GET /__admin/health`
 - `GET /__admin`
+- `GET /__admin/controls`
 - `GET /__admin/state`
 - `GET /__admin/requests`
 - `GET /__admin/metrics`
@@ -43,6 +44,28 @@ repository; live parity is an additional oracle check, not a substitute for the 
 For HTTP services, use `x-mockingbird-namespace` (or the documented credential/path carrier) so
 parallel tests do not share state. Admin state, journal, metrics and fault-preset endpoints are
 designed for assertions and diagnosis by consuming test suites.
+
+## Admin controls
+
+Every HTTP emulator takes the same controls, and each means the same thing at boot
+(`createRuntime({ adminControls })`, `serve --admin-controls`), over `/__admin`, and in a request header:
+
+| Control | Admin API | Request header | Interface |
+| --- | --- | --- | --- |
+| Isolate state by key | `GET /__admin/namespaces` | `x-mockingbird-namespace: <key>` | [Namespaces](https://mockingbird.chrisvouga.dev/docs/admin-controls/namespaces) |
+| Reset to boot | `POST /__admin/reset` | `x-mockingbird-reset: true` | [Reset](https://mockingbird.chrisvouga.dev/docs/admin-controls/reset) |
+| Snapshot and restore | `POST /__admin/snapshots`, `POST /__admin/snapshots/<id>/restore` | `x-mockingbird-snapshot: <name>`, `x-mockingbird-restore: <name>` | [Snapshot and restore](https://mockingbird.chrisvouga.dev/docs/admin-controls/snapshot-and-restore) |
+| Move the clock | `POST /__admin/clock` | `x-mockingbird-time: <instant>`, `x-mockingbird-advance: <duration>` | [Clock](https://mockingbird.chrisvouga.dev/docs/admin-controls/clock) |
+| Read or branch from old state | `GET /__admin/timeline` | `x-mockingbird-at: <checkpoint>`, `x-mockingbird-branch: <name>` | [Checkpoints and branches](https://mockingbird.chrisvouga.dev/docs/admin-controls/checkpoints-and-branches) |
+| Inject a fault | `POST /__admin/faults` | `x-mockingbird-fault: <fault>` | [Faults](https://mockingbird.chrisvouga.dev/docs/admin-controls/faults) |
+| Latency and timeouts | `PUT /__admin/latency` | `x-mockingbird-delay: <duration>`, `x-mockingbird-timeout: <duration>` | [Latency and timeouts](https://mockingbird.chrisvouga.dev/docs/admin-controls/latency-and-timeouts) |
+| Replay from a seed | `PUT /__admin/controls` | `x-mockingbird-seed: <seed>` | [Seed and determinism](https://mockingbird.chrisvouga.dev/docs/admin-controls/seed-and-determinism) |
+| See what happened | `GET /__admin/requests`, `GET /__admin/state` | | [Journal, metrics and state](https://mockingbird.chrisvouga.dev/docs/admin-controls/journal-and-state) |
+
+`GET /__admin` lists every route and header with a one-line summary, and `GET /__admin/controls`
+is the namespace's current control document. The same seed and the same requests give the same
+bytes. Setting controls as an emulator starts is [Boot](https://mockingbird.chrisvouga.dev/docs/admin-controls/boot); every route and header is in
+the [Reference](https://mockingbird.chrisvouga.dev/docs/admin-controls/reference). The full guide: <https://mockingbird.chrisvouga.dev/docs/admin-controls>.
 
 ## Report a mismatch or missing capability
 

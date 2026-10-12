@@ -7,10 +7,32 @@ Stateful local emulator of Amazon CloudWatch Metrics. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import {
+  CloudWatchClient,
+  ListMetricsCommand,
+  PutMetricDataCommand,
+} from "@aws-sdk/client-cloudwatch"
 import { createServer } from "@crvouga/mockingbird-service-cloudwatch/server"
+
+// Test setup: start the emulator and point the AWS SDK client your application uses at it.
 const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+const cloudwatch = new CloudWatchClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: ordinary SDK calls.
+await cloudwatch.send(
+  new PutMetricDataCommand({
+    Namespace: "App",
+    MetricData: [{ MetricName: "Signups", Value: 1, Unit: "Count" }],
+  }),
+)
+const { Metrics } = await cloudwatch.send(new ListMetricsCommand({ Namespace: "App" }))
+// Metrics: [{ Namespace: "App", MetricName: "Signups", Dimensions: [] }]
+
+await emulator.close() // after the test
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

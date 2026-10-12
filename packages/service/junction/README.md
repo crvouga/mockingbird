@@ -108,13 +108,16 @@ npx mockingbird-junction serve --config mockingbird.json
 ### `createServer` (Node)
 
 ```ts
+import { VitalClient } from "@tryvital/vital-node"
 import { createServer } from "@crvouga/mockingbird-service-junction/server"
 
 const server = await createServer() // shipped corpus, any free port
-const health = await fetch(`${server.url}/__admin/health`)
-console.log(health.status) // 200
 
-// Point the Vital SDK (or your backend's Junction base URL) at server.url, then:
+// The Vital SDK your application already uses. Only `environment` changes.
+const junction = new VitalClient({ apiKey: "sk_us_mockingbird", environment: server.url })
+const user = await junction.user.create({ clientUserId: "app-user-1" })
+console.log(user.userId) // "<uuid>"
+
 await server.close()
 ```
 
@@ -125,99 +128,88 @@ or a loaded corpus). The result has `url`, `port`, `runtime` and `close()`.
 ### `createRuntime` (any Fetch server)
 
 `createRuntime` is the whole served emulator — health, admin, namespaces, clock, faults, metrics — as a
-single runtime-neutral `fetch(request)`. Hand it to `Bun.serve`, a Worker, or call it directly:
+single runtime-neutral `fetch(request)`. Hand it to `Bun.serve`, a Worker, or any other Fetch server:
 
 ```ts
+import { VitalClient } from "@tryvital/vital-node"
 import { createRuntime } from "@crvouga/mockingbird-service-junction"
 import { defaultCorpus } from "@crvouga/mockingbird-service-junction/corpus"
 
 const junction = createRuntime({ corpus: defaultCorpus })
-const as = (worker: string) => ({
-  "x-vital-api-key": "sk_us_mockingbird",
-  "x-mockingbird-namespace": worker, // isolates this worker's data
-  "content-type": "application/json",
-})
+const server = Bun.serve({ port: 0, fetch: (request) => junction.fetch(request) })
 
-await junction.fetch(
-  new Request("http://junction.local/v2/user", {
-    method: "POST",
-    headers: as("worker-1"),
-    body: JSON.stringify({ client_user_id: "patient-1" }),
-  }),
-)
-const other = await junction.fetch(new Request("http://junction.local/v2/user", { headers: as("worker-2") }))
-console.log(await other.json()) // worker-2 sees none of worker-1's users
+// One SDK client per worker. The URL prefix isolates that worker's data.
+const as = (worker: string) =>
+  new VitalClient({
+    apiKey: "sk_us_mockingbird",
+    environment: `${server.url.origin}/__admin/ns/${worker}`,
+  })
+
+await as("worker-1").user.create({ clientUserId: "patient-1" })
+const other = await as("worker-2").user.getAll()
+console.log(other.users) // [] (worker-2 sees none of worker-1's users)
 
 await junction.reset("worker-1") // or junction.reset("*") for every namespace
+await server.stop()
 ```
 
-### In-process (inject `fetch`)
+### Pointing `@tryvital/vital-node` at it
+
+The official SDK takes the base URL as `environment` (this is how the package's SDK drop-in test
+constructs it). It has no option for a custom `fetch`, so it needs a served URL; a client that
+accepts a `fetch` can call `createRuntime().fetch` in-process instead.
 
 ```ts
-import { JunctionAPI } from "@crvouga/mockingbird-service-junction"
+import { VitalClient } from "@tryvital/vital-node"
+import { createServer } from "@crvouga/mockingbird-service-junction/server"
 
-const junction = new JunctionAPI({ now: () => Date.UTC(2030, 0, 1) })
-const headers = { "x-vital-api-key": "sk_us_mockingbird", "content-type": "application/json" }
+// Test setup: the emulator, with its clock set.
+const server = await createServer()
+await fetch(`${server.url}/__admin/clock`, {
+  method: "POST",
+  body: JSON.stringify({ set: "2030-01-01T00:00:00Z" }),
+})
 
-const call = async (method: string, path: string, body?: unknown) => {
-  const response = await junction.fetch(
-    new Request(`https://api.sandbox.tryvital.io${path}`, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    }),
-  )
-  return { status: response.status, json: (await response.json()) as Record<string, unknown> }
-}
+// The application's calls, through the SDK.
+const junction = new VitalClient({ apiKey: "sk_us_mockingbird", environment: server.url })
+const user = await junction.user.create({ clientUserId: "app-user-1" })
 
-const user = await call("POST", "/v2/user", { client_user_id: "app-user-1" })
-const userId = String(user.json.user_id)
-
-const catalog = await call("GET", "/v3/lab_test")
-const labTests = catalog.json.data as { id: string; method: string }[]
+const labTests = await junction.labTests.get()
 const testkit = labTests.find((test) => test.method === "testkit")
 if (testkit === undefined) throw new Error("default catalog has a testkit test")
 
-const order = await call("POST", "/v3/order", {
-  user_id: userId,
-  patient_details: {
-    first_name: "Ada",
-    last_name: "Lovelace",
+const { order } = await junction.labTests.createOrder({
+  userId: user.userId,
+  patientDetails: {
+    firstName: "Ada",
+    lastName: "Lovelace",
     dob: "1990-01-01",
     gender: "female",
-    phone_number: "+14155551234",
+    phoneNumber: "+14155551234",
     email: "ada@example.com",
   },
-  patient_address: {
-    first_line: "1 N Central Ave",
+  patientAddress: {
+    firstLine: "1 N Central Ave",
     city: "Phoenix",
     state: "AZ",
     zip: "85004",
     country: "US",
   },
-  order_set: { lab_test_ids: [testkit.id] },
+  orderSet: { labTestIds: [testkit.id] },
 })
-console.log(order.status, (order.json.order as { id: string }).id) // 200 "<uuid>"
+console.log(order.id, order.status) // "<uuid>" "received"
 
-// Every event the emulator published, oldest first:
-console.log(junction.webhookEvents().map((event) => event.event_type)) // ["labtest.order.created"]
+// Test assertion: every event the emulator published, oldest first.
+const events = server.runtime.instance().webhookEvents()
+console.log(events.map((event) => event.event_type)) // ["labtest.order.created"]
+
+await server.close()
 ```
 
-`now` (milliseconds) drives `created_on`/`updated_at` fields, webhook timestamps, and when delayed
-simulations (`POST /v3/order/{id}/test?final_status=completed&delay=<seconds>`) become due; the
-delayed transition is applied on the next `GET /v3/order/{id}` whose `now` is past the due time.
-
-### Pointing `@tryvital/vital-node` at it
-
-The official SDK takes the base URL as `environment` (this is how the package's SDK drop-in test
-constructs it):
-
-```js
-import { VitalClient } from "@tryvital/vital-node"
-
-const client = new VitalClient({ apiKey: "sk_us_mockingbird", environment: baseUrl })
-const user = await client.user.create({ clientUserId: "app-user-1" })
-```
+The clock (`POST /__admin/clock`, or `now` in milliseconds on `JunctionAPI`) drives
+`created_on`/`updated_at` fields, webhook timestamps, and when delayed simulations
+(`POST /v3/order/{id}/test?final_status=completed&delay=<seconds>`) become due; the delayed
+transition is applied on the next `GET /v3/order/{id}` whose clock is past the due time.
 
 If your app guards Junction hosts with an allowlist, allow `127.0.0.1` / `localhost` for tests
 while keeping the production and sandbox guards intact.
@@ -646,24 +638,24 @@ With `webhooks` / `--webhook-url`, every event is delivered signed, with retries
   retries now; `POST /__admin/webhooks/{id}/replay` redelivers one message.
 
 ```ts
-import { createRuntime, verifySvix } from "@crvouga/mockingbird-service-junction"
+import { Webhook } from "svix"
+import { createRuntime } from "@crvouga/mockingbird-service-junction"
 
 const secret = "whsec_bW9ja2luZ2JpcmQtdGVzdC1zZWNyZXQ="
 const junction = createRuntime({
   webhooks: { url: "http://127.0.0.1:3100/webhooks/junction", secret, retryDelaysMs: [0, 500, 2000] },
 })
 
-// In a test receiver:
-const accept = async (request: Request) =>
-  verifySvix(
-    secret,
-    {
-      "svix-id": request.headers.get("svix-id") ?? "",
-      "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
-      "svix-signature": request.headers.get("svix-signature") ?? "",
-    },
-    await request.text(),
-  )
+// The application's receiver, verifying with the official svix package as it does for real Junction:
+const accept = async (request: Request) => {
+  const body = await request.text()
+  new Webhook(secret).verify(body, {
+    "svix-id": request.headers.get("svix-id") ?? "",
+    "svix-timestamp": request.headers.get("svix-timestamp") ?? "",
+    "svix-signature": request.headers.get("svix-signature") ?? "",
+  }) // throws unless the signature is valid
+  return JSON.parse(body) as { event_type: string }
+}
 console.log(typeof accept, junction.webhooks?.deliveries().length) // "function" 0
 ```
 

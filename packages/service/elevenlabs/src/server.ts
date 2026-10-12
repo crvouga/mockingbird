@@ -67,6 +67,7 @@ export const serveTarget: ServeTarget = {
       ...(models ? { models: models.map((model_id) => ({ model_id })) } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
+      ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),
       ...(common.seed !== undefined ? { seed: common.seed } : {}),
       ...(common.onLog ? { onLog: common.onLog } : {}),
     })

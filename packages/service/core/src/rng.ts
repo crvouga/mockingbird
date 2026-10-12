@@ -16,7 +16,10 @@ export type Rng = {
   state(): number
   /** Restore a state previously returned by {@link state}. */
   setState(state: number): void
-  seed: number
+  /** Restart the stream from a new seed. `reset` then returns to this seed. */
+  reseed(seed: number | string): void
+  /** The seed the stream currently starts from. */
+  readonly seed: number
 }
 
 /** Hash an arbitrary string into a 32-bit seed, so callers can seed by name. */
@@ -30,7 +33,9 @@ export const seedFrom = (value: string): number => {
 }
 
 export const createRng = (seed: number | string = 0): Rng => {
-  const numeric = typeof seed === "string" ? seedFrom(seed) : seed >>> 0
+  const toNumeric = (value: number | string) =>
+    typeof value === "string" ? seedFrom(value) : value >>> 0
+  let numeric = toNumeric(seed)
   let state = numeric
   const next = () => {
     state = (state + 0x6d2b79f5) >>> 0
@@ -52,6 +57,12 @@ export const createRng = (seed: number | string = 0): Rng => {
       }
       state = next >>> 0
     },
-    seed: numeric,
+    reseed: (next) => {
+      numeric = toNumeric(next)
+      state = numeric
+    },
+    get seed() {
+      return numeric
+    },
   }
 }

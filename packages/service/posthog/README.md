@@ -42,14 +42,15 @@ npx mockingbird-posthog serve --port 8795 --import-flags dev
 ```
 
 ```ts
+import { PostHog } from "posthog-node"
 import { createRuntime } from "@crvouga/mockingbird-service-posthog"
 
-const posthog = createRuntime()
+// Test setup: the emulator and the flags this worker should see.
+const emulator = createRuntime()
 const admin = (path: string, body: unknown, method = "PUT") =>
-  posthog.fetch(
+  emulator.fetch(
     new Request(`http://posthog.test/__admin${path}`, { method, body: JSON.stringify(body) }),
   )
-
 // Per-worker namespaces: map each worker's project token (the SDKs cannot add headers)…
 await admin("/credentials", { credentials: { phc_worker1: "w1" } })
 // …then set flags in that namespace.
@@ -61,7 +62,15 @@ await admin("/flags/rx-category-intake?namespace=w1", {
 })
 await admin("/flags/mobile-smart-links?namespace=w1", undefined, "DELETE") // absent again
 
-// The app's posthog-node `getFeatureFlag("shop-coupons", "7")` now answers true.
+// The application's posthog-node client. Only its fetch changes: requests reach the
+// emulator in this process instead of us.i.posthog.com.
+const posthog = new PostHog("phc_worker1", {
+  fetch: (url, options) => emulator.fetch(new Request(url, options)),
+})
+await posthog.getFeatureFlag("shop-coupons", "7") // true
+await posthog.getFeatureFlag("rx-category-intake", "42") // false
+posthog.capture({ distinctId: "7", event: "coupon_applied" })
+await posthog.shutdown()
 ```
 
 ### Routes

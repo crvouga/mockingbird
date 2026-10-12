@@ -7,10 +7,24 @@ Transport scaffold for Amazon Route 53. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { ListHostedZonesCommand, Route53Client } from "@aws-sdk/client-route-53"
 import { createServer } from "@crvouga/mockingbird-service-route53/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: the Route 53 client your application already uses, pointed at the emulator.
+const server = await createServer()
+const route53 = new Route53Client({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// No Route 53 operation is implemented yet, so every command rejects.
+const failure = await route53
+  .send(new ListHostedZonesCommand({}))
+  .catch((error: Error) => error.name)
+// "UnknownOperationException"
+
+await server.close()
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

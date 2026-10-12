@@ -22,21 +22,33 @@ npm install -D @crvouga/mockingbird-service-redis
 ## Usage
 
 ```ts
+import { Redis } from "ioredis"
 import { createRedis, manualClock } from "@crvouga/mockingbird-service-redis"
+import { serve } from "@crvouga/mockingbird-service-redis/server"
 
-const clock = manualClock(1_700_000_000_000)
-const redis = createRedis({ clock })
-const client = redis.client()
-const set = await client.call("SET", "lock", "token", "PX", 1000)
-console.log(set)
-redis.advance(1000)
+// Test setup: an emulator on a manual clock, listening on a free port. `as never` is needed
+// because the two entry points bundle separate declarations of the `Redis` type.
+const emulator = createRedis({ clock: manualClock(1_700_000_000_000) })
+const server = await serve(emulator as never, { port: 0 })
+
+// Application code: the ioredis client it already uses, connected to the emulator.
+const redis = new Redis({ host: server.host, port: server.port })
+console.log(await redis.set("lock", "token", "PX", 1000)) // OK
+
+// Test control: expire the lock without sleeping.
+emulator.advance(1000)
+console.log(await redis.get("lock")) // null
+
+await redis.quit()
+await server.close()
 ```
 
 Two `createRedis()` instances never share keys. `SELECT` isolates logical databases 0–15 inside
-one instance. `redis.advance(ms)` moves an injected clock. `redis.inspect()`, `redis.fault()`,
-`redis.pauseConsumers()`, `redis.reset()`, and `redis.waiterCount()` are the test controls.
+one instance. `emulator.advance(ms)` moves an injected clock. `emulator.inspect()`,
+`emulator.fault()`, `emulator.pauseConsumers()`, `emulator.reset()`, and `emulator.waiterCount()`
+are the test controls.
 
-`ioredis` can connect to the TCP server unchanged. Cluster `MOVED` / `ASK` is not implemented:
+`ioredis` connects to the TCP server unchanged. Cluster `MOVED` / `ASK` is not implemented:
 `CLUSTER` and `READONLY` answer that cluster support is disabled.
 
 `mockingbird-redis serve --config mockingbird.json` supervises mixed HTTP/Postgres/Redis fleets.

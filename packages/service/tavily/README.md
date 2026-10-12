@@ -14,18 +14,27 @@ WIP scripted Tavily search and extraction. No public URLs are fetched. Contract 
 ## Usage
 
 ```ts
+import { tavily } from "@tavily/core"
 import { createServer } from "@crvouga/mockingbird-service-tavily/server"
+
+// Test setup: script the results for one query.
 const server = await createServer({
   searches: [{ query: "fixture", results: [
     { title: "Example", url: "https://example.test", content: "Synthetic", score: 0.9 },
   ] }],
 })
-// AsyncTavilyClient(api_key="mock_tavily_key", api_base_url=server.url)
+
+// The Tavily SDK your application already uses. Only its base URL changes.
+const client = tavily({ apiKey: "mock_tavily_key", apiBaseURL: server.url })
+const { results } = await client.search("fixture")
+console.log(results[0]?.title, results[0]?.url) // Example https://example.test
+
 await server.close()
 ```
 
-CLI: `mockingbird-tavily serve --port 12130`. Configure the consumer factory's api_base_url;
-the SDK has no required global endpoint environment variable. If your app reads TAVILY_API_KEY,
+CLI: `mockingbird-tavily serve --port 12130`. Configure the SDK's base URL (`apiBaseURL` in
+`@tavily/core`, `api_base_url` in tavily-python); neither SDK has a required global endpoint
+environment variable. If your app reads TAVILY_API_KEY,
 set it to emulate_tavily_key in local tests. HTTP authentication is Bearer, exactly as emitted by
 AsyncTavilyClient 0.7.17, not a JSON api_key body field.
 

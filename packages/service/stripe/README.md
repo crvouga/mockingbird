@@ -33,11 +33,12 @@ npx mockingbird-stripe serve --accounts accounts.json --admin-key local-admin
 npx mockingbird-stripe serve --config mockingbird.json   # every service in one process
 ```
 
-```js
+```ts
 import Stripe from "stripe"
-import { createServer } from "@crvouga/mockingbird-service-stripe/server"
+import { createRuntime } from "@crvouga/mockingbird-service-stripe"
 
-const server = await createServer({
+// Test setup: the emulator, with one account per API key the app uses.
+const emulator = createRuntime({
   accounts: [
     // Legacy STRIPE_API_KEY, STRIPE_MSO_API_KEY and the EMR key all act as MSO and share state.
     { id: "acct_mso", keys: ["sk_test_legacy", "sk_test_mso", "sk_test_emr", "pk_test_mso"], corpus: true },
@@ -45,6 +46,26 @@ const server = await createServer({
     { id: "acct_pp", keys: ["sk_test_pp"], apiVersion: "2025-02-24.acacia" },
   ],
 })
+
+// The Stripe SDK your application already uses. Only its HTTP client changes:
+// requests reach the emulator in this process instead of api.stripe.com.
+const stripe = new Stripe("sk_test_mso", {
+  apiVersion: "2024-06-20",
+  httpClient: Stripe.createFetchHttpClient((url: string, init: RequestInit) =>
+    emulator.fetch(new Request(url, init)),
+  ),
+})
+const customer = await stripe.customers.create({ email: "qa@example.com" })
+await stripe.paymentMethods.attach("pm_card_visa", { customer: customer.id }) // a new pm_ id
+```
+
+Or against a listening server, when the application runs in its own process:
+
+```ts
+import Stripe from "stripe"
+import { createServer } from "@crvouga/mockingbird-service-stripe/server"
+
+const server = await createServer()
 const url = new URL(server.url)
 const stripe = new Stripe("sk_test_mso", {
   apiVersion: "2024-06-20",
@@ -53,25 +74,7 @@ const stripe = new Stripe("sk_test_mso", {
   protocol: "http",
 })
 const customer = await stripe.customers.create({ email: "qa@example.com" })
-await stripe.paymentMethods.attach("pm_card_visa", { customer: customer.id }) // a new pm_ id
-await server.close()
-```
-
-Or over raw HTTP, the way any Stripe client talks to it:
-
-```ts
-import { createServer } from "@crvouga/mockingbird-service-stripe/server"
-
-const server = await createServer()
-const response = await fetch(`${server.url}/v1/customers`, {
-  method: "POST",
-  headers: {
-    authorization: "Bearer sk_test_mso",
-    "content-type": "application/x-www-form-urlencoded",
-  },
-  body: new URLSearchParams({ email: "qa@example.com" }),
-})
-const customer = (await response.json()) as { id: string; email: string }
+// customer.id === "cus_…", customer.email === "qa@example.com"
 await server.close()
 ```
 

@@ -303,7 +303,7 @@ export const junctionAdminRoutes =
           flags = { ...named, ...flags }
         }
         const updated = api(request).transitionOrder(order.id, resolved.status, {
-          now: runtime.clock.now,
+          now: runtime.namespaceClock(request.namespace).now,
           flags,
         })
         return jsonRes(200, {

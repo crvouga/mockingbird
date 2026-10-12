@@ -15,12 +15,24 @@ and [common errors](https://docs.aws.amazon.com/eventbridge/latest/APIReference/
 ## Usage
 
 ```ts
+import { EventBridgeClient, ListRulesCommand } from "@aws-sdk/client-eventbridge"
 import { createServer } from "@crvouga/mockingbird-service-eventbridge/server"
+
+// Test setup: seed a rule, then point the EventBridge client your application already uses
+// at the emulator.
 const server = await createServer({
   rules: [{ rule: { Name: "nightly", Arn: "arn:aws:events:us-east-1:000000000000:rule/nightly" }, targets: [] }],
 })
-// boto3.client("events", endpoint_url=server.url, region_name="us-east-1",
-//              aws_access_key_id="fixture", aws_secret_access_key="fixture")
+const eventBridge = new EventBridgeClient({
+  endpoint: server.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code, unchanged.
+const { Rules } = await eventBridge.send(new ListRulesCommand({ NamePrefix: "night" }))
+// Rules[0].Name === "nightly"
+
 await server.close()
 ```
 

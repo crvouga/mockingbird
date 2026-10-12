@@ -573,7 +573,13 @@ describe("multi-provider runtime", () => {
         )
       ).status,
     ).toBe(200)
-    expect(runtime.clock.state().frozen).toBe(true)
+    // Moving the clock moves it for every mount, whichever one the request named.
+    for (const mount of ["/google", "/apple", "/oauth2"]) {
+      const clock = await (
+        await runtime.fetch(new Request(`${issuer}/__admin/clock?mount=${mount}`))
+      ).json()
+      expect(clock).toMatchObject({ iso: "2030-01-01T00:00:00.000Z", frozen: true })
+    }
     expect(
       (await runtime.fetch(new Request(`${issuer}/__admin/reset?all=1`, { method: "POST" })))
         .status,

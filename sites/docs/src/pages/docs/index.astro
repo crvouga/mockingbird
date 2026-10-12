@@ -1,8 +1,16 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
+import ControlDirectory from "../../components/ControlDirectory.astro"
 import Icon from "../../components/Icon.astro"
 import ServiceCard from "../../components/ServiceCard.astro"
 import Base from "../../layouts/Base.astro"
+import { plainSummary } from "../../lib/guides.ts"
+
+/** Guides that are a set of pages get a section of their own, one card per page. */
+const sections = catalog.guides
+  .filter((g) => !g.parent)
+  .map((g) => ({ guide: g, pages: catalog.guides.filter((page) => page.parent === g.slug) }))
+  .filter((section) => section.pages.length > 0)
 ---
 
 <Base title="Docs" description="Guides for using, testing and contributing to Mockingbird. The same markdown GitHub renders.">
@@ -22,16 +30,43 @@ import Base from "../../layouts/Base.astro"
       <div class="featured-grid">{catalog.services.filter((s) => s.featured).map((service) => <ServiceCard service={service} />)}</div>
       <a href="/services?featured=1" class="text-link">Browse featured emulators <Icon name="arrow-right" /></a>
     </section>
+    {
+      sections.map(({ guide, pages }) => (
+        <section class="guide-section" aria-labelledby={`section-${guide.slug}`}>
+          <h2 class="guides-heading" id={`section-${guide.slug}`}>
+            <a href={`/docs/${guide.slug}`}>{guide.title}</a>
+          </h2>
+          <p class="guide-section-summary">{plainSummary(guide.summary)}</p>
+          {guide.slug === "admin-controls" ? (
+            <ControlDirectory />
+          ) : (
+            <ul class="guides guide-pages">
+              {pages.map((page) => (
+                <li>
+                  <a href={`/docs/${page.slug}`}>
+                    <span class="g-text">
+                      <strong>{page.title}</strong>
+                      <span>{plainSummary(page.summary)}</span>
+                    </span>
+                    <Icon name="arrow-right" />
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ))
+    }
     <h2 class="guides-heading">Guides</h2>
     <ul class="guides">
       {
-        catalog.guides.map((g) => (
+        catalog.guides.filter((g) => !g.parent).map((g) => (
           <li>
             <a href={`/docs/${g.slug}`}>
               <span class="g-icon"><Icon name="file" /></span>
               <span class="g-text">
                 <strong>{g.title}</strong>
-                <span>{g.summary}</span>
+                <span>{plainSummary(g.summary)}</span>
               </span>
               <Icon name="arrow-right" />
             </a>
@@ -51,6 +86,13 @@ import Base from "../../layouts/Base.astro"
   .text-link { display: inline-flex; align-items: center; gap: 6px; color: var(--highlight); font-size: 13px; }
   .text-link :global(.i) { width: 14px; height: 14px; }
   .guides-heading { margin-bottom: 16px; font-size: 20px; }
+  .guides-heading a:hover { color: var(--highlight); }
+  .guide-section { margin-bottom: 40px; }
+  .guide-section .guides-heading { margin-bottom: 8px; }
+  .guide-section-summary { max-width: 780px; margin-bottom: 16px; color: var(--fg-muted); font-size: 14px; }
+  .guide-pages { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
+  .guide-pages a { padding: 14px 16px; }
+  .guide-pages .g-text span { -webkit-line-clamp: 2; font-size: 13px; }
   .page-head code {
     font-size: 0.85em;
   }

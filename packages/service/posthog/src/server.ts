@@ -56,6 +56,7 @@ export const serveTarget: ServeTarget = {
       ...(values["session-recording"] === true ? { settings: { sessionRecording: true } } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
+      ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),
       ...(common.seed !== undefined ? { seed: common.seed } : {}),
       ...(common.onLog ? { onLog: common.onLog } : {}),
     })

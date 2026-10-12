@@ -41,6 +41,7 @@ import { createServer } from "@crvouga/mockingbird-service-aws-iot/server"
 import { IoTDataPlaneClient, PublishCommand } from "@aws-sdk/client-iot-data-plane"
 import mqtt from "mqtt"
 
+// Test setup: start the emulator with the credentials and authorizer policies the test needs.
 const arn = (resource: string) => `arn:aws:iot:us-east-1:123456789012:${resource}`
 const iot = await createServer({
   settings: {
@@ -66,6 +67,7 @@ const iot = await createServer({
   },
 })
 
+// Application code: the MQTT client and AWS SDK client it already uses, pointed at the emulator.
 const device = await mqtt.connectAsync(iot.mqttUrl, {
   protocolVersion: 5,
   clientId: "alice-phone",

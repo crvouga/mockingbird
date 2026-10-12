@@ -3,7 +3,9 @@ import {
   ApiOutlined,
   AppstoreOutlined,
   BranchesOutlined,
+  CameraOutlined,
   CheckOutlined,
+  DashboardOutlined,
   DatabaseOutlined,
   FieldTimeOutlined,
   HistoryOutlined,
@@ -47,8 +49,10 @@ import {
   ClockView,
   FaultsView,
   JournalView,
+  LatencyView,
   Overview,
   RoutesView,
+  SnapshotsView,
   TimelineView,
 } from "./controls.js"
 import { Members } from "./members.js"
@@ -489,13 +493,25 @@ function Workspace({
     { key: "overview", icon: <AppstoreOutlined />, label: "Overview" },
     { key: "state", icon: <DatabaseOutlined />, label: "State" },
     { key: "clock", icon: <FieldTimeOutlined />, label: "Clock" },
+    { key: "latency", icon: <DashboardOutlined />, label: "Latency" },
     { key: "faults", icon: <ThunderboltOutlined />, label: "Faults" },
+    {
+      key: "snapshots",
+      icon: <CameraOutlined />,
+      label: "Snapshot & restore",
+      keywords: "snapshot snapshots restore rollback save import export backup",
+    },
     { key: "journal", icon: <HistoryOutlined />, label: "Journal" },
-    { key: "checkpoints", icon: <BranchesOutlined />, label: "Checkpoints" },
+    {
+      key: "checkpoints",
+      icon: <BranchesOutlined />,
+      label: "Checkpoints",
+      keywords: "checkpoint branch checkout history timeline rewind",
+    },
     { key: "routes", icon: <ApiOutlined />, label: "Routes" },
   ]
   const nav = [
-    ...coreNav,
+    ...coreNav.map(({ key, icon, label }) => ({ key, icon, label })),
     ...panelList.map((panel) => ({
       key: panel.id,
       icon: panel.kind === "sql" ? <TableOutlined /> : <AppstoreOutlined />,
@@ -517,8 +533,12 @@ function Workspace({
         detail:
           screen.key === "overview"
             ? `Switch to ${candidate.label ?? candidate.service}`
-            : `Open ${screen.label.toLocaleLowerCase()} for ${candidate.label ?? candidate.service}`,
-        keywords: `emulator service admin ${candidate.id} ${candidate.service} ${screen.key}`,
+            : screen.key === "snapshots"
+              ? `Restore a snapshot of ${candidate.label ?? candidate.service}: records, clock, faults and latency`
+              : screen.key === "checkpoints"
+                ? `Restore a checkpoint of ${candidate.label ?? candidate.service}. History, not a snapshot`
+                : `Open ${screen.label.toLocaleLowerCase()} for ${candidate.label ?? candidate.service}`,
+        keywords: `emulator service admin ${candidate.id} ${candidate.service} ${screen.key} ${"keywords" in screen ? screen.keywords : ""}`,
         icon: screen.icon,
         run: () => goTo(candidate.id, screen.key),
       })),
@@ -545,8 +565,14 @@ function Workspace({
     case "clock":
       content = <ClockView {...common} />
       break
+    case "latency":
+      content = <LatencyView {...common} />
+      break
     case "faults":
       content = <FaultsView {...common} />
+      break
+    case "snapshots":
+      content = <SnapshotsView {...common} />
       break
     case "journal":
       content = <JournalView {...common} />

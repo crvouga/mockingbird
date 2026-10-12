@@ -1,0 +1,173 @@
+---
+import catalog from "virtual:mockingbird/catalog"
+import { CONTROL_GROUPS } from "../lib/content.ts"
+import { guideSlug } from "../lib/guides.ts"
+
+interface Props {
+  /** The page being read, so its row is marked. The hub passes its own slug and matches nothing. */
+  current?: string
+  /** `full` shows each control's interface. `strip` is the one-line jump list on a control page. */
+  variant?: "full" | "strip"
+}
+
+const { current, variant = "full" } = Astro.props
+const byFile = new Map(catalog.guides.map((guide) => [guide.file, guide]))
+const entries = CONTROL_GROUPS.flatMap((group) =>
+  group.controls.map((control) => {
+    const file = `admin-controls/${control.page}`
+    const guide = byFile.get(file)
+    return {
+      group: group.title,
+      title: guide?.title ?? control.page,
+      call: control.call,
+      href: `/docs/${guideSlug(file)}`,
+      slug: guideSlug(file),
+    }
+  }),
+)
+---
+
+{
+  variant === "strip" ? (
+    <nav class="control-strip" aria-label="Admin controls">
+      <span>Controls</span>
+      {entries.map((entry) => (
+        <a href={entry.href} aria-current={entry.slug === current ? "page" : undefined} title={entry.call}>
+          {entry.title}
+        </a>
+      ))}
+    </nav>
+  ) : (
+    <nav class="control-directory" aria-label="Admin controls">
+      <p>Each control has its own page. The line under the name is the call that does it.</p>
+      {CONTROL_GROUPS.map((group) => (
+        <section>
+          <h3>{group.title}</h3>
+          <ul>
+            {group.controls.map((control) => {
+              const entry = entries.find((item) => item.call === control.call && item.group === group.title)
+              if (!entry) return null
+              return (
+                <li>
+                  <a href={entry.href} aria-current={entry.slug === current ? "page" : undefined}>
+                    <strong>{entry.title}</strong>
+                    <code>{entry.call}</code>
+                  </a>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      ))}
+    </nav>
+  )
+}
+
+<style>
+  .control-strip {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0 0 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .control-strip > span {
+    margin-right: 4px;
+    color: var(--fg-subtle);
+    font: 11px var(--font-mono);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .control-strip a {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    color: var(--fg-muted);
+    font-size: 13px;
+    line-height: 1.4;
+  }
+
+  .control-strip a:hover {
+    border-color: var(--highlight);
+    color: var(--highlight);
+  }
+
+  .control-strip a[aria-current="page"] {
+    border-color: transparent;
+    background: var(--accent-soft);
+    color: var(--highlight);
+    font-weight: 650;
+  }
+
+  .control-directory {
+    margin: 0 0 8px;
+  }
+
+  .control-directory > p {
+    margin: 0 0 18px;
+    color: var(--fg-muted);
+    font-size: 14px;
+  }
+
+  .control-directory section + section {
+    margin-top: 22px;
+  }
+
+  .control-directory h3 {
+    margin: 0 0 8px;
+    color: var(--fg-subtle);
+    font: 11px var(--font-mono);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .control-directory ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+    gap: 8px;
+  }
+
+  .control-directory a {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    height: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: border-color 0.15s var(--ease);
+  }
+
+  .control-directory a:hover {
+    border-color: var(--highlight);
+  }
+
+  .control-directory a[aria-current="page"] {
+    border-color: transparent;
+    background: var(--accent-soft);
+  }
+
+  .control-directory strong {
+    font-size: 14px;
+    font-weight: 650;
+  }
+
+  .control-directory code {
+    color: var(--fg-muted);
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .control-directory a[aria-current="page"] code {
+    color: var(--highlight);
+  }
+</style>

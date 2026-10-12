@@ -13,9 +13,23 @@ npm install @crvouga/mockingbird-service-aws
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-aws"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://s3.us-east-1.amazonaws.com"))
+import { ListBucketsCommand, S3Client } from "@aws-sdk/client-s3"
+import { createServer } from "@crvouga/mockingbird-service-aws/server"
+
+// Test setup: start the emulator and point the AWS SDK client your application uses at it.
+const emulator = await createServer({ seed: 1 })
+const s3 = new S3Client({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+  forcePathStyle: true,
+})
+
+// Application code: ordinary SDK calls.
+const { Buckets } = await s3.send(new ListBucketsCommand({}))
+// Buckets[0].Name === "emulate-default"
+
+await emulator.close() // after the test
 ```
 
 ## API

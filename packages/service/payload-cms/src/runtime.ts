@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -88,6 +89,8 @@ export type PayloadCmsRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Collections every namespace starts with. Default: the marketing collection seed. */
   collections?: Seed
@@ -122,7 +125,7 @@ const adminRoutes = (runtime: ServiceRuntime<PayloadCmsAPI>): AdminRoutes => ({
   "PUT /collections/:slug": ({ params, body, namespace }) => {
     const docs = toDocs(
       isRecord(body) ? body.docs : undefined,
-      new Date(runtime.clock.now()).toISOString(),
+      new Date(runtime.namespaceClock(namespace).now()).toISOString(),
     )
     if (typeof docs === "string") return adminError(400, docs)
     return json(200, runtime.instance(namespace).state.replace(params.slug as string, docs))
@@ -158,6 +161,7 @@ export const createRuntime = (options: PayloadCmsRuntimeOptions = {}): PayloadCm
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: payloadCredential,
     presets: PAYLOAD_CMS_PRESETS,

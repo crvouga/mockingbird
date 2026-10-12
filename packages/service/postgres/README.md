@@ -55,44 +55,59 @@ dependency instead of `-D` if you ship it to the browser.
 ## Usage
 
 ```ts
-import { Database, Snapshot } from "@crvouga/mockingbird-service-postgres"
+import pg from "pg"
+import { Snapshot } from "@crvouga/mockingbird-service-postgres"
+import { serve } from "@crvouga/mockingbird-service-postgres/wire"
 
-const db = new Database()
+// Test setup: start the emulator on a free port.
+const server = await serve({ port: 0 })
 
-db.exec(`
+// Application code: the `pg` client it already uses, given the emulator's connection string.
+const client = new pg.Client({ connectionString: server.connectionString })
+await client.connect()
+
+await client.query(`
   CREATE TABLE users (
     id serial PRIMARY KEY,
     email text UNIQUE NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now()
   )
 `)
+await client.query(`INSERT INTO users (email) VALUES ($1)`, ["ada@example.com"])
 
-db.prepare(`INSERT INTO users (email) VALUES ($1)`).run("ada@example.com")
+const users = await client.query<{ id: number; email: string; created_at: Date }>(
+  `SELECT * FROM users`,
+)
+console.log(users.rows) // [{ id: 1, email: "ada@example.com", created_at: 2000-01-01T00:00:00.000Z }]
 
-const users = db.query<{ id: number; email: string; created_at: string }>(`SELECT * FROM users`)
-console.log(users) // [{ id: 1, email: "ada@example.com", created_at: "2000-01-01 00:00:00+00" }]
+// Test control, snapshots: freeze a template, boot a fork from it, or persist it as bytes.
+const seed = server.snapshot()
+const fork = await serve({ database: seed })
+const restored = await serve({ database: Snapshot.decode(seed.encode()) })
 
-// Snapshots: freeze a template, fork it cheaply, or persist it as bytes.
-const seed = db.snapshot()
-const db2 = seed.open()
-const bytes = seed.encode()
-const db3 = Snapshot.decode(bytes).open()
-console.log(db2.query(`SELECT count(*) AS n FROM users`), db3.changes) // [{ n: 1n }] 1
+await client.end()
+await Promise.all([server.close(), fork.close(), restored.close()])
 ```
 
-All methods are **synchronous**; do not `await` them. Browser and Node/Bun share the same
-in-memory surface (no filesystem). For a real TCP listener separate processes can connect to, see
-the [wire-protocol server](#wire-protocol-server-separate-processes) (Node/Bun only).
+`postgres.js`, a JDBC client and `psql` connect with the same connection string; see the
+[wire-protocol server](#wire-protocol-server-separate-processes) (Node/Bun only). In the browser,
+where no listener can run, use the embedded `Database` from the package root instead. It shares
+the same in-memory engine (no filesystem) and all its methods are **synchronous**; do not `await`
+them. See [Method semantics](#method-semantics).
 
 ### Per-test isolation with snapshots
 
-Run migrations and fixtures once, `snapshot()` the result, and `open()` a copy-on-write fork per
-test (microseconds, tables are shared until either side writes):
+Run migrations and fixtures once, `snapshot()` the result, and boot a server from that snapshot
+per test. Each one is a copy-on-write fork (microseconds, tables are shared until either side
+writes); with the embedded `Database`, `seed.open()` is the same fork without a listener:
 
 ```ts
-import { beforeEach, expect, test } from "bun:test"
-import { Database, PostgresError } from "@crvouga/mockingbird-service-postgres"
+import { afterEach, beforeEach, expect, test } from "bun:test"
+import pg from "pg"
+import { Database } from "@crvouga/mockingbird-service-postgres"
+import { type PostgresServer, serve } from "@crvouga/mockingbird-service-postgres/wire"
 
+// Test setup: build the template once, then boot a server from it for every test.
 const template = new Database()
 template.exec(`
   CREATE TABLE accounts (id serial PRIMARY KEY, email text UNIQUE NOT NULL);
@@ -100,64 +115,68 @@ template.exec(`
 `)
 const seed = template.snapshot()
 
-let db: Database
-beforeEach(() => {
-  db = seed.open()
+let server: PostgresServer
+let db: pg.Client
+beforeEach(async () => {
+  server = await serve({ database: seed })
+  db = new pg.Client({ connectionString: server.connectionString })
+  await db.connect()
+})
+afterEach(async () => {
+  await db.end()
+  await server.close()
 })
 
-test("unique violation surfaces SQLSTATE 23505", () => {
-  let error: unknown
-  try {
-    db.prepare(`INSERT INTO accounts (email) VALUES ($1)`).run("seed@example.com")
-  } catch (caught) {
-    error = caught
-  }
-  expect(error).toBeInstanceOf(PostgresError)
-  expect((error as PostgresError).code).toBe("23505")
-  expect((error as PostgresError).category).toBe("constraint_unique")
+// Application code under test uses `db`, an ordinary `pg` client.
+test("unique violation surfaces SQLSTATE 23505", async () => {
+  const insert = db.query(`INSERT INTO accounts (email) VALUES ($1)`, ["seed@example.com"])
+  await expect(insert).rejects.toMatchObject({ code: "23505", constraint: "accounts_email_key" })
 })
 
-test("each test starts from the seed", () => {
-  expect(db.query(`SELECT email FROM accounts`)).toEqual([{ email: "seed@example.com" }])
+test("each test starts from the seed", async () => {
+  const { rows } = await db.query(`SELECT email FROM accounts`)
+  expect(rows).toEqual([{ email: "seed@example.com" }])
 })
 ```
 
-### Adapting it to code written against `pg`
+### Code written against `pg`
 
-There is no async client, so put a small shim behind whatever query interface your code uses. With
-`{ int8: "string" }`, `int8` / `bigserial` / `count(*)` come back as strings, like node-postgres's
-default:
+Code written against `pg` needs no adapter: give `pg.Pool` (or `pg.Client`) the server's connection
+string. `pg` applies its own type parsers, so `int8` / `bigserial` / `count(*)` come back as
+strings, as they do against a real server:
 
 ```ts
-import { type BindValue, Database } from "@crvouga/mockingbird-service-postgres"
+import pg from "pg"
+import { serve } from "@crvouga/mockingbird-service-postgres/wire"
 
-const db = new Database({ int8: "string", now: "system" })
+// Test setup: start the emulator and give the pool its connection string.
+const server = await serve({ port: 0 })
+export const pool = new pg.Pool({ connectionString: server.connectionString })
 
-/** Minimal pg.Pool-shaped facade: `query(text, values)` resolving to `{ rows, rowCount, command }`. */
-export const pool = {
-  query: async <T = Record<string, unknown>>(text: string, values: BindValue[] = []) => {
-    const result = db.prepare(text).result(...values)
-    return { rows: result.rows as T[], rowCount: result.rowCount, command: result.command }
-  },
-}
-
+// Application code: unchanged `pg` queries.
 await pool.query(`CREATE TABLE notes (id bigserial PRIMARY KEY, body text)`)
 const inserted = await pool.query<{ id: string }>(
   `INSERT INTO notes (body) VALUES ($1) RETURNING id`,
   ["hello"],
 )
 console.log(inserted.rows[0]?.id, inserted.rowCount) // "1" 1
+
+await pool.end()
+await server.close()
 ```
 
-Differences from node-postgres to account for: timestamps, dates, `numeric` and `json`/`jsonb` come
-back as PostgreSQL text (node-postgres parses timestamps to `Date` and JSON to objects);
-`prepare`/`query` accept one statement at a time (use `exec` for scripts); errors are
-`PostgresError` with `code` set to the SQLSTATE, like `pg`'s `DatabaseError.code`.
+Errors are `pg`'s own `DatabaseError` with `code` set to the SQLSTATE. Where no listener can run
+(the browser), put the embedded `Database` behind whatever query interface your code uses. The
+differences from node-postgres to account for there: `int8` is a `bigint` unless you pass
+`{ int8: "string" }`; timestamps, dates, `numeric` and `json`/`jsonb` come back as PostgreSQL text
+(node-postgres parses timestamps to `Date` and JSON to objects); `prepare`/`query` accept one
+statement at a time (use `exec` for scripts); errors are `PostgresError` with `code` set to the
+SQLSTATE, like `pg`'s `DatabaseError.code`.
 
 ### Wire-protocol server (separate processes)
 
 When another process must connect over TCP — `pg`, `postgres.js`, a JDBC client, `psql`, a service
-in a local multi-service stack — start the frontend/backend v3 server instead of a shim. It needs
+in a local multi-service stack — start the frontend/backend v3 server. It needs
 `node:net`, so it is a separate Node/Bun entry (`/wire`) and the main package stays browser-safe.
 
 ```ts

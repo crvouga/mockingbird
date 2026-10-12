@@ -38,10 +38,35 @@ export function createHmac(algorithm: string, key: string | Uint8Array): Hash {
   }
   return hash as Hash
 }
-export function randomBytes(length: number): Buffer {
-  return Buffer.from(crypto.getRandomValues(new Uint8Array(length)))
+/**
+ * Mockingbird: where ids and tokens come from. With a seeded stream in place, everything the
+ * vendor code mints replays from the seed; without one it is the platform's own randomness.
+ */
+let source: (() => number) | undefined
+/** Mint from `next` (a seeded stream of `[0, 1)`) until told otherwise. */
+export function useRandom(next: (() => number) | undefined): void { source = next }
+/** Mint from `next` for one synchronous section, then put the previous source back. */
+export function withRandom<T>(next: (() => number) | undefined, run: () => T): T {
+  const previous = source
+  source = next
+  try { return run() } finally { source = previous }
 }
-export function randomUUID(): string { return crypto.randomUUID() }
+/** `Math.random`, from the seeded stream when one is in place. */
+export function random(): number { return source ? source() : Math.random() }
+export function randomBytes(length: number): Buffer {
+  if (!source) return Buffer.from(crypto.getRandomValues(new Uint8Array(length)))
+  const out = new Uint8Array(length)
+  for (let i = 0; i < length; i++) out[i] = Math.floor(source() * 256)
+  return Buffer.from(out)
+}
+export function randomUUID(): string {
+  if (!source) return crypto.randomUUID()
+  const b = randomBytes(16)
+  b[6] = (b[6] & 0x0f) | 0x40
+  b[8] = (b[8] & 0x3f) | 0x80
+  const hex = b.toString("hex")
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
 export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) throw new Error("Buffers must have equal lengths")
   let difference = 0

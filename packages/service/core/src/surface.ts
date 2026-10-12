@@ -1,8 +1,10 @@
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Clock, ClockState } from "./clock.js"
+import type { ControlHeaderInput, MockControls, NamespaceControls } from "./controls.js"
 import type { CredentialRegistry } from "./credentials.js"
 import type { FaultRegistry, FaultRule } from "./faults.js"
 import type { Journal } from "./journal.js"
+import type { LatencyRegistry } from "./latency.js"
 import type { Metrics } from "./metrics.js"
 import type { Rng } from "./rng.js"
 import type { NamespaceSnapshot } from "./snapshot.js"
@@ -20,6 +22,31 @@ export type MockCreateOptions = {
   /** All internal HTTP paths live below this prefix. Default /__admin. */
   adminPrefix?: string
   adminKey?: string
+  /**
+   * Admin controls to boot with: clock, latency, faults, seed, a starting snapshot, and
+   * per-namespace overrides. `POST /__admin/reset` returns to exactly this.
+   */
+  adminControls?: MockControls
+}
+
+/** A named snapshot, as the admin API and `runtime.snapshots` list it. */
+export type MockSnapshotInfo = {
+  readonly id: string
+  readonly namespace: string
+  readonly records: number
+  readonly at: number
+  readonly portable: boolean
+}
+
+/** One namespace's controls, as `GET /__admin/controls` and `runtime.controls()` report them. */
+export type MockControlState = {
+  readonly namespace: string
+  readonly seed: number | string
+  readonly clock: ClockState & { iso: string; autoAdvanceMs: number }
+  readonly virtualTime: boolean
+  readonly latency: unknown
+  readonly faults: readonly unknown[]
+  readonly snapshots: readonly MockSnapshotInfo[]
 }
 
 /** A checkpoint head the admin client can show. Services may return a richer object. */
@@ -49,6 +76,8 @@ export type MockSurface = {
   fetch(request: Request): Promise<Response>
   readonly clock: Clock
   readonly faults: FaultRegistry
+  /** Baseline response time per namespace. */
+  readonly latency: LatencyRegistry
   readonly metrics: Metrics
   readonly journal: Journal
   readonly rng: Rng
@@ -59,6 +88,21 @@ export type MockSurface = {
   instance(namespace?: string): MockInstanceSurface
   namespaces(): string[]
   reset(namespace?: string): Promise<void>
+  /** A namespace's clock: the base clock for `default`, its own for any other. */
+  namespaceClock(namespace?: string): Clock
+  /** A namespace's controls: seed, clock, virtual time, latency, faults and snapshots. */
+  controls(namespace?: string): MockControlState
+  /** Apply a control document to a namespace. A given key replaces that control. */
+  configure(controls: NamespaceControls, namespace?: string): MockControlState
+  /** Named snapshots of a namespace: records, clock, random streams, faults and latency. */
+  readonly snapshots: {
+    create(options?: { name?: string; namespace?: string }): MockSnapshotInfo
+    list(namespace?: string): MockSnapshotInfo[]
+    restore(id: string, namespace?: string): void
+    delete(id: string, namespace?: string): boolean
+  }
+  /** Request headers that carry controls, checked: spread them into a `fetch` or an SDK's defaults. */
+  headers(input: ControlHeaderInput): Record<string, string>
   snapshot(namespace?: string): NamespaceSnapshot
   restore(snapshot: NamespaceSnapshot, namespace?: string): void
   checkpoint(namespace?: string, branch?: string): MockCheckpoint
@@ -83,45 +127,75 @@ export const defineMock = <T extends MockSurface>(runtime: T): T => runtime
 export type MockClockState = ClockState
 
 /**
+ * What each shared admin route does. `GET /__admin` serves this list, and the guide in
+ * `docs/ADMIN_CONTROLS.md` is checked against it.
+ */
+export const ADMIN_ROUTE_REFERENCE = {
+  "GET /": "This index: every route and control header, with a one-line summary each.",
+  "GET /health": "Readiness. Never needs the admin key or a vendor credential.",
+  "GET /controls":
+    "The namespace's controls in one document: seed, clock, virtual time, latency, faults, snapshots.",
+  "PUT /controls":
+    "Apply a control document. Each key given replaces that control; `snapshot` replaces the records.",
+  "DELETE /controls": "Put the namespace's controls back to boot. Records are untouched.",
+  "POST /reset":
+    "Return the namespace to its boot state: records, controls, snapshots, journal, metrics. `?all=1` resets every namespace.",
+  "GET /namespaces": "The isolation keys in use.",
+  "DELETE /namespaces/:name": "Reset a namespace and forget it.",
+  "GET /clock": "The namespace clock: `now`, `iso`, `frozen`, `offsetMs`, `autoAdvanceMs`.",
+  "POST /clock":
+    "Move time: `now` (or `set`), `advance`, `frozen` (or `freeze`), `autoAdvance`, `reset`.",
+  "GET /latency": "The namespace's baseline response time.",
+  "PUT /latency": "Set it: `delay`, seeded `jitter`, and per-operation `operations`.",
+  "DELETE /latency": "Remove it.",
+  "GET /faults": "Fault rules that can hit this namespace. `?all=1` lists every namespace's.",
+  "POST /faults": 'Add a fault rule, or a preset with `{"preset": "<name>"}`.',
+  "PUT /faults": 'Replace the namespace\'s fault rules with `{"faults": [...]}`.',
+  "DELETE /faults":
+    "Remove the namespace's fault rules. `?id=` removes one; `?all=1` every namespace's.",
+  "GET /faults/presets": "Named faults this emulator answers to.",
+  "POST /faults/presets/:name": "Switch a preset on. The body overrides its fields.",
+  "GET /faults/:id": "One fault rule, with its `hits`, `seen` and `remaining` counters.",
+  "DELETE /faults/:id": "Remove one fault rule.",
+  "GET /snapshots": "The namespace's snapshots.",
+  "POST /snapshots":
+    'Snapshot the namespace: records, clock, random streams, faults, latency. `{"name"}` names it.',
+  "GET /snapshots/:id": "A snapshot as portable JSON.",
+  "PUT /snapshots/:id": "Store a snapshot document under this id, without restoring it.",
+  "POST /snapshots/:id/restore": "Replace the namespace with a snapshot.",
+  "DELETE /snapshots/:id": "Delete a snapshot.",
+  "GET /timeline": "The namespace's checkpoint history and branches.",
+  "POST /checkpoints": "Checkpoint a branch now. Successful mutations do this automatically.",
+  "POST /branches/:name": "Create a copy-on-write branch, optionally from a checkpoint (`at`).",
+  "POST /branches/:name/checkout": "Move a branch to a checkpoint.",
+  "GET /requests":
+    "The request journal. Filter with `operationId`, `method`, `path`, `status`, `faultId`, `since`, `limit`; `?all=1` for every namespace.",
+  "DELETE /requests": "Clear the journal.",
+  "GET /metrics": "Request counts and unmatched paths, for every namespace or the one named.",
+  "DELETE /metrics": "Clear them.",
+  "GET /credentials": "Vendor credential → namespace mappings, masked.",
+  "PUT /credentials": "Map vendor credentials to namespaces, for SDKs that cannot send a header.",
+  "DELETE /credentials": "Remove one mapping (`?credential=`) or all.",
+  "GET /state": "The namespace's collections: declared shape and stored rows.",
+  "GET /state/:collection": "A page of rows.",
+  "GET /state/:collection/:id": "One row.",
+  "POST /state/:collection": "Create a row from `{id?, value}`.",
+  "PUT /state/:collection/:id": "Replace a row.",
+  "PATCH /state/:collection/:id": "Shallow-merge into a row.",
+  "DELETE /state/:collection/:id": "Delete a row.",
+  "GET /ui": "The admin UI.",
+  "GET /ui/": "The admin UI.",
+  "GET /ui/manifest": "The admin UI's panels and extensions.",
+} as const
+
+/**
  * Admin routes every mock answers. A service adds its own keys beside these.
  * A key in this list keeps the shared handler, so the state API and the admin UI
  * stay the same when a service also ships vendor-specific controls.
  */
-export const STANDARD_ADMIN_ROUTES = [
-  "GET /",
-  "GET /health",
-  "POST /reset",
-  "GET /namespaces",
-  "GET /clock",
-  "POST /clock",
-  "GET /faults",
-  "POST /faults",
-  "DELETE /faults",
-  "POST /snapshots",
-  "POST /snapshots/:id/restore",
-  "DELETE /snapshots/:id",
-  "GET /timeline",
-  "POST /checkpoints",
-  "POST /branches/:name",
-  "POST /branches/:name/checkout",
-  "GET /requests",
-  "DELETE /requests",
-  "GET /metrics",
-  "DELETE /metrics",
-  "GET /credentials",
-  "PUT /credentials",
-  "DELETE /credentials",
-  "GET /state",
-  "GET /state/:collection",
-  "GET /state/:collection/:id",
-  "POST /state/:collection",
-  "PUT /state/:collection/:id",
-  "PATCH /state/:collection/:id",
-  "DELETE /state/:collection/:id",
-  "GET /ui",
-  "GET /ui/",
-  "GET /ui/manifest",
-] as const
+export const STANDARD_ADMIN_ROUTES = Object.keys(
+  ADMIN_ROUTE_REFERENCE,
+) as readonly (keyof typeof ADMIN_ROUTE_REFERENCE)[]
 
 export type StandardAdminRoute = (typeof STANDARD_ADMIN_ROUTES)[number]
 
@@ -190,7 +264,9 @@ const RESERVED_VIEWS = new Set([
   "overview",
   "state",
   "clock",
+  "latency",
   "faults",
+  "snapshots",
   "journal",
   "routes",
   "checkpoints",

@@ -80,9 +80,18 @@ test("workspace packages use Mockingbird names, bins, and repository URLs", () =
 const source = (path: string) => readFileSync(join(root, path), "utf8")
 
 test("shipped headers, admin errors, config, env, and docker names are Mockingbird", () => {
+  // Every control header is named once, in CONTROL_HEADERS; the constants point at it.
+  const headers = source("packages/service/core/src/controls.ts")
+  expect(headers).toContain('namespace: "x-mockingbird-namespace"')
+  expect(headers).toContain('adminKey: "x-mockingbird-admin-key"')
+  expect(
+    [...headers.matchAll(/: "(x-[a-z-]+)",/g)].every(([, name]) =>
+      name?.startsWith("x-mockingbird-"),
+    ),
+  ).toBe(true)
   const control = source("packages/service/core/src/control.ts")
-  expect(control).toContain('export const NAMESPACE_HEADER = "x-mockingbird-namespace"')
-  expect(control).toContain('export const ADMIN_KEY_HEADER = "x-mockingbird-admin-key"')
+  expect(control).toContain("export const NAMESPACE_HEADER = CONTROL_HEADERS.namespace")
+  expect(control).toContain("export const ADMIN_KEY_HEADER = CONTROL_HEADERS.adminKey")
   expect(control).toContain('type: "mockingbird_admin"')
   expect(control).toContain("expected a JSON object")
 

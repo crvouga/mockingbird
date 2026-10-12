@@ -13,10 +13,33 @@ npm install @crvouga/mockingbird-service-vercel
 ## Usage
 
 ```ts
+import { Vercel } from "@vercel/sdk"
+import { HTTPClient } from "@vercel/sdk/lib/http.js"
 import { createRuntime } from "@crvouga/mockingbird-service-vercel"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://api.vercel.com"))
+
+// Test setup: the emulator, seeded with one synthetic project.
+const emulator = createRuntime({ fixtures: { projects: [{ name: "fixture-app", framework: "nextjs" }] } })
+
+// The app's own Vercel client. Only its HTTP client changes: requests reach the
+// emulator in this process instead of api.vercel.com.
+const vercel = new Vercel({
+  bearerToken: "fixture-token",
+  httpClient: new HTTPClient({
+    fetcher: (input: RequestInfo | URL, init?: RequestInit) => emulator.fetch(new Request(input, init)),
+  }),
+})
+const domain = await vercel.projects.addProjectDomain({
+  idOrName: "fixture-app",
+  requestBody: { name: "fixture.example.com" },
+})
+console.log(domain.verified) // false
+const { domains } = await vercel.projects.getProjectDomains({ idOrName: "fixture-app" })
+console.log(domains.map((each) => each.name)) // ["fixture.example.com"]
 ```
+
+`@vercel/sdk` validates every response against Vercel's full schema. With 1.28 the domain,
+user, team and deployment-list calls pass; `createProject`, `getProjects`, `filterProjectEnvs`,
+`createProjectEnv` and `createDeployment` reach the emulator but fail the SDK's response validation.
 
 ## API
 

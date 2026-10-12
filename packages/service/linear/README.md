@@ -13,10 +13,25 @@ npm install @crvouga/mockingbird-service-linear
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-linear"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://api.linear.app"))
+import { LinearClient } from "@linear/sdk"
+import { createServer } from "@crvouga/mockingbird-service-linear/server"
+
+// Test setup: the emulator, seeded with one synthetic team.
+const team = { id: "0f0e8c1a-6f0b-4a53-9a43-3c7f0f1f2a10", key: "OPS", name: "Operations" }
+const server = await createServer({ fixtures: { teams: [team] } })
+
+// The app's own Linear client. Only its API URL changes.
+const linear = new LinearClient({ apiKey: "lin_api_fixture", apiUrl: `${server.url}/graphql` })
+const viewer = await linear.viewer
+const created = await linear.createIssue({ teamId: team.id, title: "Fixture issue", assigneeId: viewer.id })
+console.log(created.success) // true
+if (created.issueId) await linear.createComment({ issueId: created.issueId, body: "Reproduced locally." })
+await server.close()
 ```
+
+The GraphQL schema is a subset of Linear's. With `@linear/sdk` 97, `viewer` and the create and
+update mutations work; model reads that select fields outside the subset (`teams()`, `issues()`,
+`issue(id)`) are rejected, so query those through `linear.client.rawRequest` with the fields you need.
 
 ## API
 

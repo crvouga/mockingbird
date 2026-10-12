@@ -16,25 +16,34 @@ bun add @crvouga/mockingbird-service-infisical
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-infisical"
+import { InfisicalSDK } from "@infisical/sdk"
+import { createServer } from "@crvouga/mockingbird-service-infisical/server"
 
-const emulator = createRuntime()
-const response = await emulator.fetch(new Request(
-  "http://emulator.local/api/v3/secrets/raw?workspaceId=fixture-project&environment=dev&secretPath=/app",
-  { headers: { authorization: "Bearer fixture-service-token" } },
-))
-const result = await response.json() as { secrets: { secretKey: string; version: number }[] }
+const emulator = await createServer()
+
+// The application's client. Only siteUrl changes.
+const sdk = new InfisicalSDK({ siteUrl: emulator.url })
+sdk.auth().accessToken("fixture-service-token")
+const result = await sdk.secrets().listSecrets({
+  projectId: "fixture-project",
+  environment: "dev",
+  secretPath: "/app",
+})
 console.log(result.secrets.map((secret) => ({ key: secret.secretKey, version: secret.version })))
+
+await emulator.close()
 ```
 
-For the SDK walkthrough, also install `@infisical/sdk@3.0.91`. The SDK is an optional consumer
-dependency; the emulator's runtime does not depend on it.
+The examples need `@infisical/sdk@3.0.91`. The SDK is an optional consumer dependency; the
+emulator's runtime does not depend on it. A machine identity logs in with Universal Auth, and a
+`/__admin/ns/<name>` prefix on `siteUrl` gives a suite its own namespace:
 
-```js
-import { createServer } from "@crvouga/mockingbird-service-infisical/server"
+```ts
 import { InfisicalSDK } from "@infisical/sdk"
+import { createServer } from "@crvouga/mockingbird-service-infisical/server"
 
 const emulator = await createServer({ adminKey: "fixture-infisical-admin" })
+
 const sdk = new InfisicalSDK({ siteUrl: `${emulator.url}/__admin/ns/test-suite` })
 await sdk.auth().universalAuth.login({
   clientId: "fixture-machine",
@@ -46,6 +55,7 @@ const result = await sdk.secrets().listSecrets({
   secretPath: "/app",
 })
 console.log(result.secrets.map((secret) => ({ key: secret.secretKey, version: secret.version })))
+
 await emulator.close()
 ```
 

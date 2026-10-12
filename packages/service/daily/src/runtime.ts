@@ -6,6 +6,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   hmac,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -106,6 +107,8 @@ export type DailyRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   settings?: Partial<Settings>
   /** Where webhooks go (`POST /v1/webhooks/daily`); `secret` is `DAILY_WEBHOOK_SECRET`. */
@@ -256,6 +259,7 @@ export const createRuntime = (options: DailyRuntimeOptions = {}): DailyRuntime =
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: bearerToken,
     presets: DAILY_PRESETS,

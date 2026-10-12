@@ -3,6 +3,7 @@ import {
   type Clock,
   createWebhookHub,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   createRuntime as serviceRuntime,
@@ -57,6 +58,8 @@ export type S3RuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   buckets?: readonly string[]
   objects?: readonly S3SeedObject[]
@@ -164,13 +167,15 @@ export const createRuntime = (options: S3RuntimeOptions = {}): S3Runtime => {
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: accessKeyCredential,
-    create: ({ sqlite, namespace, clock }) =>
+    create: ({ sqlite, namespace, clock, rng }) =>
       new S3API({
         sqlite,
         namespace,
         now: clock.now,
+        random: rng.next,
         ...(options.buckets ? { buckets: options.buckets } : {}),
         ...(options.objects ? { objects: options.objects } : {}),
         ...(options.credentials ? { credentials: options.credentials } : {}),

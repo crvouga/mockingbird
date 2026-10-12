@@ -4,6 +4,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -55,6 +56,8 @@ export type VercelBlobRuntimeOptions = Omit<
   clock?: Clock
   seed?: number | string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type VercelBlobRuntime = ServiceRuntime<VercelBlobAPI>
@@ -126,7 +129,7 @@ const routes = (runtime: VercelBlobRuntime): AdminRoutes => ({
     if (typeof ttl !== "number" || !Number.isSafeInteger(ttl) || ttl < 0)
       return adminError(400, "expiresInMs must be a nonnegative integer")
     const id = api.state.ids.next("download_", 24)
-    const expiresAt = runtime.clock.now() + ttl
+    const expiresAt = runtime.namespaceClock(namespace).now() + ttl
     api.state.grants.insert(id, { id, blobId: blob.id, expiresAt })
     const url = new URL(blob.downloadUrl)
     url.searchParams.set("grant", id)
@@ -136,7 +139,10 @@ const routes = (runtime: VercelBlobRuntime): AdminRoutes => ({
     const api = runtime.instance(namespace)
     const grant = api.state.grants.get(params.id ?? "")
     if (!grant) return adminError(404, "Unknown download")
-    api.state.grants.update(grant.id, { ...grant, expiresAt: runtime.clock.now() })
+    api.state.grants.update(grant.id, {
+      ...grant,
+      expiresAt: runtime.namespaceClock(namespace).now(),
+    })
     return Response.json({ id: grant.id, expired: true })
   },
 })
@@ -149,6 +155,7 @@ export const createRuntime = (options: VercelBlobRuntimeOptions = {}): VercelBlo
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
       new VercelBlobAPI({ ...options, sqlite, namespace, publicNamespace, now: clock.now }),

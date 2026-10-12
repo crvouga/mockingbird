@@ -4,6 +4,7 @@
 import {
   type CliCommand,
   type CliValues,
+  resolveServeControls,
   runCli,
   serveCommand,
 } from "@crvouga/mockingbird-adapter-node"
@@ -46,14 +47,16 @@ const serve: CliCommand = {
       text(values["admin-prefix"]) ?? process.env.MOCKINGBIRD_ADMIN_PREFIX,
     )
     const adminKey = text(values["admin-key"]) ?? process.env.MOCKINGBIRD_ADMIN_KEY
-    const seed = text(values.seed)
+    const seed = text(values.seed) ?? process.env.MOCKINGBIRD_SEED
     const port = text(values.port)
     try {
+      const adminControls = await resolveServeControls(values)
       const runtime = await serveTarget.create(values, {
         adminPrefix,
         adminKey,
         seed,
         onLog: logger(format),
+        ...(adminControls !== undefined ? { adminControls } : {}),
       })
       const listening = await listenH2c(runtime, {
         port: port === undefined ? serveTarget.defaultPort : Number.parseInt(port, 10),

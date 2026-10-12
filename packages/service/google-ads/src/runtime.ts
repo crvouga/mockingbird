@@ -4,6 +4,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
 } from "@crvouga/mockingbird-service"
@@ -93,6 +94,8 @@ export type GoogleAdsRuntimeOptions = Omit<
   clock?: Clock
   seed?: number | string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
 }
 export type GoogleAdsRuntime = ServiceRuntime<GoogleAdsAPI>
@@ -158,6 +161,7 @@ export const createRuntime = (options: GoogleAdsRuntimeOptions = {}): GoogleAdsR
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     adminKey,
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
       new GoogleAdsAPI({
         ...options,

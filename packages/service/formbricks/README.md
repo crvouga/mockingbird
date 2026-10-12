@@ -37,14 +37,31 @@ npx mockingbird-formbricks serve --port 8813 \
 ```
 
 ```ts
-import { createRuntime, WORKSPACE_ID } from "@crvouga/mockingbird-service-formbricks"
+import { WORKSPACE_ID } from "@crvouga/mockingbird-service-formbricks"
+import { createServer } from "@crvouga/mockingbird-service-formbricks/server"
 
-const formbricks = createRuntime({
+// Test setup: the emulator, posting response webhooks to the app's handler.
+const server = await createServer({
   webhooks: { url: "http://127.0.0.1:3000/webhooks/formbricks", secret: "whsec_…" },
 })
-// …the app POSTs /api/v2/client/<workspace>/responses {surveyId, finished: true, data}…
-// the emulator validates it, stores it, and posts responseFinished to the webhook.
-const response = await formbricks.fetch(new Request("http://formbricks.test/__admin/responses"))
+
+// Application code: appUrl is server.url. Submit a response to the seeded NPS survey.
+const appUrl = server.url
+const created = await fetch(`${appUrl}/api/v2/client/${WORKSPACE_ID}/responses`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    surveyId: "csurveynps000000000000001",
+    finished: true,
+    data: { nps_score: 9 },
+  }),
+})
+// → {data: {id, quotaFull: false}}. The emulator validates it, stores it, and posts
+// responseFinished to the webhook.
+
+// Test control: read what was stored.
+const stored = await fetch(`${appUrl}/__admin/responses`)
+await server.close()
 ```
 
 ### Routes

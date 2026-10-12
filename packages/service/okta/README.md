@@ -13,9 +13,19 @@ npm install @crvouga/mockingbird-service-okta
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-okta"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://example.okta.com"))
+import okta from "@okta/okta-sdk-nodejs"
+import { createServer } from "@crvouga/mockingbird-service-okta/server"
+
+const server = await createServer({ seed: 1 })
+
+// The app's own Okta client. Only its org URL changes.
+const client = new okta.Client({ orgUrl: server.url, token: "fixture-api-token" })
+const user = await client.userApi.createUser({
+  body: { profile: { firstName: "Ada", lastName: "Fixture", email: "ada@example.com", login: "ada@example.com" } },
+})
+const found = await client.userApi.getUser({ userId: user.id ?? "" })
+console.log(found.status, found.profile?.login) // "ACTIVE", "ada@example.com"
+await server.close()
 ```
 
 ## API

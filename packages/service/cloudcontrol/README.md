@@ -7,10 +7,24 @@ Transport scaffold for Amazon Cloud Control API. ESM; Node 22+ or Bun 1.2+.
 ## Usage
 
 ```ts
+import { CloudControlClient, ListResourcesCommand } from "@aws-sdk/client-cloudcontrol"
 import { createServer } from "@crvouga/mockingbird-service-cloudcontrol/server"
+
+// Test setup: start the emulator and point the AWS SDK client your application uses at it.
 const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+const cloudcontrol = new CloudControlClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// No operation is implemented yet, so every SDK call rejects.
+const failure = await cloudcontrol
+  .send(new ListResourcesCommand({ TypeName: "AWS::S3::Bucket" }))
+  .catch((error: Error) => error)
+// failure.name === "UnknownOperationException"
+
+await emulator.close() // after the test
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

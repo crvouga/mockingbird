@@ -6,6 +6,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   fromBase64,
+  type MockControls,
   outboxAdminRoutes,
   type RequestLog,
   type ServiceRuntime,
@@ -164,6 +165,8 @@ export type TwilioRuntimeOptions = Pick<TwilioAPIOptions, "fixtures" | "baseUrl"
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Initial Verify settings for every namespace (e.g. `{fixedCode: "000000"}`). */
   verify?: Partial<VerifySettings>
@@ -281,11 +284,12 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: (request) => basicAuth(request)?.username,
     presets: TWILIO_PRESETS,
     webhooks: hub,
-    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock, rng }) =>
       new TwilioAPI({
         ...(options.fixtures ? { fixtures: options.fixtures } : {}),
         ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
@@ -295,6 +299,7 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
         publicNamespace,
         adminPrefix,
         now: clock.now,
+        random: rng.next,
         ...(options.verify ? { verify: options.verify } : {}),
         ...(options.accounts ? { accounts: options.accounts } : {}),
       }),
@@ -409,13 +414,20 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
           RecordingDuration: String(recording?.duration ?? 1),
           RecordingChannels: String(recording?.channels ?? 2),
           RecordingSource: "DialVerb",
-          RecordingStartTime: new Date(runtime.clock.now()).toUTCString().replace("GMT", "+0000"),
+          RecordingStartTime: new Date(runtime.namespaceClock(namespace).now())
+            .toUTCString()
+            .replace("GMT", "+0000"),
           ...overrides,
         }
         break
       }
     }
-    return publish(namespace, `voice.${kind}`, params, `${callSid}:${kind}:${runtime.clock.now()}`)
+    return publish(
+      namespace,
+      `voice.${kind}`,
+      params,
+      `${callSid}:${kind}:${runtime.namespaceClock(namespace).now()}`,
+    )
   }
 
   const inner = runtime.fetch

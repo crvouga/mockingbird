@@ -35,22 +35,34 @@ npx mockingbird-payload-cms serve --port 8822
 # or seed your own collections: --collections ./cms-seed.json   ({"marketing": [ … ]})
 ```
 
+In a test, the application's Payload SDK (`@payloadcms/sdk`) takes the emulator as its `fetch`:
+
 ```ts
+import { PayloadSDK } from "@payloadcms/sdk"
 import { createRuntime } from "@crvouga/mockingbird-service-payload-cms"
 
-const cms = createRuntime()
-await cms.fetch(
+// Test setup: an in-process CMS, with one more marketing document added through the admin plane.
+const emulator = createRuntime()
+await emulator.fetch(
   new Request("http://cms.test/__admin/collections/marketing/docs", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name: "Fall", type: "referral", isActive: true, cardTitle: "Fall Rewards" }),
   }),
 )
-const page = await cms.fetch(
-  new Request(
-    "http://cms.test/api/marketing?where[type][equals]=referral&where[isActive][equals]=true&limit=1",
-  ),
-)
+
+// Application code: Payload's SDK. Only its fetch changes, so requests reach the emulator in
+// this process instead of the CMS.
+const cms = new PayloadSDK({
+  baseURL: "http://cms.test/api",
+  fetch: ((url: string, init: RequestInit) =>
+    emulator.fetch(new Request(url, init))) as typeof fetch,
+})
+const page = await cms.find({
+  collection: "marketing",
+  where: { type: { equals: "referral" }, isActive: { equals: true } },
+  limit: 1,
+})
 // → {docs: [{id: 4, cardTitle: "Fall Rewards", …}], totalDocs: 2, limit: 1, …}
 ```
 

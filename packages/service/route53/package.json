@@ -94,6 +94,7 @@
       "introspection": [
         "GET /__admin/health",
         "GET /__admin",
+        "GET /__admin/controls",
         "GET /__admin/state",
         "GET /__admin/requests",
         "GET /__admin/metrics",

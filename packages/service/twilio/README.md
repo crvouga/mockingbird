@@ -40,29 +40,34 @@ twilio-node builds a host for each product (`api.twilio.com`, `verify.twilio.com
 `{emulator}/api/2010-04-01/…`, `{emulator}/verify/v2/…`, `{emulator}/lookups/v2/…`. Pass every
 `new Twilio(...)` an `httpClient` that rewrites the URL. `twilioMockUrl` does the rewrite:
 
-```js
-import { RequestClient, Twilio } from "twilio"
+```ts
+import twilio from "twilio"
 import { twilioMockUrl } from "@crvouga/mockingbird-service-twilio"
+import { createServer } from "@crvouga/mockingbird-service-twilio/server"
+
+const server = await createServer() // or process.env.TWILIO_API_BASE_URL, e.g. http://127.0.0.1:8798
+
+type RequestOptions = Parameters<twilio.RequestClient["request"]>[0]
 
 /** https://verify.twilio.com/v2/Services/VA…/Verifications → {base}/verify/v2/Services/VA…/Verifications */
-class MockRequestClient extends RequestClient {
-  constructor(baseUrl) {
-    super()
-    this.baseUrl = baseUrl
-  }
-  request(opts) {
-    return super.request({ ...opts, uri: twilioMockUrl(opts.uri, this.baseUrl) })
+class MockRequestClient extends twilio.RequestClient {
+  override request(opts: RequestOptions): Promise<never> {
+    const uri = twilioMockUrl(opts.uri, server.url)
+    return super.request({ ...opts, uri }) as Promise<never>
   }
 }
 
-const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN } = process.env
-const base = process.env.TWILIO_API_BASE_URL // e.g. http://127.0.0.1:8798
-const client = new Twilio(
-  TWILIO_ACCOUNT_SID,
-  TWILIO_AUTH_TOKEN,
-  base ? { httpClient: new MockRequestClient(base) } : {},
-)
+// The app's own Twilio client. Only its HTTP client changes.
+const client = twilio("AC00000000000000000000000000000000", "fixture-token", {
+  httpClient: new MockRequestClient(),
+})
+const lookup = await client.lookups.v2.phoneNumbers("+12025550123").fetch()
+// lookup.valid === true, lookup.nationalFormat === "(202) 555-0123"
+await server.close()
 ```
+
+The example type-checks with twilio 5.13.1 or later; 5.10.0 runs it the same way, but its
+`exports` map hides the typings from `moduleResolution: nodenext`.
 
 The emulator also routes by the `Host` header. A request that reaches it as `lookups.twilio.com`
 (through a DNS override or a proxy) and has no prefix is served as `/lookups/…`. The recording
@@ -73,13 +78,35 @@ adapter's raw `fetch` of `https://api.twilio.com/2010-04-01/…` becomes
 ### Reading the OTP in a test
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-twilio"
+import twilio from "twilio"
+import { twilioMockUrl } from "@crvouga/mockingbird-service-twilio"
+import { createServer } from "@crvouga/mockingbird-service-twilio/server"
 
-const twilio = createRuntime()
-// …the app calls verify.v2.services(VA).verifications.create({ to, channel: "sms" })…
-const latest = await twilio.fetch(new Request("http://twilio.test/__admin/verify/+12025550123/latest"))
-const { code, sid, status } = (await latest.json()) as { code: string; sid: string; status: string }
-// …the app calls verificationChecks.create({ verificationSid: sid, code }) → status "approved"
+// Test setup: the emulator, and the app's Twilio client pointed at it as above.
+const server = await createServer()
+type RequestOptions = Parameters<twilio.RequestClient["request"]>[0]
+class MockRequestClient extends twilio.RequestClient {
+  override request(opts: RequestOptions): Promise<never> {
+    const uri = twilioMockUrl(opts.uri, server.url)
+    return super.request({ ...opts, uri }) as Promise<never>
+  }
+}
+const client = twilio("AC00000000000000000000000000000000", "fixture-token", {
+  httpClient: new MockRequestClient(),
+})
+const verify = client.verify.v2.services("VA00000000000000000000000000000000")
+
+// The app sends the code.
+const verification = await verify.verifications.create({ to: "+12025550123", channel: "sms" })
+
+// The test reads it from the admin plane, the way a user reads the SMS.
+const latest = await fetch(`${server.url}/__admin/verify/+12025550123/latest`)
+const { code } = (await latest.json()) as { code: string; sid: string; status: string }
+
+// The app checks it.
+const check = await verify.verificationChecks.create({ verificationSid: verification.sid, code })
+// check.status === "approved"
+await server.close()
 ```
 
 ### Routes

@@ -26,6 +26,8 @@ export type RequestLog = {
   unmatched: boolean
   /** Set when a fault rule produced the response. */
   faultId?: string
+  /** Milliseconds of injected wait: latency, fault delays and timeouts. Absent when none. */
+  delayMs?: number
   /** Resource ids the handler touched (`userId`, `orderId`, …), when the service reports them. */
   ids?: Record<string, string>
   /** Set when the service created a resource the request referred to but that did not exist. */

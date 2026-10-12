@@ -46,30 +46,42 @@ npx mockingbird-daily serve --port 8800 \
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-daily"
+import { createServer } from "@crvouga/mockingbird-service-daily/server"
 
-const daily = createRuntime({
+// Test setup: the emulator, its webhook receiver and the S3 bucket transcripts land in.
+const server = await createServer({
   settings: { roomUrlBase: "https://acme-mock.daily.test/" },
   webhooks: { url: "http://127.0.0.1:4000/v1/webhooks/daily", secret: "whsec-daily" },
   transcripts: { endpoint: "http://127.0.0.1:4569", bucket: "emr-transcripts" },
 })
-const admin = (path: string, body: unknown) =>
-  daily.fetch(
-    new Request(`http://daily.test/__admin${path}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    }),
-  )
 
-// …the EMR books an appointment: POST /v1/rooms + POST /v1/meeting-tokens…
-
-// End the call: writes <room>/<session>.json to S3, then fires transcription.stopped.
-await admin("/rooms/<room name>/session", {
-  participants: [{ userId: "prac-1" }, { userId: "pat-1" }],
-  durationSec: 1200,
-  transcript: [{ s: "prac-1", t: "How are you feeling?", ts: 0.5, te: 2.1 }],
+// Application code: DAILY_API_BASE_URL is `${server.url}/v1`. The EMR books an appointment.
+const baseUrl = `${server.url}/v1`
+const headers = { authorization: "Bearer daily-api-key", "content-type": "application/json" }
+const created = await fetch(`${baseUrl}/rooms`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ privacy: "private" }),
 })
+const room = (await created.json()) as { name: string; url: string }
+const minted = await fetch(`${baseUrl}/meeting-tokens`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ properties: { room_name: room.name, user_id: "prac-1", is_owner: true } }),
+})
+const { token } = (await minted.json()) as { token: string }
+
+// Test control: end the call. Writes <room>/<session>.json to S3, then fires transcription.stopped.
+await fetch(`${server.url}/__admin/rooms/${room.name}/session`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    participants: [{ userId: "prac-1" }, { userId: "pat-1" }],
+    durationSec: 1200,
+    transcript: [{ s: "prac-1", t: "How are you feeling?", ts: 0.5, te: 2.1 }],
+  }),
+})
+await server.close()
 ```
 
 ### Routes

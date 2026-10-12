@@ -4,6 +4,7 @@ import {
   createRuntime as createServiceRuntime,
   createWebhookHub,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -110,6 +111,8 @@ export type FormbricksRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   surveys?: readonly Survey[]
   settings?: Partial<Settings>
@@ -257,6 +260,7 @@ export const createRuntime = (options: FormbricksRuntimeOptions = {}): Formbrick
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: formbricksCredential,
     presets: FORMBRICKS_PRESETS,

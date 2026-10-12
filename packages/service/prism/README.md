@@ -33,21 +33,42 @@ npx mockingbird-prism serve --port 8825 --auto-advance 2000
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-prism"
+import { createServer } from "@crvouga/mockingbird-service-prism/server"
 
-const prism = createRuntime()
-const api = (path: string, body?: unknown) =>
-  prism.fetch(
-    new Request(`http://prism.test${path}`, {
-      method: body === undefined ? "GET" : "POST",
-      headers: { authorization: "Bearer k", "content-type": "application/json" },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }),
-  )
+// Test setup: a local Prism.
+const server = await createServer()
+const baseUrl = server.url // the app's PRISM_API_URL
 
-// …the app upserts the subject, creates a scan, the capture page PUTs the video…
-// Then finish processing without waiting:
-await api("/__admin/scans/<scan id>/advance", { to: "READY" })
+// Application code: the requests it sends to Prism.
+const prism = async (path: string, body?: unknown) => {
+  const response = await fetch(`${baseUrl}${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { authorization: "Bearer k", accept: "application/json;v=1", "content-type": "application/json" },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  })
+  return (await response.json()) as Record<string, any>
+}
+await prism("/users", {
+  token: "member-1", sex: "female", region: "north_america", birthDate: "1990-04-02",
+  weight: { value: 64, unit: "kg" }, height: { value: 1.7, unit: "m" },
+  researchConsent: false, termsOfService: { accepted: true, version: "1" },
+})
+const scan = await prism("/scans", { userToken: "member-1", deviceConfigName: "IPHONE_SCANNER", bodyfatMethod: "coco2" })
+const upload = await prism(`/scans/${scan.id}/upload-url`, {})
+await fetch(upload.url, { method: "PUT", body: "capture video bytes" }) // the capture page's upload
+
+// Test control: finish processing without waiting.
+await fetch(`${baseUrl}/__admin/scans/${scan.id}/advance`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ to: "READY" }),
+})
+
+// Application code: the READY scan's results.
+const bodyfat = await prism(`/scans/${scan.id}/bodyfat`)
+// → {bodyfatMethod: "coco2", bodyfatPercentage: 29.6, leanMass: 45.07, fatMass: 18.93, …}
+
+await server.close()
 ```
 
 ### Routes

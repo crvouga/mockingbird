@@ -13,9 +13,41 @@ npm install @crvouga/mockingbird-service-google
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-google"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://www.googleapis.com"))
+import { OAuth2Client } from "google-auth-library"
+import { createServer } from "@crvouga/mockingbird-service-google/server"
+
+const google = await createServer()
+
+// The application's OAuth client. Only its endpoints change.
+const oauth = new OAuth2Client({
+  clientId: "client-id",
+  clientSecret: "client-secret",
+  redirectUri: "http://localhost:3000/callback",
+  endpoints: {
+    oauth2AuthBaseUrl: `${google.url}/o/oauth2/v2/auth`,
+    oauth2TokenUrl: `${google.url}/oauth2/token`,
+  },
+})
+const authUrl = oauth.generateAuthUrl({ scope: ["openid", "email", "profile"] })
+
+// Test control: the seeded user approves on the consent page, as a browser would.
+const consent = await fetch(`${google.url}/o/oauth2/v2/auth/callback`, {
+  method: "POST",
+  redirect: "manual",
+  body: new URLSearchParams({
+    ...Object.fromEntries(new URL(authUrl).searchParams),
+    email: "testuser@gmail.com",
+  }),
+})
+const code = new URL(consent.headers.get("location") ?? "").searchParams.get("code") ?? ""
+
+// The application exchanges the code and reads the profile.
+const { tokens } = await oauth.getToken(code)
+oauth.setCredentials(tokens)
+const me = await oauth.request<{ email: string }>({ url: `${google.url}/oauth2/v2/userinfo` })
+console.log(me.data.email) // "testuser@gmail.com"
+
+await google.close()
 ```
 
 ## API

@@ -14,7 +14,11 @@ bun add -d @crvouga/mockingbird-service-app-store-connect
 ## Usage
 
 ```ts
+import { SignJWT } from "jose"
 import { createServer } from "@crvouga/mockingbird-service-app-store-connect/server"
+
+// Test setup: a throwaway ES256 key pair. The emulator only gets the public half.
+// Never use a real Apple private key here.
 const pair = await crypto.subtle.generateKey(
   { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"],
 )
@@ -22,8 +26,20 @@ const server = await createServer({
   keys: [{ id: "mock-key", issuer: "mock-issuer", role: "ADMIN",
     publicKey: await crypto.subtle.exportKey("jwk", pair.publicKey) }],
 })
-// Configure the test app's ES256 signer with pair.privateKey and the matching key/issuer ids.
-// Override its Apple origin with server.url. Never use a real Apple private key here.
+
+// Apple publishes no JavaScript SDK, so the application signs its team JWT and calls the API
+// over HTTP. Only the origin changes: server.url instead of api.appstoreconnect.apple.com.
+const token = await new SignJWT({})
+  .setProtectedHeader({ alg: "ES256", kid: "mock-key", typ: "JWT" })
+  .setIssuer("mock-issuer")
+  .setAudience("appstoreconnect-v1")
+  .setIssuedAt()
+  .setExpirationTime("10m")
+  .sign(pair.privateKey)
+const apps = await fetch(`${server.url}/v1/apps`, { headers: { authorization: `Bearer ${token}` } })
+const { data } = (await apps.json()) as { data: { attributes: { name: string } }[] }
+console.log(data[0]?.attributes.name) // Synthetic App
+
 await server.close()
 ```
 

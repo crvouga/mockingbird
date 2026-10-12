@@ -15,9 +15,13 @@ bun add @crvouga/mockingbird-service-openai
 
 ## Usage
 
+The examples use the official `openai@7.27.0` SDK.
+
 ```ts
+import OpenAI from "openai"
 import { createRuntime, DEFAULT_TOKEN } from "@crvouga/mockingbird-service-openai"
 
+// Test setup: the emulator, scripted with the reply the test expects.
 const emulator = createRuntime({
   scripts: [{
     kind: "chat",
@@ -25,18 +29,26 @@ const emulator = createRuntime({
     usage: { prompt_tokens: 12, completion_tokens: 3, cached_tokens: 8 },
   }],
 })
-const response = await emulator.fetch(new Request("http://emulator.local/v1/chat/completions", {
-  method: "POST",
-  headers: { authorization: `Bearer ${DEFAULT_TOKEN}`, "content-type": "application/json" },
-  body: JSON.stringify({ model: "fixture-chat", messages: [{ role: "user", content: "Fixture question" }] }),
-}))
-console.log(await response.json())
+
+// The app's own OpenAI client. Only its fetch changes: requests reach the
+// emulator in this process instead of api.openai.com.
+const openai = new OpenAI({
+  apiKey: DEFAULT_TOKEN,
+  fetch: (url: RequestInfo | URL, init?: RequestInit) => emulator.fetch(new Request(url, init)),
+})
+const completion = await openai.chat.completions.create({
+  model: "fixture-chat",
+  messages: [{ role: "user", content: "Fixture question" }],
+})
+console.log(completion.choices[0]?.message.content) // "Fixture answer"
+console.log(completion.usage?.total_tokens) // 15
 ```
 
-For this optional SDK example, also install `@ai-sdk/openai@4.0.83` and `ai@7.0.127`.
+For the Vercel AI SDK, also install `@ai-sdk/openai@4.0.83` and `ai@7.0.127`, and point the
+provider's `baseURL` at a listening server.
 Use the explicit `.chat()` provider: the provider's default model uses the Responses API.
 
-```js
+```ts
 import { createOpenAI } from "@ai-sdk/openai"
 import { generateText } from "ai"
 import { createServer } from "@crvouga/mockingbird-service-openai/server"

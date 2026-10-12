@@ -1,7 +1,6 @@
 import { expect, test } from "bun:test"
 import { createClock } from "./src/clock.js"
 import { ADMIN_KEY_HEADER, createControlPlane, NAMESPACE_HEADER } from "./src/control.js"
-import { createFaultRegistry } from "./src/faults.js"
 import { createJournal } from "./src/journal.js"
 import { createMetrics } from "./src/metrics.js"
 import { MOCKINGBIRD_HEADER } from "./src/runtime.js"
@@ -16,7 +15,6 @@ test("admin clock rejects a non-object body with the Mockingbird error", async (
     startedAt: 0,
     wallNow: () => 0,
     clock: createClock(() => 0),
-    faults: createFaultRegistry(),
     metrics: createMetrics(),
     journal: createJournal(),
     defaultNamespace: "default",

@@ -33,11 +33,15 @@ fixtures. See [setup examples](../../../docs/GETTING_STARTED.md).
 
 ## Usage
 
+The example uses the official `@octokit/rest` SDK (22.0.1).
+
 ```ts
+import { Octokit } from "@octokit/rest"
 import { createRuntime } from "@crvouga/mockingbird-service-github"
 
-const github = createRuntime({ seed: 42 })
-await github.fetch(new Request("http://github.mock/__admin/github/repositories", {
+// Test setup: the emulator, seeded with a synthetic repository and commit graph.
+const emulator = createRuntime({ seed: 42 })
+await emulator.fetch(new Request("http://github.mock/__admin/github/repositories", {
   method: "POST",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
@@ -49,34 +53,27 @@ await github.fetch(new Request("http://github.mock/__admin/github/repositories",
     branches: { main: "a".repeat(40) },
   }),
 }))
-const response = await github.fetch(new Request("http://github.mock/repos/synthetic-org/example"))
-console.log(await response.json())
 
-// Continue with the same runtime to publish a synthetic branch and PR.
-const repo = "http://github.mock/repos/synthetic-org/example"
-const send = (path: string, method = "GET", body?: unknown) => github.fetch(
-  new Request(`${repo}${path}`, {
-    method,
-    headers: {
-      "content-type": "application/json",
-      "X-GitHub-Api-Version": "2026-03-10",
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-  }),
-)
-const branch = await send("/git/refs", "POST", {
-  ref: "refs/heads/topic", sha: "b".repeat(40),
+// The app's own Octokit. Only its fetch changes: requests reach the emulator
+// in this process instead of api.github.com.
+const octokit = new Octokit({
+  request: { fetch: (url: string, init: RequestInit) => emulator.fetch(new Request(url, init)) },
 })
+const repo = { owner: "synthetic-org", repo: "example" }
+const { data: repository } = await octokit.rest.repos.get(repo)
+console.log(repository.full_name) // "synthetic-org/example"
+
+// Publish a synthetic branch and PR.
+const branch = await octokit.rest.git.createRef({ ...repo, ref: "refs/heads/topic", sha: "b".repeat(40) })
 console.log(branch.status) // 201
-const created = await send("/pulls", "POST", {
-  title: "Synthetic change", head: "topic", base: "main", body: "Description",
+const { status, data: pr } = await octokit.rest.pulls.create({
+  ...repo, title: "Synthetic change", head: "topic", base: "main", body: "Description",
 })
-const pr = await created.json()
-console.log(created.status, pr.number) // 201, 1
-const lookup = await send("/pulls?head=synthetic-org%3Atopic&base=main&state=open")
-console.log((await lookup.json())[0].number === pr.number) // true
-const edited = await send(`/pulls/${pr.number}`, "PATCH", { body: "" })
-console.log((await edited.json()).body === null) // true
+console.log(status, pr.number) // 201, 1
+const lookup = await octokit.rest.pulls.list({ ...repo, head: "synthetic-org:topic", base: "main", state: "open" })
+console.log(lookup.data[0]?.number === pr.number) // true
+const edited = await octokit.rest.pulls.update({ ...repo, pull_number: pr.number, body: "" })
+console.log(edited.data.body === null) // true
 ```
 
 All requests above stay inside the local Fetch runtime. The branch target must

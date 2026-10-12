@@ -71,6 +71,33 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
   if (root.dataset.themeMode === "system") applyTheme("system", false)
 })
 
+// Mobile menu: the primary nav collapses behind a toggle on narrow screens.
+const header = document.querySelector<HTMLElement>("[data-header]")
+const navToggle = header?.querySelector<HTMLButtonElement>("[data-nav-toggle]")
+const navOpen = () => header?.hasAttribute("data-nav-open") ?? false
+const setNavOpen = (open: boolean) => {
+  if (!header || !navToggle) return
+  header.toggleAttribute("data-nav-open", open)
+  navToggle.setAttribute("aria-expanded", String(open))
+  navToggle.setAttribute("aria-label", open ? "Close menu" : "Open menu")
+}
+navToggle?.addEventListener("click", () => setNavOpen(!navOpen()))
+document.addEventListener("click", (event) => {
+  const target = event.target as Element
+  // The toggle handles itself; anything else outside the menu dismisses it.
+  if (!target.closest("[data-nav-toggle], [data-nav]")) setNavOpen(false)
+})
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !navOpen()) return
+  setNavOpen(false)
+  navToggle?.focus()
+})
+matchMedia("(min-width: 901px)").addEventListener("change", () => setNavOpen(false))
+// A page restored from the back/forward cache comes back exactly as it was left.
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) setNavOpen(false)
+})
+
 if (!isMac) {
   for (const kbd of document.querySelectorAll("[data-mod-key]")) kbd.textContent = "Ctrl K"
   for (const kbd of document.querySelectorAll("[data-mod-enter]")) kbd.textContent = "Ctrl ↵"

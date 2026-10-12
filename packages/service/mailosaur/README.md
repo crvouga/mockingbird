@@ -45,12 +45,15 @@ must not see it, since other HTTP clients (axios) also read it and would be tunn
 emulator too. If the emulator can bind 443, `--tls-port 443` and `new MailosaurClient(key,
 "https://127.0.0.1/")` work without the proxy.
 
-```js
-import { createServer } from "@crvouga/mockingbird-service-mailosaur/server"
+```ts
+import tls from "node:tls"
 import MailosaurClient from "mailosaur"
+import { createServer } from "@crvouga/mockingbird-service-mailosaur/server"
 
+// Test setup: the emulator over TLS, its certificate trusted (or NODE_EXTRA_CA_CERTS),
+// and the proxy variable set while the application's client is constructed.
 const inbox = await createServer({ tls: true })
-// …trust inbox.cert (NODE_EXTRA_CA_CERTS, or tls.setDefaultCACertificates in a test)…
+tls.setDefaultCACertificates([...tls.getCACertificates(), inbox.cert ?? ""])
 process.env.HTTPS_PROXY = inbox.proxyUrl
 const mailosaur = new MailosaurClient("any-key")
 delete process.env.HTTPS_PROXY
@@ -65,8 +68,11 @@ await fetch(`${inbox.url}/__admin/ingest`, {
     text: "Your verification code is 604218. ",
   }),
 })
+
+// The application reads it with the unmodified SDK.
 const message = await mailosaur.messages.get("abcd1234", { sentTo: "member-app-x1@abcd1234.mailosaur.net" })
 message.text?.codes?.[0]?.value // "604218"
+await inbox.close()
 ```
 
 The inbox can also be read without the SDK, through the admin routes:

@@ -7,10 +7,8 @@ import {
   resolveAdminPrefix,
 } from "./control.js"
 import { type CredentialRegistry, createCredentialRegistry, maskCredential } from "./credentials.js"
-import { createFaultRegistry } from "./faults.js"
 import { createJournal } from "./journal.js"
 import { createMetrics } from "./metrics.js"
-import { createRng } from "./rng.js"
 import type { StateField, StateFieldKind, StatePage, StateRecord, StateView } from "./state-view.js"
 import type { AdminExtension } from "./surface.js"
 
@@ -375,7 +373,6 @@ export const createEngineAdmin = (options: EngineAdminOptions): EngineAdmin => {
     startedAt,
     wallNow: () => Date.now(),
     clock: createClock(),
-    faults: createFaultRegistry(createRng(0)),
     metrics: createMetrics(),
     journal: createJournal(),
     defaultNamespace: "default",

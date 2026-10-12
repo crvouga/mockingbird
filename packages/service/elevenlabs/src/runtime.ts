@@ -3,6 +3,7 @@ import {
   type Clock,
   createRuntime as createServiceRuntime,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type RuntimeIO,
   type ServiceRuntime,
@@ -135,6 +136,8 @@ export type ElevenLabsRuntimeOptions = Omit<
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   /** Replace the process clock and sleep, e.g. to make a `latencyMs` fault take no real time. */
   io?: Partial<RuntimeIO>
@@ -219,7 +222,7 @@ const adminRoutes = (runtime: ElevenLabsRuntime): AdminRoutes => ({
  * control, fault presets and a request journal.
  */
 export const createRuntime = (options: ElevenLabsRuntimeOptions = {}): ElevenLabsRuntime => {
-  const { clock, seed, adminPrefix, adminKey, onLog, io, ...api } = options
+  const { clock, seed, adminPrefix, adminKey, adminControls, onLog, io, ...api } = options
   // One key for every namespace and history branch, so a restored script still opens.
   const vaultKey = api.vaultKey ?? createVaultKey()
   return createServiceRuntime<ElevenLabsAPI>({
@@ -230,6 +233,7 @@ export const createRuntime = (options: ElevenLabsRuntimeOptions = {}): ElevenLab
     ...(seed !== undefined ? { seed } : {}),
     ...(adminPrefix !== undefined ? { adminPrefix } : {}),
     ...(adminKey !== undefined ? { adminKey } : {}),
+    ...(adminControls !== undefined ? { adminControls } : {}),
     ...(onLog ? { onLog } : {}),
     ...(io ? { io } : {}),
     credential: (request) => request.headers.get(API_KEY_HEADER) ?? undefined,

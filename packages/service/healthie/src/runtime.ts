@@ -4,6 +4,7 @@ import {
   createRuntime as createServiceRuntime,
   createWebhookHub,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   signers,
@@ -112,6 +113,8 @@ export type HealthieRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   settings?: Partial<Settings>
   /**
@@ -140,7 +143,7 @@ const text = (value: unknown) => (typeof value === "string" ? value : undefined)
 const publicUser = ({ password: _password, ...user }: UserRecord) => user
 
 const adminRoutes = (runtime: ServiceRuntime<HealthieAPI>): AdminRoutes => {
-  const at = () => healthieTimestamp(runtime.clock.now())
+  const at = (namespace: string) => healthieTimestamp(runtime.namespaceClock(namespace).now())
   return {
     "GET /users": ({ namespace }) =>
       json(200, {
@@ -190,9 +193,9 @@ const adminRoutes = (runtime: ServiceRuntime<HealthieAPI>): AdminRoutes => {
         : adminError(404, `no user ${params.id}`)
     },
     "POST /users/:id/archive": ({ params, namespace }) =>
-      setActive(runtime.instance(namespace), params.id as string, false, at()),
+      setActive(runtime.instance(namespace), params.id as string, false, at(namespace)),
     "POST /users/:id/unarchive": ({ params, namespace }) =>
-      setActive(runtime.instance(namespace), params.id as string, true, at()),
+      setActive(runtime.instance(namespace), params.id as string, true, at(namespace)),
     "POST /offerings": ({ body, namespace }) => {
       if (!isRecord(body) || !text(body.name))
         return adminError(400, 'expected {"name", "price"?, …}')
@@ -235,7 +238,7 @@ const adminRoutes = (runtime: ServiceRuntime<HealthieAPI>): AdminRoutes => {
         stripe_charge_id: text(body.stripe_charge_id) ?? `ch_mock_${id}`,
         next_payment_date: recurring ? (text(body.next_payment_date) ?? "2099-01-01") : null,
         billing_frequency: recurring ? (offering?.billing_frequency ?? "Monthly") : null,
-        created_at: at(),
+        created_at: at(namespace),
       }
       api.state.billingItems.insert(item.id, item)
       return json(201, item)
@@ -254,7 +257,7 @@ const adminRoutes = (runtime: ServiceRuntime<HealthieAPI>): AdminRoutes => {
       if (!api.state.users.get(body.user_id as string))
         return adminError(404, `no user ${body.user_id}`)
       const answers = isRecord(body.answers) ? body.answers : {}
-      const stamp = at()
+      const stamp = at(namespace)
       const group = {
         id: api.state.nextId("form_answer_group"),
         name: text(body.name) ?? form.name,
@@ -301,7 +304,7 @@ const adminRoutes = (runtime: ServiceRuntime<HealthieAPI>): AdminRoutes => {
         sender_id: sender ?? (api.state.orgAdmin()?.id as string),
         custom_module_form_id: text(body.custom_module_form_id) ?? "300001",
         status: "requested",
-        created_at: at(),
+        created_at: at(namespace),
       }
       api.state.requestedForms.insert(request.id, request)
       api.emit({
@@ -395,6 +398,7 @@ export const createRuntime = (options: HealthieRuntimeOptions = {}): HealthieRun
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: apiKeyOf,
     presets: HEALTHIE_PRESETS,

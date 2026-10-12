@@ -32,27 +32,25 @@ npx mockingbird-easypost serve --port 8818
 ```
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-easypost"
+import EasyPostClient from "@easypost/api"
+import { createServer } from "@crvouga/mockingbird-service-easypost/server"
 
-const easypost = createRuntime()
-const auth = { authorization: `Basic ${btoa("EZTK_test:")}` }
+const server = await createServer()
 
-// Seed a status before the app looks the code up (or move an existing tracker).
-await easypost.fetch(
-  new Request("http://easypost.test/__admin/trackers/1Z999AA10123456784/transition", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status: "out_for_delivery" }),
-  }),
-)
-const tracker = await easypost.fetch(
-  new Request("http://easypost.test/v2/trackers", {
-    method: "POST",
-    headers: { ...auth, "content-type": "application/x-www-form-urlencoded" },
-    body: "tracker[tracking_code]=1Z999AA10123456784&tracker[carrier]=UPS",
-  }),
-)
-// → 201 {id: "trk_…", status: "out_for_delivery", carrier: "UPS", status_detail: "out_for_delivery", …}
+// Test setup: seed a status before the app looks the code up (or move an existing tracker).
+await fetch(`${server.url}/__admin/trackers/1Z999AA10123456784/transition`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ status: "out_for_delivery" }),
+})
+
+// The EasyPost SDK your application already uses. Only its base URL changes.
+// @ts-ignore @easypost/api 8.9.0 types its ESM default export as CommonJS (NodeNext only).
+const easypost = new EasyPostClient("EZTK_test", { baseUrl: `${server.url}/v2/` })
+const tracker = await easypost.Tracker.create({ tracking_code: "1Z999AA10123456784", carrier: "UPS" })
+console.log(tracker.id, tracker.status, tracker.carrier) // trk_… out_for_delivery UPS
+
+await server.close()
 ```
 
 ### Routes

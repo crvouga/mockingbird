@@ -2,6 +2,7 @@ import {
   type AdminRoutes,
   type Clock,
   type FaultPreset,
+  type MockControls,
   type RequestLog,
   type ServiceRuntime,
   createRuntime as serviceRuntime,
@@ -38,6 +39,8 @@ export type AwsSecretsRuntimeOptions = {
   seed?: number | string
   adminPrefix?: string
   adminKey?: string
+  /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
+  adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
   region?: string
   accountId?: string
@@ -111,6 +114,7 @@ export const createRuntime = (options: AwsSecretsRuntimeOptions = {}): AwsSecret
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
+    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: accessKeyCredential,
     create: ({ sqlite, namespace, clock }) =>

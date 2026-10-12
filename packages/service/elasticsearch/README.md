@@ -8,10 +8,20 @@ Transport scaffold for Amazon Elasticsearch Service. ESM; Node 22+ or Bun 1.2+.
 
 ```ts
 import { createServer } from "@crvouga/mockingbird-service-elasticsearch/server"
-const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+
+// Test setup: start the emulator.
+const server = await createServer()
+
+// Application code: the request `ListDomainNames` sends, against the emulator's base URL.
+// No operation is implemented yet, so every request is rejected.
+const response = await fetch(`${server.url}/2015-01-01/domain`)
+console.log(response.status, await response.text()) // 400 <ErrorResponse>...UnknownOperationException...
+
+await server.close()
 ```
+
+The scaffold answers with an XML error body, which `@aws-sdk/client-elasticsearch-service` (a
+REST-JSON client) cannot parse, so this example uses plain `fetch` until operations are implemented.
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,
 reset, timeline, clock, journal, metrics and fault controls. No AWS account is needed.

@@ -7,10 +7,23 @@ Stateful local emulator of Amazon Certificate Manager. ESM; Node 22+ or Bun 1.2+
 ## Usage
 
 ```ts
+import { ACMClient, ListCertificatesCommand, RequestCertificateCommand } from "@aws-sdk/client-acm"
 import { createServer } from "@crvouga/mockingbird-service-acm/server"
+
+// Test setup: start the emulator and point the AWS SDK client your application uses at it.
 const emulator = await createServer()
-// AWS SDK: endpoint: emulator.url, region: "us-east-1", fixture credentials.
-// Await emulator.close() after the test.
+const acm = new ACMClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: ordinary SDK calls.
+await acm.send(new RequestCertificateCommand({ DomainName: "app.example.test" }))
+const { CertificateSummaryList } = await acm.send(new ListCertificatesCommand({}))
+// CertificateSummaryList[0].DomainName === "app.example.test"
+
+await emulator.close() // after the test
 ```
 
 State lives in SQLite collections and participates in the shared runtime's namespace isolation,

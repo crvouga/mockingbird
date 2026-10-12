@@ -13,10 +13,28 @@ npm install @crvouga/mockingbird-service-clerk
 ## Usage
 
 ```ts
-import { createRuntime } from "@crvouga/mockingbird-service-clerk"
-const runtime = createRuntime({ seed: 1 })
-const response = await runtime.fetch(new Request("https://api.clerk.com"))
+import { createServer } from "@crvouga/mockingbird-service-clerk/server"
+
+const server = await createServer({ seed: 1 })
+
+// The app's Backend API calls, with the emulator's URL in place of https://api.clerk.com.
+const headers = { authorization: "Bearer sk_test_fixture", "content-type": "application/json" }
+const created = await fetch(`${server.url}/v1/users`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({ email_address: ["ada@example.com"], first_name: "Ada" }),
+})
+const user = (await created.json()) as { id: string; first_name: string }
+const listed = await fetch(`${server.url}/v1/users?email_address=ada@example.com`, { headers })
+const { data } = (await listed.json()) as { data: { id: string }[] }
+console.log(data[0]?.id === user.id) // true
+await server.close()
 ```
+
+The example uses plain `fetch` because `@clerk/backend` only parses a response whose
+`content-type` is exactly `application/json`, and the emulator answers
+`application/json; charset=UTF-8`. With `createClerkClient({ secretKey, apiUrl: server.url })` the
+requests succeed but resources come back as unparsed JSON strings.
 
 ## API
 

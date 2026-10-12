@@ -37,10 +37,12 @@ export AWS_ENDPOINT_URL_BEDROCK_AGENTCORE=http://127.0.0.1:8796  # AgentCore Inv
 ```
 
 ```ts
+import { BedrockRuntimeClient, ConverseCommand } from "@aws-sdk/client-bedrock-runtime"
 import { createServer } from "@crvouga/mockingbird-service-bedrock/server"
 
-const bedrock = await createServer({ port: 8796 })
-await fetch(`${bedrock.url}/__admin/scripts`, {
+// Test setup: start the emulator and script the model's turns.
+const emulator = await createServer()
+await fetch(`${emulator.url}/__admin/scripts`, {
   method: "PUT",
   headers: { "content-type": "application/json" },
   body: JSON.stringify({
@@ -64,8 +66,29 @@ await fetch(`${bedrock.url}/__admin/scripts`, {
     ],
   }),
 })
-// …the backend's streamText turn now emits the approval card; approving resumes the turn.
-await bedrock.close()
+
+// The AWS SDK client your application uses; only the endpoint changes.
+const bedrock = new BedrockRuntimeClient({
+  endpoint: emulator.url,
+  region: "us-east-1",
+  credentials: { accessKeyId: "fixture", secretAccessKey: "fixture" },
+})
+
+// Application code: the chat turn now asks for the tool, which the app shows as an approval card.
+const turn = await bedrock.send(
+  new ConverseCommand({
+    modelId: "global.anthropic.claude-sonnet-4-6",
+    messages: [{ role: "user", content: [{ text: "I feel dizzy" }] }],
+    toolConfig: {
+      tools: [{ toolSpec: { name: "report_rx_symptom", inputSchema: { json: { type: "object" } } } }],
+    },
+  }),
+)
+// turn.stopReason === "tool_use"
+// turn.output?.message?.content?.[0]?.toolUse?.name === "report_rx_symptom"
+// Sending the tool result back resumes the turn: "I've flagged that for your care team."
+
+await emulator.close() // after the test
 ```
 
 ### Protocols
