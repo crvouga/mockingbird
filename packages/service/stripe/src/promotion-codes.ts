@@ -153,7 +153,7 @@ export const promotionCodeHandlers = (services: Services): Record<string, Operat
         kind: "promotion code",
         where: (record) =>
           matchesCreated(record.created, params.created) &&
-          (code === null || record.code === code) &&
+          (code === null || record.code.toLowerCase() === code.toLowerCase()) &&
           (customer === null || record.customer === customer) &&
           (coupon === null || record.coupon === coupon) &&
           (active === undefined || record.active === active),

@@ -359,6 +359,12 @@ subscriptions are never recorded. The membership lookup keys our env expects
 (`membership_<tier>_<interval>`, e.g. `membership_plus_annually`) are attached to the matching
 recorded prices (listed in `synthesizedLookupKeys`). Pass your own with `createRuntime({corpus})`.
 
+### Promotion-code lookup
+
+`GET /v1/promotion_codes?code=...` matches the complete code case-insensitively, as documented
+by [Stripe](https://docs.stripe.com/api/promotion_codes/list), and preserves its stored spelling.
+The filter composes with `active`, `coupon`, customer, created-time and pagination filters.
+
 ## API
 
 `StripeAPI` is the engine; `createRuntime` wraps it in the service contract. From

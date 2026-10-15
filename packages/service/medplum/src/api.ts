@@ -46,6 +46,7 @@ import {
 import { type BinaryStorage, handleFhir } from "./fhir/http.js"
 import { MockRepository, type RepositoryServices } from "./fhir/repo.js"
 import { FhirStore } from "./fhir/store.js"
+import { RestHookSubscriptions } from "./fhir/subscriptions.js"
 import {
   BodyParseError,
   contentCouldNotBeParsed,
@@ -164,6 +165,7 @@ export class MedplumAPI implements FetchAPI {
   private readonly now: () => number
   private readonly options: MedplumAPIOptions
   readonly store: FhirStore
+  private readonly subscriptions: RestHookSubscriptions
   private readonly idSource: IdSource
   private readonly logins: Collection<LoginRecord>
   private readonly binaryData: Collection<{ base64: string }>
@@ -177,6 +179,7 @@ export class MedplumAPI implements FetchAPI {
     const base = options.baseUrl ?? DEFAULT_BASE_URL
     this.baseUrl = base.endsWith("/") ? base : `${base}/`
     this.store = new FhirStore(this.sqlite, this.namespace)
+    this.subscriptions = new RestHookSubscriptions(this.store)
     this.idSource = new IdSource(
       this.sqlite,
       this.namespace,
@@ -195,6 +198,8 @@ export class MedplumAPI implements FetchAPI {
   private services(): RepositoryServices {
     return {
       store: this.store,
+      notify: (resource, previous, interaction) =>
+        this.subscriptions.enqueue(resource, previous, interaction),
       now: this.now,
       writeTime: () => this.writeTime(),
       generateId: () => this.idSource.uuid(),
@@ -1444,6 +1449,15 @@ export class MedplumAPI implements FetchAPI {
 
   async fetch(incoming: Request): Promise<Response> {
     await this.ensureSeeded()
+    const { response, deliveries } = await this.store.exclusively(async () => {
+      const response = await this.handleRequest(incoming)
+      return { response, deliveries: this.subscriptions.take() }
+    })
+    await this.subscriptions.deliver(deliveries)
+    return response
+  }
+
+  private async handleRequest(incoming: Request): Promise<Response> {
     const url = new URL(incoming.url)
     let path = url.pathname
     // `/api/...` is an alias for `/...` on the self-hosted server.

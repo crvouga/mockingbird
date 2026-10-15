@@ -13,6 +13,8 @@ export const PACK_TAGGED = 7;
 
 export interface SlabColumn {
   pack: number;
+  /** PACK_INT uses the SQL type to retain bigint datums even inside the safe integer range. */
+  integerBigInt?: boolean;
   nullBitmap: Uint8Array | null;
   /** Prefix sum of non-null rows for O(1) null-index lookup. */
   nonNullPrefix?: Uint32Array;
@@ -112,7 +114,9 @@ function readSlabCell(column: SlabColumn, rowIndex: number, intern: readonly str
   }
   if (pack === PACK_INT) {
     const integer = view.getBigInt64(nonNullIndex * 8, true);
-    return integer <= BigInt(Number.MAX_SAFE_INTEGER) && integer >= BigInt(Number.MIN_SAFE_INTEGER)
+    return !column.integerBigInt &&
+      integer <= BigInt(Number.MAX_SAFE_INTEGER) &&
+      integer >= BigInt(Number.MIN_SAFE_INTEGER)
       ? Number(integer)
       : integer;
   }

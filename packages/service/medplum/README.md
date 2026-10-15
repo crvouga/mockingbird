@@ -167,13 +167,42 @@ The standard contract also serves `POST /__admin/reset`, snapshot and restore, t
 - Resources are validated against the FHIR R4 and Medplum StructureDefinitions, with the
   server's messages.
 - Transaction bundles are atomic only when the project has the `transaction-bundles` feature, as
-  on the server. Without it, entries commit one by one.
+  on the server. Without it, entries commit one by one. A super admin can enable it by updating
+  the Project's `features` to include `"transaction-bundles"` (keep any existing features).
+  With the flag, a failed entry returns one OperationOutcome and rolls back resources, history,
+  and queued hooks. Requests sharing a namespace run serially to isolate rollback.
 - Search follows Postgres semantics. Name and address matching is by token prefix, sorts use C
   collation (missing values last ascending), and dates compare in UTC. Only the sort key orders
   results, so ties and unsorted pages have no guaranteed order on the server; don't rely on it.
 - `:missing` on lookup-table parameters (`name`, `family`, `given`, `address`…)
   matches nothing either way, as on the server.
 - Super admins get no refresh token from a password login, as on the server.
+
+### Rest-hook subscriptions
+
+Active, project-scoped `Subscription` resources with `channel.type: "rest-hook"` deliver a POST
+when a create, update, patch, or delete matches their FHIR `criteria`. Matching uses Medplum's
+subscription evaluator, including supported-interaction and FHIRPath extensions. The first 1,000
+active subscriptions per project are evaluated, as on the server.
+
+Create and update bodies are the versioned resource, including Medplum metadata; delete bodies
+are `{}` and include `X-Medplum-Deleted-Resource`. As in the pinned Medplum 5.1.37 worker, the body
+is sent even when `channel.payload` is absent. Headers include `Content-Type: application/fhir+json`,
+`X-Medplum-Subscription`, `X-Medplum-Interaction`, and `channel.header` entries. The
+`https://www.medplum.com/fhir/StructureDefinition/subscription-secret` extension (or its legacy
+`https://www.medplum.com/fhir/StructureDefinition-subscriptionSecret` URL) signs the exact body
+with HMAC-SHA256 in `X-Signature` as lowercase hex.
+
+Deliveries leave a transactional outbox only after the FHIR request commits; rolled-back changes
+send nothing. Each delivery gets one attempt, with a 10-second timeout, before `fetch()` resolves.
+The namespace lock is released before calling a hook, so receivers can call back into the API.
+Hook errors do not fail the write or prevent delivery to other subscribers. Background retries,
+subscription AuditEvents, and attachment URL rewriting in webhook payloads are not modelled.
+
+The local oracle can be started with `startOracle({ allowUnsafeOutbound: true })` for loopback
+webhook receivers; its default outbound restrictions remain enabled otherwise. The regressions
+in `medplum.subscriptions.test.ts` and `medplum.transactions.test.ts` run unchanged against it by
+setting `MOCKINGBIRD_MEDPLUM_ORACLE_URL`.
 
 ## Deliberately not modelled
 
@@ -182,7 +211,7 @@ These answer the server's 404 (or are stored but inert):
 - terminology operations (`ValueSet/$expand`, `CodeSystem/$lookup`, …)
 - bulk `$export`
 - bots (`Bot/$execute`)
-- subscription delivery (Subscription resources are stored, but nothing is sent)
+- subscription channels other than `rest-hook`, server-scoped subscriptions, and webhook retries
 - email
 - self-registration (`/auth/newuser`)
 - the super-admin maintenance routes (`/admin/super/*`)

@@ -272,13 +272,14 @@ paths:
       operationId: FhirBatch
       x-mockingbird:
         supported: true
-        parity: { enabled: false, safe: false, reason: "Covered by the batch and transaction scenarios." }
+        parity: { enabled: false, safe: false, reason: "Batch and feature-gated atomic transactions, including rollback of rest-hook notifications; covered by scenarios and transaction regressions." }
       requestBody:
         required: true
         content: { application/fhir+json: { schema: { $ref: "#/components/schemas/Bundle" } } }
       responses:
         "200": { description: batch-response or transaction-response Bundle, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/Bundle" } } } }
-        "400": { description: Not a batch or transaction, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "400": { description: Invalid bundle or transaction entry, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "412": { description: Transaction precondition failed; all entries rolled back, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
   /fhir/R4/metadata:
     get:
       operationId: FhirCapabilities
@@ -426,7 +427,7 @@ paths:
       operationId: FhirCreate
       x-mockingbird:
         supported: true
-        parity: { enabled: false, safe: false, reason: "Every resource type; covered by the scenarios and random walks." }
+        parity: { enabled: false, safe: false, reason: "Every resource type, including rest-hook Subscriptions; covered by scenarios, random walks and subscription regressions." }
       parameters: [{ $ref: "#/components/parameters/resourceType" }]
       requestBody:
         required: true

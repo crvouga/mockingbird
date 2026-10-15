@@ -2,6 +2,8 @@ import { Collection, withNamespaceRollback } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Resource } from "@medplum/fhirtypes"
 
+const requestQueues = new WeakMap<SqliteClient, Map<string, Promise<void>>>()
+
 /** The id of the system "project" server-owned resources live in (`systemResourceProjectId`). */
 export const SYSTEM_PROJECT_ID = "65897e4f-7add-55f3-9b17-035b5a4e6d52"
 
@@ -41,6 +43,28 @@ export class FhirStore {
     readonly sqlite: SqliteClient,
     readonly namespace: string,
   ) {}
+
+  /** Serialize requests sharing storage so rollback cannot erase another request's writes. */
+  async exclusively<T>(run: () => Promise<T>): Promise<T> {
+    let namespaces = requestQueues.get(this.sqlite)
+    if (!namespaces) {
+      namespaces = new Map()
+      requestQueues.set(this.sqlite, namespaces)
+    }
+    const previous = namespaces.get(this.namespace) ?? Promise.resolve()
+    let release = () => {}
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    namespaces.set(this.namespace, current)
+    await previous
+    try {
+      return await run()
+    } finally {
+      release()
+      if (namespaces.get(this.namespace) === current) namespaces.delete(this.namespace)
+    }
+  }
 
   private table(resourceType: string): Collection<ResourceRow> {
     let table = this.current.get(resourceType)

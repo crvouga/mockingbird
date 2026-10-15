@@ -1064,6 +1064,25 @@ describe("S1.4 search, promotion codes and presets", () => {
     expect(listed.data[0]?.coupon.id).toBe(coupon.id)
   })
 
+  test("promotion code filtering is case-insensitive and preserves stored spelling (#353)", async () => {
+    const { legacy } = await harness()
+    const coupon = await legacy.coupons.create({ percent_off: 10, duration: "once" })
+    const promo = await legacy.promotionCodes.create({ coupon: coupon.id, code: "MiXeD352" })
+    await legacy.promotionCodes.create({ coupon: coupon.id, code: "OTHER352" })
+    for (const code of ["MiXeD352", "mixed352", "MIXED352"]) {
+      const page = await legacy.promotionCodes.list({ code, active: true, coupon: coupon.id })
+      expect(page.data.map((p) => ({ id: p.id, code: p.code }))).toEqual([
+        { id: promo.id, code: "MiXeD352" },
+      ])
+    }
+    expect((await legacy.promotionCodes.list({ code: "mixed" })).data).toEqual([])
+    await legacy.promotionCodes.update(promo.id, { active: false })
+    expect((await legacy.promotionCodes.list({ code: "mixed352", active: true })).data).toEqual([])
+    expect(
+      (await legacy.promotionCodes.list({ code: "mixed352", active: false })).data[0]?.id,
+    ).toBe(promo.id)
+  })
+
   test("card_declined, rate_limited and api_error presets answer Stripe-shaped errors", async () => {
     const { mso, adapter, admin, base } = await harness()
     const customer = await newCustomer(mso)

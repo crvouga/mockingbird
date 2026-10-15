@@ -33,7 +33,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `DeleteAdminProjectMember` | `DELETE /admin/projects/{projectId}/members/{membershipId}` | ✅ supported | ❌ disabled | Removes a member (and a project-scoped user). |
 | `GetStorageBinary` | `GET /storage/{binaryId}/{versionId}` | ✅ supported | ❌ disabled | Presigned URLs carry a per-server signature; covered by the binary scenario. |
 | `FhirSearchSystem` | `GET /fhir/R4` | ✅ supported | ❌ disabled | Covered by the search scenarios. |
-| `FhirBatch` | `POST /fhir/R4` | ✅ supported | ❌ disabled | Covered by the batch and transaction scenarios. |
+| `FhirBatch` | `POST /fhir/R4` | ✅ supported | ❌ disabled | Batch and feature-gated atomic transactions, including rollback of rest-hook notifications; covered by scenarios and transaction regressions. |
 | `FhirCapabilities` | `GET /fhir/R4/metadata` | ✅ supported | ❌ disabled | Covered by the auth scenarios (compared in full). |
 | `FhirGraphql` | `POST /fhir/R4/$graphql` | ✅ supported | ❌ disabled | Covered by the graphql scenario. |
 | `FhirBinaryUpload` | `POST /fhir/R4/Binary` | ✅ supported | ❌ disabled | Covered by the binary scenario. |
@@ -48,7 +48,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `PatientEverything` | `GET /fhir/R4/Patient/{id}/$everything` | ✅ supported | ❌ disabled | Covered by the resource variety scenario. |
 | `FhirSearch` | `GET /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Every resource type; covered by the search scenarios and random walks. |
 | `FhirConditionalUpdate` | `PUT /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Covered by the conditional scenario. |
-| `FhirCreate` | `POST /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Every resource type; covered by the scenarios and random walks. |
+| `FhirCreate` | `POST /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Every resource type, including rest-hook Subscriptions; covered by scenarios, random walks and subscription regressions. |
 | `FhirConditionalDelete` | `DELETE /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Covered by the conditional scenario. |
 | `FhirConditionalPatch` | `PATCH /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Covered by the conditional scenario. |
 | `FhirSearchPost` | `POST /fhir/R4/{resourceType}/_search` | ✅ supported | ❌ disabled | Covered by the search scenarios. |

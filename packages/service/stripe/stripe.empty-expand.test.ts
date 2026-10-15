@@ -207,3 +207,26 @@ test("creating a customer with a bad email and an empty custom-field name names 
   expect(error.code).toBe("parameter_invalid_empty")
   expect(error.param).toBe("invoice_settings[custom_fields][0][name]")
 })
+
+// Live Stripe seed 1057600108: list cursors are validated before the invoice filter.
+test("listing balance transactions validates an empty cursor before an empty invoice", async () => {
+  const server = await createServer({ accounts: [{ id: "acct_cursor_order", keys: [KEY] }] })
+  closers.push(() => server.close())
+  const headers = { authorization: `Bearer ${KEY}` }
+  const customer = (await (
+    await fetch(`${server.url}/v1/customers`, { method: "POST", headers })
+  ).json()) as { id: string }
+  const response = await fetch(
+    `${server.url}/v1/customers/${customer.id}/balance_transactions?ending_before=&invoice=`,
+    { headers },
+  )
+  const { error } = (await response.json()) as {
+    error: { code: string; param: string; message: string }
+  }
+  expect(response.status).toBe(400)
+  expect(error.code).toBe("parameter_invalid_empty")
+  expect(error.param).toBe("ending_before")
+  expect(error.message).toBe(
+    "You passed an empty string for 'ending_before'. We assume empty values are an attempt to unset a parameter; however 'ending_before' cannot be unset. You should remove 'ending_before' from your request or supply a non-empty value.",
+  )
+})
