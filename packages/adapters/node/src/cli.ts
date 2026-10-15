@@ -15,7 +15,7 @@ import {
   parseFaultHeader,
   resolveAdminPrefix,
 } from "@crvouga/mockingbird-service"
-import { type FleetTarget, startFleet } from "./fleet.js"
+import { type FleetTarget, type ProtocolTarget, startFleet } from "./fleet.js"
 import { fleetCommands } from "./fleet-tools.js"
 import { type Listening, listen } from "./listen.js"
 
@@ -471,7 +471,7 @@ const untilSignal = async (servers: { close(): Promise<void> }[]): Promise<numbe
   })
 
 /** The standard `serve` command for a service, including multi-service `--config`. */
-export const serveCommand = (target: FleetTarget): CliCommand => ({
+export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand => ({
   fleetTarget: target,
   summary: `Serve the ${target.name} emulator or a configured fleet`,
   options: { ...COMMON_SERVE_OPTIONS, ...("options" in target ? target.options : {}) },

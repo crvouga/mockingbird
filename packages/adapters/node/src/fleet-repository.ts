@@ -1,15 +1,17 @@
-import type { ArchiveProtector } from "./fleet-protection.js"
 import { randomUUID } from "node:crypto"
 import { link, mkdir, open, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { signV4 } from "@crvouga/mockingbird-service"
 import { type FleetArchive, validateArchive } from "./fleet-archive.js"
+import type { ArchiveProtector } from "./fleet-protection.js"
 
 /** A repository must be independent of the application services being captured. */
 export type ArchiveRepository = {
   readonly protectionPolicy?: ArchiveProtector["policy"]
   readonly writerGeneration?: number
-  publicationMetadata?(): Promise<{ id: string; generation: number; verifiedAt: string } | undefined>
+  publicationMetadata?(): Promise<
+    { id: string; generation: number; verifiedAt: string } | undefined
+  >
   put(archive: FleetArchive): Promise<string>
   get(id: string): Promise<FleetArchive>
   list(): Promise<string[]>
@@ -23,7 +25,9 @@ const validId = (id: string) => {
 }
 const bytes = async (archive: FleetArchive, max: number, protection?: ArchiveProtector) => {
   validateArchive(archive)
-  const encoded = new TextEncoder().encode(JSON.stringify(protection ? await protection.seal(archive) : archive))
+  const encoded = new TextEncoder().encode(
+    JSON.stringify(protection ? await protection.seal(archive) : archive),
+  )
   if (encoded.length > max) throw new Error("archive exceeds repository byte limit")
   return encoded
 }
@@ -211,7 +215,9 @@ export function s3Repository(options: S3RepositoryOptions): ArchiveRepository {
       return id
     },
     async get(id) {
-      const input: unknown = JSON.parse(await boundedRepositoryText(await send("GET", `${prefix}${validId(id)}.json`), max))
+      const input: unknown = JSON.parse(
+        await boundedRepositoryText(await send("GET", `${prefix}${validId(id)}.json`), max),
+      )
       const archive = protection ? await protection.open(input) : validateArchive(input)
       if (archive.sha256 !== id) throw new Error("archive identity mismatch")
       return archive
@@ -222,7 +228,10 @@ export function s3Repository(options: S3RepositoryOptions): ArchiveRepository {
       do {
         const query = new URLSearchParams({ "list-type": "2", prefix })
         if (token) query.set("continuation-token", token)
-        const xml = await boundedRepositoryText(await send("GET", "", undefined, {}, query), 4 * 1024 * 1024)
+        const xml = await boundedRepositoryText(
+          await send("GET", "", undefined, {}, query),
+          4 * 1024 * 1024,
+        )
         for (const match of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) {
           const key = match[1] ?? ""
           const id = key.slice(prefix.length, -5)

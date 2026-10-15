@@ -1,9 +1,13 @@
-import { advertisedHttpBase } from "./fleet-proxy.js"
 import { AsyncLocalStorage } from "node:async_hooks"
 import { createHash, randomUUID } from "node:crypto"
 import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
-import type { Clock, RequestLog, ServiceInstance, ServiceRuntime } from "@crvouga/mockingbird-service"
+import type {
+  Clock,
+  RequestLog,
+  ServiceInstance,
+  ServiceRuntime,
+} from "@crvouga/mockingbird-service"
 import {
   createClock,
   normalizeBootControls,
@@ -16,6 +20,7 @@ import type { CommonServeOptions, ConfigService, MockingbirdConfig, ServeTarget 
 import { FleetManagement, type ManagementOptions } from "./fleet-management.js"
 import type { EndpointManifest } from "./fleet-manifest.js"
 import { preflightFleet } from "./fleet-preflight.js"
+import { advertisedHttpBase } from "./fleet-proxy.js"
 import { type Listening, listen } from "./listen.js"
 
 export type { EndpointManifest } from "./fleet-manifest.js"
@@ -77,7 +82,15 @@ export type ProtocolTarget = {
   defaultPort: number
   start(entry: ConfigService): Promise<FleetChild>
 }
-export type FleetTarget = ServeTarget | ProtocolTarget
+/** Bundled service declarations contain distinct private runtime classes. The loader boundary
+ * accepts their opaque runtime and validates the fleet protocol before starting a listener. */
+export type FleetHttpTarget = Pick<
+  ServeTarget,
+  "name" | "defaultPort" | "options" | "packageVersion" | "listening"
+> & {
+  create(values: Parameters<ServeTarget["create"]>[0], common: CommonServeOptions): unknown
+}
+export type FleetTarget = FleetHttpTarget | ProtocolTarget
 
 export type FleetOptions = ManagementOptions & {
   participants?: Record<string, FleetChild>
@@ -178,26 +191,63 @@ const removeOwned = async (path: string | undefined, id: string) => {
 }
 
 const httpChild = async (
-  target: ServeTarget,
+  target: FleetHttpTarget,
   entry: ConfigService,
   options: FleetOptions,
   admission: (namespace: string, request: Request) => Response | undefined,
   generation: (namespace: string) => string | undefined,
   privateAccess: (namespace: string, request: Request) => boolean,
-  observer: { begin(namespace: string, request: Request): unknown; finish(namespace: string, request: Request, response: Response, log: RequestLog, token: unknown): Promise<void>; delivery(event: { namespace: string; state: string; deliveryId: string }): void },
+  observer: {
+    begin(namespace: string, request: Request): unknown
+    finish(
+      namespace: string,
+      request: Request,
+      response: Response,
+      log: RequestLog,
+      token: unknown,
+    ): Promise<void>
+    delivery(event: { namespace: string; state: string; deliveryId: string }): void
+  },
 ): Promise<FleetChild> => {
   const requestLog = new AsyncLocalStorage<{ entry?: RequestLog }>()
-  const runtime: ServiceRuntime<ServiceInstance> = await target.create(entry.options ?? {}, {
+  const created: unknown = await target.create(entry.options ?? {}, {
     adminPrefix: resolveAdminPrefix(entry.adminPrefix),
     adminKey: entry.adminKey,
     seed: entry.seed,
-    onLog: (entry) => { const current = requestLog.getStore(); if (current) current.entry = entry; options.onLog?.(entry) },
+    onLog: (entry) => {
+      const current = requestLog.getStore()
+      if (current) current.entry = entry
+      options.onLog?.(entry)
+    },
     ...(entry.adminControls !== undefined ? { adminControls: entry.adminControls } : {}),
     ...(entry.fixtures !== undefined ? { fixtures: entry.fixtures } : {}),
-    ...((advertisedHttpBase(entry) ?? entry.baseUrl) !== undefined ? { baseUrl: advertisedHttpBase(entry) ?? entry.baseUrl } : {}),
+    ...((advertisedHttpBase(entry) ?? entry.baseUrl) !== undefined
+      ? { baseUrl: advertisedHttpBase(entry) ?? entry.baseUrl }
+      : {}),
   })
+  if (
+    !isObject(created) ||
+    [
+      "fetch",
+      "fleetSnapshot",
+      "fleetRestore",
+      "fleetExport",
+      "fleetImport",
+      "namespaceOf",
+      "instance",
+      "namespaceClock",
+      "reset",
+      "configure",
+      "dropNamespace",
+    ].some((method) => typeof created[method] !== "function")
+  )
+    throw new Error(
+      "HTTP target does not implement the fleet runtime protocol; build/install matching supported service versions",
+    )
+  const runtime = created as unknown as ServiceRuntime<ServiceInstance>
   const unobserve = runtime.webhooks?.observeDeliveries(observer.delivery)
-  if (options.outbound && runtime.webhooks) runtime.webhooks.setTransportPolicy(ownedTransport(options.outbound))
+  if (options.outbound && runtime.webhooks)
+    runtime.webhooks.setTransportPolicy(ownedTransport(options.outbound))
   const adminPrefix = resolveAdminPrefix(entry.adminPrefix)
   const locked = new Set<string>()
   const active = new Map<string, number>()
@@ -222,9 +272,26 @@ const httpChild = async (
       }
       request.signal.addEventListener("abort", finish, { once: true })
       try {
-        const log: { entry?: RequestLog } = {}, traceToken = observer.begin(namespace, request), started = performance.now()
+        const log: { entry?: RequestLog } = {},
+          traceToken = observer.begin(namespace, request),
+          started = performance.now()
         const response = await requestLog.run(log, () => runtime.fetch(request))
-        await observer.finish(namespace, request, response, log.entry ?? { service: target.name, namespace, operationId: undefined, method: request.method, path: new URL(request.url).pathname, status: response.status, durationMs: performance.now() - started, unmatched: response.status === 404 }, traceToken)
+        await observer.finish(
+          namespace,
+          request,
+          response,
+          log.entry ?? {
+            service: target.name,
+            namespace,
+            operationId: undefined,
+            method: request.method,
+            path: new URL(request.url).pathname,
+            status: response.status,
+            durationMs: performance.now() - started,
+            unmatched: response.status === 404,
+          },
+          traceToken,
+        )
         if (!response.body) {
           finish()
           return response
@@ -363,7 +430,15 @@ const httpChild = async (
         collections: [...new Set(doc.records.map((row) => row.collection))],
       }
     },
-    ...(typeof (runtime.instance() as ServiceInstance & { nextEvent?: unknown }).nextEvent === "function" ? { nextEvent: (namespace: string) => (runtime.instance(namespace) as ServiceInstance & { nextEvent(): number | undefined }).nextEvent() } : {}),
+    ...(typeof (runtime.instance() as ServiceInstance & { nextEvent?: unknown }).nextEvent ===
+    "function"
+      ? {
+          nextEvent: (namespace: string) =>
+            (
+              runtime.instance(namespace) as ServiceInstance & { nextEvent(): number | undefined }
+            ).nextEvent(),
+        }
+      : {}),
     async settle(namespace) {
       const instance = runtime.instance(namespace) as ServiceInstance & { tick?(): unknown }
       await instance.tick?.()
@@ -402,7 +477,7 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
       ]),
     )
   const publish = async () => {
-    if (!manifest || management && management.lifecycle !== "ready") return
+    if (!manifest || (management && management.lifecycle !== "ready")) return
     manifest.state = recovery.size ? "recovery-required" : "ready"
     for (const [name, child] of children)
       if (manifest.services[name]) manifest.services[name].namespaces = child.namespaces
@@ -456,8 +531,12 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
       const entries = [...children]
       const results: PromiseSettledResult<void>[] = []
       for (const [, child] of [...entries].reverse()) {
-        try { await child.close(); results.unshift({ status: "fulfilled", value: undefined }) }
-        catch (reason) { results.unshift({ status: "rejected", reason }) }
+        try {
+          await child.close()
+          results.unshift({ status: "fulfilled", value: undefined })
+        } catch (reason) {
+          results.unshift({ status: "rejected", reason })
+        }
       }
       const cleanup = await Promise.allSettled([
         supervisor?.close(),
@@ -580,12 +659,14 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
         return json(409, { error: "namespace is not quiescent", services: busy })
       for (const [name, child] of selected) {
         failure = name
+        management?.phase(namespace, "checkpointing", before.size, selected.size, name)
         before.set(name, await child.checkpoint(namespace))
       }
       management?.checkCancelled(namespace)
       management?.phase(namespace, "committing")
       for (const [name, child] of selected) {
         failure = name
+        management?.phase(namespace, "committing", Object.keys(results).length, selected.size, name)
         results[name] = { status: "ok", result: await run(name, child) }
         management?.phase(namespace, "committing", Object.keys(results).length, selected.size)
       }
@@ -603,10 +684,12 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
       // Roll back even the child whose mutation failed; it may have partially changed state.
       for (const [name, point] of before) {
         try {
+          management?.phase(namespace, "rolling-back", undefined, undefined, name)
           await selected.get(name)?.restore(namespace, point)
           rollback[name] = "restored"
         } catch {
           rollback[name] = "failed"
+          management?.phase(namespace, "rollback-failed", undefined, undefined, name)
         }
       }
       keepFence = keepFence || Object.values(rollback).includes("failed") || held !== undefined
@@ -868,7 +951,13 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
                 (namespace, request) => management?.admit(namespace, request),
                 (namespace) => management?.generation(namespace),
                 (namespace, request) => management?.privateRequest(namespace, request) ?? false,
-                { begin: (namespace, request) => management?.beginRequest(name, namespace, request), finish: async (namespace, request, response, log, token) => { await management?.finishRequest(name, namespace, request, response, log, token) }, delivery: (event) => management?.observeDelivery(name, event) },
+                {
+                  begin: (namespace, request) => management?.beginRequest(name, namespace, request),
+                  finish: async (namespace, request, response, log, token) => {
+                    await management?.finishRequest(name, namespace, request, response, log, token)
+                  },
+                  delivery: (event) => management?.observeDelivery(name, event),
+                },
               )
         child.targetName = entry.target ?? name
         if (target.packageVersion) child.packageVersion = target.packageVersion

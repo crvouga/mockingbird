@@ -1,5 +1,5 @@
-import type { OwnedTransport } from "./outbound.js"
 import type { AdminRoutes } from "./control.js"
+import type { OwnedTransport } from "./outbound.js"
 import { signSvix, signTimestamped, signTwilio } from "./signing.js"
 
 /**
@@ -172,7 +172,9 @@ export type WebhookHubOptions = {
 }
 
 export type WebhookHub = {
-  observeDeliveries(listener: (event: { namespace: string; state: string; deliveryId: string }) => void): () => void
+  observeDeliveries(
+    listener: (event: { namespace: string; state: string; deliveryId: string }) => void,
+  ): () => void
   setTransportPolicy(policy: OwnedTransport): void
   pending(namespace: string): number
   snapshot(namespace: string): unknown
@@ -233,8 +235,15 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
   const payloads = new Map<string, { message: WebhookMessage; endpoint: WebhookEndpoint }>()
   const faults = new Map<string, { mode: WebhookFault["mode"]; remaining: number }[]>()
   const held = new Map<string, WebhookMessage[]>()
-  const deliveryObservers = new Set<(event: { namespace: string; state: string; deliveryId: string }) => void>()
-  const notify = (delivery: WebhookDelivery) => { for (const listener of deliveryObservers) try { listener({ namespace: delivery.namespace, state: delivery.state, deliveryId: delivery.id }) } catch {} }
+  const deliveryObservers = new Set<
+    (event: { namespace: string; state: string; deliveryId: string }) => void
+  >()
+  const notify = (delivery: WebhookDelivery) => {
+    for (const listener of deliveryObservers)
+      try {
+        listener({ namespace: delivery.namespace, state: delivery.state, deliveryId: delivery.id })
+      } catch {}
+  }
   let transport: OwnedTransport | undefined
   const inFlight = new Set<Promise<void>>()
   const workNamespace = new Map<Promise<void>, string>()
@@ -301,7 +310,8 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
         type: message.type,
         tags: message.tags,
       })
-      const ownedSend = (request: Request) => transport ? transport(request, message.namespace, send as typeof fetch) : send(request)
+      const ownedSend = (request: Request) =>
+        transport ? transport(request, message.namespace, send as typeof fetch) : send(request)
       const response = await ownedSend(
         new Request(endpoint.url, {
           method: "POST",
@@ -346,8 +356,10 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       if (!payloads.has(delivery.id)) return
       await attempt(delivery).then((ok) => {
         if (!payloads.has(delivery.id)) return
-        if (ok) { delivery.state = "delivered"; notify(delivery) }
-        else schedule(delivery)
+        if (ok) {
+          delivery.state = "delivered"
+          notify(delivery)
+        } else schedule(delivery)
       })
     }
     const delay = delays[index] ?? 0
@@ -404,8 +416,13 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
   }
 
   const hub: WebhookHub = {
-    observeDeliveries(listener) { deliveryObservers.add(listener); return () => deliveryObservers.delete(listener) },
-    setTransportPolicy(policy) { transport = policy },
+    observeDeliveries(listener) {
+      deliveryObservers.add(listener)
+      return () => deliveryObservers.delete(listener)
+    },
+    setTransportPolicy(policy) {
+      transport = policy
+    },
     pending(namespace) {
       const ids = new Set(
         [...deliveries.values()]
@@ -545,6 +562,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       const work = (async () => {
         const ok = await attempt(delivery)
         if (ok) delivery.state = "delivered"
+        notify({ ...delivery, state: ok ? "delivered" : "failed" })
       })()
       track(work, delivery)
       await work
@@ -566,8 +584,10 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
           if (!delivery) continue
           track(
             attempt(delivery).then((ok) => {
-              if (ok) delivery.state = "delivered"
-              else schedule(delivery)
+              if (ok) {
+                delivery.state = "delivered"
+                notify(delivery)
+              } else schedule(delivery)
             }),
             delivery,
           )
@@ -578,7 +598,13 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       }
     },
     async idle(namespace) {
-      for (;;) { const selected = [...inFlight].filter((work) => namespace === undefined || workNamespace.get(work) === namespace); if (!selected.length) return; await Promise.allSettled(selected) }
+      for (;;) {
+        const selected = [...inFlight].filter(
+          (work) => namespace === undefined || workNamespace.get(work) === namespace,
+        )
+        if (!selected.length) return
+        await Promise.allSettled(selected)
+      }
     },
     fault(namespace, fault) {
       const queue = faults.get(namespace) ?? []

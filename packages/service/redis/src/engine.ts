@@ -492,15 +492,21 @@ export class Redis {
   }
   nextEvent(): number | undefined {
     let earliest: number | undefined
-    const consider = (time: number) => { if (earliest === undefined || time < earliest) earliest = time }
+    const consider = (time: number) => {
+      if (earliest === undefined || time < earliest) earliest = time
+    }
     for (const db of this.dbs) {
       const point = db.snapshot() as { values: Map<string, Value>; expires: Map<string, number> }
       for (const time of point.expires.values()) consider(time)
-      for (const [key, value] of point.values) if (key.endsWith(":delayed") && value.kind === "zset") for (const member of value.members.values()) consider(Math.floor(member.score / 4096))
+      for (const [key, value] of point.values)
+        if (key.endsWith(":delayed") && value.kind === "zset")
+          for (const member of value.members.values()) consider(Math.floor(member.score / 4096))
     }
     return earliest
   }
-  settleTimers(): void { for (const db of this.dbs) db.keys() }
+  settleTimers(): void {
+    for (const db of this.dbs) db.keys()
+  }
   activeJobs(): number {
     let count = 0
     for (const db of this.dbs)

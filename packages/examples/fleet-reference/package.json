@@ -1,0 +1,27 @@
+{
+  "name": "@crvouga/mockingbird-example-fleet-reference",
+  "version": "0.0.0-development",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build entrypoint.ts --target=bun --outfile=dist/fleet.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "smoke": "bun smoke.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "pg": "8.23.0",
+    "@types/pg": "8.23.1",
+    "ioredis": "5.11.1"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-stripe": "workspace:*",
+    "@crvouga/mockingbird-service-postgres": "workspace:*",
+    "@crvouga/mockingbird-service-redis": "workspace:*"
+  },
+  "mockingbird": {
+    "layer": "example",
+    "runtime": "node"
+  }
+}

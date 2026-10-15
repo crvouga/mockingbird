@@ -3,9 +3,7 @@
   "$id": "https://mockingbird.chrisvouga.dev/schemas/fleet-v1.json",
   "title": "Mockingbird fleet configuration v1",
   "type": "object",
-  "required": [
-    "services"
-  ],
+  "required": ["services"],
   "additionalProperties": false,
   "properties": {
     "$schema": {
@@ -24,11 +22,7 @@
       }
     },
     "log": {
-      "enum": [
-        "pretty",
-        "json",
-        "off"
-      ]
+      "enum": ["pretty", "json", "off"]
     },
     "adminPrefix": {
       "type": "string"
@@ -59,9 +53,7 @@
     },
     "cors": {
       "type": "object",
-      "required": [
-        "origins"
-      ],
+      "required": ["origins"],
       "additionalProperties": false,
       "properties": {
         "origins": {
@@ -73,14 +65,7 @@
         "methods": {
           "type": "array",
           "items": {
-            "enum": [
-              "GET",
-              "POST",
-              "PUT",
-              "DELETE",
-              "HEAD",
-              "OPTIONS"
-            ]
+            "enum": ["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"]
           }
         },
         "headers": {
@@ -115,11 +100,7 @@
           }
         },
         "protocol": {
-          "enum": [
-            "http",
-            "postgres",
-            "redis"
-          ]
+          "enum": ["http", "postgres", "redis"]
         },
         "port": {
           "type": "integer",

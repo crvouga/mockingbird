@@ -351,7 +351,9 @@ async function startProtocol(entry: ConfigService): Promise<FleetChild> {
       if (control.now !== undefined) redis.clock.set(control.now)
     },
     nextEvent: (name) => get(name).redis.nextEvent(),
-    async settle(name) { get(name).redis.settleTimers() },
+    async settle(name) {
+      get(name).redis.settleTimers()
+    },
     clock: (name) => get(name).redis.clock,
   }
 }

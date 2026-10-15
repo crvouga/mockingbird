@@ -60,3 +60,37 @@ test("portable webhook restore restores endpoints/history in this and a fresh ru
     expect(current.webhooks?.endpoints("alpha")).toEqual([])
   }
 })
+
+test("delivery observations include explicit replays and flushed retries without payloads (#416)", async () => {
+  let succeed = false
+  const events: unknown[] = []
+  const hub = createWebhookHub({
+    signer: signers.none(),
+    endpoints: [{ url: "http://receiver.example.test/synthetic" }],
+    retryDelaysMs: [0, 100000],
+    fetch: async () => new Response("synthetic-body", { status: succeed ? 200 : 500 }),
+  })
+  const unsubscribe = hub.observeDeliveries((event) => events.push(event))
+  try {
+    hub.publish({
+      namespace: "alpha",
+      type: "synthetic",
+      body: { private: "synthetic-private-record" },
+    })
+    await hub.idle("alpha")
+    succeed = true
+    await hub.flush()
+    expect(events).toMatchObject([{ namespace: "alpha", state: "delivered" }])
+    const delivery = hub.deliveries("alpha")[0]
+    expect(delivery).toBeDefined()
+    succeed = false
+    await hub.replay(delivery?.id ?? "")
+    expect(events).toMatchObject([{ state: "delivered" }, { state: "failed" }])
+    expect(JSON.stringify(events)).not.toContain("synthetic-private-record")
+    expect(JSON.stringify(events)).not.toContain("receiver.example.test")
+  } finally {
+    unsubscribe()
+    hub.clear()
+    await hub.idle()
+  }
+})

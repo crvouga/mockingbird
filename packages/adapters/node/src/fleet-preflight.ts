@@ -1,11 +1,11 @@
-import { advertisedHttpBase } from "./fleet-proxy.js"
 import { readFile, realpath } from "node:fs/promises"
-import { assertFleetConfig } from "./fleet-schema.js"
 import { createRequire } from "node:module"
 import { basename, dirname, resolve } from "node:path"
 import { normalizeBootControls, resolveAdminPrefix } from "@crvouga/mockingbird-service"
 import type { MockingbirdConfig } from "./cli.js"
 import type { FleetOptions, FleetTarget } from "./fleet.js"
+import { advertisedHttpBase } from "./fleet-proxy.js"
+import { assertFleetConfig } from "./fleet-schema.js"
 
 const destination = async (path: string): Promise<string> => {
   const absolute = resolve(path)
@@ -29,11 +29,18 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
   if (
     !config.services ||
     typeof config.services !== "object" ||
-    !Object.keys(config.services).length && !Object.keys(options.participants ?? {}).length
+    (!Object.keys(config.services).length && !Object.keys(options.participants ?? {}).length)
   )
     throw new Error("config must contain at least one service")
   validateFleetPolicies(options)
-  if (options.archiveProtection && options.repository && options.repository.protectionPolicy?.format !== options.archiveProtection.policy.format) throw new Error("protected archive policy requires a protected repository; configure its protector before startup")
+  if (
+    options.archiveProtection &&
+    options.repository &&
+    options.repository.protectionPolicy?.format !== options.archiveProtection.policy.format
+  )
+    throw new Error(
+      "protected archive policy requires a protected repository; configure its protector before startup",
+    )
   resolveAdminPrefix(config.adminPrefix)
   normalizeBootControls(config.adminControls)
   const targets = new Map<string, FleetTarget>()
@@ -53,9 +60,13 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
         (!Number.isInteger(entry.port) || entry.port < 0 || entry.port > 65535)
       )
         throw new Error("invalid port")
-      if (entry.target !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.target)) throw new Error("target must name a supported service suffix")
+      if (entry.target !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.target))
+        throw new Error("target must name a supported service suffix")
       const service = entry.target ?? name
-      if (advertisedHttpBase(entry) && service !== "stripe") throw new Error(`public ingress unsupported for ${service}; use a direct endpoint to preserve signed targets`)
+      if (advertisedHttpBase(entry) && service !== "stripe")
+        throw new Error(
+          `public ingress unsupported for ${service}; use a direct endpoint to preserve signed targets`,
+        )
       const target = await options.load(service)
       const protocol = "protocol" in target ? target.protocol : "http"
       if (entry.protocol !== undefined && entry.protocol !== protocol)
@@ -120,11 +131,26 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
     }
   }
   for (const [name, participant] of Object.entries(options.participants ?? {})) {
-    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || targets.has(name)) throw new Error(`external participant identity collision ${name}`)
-    if (participant.protocol !== "external") throw new Error(`registered participant ${name} must declare external protocol`)
-    targets.set(name, { name, protocol: "external", defaultPort: 0, start: async () => participant })
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) || targets.has(name))
+      throw new Error(`external participant identity collision ${name}`)
+    if (participant.protocol !== "external")
+      throw new Error(`registered participant ${name} must declare external protocol`)
+    targets.set(name, {
+      name,
+      protocol: "external",
+      defaultPort: 0,
+      start: async () => participant,
+    })
   }
-  assertFleetConfig(config, Object.fromEntries([...targets].map(([name, target]) => [config.services[name]?.target ?? name, "options" in target ? target.options ?? {} : {}])))
+  assertFleetConfig(
+    config,
+    Object.fromEntries(
+      [...targets].map(([name, target]) => [
+        config.services[name]?.target ?? name,
+        "options" in target ? (target.options ?? {}) : {},
+      ]),
+    ),
+  )
   const ordered = new Map<string, FleetTarget>()
   const visiting = new Set<string>()
   const visit = (name: string, chain: string[]) => {
@@ -132,10 +158,13 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
     if (!targets.has(name)) throw new Error(`unknown dependency ${[...chain, name].join(" -> ")}`)
     if (visiting.has(name)) throw new Error(`dependency cycle ${[...chain, name].join(" -> ")}`)
     visiting.add(name)
-    const dependencies = config.services[name]?.dependsOn ?? options.participants?.[name]?.dependencies ?? []
-    if (!Array.isArray(dependencies) || dependencies.some((d) => typeof d !== "string")) throw new Error(`services.${name}.dependsOn must be a list of instance names`)
+    const dependencies =
+      config.services[name]?.dependsOn ?? options.participants?.[name]?.dependencies ?? []
+    if (!Array.isArray(dependencies) || dependencies.some((d) => typeof d !== "string"))
+      throw new Error(`services.${name}.dependsOn must be a list of instance names`)
     for (const dependency of dependencies) visit(dependency, [...chain, name])
-    visiting.delete(name); ordered.set(name, targets.get(name) as FleetTarget)
+    visiting.delete(name)
+    ordered.set(name, targets.get(name) as FleetTarget)
   }
   for (const name of targets.keys()) visit(name, [])
   return ordered
@@ -143,10 +172,28 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
 
 /** Policy errors are configuration errors and must precede listener creation. */
 export function validateFleetPolicies(options: FleetOptions) {
-  if (options.journal && !options.repository) throw new Error("durable operation journal requires an archive repository")
+  if (options.journal && !options.repository)
+    throw new Error("durable operation journal requires an archive repository")
   if (options.cors) {
-    if (!Array.isArray(options.cors.origins) || options.cors.origins.some((o) => { try { const u = new URL(o); return !["http:", "https:"].includes(u.protocol) || u.origin !== o } catch { return true } })) throw new Error("cors.origins must contain explicit HTTP origins")
-    if (options.cors.methods?.some((m) => !["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"].includes(m)) || options.cors.headers?.some((h) => !/^[a-zA-Z0-9-]+$/.test(h))) throw new Error("invalid CORS methods/headers")
+    if (
+      !Array.isArray(options.cors.origins) ||
+      options.cors.origins.some((o) => {
+        try {
+          const u = new URL(o)
+          return !["http:", "https:"].includes(u.protocol) || u.origin !== o
+        } catch {
+          return true
+        }
+      })
+    )
+      throw new Error("cors.origins must contain explicit HTTP origins")
+    if (
+      options.cors.methods?.some(
+        (m) => !["GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS"].includes(m),
+      ) ||
+      options.cors.headers?.some((h) => !/^[a-zA-Z0-9-]+$/.test(h))
+    )
+      throw new Error("invalid CORS methods/headers")
   }
   for (const [key, value] of Object.entries(options.limits ?? {})) {
     if (!["maxNamespaces", "maxListeners", "connections"].includes(key))

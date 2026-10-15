@@ -189,10 +189,30 @@ jobs:
           path: .smoke-passed
           key: ${{ steps.smoke-key.outputs.key }}
 
+  fleet-container:
+    name: Fleet container (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Build pinned reference image
+        run: docker build --platform linux/${{ matrix.arch }} -f packages/examples/fleet-reference/Dockerfile -t mockingbird-fleet:smoke .
+      - name: Verify non-root mixed-protocol fresh-process recovery
+        run: bun run --cwd packages/examples/fleet-reference smoke
+
   check:
     name: Check
     if: always()
-    needs: [changes, static, shard, smoke]
+    needs: [changes, static, shard, smoke, fleet-container]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -207,6 +227,7 @@ jobs:
               or (.[$job].result == "skipped" and .changes.outputs[$needed] == "false");
             .changes.result == "success"
             and .static.result == "success"
+            and .["fleet-container"].result == "success"
             and ran_or_not_needed("shard"; "shards")
             and ran_or_not_needed("smoke"; "smoke")
           ' > /dev/null

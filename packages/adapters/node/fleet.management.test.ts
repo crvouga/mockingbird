@@ -1044,13 +1044,17 @@ test("namespace fork copies real mixed state and preserves the source (#404)", a
     await http(fleet, "alpha", "fork baseline")
     expect((await call(fleet, "/namespaces/alpha/fork", { destination: "beta" })).status).toBe(201)
     expect((await pg(fleet, "beta", "SELECT * FROM forked")).rows).toEqual([{ id: 7 }])
-    expect(await kv(fleet, "beta", (c) => c.zrange("bull:synthetic:delayed", 0, -1))).toEqual(["job-1"])
+    expect(await kv(fleet, "beta", (c) => c.zrange("bull:synthetic:delayed", 0, -1))).toEqual([
+      "job-1",
+    ])
     await http(fleet, "beta", "independent")
     expect(await (await http(fleet, "alpha")).json()).toHaveLength(1)
     expect((await call(fleet, "/namespaces/alpha/fork", { destination: "beta" })).status).toBe(409)
     await call(fleet, "/namespaces/beta/reset", {})
     expect((await pg(fleet, "alpha", "SELECT * FROM forked")).rows).toEqual([{ id: 7 }])
-  } finally { await fleet.close() }
+  } finally {
+    await fleet.close()
+  }
 })
 
 test("run fixtures isolate concurrent callbacks and preserve both callback and cleanup failures (#413)", async () => {
@@ -1058,34 +1062,92 @@ test("run fixtures isolate concurrent callbacks and preserve both callback and c
   const fleet = await start({}, { ...config, adminKey: "synthetic-admin-only" })
   const client = new FleetClient(fleet.manifest.adminBase, { adminKey: "synthetic-admin-only" })
   try {
-    const names = await Promise.all([1, 2].map(() => withFleetRun(client, {}, async (run) => { expect(JSON.stringify(run)).not.toContain("synthetic-admin-only"); expect(run.generation).toBeString(); return run.namespace })))
+    const names = await Promise.all(
+      [1, 2].map(() =>
+        withFleetRun(client, {}, async (run) => {
+          expect(JSON.stringify(run)).not.toContain("synthetic-admin-only")
+          expect(run.generation).toBeString()
+          return run.namespace
+        }),
+      ),
+    )
     expect(names[0]).not.toBe(names[1])
-    expect((await (await call(fleet, "/namespaces", undefined, "GET", { "x-mockingbird-admin-key": "synthetic-admin-only" })).json()).namespaces).toHaveLength(1)
+    expect(
+      (
+        await (
+          await call(fleet, "/namespaces", undefined, "GET", {
+            "x-mockingbird-admin-key": "synthetic-admin-only",
+          })
+        ).json()
+      ).namespaces,
+    ).toHaveLength(1)
     let failed: unknown
-    try { await withFleetRun(client, {}, async (run) => { run.registerCleanup(async () => { throw new Error("synthetic cleanup failure") }); throw new Error("synthetic callback failure") }) } catch (error) { failed = error }
+    try {
+      await withFleetRun(client, {}, async (run) => {
+        run.registerCleanup(async () => {
+          throw new Error("synthetic cleanup failure")
+        })
+        throw new Error("synthetic callback failure")
+      })
+    } catch (error) {
+      failed = error
+    }
     expect(failed).toBeInstanceOf(FleetRunError)
-    expect((failed as AggregateError).errors.map((e: Error) => e.message)).toEqual(["synthetic callback failure", "synthetic cleanup failure"])
-    expect((failed as InstanceType<typeof FleetRunError>).evidence).toMatchObject({ format: "mockingbird.diagnostics/v1" })
-  } finally { await fleet.close() }
+    expect((failed as AggregateError).errors.map((e: Error) => e.message)).toEqual([
+      "synthetic callback failure",
+      "synthetic cleanup failure",
+    ])
+    expect((failed as InstanceType<typeof FleetRunError>).evidence).toMatchObject({
+      format: "mockingbird.diagnostics/v1",
+    })
+  } finally {
+    await fleet.close()
+  }
 })
 
 test("debug-preserved run descriptors have bounded fleet-owned expiry (#413)", async () => {
   const { withFleetRun, FleetRunError } = await import("./src/fleet-runs.js")
-  const fleet = await start(), client = new FleetClient(fleet.manifest.adminBase)
+  const fleet = await start(),
+    client = new FleetClient(fleet.manifest.adminBase)
   try {
     let failed: InstanceType<typeof FleetRunError> | undefined
-    try { await withFleetRun(client, { preserveOnFailureMs: 60 }, async () => { throw new Error("synthetic preserve") }) } catch (error) { failed = error as InstanceType<typeof FleetRunError> }
+    try {
+      await withFleetRun(client, { preserveOnFailureMs: 60 }, async () => {
+        throw new Error("synthetic preserve")
+      })
+    } catch (error) {
+      failed = error as InstanceType<typeof FleetRunError>
+    }
     expect(failed?.run?.expiresAt).toBeNumber()
     const ns = failed?.run?.namespace
-    expect((await (await call(fleet, "/namespaces")).json()).namespaces.some((n: {namespace:string}) => n.namespace === ns)).toBe(true)
-    for (let i = 0; i < 50; i++) { await Bun.sleep(10); if (!(await (await call(fleet, "/namespaces")).json()).namespaces.some((n: {namespace:string}) => n.namespace === ns)) break }
-    expect((await (await call(fleet, "/namespaces")).json()).namespaces.some((n: {namespace:string}) => n.namespace === ns)).toBe(false)
-  } finally { await fleet.close() }
+    expect(
+      (await (await call(fleet, "/namespaces")).json()).namespaces.some(
+        (n: { namespace: string }) => n.namespace === ns,
+      ),
+    ).toBe(true)
+    for (let i = 0; i < 50; i++) {
+      await Bun.sleep(10)
+      if (
+        !(await (await call(fleet, "/namespaces")).json()).namespaces.some(
+          (n: { namespace: string }) => n.namespace === ns,
+        )
+      )
+        break
+    }
+    expect(
+      (await (await call(fleet, "/namespaces")).json()).namespaces.some(
+        (n: { namespace: string }) => n.namespace === ns,
+      ),
+    ).toBe(false)
+  } finally {
+    await fleet.close()
+  }
 })
 
 test("namespace pools lease uniquely, verify reset before reuse, and bound exhausted waits (#421)", async () => {
   const { NamespacePool } = await import("./src/fleet-runs.js")
-  const fleet = await start(), client = new FleetClient(fleet.manifest.adminBase)
+  const fleet = await start(),
+    client = new FleetClient(fleet.manifest.adminBase)
   const pool = new NamespacePool(client, { maxSize: 1, baselineVersion: "synthetic-v1" })
   try {
     const first = await pool.acquire()
@@ -1093,7 +1155,8 @@ test("namespace pools lease uniquely, verify reset before reuse, and bound exhau
     await expect(pool.acquire({ timeoutMs: 10 })).rejects.toThrow("capacity exhausted")
     await pool.release(first)
     const next = await pool.acquire()
-    expect(next.namespace).toBe(first.namespace); expect(next.leaseId).not.toBe(first.leaseId)
+    expect(next.namespace).toBe(first.namespace)
+    expect(next.leaseId).not.toBe(first.leaseId)
     expect(await (await http(fleet, next.namespace)).json()).toEqual([])
     expect(next.generation).not.toBe(first.generation)
     await pool.release(next)
@@ -1101,71 +1164,151 @@ test("namespace pools lease uniquely, verify reset before reuse, and bound exhau
     const fresh = await pool.acquire()
     expect(fresh.namespace).not.toBe(first.namespace)
     await pool.release(fresh)
-  } finally { await pool.close(); await fleet.close() }
+  } finally {
+    await pool.close()
+    await fleet.close()
+  }
 })
 
 test("redacted audit entries attribute denied and completed operations and survive restoring application state (#410)", async () => {
   const written: unknown[] = []
-  const fleet = await start({ audit: { failurePolicy: "closed", write: async (event) => { written.push(event) } } }, { ...config, adminKey: "synthetic-admin-only" })
+  const fleet = await start(
+    {
+      audit: {
+        failurePolicy: "closed",
+        write: async (event) => {
+          written.push(event)
+        },
+      },
+    },
+    { ...config, adminKey: "synthetic-admin-only" },
+  )
   const root = { "x-mockingbird-admin-key": "synthetic-admin-only" }
   try {
-    expect((await call(fleet, "/namespaces/default/reset", {}, "POST", { "x-mockingbird-admin-key": "synthetic-invalid-presented-key" })).status).toBe(401)
-    const snapshot = await (await call(fleet, "/namespaces/default/snapshots", {}, "POST", root)).json()
+    expect(
+      (
+        await call(fleet, "/namespaces/default/reset", {}, "POST", {
+          "x-mockingbird-admin-key": "synthetic-invalid-presented-key",
+        })
+      ).status,
+    ).toBe(401)
+    const snapshot = await (
+      await call(fleet, "/namespaces/default/snapshots", {}, "POST", root)
+    ).json()
     await call(fleet, `/namespaces/default/snapshots/${snapshot.id}/restore`, {}, "POST", root)
     const text = await (await call(fleet, "/audit", undefined, "GET", root)).text()
-    expect(text).toContain('"stage":"denied"'); expect(text).toContain('"stage":"terminal"')
-    for (const secret of ["synthetic-admin-only", "synthetic-invalid-presented-key"]) expect(text).not.toContain(secret)
+    expect(text).toContain('"stage":"denied"')
+    expect(text).toContain('"stage":"terminal"')
+    for (const secret of ["synthetic-admin-only", "synthetic-invalid-presented-key"])
+      expect(text).not.toContain(secret)
     expect(written.length).toBeGreaterThanOrEqual(5)
     expect(JSON.parse(text).entries.some((entry: { durable: boolean }) => entry.durable)).toBe(true)
-  } finally { await fleet.close() }
+  } finally {
+    await fleet.close()
+  }
 })
 
 test("required audit failure prevents mutation and reports undurable evidence (#410)", async () => {
-  const fleet = await start({ audit: { failurePolicy: "closed", write: async () => { throw new Error("sink unavailable") } } })
+  const fleet = await start({
+    audit: {
+      failurePolicy: "closed",
+      write: async () => {
+        throw new Error("sink unavailable")
+      },
+    },
+  })
   try {
     await http(fleet, "default", "keep")
     expect((await call(fleet, "/namespaces/default/reset", {})).ok).toBe(false)
     expect(await (await http(fleet, "default")).json()).toHaveLength(1)
-    expect(await (await call(fleet, "/audit")).json()).toMatchObject({ failurePolicy: "closed", entries: [expect.objectContaining({ durable: false })] })
-  } finally { await fleet.close() }
+    expect(await (await call(fleet, "/audit")).json()).toMatchObject({
+      failurePolicy: "closed",
+      entries: [expect.objectContaining({ durable: false })],
+    })
+  } finally {
+    await fleet.close()
+  }
 })
 
 test("telemetry correlates lifecycle events using host elapsed time without namespace labels or bodies (#411)", async () => {
   const events: unknown[] = []
-  const fleet = await start({ telemetry: (event) => { events.push(event) }, workload: { prepare: async () => { await Bun.sleep(5) } } }, { ...config, adminControls: { clock: { now: 0, frozen: true } } })
+  const fleet = await start(
+    {
+      telemetry: (event) => {
+        events.push(event)
+      },
+      workload: {
+        prepare: async () => {
+          await Bun.sleep(5)
+        },
+      },
+    },
+    { ...config, adminControls: { clock: { now: 0, frozen: true } } },
+  )
   try {
     const response = await call(fleet, "/namespaces/default/reset", {})
     expect(response.ok).toBe(true)
     const id = response.headers.get("x-mockingbird-operation-id")
-    expect(events.every((event) => (event as {operationId:string}).operationId === id)).toBe(true)
+    expect(events.every((event) => (event as { operationId: string }).operationId === id)).toBe(
+      true,
+    )
     const telemetry = await (await call(fleet, "/telemetry")).json()
     expect(telemetry.metrics.succeeded).toBe(1)
     expect(telemetry.metrics.durationsMs.max).toBeGreaterThanOrEqual(4)
     expect(telemetry.cardinality).toBe("aggregate-no-namespace-labels")
     expect(JSON.stringify(events)).not.toContain('"namespace":')
-  } finally { await fleet.close() }
+  } finally {
+    await fleet.close()
+  }
 })
 
 test("run assertion controls observe real unmatched vendor traffic after a namespace baseline (#416)", async () => {
   const fleet = await start({}, { services: { stripe: { port: 0 } } })
   try {
     const url = fleet.manifest.services.stripe?.url
-    await fetch(`${url}/synthetic-missing`, { headers: { "x-mockingbird-namespace": "alpha", authorization: "Bearer sk_test_mockingbird" } })
+    await fetch(`${url}/synthetic-missing`, {
+      headers: { "x-mockingbird-namespace": "alpha", authorization: "Bearer sk_test_mockingbird" },
+    })
     const baseline = await (await call(fleet, "/assertions/baseline?namespace=alpha", {})).json()
-    expect((await call(fleet, `/assertions/${baseline.id}/check?namespace=alpha`, {})).status).toBe(200)
-    await fetch(`${url}/synthetic-missing`, { headers: { "x-mockingbird-namespace": "alpha", authorization: "Bearer sk_test_mockingbird" } })
-    const failed = await (await call(fleet, `/assertions/${baseline.id}/check?namespace=alpha`, {})).json()
+    expect((await call(fleet, `/assertions/${baseline.id}/check?namespace=alpha`, {})).status).toBe(
+      200,
+    )
+    await fetch(`${url}/synthetic-missing`, {
+      headers: { "x-mockingbird-namespace": "alpha", authorization: "Bearer sk_test_mockingbird" },
+    })
+    const failed = await (
+      await call(fleet, `/assertions/${baseline.id}/check?namespace=alpha`, {})
+    ).json()
     expect(failed.clean).toBe(false)
     expect(failed.failures[0]).toMatchObject({ kind: "unmatched", service: "stripe", status: 404 })
-    const allowance = { kind: "unmatched", service: "stripe", pathFingerprint: failed.failures[0].pathFingerprint, status: 404, maxCount: 1 }
-    expect((await call(fleet, `/assertions/${baseline.id}/check?namespace=alpha`, { allowances: [allowance] })).status).toBe(200)
-    expect((await call(fleet, `/assertions/${baseline.id}/check?namespace=beta`, {})).ok).toBe(false)
-  } finally { await fleet.close() }
+    const allowance = {
+      kind: "unmatched",
+      service: "stripe",
+      pathFingerprint: failed.failures[0].pathFingerprint,
+      status: 404,
+      maxCount: 1,
+    }
+    expect(
+      (
+        await call(fleet, `/assertions/${baseline.id}/check?namespace=alpha`, {
+          allowances: [allowance],
+        })
+      ).status,
+    ).toBe(200)
+    expect((await call(fleet, `/assertions/${baseline.id}/check?namespace=beta`, {})).ok).toBe(
+      false,
+    )
+  } finally {
+    await fleet.close()
+  }
 })
 
 test("bounded HTTP/control traces replay from baseline only into a separate admitted synthetic fleet (#422)", async () => {
   const { replayFleetTrace } = await import("./src/fleet-observations.js")
-  const source = await start({ trace: true }, { services: { fixture: { port: 0, seed: "synthetic" } } })
+  const source = await start(
+    { trace: true },
+    { services: { fixture: { port: 0, seed: "synthetic" } } },
+  )
   const destination = await start({}, { services: { fixture: { port: 0, seed: "synthetic" } } })
   try {
     expect((await call(source, "/trace/start", { includeBodies: true })).status).toBe(200)
@@ -1173,13 +1316,33 @@ test("bounded HTTP/control traces replay from baseline only into a separate admi
     await call(source, "/clock", { freeze: true, advance: 10 })
     await (await http(source, "default", "second")).json()
     const artifact = await (await call(source, "/trace/stop", {})).json()
-    expect(artifact.events.map((event: { kind: string }) => event.kind)).toEqual(["http", "control", "http"])
-    const subject = { manifest: destination.manifest, connections: { version: 1 as const, services: { fixture: { url: destination.children.get("fixture")?.url ?? "" } } }, client: new FleetClient(destination.manifest.adminBase), close: destination.close }
+    expect(artifact.events.map((event: { kind: string }) => event.kind)).toEqual([
+      "http",
+      "control",
+      "http",
+    ])
+    const subject = {
+      manifest: destination.manifest,
+      connections: {
+        version: 1 as const,
+        services: { fixture: { url: destination.children.get("fixture")?.url ?? "" } },
+      },
+      client: new FleetClient(destination.manifest.adminBase),
+      close: destination.close,
+    }
     const result = await replayFleetTrace(artifact, subject)
-    expect(result.matched).toBe(true); expect(result.complete).toBe(true)
-    expect(await (await http(destination, "default")).json()).toEqual(await (await http(source, "default")).json())
-    await expect(replayFleetTrace(artifact, { ...subject, manifest: source.manifest })).rejects.toThrow("separate")
-  } finally { await source.close(); await destination.close() }
+    expect(result.matched).toBe(true)
+    expect(result.complete).toBe(true)
+    expect(await (await http(destination, "default")).json()).toEqual(
+      await (await http(source, "default")).json(),
+    )
+    await expect(
+      replayFleetTrace(artifact, { ...subject, manifest: source.manifest }),
+    ).rejects.toThrow("separate")
+  } finally {
+    await source.close()
+    await destination.close()
+  }
 })
 
 test("event stepping advances the earliest Redis deadline and bounds workerless delayed-job cycles (#414)", async () => {
@@ -1190,9 +1353,42 @@ test("event stepping advances the earliest Redis deadline and bounds workerless 
     expect(step).toMatchObject({ status: "stepped", steps: [{ now: 10, processed: ["redis"] }] })
     expect(await kv(fleet, "default", (c) => c.get("synthetic-expiry"))).toBeNull()
     await kv(fleet, "default", (c) => c.zadd("bull:synthetic:delayed", String(20 * 4096), "job-1"))
-    const response = await call(fleet, "/time/run-until", { services: ["redis"], maxEvents: 3, timeoutMs: 1000 })
+    const response = await call(fleet, "/time/run-until", {
+      services: ["redis"],
+      maxEvents: 3,
+      timeoutMs: 1000,
+    })
     expect(response.status).toBe(409)
-    expect(await response.json()).toMatchObject({ status: "budget-exhausted", steps: [{ now: 20 }, { now: 20 }, { now: 20 }] })
+    expect(await response.json()).toMatchObject({
+      status: "budget-exhausted",
+      steps: [{ now: 20 }, { now: 20 }, { now: 20 }],
+    })
     expect((await call(fleet, "/time/step-next", { services: ["fixture"] })).status).toBe(400)
-  } finally { await fleet.close() }
+  } finally {
+    await fleet.close()
+  }
+})
+
+test("privileged traces cannot turn a control-only scoped credential into a snapshot reader (#392, #422)", async () => {
+  const fleet = await start({ trace: true }, { ...config, adminKey: "synthetic-admin-only" })
+  const root = { "x-mockingbird-admin-key": "synthetic-admin-only" }
+  try {
+    await call(fleet, "/namespaces/alpha", {}, "POST", root)
+    const token = await (
+      await call(
+        fleet,
+        "/credentials",
+        { namespaces: ["alpha"], actions: ["control", "read"], ttlMs: 10000 },
+        "POST",
+        root,
+      )
+    ).json()
+    const scoped = { "x-mockingbird-admin-key": token.credential }
+    expect((await call(fleet, "/trace/start?namespace=alpha", {}, "POST", scoped)).status).toBe(403)
+    expect((await call(fleet, "/trace?namespace=alpha", undefined, "GET", scoped)).status).toBe(403)
+    expect((await call(fleet, "/trace/start?namespace=alpha", {}, "POST", root)).status).toBe(200)
+    expect((await call(fleet, "/trace/stop?namespace=alpha", {}, "POST", root)).status).toBe(200)
+  } finally {
+    await fleet.close()
+  }
 })

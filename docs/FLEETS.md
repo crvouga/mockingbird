@@ -359,3 +359,208 @@ Oversize and stalled uploads return 413 and 408. Request aborts, URL/Request con
 and response-body errors stay inside the adapter boundary. Disconnect cancels response streams and
 releases backpressure waits. Configure the exported Node `serve` directly when custom transport
 limits are needed; ordinary fleet CLI listeners use these defaults.
+
+## Isolated runs, namespace forks and warm leases
+
+All helpers below ship from `@crvouga/mockingbird-service-stripe/fleet`; the standalone internal
+adapter package is not a consumer dependency. Load supported service `serveTarget` exports from
+matching installed `@crvouga/mockingbird-service-*/server` packages. Independently bundled runtime
+declarations are accepted at the loader boundary and their fleet protocol is checked before
+listening. Missing/incompatible packages fail with concrete installation/version diagnostics.
+
+`POST /namespaces/{source}/fork` accepts `{destination,bindings?}`. It fences the selected environment,
+captures all child state and clocks consistently, provisions a new namespace, and restores rebased
+HTTP/SQL/Redis state. Source state and archive identity stay unchanged. Existing destinations are
+refused. The caller must be an administrator. Failed provisioning/restore is reported and cleaned
+up or left fenced when recovery cannot be proven.
+
+`withFleetRun(client,{baseline?,scenario?,verify?,preserveOnFailureMs?},async run => …)` owns a unique
+namespace. The run descriptor exposes namespace, generation and discovered endpoints without admin
+credentials. Use `run.registerCleanup(async () => …)` for application clients/workers. Cleanup runs
+on success and failure, then the namespace is deleted. `FleetRunError` preserves original/cleanup
+failures and diagnostic evidence. Optional debug preservation expires within one day; it does not
+silently leak an indefinitely pinned namespace.
+
+`NamespacePool` provides bounded prewarmed namespace leases, not shared vendor state. Acquiring
+returns a unique lease identity/generation and expiry. Register client cleanup on the lease, then
+release it: the pool closes clients, checks quiescence, restores and verifies its baseline before
+making it warm again. Failed or expired leases are quarantined rather than reassigned. Waits have
+a timeout/cancellation policy. Changing baseline version retires stale warm entries. This is an
+in-process lease coordinator; use one pool owner, not independent competing pools for the same names.
+
+## Restore bindings, archive protection and version upgrades
+
+`POST /archives/bindings` plans explicit `{bindings:[{namespace,service,endpointId,endpointRef,secretRef?,signing?,signingRef?}],endpoints:{ref:url}}`
+bindings without restoring. The `RestoreBindings` API lists only supported webhook endpoint and
+signing-material fields; opaque records are never searched/replaced. Reports redact signing
+material. Resolve secret references through the host-owned `resolveArchiveSecret` hook. Import and
+fork may apply the same binding plan. Missing or ambiguous references fail before child mutation;
+leave application-owned URLs untouched unless they have an explicit supported binding.
+
+`archiveProtector({activeKeyId,trustedKeyIds,resolveKey})` uses RFC 7516 compact JWE with direct
+A256GCM, random 96-bit nonces and authenticated key-id metadata. The resolver supplies 32-byte keys
+from outside the artifact; the artifact contains no key. Keep previous key ids trusted only for the
+required rotation window. Unknown keys, corruption and authentication failures reject before
+archive parsing/restore; protection never falls back to plaintext. Hash identity remains the
+verified inner archive identity, not a claim of ciphertext authenticity by itself.
+
+Set `archiveProtection` on the fleet for protected control exports/imports. For at-rest protection,
+pass the same protector to `filesystemRepository(directory,maxBytes?,protector)` or
+`s3Repository({...options,protection:protector})`; protected fleet policy rejects an unprotected
+repository. Use `client.exportProtectedArchive()` for its typed envelope and `importArchive()` for
+either supported artifact type. Generic `request()` can also transport envelopes. Configure body
+and repository byte limits for encryption overhead. Secrets and opaque application fields still
+require careful privileged artifact access even when protection is disabled intentionally.
+
+`archiveCompatibility(input,registry)` reports supported source formats, per-target version
+transforms and blockers. `migrateArchive` applies only explicitly registered deterministic
+transformations, produces a separately hashed v1 artifact and records provenance. Unknown formats
+or incomplete transformation chains fail; source bytes/identity are preserved. `migrateAndVerify`
+requires an independent verification callback before publishing to a repository. Rehearse a migrated
+archive in a fresh fleet and verify application-specific probes before promoting it.
+
+`incrementalArchive`, `materializeArchive`, `archiveReachability`, `publishIncremental` and
+`compactArchive` offer optional content-addressed section deduplication with verified base chains.
+Participants may still capture full sections; this does not claim engine-level change tracking.
+Missing/corrupt bases, cycles and inconsistent target hashes fail. Materialization must match the
+full archive's state and identity before promotion. Reachability protects every required base/object
+from pruning. Compaction publishes only a verified independent full archive. Full archives remain
+the default and the management import surface consumes materialized full artifacts.
+
+## Competing writers and interrupted operation recovery
+
+For shared storage, use `RepositoryWriter` with `filesystemConditionalStore` (same-host filesystem
+mutex/CAS) or `s3ConditionalStore` (ETag/If-Match and If-None-Match). Acquire an owner lease and bind it
+to the repository before supplying it to a fleet. Expired takeover must be explicitly allowed.
+Renewals and latest publication compare the current generation/lease; a delayed previous writer
+cannot publish after takeover. Immutable uploads can succeed independently, but only verified
+objects become the fenced recovery pointer. Storage without the required conditional semantics
+is refused. The ordinary repository alone is a single-writer convenience, not a distributed lock.
+
+`journal:filesystemOperationJournal(directory)` opts into fsynced per-operation metadata and
+requires an archive repository. Before a mutation, capture a verified portable before-state where
+available; durably record prepared/committing, then upload/publication and terminal outcomes.
+Metadata contains ids, scope, action, fingerprints and archive hashes, never raw request bodies or
+snapshots. Stale journal revisions cannot overwrite reconciliation from another controller.
+
+On restart, prepared-only records can be marked abandoned before commit. A published archive is
+accepted only after object verification and matching conditional-writer generation; it is restored
+before readiness without rerunning the original mutation. Unprovable commit/rollback remains
+`recovery-required`: affected namespaces stay fenced, health fails, and the manifest does not claim
+ready. `GET /recovery` lists interrupted work. `POST /recovery/{id}/rollback` restores a verified
+before-state; explicit namespace reset/restore can also resolve its own scope. An absent before-state
+requires explicit reset. Required journal read/write failures are visible and cannot claim a durable
+outcome. This covers declared portable participants, not exactly-once external effects or a final
+backup after SIGKILL. Archive access and journal storage must remain available together.
+
+## Audit, lifecycle telemetry, assertions and traces
+
+`audit:{write,failurePolicy:"open"|"closed"}` sends attributable denied/attempt/terminal metadata to
+a host sink. Entries contain actor/credential identity, namespace, selected participants, operation
+id, real timestamp and outcome. They omit keys, bodies, records and signed URLs. `GET /audit` exposes
+a bounded 200-entry administrator-only history and whether a durable sink accepted each record.
+Restore does not rewind this administrative history. Fail-closed admission prevents mutation when
+the sink is unavailable; terminal sink failure retains recovery fences. Memory-only history does
+not claim durable or tamper-proof audit storage.
+
+`telemetry(event)` receives operation id, phase, optional participant, action, status, host elapsed
+milliseconds and recovery flag. Checkpoint, commit, rollback, workload hooks, upload verification
+and publication share the operation correlation. `GET /telemetry` reports aggregate started,
+succeeded, failed/cancelled, rollback attempts/failures, recovery-required, duration count/sum/max,
+and hook/sink failure counts. Clock rewind cannot rewind durations. Defaults have no namespace
+metric labels and require no collector. Hook failures are counted without changing vendor output.
+
+`POST /assertions/baseline` creates a run-scoped observation cursor. `POST /assertions/{id}/check`
+reports unmatched/rejected requests, applied faults, failed deliveries and current active/pending
+work since that baseline. Explicit service/path-fingerprint/operation allowances may constrain
+status and count. Pending queues are opt-in allowances; active work remains visible. Baselines do
+not clear another run's vendor history. Retention is bounded and truncated evidence is explicit.
+Request observations exclude bodies and credentials. See the exported `AssertionAllowance` type
+for the exact allowlist shape.
+
+`trace:true` enables privileged `POST /trace/start`, `GET /trace` and `POST /trace/stop`. A trace
+holds a verified baseline plus bounded HTTP observations, response hashes and supported clock/reset
+controls. Body capture requires `includeBodies:true`; sensitive JSON/form/query fields and
+credentials are omitted. Limits are 200 events/1 MiB per trace, 64 KiB captured bodies and four
+retained traces; overflow/truncation and unsupported controls are explicit limitations. Streams,
+concurrent order and unrecorded protocol/external effects cannot claim complete serial replay.
+
+`replayFleetTrace` restores into a distinct explicitly supplied synthetic fleet and checks response
+hashes. It rejects replay into its source fleet, admin-path requests and undeclared/live destinations.
+Only discovered loopback endpoints or an explicit synthetic-origin allowlist are eligible.
+Incomplete artifacts require explicit `allowIncomplete` plus any necessary application credential
+bindings; replay never silently reconstructs omitted credentials or contacts vendor production.
+
+## Logical event stepping and participant certification
+
+`POST /time/step-next` advances to the earliest declared event; `/time/run-until` accepts bounded
+`condition:"no-events"|"idle"|"checkpoint-ready"`, `maxEvents`, `maxAdvanceMs` and `timeoutMs`, with
+optional service selection. First freeze and align selected clocks. Redis declares key expiry and
+BullMQ delayed-job deadlines; HTTP participants opt in through `nextEvent()`, while unsupported
+participants are reported. After every step the controller settles timers and rechecks cross-child
+events. Cycles or a delayed job without a worker stop at the budget with diagnostics. Optional
+`synchronizeClock` runs after releasing mutation fences so application workers can consume work;
+external worker clocks are not advanced by assumption. Host timeout uncertainty retains fences.
+
+`launchFleet(command,config)` owns an installed CLI subprocess, private temporary config/discovery
+files and bounded readiness/teardown. `participantConformance(factory,probe)` populates independent
+namespaces, verifies reset isolation, captures state, destroys the first process, restores in a
+second process and compares deterministic continuation. Declare included/excluded state explicitly.
+Failure-injection probes certify capture/restore/rollback fences; unconfigured probes are reported
+as exclusions, never inferred passes. The test suite exercises the bundled public Stripe CLI and
+real mixed-protocol fresh-process recovery in the container reference.
+
+External host state can implement `FleetChild` and register through `participants`; it joins the
+same readiness, namespace, archive and fencing lifecycle. `fileParticipant(root,allowlist)` supplies
+a bounded reference for explicitly allowed relative files. It rejects traversal, unexpected archive
+paths and symlink traversal, scopes files by namespace and never lets an archive choose a host root.
+Coordinate application processes through workload hooks; the helper cannot stop unrelated writers
+that bypass its API.
+
+## Schema, ordering, ingress and container deployment
+
+Set `schemaVersion:1` and `$schema:"https://mockingbird.chrisvouga.dev/schemas/fleet-v1.json"` in fleet
+JSON. The published JSON Schema and runtime validator share one source. `composeFleetSchema` admits
+only declared target flags and registered extensions for authoring tools. Runtime config errors
+include precise paths; unknown fields/future versions reject before listeners. Programmatic
+extensions need explicit host integration rather than silently ignored configuration keys.
+
+An instance name is independent of vendor identity: `{services:{billing:{target:"stripe"},payments:{target:"stripe"}}}`
+creates independent endpoints and state. Omit `target` for existing suffix-based configurations.
+Archives record target identity and reject mismatched restore targets. `dependsOn:["billing"]`
+orders startup/verification and reverses shutdown; unknown edges and cycles fail in preflight.
+Dependency ordering does not imply snapshot consistency with unregistered external systems.
+
+`cors:{origins:["https://console.example.test"],methods?,headers?}` permits explicit browser origins
+for aggregate controls. OPTIONS is unauthenticated only for allowed preflight combinations; actual
+mutations still require credentials/scopes. Responses vary by Origin. Child vendor routes retain
+their provider CORS behavior. Avoid wildcard credential policies.
+
+For Stripe, `publicOrigin:"https://mocks.example.test",publicPath:"/billing"` separates the advertised
+HTTP base from the private listener. Generated Checkout/portal links and namespace paths use the
+fixed configured origin. `createFleetIngress(config,privateConnections)` is a streaming Fetch proxy
+reference; use the private connection manifest, not advertised URLs, as its upstream map. It strips
+forwarding/admin headers, preserves query and namespace carriers, streams bodies, propagates
+cancellation, and keeps administration on a separate private listener. Supply TLS/DNS externally.
+
+| Provider/profile | Origin/prefix behavior | Signing policy |
+| --- | --- | --- |
+| Stripe reference | Configured origin/prefix, hosted pages and namespace follow-ups tested | Vendor requests do not use host/path signing; webhook payload signatures remain intact |
+| S3 and other providers | Public origin/prefix mapping is explicitly unsupported/discoverable | Use direct endpoints preserving signed host/path/query; arbitrary rewrites are not certified |
+| PostgreSQL/Redis | Actual protocol endpoints and explicit host port mappings | HTTP reverse-proxy options do not apply |
+
+Untrusted Host/Forwarded headers never replace the configured public origin. Other mappings fail
+preflight; SDK path-prefix support must not be assumed. The opt-in
+[single-container reference](../packages/examples/fleet-reference/README.md) pins a source/lockfile
+inventory and Bun image digest, runs non-root without a Docker socket, supports Linux amd64/arm64,
+and verifies controlled shutdown plus fresh-process HTTP/PostgreSQL/Redis archive restoration.
+It supplies packaging and lifecycle, not live hosting or an automatic deployment.
+
+
+`outbound:{mode:"offline"|"allowlist",origins?,maxRedirects?,maxBodyBytes?,onReject?}` restricts
+fleet-owned webhook delivery. Offline sends fail locally; allowlist mode checks every destination
+and redirect, bounds bodies/redirects, and emits only namespace/policy/reason rejection metadata.
+Configured proxy/fetch injection remains host-owned. Discovery identifies HTTP children using the
+WebhookHub transport and reports unsupported participants. This is not a network sandbox for SDKs,
+application sockets, arbitrary provider-specific transports or DNS rebinding; apply a separate
+network policy when those need isolation. No outbound restriction is enabled by default.

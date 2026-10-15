@@ -1,8 +1,8 @@
-import type { ProtectedArchive } from "./fleet-protection.js"
 import { randomUUID } from "node:crypto"
 import { chmod, readFile, rename, rm, writeFile } from "node:fs/promises"
 import { canonical, type FleetArchive, validateArchive } from "./fleet-archive.js"
 import type { EndpointManifest } from "./fleet-manifest.js"
+import type { ProtectedArchive } from "./fleet-protection.js"
 
 export class FleetClientError extends Error {
   constructor(
@@ -99,7 +99,10 @@ export class FleetClient {
     })
   }
   exportProtectedArchive(namespace?: string, allNamespaces = false) {
-    return this.request<ProtectedArchive>("archives/export", { body: { allNamespaces }, ...(namespace ? { namespace } : {}) })
+    return this.request<ProtectedArchive>("archives/export", {
+      body: { allNamespaces },
+      ...(namespace ? { namespace } : {}),
+    })
   }
   importArchive(archive: FleetArchive | ProtectedArchive, namespace?: string) {
     if (archive.format !== "mockingbird.jwe/v1") validateArchive(archive)
