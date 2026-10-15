@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test"
-import { serveTarget } from "../../service/stripe/src/server.js"
+import type { ServeTarget } from "./src/cli.js"
+
+const stripeSource = "../../service/stripe/src/server.ts"
+const { serveTarget } = (await import(stripeSource)) as { serveTarget: ServeTarget }
+
 import { startFleet } from "./src/fleet.js"
 import { createFleetIngress } from "./src/fleet-proxy.js"
 
