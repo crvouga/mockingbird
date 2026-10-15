@@ -27,6 +27,7 @@ import type { ArchiveRepository } from "./fleet-repository.js"
 import { type ClockSynchronization, FleetTimeController } from "./fleet-time.js"
 
 export type Operation = {
+  scope?: string[]
   participant?: string
   actor?: string
   services?: string[]
@@ -148,6 +149,7 @@ const checked = (body: Record<string, unknown>, keys: string[]) => {
 const namePattern = /^[A-Za-z0-9_.-]{1,64}$/
 
 export class FleetManagement {
+  private readonly operationContext = new AsyncLocalStorage<Operation>()
   private readonly interrupted = new Map<string, JournalRecord>()
   private readonly durable = new Map<string, JournalRecord>()
   async recoverOperations() {
@@ -298,10 +300,16 @@ export class FleetManagement {
     if (id && this.aborts.get(id)?.signal.aborted)
       throw new Error("operation cancelled before commit")
   }
+  private activeOperation(namespace: string) {
+    const current = this.operationContext.getStore()
+    return current?.status === "running"
+      ? current
+      : [...this.operations.values()].find(
+          (operation) => operation.namespace === namespace && operation.status === "running",
+        )
+  }
   operationId(namespace: string) {
-    return [...this.operations.values()].find(
-      (o) => o.namespace === namespace && o.status === "running",
-    )?.id
+    return this.activeOperation(namespace)?.id
   }
   private async withEnvironment<T>(
     namespaces: string[],
@@ -494,7 +502,12 @@ export class FleetManagement {
     return undefined
   }
   private emit(operation: Operation) {
-    this.instrumentation.phase(operation, this.ctx.recovery.has(operation.namespace))
+    this.instrumentation.phase(
+      operation,
+      (operation.scope ?? [operation.namespace]).some((namespace) =>
+        this.ctx.recovery.has(namespace),
+      ),
+    )
     const event = {
       id: `${this.ctx.id}:${++this.sequence}`,
       namespace: operation.namespace,
@@ -527,9 +540,7 @@ export class FleetManagement {
     total?: number,
     participant?: string,
   ) {
-    const operation = [...this.operations.values()].find(
-      (o) => o.namespace === namespace && o.status === "running",
-    )
+    const operation = this.activeOperation(namespace)
     if (operation) {
       operation.phase = phase
       if (participant) operation.participant = participant
@@ -848,6 +859,7 @@ export class FleetManagement {
       ) {
         operation = {
           id: randomUUID(),
+          scope: body.allNamespaces === true ? [...this.namespaces.keys()] : [namespace],
           actor: typeof caller === "string" ? caller : "member",
           services:
             Array.isArray(body.services) &&
@@ -866,204 +878,208 @@ export class FleetManagement {
         this.aborts.set(operation.id, new AbortController())
         this.emit(operation)
       }
-      try {
-        if (
-          operation &&
-          !(await this.instrumentation.audit({
-            actor: operation.actor ?? "admin",
-            namespace,
-            action,
-            services: operation.services ?? [],
-            operationId: operation.id,
-            stage: "attempt",
-          }))
-        )
-          throw new Error("required audit sink unavailable before mutation")
-        if (
-          operation &&
-          this.ctx.options.journal &&
-          !path.startsWith("/fleet/recovery") &&
-          !path.includes("/assertions/") &&
-          !path.startsWith("/fleet/trace")
-        ) {
-          if (!this.ctx.options.repository) throw new Error("durable journal requires a repository")
-          let before: string | undefined
-          if (this.namespaces.has(namespace) && !this.ctx.recovery.has(namespace)) {
-            const archive = await this.capture(
-              body.allNamespaces === true ? [...this.namespaces.keys()] : [namespace],
-              this.select(body),
-            )
-            before = await this.ctx.options.repository.put(archive)
-            await this.ctx.options.repository.get(before)
-          }
-          const record: JournalRecord = {
-            version: 1,
-            revision: 1,
-            operationId: operation.id,
-            controller: this.ctx.id,
-            namespace,
-            scope: body.allNamespaces === true ? [...this.namespaces.keys()] : [namespace],
-            action,
-            phase: "prepared",
-            timestamp: new Date().toISOString(),
-            requestFingerprint: digest({ path, body, method: request.method }),
-            ...(before ? { before } : {}),
-          }
-          await this.ctx.options.journal.write(record)
-          this.durable.set(operation.id, record)
-          await this.journalPhase(operation.id, "committing")
-        }
-        const result =
-          (await this.handle(
-            request,
-            path,
-            namespace,
-            body,
-            caller === "admin" && (!member || request.headers.has("x-mockingbird-admin-key")),
-          )) ?? (await fallback())
-        if (operation) {
-          operation.status = this.aborts.get(operation.id)?.signal.aborted
-            ? "cancelled"
-            : result.ok
-              ? "succeeded"
-              : "failed"
-          operation.phase = operation.status
-          operation.finishedAt = new Date().toISOString()
-          const payload: unknown = await result
-            .clone()
-            .json()
-            .catch(() => undefined)
-          operation.result = object(payload)
-            ? Object.fromEntries(
-                Object.entries(payload).filter(([key]) =>
-                  [
-                    "status",
-                    "id",
-                    "namespace",
-                    "failedService",
-                    "rollback",
-                    "rolledBack",
-                    "error",
-                    "sha256",
-                  ].includes(key),
-                ),
-              )
-            : { status: result.status }
-          if (result.ok) operation.completed = operation.total
-          await this.journalPhase(
-            operation.id,
-            result.ok
-              ? "succeeded"
-              : this.ctx.recovery.has(namespace)
-                ? "recovery-required"
-                : "failed",
-          )
-          if (result.ok && (action === "reset" || action === "restore")) {
-            for (const record of this.interrupted.values())
-              if (record.scope.includes(namespace)) {
-                const scope = record.scope.filter((ns) => ns !== namespace)
-                const resolved: JournalRecord = {
-                  ...record,
-                  scope,
-                  revision: record.revision + 1,
-                  phase: scope.length ? "recovery-required" : "resolved",
-                  resolution: `explicit-${action}`,
-                  timestamp: new Date().toISOString(),
-                }
-                try {
-                  await this.ctx.options.journal?.write(resolved)
-                } catch (error) {
-                  this.fenceNamespaces(record.scope)
-                  throw error
-                }
-                if (scope.length) this.interrupted.set(record.operationId, resolved)
-                else this.interrupted.delete(record.operationId)
-              }
-            await this.ctx.publish()
-          }
+      const execute = async () => {
+        try {
           if (
+            operation &&
             !(await this.instrumentation.audit({
               actor: operation.actor ?? "admin",
               namespace,
               action,
               services: operation.services ?? [],
               operationId: operation.id,
-              stage: "terminal",
-              result:
-                operation.status === "succeeded"
-                  ? "succeeded"
-                  : operation.status === "cancelled"
-                    ? "cancelled"
-                    : "failed",
+              stage: "attempt",
             }))
-          ) {
-            const fences: (() => void)[] = []
-            for (const name of operation.services ?? [])
-              try {
-                const release = this.ctx.children.get(name)?.lock(namespace)
-                if (release) fences.push(release)
-              } catch {}
-            this.ctx.recovery.set(namespace, fences)
-            await this.journalPhase(operation.id, "recovery-required")
-            throw new Error("required terminal audit unavailable; recovery required")
-          }
-          result.headers.set("x-mockingbird-operation-id", operation.id)
-          this.emit(operation)
+          )
+            throw new Error("required audit sink unavailable before mutation")
           if (
-            result.ok &&
-            request.method !== "DELETE" &&
-            (action === "restore" || action === "reset" || action === "namespace")
-          )
-            this.remember(namespace).generation = randomUUID()
-        }
-        if (result.ok && request.method === "POST") {
-          if (path === "/fleet/clock") this.observations.control(namespace, "clock", body)
-          else if (/^\/fleet\/namespaces\/[^/]+\/reset$/.test(path))
-            this.observations.control(namespace, "reset", body)
-          else if (!path.startsWith("/fleet/trace") && !path.includes("/assertions/"))
-            this.observations.unsupportedControl(namespace, action)
-        }
-        for (const point of this.ctx.checkpoints.values())
-          if (!point.createdAt) {
-            point.createdAt = new Date().toISOString()
-            if (body.label !== undefined) point.label = body.label
+            operation &&
+            this.ctx.options.journal &&
+            !path.startsWith("/fleet/recovery") &&
+            !path.includes("/assertions/") &&
+            !path.startsWith("/fleet/trace")
+          ) {
+            if (!this.ctx.options.repository)
+              throw new Error("durable journal requires a repository")
+            let before: string | undefined
+            if (this.namespaces.has(namespace) && !this.ctx.recovery.has(namespace)) {
+              const archive = await this.capture(
+                body.allNamespaces === true ? [...this.namespaces.keys()] : [namespace],
+                this.select(body),
+              )
+              before = await this.ctx.options.repository.put(archive)
+              await this.ctx.options.repository.get(before)
+            }
+            const record: JournalRecord = {
+              version: 1,
+              revision: 1,
+              operationId: operation.id,
+              controller: this.ctx.id,
+              namespace,
+              scope: body.allNamespaces === true ? [...this.namespaces.keys()] : [namespace],
+              action,
+              phase: "prepared",
+              timestamp: new Date().toISOString(),
+              requestFingerprint: digest({ path, body, method: request.method }),
+              ...(before ? { before } : {}),
+            }
+            await this.ctx.options.journal.write(record)
+            this.durable.set(operation.id, record)
+            await this.journalPhase(operation.id, "committing")
           }
-        this.prune()
-        if (this.ctx.recovery.size) await this.ctx.publish()
-        return result
-      } catch (error) {
-        if (
-          operation &&
-          ["committing", "uploading", "publishing"].includes(
-            this.durable.get(operation.id)?.phase ?? "",
-          )
-        ) {
-          const releases = this.ctx.recovery.get(namespace) ?? []
-          for (const child of this.ctx.children.values())
-            try {
-              releases.push(child.lock(namespace))
-            } catch {}
-          this.ctx.recovery.set(namespace, releases)
-        }
-        if (operation) {
-          operation.status = "failed"
-          operation.phase = "failed"
-          operation.finishedAt = new Date().toISOString()
-          operation.result = {
-            message: error instanceof Error ? error.message : "operation failed",
+          const result =
+            (await this.handle(
+              request,
+              path,
+              namespace,
+              body,
+              caller === "admin" && (!member || request.headers.has("x-mockingbird-admin-key")),
+            )) ?? (await fallback())
+          if (operation) {
+            operation.status = this.aborts.get(operation.id)?.signal.aborted
+              ? "cancelled"
+              : result.ok
+                ? "succeeded"
+                : "failed"
+            operation.phase = operation.status
+            operation.finishedAt = new Date().toISOString()
+            const payload: unknown = await result
+              .clone()
+              .json()
+              .catch(() => undefined)
+            operation.result = object(payload)
+              ? Object.fromEntries(
+                  Object.entries(payload).filter(([key]) =>
+                    [
+                      "status",
+                      "id",
+                      "namespace",
+                      "failedService",
+                      "rollback",
+                      "rolledBack",
+                      "error",
+                      "sha256",
+                    ].includes(key),
+                  ),
+                )
+              : { status: result.status }
+            if (result.ok) operation.completed = operation.total
+            await this.journalPhase(
+              operation.id,
+              result.ok
+                ? "succeeded"
+                : this.ctx.recovery.has(namespace)
+                  ? "recovery-required"
+                  : "failed",
+            )
+            if (result.ok && (action === "reset" || action === "restore")) {
+              for (const record of this.interrupted.values())
+                if (record.scope.includes(namespace)) {
+                  const scope = record.scope.filter((ns) => ns !== namespace)
+                  const resolved: JournalRecord = {
+                    ...record,
+                    scope,
+                    revision: record.revision + 1,
+                    phase: scope.length ? "recovery-required" : "resolved",
+                    resolution: `explicit-${action}`,
+                    timestamp: new Date().toISOString(),
+                  }
+                  try {
+                    await this.ctx.options.journal?.write(resolved)
+                  } catch (error) {
+                    this.fenceNamespaces(record.scope)
+                    throw error
+                  }
+                  if (scope.length) this.interrupted.set(record.operationId, resolved)
+                  else this.interrupted.delete(record.operationId)
+                }
+              await this.ctx.publish()
+            }
+            if (
+              !(await this.instrumentation.audit({
+                actor: operation.actor ?? "admin",
+                namespace,
+                action,
+                services: operation.services ?? [],
+                operationId: operation.id,
+                stage: "terminal",
+                result:
+                  operation.status === "succeeded"
+                    ? "succeeded"
+                    : operation.status === "cancelled"
+                      ? "cancelled"
+                      : "failed",
+              }))
+            ) {
+              const fences: (() => void)[] = []
+              for (const name of operation.services ?? [])
+                try {
+                  const release = this.ctx.children.get(name)?.lock(namespace)
+                  if (release) fences.push(release)
+                } catch {}
+              this.ctx.recovery.set(namespace, fences)
+              await this.journalPhase(operation.id, "recovery-required")
+              throw new Error("required terminal audit unavailable; recovery required")
+            }
+            result.headers.set("x-mockingbird-operation-id", operation.id)
+            this.emit(operation)
+            if (
+              result.ok &&
+              request.method !== "DELETE" &&
+              (action === "restore" || action === "reset" || action === "namespace")
+            )
+              this.remember(namespace).generation = randomUUID()
           }
-          this.emit(operation)
-        }
-        if (this.ctx.recovery.size) await this.ctx.publish().catch(() => {})
-        return fleetError(400, error instanceof Error ? error.message : "invalid control")
-      } finally {
-        if (operation) this.aborts.delete(operation.id)
-        while (this.operations.size > 200) {
-          const entry = [...this.operations].find(([, o]) => o.status !== "running")
-          if (!entry) break
-          this.operations.delete(entry[0])
+          if (result.ok && request.method === "POST") {
+            if (path === "/fleet/clock") this.observations.control(namespace, "clock", body)
+            else if (/^\/fleet\/namespaces\/[^/]+\/reset$/.test(path))
+              this.observations.control(namespace, "reset", body)
+            else if (!path.startsWith("/fleet/trace") && !path.includes("/assertions/"))
+              this.observations.unsupportedControl(namespace, action)
+          }
+          for (const point of this.ctx.checkpoints.values())
+            if (!point.createdAt) {
+              point.createdAt = new Date().toISOString()
+              if (body.label !== undefined) point.label = body.label
+            }
+          this.prune()
+          if (this.ctx.recovery.size) await this.ctx.publish()
+          return result
+        } catch (error) {
+          if (
+            operation &&
+            ["committing", "uploading", "publishing"].includes(
+              this.durable.get(operation.id)?.phase ?? "",
+            )
+          ) {
+            const releases = this.ctx.recovery.get(namespace) ?? []
+            for (const child of this.ctx.children.values())
+              try {
+                releases.push(child.lock(namespace))
+              } catch {}
+            this.ctx.recovery.set(namespace, releases)
+          }
+          if (operation) {
+            operation.status = "failed"
+            operation.phase = "failed"
+            operation.finishedAt = new Date().toISOString()
+            operation.result = {
+              message: error instanceof Error ? error.message : "operation failed",
+            }
+            this.emit(operation)
+          }
+          if (this.ctx.recovery.size) await this.ctx.publish().catch(() => {})
+          return fleetError(400, error instanceof Error ? error.message : "invalid control")
+        } finally {
+          if (operation) this.aborts.delete(operation.id)
+          while (this.operations.size > 200) {
+            const entry = [...this.operations].find(([, o]) => o.status !== "running")
+            if (!entry) break
+            this.operations.delete(entry[0])
+          }
         }
       }
+      return operation ? this.operationContext.run(operation, execute) : execute()
     }
     const key = request.headers.get("idempotency-key")
     if (!key || !mutating) return run()
@@ -1796,9 +1812,7 @@ export class FleetManagement {
     selected: Map<string, FleetChild>,
   ) {
     const hook = this.ctx.options.workload?.[phase]
-    const op = [...this.operations.values()].find(
-      (o) => o.namespace === namespace && o.status === "running",
-    )
+    const op = this.activeOperation(namespace)
     this.phase(
       namespace,
       phase === "prepare" ? "preparing" : phase === "verify" ? "verifying" : "resuming",

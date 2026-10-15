@@ -641,6 +641,7 @@ test("scheduled backups use host time and preserve latest pointer on storage fai
   const dir = await mkdtemp(join(tmpdir(), "fleet-backups-")),
     repository = filesystemRepository(dir)
   let rejectUpload = false
+  let firstPublication: string | undefined
   const fleet = await start(
     {
       repository: {
@@ -649,22 +650,29 @@ test("scheduled backups use host time and preserve latest pointer on storage fai
           if (rejectUpload) throw new Error("synthetic storage failure")
           return repository.put(a)
         },
+        async publishLatest(id) {
+          await repository.publishLatest(id)
+          // Switch to failure before this successful run can release backupRunning.
+          // A timer that already uploaded must not race the failure assertion.
+          rejectUpload = true
+          firstPublication = id
+        },
       },
       backupPolicy: { intervalMs: 30, keep: 2 },
     },
     { ...config, adminControls: { clock: { now: 0, frozen: true } } },
   )
   try {
-    for (let i = 0; i < 100 && !(await repository.latest()); i++) await Bun.sleep(10)
-    const latest = await repository.latest()
-    expect(latest).toBeString()
-    expect(validateArchive(await repository.get(latest as string))).toBeDefined()
-    rejectUpload = true
-    await Bun.sleep(75)
-    expect(await repository.latest()).toBe(latest)
-    expect(await (await call(fleet, "/backups")).json()).toMatchObject({
-      lastFailure: "synthetic storage failure",
-    })
+    for (let i = 0; i < 100 && !firstPublication; i++) await Bun.sleep(10)
+    if (!firstPublication) throw new Error("scheduled backup did not publish a recovery point")
+    expect(validateArchive(await repository.get(firstPublication))).toBeDefined()
+    let status = await (await call(fleet, "/backups")).json()
+    for (let i = 0; i < 100 && !status.lastFailure; i++) {
+      await Bun.sleep(10)
+      status = await (await call(fleet, "/backups")).json()
+    }
+    expect(status).toMatchObject({ lastFailure: "synthetic storage failure" })
+    expect(await repository.latest()).toBe(firstPublication)
   } finally {
     await fleet.close()
     await rm(dir, { recursive: true, force: true })
@@ -1390,5 +1398,34 @@ test("privileged traces cannot turn a control-only scoped credential into a snap
     expect((await call(fleet, "/trace/stop?namespace=alpha", {}, "POST", root)).status).toBe(200)
   } finally {
     await fleet.close()
+  }
+})
+
+test("environment-wide operations preserve one correlation id through every namespace's workload hooks (#411)", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "fleet-correlation-")),
+    prepared: { namespace: string; operationId: string }[] = []
+  const fleet = await start(
+    {
+      repository: filesystemRepository(directory),
+      workload: {
+        prepare: async ({ namespace, operationId }) => {
+          prepared.push({ namespace, operationId })
+        },
+      },
+    },
+    { services: { fixture: { port: 0 } } },
+  )
+  try {
+    await call(fleet, "/namespaces/alpha", {})
+    prepared.length = 0
+    const result = await call(fleet, "/backups", { allNamespaces: true })
+    expect(result.status).toBe(200)
+    expect(prepared.map((entry) => entry.namespace).sort()).toEqual(["alpha", "default"])
+    const operationId = result.headers.get("x-mockingbird-operation-id")
+    if (!operationId) throw new Error("operation response omitted its correlation id")
+    expect([...new Set(prepared.map((entry) => entry.operationId))]).toEqual([operationId])
+  } finally {
+    await fleet.close()
+    await rm(directory, { recursive: true, force: true })
   }
 })
