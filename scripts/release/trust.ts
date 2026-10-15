@@ -37,6 +37,8 @@ export function trustedPublisherReconciler(options: {
   revoke: (name: string, id: string) => Promise<boolean>
   create: (name: string) => Promise<boolean>
   onError: (name: string, error: unknown) => void
+  /** Recreate matching settings when an actual CI publish rejected them despite matching claims. */
+  refresh?: ReadonlySet<string>
   now?: () => number
   sleep?: (ms: number) => Promise<unknown>
 }) {
@@ -63,7 +65,8 @@ export function trustedPublisherReconciler(options: {
     failed.add(name)
     try {
       const listed = await options.list(name)
-      if (listed !== null && hasReleasePublisher(listed)) {
+      const refresh = options.refresh?.has(name) === true
+      if (listed !== null && hasReleasePublisher(listed) && !refresh) {
         failed.delete(name)
         return
       }
@@ -71,9 +74,13 @@ export function trustedPublisherReconciler(options: {
       const configs = trustConfigs(listed)
       if (configs === null) throw new Error("npm trust list returned invalid JSON")
 
-      // npm currently permits one publisher per package. Creating the corrected
-      // publisher while a stale or stage-only one exists returns E409, so replace it.
-      for (const config of configs) {
+      // Remove the configurations being replaced before creating the corrected publisher.
+      // A forced refresh replaces this workflow's matching publishers, preserving other
+      // connections on packages that have multiple publishers configured.
+      const replace = refresh
+        ? configs.filter((config) => hasReleasePublisher(JSON.stringify(config)))
+        : configs
+      for (const config of replace) {
         if (typeof config.id !== "string" || config.id.length === 0) {
           throw new Error("npm trust list returned a publisher without an id")
         }

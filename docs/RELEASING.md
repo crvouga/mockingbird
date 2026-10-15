@@ -19,13 +19,20 @@ bun run release:plan                   # what the next push to main would releas
 bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
 bun run release:seed                   # reconcile npm with origin/main using your npm login
 bun run release:seed -- --trust-only   # repair existing packages' publishers; no build or publish
+bun run release:seed -- --trust-only --refresh-rejected # refresh publishers rejected by the latest Release
 bun run health                         # unified release, deployment, and infrastructure health
 bun run health -- trusted-publisher --interactive # inspect settings requiring npm approval
 bun run secrets:doctor                 # npm / Trusted Publishing / live parity status
 ```
 
-For an existing package rejected with `ENEEDAUTH`, use `bun run release:seed -- --trust-only`.
-It uses your interactive npm login, repairs the publisher for every published service, and
+For existing packages rejected with `ENEEDAUTH`, use
+`bun run release:seed -- --trust-only --refresh-rejected`. It reads the latest completed
+failed Release on `main` and recreates matching publisher settings for the packages that
+run explicitly rejected, even when their saved fields already look correct. Other publisher
+connections on those packages are preserved. This also requires `gh` access to the repo;
+a running release must finish first, and a successful latest release refreshes no settings.
+
+The command uses your interactive npm login, checks every published service, and
 reads the settings back to verify the repository, `ci.yml`, empty environment, and permission
 to publish. It runs in the current checkout without creating a worktree, building, publishing,
 tagging, or deprecating packages. Then retry Release. A green run with nothing to release does

@@ -53,12 +53,15 @@ import {
   WORKFLOW_FILE,
 } from "./lib.ts"
 import { pipelineOptions, readPlan, selectReleases } from "./pipeline.ts"
+import { rejectedReleasePackages } from "./rejected.ts"
 import { trustedPublisherReconciler } from "./trust.ts"
 
 const argv = process.argv.slice(2)
 const dryRun = argv.includes("--dry-run")
 const local = argv.includes("--local")
 const trustOnly = argv.includes("--trust-only")
+const refreshRejected = argv.includes("--refresh-rejected")
+if (refreshRejected && !trustOnly) throw new Error("--refresh-rejected requires --trust-only")
 const inCi = process.env.GITHUB_ACTIONS === "true"
 const pipeline = pipelineOptions(argv)
 if (pipeline && (local || trustOnly))
@@ -149,6 +152,16 @@ const releasedNow = new Set<string>()
 const npmEnv: Record<string, string | undefined> = { ...process.env }
 if (!local) delete npmEnv.NODE_AUTH_TOKEN
 const localTrustToken = local && !dryRun ? npmAuthToken() : undefined
+const refreshPublishers = refreshRejected
+  ? await rejectedReleasePackages(
+      new Set(plan.packages.filter((pkg) => pkg.isPublic).map((pkg) => pkg.name)),
+    )
+  : new Set<string>()
+if (refreshRejected) {
+  console.log(
+    `release:publish: refreshing ${refreshPublishers.size} publisher(s) rejected by the latest Release`,
+  )
+}
 
 /** A seed is left running unattended, so a step that stalls on the maintainer's approval alerts. */
 function attended<T>(what: string, work: () => Promise<T>): Promise<T> {
@@ -268,6 +281,7 @@ async function publish(release: Release): Promise<boolean> {
 // Consume each cached entry once so a post-mutation verification always reads npm again.
 let initialTrust: Promise<Map<string, PackageTrust>> | undefined
 const trust = trustedPublisherReconciler({
+  refresh: refreshPublishers,
   async list(name) {
     if (typeof localTrustToken !== "string") {
       throw new Error(localTrustToken?.error ?? "npm trusted publisher lookup is unavailable")
