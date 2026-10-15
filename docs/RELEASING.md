@@ -32,11 +32,14 @@ run explicitly rejected, even when their saved fields already look correct. Othe
 connections on those packages are preserved. This also requires `gh` access to the repo;
 a running release must finish first, and a successful latest release refreshes no settings.
 
-The command uses your interactive npm login, checks every published service, and
+The command uses your interactive npm login, checks the selected packages, and
 reads the settings back to verify the repository, `ci.yml`, empty environment, and permission
 to publish. It runs in the current checkout without creating a worktree, building, publishing,
 tagging, or deprecating packages. Then retry Release. A green run with nothing to release does
 not verify OIDC access: locally published versions are skipped by CI.
+
+Without `--refresh-rejected`, `--trust-only` checks every published service and repairs
+only configurations whose saved fields do not match the release policy.
 
 The seed deprecates npm packages this repo no longer publishes: the former helper packages (`@crvouga/mockingbird`, `-core`, `-service`, `-sqlite`, `-openapi*`, `-http-codec`, `-commands`, `-model`, `-canonicalize`, `-parity`, `-adapter-*`, `-openbao`), now bundled into the services, and the archived `@crvouga/postgres-mem` / `@crvouga/sqlite-mem`, which continue here as `@crvouga/mockingbird-service-postgres` / `-sqlite`. OIDC only authenticates publish operations, so CI logs deprecations for the next local seed instead of managing package settings.
 

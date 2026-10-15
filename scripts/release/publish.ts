@@ -162,6 +162,9 @@ if (refreshRejected) {
     `release:publish: refreshing ${refreshPublishers.size} publisher(s) rejected by the latest Release`,
   )
 }
+const trustPackages = plan.packages.filter(
+  (pkg) => pkg.isPublic && (!refreshRejected || refreshPublishers.has(pkg.name)),
+)
 
 /** A seed is left running unattended, so a step that stalls on the maintainer's approval alerts. */
 function attended<T>(what: string, work: () => Promise<T>): Promise<T> {
@@ -289,7 +292,7 @@ const trust = trustedPublisherReconciler({
     const token = localTrustToken
     initialTrust ??= attended("the trusted publisher lookup", async () => {
       const loaded = await loadPackageTrust(
-        plan.packages.filter((pkg) => pkg.isPublic).map((pkg) => pkg.name),
+        trustPackages.map((pkg) => pkg.name),
         token,
       )
       if (!Array.isArray(loaded)) throw new Error(loaded.error)
@@ -493,7 +496,7 @@ try {
       fail(release.pkg.name, [`skipped: dependency failed to release (${blockedBy.join(", ")})`]),
   )
   // Reconcile: every published service is trusted for OIDC, everything else is deprecated.
-  for (const pkg of local ? plan.packages : []) {
+  for (const pkg of local ? trustPackages : []) {
     if (!pkg.isPublic || failed.has(pkg.name)) continue
     const published = await npmVersions(pkg.name)
     if (trustOnly && !Array.isArray(published)) {
