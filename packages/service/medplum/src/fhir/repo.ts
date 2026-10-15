@@ -3,6 +3,7 @@ import {
   accessPolicySupportsInteraction,
   allOk,
   applyPatch,
+  type BackgroundJobInteraction,
   badRequest,
   deepClone,
   deepEquals,
@@ -89,6 +90,11 @@ export type RepositoryContext = {
 /** The services a repository draws on that are not per-request. */
 export type RepositoryServices = {
   store: FhirStore
+  notify: (
+    resource: Resource,
+    previous: Resource | undefined,
+    interaction: BackgroundJobInteraction,
+  ) => Promise<void>
   now: () => number
   /** The instant of the next write: the clock, but strictly after the previous write. */
   writeTime: () => number
@@ -291,6 +297,7 @@ export class MockRepository extends FhirRepository {
       },
     )
     if (binaryBytes) this.services.writeBinary(stored as Binary, binaryBytes)
+    await this.services.notify(stored, existing, create ? "create" : "update")
     return this.removeHiddenFields(deepClone(stored)) as WithId<T>
   }
 
@@ -704,6 +711,11 @@ export class MockRepository extends FhirRepository {
         lastUpdated,
         content: { resourceType, id, meta } as Resource,
       },
+    )
+    await this.services.notify(
+      { ...resource, meta: { ...resource.meta, ...meta } },
+      resource,
+      "delete",
     )
   }
 

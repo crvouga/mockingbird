@@ -104,6 +104,23 @@ describe("behavior 1: an acknowledged commit is durable", () => {
     ]);
   });
 
+  test("bigint increments survive reopening retained snapshots (#352)", async () => {
+    const storage = new MemoryStorage();
+    const server = await start(storage);
+    const client = await connect(server);
+    await client.query("CREATE TABLE counter (id text PRIMARY KEY, revision bigint NOT NULL)");
+    await client.query("INSERT INTO counter VALUES ('default', 1)");
+    expect((await client.query("UPDATE counter SET revision = revision + 1 RETURNING revision")).rows).toEqual([
+      { revision: "2" },
+    ]);
+    expect(await afterRestart(storage, "UPDATE counter SET revision = revision + 1 RETURNING revision")).toEqual([
+      { revision: "3" },
+    ]);
+    expect(await afterRestart(storage, "UPDATE counter SET revision = revision + 1 RETURNING revision")).toEqual([
+      { revision: "4" },
+    ]);
+  });
+
   test("the acknowledgement waits for the storage write", async () => {
     const storage = new MemoryStorage();
     const server = await start(storage);

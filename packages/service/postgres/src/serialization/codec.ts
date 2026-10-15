@@ -299,7 +299,8 @@ function decodeInner(snapshot: Uint8Array, prng: Prng, clock: Clock): DecodedSna
       if (meta.stats) state.tableStats.set(table.oid, meta.stats);
       const rowCount = readVarintU32(r);
       const slabColumns: SlabColumn[] = [];
-      for (let c = 0; c < meta.columns.length; c++) slabColumns.push(readPackedColumn(r, rowCount, intern));
+      for (let c = 0; c < meta.columns.length; c++)
+        slabColumns.push(readPackedColumn(r, rowCount, intern, meta.columns[c]!.type.id));
       table.attachSlab(new ColumnarSlab(snapshot, rowCount, slabColumns, intern));
       schema.tables.set(table.name, table);
     }
@@ -313,7 +314,7 @@ function decodeInner(snapshot: Uint8Array, prng: Prng, clock: Clock): DecodedSna
         const matRowCount = readVarintU32(r);
         const width = readVarintU32(r);
         const cols: SlabColumn[] = [];
-        for (let c = 0; c < width; c++) cols.push(readPackedColumn(r, matRowCount, intern));
+        for (let c = 0; c < width; c++) cols.push(readPackedColumn(r, matRowCount, intern, meta.matColumns?.[c]?.type));
         const slab = new ColumnarSlab(snapshot, matRowCount, cols, intern);
         matRows = slab.materialize();
       }
@@ -611,7 +612,7 @@ function writePackedColumn(
   }
 }
 
-function readPackedColumn(r: Reader, n: number, intern: readonly string[]): SlabColumn {
+function readPackedColumn(r: Reader, n: number, intern: readonly string[], type?: TypeId): SlabColumn {
   const pack = r.u8();
   if (pack === PACK_NULL) return { pack, nullBitmap: null, payload: new Uint8Array(0) };
   const bits = r.raw((n + 7) >> 3);
@@ -625,7 +626,10 @@ function readPackedColumn(r: Reader, n: number, intern: readonly string[]): Slab
     r.skipAlign4();
     const width = 8;
     const payload = r.raw(nonNull * width);
-    return { pack, nullBitmap: bits, payload };
+    // PGMM v3 shares one integer pack for numbers and bigints. The catalog carries
+    // their SQL type, so old snapshots can be decoded without changing the format.
+    const integerBigInt = type !== undefined && ["int8", "money", "time", "timestamp", "timestamptz"].includes(type);
+    return { pack, nullBitmap: bits, payload, integerBigInt };
   }
   if (pack === PACK_TEXT_INTERN) {
     r.skipAlign4();

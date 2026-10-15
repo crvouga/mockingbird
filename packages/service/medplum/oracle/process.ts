@@ -18,6 +18,8 @@ const HEALTHCHECK_POLL_INTERVAL_MS = 500
 const CHILD_STOP_GRACE_MS = 10000
 
 export type MedplumProcessOptions = {
+  /** Allow loopback webhook receivers in explicit local oracle tests. Default false. */
+  allowUnsafeOutbound?: boolean | undefined
   version?: string | undefined
   cacheDir?: string | undefined
   onLog?: ((message: string) => void) | undefined
@@ -185,7 +187,14 @@ export class MedplumServerProcess {
         redisPort: resolvedRedisPort,
         dataDir,
       })
-      await writeFile(join(dataDir, "medplum.config.json"), JSON.stringify(config, null, 2))
+      await writeFile(
+        join(dataDir, "medplum.config.json"),
+        JSON.stringify(
+          { ...config, ...(this.options.allowUnsafeOutbound ? { allowUnsafeOutbound: true } : {}) },
+          null,
+          2,
+        ),
+      )
 
       this.child = this.spawnServerProcess(paths, dataDir)
       this.boundApiPort = apiPort

@@ -266,3 +266,23 @@ test("snapshot rejects an open transaction", () => {
   db.exec("ROLLBACK");
   db.close();
 });
+
+matrixBoth("decoded snapshots preserve integer and temporal arithmetic (#352)", async (memory, postgres) => {
+  await setupBoth(memory, postgres, [
+    "CREATE TABLE counter (id int PRIMARY KEY, revision bigint, small smallint, regular integer, f real, d double precision, ts timestamp, tz timestamptz, tm time)",
+    "INSERT INTO counter VALUES (1, 1, 2, 3, 4, 5, '2000-01-01', '2000-01-01Z', '00:00:01'), (2, -1, NULL, NULL, NULL, NULL, NULL, NULL, NULL), (3, 9007199254740993, 1, 1, 1, 1, '2024-01-01', '2024-01-01Z', '23:59:59')",
+    "CREATE MATERIALIZED VIEW counter_view AS SELECT revision, ts, tm FROM counter",
+  ]);
+  const adapter = memory as InMemoryAdapter;
+  for (let round = 0; round < 2; round++) {
+    adapter.db = Snapshot.decode(adapter.db.snapshot().encode()).open();
+    const sql =
+      "UPDATE counter SET revision = revision + 1, small = small + 1, regular = regular + 1, f = f + 0.5, d = d + 0.5, ts = ts + interval '1 second', tz = tz + interval '1 second', tm = tm + interval '1 second' RETURNING *";
+    expectParity(await memory.query(sql), await postgres.query(sql));
+    expectParity(
+      await memory.query("SELECT revision + 1, ts + interval '1 second', tm + interval '1 second' FROM counter_view"),
+      await postgres.query("SELECT revision + 1, ts + interval '1 second', tm + interval '1 second' FROM counter_view"),
+    );
+    expect(adapter.db.query("SELECT revision FROM counter WHERE id = 1")).toEqual([{ revision: BigInt(round + 2) }]);
+  }
+});

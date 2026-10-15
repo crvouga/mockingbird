@@ -58,7 +58,7 @@ for the guarantees and their limits (`tests/wire/durable*.test.ts`, `tests/wire/
 
 Anything a PostgreSQL application can invoke through SQL against the PGlite **18.3** oracle must match observable behavior, except:
 
-1. **Snapshot format** — custom binary codec (`PGMM`), not `pg_dump` / on-disk clusters (logical state still round-trips).
+1. **Snapshot format** — custom binary codec (`PGMM`), not `pg_dump` / on-disk clusters (logical state still round-trips). Decoding PGMM v3 preserves bigint-backed SQL datums (including small `bigint`, `money`, `time`, `timestamp`, and `timestamptz` values) using their catalog types, so arithmetic remains valid after repeated restores, including materialized views (`tests/contract/snapshots/basic.test.ts`).
 2. **Deterministic `random()` / `now()`** — seeded PRNG and fixed clock by default (injectable).
 3. **Single-session sync API** — no concurrent sessions or `25P02` aborted-transaction state. The optional wire server separately provides per-session `READ COMMITTED` workspaces and row locks.
 4. **NOT APPLICABLE** rows in `compat/coverage.json` (roles, replication, VACUUM internals, LISTEN/NOTIFY, cursors, full PL/pgSQL, extensions other than `pgcrypto`'s `digest()` and `pg_trgm`'s `similarity` / `<%` / `gin_trgm_ops`).
