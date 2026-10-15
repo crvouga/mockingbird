@@ -31,6 +31,7 @@ import {
   type SnapshotStore,
 } from "./control.js"
 import {
+  assertSnapshotDocument,
   CONTROL_HEADERS,
   ControlError,
   type ControlHeaderInput,
@@ -233,6 +234,8 @@ export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   /** Opaque in-process checkpoint including records, controls and webhook history. */
   fleetSnapshot(namespace: string): object
   fleetRestore(snapshot: unknown, namespace: string): void
+  fleetExport(snapshot: unknown): SnapshotDocument
+  fleetImport(namespace: string, document: unknown): object
   /** Expand a named preset into fault rules (and webhook faults) for `namespace`. */
   applyPreset(name: string, namespace?: string, overrides?: Partial<FaultRule>): FaultRule[]
   /** The instance behind `namespace` (the default one when omitted), created on first use. */
@@ -886,6 +889,9 @@ export const createRuntime = <T extends ServiceInstance>(
       ...(rules ? { faults: rules } : {}),
       ...(waits ? { latency: waits } : {}),
       ...(settings?.virtualTime !== undefined ? { virtualTime: settings.virtualTime } : {}),
+      ...(point.webhooks !== undefined
+        ? { webhooks: options.webhooks?.exportSnapshot(point.webhooks) }
+        : {}),
     }
   }
 
@@ -1010,6 +1016,9 @@ export const createRuntime = <T extends ServiceInstance>(
         ? { rngState: position(document.rng.state, "snapshot.rng.state") }
         : {}),
       controls: held,
+      ...(document.webhooks !== undefined
+        ? { webhooks: options.webhooks?.importSnapshot(namespace, document.webhooks) }
+        : {}),
     }
   }
 
@@ -1155,6 +1164,20 @@ export const createRuntime = <T extends ServiceInstance>(
       if (!point || point.namespace !== namespace) throw new Error("invalid fleet checkpoint")
       restoreAll(namespace, point)
       timelines.delete(namespace)
+    },
+    fleetExport(handle) {
+      const point =
+        typeof handle === "object" && handle !== null ? fleetPoints.get(handle) : undefined
+      if (!point) throw new Error("invalid fleet checkpoint")
+      return toDocument(point)
+    },
+    fleetImport(namespace, document) {
+      const handle = {}
+      fleetPoints.set(handle, {
+        namespace,
+        ...fromDocument(namespace, assertSnapshotDocument(document)),
+      })
+      return handle
     },
     applyPreset: (name, namespace = DEFAULT_NAMESPACE, overrides = {}) =>
       controls.addFault(namespace, { ...overrides, preset: name }),

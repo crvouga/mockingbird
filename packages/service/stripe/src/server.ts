@@ -79,7 +79,7 @@ export const serveTarget: ServeTarget = {
     const url = text(values["webhook-url"])
     const secret = text(values["webhook-secret"])
     const accounts = text(values.accounts)
-    const publicUrl = text(values["public-url"])
+    const publicUrl = common.baseUrl ?? text(values["public-url"])
     return createRuntime({
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),

@@ -1,7 +1,8 @@
 /** Public readiness contract, usable before workspace packages have been built. */
 export type EndpointManifest = {
   version: 1
-  state: "ready"
+  capabilityVersion?: 1
+  state: "ready" | "recovery-required"
   pid: number
   id: string
   startedAt: string
@@ -10,7 +11,7 @@ export type EndpointManifest = {
   services: Record<
     string,
     {
-      protocol: "http" | "postgres" | "redis"
+      protocol: "http" | "postgres" | "redis" | "external"
       url: string
       healthUrl: string
       adminUrl: string

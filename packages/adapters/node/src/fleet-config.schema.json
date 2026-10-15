@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mockingbird.chrisvouga.dev/schemas/fleet-v1.json",
+  "title": "Mockingbird fleet configuration v1",
+  "type": "object",
+  "required": [
+    "services"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "const": "https://mockingbird.chrisvouga.dev/schemas/fleet-v1.json"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "services": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/service"
+      }
+    },
+    "log": {
+      "enum": [
+        "pretty",
+        "json",
+        "off"
+      ]
+    },
+    "adminPrefix": {
+      "type": "string"
+    },
+    "adminKey": {
+      "type": "string"
+    },
+    "adminControls": {
+      "$ref": "#/$defs/controls"
+    },
+    "namespace": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+    },
+    "control": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "host": {
+          "type": "string"
+        }
+      }
+    },
+    "cors": {
+      "type": "object",
+      "required": [
+        "origins"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "origins": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "methods": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "DELETE",
+              "HEAD",
+              "OPTIONS"
+            ]
+          }
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object",
+      "propertyNames": {
+        "pattern": "^x-[a-z0-9-]+$"
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "dependsOn": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "protocol": {
+          "enum": [
+            "http",
+            "postgres",
+            "redis"
+          ]
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "host": {
+          "type": "string"
+        },
+        "adminPrefix": {
+          "type": "string"
+        },
+        "adminKey": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "string"
+        },
+        "adminControls": {
+          "$ref": "#/$defs/controls"
+        },
+        "fixtures": {
+          "type": "object"
+        },
+        "baseUrl": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string"
+        },
+        "user": {
+          "type": "string"
+        },
+        "database": {
+          "type": "string"
+        },
+        "namespaces": {
+          "type": "object",
+          "propertyNames": {
+            "pattern": "^[A-Za-z0-9_.-]{1,64}$"
+          },
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 15
+              }
+            ]
+          }
+        },
+        "options": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Compose the selected target option schema before supplying service-specific flags."
+        },
+        "publicOrigin": {
+          "type": "string"
+        },
+        "publicPath": {
+          "type": "string"
+        }
+      }
+    },
+    "controls": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "seed": {},
+        "clock": {
+          "type": "object"
+        },
+        "latency": {},
+        "faults": {
+          "type": "array"
+        },
+        "snapshot": {
+          "type": "object"
+        },
+        "virtualTime": {
+          "type": "boolean"
+        },
+        "credentials": {
+          "type": "object"
+        },
+        "namespaces": {
+          "type": "object"
+        }
+      }
+    }
+  }
+}

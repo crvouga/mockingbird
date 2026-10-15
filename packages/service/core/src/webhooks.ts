@@ -1,3 +1,4 @@
+import type { OwnedTransport } from "./outbound.js"
 import type { AdminRoutes } from "./control.js"
 import { signSvix, signTimestamped, signTwilio } from "./signing.js"
 
@@ -171,8 +172,12 @@ export type WebhookHubOptions = {
 }
 
 export type WebhookHub = {
+  observeDeliveries(listener: (event: { namespace: string; state: string; deliveryId: string }) => void): () => void
+  setTransportPolicy(policy: OwnedTransport): void
   pending(namespace: string): number
   snapshot(namespace: string): unknown
+  exportSnapshot(handle: unknown): unknown
+  importSnapshot(namespace: string, document: unknown): unknown
   restore(namespace: string, snapshot: unknown): void
   publish(input: PublishInput): WebhookMessage
   /** Replace a namespace's own endpoints (`PUT /__admin/webhook-endpoints`). */
@@ -185,7 +190,7 @@ export type WebhookHub = {
   /** Run every pending retry (and release held reordered messages) now, and every retry those attempts schedule, until nothing is pending. */
   flush(): Promise<void>
   /** Resolve once nothing is in flight. */
-  idle(): Promise<void>
+  idle(namespace?: string): Promise<void>
   fault(namespace: string, fault: WebhookFault): void
   clear(namespace?: string): void
 }
@@ -228,7 +233,12 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
   const payloads = new Map<string, { message: WebhookMessage; endpoint: WebhookEndpoint }>()
   const faults = new Map<string, { mode: WebhookFault["mode"]; remaining: number }[]>()
   const held = new Map<string, WebhookMessage[]>()
+  const deliveryObservers = new Set<(event: { namespace: string; state: string; deliveryId: string }) => void>()
+  const notify = (delivery: WebhookDelivery) => { for (const listener of deliveryObservers) try { listener({ namespace: delivery.namespace, state: delivery.state, deliveryId: delivery.id }) } catch {} }
+  let transport: OwnedTransport | undefined
   const inFlight = new Set<Promise<void>>()
+  const workNamespace = new Map<Promise<void>, string>()
+  const activeDeliveries = new Map<string, { namespace: string; count: number }>()
   const controllers = new Map<string, AbortController>()
   // Immediate (delay 0) attempts chain onto this so two deliveries scheduled in the same tick
   // (e.g. a reorder fault's swap) hit the receiver in schedule order, not fetch-race order.
@@ -245,9 +255,19 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
     }
   >()
 
-  const track = (work: Promise<void>) => {
+  const track = (work: Promise<void>, delivery: WebhookDelivery) => {
     inFlight.add(work)
-    void work.finally(() => inFlight.delete(work))
+    workNamespace.set(work, delivery.namespace)
+    const active = activeDeliveries.get(delivery.id) ?? { namespace: delivery.namespace, count: 0 }
+    active.count++
+    activeDeliveries.set(delivery.id, active)
+    const finish = () => {
+      inFlight.delete(work)
+      workNamespace.delete(work)
+      active.count--
+      if (active.count === 0) activeDeliveries.delete(delivery.id)
+    }
+    void work.then(finish, finish)
   }
 
   const attempt = async (delivery: WebhookDelivery): Promise<boolean> => {
@@ -281,7 +301,8 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
         type: message.type,
         tags: message.tags,
       })
-      const response = await send(
+      const ownedSend = (request: Request) => transport ? transport(request, message.namespace, send as typeof fetch) : send(request)
+      const response = await ownedSend(
         new Request(endpoint.url, {
           method: "POST",
           headers: {
@@ -315,6 +336,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
     const index = delivery.attempts.length
     if (index >= delays.length) {
       delivery.state = "failed"
+      notify(delivery)
       pending.delete(delivery.id)
       return
     }
@@ -324,7 +346,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       if (!payloads.has(delivery.id)) return
       await attempt(delivery).then((ok) => {
         if (!payloads.has(delivery.id)) return
-        if (ok) delivery.state = "delivered"
+        if (ok) { delivery.state = "delivered"; notify(delivery) }
         else schedule(delivery)
       })
     }
@@ -332,12 +354,12 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
     if (delay <= 0) {
       const task = immediate.then(settle)
       immediate = task.catch(() => {})
-      track(task)
+      track(task, delivery)
       return
     }
     const timer = scheduleTimer(() => {
       pending.delete(delivery.id)
-      track(settle())
+      track(settle(), delivery)
     }, delay)
     unref(timer)
     pending.set(delivery.id, timer)
@@ -361,6 +383,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       deliveries.set(delivery.id, delivery)
       payloads.set(delivery.id, { message, endpoint })
       if (state === "pending") schedule(delivery)
+      else notify(delivery)
     }
   }
 
@@ -381,13 +404,16 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
   }
 
   const hub: WebhookHub = {
+    observeDeliveries(listener) { deliveryObservers.add(listener); return () => deliveryObservers.delete(listener) },
+    setTransportPolicy(policy) { transport = policy },
     pending(namespace) {
-      return (
-        inFlight.size +
-        (held.get(namespace)?.length ?? 0) +
-        [...deliveries.values()].filter((d) => d.namespace === namespace && d.state === "pending")
-          .length
+      const ids = new Set(
+        [...deliveries.values()]
+          .filter((d) => d.namespace === namespace && d.state === "pending")
+          .map((d) => d.id),
       )
+      for (const [id, active] of activeDeliveries) if (active.namespace === namespace) ids.add(id)
+      return ids.size + (held.get(namespace)?.length ?? 0)
     },
     snapshot(namespace) {
       if (hub.pending(namespace) > 0) throw new Error("webhooks are not quiescent")
@@ -403,6 +429,52 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
           faults: faults.get(namespace) ?? [],
         }),
       )
+      return handle
+    },
+    exportSnapshot(handle) {
+      const point =
+        typeof handle === "object" && handle !== null ? snapshots.get(handle) : undefined
+      if (!point) throw new Error("invalid webhook snapshot")
+      const { namespace: _namespace, ...document } = point
+      return structuredClone(document)
+    },
+    importSnapshot(namespace, document) {
+      if (
+        !isRecord(document) ||
+        !Array.isArray(document.endpoints) ||
+        !Array.isArray(document.messages) ||
+        !Array.isArray(document.deliveries) ||
+        !Array.isArray(document.payloads) ||
+        !Array.isArray(document.faults)
+      )
+        throw new Error("invalid portable webhook snapshot")
+      for (const endpoint of document.endpoints)
+        if (typeof parseEndpoint(endpoint) === "string")
+          throw new Error("invalid portable webhook endpoint")
+      for (const message of document.messages)
+        if (
+          !isRecord(message) ||
+          typeof message.id !== "string" ||
+          typeof message.body !== "string"
+        )
+          throw new Error("invalid portable webhook message")
+      for (const pair of [...document.deliveries, ...document.payloads])
+        if (
+          !Array.isArray(pair) ||
+          pair.length !== 2 ||
+          typeof pair[0] !== "string" ||
+          !isRecord(pair[1])
+        )
+          throw new Error("invalid portable webhook entry")
+      const handle = {}
+      const point = structuredClone(document) as Omit<
+        NonNullable<ReturnType<typeof snapshots.get>>,
+        "namespace"
+      >
+      for (const message of point.messages) message.namespace = namespace
+      for (const [, delivery] of point.deliveries) delivery.namespace = namespace
+      for (const [, payload] of point.payloads) payload.message.namespace = namespace
+      snapshots.set(handle, { ...point, namespace })
       return handle
     },
     restore(namespace, handle) {
@@ -470,8 +542,12 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
     async replay(id) {
       const delivery = deliveries.get(id)
       if (!delivery) return undefined
-      const ok = await attempt(delivery)
-      if (ok) delivery.state = "delivered"
+      const work = (async () => {
+        const ok = await attempt(delivery)
+        if (ok) delivery.state = "delivered"
+      })()
+      track(work, delivery)
+      await work
       return delivery
     },
     async flush() {
@@ -493,6 +569,7 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
               if (ok) delivery.state = "delivered"
               else schedule(delivery)
             }),
+            delivery,
           )
         }
         await hub.idle()
@@ -500,8 +577,8 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
         if (held.size === 0 && !scheduled) return
       }
     },
-    async idle() {
-      while (inFlight.size > 0) await Promise.allSettled([...inFlight])
+    async idle(namespace) {
+      for (;;) { const selected = [...inFlight].filter((work) => namespace === undefined || workNamespace.get(work) === namespace); if (!selected.length) return; await Promise.allSettled(selected) }
     },
     fault(namespace, fault) {
       const queue = faults.get(namespace) ?? []

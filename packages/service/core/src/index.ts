@@ -227,3 +227,6 @@ export type {
   WebhookSigner,
 } from "./webhooks.js"
 export { createWebhookHub, signers, webhookAdminRoutes } from "./webhooks.js"
+
+export { ownedTransport } from "./outbound.js"
+export type { OutboundPolicy, OwnedTransport } from "./outbound.js"

@@ -102,7 +102,9 @@ test("shipped headers, admin errors, config, env, and docker names are Mockingbi
   expect(cli).toContain("mockingbird.json")
   expect(cli).toContain("MOCKINGBIRD_ADMIN_PREFIX")
   expect(cli).toContain("MOCKINGBIRD_ADMIN_KEY")
-  const fleet = source("packages/adapters/node/src/fleet.ts")
+  const fleet =
+    source("packages/adapters/node/src/fleet.ts") +
+    source("packages/adapters/node/src/fleet-management.ts")
   expect(fleet).toContain("process.env.MOCKINGBIRD_ADMIN_KEY")
   expect(fleet).toContain("x-mockingbird-admin-key")
   const stateDir = source("packages/service/github/oracle/run.mjs")
