@@ -275,14 +275,16 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
       const scope = requestScope(services, context)
       const params = queryParams(context)
       const id = context.params.customer ?? ""
-      // Unlike most filters, an empty `invoice` is refused rather than read as unset (probed live).
-      if (params.invoice === "") throw parameterInvalidEmpty("invoice")
       // Stripe resolves the list cursor before the customer in the path.
       const page = await paginate(scope.account.balanceTransactions, params, {
         url: `/v1/customers/${id}/balance_transactions`,
         // Stripe names an unknown cursor on this list by its internal model.
         kind: "abstracttransaction",
         rejectEmptyCursors: true,
+        // Stripe validates the invoice filter after pagination cursors (live seed 1057600108).
+        check: () => {
+          if (params.invoice === "") throw parameterInvalidEmpty("invoice")
+        },
         where: (record) => record.customer === id && matchesCreated(record.created, params.created),
         render: renderCustomerBalanceTransaction,
       })

@@ -312,6 +312,12 @@
       "seed": 115477026,
       "status": "fixed",
       "failure": "GetProjectEvent copied raw legacy message=false over its normalized REST string field after StoreEvent; Relay LogEntry ignores false rather than rejecting ingestion. Fixed after exact CI seed replay, 11 package tests and all 598 repository checks; official Relay source is the oracle fallback because live credentials are unavailable."
+    },
+    {
+      "provider": "stripe",
+      "seed": 1057600108,
+      "status": "open",
+      "failure": "GetCustomersCustomerBalanceTransactions with ending_before=\"\" and invoice=\"\": Stripe rejects ending_before first, while the emulator rejected invoice first. Live run 38718066587, shrunk path 11:2:1:2:1:2:2:2."
     }
   ]
 }
