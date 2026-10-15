@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      # A key is <prefix>-<commit sha>[-<run attempt>] for turbo, deps-<os>-<bun>-<lockfile hash>
+      # A key is <prefix>-<commit sha>[-<run attempt>] for turbo, deps-<os>-<arch>-<bun>-<lockfile hash>
       # for node_modules, smoke-v1-<os>-<fingerprint> for a passed consumer smoke; the prefix is
       # what a restore-keys lookup matches.
       - env:
