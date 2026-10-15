@@ -28,6 +28,7 @@
  *
  *   bun run release:seed               (reconcile)
  *   bun run release:seed -- --dry-run  (plan + pack, print what would change)
+ *   bun run release:seed -- --trust-only (repair existing packages' publishers without a build)
  */
 import {
   cpSync,
@@ -58,6 +59,7 @@ function enter(dir: string) {
 }
 
 const dryRun = process.argv.includes("--dry-run")
+const trustOnly = process.argv.includes("--trust-only")
 const MIN_NPM = [11, 15] as const
 
 async function run(cmd: string[], cwd: string, env: Record<string, string | undefined>) {
@@ -109,13 +111,6 @@ async function copyTree(from: string, to: string): Promise<boolean> {
   return copied === 0
 }
 
-const commonGitDir = (
-  await $`git rev-parse --path-format=absolute --git-common-dir`.cwd(root).quiet()
-)
-  .text()
-  .trim()
-const cache = seedCachePath(commonGitDir)
-const stampPath = `${cache}.sha`
 const env: Record<string, string | undefined> = { ...process.env }
 delete env.NODE_AUTH_TOKEN
 let npmScratch: string | undefined
@@ -150,59 +145,81 @@ try {
     )
   }
 
-  // 3. A clean origin/main. Kept across runs so a crash does not rebuild the repo.
-  await $`git fetch origin main --tags`.cwd(root).quiet()
-  const sha = (await $`git rev-parse origin/main`.cwd(root).quiet()).text().trim()
-  const head = (await $`git rev-parse HEAD`.cwd(root).quiet()).text().trim()
-  if (!existsSync(join(cache, ".git"))) {
-    mkdirSync(join(cache, ".."), { recursive: true })
-    await $`git worktree add --detach ${cache} ${sha}`.cwd(root).quiet()
+  if (trustOnly) {
+    // Account settings do not need a build, a main checkout, or a new package version.
+    await run(
+      [
+        "bun",
+        "scripts/release/publish.ts",
+        "--local",
+        "--trust-only",
+        ...(dryRun ? ["--dry-run"] : []),
+      ],
+      root,
+      env,
+    )
   } else {
-    await $`git reset --hard ${sha}`.cwd(cache).quiet()
-  }
-  // This checkout's publisher, not origin/main's, so the retry fix runs before it is merged.
-  for (const name of readdirSync(join(root, "scripts/release"))) {
-    cpSync(join(root, "scripts/release", name), join(cache, "scripts/release", name), {
-      recursive: true,
-      force: true,
-    })
-  }
-
-  const reused =
-    existsSync(stampPath) &&
-    readFileSync(stampPath, "utf8").trim() === sha &&
-    existsSync(join(cache, "node_modules")) &&
-    distReady(cache)
-  if (reused) {
-    console.log(`release:seed: reusing build of origin/main ${sha.slice(0, 7)}`)
-  } else if (head === sha && distReady(root)) {
-    console.log("release:seed: reusing this checkout's build of origin/main")
-    const copiedModules = await copyTree(join(root, "node_modules"), join(cache, "node_modules"))
-    if (!copiedModules) {
-      console.log("release:seed: could not copy node_modules; installing and building instead")
-      await run(["bun", "install", "--frozen-lockfile"], cache, env)
-      await run(["bun", "run", "build"], cache, env)
+    // 3. A clean origin/main. Kept across runs so a crash does not rebuild the repo.
+    const commonGitDir = (
+      await $`git rev-parse --path-format=absolute --git-common-dir`.cwd(root).quiet()
+    )
+      .text()
+      .trim()
+    const cache = seedCachePath(commonGitDir)
+    const stampPath = `${cache}.sha`
+    await $`git fetch origin main --tags`.cwd(root).quiet()
+    const sha = (await $`git rev-parse origin/main`.cwd(root).quiet()).text().trim()
+    const head = (await $`git rev-parse HEAD`.cwd(root).quiet()).text().trim()
+    if (!existsSync(join(cache, ".git"))) {
+      mkdirSync(join(cache, ".."), { recursive: true })
+      await $`git worktree add --detach ${cache} ${sha}`.cwd(root).quiet()
     } else {
-      const service = join(root, "packages/service")
-      for (const entry of readdirSync(service, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue
-        const from = join(service, entry.name, "dist")
-        if (!existsSync(from)) continue
-        if (!(await copyTree(from, join(cache, "packages/service", entry.name, "dist")))) {
-          throw new Error(`release:seed: could not copy ${from}`)
+      await $`git reset --hard ${sha}`.cwd(cache).quiet()
+    }
+    // This checkout's publisher, not origin/main's, so the retry fix runs before it is merged.
+    for (const name of readdirSync(join(root, "scripts/release"))) {
+      cpSync(join(root, "scripts/release", name), join(cache, "scripts/release", name), {
+        recursive: true,
+        force: true,
+      })
+    }
+
+    const reused =
+      existsSync(stampPath) &&
+      readFileSync(stampPath, "utf8").trim() === sha &&
+      existsSync(join(cache, "node_modules")) &&
+      distReady(cache)
+    if (reused) {
+      console.log(`release:seed: reusing build of origin/main ${sha.slice(0, 7)}`)
+    } else if (head === sha && distReady(root)) {
+      console.log("release:seed: reusing this checkout's build of origin/main")
+      const copiedModules = await copyTree(join(root, "node_modules"), join(cache, "node_modules"))
+      if (!copiedModules) {
+        console.log("release:seed: could not copy node_modules; installing and building instead")
+        await run(["bun", "install", "--frozen-lockfile"], cache, env)
+        await run(["bun", "run", "build"], cache, env)
+      } else {
+        const service = join(root, "packages/service")
+        for (const entry of readdirSync(service, { withFileTypes: true })) {
+          if (!entry.isDirectory()) continue
+          const from = join(service, entry.name, "dist")
+          if (!existsSync(from)) continue
+          if (!(await copyTree(from, join(cache, "packages/service", entry.name, "dist")))) {
+            throw new Error(`release:seed: could not copy ${from}`)
+          }
         }
       }
+      writeFileSync(stampPath, sha)
+    } else {
+      console.log(`release:seed: installing and building origin/main ${sha.slice(0, 7)}`)
+      await run(["bun", "install", "--frozen-lockfile"], cache, env)
+      await run(["bun", "run", "build"], cache, env)
+      writeFileSync(stampPath, sha)
     }
-    writeFileSync(stampPath, sha)
-  } else {
-    console.log(`release:seed: installing and building origin/main ${sha.slice(0, 7)}`)
-    await run(["bun", "install", "--frozen-lockfile"], cache, env)
-    await run(["bun", "run", "build"], cache, env)
-    writeFileSync(stampPath, sha)
-  }
 
-  // 4. Publish, trust, tag, release, deprecate.
-  await run(["bun", "scripts/release/publish.ts", dryRun ? "--dry-run" : "--local"], cache, env)
+    // 4. Publish, trust, tag, release, deprecate.
+    await run(["bun", "scripts/release/publish.ts", dryRun ? "--dry-run" : "--local"], cache, env)
+  }
 } catch (error) {
   console.error(`release:seed: ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1

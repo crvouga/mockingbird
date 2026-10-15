@@ -16,9 +16,18 @@ OIDC cannot create a package that does not exist on npm yet. A maintainer runs `
 bun run release:plan                   # what the next push to main would release
 bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
 bun run release:seed                   # reconcile npm with origin/main using your npm login
-bun run health                         # access pages whose Trusted Publisher still needs a click
+bun run release:seed -- --trust-only   # repair existing packages' publishers; no build or publish
+bun run health                         # unified release, deployment, and infrastructure health
+bun run health -- trusted-publisher --interactive # inspect settings requiring npm approval
 bun run secrets:doctor                 # npm / Trusted Publishing / live parity status
 ```
+
+For an existing package rejected with `ENEEDAUTH`, use `bun run release:seed -- --trust-only`.
+It uses your interactive npm login, repairs the publisher for every published service, and
+reads the settings back to verify the repository, `ci.yml`, empty environment, and permission
+to publish. It runs in the current checkout without creating a worktree, building, publishing,
+tagging, or deprecating packages. Then retry Release. A green run with nothing to release does
+not verify OIDC access: locally published versions are skipped by CI.
 
 The seed deprecates npm packages this repo no longer publishes: the former helper packages (`@crvouga/mockingbird`, `-core`, `-service`, `-sqlite`, `-openapi*`, `-http-codec`, `-commands`, `-model`, `-canonicalize`, `-parity`, `-adapter-*`, `-openbao`), now bundled into the services, and the archived `@crvouga/postgres-mem` / `@crvouga/sqlite-mem`, which continue here as `@crvouga/mockingbird-service-postgres` / `-sqlite`. OIDC only authenticates publish operations, so CI logs deprecations for the next local seed instead of managing package settings.
 

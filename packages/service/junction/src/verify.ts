@@ -52,6 +52,12 @@ export type VerifyReport = {
   drift: { checked: number; stale: number }
   scenario: { steps: number; divergent: number }
   divergences: Divergence[]
+  /** Live access is blocked; this is not emulator or corpus drift. */
+  blocked?: {
+    status: number
+    reason: "authentication" | "payment-required" | "access-denied"
+    message: string
+  }
 }
 
 type Side = "real" | "mock"
@@ -451,6 +457,32 @@ export const verifyAgainstReal = async (options: VerifyOptions): Promise<VerifyR
     })
     const response = side === "real" ? await send(request) : await options.mock.fetch(request)
     return readReply(response)
+  }
+
+  // Check read-only access before creating a user or order. A suspended sandbox
+  // can return 402 everywhere; those responses must not become fake drift reports.
+  const access = await call("real", "GET", "/v3/lab_test")
+  if ([401, 402, 403].includes(access.status)) {
+    const reason =
+      access.status === 401
+        ? "authentication"
+        : access.status === 402
+          ? "payment-required"
+          : "access-denied"
+    const message =
+      access.status === 401
+        ? "Junction rejected JUNCTION_API_KEY. Restore the sandbox credential before verifying."
+        : access.status === 402
+          ? "Junction sandbox returned HTTP 402 Payment Required. Restore the team's account access/entitlement before verifying."
+          : "Junction denied sandbox access (HTTP 403). Restore the team's API permissions before verifying."
+    progress(`BLOCKED: ${message}`)
+    return {
+      ok: false,
+      blocked: { status: access.status, reason, message },
+      drift: { checked: 0, stale: 0 },
+      scenario: { steps: 0, divergent: 0 },
+      divergences: [],
+    }
   }
 
   // ── drift ────────────────────────────────────────────────────────

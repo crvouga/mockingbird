@@ -90,7 +90,15 @@
     "health": "bun scripts/health/cli.ts",
     "secrets": "bun scripts/secrets/cli.ts",
     "secrets:doctor": "bun scripts/secrets/doctor.ts",
-    "secrets:push": "bun scripts/secrets/push-env.ts"
+    "secrets:push": "bun scripts/secrets/push-env.ts",
+    "health:npm": "bun scripts/health/task.ts npm",
+    "health:trusted-publisher": "bun scripts/health/task.ts trusted-publisher",
+    "health:github": "bun scripts/health/task.ts github",
+    "health:secrets": "bun scripts/health/task.ts secrets",
+    "health:docs": "bun scripts/health/task.ts docs",
+    "health:images": "bun scripts/health/task.ts images",
+    "health:repository": "bun scripts/health/task.ts repository",
+    "health:all": "bun scripts/health/task.ts --summary"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

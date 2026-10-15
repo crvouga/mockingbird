@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url"
 import node from "@astrojs/node"
 import { defineConfig } from "astro/config"
 import { catalog } from "./integrations/catalog/index.ts"
+import { deployment } from "./integrations/deployment.ts"
 
 const docsRoot = fileURLToPath(new URL(".", import.meta.url))
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url))
@@ -23,6 +24,7 @@ export default defineConfig({
   devToolbar: { enabled: false },
   prefetch: { prefetchAll: true, defaultStrategy: "hover" },
   integrations: [
+    deployment(repoRoot),
     {
       name: "mockingbird-vite-cache",
       hooks: {

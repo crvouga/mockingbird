@@ -367,9 +367,9 @@ export function seedSummary(run: {
     )
   }
   const others = failed === needsSeed.length + needsTrust.length
-  lines.push(
-    `${others ? "Every other package was released. " : ""}Run bun run release:seed, then retry CI.`,
-  )
+  const command =
+    needsSeed.length > 0 ? "bun run release:seed" : "bun run release:seed -- --trust-only"
+  lines.push(`${others ? "Every other package was released. " : ""}Run ${command}, then retry CI.`)
   return lines
 }
 

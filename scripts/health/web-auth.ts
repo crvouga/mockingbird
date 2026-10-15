@@ -39,7 +39,7 @@ export async function pollWebAuth(
   fetchDone: () => Promise<{ status: number; retryAfter: string | null; body: unknown }>,
   sleep: (ms: number) => Promise<void>,
   now: () => number = Date.now,
-  deadlineMs = 3 * 60 * 1000,
+  deadlineMs = 10 * 60 * 1000,
 ): Promise<string> {
   const deadline = now() + deadlineMs
   for (;;) {
@@ -89,6 +89,7 @@ export async function promptWebAuth(
     async () => {
       const res = await fetch(challenge.doneUrl, {
         headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+        signal: AbortSignal.timeout(15_000),
       })
       return {
         status: res.status,

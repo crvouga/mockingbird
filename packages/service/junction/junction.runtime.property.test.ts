@@ -660,6 +660,37 @@ describe("A4 corpus tools", () => {
 })
 
 describe("A11 verify", () => {
+  for (const status of [401, 402, 403]) {
+    test(`HTTP ${status} blocks verification before any mock calls or live writes`, async () => {
+      const requests: Request[] = []
+      const report = await verifyAgainstReal({
+        realKey: "sk_us_fake",
+        realUrl: "https://real.test",
+        corpus: defaultCorpus,
+        mock: {
+          fetch: () => {
+            throw new Error("Mock must not run while vendor access is blocked")
+          },
+        },
+        orders: true,
+        minIntervalMs: 0,
+        fetch: async (request) => {
+          requests.push(request)
+          return new Response(JSON.stringify({ detail: "private vendor response" }), { status })
+        },
+      })
+      expect(requests.map((request) => [request.method, new URL(request.url).pathname])).toEqual([
+        ["GET", "/v3/lab_test"],
+      ])
+      expect(report.ok).toBe(false)
+      expect(report.blocked?.status).toBe(status)
+      expect(report.drift).toEqual({ checked: 0, stale: 0 })
+      expect(report.scenario).toEqual({ steps: 0, divergent: 0 })
+      expect(report.divergences).toEqual([])
+      expect(JSON.stringify(report)).not.toContain("private vendor response")
+    })
+  }
+
   const verifyWith = async (tamper?: (path: string, response: Response) => Promise<Response>) => {
     const real = createRuntime({ corpus: defaultCorpus })
     const report = await verifyAgainstReal({
