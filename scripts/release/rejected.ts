@@ -1,10 +1,11 @@
+import { stripVTControlCharacters } from "node:util"
 import { $ } from "bun"
 import { REPO, WORKFLOW_FILE } from "./lib.ts"
 
 /** Select only public packages that the Release publisher explicitly reported as rejected. */
 export function rejectedPackages(log: string, publicNames: ReadonlySet<string>): Set<string> {
   const names = new Set<string>()
-  const clean = log.replace(/\x1b\[[0-9;]*m/g, "")
+  const clean = stripVTControlCharacters(log)
   const reports = clean.matchAll(
     /Check its Trusted Publisher \(repo crvouga\/mockingbird, workflow ci\.yml\): https:\/\/www\.npmjs\.com\/package\/(@[^\s/]+\/[^\s/]+)\/access/g,
   )
