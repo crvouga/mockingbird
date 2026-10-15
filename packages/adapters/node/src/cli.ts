@@ -15,7 +15,8 @@ import {
   parseFaultHeader,
   resolveAdminPrefix,
 } from "@crvouga/mockingbird-service"
-import { type FleetTarget, startFleet } from "./fleet.js"
+import { type FleetTarget, type ProtocolTarget, startFleet } from "./fleet.js"
+import { fleetCommands } from "./fleet-tools.js"
 import { type Listening, listen } from "./listen.js"
 
 export type CliOption = {
@@ -29,6 +30,7 @@ export type CliOption = {
 export type CliValues = Record<string, string | boolean | undefined>
 
 export type CliCommand = {
+  fleetTarget?: FleetTarget
   summary: string
   usage?: string
   options?: Record<string, CliOption>
@@ -73,6 +75,12 @@ const commandHelp = (spec: CliSpec, name: string, command: CliCommand): string =
 
 /** Parse `argv` against `spec` and run the chosen command. Resolves to an exit code. */
 export const runCli = async (spec: CliSpec, argv: string[]): Promise<number> => {
+  const own = spec.commands.serve?.fleetTarget
+  if (own)
+    spec = {
+      ...spec,
+      commands: { ...fleetCommands((name) => loadTarget(name, own)), ...spec.commands },
+    }
   // Two-word commands (`corpus pull`) win over one-word ones.
   const pair = argv.length >= 2 ? `${argv[0]} ${argv[1]}` : undefined
   const words = pair !== undefined && spec.commands[pair] ? 2 : 1
@@ -138,6 +146,7 @@ export type CommonServeOptions = {
  * `serveTarget`, which is also how `serve --config` finds services by name.
  */
 export type ServeTarget = {
+  packageVersion?: string
   name: string
   defaultPort: number
   /** Serve flags beyond the common ones. */
@@ -345,6 +354,11 @@ export const resolveServeControls = async (
 
 /** A service entry in `mockingbird.json`. */
 export type ConfigService = {
+  /** Stable config key is the instance identity; target defaults to that key. */
+  target?: string
+  publicOrigin?: string
+  publicPath?: string
+  dependsOn?: string[]
   protocol?: "http" | "postgres" | "redis"
   port?: number
   host?: string
@@ -365,6 +379,10 @@ export type ConfigService = {
 }
 
 export type MockingbirdConfig = {
+  $schema?: string
+  schemaVersion?: 1
+  extensions?: Record<string, unknown>
+  cors?: { origins: string[]; methods?: string[]; headers?: string[] }
   /** Keyed by service name: `junction` loads `@crvouga/mockingbird-service-junction`. */
   services: Record<string, ConfigService>
   log?: LogFormat
@@ -440,15 +458,21 @@ const untilSignal = async (servers: { close(): Promise<void> }[]): Promise<numbe
     const stop = async () => {
       ;(process as EventEmitter).removeListener("SIGINT", stop)
       ;(process as EventEmitter).removeListener("SIGTERM", stop)
-      await Promise.allSettled(servers.map((s) => s.close()))
-      resolve(0)
+      const results = await Promise.allSettled(servers.map((s) => s.close()))
+      for (const result of results)
+        if (result.status === "rejected")
+          console.error(
+            result.reason instanceof Error ? result.reason.message : String(result.reason),
+          )
+      resolve(results.some((r) => r.status === "rejected") ? 1 : 0)
     }
     process.once("SIGINT", stop)
     process.once("SIGTERM", stop)
   })
 
 /** The standard `serve` command for a service, including multi-service `--config`. */
-export const serveCommand = (target: FleetTarget): CliCommand => ({
+export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand => ({
+  fleetTarget: target,
   summary: `Serve the ${target.name} emulator or a configured fleet`,
   options: { ...COMMON_SERVE_OPTIONS, ...("options" in target ? target.options : {}) },
   async run(values) {

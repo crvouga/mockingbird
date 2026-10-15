@@ -23,6 +23,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
+    },
+    "./fleet": {
+      "types": "./dist/fleet.d.ts",
+      "default": "./dist/fleet.js"
     }
   },
   "bin": {
@@ -53,7 +57,8 @@
     "runtime": "portable",
     "entries": {
       "server": "node",
-      "cli": "node"
+      "cli": "node",
+      "fleet": "node"
     },
     "layer": "service",
     "category": "payments",

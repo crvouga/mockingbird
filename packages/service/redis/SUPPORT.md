@@ -28,3 +28,13 @@ against the emulator and an installed local `redis-server` (verified with Redis 
 
 Out of scope: Redis Cluster, Redis 8 modules and a complete Lua 5.1 runtime. Compatibility claims
 are limited to the tested BullMQ flows rather than every arbitrary Lua program.
+
+## Fleet controls
+
+The fleet adapter supports dynamic namespace listeners, finite numeric seeds, boot/reset clocks,
+connection admission quotas, private pre-ready seeding listeners, bounded key/type/TTL inspection,
+and portable `mockingbird.redis/v1` archives. Binary values, Maps, bigint stream ids, Lua scripts,
+random state, consumer pause state and queued/delayed BullMQ work survive process replacement.
+Live blocked/active work must drain before capture. Fleet latency/fault profiles are unsupported for
+RESP children and are rejected explicitly. See [Fleets](../../../docs/FLEETS.md) and the adapter's
+`fleet.management.test.ts` acceptance suite (real ioredis clients).

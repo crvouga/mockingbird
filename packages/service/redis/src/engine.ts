@@ -1,6 +1,7 @@
 import { fromLatin1, globMatch, intReply, latin1, parseI64, utf8, utf8Text } from "./bytes.ts"
 import { type RedisClock, wallClock } from "./clock.ts"
 import { LuaFailure, LuaStatus, LuaTable, type LuaValue, luaGlobals, runLua } from "./lua.ts"
+import { assertPortableDatabase, decodePortable, encodePortable } from "./portable.ts"
 import {
   arityError,
   arr,
@@ -93,6 +94,7 @@ export type RedisFault =
   | null
 
 interface Session {
+  controlPrivileged?: boolean
   id: number
   db: number
   protocol: 2 | 3
@@ -488,6 +490,23 @@ export class Redis {
         .length
     )
   }
+  nextEvent(): number | undefined {
+    let earliest: number | undefined
+    const consider = (time: number) => {
+      if (earliest === undefined || time < earliest) earliest = time
+    }
+    for (const db of this.dbs) {
+      const point = db.snapshot() as { values: Map<string, Value>; expires: Map<string, number> }
+      for (const time of point.expires.values()) consider(time)
+      for (const [key, value] of point.values)
+        if (key.endsWith(":delayed") && value.kind === "zset")
+          for (const member of value.members.values()) consider(Math.floor(member.score / 4096))
+    }
+    return earliest
+  }
+  settleTimers(): void {
+    for (const db of this.dbs) db.keys()
+  }
   activeJobs(): number {
     let count = 0
     for (const db of this.dbs)
@@ -516,6 +535,48 @@ export class Redis {
       clock: this.clock.state(),
       paused: this.consumersPaused,
     })
+    return handle
+  }
+  exportSnapshot(handle: unknown): unknown {
+    const point =
+      typeof handle === "object" && handle !== null ? this.snapshots.get(handle) : undefined
+    if (!point) throw new Error("invalid Redis checkpoint")
+    return { format: "mockingbird.redis/v1", data: encodePortable(point) }
+  }
+  importSnapshot(document: unknown): object {
+    if (
+      !document ||
+      typeof document !== "object" ||
+      (document as { format?: unknown }).format !== "mockingbird.redis/v1"
+    )
+      throw new Error("invalid Redis archive")
+    const point = decodePortable((document as { data?: unknown }).data) as NonNullable<
+      ReturnType<typeof this.snapshots.get>
+    >
+    if (
+      !point ||
+      !Array.isArray(point.dbs) ||
+      point.dbs.length !== this.dbs.length ||
+      !(point.scripts instanceof Map) ||
+      !Number.isFinite(point.rng) ||
+      typeof point.paused !== "boolean" ||
+      !point.clock ||
+      !Number.isFinite(point.clock.now) ||
+      typeof point.clock.frozen !== "boolean"
+    )
+      throw new Error("invalid Redis archive state")
+    for (const db of point.dbs) assertPortableDatabase(db)
+    if (
+      !Number.isSafeInteger(point.rng) ||
+      point.rng < 0 ||
+      point.rng > 0xffffffff ||
+      [...point.scripts].some(
+        ([key, script]) => typeof key !== "string" || typeof script !== "string",
+      )
+    )
+      throw new Error("invalid Redis random/script state")
+    const handle = {}
+    this.snapshots.set(handle, point)
     return handle
   }
   restore(handle: unknown): void {
@@ -604,7 +665,8 @@ export class Redis {
   }
 
   perform(session: Session, name: string, args: Uint8Array[]): Promise<Reply> {
-    if (this.controlPaused) return Promise.resolve(err("BUSY fleet control in progress"))
+    if (this.controlPaused && !session.controlPrivileged)
+      return Promise.resolve(err("BUSY fleet control in progress"))
     if (session.dead || this.closed) {
       return Promise.reject(new RedisConnectionError("Connection is closed"))
     }

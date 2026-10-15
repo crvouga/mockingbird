@@ -1,0 +1,13 @@
+.git
+**/node_modules
+**/dist
+**/.turbo
+**/.cache
+**/.env*
+**/*.log
+**/*.tgz
+.super.engineering
+.superconductor
+.superset
+.parity-artifacts
+coverage

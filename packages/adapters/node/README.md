@@ -7,15 +7,25 @@ server over `node:http`. Use it when the code under test needs a URL (a subproce
 SDK you cannot hand a `fetch`). If you can inject `fetch`, call the emulator's `fetch` directly instead;
 on Bun, `@crvouga/mockingbird-adapter-bun` is lighter.
 
-## Install
+## Supported consumer entry points
+
+Install a published service and use its bundled CLI. Never install this private workspace package.
 
 ```bash
-npm install @crvouga/mockingbird-adapter-node
+npm install @crvouga/mockingbird-service-stripe
+npx mockingbird-stripe serve --config mockingbird.json --ready-file ready.json
 ```
+
+The supported management client and contributor-independent harness APIs are exported from
+`@crvouga/mockingbird-service-stripe/fleet`. The CLI can supervise other installed services;
+see [Fleets](../../../docs/FLEETS.md).
 
 Requires Node >=22 (also runs on Bun, which implements `node:http`). ESM only.
 
-## Usage
+## Contributor-only workspace usage
+
+The following internal imports are for this repository's contributors, after `bun run setup`.
+Consumer programs should use the service's public `/fleet` entry point above.
 
 ```ts
 import type { AddressInfo } from "node:net"
@@ -49,18 +59,21 @@ server.closeAllConnections()
 
 Types:
 
-- `NodeServeOptions`: `{ port?: number; host?: string }`. `port` defaults to `0` (ephemeral; read it
+- `NodeServeOptions`: `{ port?: number; host?: string; maxBodyBytes?: number; requestTimeoutMs?: number }`. `port` defaults to `0` (ephemeral; read it
   from `server.address()`); `host` is passed to `server.listen` (Node's default when omitted).
 
 Behavior:
 
-- Each incoming request is buffered and converted to a Fetch `Request`. The URL is built from the
-  `Host` header; leading repeated slashes in the path collapse to one.
-- The body is forwarded only for methods other than `GET`/`HEAD`, and only when non-empty.
-- The `Response` status, headers and body are written back in full (no streaming). Repeated
-  `Set-Cookie` headers are preserved, one header line per cookie.
-- Errors thrown by `api.fetch` are not caught by the adapter; return error responses from your
-  `FetchAPI` instead.
+- Incoming bodies stream into Fetch `Request` handlers, bounded incrementally at 16 MiB / 30 seconds
+  by default. Oversized/chunked uploads return 413; stalled uploads return 408. Bodies are forwarded
+  for methods other than GET/HEAD. URL/Request construction and aborted uploads are caught.
+- Response bodies stream chunk by chunk with backpressure; repeated `Set-Cookie` values remain
+  separate headers. Client disconnects cancel the response reader and release backpressure waits.
+- `MOCKINGBIRD_DROP` errors destroy the socket. Other fetch failures become structured 500
+  `mockingbird_internal` responses. Mid-stream failures close the connection after sent chunks.
+- Fleet controls track open response bodies, not just the time until headers. Configure larger,
+  bounded body limits directly on `serve` for large archive imports. JSON control handlers still
+  parse a bounded complete document; this is not an unbounded streaming JSON parser.
 
 ## Related
 

@@ -116,6 +116,8 @@ export type {
   NamespaceControls,
 } from "./namespace-controls.js"
 export { createNamespaceControls } from "./namespace-controls.js"
+export type { OutboundPolicy, OwnedTransport } from "./outbound.js"
+export { ownedTransport } from "./outbound.js"
 export type { OutboxItem, OutboxQuery } from "./outbox.js"
 export {
   extractCodes,

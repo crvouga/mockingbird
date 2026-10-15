@@ -546,7 +546,11 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
         corpus,
         publicNamespace,
         adminPrefix,
-        ...(options.publicUrl ? { publicUrl: options.publicUrl } : {}),
+        ...(options.publicUrl
+          ? {
+              publicUrl: `${options.publicUrl.replace(/\/$/, "")}${publicNamespace === "default" ? "" : `${adminPrefix}/ns/${encodeURIComponent(publicNamespace)}`}`,
+            }
+          : {}),
         ...(options.webhookApiVersion ? { webhookApiVersion: options.webhookApiVersion } : {}),
         ...(options.lifecycle ? { lifecycle: options.lifecycle } : {}),
         pendingWebhooks: (account, type) =>

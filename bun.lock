@@ -117,6 +117,21 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/examples/fleet-reference": {
+      "name": "@crvouga/mockingbird-example-fleet-reference",
+      "version": "0.0.0-development",
+      "dependencies": {
+        "@crvouga/mockingbird-service-postgres": "workspace:*",
+        "@crvouga/mockingbird-service-redis": "workspace:*",
+        "@crvouga/mockingbird-service-stripe": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.0",
+        "@types/pg": "8.23.1",
+        "ioredis": "5.11.1",
+        "pg": "8.23.0",
+      },
+    },
     "packages/examples/medical-testing": {
       "name": "@crvouga/mockingbird-example-medical-testing",
       "version": "0.0.0-development",
@@ -4064,6 +4079,8 @@
 
     "@crvouga/mockingbird-docs": ["@crvouga/mockingbird-docs@workspace:sites/docs"],
 
+    "@crvouga/mockingbird-example-fleet-reference": ["@crvouga/mockingbird-example-fleet-reference@workspace:packages/examples/fleet-reference"],
+
     "@crvouga/mockingbird-example-medical-testing": ["@crvouga/mockingbird-example-medical-testing@workspace:packages/examples/medical-testing"],
 
     "@crvouga/mockingbird-http-codec": ["@crvouga/mockingbird-http-codec@workspace:packages/http/codec"],
@@ -6932,6 +6949,7 @@
 
     "@commitlint/types/chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
 
+
     "@crvouga/mockingbird-package-oracle/@aws-sdk/client-s3": ["@aws-sdk/client-s3@3.1031.0", "", { "dependencies": { "@aws-crypto/sha1-browser": "5.2.0", "@aws-crypto/sha256-browser": "5.2.0", "@aws-crypto/sha256-js": "5.2.0", "@aws-sdk/core": "^3.974.0", "@aws-sdk/credential-provider-node": "^3.972.31", "@aws-sdk/middleware-bucket-endpoint": "^3.972.10", "@aws-sdk/middleware-expect-continue": "^3.972.10", "@aws-sdk/middleware-flexible-checksums": "^3.974.8", "@aws-sdk/middleware-host-header": "^3.972.10", "@aws-sdk/middleware-location-constraint": "^3.972.10", "@aws-sdk/middleware-logger": "^3.972.10", "@aws-sdk/middleware-recursion-detection": "^3.972.11", "@aws-sdk/middleware-sdk-s3": "^3.972.29", "@aws-sdk/middleware-ssec": "^3.972.10", "@aws-sdk/middleware-user-agent": "^3.972.30", "@aws-sdk/region-config-resolver": "^3.972.12", "@aws-sdk/signature-v4-multi-region": "^3.996.17", "@aws-sdk/types": "^3.973.8", "@aws-sdk/util-endpoints": "^3.996.7", "@aws-sdk/util-user-agent-browser": "^3.972.10", "@aws-sdk/util-user-agent-node": "^3.973.16", "@smithy/config-resolver": "^4.4.16", "@smithy/core": "^3.23.15", "@smithy/eventstream-serde-browser": "^4.2.14", "@smithy/eventstream-serde-config-resolver": "^4.3.14", "@smithy/eventstream-serde-node": "^4.2.14", "@smithy/fetch-http-handler": "^5.3.17", "@smithy/hash-blob-browser": "^4.2.15", "@smithy/hash-node": "^4.2.14", "@smithy/hash-stream-node": "^4.2.14", "@smithy/invalid-dependency": "^4.2.14", "@smithy/md5-js": "^4.2.14", "@smithy/middleware-content-length": "^4.2.14", "@smithy/middleware-endpoint": "^4.4.30", "@smithy/middleware-retry": "^4.5.3", "@smithy/middleware-serde": "^4.2.18", "@smithy/middleware-stack": "^4.2.14", "@smithy/node-config-provider": "^4.3.14", "@smithy/node-http-handler": "^4.5.3", "@smithy/protocol-http": "^5.3.14", "@smithy/smithy-client": "^4.12.11", "@smithy/types": "^4.14.1", "@smithy/url-parser": "^4.2.14", "@smithy/util-base64": "^4.3.2", "@smithy/util-body-length-browser": "^4.2.2", "@smithy/util-body-length-node": "^4.2.3", "@smithy/util-defaults-mode-browser": "^4.3.47", "@smithy/util-defaults-mode-node": "^4.2.52", "@smithy/util-endpoints": "^3.4.1", "@smithy/util-middleware": "^4.2.14", "@smithy/util-retry": "^4.3.2", "@smithy/util-stream": "^4.5.23", "@smithy/util-utf8": "^4.2.2", "@smithy/util-waiter": "^4.2.16", "tslib": "^2.6.2" } }, "sha512-HflwKSpDl2pwPiH116n9dy1pKW+5yEoiGFor6NO1yADgge+QY5LqluBiHscD7k/o9ib+dgxf6Vg4WsctcRT3OA=="],
 
     "@crvouga/mockingbird-service-app-store-connect/jose": ["jose@6.1.3", "", {}, "sha512-0TpaTfihd4QMNwrz/ob2Bp7X04yuxJkjRGi4aKmOqwhov54i6u79oCv7T+C7lo70MKH6BesI3vscD1yb/yzKXQ=="],
@@ -7335,6 +7353,7 @@
     "@babel/traverse/@babel/code-frame/@babel/helper-validator-identifier": ["@babel/helper-validator-identifier@7.29.7", "", {}, "sha512-qehxGkRj55h/ff8EMaJ+cYhyaKlHIxqYDn682wQD7RNp9UujOQsHog2uS0r2vzr4pW+sXf90NeeayjcNaX3fFg=="],
 
     "@babel/traverse/@babel/code-frame/js-tokens": ["js-tokens@4.0.0", "", {}, "sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ=="],
+
 
     "@crvouga/mockingbird-service-google-calendar/google-auth-library/gaxios": ["gaxios@6.7.1", "", { "dependencies": { "extend": "^3.0.2", "https-proxy-agent": "^7.0.1", "is-stream": "^2.0.0", "node-fetch": "^2.6.9", "uuid": "^9.0.1" } }, "sha512-LDODD4TMYx7XXdpwxAVRAIAuB0bzv0s+ywFonY46k126qzQHT9ygyoa9tncmOiQmmDrik65UYsEkv3lbfqQ3yQ=="],
 

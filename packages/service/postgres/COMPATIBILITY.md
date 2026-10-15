@@ -126,3 +126,15 @@ bun run build                # ESM browser build
 Do not treat isolated unit tests of internal modules as proof of PostgreSQL compatibility. The differential suite is authoritative for SQL behavior; `test:postgres-compat` is the release gate.
 
 **Parity claim:** Verified against **PostgreSQL 18.3** (PGlite). Features marked **VERIFIED** are oracle-proven. **PARTIALLY VERIFIED** rows must not be marketed as complete. **NOT APPLICABLE** is the only allowed permanent omission from the SQL drop-in claim.
+
+## Fleet administration and portability
+
+The wire fleet adapter supports dynamic isolated namespace listeners, finite numeric seeds,
+boot/reset logical clocks, connection admission limits, private pre-ready initialization listeners
+and bounded read-only inspection of the same wire engine. `mockingbird.postgres/v1` archives carry
+PGMM bytes for every database plus clock, fault and PRNG state, decoded before restoring. Live
+sessions remain a capture/reset conflict. Cross-service latency/fault profiles are rejected for
+PostgreSQL; clock profiles are supported. This adds fleet orchestration around existing SQL and
+snapshot semantics, not a broader SQL compatibility claim. Acceptance evidence is
+`packages/adapters/node/fleet.management.test.ts` using the unmodified `pg` wire client.
+See [Fleets](../../../docs/FLEETS.md).

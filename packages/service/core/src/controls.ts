@@ -128,6 +128,8 @@ export type SnapshotDocument = {
   faults?: unknown
   latency?: unknown
   virtualTime?: boolean
+  /** Quiescent webhook endpoints, delivery history and fault state. Contains private configuration. */
+  webhooks?: unknown
 }
 
 /** Controls for one namespace. */
@@ -283,6 +285,7 @@ export const assertSnapshotDocument = (value: unknown, label = "snapshot"): Snap
     if (
       !isRecord(value.clock) ||
       typeof value.clock.now !== "number" ||
+      !Number.isFinite(value.clock.now) ||
       typeof value.clock.frozen !== "boolean"
     )
       throw new ControlError(`${label}.clock: expected {now, frozen}`)
