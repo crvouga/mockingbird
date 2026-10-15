@@ -1,0 +1,35 @@
+name: Release group
+description: Build and publish one group from the shared release-plan.json.
+inputs:
+  group:
+    description: "prerequisites, maintenance, or a leaf shard (i/n)."
+    required: true
+runs:
+  using: composite
+  steps:
+    # No registry-url: its legacy _authToken config prevents npm's OIDC exchange.
+    - uses: actions/setup-node@v7
+      with:
+        node-version: 24
+        package-manager-cache: false
+
+    # Trusted Publishing needs npm >= 11.5.1. Account trust setup stays in the local seed.
+    - name: Update npm
+      shell: bash
+      run: npm install -g npm@11
+
+    - name: Build planned packages
+      shell: bash
+      env:
+        RELEASE_GROUP: ${{ inputs.group }}
+      run: bun scripts/release/build.ts --plan release-plan.json --group "$RELEASE_GROUP"
+
+    - name: Publish, tag, and create GitHub Releases
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_GROUP: ${{ inputs.group }}
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        bun run release:publish -- --plan release-plan.json --group "$RELEASE_GROUP"

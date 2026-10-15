@@ -19,6 +19,7 @@
  *   bun run release:publish                (CI, on main)
  *   bun run release:publish -- --local     (maintainer bootstrap: your npm login, no provenance)
  *   bun run release:seed -- --trust-only   (repair and verify published packages' OIDC setup)
+ *   bun run release:publish -- --plan release-plan.json --group 1/8 (one CI leaf shard)
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -51,6 +52,7 @@ import {
   unresolvablePins,
   WORKFLOW_FILE,
 } from "./lib.ts"
+import { pipelineOptions, readPlan, selectReleases } from "./pipeline.ts"
 import { trustedPublisherReconciler } from "./trust.ts"
 
 const argv = process.argv.slice(2)
@@ -58,6 +60,10 @@ const dryRun = argv.includes("--dry-run")
 const local = argv.includes("--local")
 const trustOnly = argv.includes("--trust-only")
 const inCi = process.env.GITHUB_ACTIONS === "true"
+const pipeline = pipelineOptions(argv)
+if (pipeline && (local || trustOnly))
+  throw new Error("release groups cannot be used with local seeding")
+const maintenance = !pipeline || pipeline.group === "maintenance"
 
 if (trustOnly && !local) {
   console.error("--trust-only requires --local. Use bun run release:seed -- --trust-only.")
@@ -81,7 +87,13 @@ if (local && !dryRun && !trustOnly) {
 
 const plan: Plan = trustOnly
   ? { packages: discoverPackages(), releases: [], versions: new Map() }
-  : await computePlan()
+  : pipeline
+    ? await readPlan(pipeline.path)
+    : await computePlan()
+if (pipeline) {
+  plan.releases = selectReleases(plan, pipeline.group)
+  if (maintenance) plan.versions.clear()
+}
 if (trustOnly) {
   console.log("release:publish: reconciling Trusted Publishers only")
 } else if (plan.releases.length === 0) {
@@ -131,7 +143,7 @@ const failed = new Set<string>()
 const needsSeed: string[] = []
 /** Published packages whose OIDC publish npm rejected; the local seed attaches their publisher. */
 const needsTrust: string[] = []
-/** `<name>@<version>` of everything this run put on npm, which `npm view` may not show yet. */
+/** Pins already published or verified on npm; avoid checking shared prerequisites per package. */
 const releasedNow = new Set<string>()
 // OIDC is npm's fallback only when legacy token auth is absent. Locally, use the npm login.
 const npmEnv: Record<string, string | undefined> = { ...process.env }
@@ -193,6 +205,7 @@ async function assertInstallable(release: Release, tarball: string): Promise<boo
       ])
       return false
     }
+    releasedNow.add(`${dep}@${pinned}`)
   }
   return true
 }
@@ -446,7 +459,7 @@ async function deprecateRetiredPackages(): Promise<void> {
 
 let githubReleaseGaps = 0
 try {
-  if (!trustOnly) githubReleaseGaps += await repairMissingReleases()
+  if (!trustOnly && maintenance) githubReleaseGaps += await repairMissingReleases()
   // A package that cannot release never stops the independent ones; its dependents are skipped.
   // A GitHub release failure does not: the package is already on npm, and dependents may pin it.
   await releaseInOrder(
@@ -466,7 +479,7 @@ try {
       fail(release.pkg.name, [`skipped: dependency failed to release (${blockedBy.join(", ")})`]),
   )
   // Reconcile: every published service is trusted for OIDC, everything else is deprecated.
-  for (const pkg of plan.packages) {
+  for (const pkg of local ? plan.packages : []) {
     if (!pkg.isPublic || failed.has(pkg.name)) continue
     const published = await npmVersions(pkg.name)
     if (trustOnly && !Array.isArray(published)) {
@@ -478,7 +491,7 @@ try {
     }
     if (Array.isArray(published) && published.length > 0) await ensureTrustedPublisher(pkg.name)
   }
-  if (!trustOnly) await deprecateRetiredPackages()
+  if (!trustOnly && maintenance) await deprecateRetiredPackages()
 } finally {
   for (const path of changelogs) rmSync(path, { force: true })
   const skipped = restoreOriginals(originals)
