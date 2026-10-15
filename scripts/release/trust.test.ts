@@ -73,12 +73,14 @@ describe("local seed trust reconciliation", () => {
     let clock = 0
     const started: number[] = []
     const slept: number[] = []
+    const saved = new Set<string>()
     const trust = trustedPublisherReconciler({
-      list: async () => "[]",
+      list: async (name) => JSON.stringify(saved.has(name) ? [config] : []),
       revoke: async () => true,
       create: async (name) => {
         started.push(clock)
         clock += 500
+        if (name !== "failed") saved.add(name)
         return name !== "failed"
       },
       onError: () => {},
@@ -111,14 +113,16 @@ describe("local seed trust reconciliation", () => {
 
   test("thrown trust commands remain failures without aborting reconciliation", async () => {
     const errors: string[] = []
+    const saved = new Set<string>()
     const trust = trustedPublisherReconciler({
       list: async (name) => {
         if (name === "lookup-failed") throw new Error("lookup failed")
-        return "[]"
+        return JSON.stringify(saved.has(name) ? [config] : [])
       },
       revoke: async () => true,
       create: async (name) => {
         if (name === "create-failed") throw new Error("create failed")
+        saved.add(name)
         return true
       },
       onError: (name) => errors.push(name),
@@ -134,8 +138,9 @@ describe("local seed trust reconciliation", () => {
     const events: string[] = []
     const slept: number[] = []
     const stageOnly = { ...config, id: "stage-id", permissions: ["createStagedPackage"] }
+    let saved = false
     const trust = trustedPublisherReconciler({
-      list: async () => JSON.stringify([stageOnly]),
+      list: async () => JSON.stringify([saved ? config : stageOnly]),
       revoke: async (name, id) => {
         events.push(`revoke ${name} ${id}`)
         clock += 200
@@ -143,6 +148,7 @@ describe("local seed trust reconciliation", () => {
       },
       create: async (name) => {
         events.push(`create ${name}`)
+        saved = true
         return true
       },
       onError: () => {},
@@ -158,6 +164,34 @@ describe("local seed trust reconciliation", () => {
     expect(events).toEqual(["revoke replace-me stage-id", "create replace-me"])
     expect(slept).toEqual([2_000])
     expect(trust.failed.size).toBe(0)
+  })
+
+  test("a successful create must persist a publisher that permits Release to publish", async () => {
+    for (const saved of [
+      null,
+      "[]",
+      "invalid JSON",
+      JSON.stringify([{ ...config, permissions: ["createStagedPackage"] }]),
+      JSON.stringify([{ ...config, environment: "production" }]),
+      JSON.stringify([{ ...config, file: "other.yml" }]),
+      JSON.stringify([config]),
+    ]) {
+      let created = false
+      const errors: unknown[] = []
+      const trust = trustedPublisherReconciler({
+        list: async () => (created ? saved : "[]"),
+        revoke: async () => true,
+        create: async () => {
+          created = true
+          return true
+        },
+        onError: (_, error) => errors.push(error),
+      })
+      await trust.ensure("verify-me")
+      const healthy = saved === JSON.stringify([config])
+      expect([...trust.failed]).toEqual(healthy ? [] : ["verify-me"])
+      expect(errors.length).toBe(healthy ? 0 : 1)
+    }
   })
 
   test("does not create when an existing publisher cannot be revoked safely", async () => {

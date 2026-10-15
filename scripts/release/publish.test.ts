@@ -39,6 +39,13 @@ describe("seedSummary", () => {
     expect(lines.at(-1)).toBe("Run bun run release:seed, then retry CI.")
   })
 
+  test("existing packages rejected by npm use the publisher-only repair", () => {
+    const lines = seedSummary({ needsSeed: [], needsTrust: ["untrusted"], failed: 1 })
+    expect(lines.at(-1)).toBe(
+      "Every other package was released. Run bun run release:seed -- --trust-only, then retry CI.",
+    )
+  })
+
   test("says nothing when no package needs the seed", () => {
     expect(seedSummary({ needsSeed: [], needsTrust: [], failed: 1 })).toEqual([])
   })
