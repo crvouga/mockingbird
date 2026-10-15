@@ -316,8 +316,8 @@
     {
       "provider": "stripe",
       "seed": 1057600108,
-      "status": "open",
-      "failure": "GetCustomersCustomerBalanceTransactions with ending_before=\"\" and invoice=\"\": Stripe rejects ending_before first, while the emulator rejected invoice first. Live run 38718066587, shrunk path 11:2:1:2:1:2:2:2."
+      "status": "fixed",
+      "failure": "GetCustomersCustomerBalanceTransactions with ending_before=\"\" and invoice=\"\" rejected invoice before the cursor. Fixed using post-cursor filter validation; 14 regression tests, 180 Stripe tests and all 1211 repository tasks passed. Exact live replay 38718848403 passed 25 walks / 104 operations / 23 of 44 operation IDs with webhook parity. Original failure run 38718066587, shrunk path 11:2:1:2:1:2:2:2."
     }
   ]
 }
