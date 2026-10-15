@@ -11,6 +11,7 @@ import {
   yamlFile,
 } from "./io.ts"
 import { type HealthItem, report } from "./report.ts"
+import { readVerificationBlocker } from "./verification.ts"
 
 export function runHealth(id: string, run: WorkflowRun | undefined): HealthItem {
   if (!run) return { id, status: "unknown", message: "No run found on main." }
@@ -37,6 +38,29 @@ export function scheduleWindow(cron: string): number {
 
 export async function runGitHubHealth() {
   const items: HealthItem[] = []
+  const diagnoses = new Map<number, Promise<string | undefined>>()
+  async function describeRun(
+    file: string,
+    id: string,
+    run: WorkflowRun | undefined,
+  ): Promise<HealthItem> {
+    const result = runHealth(id, run)
+    if (file !== "verify.yml" || result.status !== "fail" || !run) return result
+    if (!diagnoses.has(run.id))
+      diagnoses.set(
+        run.id,
+        readVerificationBlocker(run.id).catch(() => undefined),
+      )
+    const blocker = await diagnoses.get(run.id)
+    return blocker
+      ? {
+          ...result,
+          message: blocker,
+          remedy:
+            "Restore Junction sandbox access, then rerun Verify. This remains failed until live verification passes.",
+        }
+      : result
+  }
   items.push(
     await inspect("repository", async () => {
       const repo = await github<{ archived: boolean; disabled: boolean; default_branch: string }>(
@@ -129,7 +153,7 @@ export async function runGitHubHealth() {
           if (triggers && ("push" in triggers || "schedule" in triggers)) {
             rows.push(
               await inspect(`${file}:latest`, async () =>
-                runHealth(`${file}:latest`, (await workflowRuns(file))[0]),
+                describeRun(file, `${file}:latest`, (await workflowRuns(file))[0]),
               ),
             )
           } else
@@ -155,7 +179,7 @@ export async function runGitHubHealth() {
                     remedy: "Enable the workflow and inspect its schedule and repository activity.",
                     url: `https://github.com/${REPO}/actions/workflows/${file}`,
                   }
-                return runHealth(`${file}:schedule`, run)
+                return describeRun(file, `${file}:schedule`, run)
               }),
             )
           return rows

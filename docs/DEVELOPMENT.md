@@ -44,6 +44,7 @@ bun run health -- npm docs images                # selected checks
 bun run health -- --verbose                      # every observation, including optional gaps
 bun run health -- --json > health.json            # machine-readable report, no log prefixes
 bun run health -- trusted-publisher --interactive # permit npm security-key approval
+bun run health -- --no-interactive               # disable browser approval in a terminal
 ```
 
 | Check | What it verifies |
@@ -71,17 +72,26 @@ the complete per-resource reports. Optional cold parity integrations and local c
 do not make production infrastructure fail; their missing keys and mappings remain visible
 with `--verbose` or `--json`.
 
-The default command never opens an authentication browser. If npm requires a security key,
-publisher health is **unknown**, and the rest still runs. Use the interactive command above
-to approve npm's prompt, preferably with its temporary two-factor skip. To repair publisher
-settings after inspecting the report, use `bun run release:seed -- --trust-only`.
+Terminal runs open npm's security-key approval when needed and display the link while it is
+active. Approve it, preferably with its temporary two-factor skip, to inspect all publishers.
+JSON, CI, and `--no-interactive` runs never prompt; publisher health stays **unknown** if npm
+requires approval. Other checks continue independently. Use `--interactive` to explicitly
+enable approval outside a terminal. To repair publisher settings after inspecting the report,
+use `bun run release:seed -- --trust-only`.
 
-Healthy HTTP pages and matching catalog content do not prove which image is running. Until
-the deployed docs expose a valid `x-mockingbird-revision` source commit, deployment identity
-is explicitly **unknown**. A successful unrelated fleet run cannot clear that result. Secret
-presence likewise does not prove a token is valid or unexpired: health reports workflow
-outcomes and readiness without running billable vendor parity suites. Run `parity:remote`
-when behavioral verification against a real sandbox is required.
+The docs build freezes a deterministic source fingerprint into `/health.json`, independent
+of runtime files, secrets, and `.git`. Health compares it with GitHub's current main source
+tree; stale or malformed manifests fail, and an older image without the endpoint remains
+**unknown** until the managed publish workflow deploys it. HTTP availability alone cannot
+clear that result. The optional webhook receiver may omit `WEBHOOK_READ_TOKEN` only when
+fleet inventory does not declare it and unauthenticated reads fail closed with HTTP 503.
+A declared but unavailable token, or public event reads, fails.
+
+Secret presence does not prove a token is valid or unexpired. Health diagnoses failed
+Junction verification artifacts, including vendor HTTP 401/402/403 access blockers, without
+printing API response bodies or running billable parity suites. Restore vendor account
+access or the named credential, then retry the workflow; access failures never pass as
+healthy emulator parity. Run `parity:remote` for behavioral verification against a sandbox.
 
 `bun run secrets:doctor` remains a compatibility shortcut to the same npm, publisher, and
 secrets checks and accepts the same reporting flags.

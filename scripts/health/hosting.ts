@@ -10,6 +10,8 @@ export type HostedService = {
   port: number
   health_check: boolean
   health_path?: string
+  secrets?: Array<{ name: string }>
+  env?: Record<string, string>
 }
 export async function loadHosting(): Promise<HostedService> {
   const contract = await request(HOSTING_CONTRACT)

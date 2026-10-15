@@ -7,9 +7,18 @@ import { checks } from "./checks.ts"
 import { safeError } from "./io.ts"
 import { type HealthReport, needsAttention, renderHealth, report } from "./report.ts"
 
-export function parseArgs(argv: string[]) {
+export function parseArgs(argv: string[], terminal = false) {
   const args = argv.filter((arg) => arg !== "--")
-  const flags = new Set(["--help", "-h", "--json", "--verbose", "--interactive"])
+  const flags = new Set([
+    "--help",
+    "-h",
+    "--json",
+    "--verbose",
+    "--interactive",
+    "--no-interactive",
+  ])
+  if (args.includes("--interactive") && args.includes("--no-interactive"))
+    throw new Error("Choose either --interactive or --no-interactive")
   const ids = args.filter((arg) => !arg.startsWith("-"))
   const unknown = args.filter((arg) =>
     arg.startsWith("-") ? !flags.has(arg) : !checks.some((check) => check.id === arg),
@@ -19,7 +28,9 @@ export function parseArgs(argv: string[]) {
     help: args.includes("--help") || args.includes("-h"),
     json: args.includes("--json"),
     verbose: args.includes("--verbose"),
-    interactive: args.includes("--interactive"),
+    interactive:
+      args.includes("--interactive") ||
+      (terminal && !args.includes("--json") && !args.includes("--no-interactive")),
     selected: checks.filter((check) => ids.length === 0 || ids.includes(check.id)),
   }
 }
@@ -56,12 +67,20 @@ export function readReports(directory: string, ids: string[]): HealthReport[] {
 }
 
 async function main() {
-  const options = parseArgs(process.argv.slice(2))
+  const options = parseArgs(
+    process.argv.slice(2),
+    Boolean(
+      process.stdin.isTTY &&
+        process.stderr.isTTY &&
+        !process.env.CI &&
+        process.env.GITHUB_ACTIONS !== "true",
+    ),
+  )
   if (options.help) {
-    console.log("bun run health [check…] [--json] [--verbose] [--interactive]\n")
+    console.log("bun run health [check…] [--json] [--verbose] [--interactive|--no-interactive]\n")
     for (const check of checks) console.log(`  ${check.id.padEnd(20)} ${check.summary}`)
     console.log(
-      "\nRead-only live checks run through uncached Turbo tasks; failures do not stop other checks.\n--interactive permits npm security-key approval. Default runs never open a browser.\nExit 1 = failed, pending, or unknown required checks. Optional integrations are listed separately.",
+      "\nRead-only live checks run through uncached Turbo tasks; failures do not stop other checks.\nTerminal runs request npm security-key approval when needed. JSON/CI runs do not prompt by default.\nUse --no-interactive to disable prompts, or --interactive to explicitly enable approval.\nExit 1 = failed, pending, or unknown required checks. Optional integrations are listed separately.",
     )
     return
   }
@@ -75,6 +94,7 @@ async function main() {
       [
         join(root, "node_modules/.bin/turbo"),
         "run",
+        "--filter=//",
         ...tasks,
         "--continue=always",
         options.interactive ? "--output-logs=full" : "--output-logs=errors-only",

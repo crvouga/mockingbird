@@ -203,13 +203,14 @@ const code = await runCli(
           if (values.json === true) {
             console.log(JSON.stringify(report, null, 2))
           } else {
+            if (report.blocked) console.error(`verify BLOCKED: ${report.blocked.message}`)
             for (const d of report.divergences) {
               console.log(`DIVERGED ${d.check} (${d.kind}${d.at ? ` at ${d.at}` : ""})`)
               console.log(`  real: ${JSON.stringify(d.real)?.slice(0, 400)}`)
               console.log(`  mock: ${JSON.stringify(d.mock)?.slice(0, 400)}`)
             }
             console.log(
-              `verify: drift ${report.drift.stale}/${report.drift.checked} stale; scenario ${report.scenario.divergent}/${report.scenario.steps} divergent — ${report.ok ? "OK" : "DIVERGED"}`,
+              `verify: drift ${report.drift.stale}/${report.drift.checked} stale; scenario ${report.scenario.divergent}/${report.scenario.steps} divergent — ${report.blocked ? "BLOCKED" : report.ok ? "OK" : "DIVERGED"}`,
             )
           }
           return report.ok ? 0 : 1

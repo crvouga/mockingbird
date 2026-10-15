@@ -2,15 +2,17 @@ import { describe, expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { sourceManifest } from "../../sites/docs/src/lib/deployment.ts"
 import { checks } from "./checks.ts"
 import { parseArgs, readReports } from "./cli.ts"
-import { catalogHealth, deploymentRevisionHealth } from "./docs.ts"
+import { catalogHealth, deploymentManifestHealth, webhookReadHealth } from "./docs.ts"
 import { runHealth, scheduleWindow } from "./github.ts"
 import { command, inspect, request, safeError, type WorkflowRun } from "./io.ts"
 import { latestReleaseTags, type Packument, packageHealth } from "./npm.ts"
 import { needsAttention, renderHealth, report } from "./report.ts"
 import { releaseConfiguration } from "./repository.ts"
 import { paritySecretMappings, referencedSecrets } from "./secrets.ts"
+import { verificationBlocker } from "./verification.ts"
 
 const name = "@crvouga/mockingbird-service-example"
 const document: Packument = {
@@ -112,6 +114,11 @@ test("all seven live tasks are uncached and compose through Turbo independently"
   ])
   expect(() => parseArgs(["--invalid"])).toThrow("Unknown")
   expect(parseArgs([]).interactive).toBe(false)
+  expect(parseArgs([], true).interactive).toBe(true)
+  expect(parseArgs(["--json"], true).interactive).toBe(false)
+  expect(parseArgs(["--no-interactive"], true).interactive).toBe(false)
+  expect(parseArgs(["--interactive"]).interactive).toBe(true)
+  expect(() => parseArgs(["--interactive", "--no-interactive"])).toThrow("Choose either")
 })
 
 test("a check that throws becomes unknown without aborting independent observations", async () => {
@@ -153,13 +160,57 @@ test("catalog omissions, duplicates, and invalid responses identify broken docs 
   expect(catalogHealth([name], "not a catalog").status).toBe("fail")
 })
 
-test("deployment availability is never substituted for immutable revision evidence", () => {
-  const sha = "a".repeat(40)
-  expect(deploymentRevisionHealth(null, sha).status).toBe("unknown")
-  expect(deploymentRevisionHealth("latest", sha).status).toBe("unknown")
-  expect(deploymentRevisionHealth(sha).status).toBe("unknown")
-  expect(deploymentRevisionHealth(sha, sha).status).toBe("ok")
-  expect(deploymentRevisionHealth(sha, "b".repeat(40)).status).toBe("fail")
+test("source identity requires a valid matching build manifest", () => {
+  const manifest = sourceManifest([
+    { path: "sites/docs/src/pages/index.astro", sha: "a".repeat(40) },
+  ])
+  expect(deploymentManifestHealth(manifest, manifest).status).toBe("ok")
+  for (const live of [
+    null,
+    {},
+    "healthy",
+    { ...manifest, files: 0 },
+    { ...manifest, fingerprint: "main" },
+    { ...manifest, fingerprint: "b".repeat(64) },
+    { ...manifest, files: 2 },
+  ])
+    expect(deploymentManifestHealth(live, manifest).status).toBe("fail")
+})
+
+test("optional webhook reads must fail closed; declared but unavailable tokens still fail", () => {
+  expect(webhookReadHealth(401, true).status).toBe("ok")
+  expect(webhookReadHealth(503, false).status).toBe("optional")
+  expect(webhookReadHealth(503, true).status).toBe("fail")
+  expect(webhookReadHealth(503, undefined).status).toBe("unknown")
+  for (const configured of [true, false, undefined])
+    expect(webhookReadHealth(200, configured).status).toBe("fail")
+})
+
+test("vendor access blockers are diagnosed without exposing bodies or hiding mixed drift", () => {
+  for (const status of [401, 402, 403]) {
+    expect(verificationBlocker({ blocked: { status } })).toContain(`HTTP ${status}`)
+    expect(
+      verificationBlocker({
+        divergences: [
+          { kind: "status", real: status },
+          { kind: "status", real: status },
+        ],
+      }),
+    ).toContain(`HTTP ${status}`)
+  }
+  for (const value of [
+    null,
+    {},
+    { divergences: [] },
+    {
+      divergences: [
+        { kind: "status", real: 402 },
+        { kind: "status", real: 200 },
+      ],
+    },
+    { divergences: [{ kind: "body", real: "private data" }] },
+  ])
+    expect(verificationBlocker(value)).toBeUndefined()
 })
 
 test("job permission overrides cannot inherit OIDC accidentally", () => {
