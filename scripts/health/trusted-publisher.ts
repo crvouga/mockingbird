@@ -301,6 +301,7 @@ async function registryGet(
 ): Promise<Response> {
   return fetch(`${REGISTRY}${path}`, {
     headers: { authorization: `Bearer ${token}`, accept: "application/json", ...headers },
+    signal: AbortSignal.timeout(15_000),
   })
 }
 
@@ -444,6 +445,7 @@ export async function loadPackageTrust(
   names: string[],
   token: string,
   knownStatus?: ReadonlyMap<string, number>,
+  options: { interactive?: boolean } = {},
 ): Promise<PackageTrust[] | { error: string }> {
   const who = await registryGet("/-/whoami", token)
   if (!who.ok) {
@@ -472,7 +474,13 @@ export async function loadPackageTrust(
       })
       return { status: res.status, body: await res.json().catch(() => undefined) }
     },
-    (challenge, again) => promptWebAuth(challenge, token, again),
+    (challenge, again) => {
+      if (options.interactive === false)
+        throw new Error(
+          "npm requires security-key approval; run bun run health -- trusted-publisher --interactive",
+        )
+      return promptWebAuth(challenge, token, again)
+    },
   )
 
   const results = names.map((name, index): PackageTrust => {

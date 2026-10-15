@@ -16,10 +16,18 @@ describe("alertIfWaiting", () => {
 
   test("a stalled step alerts repeatedly, and stops once it settles", async () => {
     const alerts: string[] = []
-    await alertIfWaiting("npm login is waiting for you", () => Bun.sleep(60), {
+    let finish: (() => void) | undefined
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    await alertIfWaiting("npm login is waiting for you", () => pending, {
       afterMs: 0,
       everyMs: 10,
-      alert: (message) => alerts.push(message),
+      alert: (message) => {
+        alerts.push(message)
+        // Settle after observing repetition, independent of event-loop load.
+        if (alerts.length === 2) finish?.()
+      },
     })
     const rung = alerts.length
     expect(rung).toBeGreaterThanOrEqual(2)

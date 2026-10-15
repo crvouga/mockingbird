@@ -79,7 +79,16 @@ export function trustedPublisherReconciler(options: {
         }
         if (!(await mutate(() => options.revoke(name, config.id as string)))) return
       }
-      if (await mutate(() => options.create(name))) failed.delete(name)
+      if (!(await mutate(() => options.create(name)))) return
+      // A successful settings command is not proof that npm saved a publisher
+      // that permits this workflow to publish. Verify the persisted configuration.
+      const saved = await options.list(name)
+      if (saved === null || !hasReleasePublisher(saved)) {
+        throw new Error(
+          "npm did not save a Trusted Publisher that allows the Release workflow to publish",
+        )
+      }
+      failed.delete(name)
     } catch (error) {
       options.onError(name, error)
     }

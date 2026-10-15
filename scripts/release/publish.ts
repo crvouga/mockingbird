@@ -18,22 +18,25 @@
  *   bun run release:publish -- --dry-run   (plan + pack, no side effects)
  *   bun run release:publish                (CI, on main)
  *   bun run release:publish -- --local     (maintainer bootstrap: your npm login, no provenance)
+ *   bun run release:seed -- --trust-only   (repair and verify published packages' OIDC setup)
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { $ } from "bun"
 import { VERSION_PLACEHOLDER } from "../bundle-service-version.ts"
-import { loadPackageTrust, npmAuthToken } from "../health/trusted-publisher.ts"
+import { loadPackageTrust, npmAuthToken, type PackageTrust } from "../health/trusted-publisher.ts"
 import { alertIfWaiting } from "./attention.ts"
 import { restoreOriginals } from "./files.ts"
 import {
   changelog,
   computePlan,
+  discoverPackages,
   githubRetryDelayMs,
   initialPackageBlocker,
   isRetryableGitHubError,
   npmVersions,
+  type Plan,
   packedManifest,
   pinManifest,
   REPO,
@@ -53,14 +56,20 @@ import { trustedPublisherReconciler } from "./trust.ts"
 const argv = process.argv.slice(2)
 const dryRun = argv.includes("--dry-run")
 const local = argv.includes("--local")
+const trustOnly = argv.includes("--trust-only")
 const inCi = process.env.GITHUB_ACTIONS === "true"
+
+if (trustOnly && !local) {
+  console.error("--trust-only requires --local. Use bun run release:seed -- --trust-only.")
+  process.exit(1)
+}
 
 if (!dryRun && !inCi && !local) {
   console.error("release:publish: runs in CI. Use --dry-run to preview, or --local to bootstrap.")
   process.exit(1)
 }
 
-if (local && !dryRun) {
+if (local && !dryRun && !trustOnly) {
   await $`git fetch origin main --tags`.cwd(root).quiet()
   const head = (await $`git rev-parse HEAD`.cwd(root).quiet()).text().trim()
   const main = (await $`git rev-parse origin/main`.cwd(root).quiet()).text().trim()
@@ -70,8 +79,12 @@ if (local && !dryRun) {
   }
 }
 
-const plan = await computePlan()
-if (plan.releases.length === 0) {
+const plan: Plan = trustOnly
+  ? { packages: discoverPackages(), releases: [], versions: new Map() }
+  : await computePlan()
+if (trustOnly) {
+  console.log("release:publish: reconciling Trusted Publishers only")
+} else if (plan.releases.length === 0) {
   console.log("release:publish: nothing to release")
 } else {
   console.log(
@@ -238,16 +251,33 @@ async function publish(release: Release): Promise<boolean> {
   return true
 }
 
+// Read the initial settings in a batch while npm's two-factor skip is active.
+// Consume each cached entry once so a post-mutation verification always reads npm again.
+let initialTrust: Promise<Map<string, PackageTrust>> | undefined
 const trust = trustedPublisherReconciler({
   async list(name) {
     if (typeof localTrustToken !== "string") {
       throw new Error(localTrustToken?.error ?? "npm trusted publisher lookup is unavailable")
     }
-    const loaded = await attended("the trusted publisher lookup", () =>
-      loadPackageTrust([name], localTrustToken),
-    )
-    if (!Array.isArray(loaded)) throw new Error(loaded.error)
-    const pkg = loaded[0]
+    const token = localTrustToken
+    initialTrust ??= attended("the trusted publisher lookup", async () => {
+      const loaded = await loadPackageTrust(
+        plan.packages.filter((pkg) => pkg.isPublic).map((pkg) => pkg.name),
+        token,
+      )
+      if (!Array.isArray(loaded)) throw new Error(loaded.error)
+      return new Map(loaded.map((pkg) => [pkg.name, pkg]))
+    })
+    const snapshot = await initialTrust
+    let pkg = snapshot.get(name)
+    snapshot.delete(name)
+    if (!pkg) {
+      const loaded = await attended("the trusted publisher verification", () =>
+        loadPackageTrust([name], token),
+      )
+      if (!Array.isArray(loaded)) throw new Error(loaded.error)
+      pkg = loaded[0]
+    }
     if (!pkg || pkg.error) throw new Error(pkg?.error ?? "npm returned no trusted publisher")
     return JSON.stringify(pkg.configs ?? [])
   },
@@ -416,7 +446,7 @@ async function deprecateRetiredPackages(): Promise<void> {
 
 let githubReleaseGaps = 0
 try {
-  githubReleaseGaps += await repairMissingReleases()
+  if (!trustOnly) githubReleaseGaps += await repairMissingReleases()
   // A package that cannot release never stops the independent ones; its dependents are skipped.
   // A GitHub release failure does not: the package is already on npm, and dependents may pin it.
   await releaseInOrder(
@@ -439,9 +469,16 @@ try {
   for (const pkg of plan.packages) {
     if (!pkg.isPublic || failed.has(pkg.name)) continue
     const published = await npmVersions(pkg.name)
+    if (trustOnly && !Array.isArray(published)) {
+      fail(pkg.name, [`npm view: ${published.error}`])
+      continue
+    }
+    if (trustOnly && dryRun && Array.isArray(published) && published.length > 0) {
+      console.log(`would verify and repair Trusted Publisher for ${pkg.name}`)
+    }
     if (Array.isArray(published) && published.length > 0) await ensureTrustedPublisher(pkg.name)
   }
-  await deprecateRetiredPackages()
+  if (!trustOnly) await deprecateRetiredPackages()
 } finally {
   for (const path of changelogs) rmSync(path, { force: true })
   const skipped = restoreOriginals(originals)
@@ -453,7 +490,7 @@ try {
   rmSync(packDir, { recursive: true, force: true })
 }
 
-const ok = plan.releases.length - failed.size
+const ok = trustOnly ? 0 : plan.releases.length - failed.size
 console.log(
   `release:publish: released=${ok} failed=${failed.size} trusted-publisher-failed=${trustFailed.size} github-releases-missing=${githubReleaseGaps}${dryRun ? " (dry-run)" : ""}`,
 )
@@ -468,7 +505,7 @@ if (trustFailed.size > 0) {
     `::error::${trustFailed.size} npm Trusted Publisher(s) still missing: ${[...trustFailed].join(", ")}`,
   )
   console.error(
-    "Re-run bun run release:seed; successful package, tag, and trust operations are skipped.",
+    "Re-run bun run release:seed -- --trust-only to repair and verify publishers; healthy configurations are skipped.",
   )
 }
 if (failed.size > 0 || trustFailed.size > 0 || githubReleaseGaps > 0) process.exit(1)

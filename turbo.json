@@ -181,6 +181,96 @@
     },
     "//#check:format": {
       "inputs": ["biome.json", "scripts/**", "docs/**", "*.json", "*.md", ".github/**"]
+    },
+    "//#health:npm": {
+      "cache": false,
+      "passThroughEnv": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_HOST",
+        "GH_CONFIG_DIR",
+        "MOCKINGBIRD_HEALTH_REPORT_DIR",
+        "MOCKINGBIRD_HEALTH_INTERACTIVE"
+      ]
+    },
+    "//#health:trusted-publisher": {
+      "cache": false,
+      "passThroughEnv": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_HOST",
+        "GH_CONFIG_DIR",
+        "MOCKINGBIRD_HEALTH_REPORT_DIR",
+        "MOCKINGBIRD_HEALTH_INTERACTIVE"
+      ]
+    },
+    "//#health:github": {
+      "cache": false,
+      "passThroughEnv": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_HOST",
+        "GH_CONFIG_DIR",
+        "MOCKINGBIRD_HEALTH_REPORT_DIR",
+        "MOCKINGBIRD_HEALTH_INTERACTIVE"
+      ]
+    },
+    "//#health:secrets": {
+      "cache": false,
+      "passThroughEnv": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_HOST",
+        "GH_CONFIG_DIR",
+        "MOCKINGBIRD_HEALTH_REPORT_DIR",
+        "MOCKINGBIRD_HEALTH_INTERACTIVE"
+      ]
+    },
+    "//#health:docs": {
+      "cache": false,
+      "passThroughEnv": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_HOST",
+        "GH_CONFIG_DIR",
+        "MOCKINGBIRD_HEALTH_REPORT_DIR",
+        "MOCKINGBIRD_HEALTH_INTERACTIVE"
+      ]
+    },
+    "//#health:images": {
+      "cache": false,
+      "passThroughEnv": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_HOST",
+        "GH_CONFIG_DIR",
+        "MOCKINGBIRD_HEALTH_REPORT_DIR",
+        "MOCKINGBIRD_HEALTH_INTERACTIVE"
+      ]
+    },
+    "//#health:repository": {
+      "cache": false,
+      "passThroughEnv": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN",
+        "GH_HOST",
+        "GH_CONFIG_DIR",
+        "MOCKINGBIRD_HEALTH_REPORT_DIR",
+        "MOCKINGBIRD_HEALTH_INTERACTIVE"
+      ]
+    },
+    "//#health:all": {
+      "cache": false,
+      "dependsOn": [
+        "//#health:npm",
+        "//#health:trusted-publisher",
+        "//#health:github",
+        "//#health:secrets",
+        "//#health:docs",
+        "//#health:images",
+        "//#health:repository"
+      ],
+      "passThroughEnv": ["MOCKINGBIRD_HEALTH_REPORT_DIR"]
     }
   }
 }

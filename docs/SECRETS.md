@@ -57,8 +57,10 @@ A parity script exits 2 when its credentials are missing, and `parity:service` r
 bun run secrets:doctor
 ```
 
-This prints, per service, whether every key it needs is set as a repo secret (runnable with
-`parity:remote`) and in your `.env.local`. It never prints values.
+This runs the unified npm, publisher, and secrets checks. Use `-- --verbose` to list every
+service's GitHub and optional local credential readiness; values are never printed. The full
+`bun run health` command also checks docs deployment, images, workflows, and infrastructure
+configuration ([details](DEVELOPMENT.md#infrastructure-health)).
 
 ### Adding or rotating a sandbox key
 
@@ -170,6 +172,10 @@ packages, `bun run release:seed` (`-- --dry-run` to preview) runs `npm login` if
   and a rerun resumes safely. CI never receives or falls back to a long-lived npm token. A
   scheduled run every six hours retries interrupted OIDC releases.
 
+For existing packages rejected by CI with `ENEEDAUTH`, run
+`bun run release:seed -- --trust-only`. This repairs and verifies their Trusted Publisher
+settings using your interactive npm login, without a build or a new package publication.
+
 ```bash
 bun run release:plan                       # what the next release would publish
 bun run release:publish -- --dry-run
@@ -186,12 +192,13 @@ Set by the local seed after the first publish. Manual equivalent, per package at
 - Environment: (empty)
 - Allowed actions: npm publish
 
-`bun run health` checks every npm package whose repository is this repo, and every
-public workspace package, including one that has not been published yet. It lists
-the packages that still need that page, each as a link to `/access`. A publisher
+`bun run health -- trusted-publisher` checks every public workspace package, including one
+that has not been published yet. It lists packages that still need configuration with links
+to `/access`. The separate `npm` check also verifies retirement of former packages. A publisher
 that can only stage, or that is pinned to an environment, is included: the Release
 workflow calls `npm publish` and sets no environment. It uses the `npm login` session
-and opens npm's security-key prompt, which `npm login` itself does not complete. If
+and reports unreadable settings as unknown. Add `--interactive` to open npm's security-key
+prompt, which `npm login` itself does not complete. If
 that page offers to skip two-factor for a few minutes, turn it on so one approval
 covers every package.
 

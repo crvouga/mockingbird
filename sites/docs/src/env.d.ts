@@ -3,6 +3,11 @@ declare module "virtual:mockingbird/catalog" {
   export default catalog
 }
 
+declare module "virtual:mockingbird/deployment" {
+  const manifest: import("./lib/deployment.ts").DeploymentManifest
+  export default manifest
+}
+
 declare module "virtual:mockingbird/runtimes" {
   // biome-ignore lint/suspicious/noExplicitAny: each service module has its own export shape.
   export const loaders: Record<string, () => Promise<any>>

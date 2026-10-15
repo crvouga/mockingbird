@@ -56,7 +56,19 @@ jobs:
         timeout-minutes: 15
         env:
           JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
-        run: bun run --cwd packages/service/junction verify -- --sample 60 --orders --json > "$RUNNER_TEMP/junction-verify.json"
+        run: |
+          set +e
+          bun run --cwd packages/service/junction verify -- --sample 60 --orders --json > "$RUNNER_TEMP/junction-verify.json"
+          result=$?
+          set -e
+          # JavaScript template literals are evaluated by Bun.
+          # shellcheck disable=SC2016
+          bun -e '
+            const report = await Bun.file(process.argv[1]).json();
+            if (report.blocked) console.error(`::error::${report.blocked.message}`);
+            else if (!report.ok) console.error(`::error::Junction verification failed: ${report.drift.stale} stale observations; ${report.scenario.divergent} divergent scenario steps. See junction-verify-report.`);
+          ' "$RUNNER_TEMP/junction-verify.json"
+          exit "$result"
 
       - name: Upload verification report
         if: always()

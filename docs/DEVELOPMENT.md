@@ -31,6 +31,71 @@ That is the whole onboarding: no secrets, no accounts, nothing self-hosted. `bun
 | Adapters | `adapter-node`, `adapter-bun` | tests only |
 | Auth | `credentials` (sandbox credentials for live parity, from the environment) | tests only |
 
+## Infrastructure health
+
+`bun run health` checks deployed infrastructure and release readiness in one report. This is
+separate from the offline quality gate: live checks need network access, `gh auth login`, and
+an npm login to inspect private publisher settings. It never publishes, deploys, repairs
+settings, dispatches workflows, or changes credentials.
+
+```bash
+bun run health                                  # every infrastructure check
+bun run health -- npm docs images                # selected checks
+bun run health -- --verbose                      # every observation, including optional gaps
+bun run health -- --json > health.json            # machine-readable report, no log prefixes
+bun run health -- trusted-publisher --interactive # permit npm security-key approval
+bun run health -- --no-interactive               # disable browser approval in a terminal
+```
+
+| Check | What it verifies |
+| --- | --- |
+| `npm` | Every public service exists on npm; `latest` resolves, metadata and tarball integrity exist, current services are not deprecated, exact internal dependency pins exist, stable release tags agree with npm, current tags have GitHub Releases, and retired packages are absent or deprecated |
+| `trusted-publisher` | Each public package trusts `crvouga/mockingbird`, `ci.yml`, an empty environment, and direct `npm publish`; missing packages and unreadable settings are distinct |
+| `github` | Repository and Actions are enabled, main is protected, workflow files are registered and active, latest main runs succeed, schedules are not overdue, and the Actions cache stays below its 10 GiB budget |
+| `secrets` | Required workflow secrets, effective repository/organization secret names, parity workflow env mappings, scheduled parity readiness, and optional local/on-demand credentials; values are never printed or fetched from GitHub |
+| `docs` | Fresh shared hosting contract and authoritative fleet inventory, HTTPS pages and machine-readable routes, all service catalog entries, deployed `llms.txt` versus main, webhook runtime and read protection, and immutable deployed revision evidence |
+| `images` | Anonymous GHCR pull access, `linux/amd64`, port 80, and `latest` matching the immutable SHA tag of the latest successful image publish |
+| `repository` | Local release OIDC permissions, docs publishing contract, every public package's publish configuration, and generated agents/worktree/catalog/README/brand/parity configuration |
+
+Turbo runs seven independent `health:<check>` root tasks and composes them with
+`health:all`. Every health task has `cache: false`; `--continue=always` lets unrelated checks
+finish after failures. Each invocation uses an isolated temporary report directory, so old
+passes cannot hide crashed, missing, or malformed task output. Debug a task directly with
+`bun run health:docs`, or run selected tasks through Turbo with
+`bunx turbo run health:npm health:images --continue=always`.
+
+Exit **0** means every required check passed. Exit **1** means a failure, pending workflow,
+missing access, or another unknown result. The default output lists required problems with
+exact package/resource names, reasons, repair commands, and links; `--verbose` also lists all
+healthy and optional observations. JSON includes `schemaVersion`, `checkedAt`, `healthy`, and
+the complete per-resource reports. Optional cold parity integrations and local credentials
+do not make production infrastructure fail; their missing keys and mappings remain visible
+with `--verbose` or `--json`.
+
+Terminal runs open npm's security-key approval when needed and display the link while it is
+active. Approve it, preferably with its temporary two-factor skip, to inspect all publishers.
+JSON, CI, and `--no-interactive` runs never prompt; publisher health stays **unknown** if npm
+requires approval. Other checks continue independently. Use `--interactive` to explicitly
+enable approval outside a terminal. To repair publisher settings after inspecting the report,
+use `bun run release:seed -- --trust-only`.
+
+The docs build freezes a deterministic source fingerprint into `/health.json`, independent
+of runtime files, secrets, and `.git`. Health compares it with GitHub's current main source
+tree; stale or malformed manifests fail, and an older image without the endpoint remains
+**unknown** until the managed publish workflow deploys it. HTTP availability alone cannot
+clear that result. The optional webhook receiver may omit `WEBHOOK_READ_TOKEN` only when
+fleet inventory does not declare it and unauthenticated reads fail closed with HTTP 503.
+A declared but unavailable token, or public event reads, fails.
+
+Secret presence does not prove a token is valid or unexpired. Health diagnoses failed
+Junction verification artifacts, including vendor HTTP 401/402/403 access blockers, without
+printing API response bodies or running billable parity suites. Restore vendor account
+access or the named credential, then retry the workflow; access failures never pass as
+healthy emulator parity. Run `parity:remote` for behavioral verification against a sandbox.
+
+`bun run secrets:doctor` remains a compatibility shortcut to the same npm, publisher, and
+secrets checks and accepts the same reporting flags.
+
 ## Quality gates
 
 Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates the pull-request gate end-to-end (install + commitlint + check). Passing that gate is the release decision.
