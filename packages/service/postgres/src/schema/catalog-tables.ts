@@ -155,7 +155,7 @@ function pgClass(ctx: EngineCtx): Relation {
         v.materialized ? "m" : "v",
         v.columns?.length ?? 0,
         v.matRows?.length ?? 0,
-        false,
+        v.materialized && [...schemaData.indexes.values()].some((i) => i.tableOid === v.oid),
         !v.materialized || v.matRows !== null,
         relPersistence(v),
       );
@@ -431,7 +431,7 @@ function pgIndex(ctx: EngineCtx): Relation {
       const valid = i.valid !== false;
       rows.push([
         i.oid ?? 0,
-        table?.oid ?? 0,
+        table?.oid ?? i.tableOid ?? 0,
         indexAttributeCount(i),
         i.columns.length,
         i.unique,
@@ -616,7 +616,7 @@ function pgStatUserIndexes(ctx: EngineCtx): Relation {
     for (const index of schema.indexes.values()) {
       const table = schema.tables.get(index.table);
       rows.push([
-        table?.oid ?? 0,
+        table?.oid ?? index.tableOid ?? 0,
         index.oid ?? 0,
         schema.name,
         index.table,

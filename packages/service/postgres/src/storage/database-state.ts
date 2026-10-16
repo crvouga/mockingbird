@@ -75,6 +75,9 @@ export interface IndexMeta {
 }
 
 export interface TriggerMeta {
+  constraint?: boolean;
+  deferrable?: boolean;
+  initiallyDeferred?: boolean;
   name: string;
   timing: "before" | "after" | "instead_of";
   events: CreateTriggerStmt["events"];
@@ -365,6 +368,16 @@ export class DatabaseState {
   changes = 0;
   private oidCounter = 16384;
   inTransaction = false;
+  /** Transaction-only events: included in rollback clones, never in exported snapshots. */
+  pendingTriggers: Array<{
+    schema: string;
+    table: string;
+    trigger: string;
+    event: "insert" | "update" | "delete";
+    oldRow: Datum[] | null;
+    newRow: Datum[] | null;
+  }> = [];
+  constraintModes = new Map<string, boolean>();
   /** most recent sequence touched by nextval/setval, for lastval() */
   lastSequence: { schema: string; name: string } | null = null;
   /** Session currval per sequence; absent entry means currval is undefined. */
@@ -408,6 +421,8 @@ export class DatabaseState {
     this.settings.set("row_security", "on");
     this.settings.set("array_nulls", "on");
     this.settings.set("backslash_quote", "safe_encoding");
+    this.settings.set("default_tablespace", "");
+    this.settings.set("default_table_access_method", "heap");
   }
 
   nextOid(): number {
@@ -588,6 +603,8 @@ export class DatabaseState {
     s.prepared = new Map(this.prepared);
     s.changes = this.changes;
     s.inTransaction = this.inTransaction;
+    s.pendingTriggers = this.pendingTriggers.slice();
+    s.constraintModes = new Map(this.constraintModes);
     s.lastSequence = this.lastSequence ? { ...this.lastSequence } : null;
     s.sequenceCurrval = new Map(this.sequenceCurrval);
     s.tableStats = new Map(this.tableStats);
@@ -606,6 +623,8 @@ export class DatabaseState {
     s.prepared = new Map(this.prepared);
     s.changes = this.changes;
     s.inTransaction = this.inTransaction;
+    s.pendingTriggers = this.pendingTriggers.slice();
+    s.constraintModes = new Map(this.constraintModes);
     s.lastSequence = this.lastSequence ? { ...this.lastSequence } : null;
     s.sequenceCurrval = new Map(this.sequenceCurrval);
     s.tableStats = new Map(this.tableStats);
@@ -685,6 +704,8 @@ export class DatabaseState {
     this.settings = other.settings;
     this.localSettings = other.localSettings;
     this.prepared = other.prepared;
+    this.pendingTriggers = other.pendingTriggers.slice();
+    this.constraintModes = new Map(other.constraintModes);
     this.changes = other.changes;
     this.lastSequence = other.lastSequence;
     this.sequenceCurrval = other.sequenceCurrval;

@@ -163,6 +163,8 @@ export function s3ConditionalStore<T>(
 export type WriterLease = { owner: string; generation: number; id: string; expiresAt: number }
 export type WriterState = {
   lease: WriterLease
+  /** Voluntarily relinquished; unlike expiry, acquisition needs no takeover policy. */
+  released?: boolean
   latest?: { id: string; generation: number; verifiedAt: string }
 }
 export class RepositoryWriter {
@@ -175,9 +177,9 @@ export class RepositoryWriter {
     if (!owner || !Number.isSafeInteger(ttlMs) || ttlMs < 1)
       throw new Error("owner and positive lease duration required")
     const current = await this.control.read()
-    if (current && current.value.lease.expiresAt > this.now())
+    if (current && !current.value.released && current.value.lease.expiresAt > this.now())
       throw new Error("repository writer already owned")
-    if (current && !takeoverExpired)
+    if (current && !current.value.released && !takeoverExpired)
       throw new Error("expired writer requires explicit takeover policy")
     const lease = {
       owner,
@@ -197,12 +199,37 @@ export class RepositoryWriter {
   private valid(state: WriterState | undefined, lease: WriterLease) {
     if (
       !state ||
+      state.released ||
       state.lease.id !== lease.id ||
       state.lease.generation !== lease.generation ||
       state.lease.owner !== lease.owner ||
       state.lease.expiresAt <= this.now()
     )
       throw new Error("stale or expired repository writer")
+  }
+  /** Release after draining workloads and awaiting the final verified publish.
+   * A failed/uncertain storage operation throws; retry with the same lease to
+   * discover whether it completed. Never clears the verified recovery pointer.
+   */
+  async release(lease: WriterLease): Promise<"released" | "already-released"> {
+    const current = await this.control.read()
+    if (!current) throw new Error("stale or expired repository writer")
+    if (
+      current.value.released &&
+      current.value.lease.id === lease.id &&
+      current.value.lease.generation === lease.generation &&
+      current.value.lease.owner === lease.owner
+    )
+      return "already-released"
+    this.valid(current.value, lease)
+    if (
+      !(await this.control.compareAndSwap(current.revision, {
+        ...current.value,
+        released: true,
+      }))
+    )
+      throw new Error("writer release conflict")
+    return "released"
   }
   async renew(lease: WriterLease, ttlMs: number) {
     if (!Number.isSafeInteger(ttlMs) || ttlMs < 1)

@@ -1,3 +1,4 @@
+import { flushConstraintTriggers } from "../executor/triggers.ts";
 import { pgError } from "../errors/error.ts";
 import { assert } from "../runtime/assert.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
@@ -51,10 +52,18 @@ export class TransactionManager {
   }
 
   commit(): void {
+    try {
+      flushConstraintTriggers(this.state, true);
+    } catch (error) {
+      this.rollback();
+      throw error;
+    }
     this.base = null;
     this.savepoints = [];
     this.state.inTransaction = false;
     this.state.localSettings.clear();
+    this.state.pendingTriggers = [];
+    this.state.constraintModes.clear();
     while (this.freezeDepth > 0) this.thawOnce();
   }
 
@@ -66,6 +75,8 @@ export class TransactionManager {
     this.savepoints = [];
     this.state.inTransaction = false;
     this.state.localSettings.clear();
+    this.state.pendingTriggers = [];
+    this.state.constraintModes.clear();
     while (this.freezeDepth > 0) this.thawOnce();
   }
 

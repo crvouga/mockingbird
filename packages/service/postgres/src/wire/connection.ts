@@ -274,8 +274,20 @@ const binaryValue = (type: string, text: string): Uint8Array | null => {
 const binaryEncodable = (type: string): boolean =>
   TEXT_TYPES.has(type) || ["bool", "int2", "int4", "oid", "int8", "float4", "float8", "bytea", "uuid"].includes(type);
 
+/** set_config is a SELECT with session side effects that must survive workspace replay. */
+const setsSessionConfig = (node: unknown): boolean => {
+  if (Array.isArray(node)) return node.some(setsSessionConfig);
+  if (typeof node !== "object" || node === null) return false;
+  const call = node as { type?: string; name?: string[] };
+  if (call.type === "func" && call.name?.at(-1) === "set_config") return true;
+  return Object.values(node).some(setsSessionConfig);
+};
 const mutatesDatabase = (sql: string): boolean =>
-  parseSql(sql).some((stmt) => !["select", "show", "explain", "transaction", "no_op"].includes(stmt.type));
+  parseSql(sql).some(
+    (stmt) =>
+      !["select", "show", "explain", "transaction", "no_op"].includes(stmt.type) ||
+      (stmt.type === "select" && setsSessionConfig(stmt)),
+  );
 
 /** Statements that cannot change what a snapshot of the database holds. */
 const NEVER_WRITES = new Set(["show", "set", "reset", "transaction", "no_op", "prepare", "deallocate"]);
@@ -963,6 +975,7 @@ export class Connection implements Session {
       }
       return outcome;
     } finally {
+      workspace?.transactions.rollback();
       workspace?.close();
     }
   }
@@ -1041,8 +1054,9 @@ export class Connection implements Session {
     // The workspace is this session's alone: a SET inside the block reaches the session at commit.
     workspace.state.settings = new Map(this.settings);
     workspace.state.settingDefaults = this.settingDefaults;
+    workspace.transactions.begin();
     for (const logged of this.transaction?.statements ?? []) {
-      workspace.transaction(() => this.replay(workspace, logged));
+      this.replay(workspace, logged);
     }
     return workspace;
   }

@@ -76,3 +76,47 @@ test("S3 ownership refuses a provider without the ETag contract required for con
   })
   await expect(control.read()).rejects.toThrow("lacks required ETag")
 })
+
+test("voluntary release preserves recovery and fences old writers (#434)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "fleet-release-"))
+  try {
+    const repository = filesystemRepository(join(dir, "archives"))
+    const control = filesystemConditionalStore<WriterState>(join(dir, "writer.json"))
+    const writer = new RepositoryWriter(repository, control, () => 100)
+    const lease = await writer.acquire("first", 1000)
+    const id = await repository.put(archive(1))
+    await writer.publish(id, lease)
+    expect(await writer.release(lease)).toBe("released")
+    expect(await writer.release(lease)).toBe("already-released")
+    await expect(writer.renew(lease, 100)).rejects.toThrow("stale")
+    await expect(writer.publish(id, lease)).rejects.toThrow("stale")
+    const replacement = await writer.acquire("next", 1000)
+    expect(replacement.generation).toBe(lease.generation + 1)
+    expect(await writer.latest()).toBe(id)
+    await expect(writer.release(lease)).rejects.toThrow("stale")
+    await expect(writer.renew(lease, 100)).rejects.toThrow("stale")
+    await expect(writer.publish(id, lease)).rejects.toThrow("stale")
+    await writer.renew(replacement, 1000)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("release reports CAS conflicts and unavailable storage without clearing state (#434)", async () => {
+  const repository = {} as ConstructorParameters<typeof RepositoryWriter>[0]
+  let unavailable = false
+  const lease = { id: "synthetic-lease", owner: "first", generation: 1, expiresAt: 200 }
+  const control = {
+    kind: "s3-etag" as const,
+    read: async () => ({ revision: "r1", value: { lease } }),
+    compareAndSwap: async () => {
+      if (unavailable) throw new Error("storage unavailable")
+      return false
+    },
+  }
+  const writer = new RepositoryWriter(repository, control, () => 100)
+  await expect(writer.release(lease)).rejects.toThrow("release conflict")
+  unavailable = true
+  await expect(writer.release(lease)).rejects.toThrow("storage unavailable")
+  expect((await control.read()).value.lease).toEqual(lease)
+})

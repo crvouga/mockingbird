@@ -437,6 +437,17 @@ cannot publish after takeover. Immutable uploads can succeed independently, but 
 objects become the fenced recovery pointer. Storage without the required conditional semantics
 is refused. The ordinary repository alone is a single-writer convenience, not a distributed lock.
 
+For a voluntary handoff, first stop accepting workload writes, drain application processes,
+await the final archive upload and verified `publish`, then `await writer.release(lease)`.
+Release keeps the latest verified archive and generation, marks the lease relinquished with a
+conditional write, and lets the replacement `acquire` immediately without expired-takeover
+permission. The replacement increments the generation. Release returns `"released"` or
+`"already-released"` for a repeat of the same lease, and rejects stale leases after handoff.
+Renew and publish reject released leases. A conditional conflict throws `writer release conflict`;
+connectivity/storage errors propagate. After an uncertain response, retry the same lease (or
+read the control record); never delete the record. Filesystem and S3 use the same CAS contract.
+Expired-owner takeover remains a separate explicit policy.
+
 `journal:filesystemOperationJournal(directory)` opts into fsynced per-operation metadata and
 requires an archive repository. Before a mutation, capture a verified portable before-state where
 available; durably record prepared/committing, then upload/publication and terminal outcomes.

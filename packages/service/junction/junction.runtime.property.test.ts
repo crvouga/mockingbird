@@ -392,10 +392,10 @@ describe("A5 lab accounts", () => {
     const listed = await call(runtime, "GET", "/v3/lab_test/lab_account")
     expect((listed.body.data as Json[]).map((a) => a.id)).toEqual(accounts.map((a) => a.id))
 
-    // Two active Labcorp accounts and no id: placed with the first listed (#136).
+    // Two active Labcorp accounts and no id: the default omission policy uses the platform (#435).
     const ambiguous = await createOrder(runtime, "CA")
     expect(ambiguous.res.status).toBe(200)
-    expect(runtime.instance().orderLabAccount(ambiguous.orderId as string)).toBe("acct-labcorp-47")
+    expect(runtime.instance().orderLabAccount(ambiguous.orderId as string)).toBeNull()
 
     // Another lab's account by id: placed with it, as the sandbox does (#138).
     const otherLab = await createOrder(runtime, "CA", { lab_account_id: "acct-quest" })

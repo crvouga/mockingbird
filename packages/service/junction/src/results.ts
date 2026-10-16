@@ -171,7 +171,17 @@ const metadataOf = (order: OrderRecord, _userClient: string) => {
 
 /** Minimal single-page PDF with a deterministic title; valid enough for byte-shape checks. */
 const deterministicPdf = (title: string): Uint8Array => {
-  const text = `BT /F1 14 Tf 72 720 Td (${title}) Tj ET`
+  // Escape PDF literal strings, including non-ASCII UTF-8 bytes as octal, so lengths and xref offsets stay correct.
+  const literal = [...new TextEncoder().encode(title)]
+    .map((byte) =>
+      byte < 32 || byte > 126
+        ? `\\${byte.toString(8).padStart(3, "0")}`
+        : byte === 40 || byte === 41 || byte === 92
+          ? `\\${String.fromCharCode(byte)}`
+          : String.fromCharCode(byte),
+    )
+    .join("")
+  const text = `BT /F1 14 Tf 72 720 Td (${literal}) Tj ET`
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -273,7 +283,8 @@ export const resultsHandlers = (state: JunctionState) => ({
   ) => {
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context)
-    const bytes = deterministicPdf(`Requisition ${order.id}`)
+    const number = state.orderLabAccounts.get(order.id)?.provider_account_id ?? "unknown"
+    const bytes = deterministicPdf(`Requisition ${order.id} - Account number: ${number}`)
     return new Response(bytes as unknown as BodyInit, {
       status: 200,
       headers: { "content-type": "application/pdf" },

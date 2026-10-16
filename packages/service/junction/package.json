@@ -86,7 +86,9 @@
         "GET /__admin/requests",
         "GET /__admin/metrics",
         "GET /__admin/faults/presets",
-        "GET /__admin/ui"
+        "GET /__admin/ui",
+        "GET/PUT /__admin/lab-account-omission-policies",
+        "GET/PUT /__admin/requisitions/:id"
       ],
       "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }

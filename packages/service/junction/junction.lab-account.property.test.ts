@@ -283,8 +283,8 @@ describe("Junction order lab-account routing", () => {
       /** The account the order is placed with when it is not the id sent. */
       selected?: string
     }> = [
-      // Several active accounts and no id: the sandbox places the order (#136); the first wins.
-      { lab: "nexus", id: null, status: 200, selected: accountId("nexus") },
+      // Multiple orderable accounts use the platform omission policy (#435).
+      { lab: "nexus", id: null, status: 200 },
       { lab: "nexus", id: accountId("nexus", 1), status: 200 },
       { lab: "mtl", id: null, status: 400, detail: NO_ACTIVE },
       { lab: "mtl", id: accountId("mtl"), status: 400, detail: "Lab account is not active" },

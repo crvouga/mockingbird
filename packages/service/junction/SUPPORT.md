@@ -44,7 +44,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `get_result_raw_v3_order__order_id__result_get` | `GET /v3/order/{order_id}/result` | ✅ supported | ❌ disabled | results carry provider-side specimen data; covered by the emulator-internal results property suite instead |
 | `get_result_metadata_v3_order__order_id__result_metadata_get` | `GET /v3/order/{order_id}/result/metadata` | ✅ supported | ✅ |  |
 | `get_result_pdf_v3_order__order_id__result_pdf_get` | `GET /v3/order/{order_id}/result/pdf` | ✅ supported | ❌ disabled | PDF bytes are provider-rendered; compared by shape (byteLength) only in the scenario script |
-| `get_order_requisition_pdf_v3_order__order_id__requisition_pdf_get` | `GET /v3/order/{order_id}/requisition/pdf` | ✅ supported | ❌ disabled | PDF bytes are provider-rendered; compared by shape (byteLength) only in the scenario script |
+| `get_order_requisition_pdf_v3_order__order_id__requisition_pdf_get` | `GET /v3/order/{order_id}/requisition/pdf` | ✅ supported | ❌ disabled | Synthetic PDF includes persisted selected provider account number or unknown; admin evidence override supported; live comparison remains shape-only |
 | `get_orders_v3_orders_get` | `GET /v3/orders` | ✅ supported | ✅ |  |
 | `get_order_transaction_v3_order_transaction__transaction_id__get` | `GET /v3/order_transaction/{transaction_id}` | ✅ supported | ❌ disabled | order transactions are not available to the sandbox team (feature not available) |
 | `get_order_transaction_result_v3_order_transaction__transaction_id__result_get` | `GET /v3/order_transaction/{transaction_id}/result` | ✅ supported | ❌ disabled | lab results are not available to the sandbox team (feature not available) |

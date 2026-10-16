@@ -1,3 +1,4 @@
+import { materializedTable } from "../storage/indexable-relation.ts";
 import type {
   AlterEnumStmt,
   AlterIndexStmt,
@@ -570,7 +571,8 @@ export function executeCreateTableAs(env: ExecEnv, stmt: CreateTableAsStmt): Exe
 
 export function executeCreateIndex(env: ExecEnv, stmt: CreateIndexStmt): ExecResult {
   const state = env.ctx.state;
-  const table = state.findTable(stmt.table);
+  const view = state.findView(stmt.table);
+  const table = state.findTable(stmt.table) ?? (view?.materialized ? materializedTable(view) : undefined);
   if (!table) {
     throw pgError("undefined_table", `relation "${stmt.table.join(".")}" does not exist`, "42P01");
   }
@@ -691,13 +693,22 @@ export function executeRefreshMatView(env: ExecEnv, stmt: RefreshMaterializedVie
   if (!found?.materialized) {
     throw pgError("undefined_table", `materialized view "${stmt.name.join(".")}" does not exist`, "42P01");
   }
+  const rel = executeSelectStmt(matviewQueryEnv(env, !stmt.withData), found.query);
+  const next = {
+    ...found,
+    matColumns: rel.columns.map((c, i) => ({
+      name: found.columns?.[i] ?? c.name,
+      type: c.type === UNKNOWN ? ("text" as const) : c.type,
+    })),
+    matRows: stmt.withData ? rel.rows : null,
+  };
+  const table = materializedTable(next);
+  for (const index of env.ctx.state.getSchema(found.schema).indexes.values()) {
+    if (index.tableOid === found.oid && index.valid !== false) assertUniqueIndexBuildable(env, table, index);
+  }
   const view = env.ctx.state.ensureWritableView(found);
-  const rel = executeSelectStmt(matviewQueryEnv(env, !stmt.withData), view.query);
-  view.matColumns = rel.columns.map((c, i) => ({
-    name: view.columns?.[i] ?? c.name,
-    type: c.type === UNKNOWN ? "text" : c.type,
-  }));
-  view.matRows = stmt.withData ? rel.rows : null;
+  view.matColumns = next.matColumns;
+  view.matRows = next.matRows;
   return commandResult("REFRESH MATERIALIZED VIEW", 0);
 }
 
@@ -856,6 +867,8 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
 }
 
 export function executeCreateTrigger(env: ExecEnv, stmt: CreateTriggerStmt): ExecResult {
+  if (stmt.constraint && (stmt.timing !== "after" || !stmt.forEachRow))
+    throw pgError("syntax", "constraint triggers must be AFTER ROW triggers", "42601");
   const state = env.ctx.state;
   const found = state.findTable(stmt.table);
   if (!found) {
@@ -874,6 +887,9 @@ export function executeCreateTrigger(env: ExecEnv, stmt: CreateTriggerStmt): Exe
   }
   const meta = {
     name: stmt.name,
+    constraint: stmt.constraint,
+    deferrable: stmt.deferrable,
+    initiallyDeferred: stmt.initiallyDeferred,
     timing: stmt.timing,
     events: stmt.events,
     forEachRow: stmt.forEachRow,

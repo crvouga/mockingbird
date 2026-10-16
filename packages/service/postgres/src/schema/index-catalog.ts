@@ -1,3 +1,4 @@
+import { materializedTable } from "../storage/indexable-relation.ts";
 import { pgError } from "../errors/error.ts";
 import type { ConstraintMeta, DatabaseState, IndexMeta, SchemaData, TableData } from "../storage/database-state.ts";
 
@@ -54,6 +55,8 @@ export function syncIndexCatalog(state: DatabaseState): void {
   const tables = new Map<number, { schema: SchemaData; table: TableData }>();
   for (const schema of state.schemas.values()) {
     for (const table of schema.tables.values()) tables.set(table.oid, { schema, table });
+    for (const view of schema.views.values())
+      if (view.materialized) tables.set(view.oid, { schema, table: materializedTable(view) });
   }
 
   // Constraint-backed indexes that already exist, by oid.

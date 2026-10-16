@@ -2,7 +2,40 @@ import { expect } from "bun:test";
 import { TRG_SECTION } from "../../../compat/sections/trg.ts";
 import { runCatalog } from "./run.ts";
 
+const deferredSetup = [
+  "CREATE TABLE entries (id int)",
+  "CREATE FUNCTION check_entries() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF EXISTS (SELECT 1 FROM entries WHERE id < 0) THEN RAISE EXCEPTION 'invalid entries'; END IF; RETURN NEW; END $$",
+  "CREATE CONSTRAINT TRIGGER validate_entry AFTER INSERT OR UPDATE OR DELETE ON entries DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION check_entries()",
+];
+
 runCatalog(TRG_SECTION, [
+  {
+    id: "TRG-deferred-01",
+    kind: "sequence",
+    setup: deferredSetup,
+    steps: [
+      { sql: "BEGIN" },
+      { sql: "INSERT INTO entries VALUES (-1)" },
+      { sql: "UPDATE entries SET id = 1" },
+      { sql: "COMMIT" },
+      { sql: "SELECT * FROM entries", query: true },
+    ],
+  },
+  {
+    id: "TRG-deferred-02",
+    kind: "sequence",
+    setup: deferredSetup,
+    steps: [
+      { sql: "BEGIN" },
+      { sql: "SAVEPOINT s" },
+      { sql: "INSERT INTO entries VALUES (-1)" },
+      { sql: "SET CONSTRAINTS validate_entry IMMEDIATE" },
+      { sql: "ROLLBACK TO s" },
+      { sql: "INSERT INTO entries VALUES (2)" },
+      { sql: "COMMIT" },
+      { sql: "SELECT * FROM entries", query: true },
+    ],
+  },
   {
     id: "TRG-bi-01",
     kind: "parity",

@@ -1592,11 +1592,9 @@ export class Parser {
       return this.parseCreateFunction(orReplace);
     }
     if (this.atKw("trigger") || (this.atKw("constraint") && this.atKw("trigger", 1))) {
-      if (this.eatKw("constraint")) {
-        // constraint triggers behave like AFTER triggers here
-      }
+      const constraint = this.eatKw("constraint");
       this.expectKw("trigger");
-      return this.parseCreateTrigger(orReplace);
+      return this.parseCreateTrigger(orReplace, constraint);
     }
     if (this.atKw("extension")) {
       this.pos++;
@@ -2451,7 +2449,7 @@ export class Parser {
     };
   }
 
-  private parseCreateTrigger(orReplace: boolean): CreateTriggerStmt {
+  private parseCreateTrigger(orReplace: boolean, constraint: boolean): CreateTriggerStmt {
     const name = this.ident();
     let timing: "before" | "after" | "instead_of";
     if (this.eatKw("before")) timing = "before";
@@ -2482,9 +2480,18 @@ export class Parser {
     const table = this.qualifiedName();
     // referencing / deferrable clauses
     if (this.eatKw("referencing")) throw unsupported("trigger transition tables");
-    while (this.atKw("not") || this.atKw("deferrable") || this.atKw("initially")) {
-      this.pos++;
+    let deferrable = false;
+    let initiallyDeferred = false;
+    if (this.eatKw("not")) this.expectKw("deferrable");
+    else if (this.eatKw("deferrable")) deferrable = true;
+    if (this.eatKw("initially")) {
+      if (this.eatKw("deferred")) initiallyDeferred = true;
+      else this.expectKw("immediate");
     }
+    if ((deferrable || initiallyDeferred) && !constraint)
+      this.errorAt(this.peek(), "only constraint triggers can be deferred");
+    if (initiallyDeferred && !deferrable)
+      this.errorAt(this.peek(), "constraint declared INITIALLY DEFERRED must be DEFERRABLE");
     let forEachRow = false;
     if (this.eatKw("for")) {
       this.eatKw("each");
@@ -2509,7 +2516,21 @@ export class Parser {
       } while (this.eatPunct(","));
     }
     this.expectPunct(")");
-    return { type: "create_trigger", orReplace, name, timing, events, table, forEachRow, when, funcName, funcArgs };
+    return {
+      type: "create_trigger",
+      constraint,
+      deferrable,
+      initiallyDeferred,
+      orReplace,
+      name,
+      timing,
+      events,
+      table,
+      forEachRow,
+      when,
+      funcName,
+      funcArgs,
+    };
   }
 
   // --- ALTER --------------------------------------------------------------------
@@ -2872,9 +2893,15 @@ export class Parser {
       this.skipToStatementEnd();
       return { type: "no_op", what: "SET TRANSACTION" };
     }
-    if (this.atKw("constraints")) {
-      this.skipToStatementEnd();
-      return { type: "no_op", what: "SET CONSTRAINTS" };
+    if (this.eatKw("constraints")) {
+      const names: string[][] | null = this.eatKw("all") ? null : [];
+      if (names)
+        do {
+          names.push(this.qualifiedName());
+        } while (this.eatPunct(","));
+      const deferred = this.eatKw("deferred");
+      if (!deferred) this.expectKw("immediate");
+      return { type: "set_constraints", names, deferred };
     }
     if (this.atKw("role") || (this.atKw("session", 0) && this.atKw("authorization", 1))) {
       this.skipToStatementEnd();
