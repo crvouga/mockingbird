@@ -42,7 +42,7 @@ describe("seedSummary", () => {
   test("existing packages rejected by npm use the publisher-only repair", () => {
     const lines = seedSummary({ needsSeed: [], needsTrust: ["untrusted"], failed: 1 })
     expect(lines.at(-1)).toBe(
-      "Every other package was released. Run bun run release:seed -- --trust-only, then retry CI.",
+      "Every other package was released. Run bun run release:seed -- --trust-only --refresh-rejected, then retry CI.",
     )
   })
 

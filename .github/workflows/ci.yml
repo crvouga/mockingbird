@@ -2,7 +2,7 @@
 #
 # This workflow does not decide whether a commit is releasable. A pull request
 # whose checks passed (pr.yml: Commitlint, Check, plus GitGuardian) is releasable
-# by definition; merging it to main is what starts a publish. The job builds
+# by definition; merging it to main is what starts a publish. Each job builds
 # (replaying the turbo caches pr.yml keeps warm on main; it saves none of its own)
 # and publishes. It does not re-run those checks.
 #
@@ -29,13 +29,15 @@ env:
 
 jobs:
   release:
-    name: Release
+    name: Release prerequisites
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: write
       id-token: write
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -43,33 +45,74 @@ jobs:
 
       - uses: ./.github/actions/setup
 
-      # Do not set registry-url: setup-node then writes legacy _authToken config,
-      # which prevents npm from starting the OIDC exchange when no token exists.
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          package-manager-cache: false
-
-      # Trusted Publishing needs npm >= 11.5.1. Account trust setup runs in the local seed.
-      - name: Update npm
-        run: npm install -g npm@11
-
       - name: Plan
         id: plan
-        run: bun run release:plan -- --github-output
+        run: bun run release:plan -- --github-output --save release-plan.json
 
-      # Dist is an input to publish, not a second quality gate. Check already
-      # built, packed, and smoke-tested this tree.
-      - name: Build
+      # Freeze versions before any job pushes a tag. Shards never recompute the plan.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-plan
+          path: release-plan.json
+          retention-days: 1
+          if-no-files-found: error
+
+      # Publish anything another release pins (currently SQLite) before the leaf shards.
+      - uses: ./.github/actions/release
         if: steps.plan.outputs.has_changes == 'true'
-        timeout-minutes: 15
-        run: bunx turbo run build --output-logs=errors-only
+        with:
+          group: prerequisites
 
-      - name: Publish, tag, and create GitHub Releases
-        timeout-minutes: 20
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          bun run release:publish
+  publish:
+    name: Release shard ${{ matrix.shard }}
+    needs: release
+    # A failed prerequisite must not stop independent packages. Every pin is checked on npm
+    # before publishing; packages whose dependency failed remain blocked.
+    if: >-
+      ${{ !cancelled() && needs.release.outputs.matrix != '' &&
+          needs.release.outputs.matrix != '[]' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        shard: ${{ fromJSON(needs.release.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-plan
+      - uses: ./.github/actions/release
+        with:
+          group: ${{ matrix.shard }}
+
+  reconcile:
+    name: Reconcile releases
+    needs: [release, publish]
+    # Repairs run even when there is nothing new to publish or one shard failed.
+    if: ${{ !cancelled() && needs.release.outputs.matrix != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          turbo-cache: "false"
+      - uses: actions/download-artifact@v5
+        with:
+          name: release-plan
+      - uses: ./.github/actions/release
+        with:
+          group: maintenance

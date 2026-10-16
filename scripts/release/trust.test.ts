@@ -69,6 +69,40 @@ describe("local seed trust reconciliation", () => {
     expect(trust.failed.size).toBe(0)
   })
 
+  test("CI-rejected matching settings are refreshed while other packages and publishers survive", async () => {
+    const events: string[] = []
+    const foreign = {
+      ...config,
+      id: "other-workflow",
+      claims: { ...config.claims, workflow_ref: { file: "other.yml" } },
+    }
+    let recreated = false
+    const trust = trustedPublisherReconciler({
+      refresh: new Set(["rejected"]),
+      list: async (name) =>
+        JSON.stringify(
+          name === "rejected"
+            ? [foreign, recreated ? { ...config, id: "new-id" } : config]
+            : [config],
+        ),
+      revoke: async (name, id) => {
+        events.push(`revoke ${name} ${id}`)
+        return true
+      },
+      create: async (name) => {
+        events.push(`create ${name}`)
+        recreated = true
+        return true
+      },
+      onError: () => {},
+      sleep: async () => {},
+    })
+    await trust.ensure("healthy")
+    await trust.ensure("rejected")
+    expect(events).toEqual(["revoke rejected healthy-id", "create rejected"])
+    expect(trust.failed.size).toBe(0)
+  })
+
   test("spaces mutations, preserves failures and continues independent packages", async () => {
     let clock = 0
     const started: number[] = []

@@ -60,6 +60,8 @@ function enter(dir: string) {
 
 const dryRun = process.argv.includes("--dry-run")
 const trustOnly = process.argv.includes("--trust-only")
+const refreshRejected = process.argv.includes("--refresh-rejected")
+if (refreshRejected && !trustOnly) throw new Error("--refresh-rejected requires --trust-only")
 const MIN_NPM = [11, 15] as const
 
 async function run(cmd: string[], cwd: string, env: Record<string, string | undefined>) {
@@ -153,6 +155,7 @@ try {
         "scripts/release/publish.ts",
         "--local",
         "--trust-only",
+        ...(refreshRejected ? ["--refresh-rejected"] : []),
         ...(dryRun ? ["--dry-run"] : []),
       ],
       root,

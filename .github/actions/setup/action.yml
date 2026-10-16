@@ -5,7 +5,7 @@ description: Bun + cached node_modules + Turborepo's cache kept in the GitHub Ac
 # contributors get the same setup as maintainers.
 #
 # Cache layout (the GitHub Actions cache is the remote cache; there is no turbo token or server):
-#   deps-…                     node_modules for one lockfile. Saved only on main, where every PR
+#   deps-…                     node_modules per OS, CPU architecture, and lockfile. Saved only on main, where every PR
 #                              can read it; a PR that changes the lockfile installs (~10 s).
 #   turbo-v3-<os>-static-…     the Static job's tasks (lint + root checks).
 #   turbo-v3-<os>-shard-<i>-…  shard i's tasks (scripts/ci-plan.ts). Only the Static and shard
@@ -40,7 +40,7 @@ runs:
           packages/*/node_modules
           packages/*/*/node_modules
           sites/*/node_modules
-        key: deps-${{ runner.os }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'sites/*/package.json') }}
+        key: deps-${{ runner.os }}-${{ runner.arch }}-bun1.4.0-${{ hashFiles('bun.lock', 'package.json', 'packages/*/package.json', 'packages/*/*/package.json', 'sites/*/package.json') }}
 
     - if: steps.deps.outputs.cache-hit != 'true'
       shell: bash
