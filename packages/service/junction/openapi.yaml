@@ -1641,8 +1641,8 @@ paths:
           enabled: false
           safe: true
           reason: >-
-            PDF bytes are provider-rendered; compared by shape (byteLength) only in the scenario
-            script
+            Synthetic PDF includes persisted selected provider account number or unknown; admin
+            evidence override supported; live comparison remains shape-only
       responses:
         "200":
           description: Successful Response

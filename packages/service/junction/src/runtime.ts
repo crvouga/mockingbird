@@ -11,7 +11,7 @@ import type { IdentityMode, JunctionFixtures } from "./fixtures.js"
 import { document } from "./generated/openapi.js"
 import { JUNCTION_NAMESPACE, JunctionAPI } from "./index.js"
 import type { LabAccountLayout } from "./lab-account-presets.js"
-import type { BillingType } from "./lab-accounts.js"
+import type { BillingType, LabAccountOmissionPolicy } from "./lab-accounts.js"
 import type { JunctionLimitsInput } from "./limits.js"
 import type { SealedCorpus } from "./sealed-corpus.js"
 import type { GeoMode, WebhookPublisher } from "./state.js"
@@ -31,6 +31,8 @@ export type JunctionRuntimeOptions = {
   geo?: GeoMode
   /** The team's lab accounts, or `{ presets, accounts }`; see {@link JunctionAPIOptions.labAccounts}. */
   labAccounts?: LabAccountLayout
+  /** Per-lab multiple-account omission policy; default platform. */
+  labAccountOmissionPolicies?: Record<string, LabAccountOmissionPolicy>
   /** The team the mock answers as. Default: the corpus's recorded team, else a fixed id. */
   teamId?: string
   /** Sandbox-only restrictions, every one off by default; per namespace via `PUT /__admin/limits`. */
@@ -96,6 +98,9 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
         ...(options.corpus ? { corpus: options.corpus } : {}),
         ...(options.geo ? { geo: options.geo } : {}),
         ...(options.labAccounts ? { labAccounts: options.labAccounts } : {}),
+        ...(options.labAccountOmissionPolicies
+          ? { labAccountOmissionPolicies: options.labAccountOmissionPolicies }
+          : {}),
         ...(options.teamId !== undefined ? { teamId: options.teamId } : {}),
         ...(options.limits ? { limits: options.limits } : {}),
         ...(options.identity ? { identity: options.identity } : {}),

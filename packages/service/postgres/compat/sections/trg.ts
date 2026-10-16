@@ -4,6 +4,8 @@ const D = "documented_divergence" as const;
 const REPORT = ["tests/contract/_reports/session-system.md"];
 
 export const TRG_SECTION: CatalogSection = section("TRG", "Triggers", true, [
+  ["deferred-01", "deferred constraint trigger observes final transaction state"],
+  ["deferred-02", "SET CONSTRAINTS IMMEDIATE flushes pending events"],
   ["bi-01", "BEFORE INSERT trigger assigns a NEW column"],
   ["bi-02", "BEFORE INSERT trigger computes from another NEW column"],
   ["bi-03", "BEFORE INSERT returning NULL suppresses the row"],

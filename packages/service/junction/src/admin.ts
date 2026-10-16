@@ -22,7 +22,12 @@ import {
   labAccountFromPreset,
   SYNTHETIC_LAB_ACCOUNT_PRESETS,
 } from "./lab-account-presets.js"
-import { type BillingType, type LabAccountInput, renderLabAccount } from "./lab-accounts.js"
+import {
+  type BillingType,
+  type LabAccountInput,
+  type LabAccountOmissionPolicy,
+  renderLabAccount,
+} from "./lab-accounts.js"
 import { sandboxUserQuotaBody } from "./limits.js"
 import type { GeoMode, ResultFixture } from "./state.js"
 import type { WebhookDispatcher } from "./webhooks.js"
@@ -311,6 +316,31 @@ export const junctionAdminRoutes =
           status: updated?.last_event.status,
           events: updated?.events,
         })
+      },
+
+      "GET /lab-account-omission-policies": (request) =>
+        jsonRes(200, { policies: api(request).labAccountOmissionPolicies }),
+      "PUT /lab-account-omission-policies": (request) => {
+        try {
+          api(request).labAccountOmissionPolicies = (
+            isRecord(request.body) ? request.body.policies : undefined
+          ) as Record<string, LabAccountOmissionPolicy>
+          return jsonRes(200, { policies: api(request).labAccountOmissionPolicies })
+        } catch (error) {
+          return adminError(400, error instanceof Error ? error.message : "invalid policies")
+        }
+      },
+      "GET /requisitions/:id": (request) => {
+        const fixture = api(request).requisitionFixture(request.params.id as string)
+        return fixture ? jsonRes(200, fixture) : adminError(404, "no order")
+      },
+      "PUT /requisitions/:id": (request) => {
+        const number = isRecord(request.body) ? request.body.provider_account_id : undefined
+        if (number !== null && typeof number !== "string")
+          return adminError(400, "provider_account_id must be a string or null (unknown)")
+        return api(request).installRequisitionFixture(request.params.id as string, number)
+          ? jsonRes(200, { provider_account_id: number })
+          : adminError(404, "no order")
       },
 
       "GET /result-fixtures": () => jsonRes(200, { fixtures: RESULT_FIXTURES }),

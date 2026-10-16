@@ -1,3 +1,4 @@
+import { validateStorageSetting } from "../storage/guc.ts";
 import { isPostgresError, pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import { findIndexByOid } from "../schema/index-catalog.ts";
@@ -193,7 +194,11 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
     }
     const name = argText(ctx, args[0]!).toLowerCase();
     const value = args[1]!.v === null ? "" : argText(ctx, args[1]!);
-    ctx.state.settings.set(name, value);
+    if (!ctx.state.settings.has(name) && !name.includes("."))
+      throw pgError("undefined_object", `unrecognized configuration parameter "${name}"`, "42704");
+    validateStorageSetting(name, value);
+    const local = args[2]?.v === true;
+    if (!local || ctx.state.inTransaction) (local ? ctx.state.localSettings : ctx.state.settings).set(name, value);
     return tv("text", value);
   });
 
@@ -261,13 +266,7 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
       if (!col)
         throw pgError("undefined_column", `column "${column}" of relation "${table.name}" does not exist`, "42703");
       if (!col.identity) return tv("text", null);
-      return tv(
-        "text",
-        col.identity.sequence
-          .split(".")
-          .map(quoteIdent)
-          .join("."),
-      );
+      return tv("text", col.identity.sequence.split(".").map(quoteIdent).join("."));
     }),
   );
 

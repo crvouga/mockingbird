@@ -1,3 +1,4 @@
+import { triggerScope } from "./triggers-scope.ts";
 import type { Statement } from "../ast/nodes.ts";
 import { pgError, unsupported } from "../errors/error.ts";
 import { parse } from "../parser/index.ts";
@@ -5,7 +6,7 @@ import type { TableData, TriggerMeta } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import type { Datum } from "../types/value.ts";
 import { compileTriggerBody, type PlStmt } from "./plpgsql.ts";
-import { type ExecEnv, RowScope } from "./relation.ts";
+import type { ExecEnv, RowScope } from "./relation.ts";
 import { evalPredicate, evalScalar, runStatement } from "./select.ts";
 import { setTriggerExecutor, type TriggerEvent } from "./triggers.ts";
 
@@ -93,27 +94,6 @@ function runTriggerBody(
         throw unsupported(`trigger body: ${stmt.kind}`);
     }
   }
-}
-
-function triggerScope(table: TableData, newRow: Datum[] | null, oldRow: Datum[] | null): RowScope {
-  const cols: Array<{ name: string; type: import("../types/value.ts").TypeId; table: string | null }> = [];
-  const row: Datum[] = [];
-  const rangeVars = new Set<string>();
-  if (newRow) {
-    rangeVars.add("new");
-    for (let i = 0; i < table.columns.length; i++) {
-      cols.push({ name: table.columns[i]!.name, type: table.columns[i]!.type.id, table: "new" });
-      row.push(newRow[i] ?? null);
-    }
-  }
-  if (oldRow) {
-    rangeVars.add("old");
-    for (let i = 0; i < table.columns.length; i++) {
-      cols.push({ name: table.columns[i]!.name, type: table.columns[i]!.type.id, table: "old" });
-      row.push(oldRow[i] ?? null);
-    }
-  }
-  return new RowScope(cols, row, null, rangeVars);
 }
 
 function executeTrigger(

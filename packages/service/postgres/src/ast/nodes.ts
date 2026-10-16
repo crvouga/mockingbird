@@ -629,6 +629,9 @@ export interface CreateFunctionStmt {
 
 export interface CreateTriggerStmt {
   readonly type: "create_trigger";
+  readonly constraint: boolean;
+  readonly deferrable: boolean;
+  readonly initiallyDeferred: boolean;
   readonly orReplace: boolean;
   readonly name: string;
   readonly timing: "before" | "after" | "instead_of";
@@ -741,6 +744,12 @@ export interface TransactionStmt {
   readonly modes?: string[];
   /** COMMIT/ROLLBACK AND CHAIN */
   readonly chain?: boolean;
+}
+
+export interface SetConstraintsStmt {
+  readonly type: "set_constraints";
+  readonly names: string[][] | null;
+  readonly deferred: boolean;
 }
 
 export interface SetStmt {
@@ -857,6 +866,7 @@ export type Statement =
   | TruncateStmt
   | RefreshMaterializedViewStmt
   | TransactionStmt
+  | SetConstraintsStmt
   | SetStmt
   | ShowStmt
   | ResetStmt

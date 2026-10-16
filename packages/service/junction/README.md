@@ -330,23 +330,31 @@ invented.
 
 ## Lab accounts
 
-`create_order` routes, accepts and rejects `lab_account_id` against the team's lab accounts, the
-way the sandbox does: an explicit id must exist, be linked to the team and be active; with no id,
-one active account for the lab is selected, several select the first listed, and a lab with none
-falls back to Junction's platform account. The billing type must be allowed in the patient's
-state by the account's `allowed_billing`.
+`create_order` selects explicit linked accounts in either `active` or `ready_to_launch`
+status. With no id, exactly one orderable linked account is selected. Multiple orderable
+accounts use the per-lab `labAccountOmissionPolicies` control (`platform`, the default, or
+`reject`). Platform selection uses an orderable linked account with `org_id: null`, or an
+opaque platform account for a supported platform lab. It never chooses a customer account
+by listing order. With no linked accounts, supported labs use the platform; with linked
+accounts but none orderable, ordering fails. Billing type and patient state are checked
+against the selected account. This follows the
+[Junction guide](https://docs.junction.com/lab/overview/lab-accounts); the choice between
+platform fallback and rejection varies by lab/team, so configure `reject` where appropriate.
+Set `{ labAccountOmissionPolicies: { bioreference: "platform" } }` at runtime creation, or
+`PUT /__admin/lab-account-omission-policies` with `{ "policies": { "bioreference": "reject" } }`.
+`GET` reads the effective overrides. Overrides are namespace isolated and kept across reset.
 
-Two of Junction's documented rules are **not** enforced by the sandbox, so the emulator does not
-enforce them either. An id naming another lab's account is accepted and the order is placed with
-that account (the guide says it must be "associated with the lab selected for the order"):
-recorded in `corpus/lab-account-probes.json`, where a Labcorp test ordered through Junction's
-BioReference account was placed, and reported live by a consumer's team
-([#138](https://github.com/crvouga/mockingbird/issues/138)). An omitted id while several active
-accounts are linked for the lab places the order (the guide says it "may be rejected"): reported
-live by a consumer's team ([#136](https://github.com/crvouga/mockingbird/issues/136)); the
-sandbox team the parity run uses has one account per lab, so `verify --orders` checks it whenever
-a corpus has such a lab. Which of the several accounts the sandbox bills through is not visible
-from outside; the emulator uses the first listed.
+Explicit ids naming another lab's account remain accepted, matching the sandbox probe in
+`corpus/lab-account-probes.json` and [#138](https://github.com/crvouga/mockingbird/issues/138).
+Delegation alone does not change account selection.
+
+Requisition PDFs are synthetic and contain labelled `Account number:` evidence copied from
+the selected account's `provider_account_id` **when the order is created**. Later account edits,
+reordering or routing changes cannot change that evidence. Opaque platform accounts show
+`unknown`. Use `GET /__admin/requisitions/:id` to inspect it, or `PUT` with
+`{ "provider_account_id": "MOCK-CUSTOMER" }` (or `null` for explicitly unknown evidence) to
+install a namespace-isolated fixture. Reset removes the orders and their requisition fixtures.
+This models account evidence, not a vendor's exact PDF layout or proof of a real association.
 
 Junction's order (`ClientFacingOrder`) has no `lab_account_id`, so neither does the emulator's: not on
 the create response, `GET /v3/order/{id}`, `GET /v3/orders` or webhooks. The account an order was
@@ -705,8 +713,8 @@ An emulator that is silent about its gaps is how a green suite starts lying. Spe
     accounts is not reproduced. Run `verify --orders` with your team's corpus to check what you rely on.
   - Rate limits and outages, except when injected as faults or switched on as
     [limits](#sandbox-limits).
-  - Which of several active accounts for a lab the sandbox bills an order through when
-    `lab_account_id` is omitted (see [Lab accounts](#lab-accounts)); the emulator uses the first listed.
+  - Lab/team-specific omission defaults must be configured through `labAccountOmissionPolicies`
+    (see [Lab accounts](#lab-accounts)); exact vendor requisition layout is not modelled.
   - Adopted users (`adopt-users`) have `client_user_id` equal to their `user_id`; nothing in
     Junction corresponds to adoption.
   - Real 429 / 5xx bodies: the presets are plausible, not recorded.

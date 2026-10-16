@@ -11,6 +11,7 @@ import type {
   ShowStmt,
   TransactionStmt,
 } from "../ast/nodes.ts";
+import { validateStorageSetting } from "../storage/guc.ts";
 import { pgError, unsupported } from "../errors/error.ts";
 import { Prng } from "../runtime/prng.ts";
 import { DatabaseState } from "../storage/database-state.ts";
@@ -123,6 +124,7 @@ export function executeSet(env: ExecEnv, stmt: SetStmt): ExecResult {
     else target.delete(name);
     return commandResult("SET", 0);
   }
+  validateStorageSetting(name, stmt.value);
   target.set(name, stmt.value);
   return commandResult("SET", 0);
 }

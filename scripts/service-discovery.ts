@@ -64,6 +64,12 @@ for (const name of readdirSync(servicesDir).sort()) {
           "GET /__admin/metrics",
           "GET /__admin/faults/presets",
           "GET /__admin/ui",
+          ...(name === "junction"
+            ? [
+                "GET/PUT /__admin/lab-account-omission-policies",
+                "GET/PUT /__admin/requisitions/:id",
+              ]
+            : []),
         ]
       : ["README.md public test controls", `${capabilities} compatibility and divergence evidence`],
     reporting: REPORTING,

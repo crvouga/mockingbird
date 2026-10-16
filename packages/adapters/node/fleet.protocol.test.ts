@@ -253,3 +253,57 @@ test("protocol controls report precise conflicts for live Postgres sessions and 
     await fleet.close()
   }
 })
+
+test("Postgres archive restores materialized indexes and deferred triggers in a fresh fleet (#431, #432)", async () => {
+  const first = await start()
+  const second = await start()
+  try {
+    const original = endpoint(first, "postgres", "worker-7")
+    await sql(original, "CREATE TABLE entries(id int); INSERT INTO entries VALUES (1)")
+    await sql(
+      original,
+      "CREATE MATERIALIZED VIEW saved_rows AS SELECT id FROM entries WITH NO DATA; CREATE UNIQUE INDEX saved_unique ON saved_rows(id)",
+    )
+    await sql(
+      original,
+      "CREATE FUNCTION check_entries() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF EXISTS (SELECT 1 FROM entries WHERE id < 0) THEN RAISE EXCEPTION 'invalid entries'; END IF; RETURN NEW; END $$",
+    )
+    await sql(
+      original,
+      "CREATE CONSTRAINT TRIGGER validate_entry AFTER INSERT OR UPDATE OR DELETE ON entries DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION check_entries()",
+    )
+    const exported = await control(first, "archives/export", { allNamespaces: true })
+    expect(exported.status).toBe(200)
+    const archive = await exported.json()
+    expect((await control(second, "archives/import", { archive })).status).toBe(200)
+    const restored = endpoint(second, "postgres", "worker-7")
+    await sql(restored, "REFRESH MATERIALIZED VIEW saved_rows")
+    expect((await sql(restored, "SELECT * FROM saved_rows")).rows).toEqual([{ id: 1 }])
+    expect(
+      (await sql(restored, "SELECT indexname FROM pg_indexes WHERE tablename = 'saved_rows'")).rows,
+    ).toEqual([{ indexname: "saved_unique" }])
+    await sql(
+      restored,
+      "BEGIN; INSERT INTO entries VALUES (-1); UPDATE entries SET id = 2 WHERE id = -1; COMMIT",
+    )
+    await expect(
+      sql(restored, "BEGIN; INSERT INTO entries VALUES (-2); COMMIT"),
+    ).rejects.toMatchObject({ code: "P0001" })
+    expect((await sql(restored, "SELECT * FROM entries ORDER BY id")).rows).toEqual([
+      { id: 1 },
+      { id: 2 },
+    ])
+    expect(
+      (
+        await sql(
+          endpoint(second, "postgres", "other"),
+          "SELECT count(*) AS n FROM pg_indexes WHERE indexname = 'saved_unique'",
+        )
+      ).rows,
+    ).toEqual([{ n: "0" }])
+    expect((await sql(original, "SELECT * FROM entries")).rows).toEqual([{ id: 1 }])
+  } finally {
+    await first.close()
+    await second.close()
+  }
+})

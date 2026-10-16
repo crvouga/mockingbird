@@ -35,8 +35,10 @@ import {
   type BillingType,
   defaultBillingTypesFrom,
   type LabAccountInput,
+  type LabAccountOmissionPolicy,
   labAccountFromClientFacing,
   labAccountFromInput,
+  omissionPoliciesFrom,
   patchLabAccount as patchLabAccountRecord,
   TEAM_LAB_ACCOUNTS,
 } from "./lab-accounts.js"
@@ -122,6 +124,7 @@ export type {
   BillingType,
   LabAccountDelegatedFlow,
   LabAccountInput,
+  LabAccountOmissionPolicy,
   LabAccountRecord,
   LabAccountStatus,
 } from "./lab-accounts.js"
@@ -213,6 +216,8 @@ export type JunctionAPIOptions = APIOptions & {
    * default, `client_bill`.
    */
   defaultBillingTypes?: Partial<Record<string, BillingType>>
+  /** Per-lab multiple-account routing policy; defaults to platform fallback. */
+  labAccountOmissionPolicies?: Record<string, LabAccountOmissionPolicy>
   /** Users and orders to load into every namespace, re-applied on every `reset()`. */
   fixtures?: JunctionFixtures
 }
@@ -293,6 +298,9 @@ export class JunctionAPI implements FetchAPI {
       throw new TypeError(`identity must be one of ${IDENTITY_MODES.join(", ")}`)
     state.identity = options.identity ?? "strict"
     state.defaultBillingTypes = defaultBillingTypesFrom(options.defaultBillingTypes ?? {})
+    state.labAccountOmissionPolicies = omissionPoliciesFrom(
+      options.labAccountOmissionPolicies ?? {},
+    )
     const handlers = defineOperations<SupportedOperationId>({
       ...userHandlers(state),
       ...orderHandlers(state),
@@ -451,7 +459,16 @@ export class JunctionAPI implements FetchAPI {
     return this.limits
   }
 
-  /** Lab slug → the `billing_type` an order gets when it omits one. Kept across `reset()`. */
+  /** Multiple-account routing policy per lab, kept across reset. */
+  get labAccountOmissionPolicies(): Record<string, LabAccountOmissionPolicy> {
+    return { ...this.state.labAccountOmissionPolicies }
+  }
+
+  set labAccountOmissionPolicies(input: Record<string, LabAccountOmissionPolicy>) {
+    this.state.labAccountOmissionPolicies = omissionPoliciesFrom(input)
+  }
+
+  /** Lab slug → the billing type an order gets when omitted. Kept across reset. */
   get defaultBillingTypes(): Record<string, BillingType> {
     return { ...this.state.defaultBillingTypes } as Record<string, BillingType>
   }
@@ -532,6 +549,22 @@ export class JunctionAPI implements FetchAPI {
    */
   orderLabAccount(id: string): string | null | undefined {
     return this.state.orderLabAccounts.get(id)?.lab_account_id
+  }
+
+  /** Frozen provider number used by the synthetic requisition; null means unknown. */
+  requisitionFixture(id: string): { provider_account_id: string | null } | undefined {
+    if (!this.state.orders.get(id)) return undefined
+    return { provider_account_id: this.state.orderLabAccounts.get(id)?.provider_account_id ?? null }
+  }
+
+  installRequisitionFixture(id: string, providerAccountId: string | null): boolean {
+    if (!this.state.orders.get(id)) return false
+    const current = this.state.orderLabAccounts.get(id)
+    this.state.orderLabAccounts.insert(id, {
+      lab_account_id: current?.lab_account_id ?? null,
+      provider_account_id: providerAccountId,
+    })
+    return true
   }
 
   /**

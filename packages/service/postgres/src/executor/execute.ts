@@ -1,3 +1,4 @@
+import { flushConstraintTriggers, setConstraints } from "./triggers.ts";
 import type { AlterTableStmt, Statement } from "../ast/nodes.ts";
 import { pgError } from "../errors/error.ts";
 // side effect: registers the pg_catalog / information_schema builder
@@ -78,7 +79,20 @@ function alterTableIsSelfContained(stmt: AlterTableStmt): boolean {
 
 /** Execute one parsed statement against `state`. */
 export function executeStatement(env: ExecEnv, stmt: Statement): ExecResult {
-  if (!RESHAPES_TABLES.has(stmt.type)) return dispatchStatement(env, stmt);
+  if (!RESHAPES_TABLES.has(stmt.type)) {
+    if (
+      (stmt.type === "insert" || stmt.type === "update" || stmt.type === "delete") &&
+      (env.ctx.state.pendingTriggers.length > 0 ||
+        env.ctx.state.findTable(stmt.table)?.triggers.some((t) => t.constraint))
+    ) {
+      return withStatementRollback(env, () => {
+        const result = dispatchStatement(env, stmt);
+        flushConstraintTriggers(env.ctx.state);
+        return result;
+      });
+    }
+    return dispatchStatement(env, stmt);
+  }
   try {
     return dispatchStatement(env, stmt);
   } finally {
@@ -142,6 +156,9 @@ function dispatchStatement(env: ExecEnv, stmt: Statement): ExecResult {
       return executeRefreshMatView(env, stmt);
     case "transaction":
       return executeTransaction(env, stmt);
+    case "set_constraints":
+      setConstraints(env.ctx.state, stmt);
+      return commandResult("SET CONSTRAINTS", 0);
     case "set":
       return executeSet(env, stmt);
     case "show":

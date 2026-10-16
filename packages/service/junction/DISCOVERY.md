@@ -41,6 +41,8 @@ repository; live parity is an additional oracle check, not a substitute for the 
 - `GET /__admin/metrics`
 - `GET /__admin/faults/presets`
 - `GET /__admin/ui`
+- `GET/PUT /__admin/lab-account-omission-policies`
+- `GET/PUT /__admin/requisitions/:id`
 
 For HTTP services, use `x-mockingbird-namespace` (or the documented credential/path carrier) so
 parallel tests do not share state. Admin state, journal, metrics and fault-preset endpoints are

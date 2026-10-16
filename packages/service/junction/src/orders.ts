@@ -1044,6 +1044,7 @@ export const orderHandlers = (state: JunctionState) => ({
       typeof body.lab_account_id === "string" ? body.lab_account_id : null,
       state.teamId,
       state.listLabAccounts(),
+      state.labAccountOmissionPolicies,
     )
     const requestedBilling =
       typeof body.billing_type === "string" && body.billing_type !== ""
@@ -1117,6 +1118,7 @@ export const orderHandlers = (state: JunctionState) => ({
     persistOrderRecord(state, order, labTest, details, address)
     state.orderLabAccounts.insert(orderId, {
       lab_account_id: labAccount === "platform" ? null : labAccount.id,
+      provider_account_id: labAccount === "platform" ? null : labAccount.provider_account_id,
     })
     const responseOrder = { ...order } as Record<string, unknown>
     if (responseOrder.result_types === null) delete responseOrder.result_types

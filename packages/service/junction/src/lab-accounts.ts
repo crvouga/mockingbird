@@ -253,28 +253,37 @@ export const effectiveBilling = (
 ): Record<string, readonly string[]> =>
   account === "platform" ? PLATFORM_BILLING : account.allowed_billing
 
-/**
- * The selection rules as the sandbox applies them. An explicit id must exist, be linked to
- * the team and be active; the sandbox does **not** require it to belong to the ordered lab
- * (recorded in corpus/lab-account-probes.json: a Labcorp test ordered through Junction's
- * BioReference account was placed), although the lab-accounts guide says it must. With no id,
- * one active linked account for the lab is selected, several select the first in listing
- * order (a sandbox team with several was observed placing such an order, where the guide says
- * it "may be rejected"), and a lab with none falls back to Junction's platform account.
- */
+export type LabAccountOmissionPolicy = "platform" | "reject"
+
+export const omissionPoliciesFrom = (input: unknown): Record<string, LabAccountOmissionPolicy> => {
+  if (!isRecord(input))
+    throw new TypeError("omission policies must map lab slugs to platform or reject")
+  const result: Record<string, LabAccountOmissionPolicy> = {}
+  for (const [lab, policy] of Object.entries(input)) {
+    if (!lab.trim() || (policy !== "platform" && policy !== "reject"))
+      throw new TypeError("omission policies must map lab slugs to platform or reject")
+    result[lab.trim().toLowerCase()] = policy
+  }
+  return result
+}
+
+const orderable = (account: LabAccountRecord) =>
+  account.status === "active" || account.status === "ready_to_launch"
+
+/** Explicit selection, single orderable account, or a configured platform/reject ambiguity policy. */
 export const selectLabAccount = (
   labSlug: string,
   requestedId: string | null,
   teamId: string,
   accounts: readonly LabAccountRecord[],
+  policies: Readonly<Record<string, LabAccountOmissionPolicy>> = {},
 ): LabAccountRecord | "platform" => {
   if (requestedId !== null) {
     const linked = labAccountById(requestedId, accounts)
     if (!linked) throw new HttpError(400, { detail: "Lab account does not exist" })
     if (!isLinkedToTeam(linked, teamId))
       throw new HttpError(400, { detail: "Lab account is not linked to your team" })
-    if (linked.status !== "active")
-      throw new HttpError(400, { detail: "Lab account is not active" })
+    if (!orderable(linked)) throw new HttpError(400, { detail: "Lab account is not active" })
     return linked
   }
   const candidates = linkedLabAccounts(labSlug, teamId, accounts)
@@ -282,8 +291,20 @@ export const selectLabAccount = (
     if (PLATFORM_ACCOUNT_LABS.includes(labSlug)) return "platform"
     throw new HttpError(400, { detail: `No active lab account is available for lab ${labSlug}` })
   }
-  const active = candidates.find((entry) => entry.status === "active")
-  if (active) return active
+  const active = candidates.filter(orderable)
+  if (active.length === 1) return active[0] as LabAccountRecord
+  if (active.length > 1) {
+    if ((policies[labSlug] ?? "platform") === "reject")
+      throw new HttpError(400, {
+        detail: "Multiple lab accounts are available; provide lab_account_id",
+      })
+    const platform = active
+      .filter((entry) => entry.org_id === null)
+      .sort((a, b) => a.id.localeCompare(b.id))[0]
+    if (platform) return platform
+    if (PLATFORM_ACCOUNT_LABS.includes(labSlug)) return "platform"
+    throw new HttpError(400, { detail: `No platform lab account is available for lab ${labSlug}` })
+  }
   throw new HttpError(400, { detail: "No active lab account is available for this lab" })
 }
 

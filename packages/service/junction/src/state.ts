@@ -309,7 +309,10 @@ export class JunctionState {
    * The lab account each order was placed with (`null`: Junction's platform account). Kept
    * off the order record: Junction's `ClientFacingOrder` has no `lab_account_id`.
    */
-  readonly orderLabAccounts: Collection<{ lab_account_id: string | null }>
+  readonly orderLabAccounts: Collection<{
+    lab_account_id: string | null
+    provider_account_id?: string | null
+  }>
   readonly webhookEvents: Collection<WebhookEventRecord>
   readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
 
@@ -327,6 +330,9 @@ export class JunctionState {
   /** Sandbox-only restrictions to enforce; every one is off by default. */
   limits: JunctionLimits = { ...DEFAULT_LIMITS }
   /** Lab slug → the `billing_type` an order for that lab gets when it omits one. */
+  labAccountOmissionPolicies: Readonly<
+    Record<string, import("./lab-accounts.js").LabAccountOmissionPolicy>
+  > = {}
   defaultBillingTypes: Readonly<Record<string, string>> = {}
   /** Whether an unknown `user_id` is refused (`strict`) or created on first use. */
   identity: IdentityMode = "strict"
