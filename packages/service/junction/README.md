@@ -925,15 +925,19 @@ requisition uses that same stored provider account number.
 account billing override. For example, with synthetic fixture IDs:
 
 ```ts
-labAccountBehavior: {
-  profile: "sandbox-observed",
-  accounts: {
-    "synthetic-delegated-id": {
-      rejectBilling: { client_bill: "Lab 13 does not support billing type patient_bill_passthrough" },
+import { createRuntime } from "@crvouga/mockingbird-service-junction"
+
+const runtime = createRuntime({
+  labAccountBehavior: {
+    profile: "sandbox-observed",
+    accounts: {
+      "synthetic-delegated-id": {
+        rejectBilling: { client_bill: "Lab 13 does not support billing type patient_bill_passthrough" },
+      },
+      "synthetic-ny-id": { allowBilling: { client_bill: ["NY", "NJ"] } },
     },
-    "synthetic-ny-id": { allowBilling: { client_bill: ["NY", "NJ"] } },
   },
-}
+})
 ```
 
 These controls encode the independently reported sandbox observations in #440/#441;

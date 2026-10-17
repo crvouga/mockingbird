@@ -112,6 +112,9 @@ For `parity` and `bug` issues:
 
 After every worker finishes, integrate and run the affected package tests, available oracle
 checks, and `bun run check` once for the combined result. Fix integration failures before shipping.
+For public exports, packaging or TypeScript README example changes, include `bun run release:smoke`.
+Run it separately from builds, checks and commits: it temporarily pins package manifests while
+packing, then restores them. Shared-worktree workers must not overlap that phase.
 Commit with Conventional Commits reflecting the actual batch scope; include a `Fixes #<n>` line
 for each verified resolution. Never claim that a blocked issue is fixed.
 
