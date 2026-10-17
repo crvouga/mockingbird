@@ -9,6 +9,7 @@ import {
 import { defaultCorpus } from "./corpus.js"
 import { pullCorpus } from "./corpus-tools.js"
 import { IDENTITY_MODES, type IdentityMode, type JunctionFixtures } from "./fixtures.js"
+import { labAccountBehaviorFrom } from "./lab-account-behavior.js"
 import type { LabAccountLayout } from "./lab-account-presets.js"
 import { type BillingType, defaultBillingTypesFrom } from "./lab-accounts.js"
 import { createRuntime, type JunctionRuntime, type JunctionRuntimeOptions } from "./runtime.js"
@@ -143,6 +144,17 @@ export const serveTarget: ServeTarget = {
       description: "Unknown user ids: 404 (strict) or create on first use",
       default: "strict",
     },
+    "lab-account-profile": {
+      type: "string",
+      value: "<native|expected-contract|sandbox-observed>",
+      description:
+        "Lab account policy (default native; production behavior is assumed, not certified)",
+    },
+    "lab-account-sandbox-policies": {
+      type: "string",
+      value: "<file>",
+      description: "Account id to explicit billing sandbox observations (JSON object)",
+    },
     "default-billing-type": {
       type: "string",
       value: "<lab=type,…>",
@@ -221,6 +233,11 @@ export const serveTarget: ServeTarget = {
     if (identity !== undefined && !IDENTITY_MODES.includes(identity as IdentityMode)) {
       throw new Error(`--identity must be one of ${IDENTITY_MODES.join(", ")} (got ${identity})`)
     }
+    const policyFile = asString(values["lab-account-sandbox-policies"])
+    const labAccountBehavior = labAccountBehaviorFrom({
+      profile: asString(values["lab-account-profile"]) ?? "native",
+      accounts: policyFile ? await readJson(policyFile) : {},
+    })
     const defaultBillingTypes = billingDefaults(asString(values["default-billing-type"]))
     const webhookUrl = asString(values["webhook-url"])
     const webhookSecret =
@@ -238,6 +255,7 @@ export const serveTarget: ServeTarget = {
       ...(teamId !== undefined ? { teamId } : {}),
       ...(maxUsers !== undefined ? { limits: { maxUsers } } : {}),
       ...(identity !== undefined ? { identity: identity as IdentityMode } : {}),
+      labAccountBehavior,
       ...(defaultBillingTypes ? { defaultBillingTypes } : {}),
       ...(journalSize !== undefined ? { journalSize } : {}),
       ...(webhookUrl !== undefined && webhookSecret !== undefined

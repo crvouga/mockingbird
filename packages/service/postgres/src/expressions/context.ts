@@ -1,3 +1,4 @@
+import { quoteIdentifier } from "../sql/keywords.ts";
 import { pgError } from "../errors/error.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import type { CastEnv } from "../types/cast.ts";
@@ -13,6 +14,12 @@ import { isEnumType, type TypeId } from "../types/value.ts";
  */
 export class EngineCtx implements CastEnv, CompareCtx {
   readonly state: DatabaseState;
+  private writeXid: number | null = null;
+
+  rowVersionXid(): number {
+    if (this.state.inTransaction) return (this.state.transactionXid ??= this.state.allocateXid());
+    return (this.writeXid ??= this.state.allocateXid());
+  }
   /** transaction timestamp (now(), current_timestamp) — UTC micros since PG epoch */
   readonly txNow: bigint;
   /** statement timestamp */
@@ -28,6 +35,27 @@ export class EngineCtx implements CastEnv, CompareCtx {
 
   timezone(): string {
     return this.state.getSetting("timezone") ?? "UTC";
+  }
+
+  relationOid(parts: string[]): number {
+    const target = this.state.resolveRelationSchema(parts);
+    const schema = target ? this.state.schemas.get(target.schema) : undefined;
+    const relation = target
+      ? (schema?.sequences.get(target.name) ?? schema?.tables.get(target.name) ?? schema?.views.get(target.name))
+      : undefined;
+    if (!relation) throw pgError("undefined_table", `relation "${parts.join(".")}" does not exist`, "42P01");
+    return relation.oid;
+  }
+
+  relationName(oid: number): string | null {
+    for (const schema of this.state.schemas.values()) {
+      for (const relation of [...schema.tables.values(), ...schema.sequences.values(), ...schema.views.values()]) {
+        if (relation.oid !== oid) continue;
+        const visible = this.state.resolveRelationSchema([relation.name])?.schema === schema.name;
+        return (visible ? [relation.name] : [schema.name, relation.name]).map(quoteIdentifier).join(".");
+      }
+    }
+    return null;
   }
 
   namespaceOid(name: string): number {

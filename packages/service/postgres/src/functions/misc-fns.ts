@@ -16,7 +16,11 @@ export const PG_SERVER_VERSION_NUM = "180003";
 
 function findSequenceForCall(ctx: EngineCtx, name: string): SequenceData {
   const parts = parseQualifiedName(name);
-  const seq = ctx.state.findSequence(parts);
+  const seq = /^\d+$/.test(name)
+    ? [...ctx.state.schemas.values()]
+        .flatMap((schema) => [...schema.sequences.values()])
+        .find((sequence) => sequence.oid === Number(name))
+    : ctx.state.findSequence(parts);
   if (!seq) {
     throw pgError("undefined_table", `relation "${name}" does not exist`, "42P01");
   }
@@ -259,14 +263,16 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
     "pg_get_serial_sequence",
     strict("text", (ctx, args) => {
       const tableName = argText(ctx, args[0]!);
-      const column = argText(ctx, args[1]!).toLowerCase();
+      const column = argText(ctx, args[1]!);
       const table = ctx.state.findTable(parseQualifiedName(tableName));
       if (!table) throw pgError("undefined_table", `relation "${tableName}" does not exist`, "42P01");
       const col = table.columns.find((c) => c.name === column);
       if (!col)
         throw pgError("undefined_column", `column "${column}" of relation "${table.name}" does not exist`, "42703");
-      if (!col.identity) return tv("text", null);
-      return tv("text", col.identity.sequence.split(".").map(quoteIdent).join("."));
+      const seq = [...(ctx.state.schemas.get(table.schema)?.sequences.values() ?? [])].find(
+        (candidate) => candidate.ownedBy?.table === table.name && candidate.ownedBy.column === column,
+      );
+      return tv("text", seq ? [seq.schema, seq.name].map(quoteIdent).join(".") : null);
     }),
   );
 

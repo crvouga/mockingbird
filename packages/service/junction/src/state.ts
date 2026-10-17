@@ -307,7 +307,8 @@ export class JunctionState {
   readonly orderByTransaction: Collection<{ order_id: string }>
   /**
    * The lab account each order was placed with (`null`: Junction's platform account). Kept
-   * off the order record: Junction's `ClientFacingOrder` has no `lab_account_id`.
+   * separately from the response: explicit profiles render this persisted association,
+   * while the native profile retains its historical response shape.
    */
   readonly orderLabAccounts: Collection<{
     lab_account_id: string | null
@@ -334,6 +335,10 @@ export class JunctionState {
     Record<string, import("./lab-accounts.js").LabAccountOmissionPolicy>
   > = {}
   defaultBillingTypes: Readonly<Record<string, string>> = {}
+  labAccountBehavior: import("./lab-account-behavior.js").LabAccountBehavior = {
+    profile: "native",
+    accounts: {},
+  }
   /** Whether an unknown `user_id` is refused (`strict`) or created on first use. */
   identity: IdentityMode = "strict"
   private webhooksMuted = 0

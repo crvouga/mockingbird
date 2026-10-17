@@ -305,7 +305,10 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
 
   // oid family
   if (from === "oid" && target === "regnamespace") return tv(target, v);
-  if (from === "regnamespace" && (target === "oid" || target === "int4" || target === "int8")) {
+  if (
+    (from === "regnamespace" || from === "regclass") &&
+    (target === "oid" || target === "int4" || target === "int8")
+  ) {
     return tv(target, target === "int8" ? BigInt(v as number) : v);
   }
   if ((from === "int4" || from === "int8" || from === "int2") && (target === "oid" || target === "regnamespace")) {

@@ -36,3 +36,10 @@ export {
 } from "./api/database.ts";
 export { type ResultSet, type RunResult, Statement } from "./api/statement.ts";
 export { type ErrorCategory, PostgresError } from "./errors/error.ts";
+
+export {
+  analyzeSchema,
+  type SchemaReport,
+  type SchemaReportOptions,
+  type SchemaDiagnostic,
+} from "./api/schema-report.ts";

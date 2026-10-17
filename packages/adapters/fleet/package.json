@@ -1,0 +1,62 @@
+{
+  "name": "@crvouga/mockingbird-fleet",
+  "version": "0.0.0-development",
+  "description": "Vendor-neutral fleet lifecycle, discovery, archives and control client for Mockingbird emulators.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "mockingbird-fleet": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/adapters/fleet"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/adapters/fleet#readme",
+  "keywords": [
+    "mockingbird",
+    "fleet",
+    "emulator",
+    "testing"
+  ],
+  "mockingbird": {
+    "runtime": "node",
+    "layer": "adapter"
+  },
+  "scripts": {
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "portability": "bun ../../../scripts/portability.ts"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@types/node": "22.20.1",
+    "@crvouga/mockingbird-service-postgres": "workspace:*",
+    "@crvouga/mockingbird-service-redis": "workspace:*",
+    "@crvouga/mockingbird-service-cognito": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*"
+  }
+}

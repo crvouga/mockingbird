@@ -1,8 +1,5 @@
 import type { EventEmitter } from "node:events"
 import { readFile } from "node:fs/promises"
-import { createRequire } from "node:module"
-import { resolve } from "node:path"
-import { pathToFileURL } from "node:url"
 import { type ParseArgsConfig, parseArgs } from "node:util"
 import type {
   MockControls,
@@ -16,6 +13,7 @@ import {
   resolveAdminPrefix,
 } from "@crvouga/mockingbird-service"
 import { type FleetTarget, type ProtocolTarget, startFleet } from "./fleet.js"
+import { createInstalledServiceLoader } from "./fleet-loader.js"
 import { fleetCommands } from "./fleet-tools.js"
 import { type Listening, listen } from "./listen.js"
 
@@ -394,30 +392,10 @@ export type MockingbirdConfig = {
   control?: { host?: string; port?: number }
 }
 
-const loadTarget = async (name: string, own: FleetTarget): Promise<FleetTarget> => {
-  if (name === own.name) return own
-  const specifier = `@crvouga/mockingbird-service-${name}/server`
-  try {
-    // A CLI run with npx may live outside the consumer project. Discover its locally
-    // installed services as well as siblings of the bundled CLI.
-    let mod: { serveTarget?: FleetTarget }
-    try {
-      mod = (await import(specifier)) as { serveTarget?: FleetTarget }
-    } catch {
-      const fromProject = createRequire(resolve(process.cwd(), "package.json"))
-      mod = (await import(pathToFileURL(fromProject.resolve(specifier)).href)) as {
-        serveTarget?: FleetTarget
-      }
-    }
-    if (!mod.serveTarget) throw new Error(`${specifier} exports no serveTarget`)
-    return mod.serveTarget
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    throw new Error(
-      `cannot load service "${name}": ${reason}. Install @crvouga/mockingbird-service-${name}.`,
-    )
-  }
-}
+const loadTarget = (name: string, own: FleetTarget): Promise<FleetTarget> =>
+  createInstalledServiceLoader({ projectRoot: process.cwd(), services: [name], targets: [own] })(
+    name,
+  )
 
 const start = async (
   target: ServeTarget,

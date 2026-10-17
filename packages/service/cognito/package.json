@@ -113,6 +113,7 @@
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
     "amazon-cognito-identity-js": "6.3.16",
-    "fast-check": "4.9.0"
+    "fast-check": "4.9.0",
+    "jose": "6.2.2"
   }
 }

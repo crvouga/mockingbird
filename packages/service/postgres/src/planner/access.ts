@@ -96,7 +96,7 @@ export function tryIndexedFromItem(env: ExecEnv, item: FromItem, where: Expr | n
   if (!table) return null;
   const alias = item.alias ?? item.name[item.name.length - 1]!;
   table.materializeSlab();
-  return tryIndexedTableRows(env, table, alias, where);
+  return tryIndexedTableRows(env, table, alias, where)?.map((row) => [...row, table.rowXmins.get(row) ?? 2]) ?? null;
 }
 
 export function joinKeyFromRow(

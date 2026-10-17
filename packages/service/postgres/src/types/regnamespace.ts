@@ -50,6 +50,13 @@ const invalidName = (): never => {
  * oids; anything else must be exactly one identifier, case-folded unless double-quoted.
  */
 export function parseNamespaceInput(text: string): { oid: number } | { name: string } {
+  const parsed = parseRelationInput(text);
+  if ("oid" in parsed) return parsed;
+  if (parsed.parts.length !== 1) invalidName();
+  return { name: parsed.parts[0]! };
+}
+
+export function parseRelationInput(text: string): { oid: number } | { parts: string[] } {
   if (text === "-") return { oid: 0 };
   if (/^\d+$/.test(text)) return { oid: parseOidText(text) };
   const names: string[] = [];
@@ -87,8 +94,8 @@ export function parseNamespaceInput(text: string): { oid: number } | { name: str
     // a separator must be followed by another name
     if (at === text.length) invalidName();
   }
-  if (names.length !== 1) invalidName();
-  return { name: names[0]! };
+  if (names.length === 0 || names.length > 3) invalidName();
+  return { parts: names };
 }
 
 /** regnamespaceout: `-` for zero, the quoted schema name, or the bare number when no schema has that oid. */

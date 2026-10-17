@@ -1,4 +1,12 @@
-import { digest, type FleetArchive, sealArchive, validateArchive } from "./fleet-archive.js"
+import {
+  type ArchiveCompatibilityPolicy,
+  type ArchiveCompatibilityTags,
+  assertCompatibilityTags,
+  digest,
+  type FleetArchive,
+  sealArchive,
+  validateArchive,
+} from "./fleet-archive.js"
 import type { ArchiveRepository } from "./fleet-repository.js"
 
 export type ParticipantMigration = {
@@ -19,6 +27,7 @@ type Source = {
   format: string
   createdAt: string
   sourceId: string
+  compatibility?: ArchiveCompatibilityTags
   sha256: string
   namespaces: Record<
     string,
@@ -49,10 +58,19 @@ const sourceArchive = (input: unknown): Source => {
     throw new Error("corrupt migration source")
   return structuredClone(source)
 }
-export function archiveCompatibility(input: unknown, registry: MigrationRegistry) {
+export function archiveCompatibility(
+  input: unknown,
+  registry: MigrationRegistry,
+  policy?: ArchiveCompatibilityPolicy,
+) {
   const source = sourceArchive(input)
   const problems: string[] = [],
     steps: { namespace: string; service: string; transformations: string[] }[] = []
+  try {
+    assertCompatibilityTags(source.compatibility, policy)
+  } catch (error) {
+    problems.push(error instanceof Error ? error.message : "invalid application compatibility")
+  }
   if (source.format !== "mockingbird.fleet/v1" && !registry.sourceFormats.includes(source.format))
     problems.push(`unsupported source format ${source.format}`)
   for (const [namespace, ns] of Object.entries(source.namespaces))
@@ -113,6 +131,7 @@ export async function migrateArchive(
   const content = {
     format: "mockingbird.fleet/v1" as const,
     sourceId: source.sourceId,
+    ...(source.compatibility ? { compatibility: source.compatibility } : {}),
     createdAt: source.createdAt,
     namespaces,
     migration: {

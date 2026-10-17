@@ -23,7 +23,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `get_labs_v3_lab_tests_labs_get` | `GET /v3/lab_tests/labs` | ✅ supported | ✅ |  |
 | `get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get` | `GET /v3/lab_tests/{lab_test_id}/markers` | ✅ supported | ✅ |  |
 | `list_order_set_markers_v3_lab_tests_list_order_set_markers_post` | `POST /v3/lab_tests/list_order_set_markers` | ✅ supported | ✅ |  |
-| `create_order_v3_order_post` | `POST /v3/order` | ✅ supported | ✅ |  |
+| `create_order_v3_order_post` | `POST /v3/order` | ✅ supported | ✅ | Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders, without production parity certification. |
 | `get_area_info_v3_order_area_info_get` | `GET /v3/order/area/info` | ✅ supported | ❌ disabled | central_labs presence, within_radius counts and getlabs market coverage are provider-owned geo data that an emulator cannot replicate per-zip; covered by the client-parity scenario shape checks instead |
 | `get_psc_info_v3_order_psc_info_get` | `GET /v3/order/psc/info` | ✅ supported | ❌ disabled | patient_service_centers are real site inventories per zip (thousands of sites, result-capped at 30) that a fixture emulator cannot replicate per-zip; covered by the client-parity scenario shape checks instead |
 | `get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post` | `POST /v3/order/phlebotomy/appointment/availability` | ✅ supported | ❌ disabled | availability slots are provider-side data whose values shift between sandbox calls; covered by the emulator-internal scheduling property suite instead |

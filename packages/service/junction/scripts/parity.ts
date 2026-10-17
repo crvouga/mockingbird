@@ -18,6 +18,7 @@ import { document, JunctionAPI } from "../src/index.js"
 import { prefetchCoverageObservations } from "../src/prefetch.js"
 import { reshapeCoverageGeoCommand } from "../src/reshape.js"
 import { PARITY_SEEDS } from "../src/seeds.js"
+import { probeAccountBilling } from "./account-billing-probes.js"
 import { cancelWalkAppointments } from "./booking-cleanup.js"
 import bookingObservation from "./booking-probe-observation.json" with { type: "json" }
 import { probeBookingLifecycle } from "./booking-probes.js"
@@ -719,6 +720,13 @@ const probeCall: Parameters<typeof probeBookingLifecycle>[0] = async (method, pa
   await Bun.sleep(DEFAULT_MIN_INTERVAL_MS * 4)
   return { status: response.status, body: parsed }
 }
+const accountBillingProbe = await probeAccountBilling(probeCall, crypto.randomUUID())
+await mkdir(join(import.meta.dir, "..", "corpus"), { recursive: true })
+await writeFile(
+  join(import.meta.dir, "..", "corpus", "account-billing-probes.json"),
+  `${JSON.stringify(accountBillingProbe, null, 2)}\n`,
+)
+console.log(`junction account-billing probes: ${JSON.stringify(accountBillingProbe)}`)
 const simulationProbe = await probeSimulationLifecycle(probeCall, crypto.randomUUID())
 const simulationCorpusDir = join(import.meta.dir, "..", "corpus")
 await mkdir(simulationCorpusDir, { recursive: true })

@@ -2304,6 +2304,7 @@ export class Parser {
     let sqlBody: Statement[] | null = null;
     let volatility: "immutable" | "stable" | "volatile" | null = null;
     let strict = false;
+    const settings: Record<string, string> = {};
     for (;;) {
       if (this.eatKw("language")) {
         language = this.peek().type === "string" ? this.next().value : this.ident(true);
@@ -2362,9 +2363,25 @@ export class Parser {
         continue;
       }
       if (this.eatKw("set")) {
-        // SET config = value
-        this.ident(true);
-        if (this.eatOp("=") || this.eatKw("to")) this.next();
+        const key = this.ident(true).toLowerCase();
+        if (this.eatKw("from")) {
+          this.expectKw("current");
+          settings[key] = "__from_current__";
+        } else {
+          if (!this.eatOp("=")) this.expectKw("to");
+          const values: string[] = [];
+          do {
+            const value = this.next();
+            if (!["string", "ident", "quoted_ident", "number"].includes(value.type))
+              this.errorAt(value, "expected setting value");
+            values.push(
+              key === "search_path" && /[^a-z0-9_]/.test(value.value)
+                ? `"${value.value.replaceAll('"', '""')}"`
+                : value.value,
+            );
+          } while (this.eatPunct(","));
+          settings[key] = values.join(", ");
+        }
         continue;
       }
       if (this.eatKw("window")) throw unsupported("window functions via CREATE FUNCTION");
@@ -2446,6 +2463,7 @@ export class Parser {
       sqlBody,
       volatility,
       strict,
+      settings,
     };
   }
 
@@ -2558,9 +2576,9 @@ export class Parser {
           type: "alter_sequence",
           name,
           ifExists,
-          options: { ownedBy: undefined } as SequenceOptions & { renameTo?: string },
-          ...({ renameTo: to } as any),
-        } as any;
+          options: {},
+          renameTo: to,
+        };
       }
       if (this.atKw("set") && (this.atKw("logged", 1) || this.atKw("unlogged", 1))) {
         this.pos++;

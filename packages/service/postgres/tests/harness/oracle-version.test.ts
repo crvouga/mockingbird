@@ -10,6 +10,7 @@ function normalizeServerVersion(raw: string): string {
 }
 
 describe("oracle version pin", () => {
+  // Cold WASM oracle startup competes with package builds in the full repository graph.
   test(`${oracleKind()} server_version is on the allow-list`, async () => {
     const db = createOracleAdapter();
     try {
@@ -20,5 +21,5 @@ describe("oracle version pin", () => {
     } finally {
       await db.close();
     }
-  });
+  }, 30_000);
 });

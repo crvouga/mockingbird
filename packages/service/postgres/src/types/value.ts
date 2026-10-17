@@ -16,7 +16,7 @@ import {
 import { type JsonbValue, jsonbText, parseJsonText, validateJsonText } from "./jsonb.ts";
 import { parseJsonpath } from "./jsonpath.ts";
 import { type Numeric, numericText, parseNumeric } from "./numeric.ts";
-import { namespaceText, parseNamespaceInput, parseOidText } from "./regnamespace.ts";
+import { namespaceText, parseNamespaceInput, parseOidText, parseRelationInput } from "./regnamespace.ts";
 
 /**
  * Canonical type ids are lowercase PG internal names: "int4", "text",
@@ -154,6 +154,7 @@ const TYPE_ALIASES: Record<string, TypeId> = {
   regtype: "regtype",
   regproc: "regproc",
   regnamespace: "regnamespace",
+  xid: "xid",
   oid: "oid",
   void: "void",
   record: "record",
@@ -242,6 +243,7 @@ export const TYPE_OIDS: Record<string, number> = {
   regproc: 24,
   text: 25,
   oid: 26,
+  xid: 28,
   json: 114,
   float4: 700,
   float8: 701,
@@ -577,6 +579,7 @@ function quoteArrayElem(s: string): string {
 export interface OutputCtx {
   /** unquoted schema name for an oid, or null when no schema has it */
   namespaceName?(oid: number): string | null;
+  relationName?(oid: number): string | null;
   /** offset seconds east of UTC for rendering timestamptz at given UTC micros */
   zoneOffsetAt(utcMicros: bigint): number;
 }
@@ -629,6 +632,7 @@ export function recordText(rec: PgRecord, ctx: OutputCtx): string {
 
 /** Render a non-null datum of type `t` to PG wire text. */
 export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
+  if (t === "regclass") return v === 0 ? "-" : (ctx.relationName?.(v as number) ?? String(v));
   if (t === "regnamespace") return namespaceText(v as number, ctx.namespaceName?.(v as number));
   if (v === null) throw pgError("internal", "datumText called with null");
   if (isArrayType(t)) return arrayText(v as PgArray, ctx);
@@ -639,6 +643,7 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
     case "int2":
     case "int4":
     case "oid":
+    case "xid":
       return String(v);
     case "int8":
       return String(v);
@@ -707,6 +712,7 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
 export interface InputCtx {
   /** oid of the schema with exactly this name; raises 3F000 when there is none */
   namespaceOid?(name: string): number;
+  relationOid?(parts: string[]): number;
   /** session zone offset lookup for naive timestamptz input */
   zoneOffsetForNaive(naiveMicros: bigint): number;
   /** enum label validation: returns true when label is valid for the enum type */
@@ -717,6 +723,12 @@ export const UTC_INPUT: InputCtx = { zoneOffsetForNaive: () => 0 };
 
 /** Parse PG wire text into a datum of type `t` (typinput). */
 export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
+  if (t === "regclass") {
+    const parsed = parseRelationInput(text);
+    if ("oid" in parsed) return parsed.oid;
+    if (!ctx.relationOid) throw unsupported("regclass input without a catalog");
+    return ctx.relationOid(parsed.parts);
+  }
   if (t === "regnamespace") {
     const parsed = parseNamespaceInput(text);
     if ("oid" in parsed) return parsed.oid;
@@ -738,6 +750,7 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     case "int8":
       return parseIntegerText(text, t);
     case "oid":
+    case "xid":
       return parseOidText(text);
     case "float4":
       return Math.fround(parseFloatText(text, "float4"));

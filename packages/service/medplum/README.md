@@ -297,3 +297,18 @@ in its README. `bun run generate` regenerates the operation table and the embedd
 and `generate:check` fails when they are stale.
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
+
+### Fleet public ingress
+
+The Node fleet accepts `publicOrigin` plus optional `publicPath` for Medplum. Fixed
+configuration controls emitted URLs; forwarding headers cannot select the public origin.
+A namespace carried by `/__admin/ns/<name>` is retained in generated links. Management
+routes remain private. Synthetic loopback acceptance: `medplum.ingress.test.ts` (#460).
+
+| Surface | Public origin / prefix / namespace | Limits |
+| --- | --- | --- |
+| OAuth discovery, token and JWKS | Supported | Existing emulator OAuth flows only; no production identity federation certification |
+| FHIR create/read/search, fullUrl, Location and pagination | Supported | Existing project/access-policy enforcement applies |
+| State replacement on changed private ports | Supported | Reacquire tokens after restore; public configuration must match |
+| Storage and other hosted URLs | Configured base URL | Existing endpoint limitations apply; external hosting and DNS are caller-owned |
+| Management routes and credentials | Private listener only | Never exposed through reference ingress |

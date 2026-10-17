@@ -30,6 +30,8 @@ import { type PostgresError, pgError, unsupported } from "../errors/error.ts";
 import { sequenceNextval } from "../functions/misc-fns.ts";
 import { assertGinTrgmIndex } from "../functions/pgtrgm.ts";
 import { parse } from "../parser/index.ts";
+import { quoteIdent } from "../sql/deparse.ts";
+import { parseRelationInput } from "../types/regnamespace.ts";
 import { checkForeignKeyPersistence, relPersistence } from "../schema/persistence.ts";
 import { resolveStorage } from "../schema/storage.ts";
 import {
@@ -197,12 +199,83 @@ export function executeCreateSequence(env: ExecEnv, stmt: CreateSequenceStmt): E
   return commandResult("CREATE SEQUENCE", 0);
 }
 
+function renameSequenceReferences(env: ExecEnv, seq: SequenceData, newName: string): void {
+  const state = env.ctx.state;
+  const matches = (value: string): boolean => {
+    try {
+      const input = parseRelationInput(value);
+      if ("oid" in input) return input.oid === seq.oid;
+      return state.findSequence(input.parts)?.oid === seq.oid;
+    } catch {
+      return false;
+    }
+  };
+  const rewrite = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(rewrite);
+    if (value === null || typeof value !== "object") return value;
+    const node = value as Record<string, unknown>;
+    const updated = Object.fromEntries(Object.entries(node).map(([key, child]) => [key, rewrite(child)]));
+    const rewriteLiteral = (literal: unknown): unknown => {
+      if (
+        literal &&
+        typeof literal === "object" &&
+        "type" in literal &&
+        literal.type === "string_lit" &&
+        "value" in literal &&
+        typeof literal.value === "string" &&
+        matches(literal.value)
+      ) {
+        return { ...literal, value: [seq.schema, newName].map(quoteIdent).join(".") };
+      }
+      return literal;
+    };
+    if (
+      node.type === "func" &&
+      Array.isArray(node.name) &&
+      ["nextval", "currval", "setval"].includes(String(node.name.at(-1))) &&
+      Array.isArray(updated.args)
+    )
+      updated.args[0] = rewriteLiteral(updated.args[0]);
+    if (
+      node.type === "cast" &&
+      node.target &&
+      typeof node.target === "object" &&
+      "parts" in node.target &&
+      Array.isArray(node.target.parts) &&
+      node.target.parts.at(-1) === "regclass"
+    )
+      updated.expr = rewriteLiteral(updated.expr);
+    return updated;
+  };
+  for (const schema of state.schemas.values()) {
+    for (const table of [...schema.tables.values()]) {
+      const writable = state.ensureWritableTable(table);
+      for (const column of writable.columns) {
+        if (column.defaultExpr) column.defaultExpr = rewrite(column.defaultExpr) as Expr;
+        if (column.identity?.sequence === `${seq.schema}.${seq.name}`)
+          column.identity = { ...column.identity, sequence: `${seq.schema}.${newName}` };
+      }
+    }
+  }
+}
+
 export function executeAlterSequence(env: ExecEnv, stmt: AlterSequenceStmt): ExecResult {
   const state = env.ctx.state;
-  const seq = state.findSequence(stmt.name);
-  if (!seq) {
+  const foundSequence = state.findSequence(stmt.name);
+  if (!foundSequence) {
     if (stmt.ifExists) return commandResult("ALTER SEQUENCE", 0);
     throw pgError("undefined_table", `relation "${stmt.name.join(".")}" does not exist`, "42P01");
+  }
+  const seq = state.ensureWritableSequence(foundSequence);
+  if (stmt.renameTo) {
+    const schema = state.getSchema(seq.schema);
+    if (schema.hasRelation(stmt.renameTo))
+      throw pgError("duplicate_table", `relation "${stmt.renameTo}" already exists`, "42P07");
+    renameSequenceReferences(env, seq, stmt.renameTo);
+    schema.sequences.delete(seq.name);
+    seq.name = stmt.renameTo;
+    schema.sequences.set(seq.name, seq);
+    return commandResult("ALTER SEQUENCE", 0);
   }
   const o = stmt.options;
   if (o.logged !== undefined) {
@@ -284,7 +357,7 @@ function buildColumn(
     col.defaultExpr = {
       type: "func",
       name: ["nextval"],
-      args: [{ type: "string_lit", value: `${schema.name}.${seqName}` }],
+      args: [{ type: "string_lit", value: [schema.name, seqName].map(quoteIdent).join(".") }],
     } as Expr;
   }
 
@@ -558,7 +631,11 @@ export function executeCreateTableAs(env: ExecEnv, stmt: CreateTableAsStmt): Exe
   const table = new TableData(schema.name, name, columns, state.nextOid(), stmt.temp);
   table.unlogged = stmt.unlogged === true;
   if (stmt.withData) {
-    for (const row of rel.rows) table.mutableRows().push(row.slice());
+    for (const row of rel.rows) {
+      const stored = row.slice();
+      table.rowXmins.set(stored, env.ctx.rowVersionXid());
+      table.mutableRows().push(stored);
+    }
   }
   schema.tables.set(name, table);
   const count = stmt.withData ? table.rowCount() : 0;
@@ -857,6 +934,12 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
     language: lang,
     body,
     rawBody: stmt.body,
+    settings: Object.fromEntries(
+      Object.entries(stmt.settings ?? {}).map(([key, value]) => [
+        key,
+        value === "__from_current__" ? (state.getSetting(key) ?? "") : value,
+      ]),
+    ),
     strict: stmt.strict,
     oid: state.nextOid(),
   };
@@ -1059,6 +1142,7 @@ export function executeAlterTable(env: ExecEnv, stmt: AlterTableStmt): ExecResul
           }
           const next = row.slice();
           next[idx] = nv;
+          table.rowXmins.set(next, table.rowXmins.get(rows[i]!) ?? 2);
           rows[i] = next;
         }
         col.type = resolved.column;
@@ -1162,6 +1246,11 @@ export function executeAlterTable(env: ExecEnv, stmt: AlterTableStmt): ExecResul
           );
         }
         table.columns[idx]!.name = action.to;
+        for (const seq of [...schema.sequences.values()]) {
+          if (seq.ownedBy?.table === table.name && seq.ownedBy.column === action.from) {
+            state.ensureWritableSequence(seq).ownedBy = { table: table.name, column: action.to };
+          }
+        }
         // update constraint column lists
         for (const con of table.constraints) {
           if (con.kind === "primary_key" || con.kind === "unique" || con.kind === "foreign_key") {
@@ -1201,6 +1290,11 @@ export function executeAlterTable(env: ExecEnv, stmt: AlterTableStmt): ExecResul
           throw pgError("duplicate_table", `relation "${action.to}" already exists`, "42P07");
         }
         const oldName = table.name;
+        for (const seq of [...schema.sequences.values()]) {
+          if (seq.ownedBy?.table === oldName) {
+            state.ensureWritableSequence(seq).ownedBy = { ...seq.ownedBy, table: action.to };
+          }
+        }
         schema.tables.delete(table.name);
         table.name = action.to;
         schema.tables.set(action.to, table);

@@ -1,13 +1,13 @@
 /**
  * `bun github:resolve-issues [<n>…]`: resolve agent-reported issues on GitHub Actions with Claude
- * Code agents, as you. The agents use a GitHub token minted for this run and your Claude
+ * Code coordinator, as you. The coordinator uses a GitHub token minted for this run and your Claude
  * subscription token, so commits and PRs are yours and the repo holds no secret for them.
  *
  *   bun github:resolve-issues setup            once, by the repo owner: the GitHub App tokens come from
  *   bun github:resolve-issues                  the queue: up to 3 issues (--max=<k>, at most 10)
  *   bun github:resolve-issues 190 191          these issues (a new-service issue runs only when named)
  *     --model=<id>     Claude model for the agents (default claude-opus-5-5)
- *     --ref=<branch>   branch whose workflow runs (default main); the agents always branch from main
+ *     --ref=<branch>   branch whose workflow runs (default main); the coordinator branches once from main
  *     --dry-run        hand the credentials over and check them, then stop (no agent, no PR)
  *     --yes            skip the confirmation prompt
  *
@@ -26,11 +26,11 @@
  *   - Handover: the repo is public and workflow_dispatch inputs are neither masked nor secret, so
  *     credentials never travel as inputs. Instead:
  *       1. This command creates a secret gist and dispatches the workflow with the gist's id.
- *       2. Each job generates an RSA key pair and uploads only the public key, as an artifact.
+ *       2. The coordinator job generates an RSA key pair and uploads only the public key, as an artifact.
  *       3. This command encrypts the credentials to that key (RSA-OAEP wrapping AES-GCM, bound to
- *          the run and the issue) and adds the ciphertext to the gist.
+ *          the run and the complete issue batch) and adds the ciphertext to the gist.
  *       4. The job decrypts them, masks them, refuses anything that is not a one-line token, and
- *          deletes its private key. When every job has its credentials, this command deletes the
+ *          deletes its private key. When the coordinator has its credentials, this command deletes the
  *          gist. A re-run job has a new key and no one to answer it, so it fails; dispatch again.
  *   - In the job, Claude Code scrubs its own credentials from the agent's shell commands
  *     (CLAUDE_CODE_SUBPROCESS_ENV_SCRUB), and both tokens are redacted from the agent's report.
@@ -69,7 +69,7 @@ const WORKFLOW = "resolve-issues.yml"
 /** Most issues one run takes: bounds what a run can spend and touch. */
 export const MAX_ISSUES = 10
 const DEFAULT_MODEL = "claude-opus-5-5"
-/** How long a job waits for its credentials, and this command for every job's public key. */
+/** How long a job waits for its credentials, and this command for the coordinator's public key. */
 const HANDSHAKE_TIMEOUT_MS = 15 * 60_000
 const POLL_MS = 5_000
 
@@ -109,7 +109,8 @@ export function pickFromQueue(open: Issue[], max: number): number[] {
 export function parseIssueNumbers(args: string[]): number[] {
   const numbers = args.map((arg) => {
     const n = Number(arg.replace(/^#/, ""))
-    if (!Number.isInteger(n) || n <= 0) throw new Error(`not an issue number: ${arg}`)
+    if (!/^#?[1-9]\d*$/.test(arg) || !Number.isSafeInteger(n))
+      throw new Error(`not an issue number: ${arg}`)
     return n
   })
   return [...new Set(numbers)]
@@ -137,8 +138,18 @@ const toBase64 = (bytes: ArrayBuffer | Uint8Array) =>
 const fromBase64 = (text: string) => Uint8Array.from(Buffer.from(text, "base64"))
 
 /** What a ciphertext is bound to, so it opens only in the job it was sealed for. */
-export const handoverContext = (repo: string, runId: string, issue: number) =>
-  `${repo}/actions/runs/${runId}#${issue}`
+export function issueBatchId(issues: readonly number[]): string {
+  if (
+    !issues.length ||
+    issues.length > MAX_ISSUES ||
+    issues.some((issue) => !Number.isSafeInteger(issue) || issue <= 0)
+  )
+    throw new Error(`expected 1 to ${MAX_ISSUES} positive integer issue numbers`)
+  return [...new Set(issues)].sort((a, b) => a - b).join("-")
+}
+export const BATCH_KEY_ARTIFACT = "resolve-issues-key-batch"
+export const handoverContext = (repo: string, runId: string, issues: number | readonly number[]) =>
+  `${repo}/actions/runs/${runId}#batch-${issueBatchId(typeof issues === "number" ? [issues] : issues)}`
 
 /** A fresh RSA-OAEP key pair, both halves base64 (SPKI and PKCS #8). */
 export async function generateKeyPair(): Promise<{ publicKey: string; privateKey: string }> {
@@ -346,7 +357,7 @@ async function dispatch(args: string[]) {
   }
   const list = issues.map((n) => `#${n}`).join(" ")
   console.log(
-    `${dryRun ? "Dry run for" : "Resolve"} ${list} on ${repo}: one Claude Code agent per issue (${model}), workflow from ${ref}, each ending in a draft PR taken to ready-to-merge (never merged).`,
+    `${dryRun ? "Dry run for" : "Resolve"} ${list} on ${repo}: one Claude Code coordinator (${model}), workflow from ${ref}, one shared worktree, branch and draft PR for the entire batch; native subagents handle independent issues. The PR is taken to ready-to-merge (never merged).`,
   )
   confirm("Proceed?", yes)
 
@@ -403,16 +414,33 @@ async function dispatch(args: string[]) {
     console.log(url)
 
     await handOver(repo, runId, gist.id, issues, credentials)
-    console.log(`Every job has its credentials; the handover gist is deleted.`)
+    console.log(`The coordinator has its credentials; the handover gist is deleted.`)
     console.log(`Follow it: gh run watch ${runId} --repo ${repo}`)
   } finally {
     await deleteGist()
   }
 }
 
-type Job = { name: string; status: string; steps?: { name: string; status: string }[] }
+type Job = {
+  name: string
+  status: string
+  steps?: { name: string; status: string; conclusion?: string }[]
+}
 
-/** Serve each job's public key with sealed credentials, then wait until every job has read them. */
+/** Only an actually successful receive step acknowledges delivery, including in dry runs. */
+export const credentialsReceived = (jobs: Job[]): boolean =>
+  jobs.some(
+    (job) =>
+      job.name === "Batch coordinator" &&
+      job.steps?.some(
+        (step) =>
+          step.name === "Receive credentials" &&
+          step.status === "completed" &&
+          step.conclusion === "success",
+      ),
+  )
+
+/** Seal once to the coordinator's key; all native subagents share its existing checkout. */
 async function handOver(
   repo: string,
   runId: string,
@@ -420,44 +448,35 @@ async function handOver(
   issues: number[],
   credentials: Credentials,
 ) {
-  const waiting = new Set(issues)
-  const received = (jobs: Job[], issue: number) =>
-    jobs.some(
-      (job) =>
-        job.name === `#${issue}` &&
-        (job.status === "completed" ||
-          job.steps?.some((s) => s.name === "Receive credentials" && s.status === "completed")),
-    )
+  let sent = false
   const deadline = Date.now() + HANDSHAKE_TIMEOUT_MS
   const dir = mkdtempSync(join(tmpdir(), "resolve-issues-"))
   try {
     while (Date.now() < deadline) {
-      const artifacts =
-        await sh`gh api ${`repos/${repo}/actions/runs/${runId}/artifacts`} --jq ${".artifacts[].name"}`
-      const names = new Set(artifacts.out.split("\n"))
-      for (const issue of waiting) {
-        const name = `resolve-issues-key-${issue}`
-        if (!names.has(name)) continue
-        const target = join(dir, String(issue))
-        const download =
-          await sh`gh run download ${runId} --repo ${repo} --name ${name} --dir ${target}`
-        if (!download.ok) continue
-        const publicKey = readFileSync(join(target, "public.key"), "utf8").trim()
-        const sealed = await seal(credentials, publicKey, handoverContext(repo, runId, issue))
-        await ghApi(`gists/${gistId}`, "PATCH", {
-          files: { [`issue-${issue}.json`]: { content: JSON.stringify(sealed) } },
-        })
-        waiting.delete(issue)
-        console.log(`  #${issue}: credentials sealed to its job's key`)
+      if (!sent) {
+        const artifacts =
+          await sh`gh api ${`repos/${repo}/actions/runs/${runId}/artifacts`} --jq ${".artifacts[].name"}`
+        if (new Set(artifacts.out.split("\n")).has(BATCH_KEY_ARTIFACT)) {
+          const download =
+            await sh`gh run download ${runId} --repo ${repo} --name ${BATCH_KEY_ARTIFACT} --dir ${dir}`
+          if (download.ok) {
+            const publicKey = readFileSync(join(dir, "public.key"), "utf8").trim()
+            const sealed = await seal(credentials, publicKey, handoverContext(repo, runId, issues))
+            await ghApi(`gists/${gistId}`, "PATCH", {
+              files: { "batch.json": { content: JSON.stringify(sealed) } },
+            })
+            sent = true
+            console.log(
+              `  batch ${issueBatchId(issues)}: credentials sealed to the coordinator's key`,
+            )
+          }
+        }
       }
-
-      if (waiting.size === 0) {
+      if (sent) {
         const jobs =
           await sh`gh api ${`repos/${repo}/actions/runs/${runId}/jobs?per_page=100`} --jq .jobs`
-        if (jobs.ok && issues.every((issue) => received(JSON.parse(jobs.out) as Job[], issue)))
-          return
+        if (jobs.ok && credentialsReceived(JSON.parse(jobs.out) as Job[])) return
       }
-      // After the check above: a dry run can finish between two polls.
       const status = await sh`gh run view ${runId} --repo ${repo} --json status --jq .status`
       if (status.out === "completed") break
       await Bun.sleep(POLL_MS)
@@ -465,11 +484,8 @@ async function handOver(
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
-  const missing = [...waiting].map((n) => `#${n}`).join(" ")
   throw new Error(
-    missing
-      ? `no public key from the job for ${missing}; see https://github.com/${repo}/actions/runs/${runId}`
-      : `the jobs did not confirm they received their credentials; see https://github.com/${repo}/actions/runs/${runId}`,
+    `${sent ? "the coordinator did not confirm receipt of its credentials" : "no public key from the coordinator"}; see https://github.com/${repo}/actions/runs/${runId}`,
   )
 }
 
@@ -515,7 +531,7 @@ async function verifyToken() {
   const problems = await checkTokenReach(token, repo)
   if (problems.length > 0)
     fail(`refusing the handed-over GitHub token:\n  - ${problems.join("\n  - ")}`)
-  console.log(`The GitHub token reaches ${repo} alone, with the agents' permissions.`)
+  console.log(`The GitHub token reaches ${repo} alone, with the coordinator's permissions.`)
 }
 
 /** Runner: write a fresh key pair; only public.key leaves the job. */
@@ -530,19 +546,22 @@ async function keygen(dir: string) {
 async function receive(dir: string) {
   const {
     HANDSHAKE: gist,
-    ISSUE: issue,
+    ISSUES: issueList,
     GITHUB_REPOSITORY: repo,
     GITHUB_RUN_ID: runId,
   } = process.env
   const githubEnv = process.env.GITHUB_ENV
   if (!gist || !/^[0-9a-f]+$/.test(gist)) fail("HANDSHAKE must be the handover gist's id", 2)
-  if (!issue || !repo || !runId || !githubEnv)
+  if (!issueList || !repo || !runId || !githubEnv)
     fail("receive runs inside the Resolve issues workflow", 2)
+  const issues = JSON.parse(issueList) as number[]
+  if (!Array.isArray(issues)) fail("ISSUES must be a JSON issue-number array", 2)
+  issueBatchId(issues)
   const privateKeyPath = join(dir, "private.key")
   if (!existsSync(privateKeyPath)) fail(`no private key in ${dir}; run keygen first`, 2)
 
   // The gist's git remote, not its API: no rate limit and no cache in front of it.
-  const file = `issue-${issue}.json`
+  const file = "batch.json"
   const deadline = Date.now() + HANDSHAKE_TIMEOUT_MS
   let sealed: Sealed | undefined
   while (!sealed && Date.now() < deadline) {
@@ -564,14 +583,11 @@ async function receive(dir: string) {
 
   const privateKey = readFileSync(privateKeyPath, "utf8")
   rmSync(privateKeyPath, { force: true })
-  const credentials = await open(
-    sealed,
-    privateKey,
-    handoverContext(repo, runId, Number(issue)),
-  ).catch((error: Error) =>
-    fail(
-      `the credentials in the handover gist do not open with this job's key (${error.message}). They were sealed for another run or job: dispatch again with bun github:resolve-issues.`,
-    ),
+  const credentials = await open(sealed, privateKey, handoverContext(repo, runId, issues)).catch(
+    (error: Error) =>
+      fail(
+        `the credentials in the handover gist do not open with this job's key (${error.message}). They were sealed for another run or job: dispatch again with bun github:resolve-issues.`,
+      ),
   )
   // Mask before anything else can print them, then hand them to the later steps.
   console.log(`::add-mask::${credentials.githubToken}`)
@@ -580,7 +596,7 @@ async function receive(dir: string) {
     githubEnv,
     `GH_TOKEN=${credentials.githubToken}\nCLAUDE_CODE_OAUTH_TOKEN=${credentials.claudeCodeOAuthToken}\n`,
   )
-  console.log(`Credentials for #${issue} received.`)
+  console.log(`Credentials for batch ${issueBatchId(issues)} received.`)
 }
 
 if (import.meta.main) {

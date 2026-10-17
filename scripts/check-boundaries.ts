@@ -13,7 +13,7 @@
  *      could not install it),
  *   6. every workspace package is named `@crvouga/mockingbird` or
  *      `@crvouga/mockingbird-<kebab-case>` (hard rule: one npm naming convention),
- *   7. only emulator services (`@crvouga/mockingbird-service-<name>`) are published; a
+ *   7. emulator services and the neutral fleet tool are published; a
  *      service that imports private helper packages builds with
  *      scripts/bundle-service.ts, which inlines them into its `dist`.
  *      Postgres and SQLite bundle the same way from scripts/build.ts.
@@ -112,11 +112,11 @@ for (const pkg of packages.values()) {
   }
 }
 
-// 7. only emulator services are published.
+// 7. publish emulator services and the explicit neutral fleet tool.
 for (const pkg of packages.values()) {
-  if (pkg.public && !SERVICE_NAME.test(pkg.name)) {
+  if (pkg.public && !SERVICE_NAME.test(pkg.name) && pkg.name !== "@crvouga/mockingbird-fleet") {
     fail(
-      `${pkg.name}: only emulator services (@crvouga/mockingbird-service-<name>) are published — mark it "private": true`,
+      `${pkg.name}: only emulator services and @crvouga/mockingbird-fleet are published — mark it "private": true`,
     )
   }
 }

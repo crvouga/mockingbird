@@ -9,12 +9,33 @@ export const ingressSupport = {
     streaming: true,
     signing: "vendor request signing is not used; webhook signatures remain payload based",
   },
+  cognito: {
+    publicOrigin: true,
+    pathPrefix: true,
+    namespaces: "path-or-header",
+    streaming: true,
+    signing:
+      "JWT issuer and JWKS use the configured public namespace; SigV4 verification is not modelled",
+  },
+  medplum: {
+    publicOrigin: true,
+    pathPrefix: true,
+    namespaces: "path-or-header",
+    streaming: true,
+    signing: "FHIR, OAuth and storage URLs use the configured public namespace",
+  },
   other: {
     publicOrigin: false,
     reason:
       "host/path-sensitive signing and hosted URL rewriting are not certified; use a direct endpoint",
   },
 } as const
+
+export function supportsPublicIngress(
+  service: string,
+): service is "stripe" | "cognito" | "medplum" {
+  return service === "stripe" || service === "cognito" || service === "medplum"
+}
 
 /** Fixed configuration is the only authority for generated/advertised origins. */
 export function advertisedHttpBase(entry: ConfigService): string | undefined {
@@ -47,7 +68,7 @@ export function createFleetIngress(
     .flatMap(([service, entry]) => {
       const base = advertisedHttpBase(entry)
       if (!base) return []
-      if ((entry.target ?? service) !== "stripe")
+      if (!supportsPublicIngress(entry.target ?? service))
         throw new Error(
           `public ingress unsupported for ${entry.target ?? service}; host/path-sensitive signatures require a direct endpoint`,
         )
@@ -76,6 +97,11 @@ export function createFleetIngress(
         (url.pathname === r.prefix || url.pathname.startsWith(`${r.prefix}/`)),
     )
     if (!route) return new Response("public ingress route not found", { status: 404 })
+    if (
+      (route.entry.target ?? route.service) === "cognito" &&
+      request.headers.get("authorization")?.startsWith("AWS4-HMAC-SHA256")
+    )
+      return new Response("SigV4 requests require a direct endpoint", { status: 403 })
     const path = url.pathname.slice(route.prefix.length) || "/"
     const adminPrefix = route.entry.adminPrefix ?? config.adminPrefix ?? "/__admin"
     // Namespace path carriers select vendor state. All other administration stays private.

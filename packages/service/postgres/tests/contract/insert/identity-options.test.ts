@@ -1,10 +1,13 @@
 import { errorParity, sequenceParity } from "../helpers.ts";
 
-const setup = ['CREATE SCHEMA geviti', 'CREATE TABLE geviti."profileStates" (seq bigint NOT NULL)'];
+const setup = [
+  "CREATE SCHEMA synthetic_fixture",
+  'CREATE TABLE synthetic_fixture."profileStates" (seq bigint NOT NULL)',
+];
 const addDumpIdentity = `
-  ALTER TABLE geviti."profileStates"
+  ALTER TABLE synthetic_fixture."profileStates"
     ALTER COLUMN seq ADD GENERATED ALWAYS AS IDENTITY (
-      SEQUENCE NAME geviti."profileStates_seq_seq"
+      SEQUENCE NAME synthetic_fixture."profileStates_seq_seq"
       START WITH 1 INCREMENT BY 1 NO MINVALUE NO MAXVALUE CACHE 1
     )
 `;
@@ -19,15 +22,15 @@ errorParity(
 
 sequenceParity("named identity sequence generates consecutive values", setup, [
   { sql: addDumpIdentity },
-  { sql: 'INSERT INTO geviti."profileStates" DEFAULT VALUES' },
-  { sql: 'INSERT INTO geviti."profileStates" DEFAULT VALUES' },
-  { sql: 'SELECT seq FROM geviti."profileStates" ORDER BY seq', query: true },
+  { sql: 'INSERT INTO synthetic_fixture."profileStates" DEFAULT VALUES' },
+  { sql: 'INSERT INTO synthetic_fixture."profileStates" DEFAULT VALUES' },
+  { sql: 'SELECT seq FROM synthetic_fixture."profileStates" ORDER BY seq', query: true },
 ]);
 
 sequenceParity("named identity sequence is catalog-visible", setup, [
   { sql: addDumpIdentity },
   {
-    sql: `SELECT pg_get_serial_sequence('geviti."profileStates"', 'seq') AS sequence_name`,
+    sql: `SELECT pg_get_serial_sequence('synthetic_fixture."profileStates"', 'seq') AS sequence_name`,
     query: true,
   },
   {
@@ -35,7 +38,7 @@ sequenceParity("named identity sequence is catalog-visible", setup, [
       SELECT n.nspname, c.relname, c.relkind
       FROM pg_class c
       JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = 'geviti' AND c.relname = 'profileStates_seq_seq'
+      WHERE n.nspname = 'synthetic_fixture' AND c.relname = 'profileStates_seq_seq'
     `,
     query: true,
   },
@@ -43,7 +46,7 @@ sequenceParity("named identity sequence is catalog-visible", setup, [
     sql: `
       SELECT is_identity
       FROM information_schema.columns
-      WHERE table_schema = 'geviti' AND table_name = 'profileStates' AND column_name = 'seq'
+      WHERE table_schema = 'synthetic_fixture' AND table_name = 'profileStates' AND column_name = 'seq'
     `,
     query: true,
   },

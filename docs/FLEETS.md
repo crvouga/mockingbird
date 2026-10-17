@@ -557,6 +557,8 @@ cancellation, and keeps administration on a separate private listener. Supply TL
 | Provider/profile | Origin/prefix behavior | Signing policy |
 | --- | --- | --- |
 | Stripe reference | Configured origin/prefix, hosted pages and namespace follow-ups tested | Vendor requests do not use host/path signing; webhook payload signatures remain intact |
+| Cognito | Configured origin/prefix and namespace JWT discovery/authentication; restore on changed private ports tested | RS256 issuer/JWKS certified; SigV4 requests require direct endpoints |
+| Medplum | Configured FHIR/OAuth origin/prefix and namespace links, pagination, restored state tested | Existing OAuth/project policies; reacquire tokens after restore |
 | S3 and other providers | Public origin/prefix mapping is explicitly unsupported/discoverable | Use direct endpoints preserving signed host/path/query; arbitrary rewrites are not certified |
 | PostgreSQL/Redis | Actual protocol endpoints and explicit host port mappings | HTTP reverse-proxy options do not apply |
 
@@ -575,3 +577,7 @@ Configured proxy/fetch injection remains host-owned. Discovery identifies HTTP c
 WebhookHub transport and reports unsupported participants. This is not a network sandbox for SDKs,
 application sockets, arbitrary provider-specific transports or DNS rebinding; apply a separate
 network policy when those need isolation. No outbound restriction is enabled by default.
+
+Provider-specific ingress limits and acceptance coverage are documented in the
+[Cognito README](../packages/service/cognito/README.md#fleet-fixtures-and-public-identity-endpoints) and
+[Medplum README](../packages/service/medplum/README.md#fleet-public-ingress).

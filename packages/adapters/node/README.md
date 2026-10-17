@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-adapter-node
 
-> **Internal package — not published to npm.** Mockingbird publishes only its emulator services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
+> **Internal package — not published to npm.** Mockingbird publishes emulator services and the neutral fleet tool, which bundle this code. It is documented here for contributors to this repo.
 
 Serve any Mockingbird `FetchAPI` (a provider emulator such as `StripeAPI`, or your own) as a real HTTP
 server over `node:http`. Use it when the code under test needs a URL (a subprocess, a browser, an
@@ -17,7 +17,10 @@ npx mockingbird-stripe serve --config mockingbird.json --ready-file ready.json
 ```
 
 The supported management client and contributor-independent harness APIs are exported from
-`@crvouga/mockingbird-service-stripe/fleet`. The CLI can supervise other installed services;
+`@crvouga/mockingbird-fleet` (vendor-neutral; install with the selected emulator packages).
+`@crvouga/mockingbird-service-stripe/fleet` remains a compatible entry point.
+See the [neutral package guide](../fleet/README.md) for installed-service resolution, bounded client
+responses, connection components and application archive compatibility policies. The CLI can supervise other installed services;
 see [Fleets](../../../docs/FLEETS.md).
 
 Requires Node >=22 (also runs on Bun, which implements `node:http`). ESM only.
@@ -25,7 +28,7 @@ Requires Node >=22 (also runs on Bun, which implements `node:http`). ESM only.
 ## Contributor-only workspace usage
 
 The following internal imports are for this repository's contributors, after `bun run setup`.
-Consumer programs should use the service's public `/fleet` entry point above.
+Consumer programs should use the neutral fleet package or the service's public `/fleet` entry point above.
 
 ```ts
 import type { AddressInfo } from "node:net"

@@ -6,7 +6,8 @@
  * files. Each public package is tagged `<name>@<version>` at the commit it was
  * released from; package.json keeps the `0.0.0-development` placeholder.
  *
- * Only emulator services (`@crvouga/mockingbird-service-<name>`) are public. The helper
+ * Emulator services (`@crvouga/mockingbird-service-<name>`) and the vendor-neutral
+ * `@crvouga/mockingbird-fleet` tool are public. The helper
  * packages they build on are private and inlined into each service's bundle
  * (scripts/bundle-service.ts), so a service's sources are its own directory plus
  * every private workspace package its `src` reaches.

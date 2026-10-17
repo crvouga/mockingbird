@@ -11,14 +11,6 @@
     "stripInternal": true,
     "types": []
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist",
-    "tests",
-    "src/wire",
-    "src/server.ts"
-  ]
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "tests", "src/wire", "src/server.ts"]
 }

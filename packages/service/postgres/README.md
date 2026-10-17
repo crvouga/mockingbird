@@ -529,6 +529,11 @@ search, `ON CONFLICT DO NOTHING/UPDATE`, `RETURNING`, `PREPARE`/`EXECUTE`/`DEALL
 
 ## API
 
+`analyzeSchema(sql, options?)` returns bounded, JSON-serializable schema compatibility diagnostics
+without changing an application database. Accepted statements remain semantically unverified;
+see [schema preflight and row-version metadata](COMPATIBILITY.md#schema-preflight-and-row-version-metadata)
+for limits, the report contract and `xmin` support.
+
 Stable runtime exports of the main entry:
 
 | Export | Description |

@@ -25,8 +25,15 @@ const pkgs = discoverPackages()
   .filter((p) => p.isPublic)
   .sort((a, b) => a.name.localeCompare(b.name))
 const serviceLines: string[] = []
+const toolingLines: string[] = []
 for (const pkg of pkgs) {
   const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8")) as Manifest
+  if (pkg.name === "@crvouga/mockingbird-fleet" && manifest.mockingbird?.layer === "adapter") {
+    toolingLines.push(
+      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): Vendor-neutral Node.js fleet lifecycle, installed-service loading, control client, discovery and archives. This is tooling, not a vendor emulator.`,
+    )
+    continue
+  }
   const parity = manifest.mockingbird?.parity
   if (
     manifest.mockingbird?.layer !== "service" ||
@@ -81,6 +88,10 @@ const body = [
   `- [Missing feature](${RAW}/.github/ISSUE_TEMPLATE/feature.md): title \`[<service>] feature: <what is missing>\`. An emulator lacks an operation, parameter, event, behavior or test control you use.`,
   `- [Bug](${RAW}/.github/ISSUE_TEMPLATE/bug.md): title \`[<service>] bug: <what breaks>\`. An emulator crashes, leaks state, contradicts its README, or does not build.`,
   `- [New service](${RAW}/.github/ISSUE_TEMPLATE/new-service.md): title \`[new-service] <Vendor>: <API surface>\`. No package emulates a vendor you depend on; describe the surface, auth, state, behaviors, webhooks and test controls you need.`,
+  "",
+  "## Fleet management",
+  "",
+  ...toolingLines,
   "",
   "## Services",
   "",

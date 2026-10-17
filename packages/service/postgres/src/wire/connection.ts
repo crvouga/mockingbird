@@ -36,6 +36,7 @@ type LoggedStatement =
   | { kind: "sql"; sql: string; params: BindValue[] }
   | { kind: "copy"; stmt: CopyStmt; data: string };
 type TransactionWorkspace = {
+  xid: number;
   statements: LoggedStatement[];
   savepoints: Array<{ name: string; statementCount: number }>;
 };
@@ -994,7 +995,7 @@ export class Connection implements Session {
     if (stmt?.type !== "transaction") throw pgError("syntax", "invalid transaction command", "42601");
     switch (stmt.action) {
       case "begin":
-        this.transaction ??= { statements: [], savepoints: [] };
+        this.transaction ??= { statements: [], savepoints: [], xid: this.database.state.allocateXid() };
         return command("BEGIN");
       case "commit": {
         const transaction = this.transaction;
@@ -1002,6 +1003,7 @@ export class Connection implements Session {
         if (transaction) {
           this.inSession(this.database, () =>
             this.database.transaction(() => {
+              this.database.state.transactionXid = transaction.xid;
               for (const logged of transaction.statements) this.replay(this.database, logged);
             }),
           );
@@ -1055,6 +1057,7 @@ export class Connection implements Session {
     workspace.state.settings = new Map(this.settings);
     workspace.state.settingDefaults = this.settingDefaults;
     workspace.transactions.begin();
+    workspace.state.transactionXid = this.transaction?.xid ?? null;
     for (const logged of this.transaction?.statements ?? []) {
       this.replay(workspace, logged);
     }

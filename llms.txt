@@ -37,6 +37,10 @@ Do not work around an emulator in your own project: file a GitHub issue on crvou
 - [Bug](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/bug.md): title `[<service>] bug: <what breaks>`. An emulator crashes, leaks state, contradicts its README, or does not build.
 - [New service](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/new-service.md): title `[new-service] <Vendor>: <API surface>`. No package emulates a vendor you depend on; describe the surface, auth, state, behaviors, webhooks and test controls you need.
 
+## Fleet management
+
+- [@crvouga/mockingbird-fleet](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/adapters/fleet/README.md): Vendor-neutral Node.js fleet lifecycle, installed-service loading, control client, discovery and archives. This is tooling, not a vendor emulator.
+
 ## Services
 
 - [@crvouga/mockingbird-service-acm](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/acm/README.md): Stateful Amazon Certificate Manager emulator with AWS SDK wire compatibility and deterministic local controls. Parity: Documented operations; LocalStack differential scenarios.
