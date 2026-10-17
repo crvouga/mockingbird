@@ -82,7 +82,7 @@ export const serveTarget: ServeTarget = {
     const email = text(values["super-admin-email"])
     const password = text(values["super-admin-password"])
     return createRuntime({
-      baseUrl: text(values["base-url"]) ?? `http://${host}:${port}/`,
+      baseUrl: common.baseUrl ?? text(values["base-url"]) ?? `http://${host}:${port}/`,
       ...(clientId || clientSecret || projectId
         ? {
             project: {

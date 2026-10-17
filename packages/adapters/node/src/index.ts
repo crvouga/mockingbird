@@ -23,14 +23,30 @@ export type {
   ProtocolTarget,
 } from "./fleet.js"
 export { startFleet } from "./fleet.js"
-export type { FleetArchive } from "./fleet-archive.js"
-export { diffArchives, inspectArchive, validateArchive } from "./fleet-archive.js"
+export type {
+  ArchiveCompatibilityPolicy,
+  ArchiveCompatibilityTags,
+  FleetArchive,
+} from "./fleet-archive.js"
+export {
+  assertArchiveCompatibility,
+  diffArchives,
+  inspectArchive,
+  migrateApplicationArchive,
+  validateArchive,
+} from "./fleet-archive.js"
 export type { RestoreBinding, RestoreBindings } from "./fleet-bindings.js"
 export { planRestoreBindings, rebaseArchiveNamespace } from "./fleet-bindings.js"
-export type { ConnectionManifest, ConnectionMapping, FleetClientOptions } from "./fleet-client.js"
+export type {
+  ConnectionField,
+  ConnectionManifest,
+  ConnectionMapping,
+  FleetClientOptions,
+} from "./fleet-client.js"
 export {
   FleetClient,
   FleetClientError,
+  FleetClientResponseError,
   renderConnections,
   writeConnections,
 } from "./fleet-client.js"
@@ -55,6 +71,7 @@ export type {
 export { FleetInstrumentation } from "./fleet-instrumentation.js"
 export type { JournalRecord, OperationJournal } from "./fleet-journal.js"
 export { filesystemOperationJournal, reconcileOperation } from "./fleet-journal.js"
+export { createInstalledServiceLoader } from "./fleet-loader.js"
 export type {
   ManagementOptions,
   Operation,

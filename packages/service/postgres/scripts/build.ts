@@ -5,6 +5,7 @@ import { dts } from "rollup-plugin-dts";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
+const { version } = await Bun.file("package.json").json();
 
 const build = Bun.spawn(
   [
@@ -14,6 +15,7 @@ const build = Bun.spawn(
     "src/unstable.ts",
     "src/admin.ts",
     "--bundle",
+    `--define:MOCKINGBIRD_POSTGRES_VERSION=${JSON.stringify(version)}`,
     "--format=esm",
     "--outdir=dist",
     "--platform=browser",
@@ -34,6 +36,7 @@ const serverBuild = Bun.spawn(
     "src/wire/cli.ts",
     "src/server.ts",
     "--bundle",
+    `--define:MOCKINGBIRD_POSTGRES_VERSION=${JSON.stringify(version)}`,
     "--format=esm",
     "--outdir=dist",
     "--outbase=src",

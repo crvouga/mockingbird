@@ -279,6 +279,7 @@ function applyOnConflictUpdate(
   const updated = existing.slice();
   applyUpdateSets(env, table, sets, scope, updated);
   computeGeneratedColumns(env, table, updated);
+  table.rowXmins.set(updated, env.ctx.rowVersionXid());
   rows[existingIdx] = updated;
   indexUpdateRow(env, table, existingIdx, existing, updated);
   checkNotNull(env, table, updated);
@@ -380,6 +381,7 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
       checkChecks(env, table, newRow);
       checkUnique(env, table, newRow, rows.length);
       checkForeignKeys(env, table, newRow);
+      table.rowXmins.set(newRow, env.ctx.rowVersionXid());
       rows.push(newRow);
       indexInsertRow(env, table, rows.length - 1, newRow);
       insertedCount++;
@@ -515,6 +517,7 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
     const finalRow = fired.row;
 
     computeGeneratedColumns(env, table, finalRow);
+    table.rowXmins.set(finalRow, env.ctx.rowVersionXid());
     rows[ri] = finalRow;
     try {
       checkNotNull(env, table, finalRow);
@@ -654,6 +657,7 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
           for (const c of con.columns) {
             newRow[child.columnIndex(c)] = null;
           }
+          child.rowXmins.set(newRow, env.ctx.rowVersionXid());
           childRows[i] = newRow;
           checkNotNull(env, child, newRow);
           checkChecks(env, child, newRow);
@@ -667,6 +671,7 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
             const ci = child.columnIndex(c);
             newRow[ci] = columnDefault(env, child, child.columns[ci]!);
           }
+          child.rowXmins.set(newRow, env.ctx.rowVersionXid());
           childRows[i] = newRow;
           checkNotNull(env, child, newRow);
           checkChecks(env, child, newRow);
@@ -705,6 +710,7 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
               const refIdx = table.columnIndex(con.refColumns[c]!);
               newRow[localIdx] = newRows[r]![refIdx] ?? null;
             }
+            child.rowXmins.set(newRow, env.ctx.rowVersionXid());
             childRows[i] = newRow;
             checkChecks(env, child, newRow);
           }
@@ -714,6 +720,7 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
           for (const i of idxs) {
             const newRow = childRows[i]!.slice();
             for (const c of con.columns) newRow[child.columnIndex(c)] = null;
+            child.rowXmins.set(newRow, env.ctx.rowVersionXid());
             childRows[i] = newRow;
             checkNotNull(env, child, newRow);
           }
@@ -726,6 +733,7 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
               const ci = child.columnIndex(c);
               newRow[ci] = columnDefault(env, child, child.columns[ci]!);
             }
+            child.rowXmins.set(newRow, env.ctx.rowVersionXid());
             childRows[i] = newRow;
             checkForeignKeys(env, child, newRow);
           }

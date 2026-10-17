@@ -15,6 +15,7 @@ import {
   type UserFixture,
 } from "./fixtures.js"
 import type { JunctionAPI } from "./index.js"
+import { labAccountBehaviorFrom } from "./lab-account-behavior.js"
 import {
   LAB_ACCOUNT_PRESET_ALIASES,
   LAB_ACCOUNT_PRESETS,
@@ -441,6 +442,13 @@ export const junctionAdminRoutes =
         const input = request.body
         return guarded(() => jsonRes(200, { limits: api(request).configureLimits(input) }))
       },
+
+      "GET /lab-account-behavior": (request) => jsonRes(200, api(request).labAccountBehavior),
+      "PUT /lab-account-behavior": (request) =>
+        guarded(() => {
+          api(request).labAccountBehavior = labAccountBehaviorFrom(request.body)
+          return jsonRes(200, api(request).labAccountBehavior)
+        }),
 
       "GET /default-billing-types": (request) =>
         jsonRes(200, { defaultBillingTypes: api(request).defaultBillingTypes }),

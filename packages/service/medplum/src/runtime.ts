@@ -255,6 +255,11 @@ export const createRuntime = (options: MedplumRuntimeOptions = {}): MedplumRunti
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
       new MedplumAPI({
         ...apiOptions,
+        ...(apiOptions.baseUrl && publicNamespace !== "default"
+          ? {
+              baseUrl: `${apiOptions.baseUrl.replace(/\/$/, "")}${adminPrefix ?? "/__admin"}/ns/${encodeURIComponent(publicNamespace)}/`,
+            }
+          : {}),
         sqlite,
         namespace,
         now: clock.now,

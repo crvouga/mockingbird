@@ -141,3 +141,34 @@ PostgreSQL; clock profiles are supported. This adds fleet orchestration around e
 snapshot semantics, not a broader SQL compatibility claim. Acceptance evidence is
 `packages/adapters/node/fleet.management.test.ts` using the unmodified `pg` wire client.
 See [Fleets](../../../docs/FLEETS.md).
+
+## Schema preflight and row-version metadata
+
+`analyzeSchema(sql, options)` (the package's main export) checks plain schema SQL in a discarded
+in-memory database and returns a JSON-serializable report, including the installed build version,
+statement offsets/lines/columns, object names, SQLSTATEs, independent failures and identifiable
+missing prerequisites. Defaults cap input at 1 MiB, statements at 1,000 and diagnostics at 100;
+configurable hard caps are 4 MiB, 10,000 and 1,000. It does not execute data statements, contact an
+oracle or change an existing database. Accepted statements remain explicitly **unknown** for full
+semantic compatibility, including deferred SQL/PL/pgSQL bodies and dynamic SQL. A detected gap sets
+`compatible: false`; otherwise it stays `null`, never a claim of a verified import. Source-tree
+execution identifies the version as `source-tree`; published builds embed their package version.
+Lexical errors that prevent reliable statement recovery terminate the scan.
+
+SQL and PL/pgSQL function definitions retain comma-separated `SET` lists (including `search_path`),
+apply them during calls and restore the caller's settings on return or error. Portable snapshots
+retain these settings. Sequence functions accept explicit `regclass` input, and
+`pg_get_serial_sequence` finds owned serial, identity and explicitly owned sequences using exact
+column-name case; ownership follows sequence/table/column renames and snapshots.
+
+Stored tables expose `xmin` and `alias.xmin` as hidden `xid` system columns. INSERT, UPDATE, upsert,
+COPY and referential-action writes stamp row versions with a local transaction identity; explicit
+transactions share that identity, including wire workspace replay and commit. Rollback restores
+committed row metadata. Snapshots preserve identities and continue allocation above retained IDs;
+legacy PGMM snapshots without metadata expose frozen xid `2`. Each database/namespace owns its
+allocator. These identities are version markers, not permanent globally unique row identifiers.
+The implementation does not add full MVCC, VACUUM/freeze maintenance, physical tuple metadata or
+xid wraparound management; it fails when the 32-bit allocation space is exhausted.
+
+Evidence: `tests/contract/regressions/issue-queue.test.ts` (PostgreSQL 18.3 differential contracts),
+`tests/contract/api/schema-report.test.ts`, and `tests/wire/issue-queue.test.ts`.

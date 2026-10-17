@@ -26,6 +26,7 @@ import {
   type UserFixture,
 } from "./fixtures.js"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
+import { type LabAccountBehavior, labAccountBehaviorFrom } from "./lab-account-behavior.js"
 import {
   expandLabAccountLayout,
   type LabAccountLayout,
@@ -218,6 +219,8 @@ export type JunctionAPIOptions = APIOptions & {
   defaultBillingTypes?: Partial<Record<string, BillingType>>
   /** Per-lab multiple-account routing policy; defaults to platform fallback. */
   labAccountOmissionPolicies?: Record<string, LabAccountOmissionPolicy>
+  /** Named policy; native preserves legacy behavior. Sandbox exceptions are account-owned. */
+  labAccountBehavior?: Partial<LabAccountBehavior>
   /** Users and orders to load into every namespace, re-applied on every `reset()`. */
   fixtures?: JunctionFixtures
 }
@@ -297,6 +300,10 @@ export class JunctionAPI implements FetchAPI {
     if (options.identity !== undefined && !IDENTITY_MODES.includes(options.identity))
       throw new TypeError(`identity must be one of ${IDENTITY_MODES.join(", ")}`)
     state.identity = options.identity ?? "strict"
+    state.labAccountBehavior = labAccountBehaviorFrom({
+      profile: "native",
+      ...options.labAccountBehavior,
+    })
     state.defaultBillingTypes = defaultBillingTypesFrom(options.defaultBillingTypes ?? {})
     state.labAccountOmissionPolicies = omissionPoliciesFrom(
       options.labAccountOmissionPolicies ?? {},
@@ -468,7 +475,15 @@ export class JunctionAPI implements FetchAPI {
     this.state.labAccountOmissionPolicies = omissionPoliciesFrom(input)
   }
 
-  /** Lab slug → the billing type an order gets when omitted. Kept across reset. */
+  /** Effective account policy for this namespace; kept across reset. */
+  get labAccountBehavior(): LabAccountBehavior {
+    return labAccountBehaviorFrom(this.state.labAccountBehavior)
+  }
+
+  set labAccountBehavior(input: LabAccountBehavior) {
+    this.state.labAccountBehavior = labAccountBehaviorFrom(input)
+  }
+
   get defaultBillingTypes(): Record<string, BillingType> {
     return { ...this.state.defaultBillingTypes } as Record<string, BillingType>
   }
@@ -733,3 +748,9 @@ const normalizePath = (request: Request): Request => {
   next.pathname = normalized
   return new Request(next, request)
 }
+
+export type {
+  LabAccountBehavior,
+  LabAccountProfile,
+  LabAccountSandboxPolicy,
+} from "./lab-account-behavior.js"

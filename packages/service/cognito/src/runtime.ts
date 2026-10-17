@@ -8,6 +8,7 @@ import {
   createRuntime as serviceRuntime,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+import { type CognitoFixtures, redactedUser, validateCognitoFixtures } from "./fixtures.js"
 import { document } from "./generated/openapi.js"
 import { accessKeyCredential, COGNITO_NAMESPACE, CognitoAPI } from "./index.js"
 import type { CognitoSeedUser } from "./state.js"
@@ -47,6 +48,8 @@ export type CognitoRuntimeOptions = {
   clientId?: string
   region?: string
   users?: readonly CognitoSeedUser[]
+  fixtures?: CognitoFixtures
+  baseUrl?: string
 }
 export type CognitoRuntime = ServiceRuntime<CognitoAPI>
 const json = (body: unknown, status = 200) => Response.json(body, { status })
@@ -56,16 +59,7 @@ const admin = (runtime: CognitoRuntime): AdminRoutes => ({
       users: runtime
         .instance(namespace)
         .state.users.list({ order: "oldest" })
-        .map(({ value }) => ({
-          username: value.username,
-          sub: value.sub,
-          attributes: value.attributes,
-          confirmed: value.confirmed,
-          enabled: value.enabled,
-          status: value.status,
-          groups: value.groups,
-          identities: value.identities,
-        })),
+        .map(({ value }) => redactedUser(value)),
     }),
   "POST /users": ({ namespace, body }) => {
     const input = body as Partial<CognitoSeedUser> | null
@@ -74,7 +68,7 @@ const admin = (runtime: CognitoRuntime): AdminRoutes => ({
         { error: { type: "mockingbird_admin", message: "username and password are required" } },
         400,
       )
-    return json(runtime.instance(namespace).state.put(input as CognitoSeedUser), 201)
+    return json(redactedUser(runtime.instance(namespace).state.put(input as CognitoSeedUser)), 201)
   },
   "GET /codes": ({ namespace, url }) => {
     const user = runtime.instance(namespace).state.find(url.searchParams.get("username") ?? "")
@@ -86,9 +80,9 @@ const admin = (runtime: CognitoRuntime): AdminRoutes => ({
         })
       : json({ error: { type: "mockingbird_admin", message: "user not found" } }, 404)
   },
-  "POST /keys/rotate": ({ namespace, body }) =>
+  "POST /keys/rotate": async ({ namespace, body }) =>
     json(
-      runtime
+      await runtime
         .instance(namespace)
         .rotateSigningKey((body as { retainPrevious?: boolean } | null)?.retainPrevious !== false),
     ),
@@ -104,8 +98,10 @@ const admin = (runtime: CognitoRuntime): AdminRoutes => ({
     return json({ revoked: true })
   },
 })
-export const createRuntime = (options: CognitoRuntimeOptions = {}): CognitoRuntime =>
-  serviceRuntime({
+export const createRuntime = (options: CognitoRuntimeOptions = {}): CognitoRuntime => {
+  const fixtures = options.fixtures ? validateCognitoFixtures(options.fixtures) : undefined
+  if (fixtures && options.users) throw new Error("fixtures.users and users cannot both be supplied")
+  return serviceRuntime({
     name: COGNITO_NAMESPACE,
     document,
     presets: COGNITO_PRESETS,
@@ -117,15 +113,19 @@ export const createRuntime = (options: CognitoRuntimeOptions = {}): CognitoRunti
     ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: accessKeyCredential,
-    create: ({ sqlite, namespace, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
       new CognitoAPI({
         sqlite,
         namespace,
+        publicNamespace,
+        adminPrefix,
+        ...(options.baseUrl ? { baseUrl: options.baseUrl } : {}),
         now: clock.now,
         ...(options.poolId ? { poolId: options.poolId } : {}),
         ...(options.clientId ? { clientId: options.clientId } : {}),
         ...(options.region ? { region: options.region } : {}),
-        ...(options.users ? { users: options.users } : {}),
+        ...((fixtures?.users ?? options.users) ? { users: fixtures?.users ?? options.users } : {}),
       }),
     admin,
   })
+}

@@ -213,9 +213,10 @@ test("failed terminal journal durability keeps mutated state fenced rather than 
       },
     )
     await files.write("default", "state", new TextEncoder().encode("synthetic-input"))
-    await expect(new FleetClient(fleet.manifest.adminBase).reset("default")).rejects.toThrow(
-      "unavailable",
-    )
+    await expect(new FleetClient(fleet.manifest.adminBase).reset("default")).rejects.toMatchObject({
+      status: 400,
+      details: { type: "mockingbird_admin", code: "invalid_request", body: "omitted" },
+    })
     await expect(files.write("default", "state", new Uint8Array())).rejects.toThrow("fenced")
     expect((await fetch(fleet.manifest.healthUrl)).status).toBe(503)
     expect((await journal.load())[0]?.phase).toBe("committing")

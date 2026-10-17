@@ -563,6 +563,7 @@ export interface CreateSequenceStmt {
 }
 
 export interface AlterSequenceStmt {
+  readonly renameTo?: string;
   readonly type: "alter_sequence";
   readonly name: string[];
   readonly ifExists: boolean;
@@ -623,6 +624,7 @@ export interface CreateFunctionStmt {
   readonly language: string;
   readonly body: string | null; // AS 'body'
   readonly sqlBody: Statement[] | null; // BEGIN ATOMIC ... END or RETURN expr
+  readonly settings?: Record<string, string>;
   readonly volatility: "immutable" | "stable" | "volatile" | null;
   readonly strict: boolean;
 }

@@ -1,7 +1,7 @@
 /**
  * Build a published mock-service package as a self-contained bundle.
  *
- * Only `@crvouga/mockingbird-service-*` packages ship to npm; the helper workspace
+ * Services and the neutral `@crvouga/mockingbird-fleet` tool ship to npm; the helper workspace
  * packages they build on (core, service runtime, openapi, commands, …) are private.
  * So each service inlines them: every import that is not a declared `dependency` /
  * `peerDependency` of the service is bundled into its `dist`, JavaScript with esbuild

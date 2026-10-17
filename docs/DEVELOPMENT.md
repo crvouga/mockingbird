@@ -186,16 +186,20 @@ and returns JSON for the next blocker. `bun run pr:ready comments` lists review 
 comments when you want to read them.
 
 `/resolve-issues` works the queue of GitHub issues that agents in other projects file through
-[REPORTING_ISSUES.md](REPORTING_ISSUES.md) (label `agent-reported`): claim one, confirm the
-reported behavior against the oracle, add a regression test, fix the emulator, and ship it through
-`/pr-ready` with `Fixes #<n>`. `feature` requests become acceptance tests plus contract changes;
+[REPORTING_ISSUES.md](REPORTING_ISSUES.md) (label `agent-reported`): claim the selected issues, confirm
+reported behavior against the oracle, add regression tests and fix the emulators. Every invocation
+uses one branch, one existing worktree and one PR for the complete batch. Prioritize native
+subagents per independent issue or issue group in that same worktree; the coordinator integrates
+and runs `/pr-ready` once, with a `Fixes #<n>` line for each fully resolved issue. `feature` requests become acceptance tests plus contract changes;
 `new-service` requests become new packages built through
 [AUTHORING_A_SERVICE.md](AUTHORING_A_SERVICE.md).
 `bun github:resolve-issues [<issue…>]` runs that command on GitHub, unattended, as you. It starts
 the [Resolve issues](../.github/workflows/resolve-issues.yml) workflow with a GitHub token minted for
 the run, which expires within 8 hours and reaches only this repository, plus your Claude
-subscription token. No repo secret is involved. For each issue, an agent opens a draft PR and
-carries it to ready-to-merge. With no issue named, it takes the queue in the command's order. The
+subscription token. No repo secret is involved. One coordinator opens a single draft PR for the
+batch, delegates independent issue groups to native subagents in its shared checkout, and carries
+the combined PR to ready-to-merge. Blocked issues are reported individually while independent
+work continues. With no issue named, it takes the queue in the command's order. The
 repo owner runs `bun github:resolve-issues setup` once first.
 [SECRETS.md](SECRETS.md#resolving-issues-on-github) lists the safeguards.
 

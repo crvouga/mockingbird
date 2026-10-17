@@ -5,8 +5,14 @@ import * as postgresMem from "../../../src/index.ts";
 import { Database, PostgresError } from "../../../src/index.ts";
 
 describe("public API exports", () => {
-  test("main entry runtime keys are exactly Database, PostgresError, Snapshot, Statement", () => {
-    expect(Object.keys(postgresMem).sort()).toEqual(["Database", "PostgresError", "Snapshot", "Statement"]);
+  test("main entry exposes the database API and schema preflight", () => {
+    expect(Object.keys(postgresMem).sort()).toEqual([
+      "Database",
+      "PostgresError",
+      "Snapshot",
+      "Statement",
+      "analyzeSchema",
+    ]);
   });
 
   test("package.json exports ., ./admin, ./unstable, ./wire and ./server", () => {

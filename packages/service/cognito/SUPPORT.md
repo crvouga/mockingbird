@@ -9,5 +9,5 @@ Generated from `openapi.yaml`; do not edit by hand.
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
 | `CognitoRpc` | `POST /` | ✅ supported | ⚠️ unsafe (opt-in) |  |
-| `Discovery` | `GET /{poolId}/.well-known/openid-configuration` | ✅ supported | ❌ disabled | Local issuer metadata. |
-| `Jwks` | `GET /{poolId}/.well-known/jwks.json` | ✅ supported | ❌ disabled | Local signing keys. |
+| `Discovery` | `GET /{poolId}/.well-known/openid-configuration` | ✅ supported | ❌ disabled | Namespace-scoped local issuer metadata with configured public origin/prefix. |
+| `Jwks` | `GET /{poolId}/.well-known/jwks.json` | ✅ supported | ❌ disabled | Namespace-scoped RS256 keys; portable snapshots retain the current key and two prior keys. |

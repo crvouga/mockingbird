@@ -12,8 +12,8 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GetHealthcheck` | `GET /healthcheck` | ✅ supported | ❌ disabled | Reports the host (platform, runtime) the server runs on. |
 | `GetRobots` | `GET /robots.txt` | ✅ supported | ❌ disabled | Static text; covered by the server scenarios. |
 | `GetJwks` | `GET /.well-known/jwks.json` | ✅ supported | ❌ disabled | Signing keys are generated per server. |
-| `GetOpenIdConfiguration` | `GET /.well-known/openid-configuration` | ✅ supported | ❌ disabled | Discovery document; endpoints are the server's own. |
-| `GetSmartConfiguration` | `GET /.well-known/smart-configuration` | ✅ supported | ❌ disabled | Discovery document; endpoints are the server's own. |
+| `GetOpenIdConfiguration` | `GET /.well-known/openid-configuration` | ✅ supported | ❌ disabled | Discovery document; endpoints use the configured public base and namespace; fleet origin/prefix ingress is covered by acceptance tests. |
+| `GetSmartConfiguration` | `GET /.well-known/smart-configuration` | ✅ supported | ❌ disabled | Discovery document; endpoints use the configured public base and namespace; fleet origin/prefix ingress is covered by acceptance tests. |
 | `PostAuthLogin` | `POST /auth/login` | ✅ supported | ❌ disabled | Password flows are covered by the auth scenarios. |
 | `PostAuthProfile` | `POST /auth/profile` | ✅ supported | ❌ disabled | Multi-membership login step. |
 | `GetAuthMe` | `GET /auth/me` | ✅ supported | ❌ disabled | Covered by the auth and admin scenarios. |

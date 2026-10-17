@@ -93,10 +93,12 @@ someone approves it by hand.
 
 `bun github:resolve-issues` runs the [Resolve issues](../.github/workflows/resolve-issues.yml)
 workflow as **you**, with credentials bounded to that run. No repo secret is involved. The workflow
-starts one Claude Code agent per `agent-reported` issue. Each agent opens a draft PR, runs
-[`/resolve-issues <n>`](../.agents/commands/resolve-issues.md), and then runs `/pr-ready` until the
-PR is green and ready to merge. When a decision needs a human, the agent comments on the issue
-instead. It never merges.
+starts one Claude Code coordinator for the complete `agent-reported` issue batch. It opens one
+draft PR on one branch in one checkout, runs [`/resolve-issues`](../.agents/commands/resolve-issues.md)
+with every selected issue, and prioritizes native subagents for independent issue groups in that
+same worktree. The coordinator integrates their changes and runs `/pr-ready` until the combined
+PR is green and ready to merge. It reports precise blockers on affected issues while continuing
+independent work. It never merges.
 
 ```bash
 bun github:resolve-issues setup           # once, by the repo owner (below)
@@ -128,13 +130,14 @@ bun github:resolve-issues --dry-run 190   # hand over and check the credentials,
   (`claude setup-token`). The job unsets `ANTHROPIC_API_KEY`, and Claude Code keeps its
   credentials out of the agent's shell commands (`CLAUDE_CODE_SUBPROCESS_ENV_SCRUB`).
 - **Credentials are never workflow inputs.** The repository is public, and inputs are neither
-  masked nor secret. Instead, each job generates a key pair and uploads only its public key. The
-  command encrypts the credentials to that key, bound to the run and the issue, and passes the
-  ciphertext through a secret gist. It deletes the gist as soon as every job has read it; keep the
+  masked nor secret. Instead, the coordinator job generates a key pair and uploads only its public key.
+  The command encrypts the credentials to that key, bound to the repository, run and complete issue
+  batch, and passes the ciphertext through a secret gist. It deletes the gist as soon as the
+  coordinator confirms successful receipt; keep the
   command running until it says so, which takes a minute or two. The job masks both tokens,
   refuses anything that is not a one-line token, deletes its private key, and redacts both tokens
   from the agent's report. A re-run job cannot get credentials, so dispatch again instead.
-- **Runs are bounded.** A run takes at most 10 issues, and each job stops after 3 hours. The job
+- **Runs are bounded.** A run takes at most 10 issues, and its coordinator job stops after 3 hours. The job
   holds no vendor sandbox keys: to check a report against the oracle, the agent dispatches the
   Parity workflow (`bun run parity:remote`).
 

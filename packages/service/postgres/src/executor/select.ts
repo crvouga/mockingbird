@@ -254,7 +254,22 @@ function runFunctionBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): Ex
   return last;
 }
 
+function withFunctionSettings<T>(env: ExecEnv, fn: FunctionData, run: () => T): T {
+  const state = env.ctx.state;
+  const saved = new Map(state.localSettings);
+  for (const [name, value] of Object.entries(fn.settings ?? {})) state.localSettings.set(name, value);
+  try {
+    return run();
+  } finally {
+    state.localSettings = saved;
+  }
+}
+
 export function callSqlFunctionScalar(env: ExecEnv, fn: FunctionData, args: TypedValue[]): TypedValue {
+  return withFunctionSettings(env, fn, () => callSqlFunctionScalarBody(env, fn, args));
+}
+
+function callSqlFunctionScalarBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): TypedValue {
   const retT = fn.returns ?? "text";
   if (fn.language === "plpgsql") {
     return callPlpgsqlScalar(env, fn, args);
@@ -285,6 +300,10 @@ export function callSqlFunctionScalar(env: ExecEnv, fn: FunctionData, args: Type
 }
 
 export function callSqlFunctionSet(env: ExecEnv, fn: FunctionData, args: TypedValue[]): Relation {
+  return withFunctionSettings(env, fn, () => callSqlFunctionSetBody(env, fn, args));
+}
+
+function callSqlFunctionSetBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): Relation {
   if (fn.language === "plpgsql") {
     return callPlpgsqlSet(env, fn, args);
   }
@@ -470,15 +489,17 @@ interface Source {
 }
 
 function renameWithAliases(rel: Relation, label: string | null, colAliases: string[] | null, what: string): Relation {
-  if (colAliases && colAliases.length > rel.columns.length) {
+  const visibleWidth = rel.columns.filter((column) => !column.system).length;
+  if (colAliases && colAliases.length > visibleWidth) {
     throw pgError(
       "invalid_column_reference",
-      `table "${what}" has ${rel.columns.length} columns available but ${colAliases.length} columns specified`,
+      `table "${what}" has ${visibleWidth} columns available but ${colAliases.length} columns specified`,
       "42P10",
     );
   }
   const columns = rel.columns.map((c, i) => ({
-    name: colAliases?.[i] ?? c.name,
+    ...c,
+    name: c.system ? c.name : (colAliases?.[i] ?? c.name),
     type: c.type === UNKNOWN ? ("text" as TypeId) : c.type,
     table: label,
   }));
@@ -501,8 +522,11 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null): 
       if (table) {
         table.materializeSlab();
         const rel: Relation = {
-          columns: table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label })),
-          rows: table.rows,
+          columns: [
+            ...table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label })),
+            { name: "xmin", type: "xid", table: label, hidden: true, system: true },
+          ],
+          rows: table.rows.map((row) => [...row, table.rowXmins.get(row) ?? 2]),
         };
         return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
       }
@@ -1230,7 +1254,7 @@ function resolveColIdx(columns: Relation["columns"], parts: string[]): number | 
     let found = -1;
     for (let i = 0; i < columns.length; i++) {
       const c = columns[i]!;
-      if (!c.hidden && c.name === name) {
+      if ((!c.hidden || c.system) && c.name === name) {
         if (found !== -1) return null;
         found = i;
       }
@@ -1913,7 +1937,7 @@ function expandTargets(core: SelectCore, columns: Relation["columns"]): ProjItem
         let any = false;
         for (let i = 0; i < columns.length; i++) {
           const c = columns[i]!;
-          if (c.table === label) {
+          if (c.table === label && !c.system) {
             any = true;
             items.push({ name: c.name, kind: "col", colIdx: i, expr: null, hidden: false });
           }

@@ -11,6 +11,7 @@ export interface RelColumn {
   table: string | null;
   /** hidden columns (e.g. ORDER BY helpers) are excluded from final output */
   hidden?: boolean;
+  system?: boolean;
 }
 
 export interface Relation {
@@ -43,7 +44,7 @@ export class RowScope {
       let count = 0;
       for (let i = 0; i < this.columns.length; i++) {
         const c = this.columns[i]!;
-        if (c.name === name && !c.hidden) {
+        if (c.name === name && (!c.hidden || c.system)) {
           count++;
           if (count > 1) {
             throw pgError("ambiguous_column", `column reference "${name}" is ambiguous`);
@@ -85,7 +86,7 @@ export class RowScope {
     // include hidden columns: per-side USING copies are real columns of the range var
     for (let i = 0; i < this.columns.length; i++) {
       const c = this.columns[i]!;
-      if (c.table === rangeVar) {
+      if (c.table === rangeVar && !c.system) {
         types.push(c.type);
         values.push(this.row[i] ?? null);
         names.push(c.name);

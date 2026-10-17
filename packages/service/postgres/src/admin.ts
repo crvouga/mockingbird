@@ -20,7 +20,7 @@ import { Database, type DatabaseOptions, type HistoryCheckpoint } from "./api/da
 export interface AdminOptions {
   /** Database for the `default` namespace. Other namespaces open a fresh engine. */
   database?: Database;
-  adminPrefix?: string
+  adminPrefix?: string;
   adminKey?: string;
   /** Options for namespaces opened after `default`, and for `default` when `database` is omitted. */
   databaseOptions?: DatabaseOptions;

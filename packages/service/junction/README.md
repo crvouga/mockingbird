@@ -910,3 +910,49 @@ The USSL testkit result metadata follows the observed sandbox fixture (null spec
 and CLIA `05D2130115`); other laboratories retain their existing metadata behavior.
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
+
+### Lab-account behavior profiles
+
+`createRuntime({ labAccountBehavior: { profile, accounts } })` selects a named policy.
+`native` is the backward-compatible default. `expected-contract` enforces the
+[documented lab/account association and billing rules](https://docs.junction.com/lab/overview/lab-accounts),
+including rejecting a selected account belonging to another lab. This is an assumption
+from the public contract, **not measured production parity**. Both `expected-contract`
+and `sandbox-observed` return the persisted account association in POST/GET; a synthetic
+requisition uses that same stored provider account number.
+
+`sandbox-observed` uses explicit, account-owned observations, never a global delegated
+account billing override. For example, with synthetic fixture IDs:
+
+```ts
+import { createRuntime } from "@crvouga/mockingbird-service-junction"
+
+const runtime = createRuntime({
+  labAccountBehavior: {
+    profile: "sandbox-observed",
+    accounts: {
+      "synthetic-delegated-id": {
+        rejectBilling: { client_bill: "Lab 13 does not support billing type patient_bill_passthrough" },
+      },
+      "synthetic-ny-id": { allowBilling: { client_bill: ["NY", "NJ"] } },
+    },
+  },
+})
+```
+
+These controls encode the independently reported sandbox observations in #440/#441;
+they do not establish production billing behavior. Exceptions apply only to explicit
+root account IDs and explicit billing. `defaultBillingTypes` still governs omitted
+billing independently. `GET/PUT /__admin/lab-account-behavior` inspect/change one
+namespace's policy; changes survive its reset and never affect another namespace.
+Unknown profile names are rejected. CLI/server equivalents are `--lab-account-profile`
+and `--lab-account-sandbox-policies <json-file>` (the account-policy object).
+
+The explicit profiles also accept `order_set.add_on` with `provider_ids` or `marker_ids`
+from one lab's configured marker catalog. The selected markers determine the synthetic
+custom panel; unresolved or cross-lab combinations refuse without placing an order.
+Combining `lab_test_ids` and `add_on` in one request is explicitly refused by these profiles
+until the combined-panel semantics are verified. Malformed add-ons also refuse without placing
+an order; requested add-on markers are never silently discarded.
+Panel and custom orders share account/billing checks for home and walk-in collection.
+The native profile keeps its existing panel-only contract.

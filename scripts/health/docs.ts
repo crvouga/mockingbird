@@ -160,7 +160,7 @@ export async function runDocsHealth() {
       if (!response.ok) throw new Error(`Catalog HTTP ${response.status}`)
       const value = catalogHealth(
         discoverPackages()
-          .filter((pkg) => pkg.isPublic)
+          .filter((pkg) => pkg.isPublic && pkg.name.startsWith("@crvouga/mockingbird-service-"))
           .map((pkg) => pkg.name),
         await response.json(),
       )

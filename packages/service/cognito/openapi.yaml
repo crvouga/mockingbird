@@ -49,7 +49,7 @@ paths:
     get:
       operationId: Discovery
       security: []
-      x-mockingbird: { supported: true, parity: { enabled: false, reason: Local issuer metadata. } }
+      x-mockingbird: { supported: true, parity: { enabled: false, reason: Namespace-scoped local issuer metadata with configured public origin/prefix. } }
       parameters:
         - { name: poolId, in: path, required: true, schema: { type: string } }
       responses:
@@ -60,7 +60,7 @@ paths:
     get:
       operationId: Jwks
       security: []
-      x-mockingbird: { supported: true, parity: { enabled: false, reason: Local signing keys. } }
+      x-mockingbird: { supported: true, parity: { enabled: false, reason: Namespace-scoped RS256 keys; portable snapshots retain the current key and two prior keys. } }
       parameters:
         - { name: poolId, in: path, required: true, schema: { type: string } }
       responses:

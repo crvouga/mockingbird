@@ -645,6 +645,7 @@ paths:
         parity:
           enabled: true
           safe: true
+          reason: Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders, without production parity certification.
       requestBody:
         required: true
         content:
@@ -3204,6 +3205,7 @@ components:
             $ref: "#/components/schemas/OrderSummary"
     ClientFacingOrder:
       type: object
+      description: Account profiles expose lab_account_id from the persisted selected association; native preserves the legacy response shape.
       required:
         - user_id
         - id
@@ -3223,6 +3225,9 @@ components:
         - shipping_details
         - has_abn
       properties:
+        lab_account_id:
+          type: [string, "null"]
+          format: uuid
         user_id:
           type: string
           format: uuid
@@ -3364,8 +3369,22 @@ components:
             - type: "null"
     OrderSetRequest:
       type: object
-      required: [lab_test_ids]
+      anyOf:
+        - required: [lab_test_ids]
+        - required: [add_on]
       properties:
+        add_on:
+          type: object
+          description: Custom marker orders are supported by the explicit expected-contract and sandbox-observed profiles.
+          properties:
+            marker_ids:
+              type: array
+              items:
+                type: integer
+            provider_ids:
+              type: array
+              items:
+                type: string
         lab_test_ids:
           type: array
           minItems: 1

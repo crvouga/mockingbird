@@ -4,7 +4,8 @@ import { basename, dirname, resolve } from "node:path"
 import { normalizeBootControls, resolveAdminPrefix } from "@crvouga/mockingbird-service"
 import type { MockingbirdConfig } from "./cli.js"
 import type { FleetOptions, FleetTarget } from "./fleet.js"
-import { advertisedHttpBase } from "./fleet-proxy.js"
+import { validateCompatibilityTags } from "./fleet-archive.js"
+import { advertisedHttpBase, supportsPublicIngress } from "./fleet-proxy.js"
 import { assertFleetConfig } from "./fleet-schema.js"
 
 const destination = async (path: string): Promise<string> => {
@@ -63,7 +64,7 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
       if (entry.target !== undefined && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(entry.target))
         throw new Error("target must name a supported service suffix")
       const service = entry.target ?? name
-      if (advertisedHttpBase(entry) && service !== "stripe")
+      if (advertisedHttpBase(entry) && !supportsPublicIngress(service))
         throw new Error(
           `public ingress unsupported for ${service}; use a direct endpoint to preserve signed targets`,
         )
@@ -172,6 +173,14 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
 
 /** Policy errors are configuration errors and must precede listener creation. */
 export function validateFleetPolicies(options: FleetOptions) {
+  if (options.archiveCompatibility) {
+    validateCompatibilityTags(options.archiveCompatibility.tags)
+    if (
+      options.archiveCompatibility.missing !== undefined &&
+      !["allow", "reject"].includes(options.archiveCompatibility.missing)
+    )
+      throw new Error("archiveCompatibility.missing must be allow or reject")
+  }
   if (options.journal && !options.repository)
     throw new Error("durable operation journal requires an archive repository")
   if (options.cors) {

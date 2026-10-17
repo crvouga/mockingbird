@@ -66,6 +66,7 @@ export interface DecodedSnapshot {
 }
 
 interface TableMetaBjv {
+  xmins?: number[];
   name: string;
   schema: string;
   columns: ColumnMeta[];
@@ -188,6 +189,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
       writeBjv(
         w,
         {
+          xmins: table.allRows().map((row) => table.rowXmins.get(row) ?? 2),
           name: table.name,
           schema: table.schema,
           columns: table.columns,
@@ -296,8 +298,14 @@ function decodeInner(snapshot: Uint8Array, prng: Prng, clock: Clock): DecodedSna
       table.constraints = meta.constraints;
       table.triggers = meta.triggers;
       table.unlogged = meta.unlogged === true;
+      table.slabXmins = meta.xmins ?? null;
+      state.xidCounter = Math.max(
+        state.xidCounter,
+        (meta.xmins ?? []).reduce((max, xid) => Math.max(max, xid + 1), 3),
+      );
       if (meta.stats) state.tableStats.set(table.oid, meta.stats);
       const rowCount = readVarintU32(r);
+      if (meta.xmins && meta.xmins.length !== rowCount) throw snapshotError();
       const slabColumns: SlabColumn[] = [];
       for (let c = 0; c < meta.columns.length; c++)
         slabColumns.push(readPackedColumn(r, rowCount, intern, meta.columns[c]!.type.id));
@@ -808,6 +816,11 @@ function validateTableMetaBjv(value: unknown): asserts value is TableMetaBjv {
   if (!isRecord(value) || typeof value.name !== "string" || typeof value.schema !== "string") throw snapshotError();
   if (!Array.isArray(value.columns)) throw snapshotError();
   for (const col of value.columns) validateColumnMeta(col);
+  if (
+    value.xmins !== undefined &&
+    (!Array.isArray(value.xmins) || value.xmins.some((xid) => !Number.isInteger(xid) || xid < 2 || xid > 4294967295))
+  )
+    throw snapshotError();
 }
 
 function validateViewMetaBjv(value: unknown): asserts value is ViewMetaBjv {
@@ -909,6 +922,7 @@ function forceSchemaIntern(pool: InternPool, state: DatabaseState, schemas: Sche
       pool.forceId(table.name);
       pool.forceId(table.schema);
       forceBjvStrings(pool, {
+        xmins: table.allRows().map((row) => table.rowXmins.get(row) ?? 2),
         name: table.name,
         schema: table.schema,
         columns: table.columns,

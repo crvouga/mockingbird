@@ -5,6 +5,8 @@ import { type Clock, normalizeControls, restoreClock } from "@crvouga/mockingbir
 import type { MockingbirdConfig } from "./cli.js"
 import type { EndpointManifest, FleetChild } from "./fleet.js"
 import {
+  type ArchiveCompatibilityPolicy,
+  assertArchiveCompatibility,
   canonical,
   diffArchives,
   digest,
@@ -22,7 +24,7 @@ import { FleetInstrumentation, type InstrumentationOptions } from "./fleet-instr
 import { type JournalRecord, type OperationJournal, reconcileOperation } from "./fleet-journal.js"
 import { type AssertionAllowance, FleetObservations } from "./fleet-observations.js"
 import type { ArchiveProtector } from "./fleet-protection.js"
-import { ingressSupport } from "./fleet-proxy.js"
+import { ingressSupport, supportsPublicIngress } from "./fleet-proxy.js"
 import type { ArchiveRepository } from "./fleet-repository.js"
 import { type ClockSynchronization, FleetTimeController } from "./fleet-time.js"
 
@@ -76,6 +78,7 @@ export type ManagementOptions = InstrumentationOptions & {
   journal?: OperationJournal
   synchronizeClock?: ClockSynchronization
   outbound?: OutboundPolicy
+  archiveCompatibility?: ArchiveCompatibilityPolicy
   archiveProtection?: ArchiveProtector
   resolveArchiveSecret?(reference: string): Promise<string>
   cors?: { origins: string[]; methods?: string[]; headers?: string[] }
@@ -643,7 +646,9 @@ export class FleetManagement {
           {
             protocol: c.protocol,
             coverage: c.coverage,
-            ingress: c.targetName === "stripe" ? ingressSupport.stripe : ingressSupport.other,
+            ingress: supportsPublicIngress(c.targetName ?? "")
+              ? ingressSupport[c.targetName as "stripe" | "cognito" | "medplum"]
+              : ingressSupport.other,
             target: c.targetName,
             outboundPolicy: c.outboundPolicy ?? "unsupported",
             version: 1,
@@ -2054,11 +2059,14 @@ export class FleetManagement {
       format: "mockingbird.fleet/v1",
       createdAt: new Date().toISOString(),
       sourceId: this.ctx.id,
+      ...(this.ctx.options.archiveCompatibility
+        ? { compatibility: structuredClone(this.ctx.options.archiveCompatibility.tags) }
+        : {}),
       namespaces: contents,
     })
   }
   async restoreArchive(input: FleetArchive, selectedNamespace?: string): Promise<void> {
-    const archive = validateArchive(input)
+    const archive = assertArchiveCompatibility(input, this.ctx.options.archiveCompatibility)
     const entries = Object.entries(archive.namespaces).filter(
       ([ns]) => selectedNamespace === undefined || ns === selectedNamespace,
     )

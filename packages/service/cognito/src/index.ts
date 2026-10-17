@@ -1,6 +1,13 @@
-import { type APIOptions, bootSqlite, sigV4AccessKeyId } from "@crvouga/mockingbird-service"
+import { requestBaseUrl } from "@crvouga/mockingbird-core"
+import {
+  type APIOptions,
+  bootSqlite,
+  Collection,
+  sigV4AccessKeyId,
+} from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
-import { CognitoSigner } from "./crypto.js"
+import { CognitoSigner, type CognitoSigningKey } from "./crypto.js"
+import { redactedUser } from "./fixtures.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 import {
   type CognitoAttribute,
@@ -9,6 +16,7 @@ import {
   type CognitoUser,
 } from "./state.js"
 
+export type { CognitoFixtures } from "./fixtures.js"
 export type { CognitoRuntime, CognitoRuntimeOptions } from "./runtime.js"
 export { COGNITO_PRESETS, createRuntime } from "./runtime.js"
 export type { CognitoAttribute, CognitoSeedUser, CognitoUser } from "./state.js"
@@ -21,6 +29,9 @@ export type CognitoAPIOptions = APIOptions & {
   clientId?: string
   region?: string
   users?: readonly CognitoSeedUser[]
+  baseUrl?: string
+  publicNamespace?: string
+  adminPrefix?: string
 }
 const headers = (requestId: string) => ({
   "content-type": "application/x-amz-json-1.1",
@@ -40,8 +51,11 @@ const publicUser = (user: CognitoUser) => ({
 
 export class CognitoAPI {
   readonly state: CognitoState
-  private signer = new CognitoSigner()
-  private previous: CognitoSigner[] = []
+  private readonly signingKeys: Collection<CognitoSigningKey[]>
+  private initializingKeys: Promise<CognitoSigningKey[]> | undefined
+  private readonly publicNamespace: string
+  private readonly adminPrefix: string
+  private readonly baseUrl: string | undefined
   private readonly sqlite
   private readonly namespace: string
   private readonly now: () => number
@@ -53,19 +67,57 @@ export class CognitoAPI {
     this.now = options.now ?? Date.now
     this.poolId = options.poolId ?? "us-east-1_mockingbird"
     this.defaultClientId = options.clientId ?? "mockingbird-client"
+    this.publicNamespace = options.publicNamespace ?? "default"
+    this.adminPrefix = options.adminPrefix ?? "/__admin"
+    this.baseUrl = options.baseUrl?.replace(/\/+$/, "")
+    if (this.baseUrl) {
+      const url = new URL(this.baseUrl)
+      if (
+        !["http:", "https:"].includes(url.protocol) ||
+        url.username ||
+        url.password ||
+        url.search ||
+        url.hash
+      )
+        throw new Error("baseUrl must be HTTP(S) without credentials, query or fragment")
+    }
+    this.signingKeys = new Collection(this.sqlite, this.namespace, "cognito_signing_keys")
     this.state = new CognitoState(this.sqlite, this.namespace, options.users ?? [])
   }
   async reset() {
     clearNamespace(this.sqlite, this.namespace)
     this.state.seed()
   }
-  rotateSigningKey(retainPrevious = true) {
-    this.previous = retainPrevious ? [this.signer, ...this.previous].slice(0, 2) : []
-    this.signer = new CognitoSigner(`cognito-${this.now()}`)
-    return { kid: this.signer.kid }
+  private async keyRing(): Promise<CognitoSigningKey[]> {
+    const stored = this.signingKeys.get("ring")
+    if (stored) return stored
+    // Concurrent first requests share initialization. Subsequent requests always read storage,
+    // so portable restore and time travel cannot leave an obsolete in-memory signer behind.
+    this.initializingKeys ??= new CognitoSigner()
+      .export()
+      .then((key) => {
+        const ring = this.signingKeys.get("ring") ?? [key]
+        this.signingKeys.insert("ring", ring)
+        return ring
+      })
+      .finally(() => {
+        this.initializingKeys = undefined
+      })
+    return this.initializingKeys
+  }
+  async rotateSigningKey(retainPrevious = true) {
+    await this.keyRing()
+    const key = await new CognitoSigner().export()
+    const retained = retainPrevious ? (this.signingKeys.get("ring") ?? []).slice(0, 2) : []
+    this.signingKeys.insert("ring", [key, ...retained])
+    return { kid: key.kid }
   }
   private issuer(request: Request, poolId = this.poolId) {
-    return `${new URL(request.url).origin}/${encodeURIComponent(poolId)}`
+    const prefix =
+      this.publicNamespace === "default"
+        ? ""
+        : `${this.adminPrefix}/ns/${encodeURIComponent(this.publicNamespace)}`
+    return `${this.baseUrl ?? requestBaseUrl(request)}${prefix}/${encodeURIComponent(poolId)}`
   }
   private requestId() {
     return this.state.token("req-")
@@ -96,6 +148,7 @@ export class CognitoAPI {
   ) {
     const now = Math.floor(this.now() / 1000)
     const issuer = this.issuer(request)
+    const identities = redactedUser(user).identities
     const common = {
       iss: issuer,
       sub: user.sub,
@@ -106,15 +159,16 @@ export class CognitoAPI {
       email: attr(user, "email"),
       email_verified: attr(user, "email_verified") === "true",
       ...(user.groups.length ? { "cognito:groups": user.groups } : {}),
-      ...(user.identities.length ? { identities: user.identities } : {}),
+      ...(identities.length ? { identities } : {}),
     }
-    const access = await this.signer.sign({
+    const signer = new CognitoSigner((await this.keyRing())[0])
+    const access = await signer.sign({
       ...common,
       client_id: clientId,
       token_use: "access",
       scope: "aws.cognito.signin.user.admin",
     })
-    const id = await this.signer.sign({ ...common, aud: clientId, token_use: "id" })
+    const id = await signer.sign({ ...common, aud: clientId, token_use: "id" })
     this.state.sessions.insert(access, {
       username: user.username,
       clientId,
@@ -160,7 +214,7 @@ export class CognitoAPI {
     if (request.method === "GET" && jwks)
       return Response.json({
         keys: (
-          await Promise.all([this.signer, ...this.previous].map((signer) => signer.jwks()))
+          await Promise.all((await this.keyRing()).map((key) => new CognitoSigner(key).jwks()))
         ).flatMap((set) => set.keys),
       })
     if (request.method !== "POST" || url.pathname !== "/")

@@ -62,7 +62,7 @@ paths:
       security: []
       x-mockingbird:
         supported: true
-        parity: { enabled: false, safe: true, reason: "Discovery document; endpoints are the server's own." }
+        parity: { enabled: false, safe: true, reason: "Discovery document; endpoints use the configured public base and namespace; fleet origin/prefix ingress is covered by acceptance tests." }
       responses:
         "200": { description: OpenID discovery, content: { application/json: { schema: { type: object } } } }
   /.well-known/smart-configuration:
@@ -71,7 +71,7 @@ paths:
       security: []
       x-mockingbird:
         supported: true
-        parity: { enabled: false, safe: true, reason: "Discovery document; endpoints are the server's own." }
+        parity: { enabled: false, safe: true, reason: "Discovery document; endpoints use the configured public base and namespace; fleet origin/prefix ingress is covered by acceptance tests." }
       responses:
         "200": { description: SMART discovery, content: { application/json: { schema: { type: object } } } }
   /auth/login:

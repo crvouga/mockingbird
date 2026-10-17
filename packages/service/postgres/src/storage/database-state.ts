@@ -93,6 +93,8 @@ export class TableData {
   schema: string;
   columns: ColumnMeta[];
   rows: Datum[][];
+  rowXmins = new WeakMap<Datum[], number>();
+  slabXmins: number[] | null = null;
   /** Frozen columnar storage after snapshot hydrate; `rows` stays empty until materialized. */
   slab: ColumnarSlab | null = null;
   constraints: ConstraintMeta[];
@@ -141,6 +143,11 @@ export class TableData {
   materializeSlab(): void {
     if (!this.slab) return;
     this.rows = this.slab.materialize();
+    if (this.slabXmins)
+      this.rows.forEach((row, index) => {
+        this.rowXmins.set(row, this.slabXmins![index] ?? 2);
+      });
+    this.slabXmins = null;
     this.slab = null;
     this.indexStores = null;
   }
@@ -180,6 +187,10 @@ export class TableData {
     } else {
       t.rows = this.rows.map((r) => r.slice());
     }
+    t.rows.forEach((row, index) => {
+      const xmin = this.slabXmins?.[index] ?? this.rowXmins.get(this.rows[index]!);
+      if (xmin !== undefined) t.rowXmins.set(row, xmin);
+    });
     t.unlogged = this.unlogged;
     t.constraints = this.constraints.map((c) => ({ ...c }));
     t.triggers = this.triggers.map((tr) => ({ ...tr }));
@@ -249,6 +260,7 @@ export interface DomainData {
 }
 
 export interface FunctionData {
+  settings?: Record<string, string>;
   name: string;
   schema: string;
   argNames: (string | null)[];
@@ -367,6 +379,15 @@ export class DatabaseState {
   clock: Clock;
   changes = 0;
   private oidCounter = 16384;
+  /** Local monotonic xid allocator; 2 denotes a row from a legacy snapshot without metadata. */
+  xidCounter = 3;
+  transactionXid: number | null = null;
+
+  allocateXid(): number {
+    if (this.xidCounter > 4294967295)
+      throw pgError("program_limit_exceeded", "transaction ID space exhausted; xid wraparound is not modeled", "54000");
+    return this.xidCounter++;
+  }
   inTransaction = false;
   /** Transaction-only events: included in rollback clones, never in exported snapshots. */
   pendingTriggers: Array<{
@@ -609,6 +630,8 @@ export class DatabaseState {
     s.sequenceCurrval = new Map(this.sequenceCurrval);
     s.tableStats = new Map(this.tableStats);
     s.oidCounter = this.oidCounter;
+    s.xidCounter = this.xidCounter;
+    s.transactionXid = this.transactionXid;
     for (const [name, overloads] of this.systemFunctions) s.systemFunctions.set(name, overloads.slice());
     return s;
   }
@@ -629,6 +652,8 @@ export class DatabaseState {
     s.sequenceCurrval = new Map(this.sequenceCurrval);
     s.tableStats = new Map(this.tableStats);
     s.oidCounter = this.oidCounter;
+    s.xidCounter = this.xidCounter;
+    s.transactionXid = this.transactionXid;
     for (const [name, overloads] of this.systemFunctions) s.systemFunctions.set(name, overloads.slice());
     return s;
   }
@@ -711,6 +736,8 @@ export class DatabaseState {
     this.sequenceCurrval = other.sequenceCurrval;
     this.tableStats = other.tableStats;
     this.oidCounter = other.oidCounter;
+    this.xidCounter = Math.max(this.xidCounter, other.xidCounter);
+    this.transactionXid = other.transactionXid;
   }
 
   /** @internal Snapshot codec access to the oid allocator. */

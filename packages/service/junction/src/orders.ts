@@ -442,6 +442,7 @@ const pyIso = (value: string): string => {
 const orderValidation = (
   body: Record<string, unknown>,
   now: () => number = Date.now,
+  allowAddOn = false,
 ): unknown[] => {
   const errors: unknown[] = []
   const userId = body.user_id
@@ -477,8 +478,11 @@ const orderValidation = (
   } else if (os !== undefined) {
     const o = os as Record<string, unknown>
     const ids = o.lab_test_ids
-    if (ids === undefined) errors.push(missingError(["body", "order_set", "lab_test_ids"], o))
-    else if (!Array.isArray(ids)) {
+    if (ids === undefined && !(allowAddOn && o.add_on !== undefined))
+      errors.push(missingError(["body", "order_set", "lab_test_ids"], o))
+    else if (ids === undefined) {
+      /* The profile validates add_on after shared patient validation. */
+    } else if (!Array.isArray(ids)) {
       errors.push({
         type: "list_type",
         loc: ["body", "order_set", "lab_test_ids"],
@@ -953,7 +957,7 @@ export const orderHandlers = (state: JunctionState) => ({
         })
       }
     }
-    const errors = orderValidation(body, context.now)
+    const errors = orderValidation(body, context.now, state.labAccountBehavior.profile !== "native")
     if (errors.length > 0) throw new HttpError(422, { detail: errors })
     const rawAddress = body.patient_address
     if (
@@ -1006,9 +1010,78 @@ export const orderHandlers = (state: JunctionState) => ({
       : rawOrderSet === undefined && singleLabTestId !== undefined
         ? [singleLabTestId]
         : []
+    const addOn =
+      typeof rawOrderSet === "object" && rawOrderSet !== null
+        ? (rawOrderSet as Record<string, unknown>).add_on
+        : undefined
+    const addOnRecord =
+      addOn && typeof addOn === "object" && !Array.isArray(addOn)
+        ? (addOn as Record<string, unknown>)
+        : undefined
+    if (state.labAccountBehavior.profile !== "native" && addOn !== undefined) {
+      if (!addOnRecord) throw new HttpError(422, { detail: "add_on must be an object" })
+      if (labTestIds.length > 0)
+        throw new HttpError(400, {
+          detail: "Combining lab_test_ids and add_on is not supported by this profile",
+        })
+    }
+    const providerIds = addOnRecord?.provider_ids
+    const markerIds = addOnRecord?.marker_ids
+    let customTest: LabTestRecord | undefined
+    if (addOnRecord && state.labAccountBehavior.profile !== "native") {
+      if (
+        (providerIds !== undefined &&
+          (!Array.isArray(providerIds) || !providerIds.every((id) => typeof id === "string"))) ||
+        (markerIds !== undefined &&
+          (!Array.isArray(markerIds) || !markerIds.every((id) => Number.isInteger(id))))
+      )
+        throw new HttpError(422, {
+          detail: "add_on requires string provider_ids or integer marker_ids",
+        })
+      const requestedProviders = Array.isArray(providerIds) ? (providerIds as string[]) : []
+      const requestedMarkers = Array.isArray(markerIds) ? (markerIds as number[]) : []
+      const explicitAccount = state.listLabAccounts().find((a) => a.id === body.lab_account_id)
+      const candidates = state
+        .listLabTests()
+        .filter((t) => !explicitAccount || t.lab.slug === explicitAccount.lab)
+      for (const template of candidates) {
+        const pool = candidates
+          .filter((t) => t.lab.slug === template.lab.slug)
+          .flatMap((t) => t.markers ?? [])
+        const markers = [
+          ...new Map(
+            pool
+              .filter(
+                (m) =>
+                  requestedProviders.includes(m.provider_id ?? "") ||
+                  requestedMarkers.includes(m.id),
+              )
+              .map((m) => [m.id, m]),
+          ).values(),
+        ]
+        if (
+          markers.length &&
+          requestedProviders.every((id) => markers.some((m) => m.provider_id === id)) &&
+          requestedMarkers.every((id) => markers.some((m) => m.id === id))
+        ) {
+          customTest = {
+            ...template,
+            id: deterministicUuid(
+              `junction:add-on:${template.lab.slug}:${markers
+                .map((m) => m.id)
+                .sort()
+                .join(",")}`,
+            ),
+            markers,
+            auto_generated: true,
+          }
+          break
+        }
+      }
+    }
     // Vital: empty lab_test_ids → "No markers found…"; unknown id → "Test does not exist";
     // known panels with markers:null (e.g. Female General Wellness) still create successfully.
-    if (labTestIds.length === 0) {
+    if (labTestIds.length === 0 && !customTest) {
       throw new HttpError(400, {
         detail: "No markers found for the supplied lab tests. Please check the lab test ids",
       })
@@ -1019,7 +1092,9 @@ export const orderHandlers = (state: JunctionState) => ({
     if (resolved.some((test) => test === undefined)) {
       throw new HttpError(400, { detail: "Test does not exist" })
     }
-    const labTests = resolved as NonNullable<(typeof resolved)[number]>[]
+    const labTests = [...resolved, ...(customTest ? [customTest] : [])] as NonNullable<
+      (typeof resolved)[number]
+    >[]
     const methods = new Set(
       labTests.map((test) =>
         typeof test.method === "string" && test.method.length > 0 ? test.method : "",
@@ -1046,12 +1121,31 @@ export const orderHandlers = (state: JunctionState) => ({
       state.listLabAccounts(),
       state.labAccountOmissionPolicies,
     )
+    if (
+      state.labAccountBehavior.profile === "expected-contract" &&
+      labAccount !== "platform" &&
+      labAccount.lab !== labSlug
+    )
+      throw new HttpError(400, { detail: "Lab account does not belong to the selected lab" })
     const requestedBilling =
       typeof body.billing_type === "string" && body.billing_type !== ""
         ? body.billing_type
         : undefined
     const billingType = requestedBilling ?? state.defaultBillingTypes[labSlug] ?? "client_bill"
-    const allowedStates = effectiveBilling(labAccount)[billingType]
+    const sandboxPolicy =
+      state.labAccountBehavior.profile === "sandbox-observed" &&
+      labAccount !== "platform" &&
+      typeof body.lab_account_id === "string"
+        ? state.labAccountBehavior.accounts[labAccount.id]
+        : undefined
+    const rejection = requestedBilling
+      ? sandboxPolicy?.rejectBilling?.[requestedBilling as import("./lab-accounts.js").BillingType]
+      : undefined
+    if (rejection) throw new HttpError(400, { detail: rejection })
+    const allowedStates =
+      (requestedBilling
+        ? sandboxPolicy?.allowBilling?.[requestedBilling as import("./lab-accounts.js").BillingType]
+        : undefined) ?? effectiveBilling(labAccount)[billingType]
     if (!allowedStates)
       throw new HttpError(400, {
         // An omitted billing_type that resolves to one the account lacks is reported against
@@ -1121,6 +1215,8 @@ export const orderHandlers = (state: JunctionState) => ({
       provider_account_id: labAccount === "platform" ? null : labAccount.provider_account_id,
     })
     const responseOrder = { ...order } as Record<string, unknown>
+    if (state.labAccountBehavior.profile !== "native")
+      responseOrder.lab_account_id = state.orderLabAccounts.get(order.id)?.lab_account_id ?? null
     if (responseOrder.result_types === null) delete responseOrder.result_types
     const response = {
       order: responseOrder,
@@ -1145,6 +1241,8 @@ export const orderHandlers = (state: JunctionState) => ({
     )
     if (alreadyCancelled) {
       const responseOrder = { ...order } as Record<string, unknown>
+      if (state.labAccountBehavior.profile !== "native")
+        responseOrder.lab_account_id = state.orderLabAccounts.get(order.id)?.lab_account_id ?? null
       if (responseOrder.result_types === null) delete responseOrder.result_types
       return jsonRes(200, {
         order: responseOrder,
@@ -1191,6 +1289,8 @@ export const orderHandlers = (state: JunctionState) => ({
       cascadeCancelAppointments(state, id, context.now())
     }
     const responseOrder = { ...order } as Record<string, unknown>
+    if (state.labAccountBehavior.profile !== "native")
+      responseOrder.lab_account_id = state.orderLabAccounts.get(order.id)?.lab_account_id ?? null
     if (responseOrder.result_types === null) delete responseOrder.result_types
     const response = {
       order: responseOrder,
@@ -1272,6 +1372,8 @@ export const orderHandlers = (state: JunctionState) => ({
     applyDueSimulations(state, context)
     const fresh = state.orders.get(id) ?? orderMissing(state, context.operation.operationId, id)
     const body = { ...fresh } as Record<string, unknown>
+    if (state.labAccountBehavior.profile !== "native")
+      body.lab_account_id = state.orderLabAccounts.get(id)?.lab_account_id ?? null
     if (body.result_types === null) delete body.result_types
     return jsonRes(200, body)
   },

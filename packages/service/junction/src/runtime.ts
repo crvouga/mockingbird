@@ -10,6 +10,7 @@ import { junctionAdminRoutes, junctionFaultPresets } from "./admin.js"
 import type { IdentityMode, JunctionFixtures } from "./fixtures.js"
 import { document } from "./generated/openapi.js"
 import { JUNCTION_NAMESPACE, JunctionAPI } from "./index.js"
+import { type LabAccountBehavior, labAccountBehaviorFrom } from "./lab-account-behavior.js"
 import type { LabAccountLayout } from "./lab-account-presets.js"
 import type { BillingType, LabAccountOmissionPolicy } from "./lab-accounts.js"
 import type { JunctionLimitsInput } from "./limits.js"
@@ -33,6 +34,7 @@ export type JunctionRuntimeOptions = {
   labAccounts?: LabAccountLayout
   /** Per-lab multiple-account omission policy; default platform. */
   labAccountOmissionPolicies?: Record<string, LabAccountOmissionPolicy>
+  labAccountBehavior?: Partial<LabAccountBehavior>
   /** The team the mock answers as. Default: the corpus's recorded team, else a fixed id. */
   teamId?: string
   /** Sandbox-only restrictions, every one off by default; per namespace via `PUT /__admin/limits`. */
@@ -77,6 +79,8 @@ export type JunctionRuntime = ServiceRuntime<JunctionAPI> & {
  * Runtime-neutral: serve it with any Fetch-native server, or use `./server` for Node.
  */
 export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRuntime => {
+  if (options.labAccountBehavior)
+    labAccountBehaviorFrom({ profile: "native", ...options.labAccountBehavior })
   const webhooks = options.webhooks ? createWebhookDispatcher(options.webhooks) : undefined
   const runtime: ServiceRuntime<JunctionAPI> = createServiceRuntime<JunctionAPI>({
     name: JUNCTION_NAMESPACE,
@@ -101,6 +105,7 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
         ...(options.labAccountOmissionPolicies
           ? { labAccountOmissionPolicies: options.labAccountOmissionPolicies }
           : {}),
+        ...(options.labAccountBehavior ? { labAccountBehavior: options.labAccountBehavior } : {}),
         ...(options.teamId !== undefined ? { teamId: options.teamId } : {}),
         ...(options.limits ? { limits: options.limits } : {}),
         ...(options.identity ? { identity: options.identity } : {}),

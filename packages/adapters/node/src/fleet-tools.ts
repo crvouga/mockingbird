@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { resolve } from "node:path"
 import { type Fleet, type FleetOptions, startFleet } from "./fleet.js"
-import { type FleetArchive, validateArchive } from "./fleet-archive.js"
+import { assertArchiveCompatibility, type FleetArchive } from "./fleet-archive.js"
 import {
   type ConnectionManifest,
   type ConnectionMapping,
@@ -80,12 +80,12 @@ export async function doctorFleet(
 /** Boots a separate in-memory fleet on ephemeral ports; never uses source files or repositories. */
 export async function rehearseFleet(
   config: MockingbirdConfig,
-  options: Pick<FleetOptions, "load">,
+  options: Pick<FleetOptions, "load" | "archiveCompatibility">,
   input: unknown,
   probes: ((fleet: Fleet, signal: AbortSignal) => Promise<void>)[] = [],
   timeoutMs = 30000,
 ) {
-  const archive = validateArchive(input)
+  const archive = assertArchiveCompatibility(input, options.archiveCompatibility)
   const startedAt = new Date().toISOString()
   const isolated: MockingbirdConfig = {
     ...config,
@@ -99,7 +99,7 @@ export async function rehearseFleet(
   }
   let fleet: Fleet | undefined
   try {
-    fleet = await startFleet(isolated, { load: options.load })
+    fleet = await startFleet(isolated, options)
     const client = new FleetClient(fleet.manifest.adminBase, {
       ...(config.adminKey ? { adminKey: config.adminKey } : {}),
     })

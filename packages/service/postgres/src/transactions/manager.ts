@@ -61,6 +61,7 @@ export class TransactionManager {
     this.base = null;
     this.savepoints = [];
     this.state.inTransaction = false;
+    this.state.transactionXid = null;
     this.state.localSettings.clear();
     this.state.pendingTriggers = [];
     this.state.constraintModes.clear();
@@ -74,6 +75,7 @@ export class TransactionManager {
     this.base = null;
     this.savepoints = [];
     this.state.inTransaction = false;
+    this.state.transactionXid = null;
     this.state.localSettings.clear();
     this.state.pendingTriggers = [];
     this.state.constraintModes.clear();
@@ -113,6 +115,7 @@ export class TransactionManager {
     this.base = null;
     this.savepoints = [];
     this.state.inTransaction = false;
+    this.state.transactionXid = null;
     this.freezeDepth = 0;
   }
 }

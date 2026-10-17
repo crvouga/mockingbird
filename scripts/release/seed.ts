@@ -93,6 +93,9 @@ function distReady(dir: string): boolean {
     saw += 1
     if (!existsSync(join(service, entry.name, "dist/index.js"))) return false
   }
+  const fleet = join(dir, "packages/adapters/fleet")
+  if (existsSync(join(fleet, "package.json")) && !existsSync(join(fleet, "dist/index.js")))
+    return false
   return saw > 0
 }
 
@@ -212,6 +215,12 @@ try {
           }
         }
       }
+      const neutralDist = join(root, "packages/adapters/fleet/dist")
+      if (
+        existsSync(neutralDist) &&
+        !(await copyTree(neutralDist, join(cache, "packages/adapters/fleet/dist")))
+      )
+        throw new Error("release:seed: could not copy neutral fleet dist")
       writeFileSync(stampPath, sha)
     } else {
       console.log(`release:seed: installing and building origin/main ${sha.slice(0, 7)}`)
