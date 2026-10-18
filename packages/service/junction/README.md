@@ -940,8 +940,11 @@ const runtime = createRuntime({
 })
 ```
 
-These controls encode the independently reported sandbox observations in #440/#441;
-they do not establish production billing behavior. Exceptions apply only to explicit
+These controls encode the independently reported observations in #440/#441. For #440 the
+reporter states that production returns the same refusal for a delegated BioReference
+account with explicit `client_bill` ("Lab 14 ..." there, "Lab 13 ..." in the sandbox);
+that is a reported observation, not a repository probe, and the vendor has not explained it,
+so no billing rule is built in. Exceptions apply only to explicit
 root account IDs and explicit billing. `defaultBillingTypes` still governs omitted
 billing independently. `GET/PUT /__admin/lab-account-behavior` inspect/change one
 namespace's policy; changes survive its reset and never affect another namespace.
