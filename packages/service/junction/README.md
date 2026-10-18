@@ -948,6 +948,14 @@ namespace's policy; changes survive its reset and never affect another namespace
 Unknown profile names are rejected. CLI/server equivalents are `--lab-account-profile`
 and `--lab-account-sandbox-policies <json-file>` (the account-policy object).
 
+`sandbox-observed` also encodes the owner-recorded October 2026 sandbox omission controls
+(#439), which are recorded observations, not a live repository probe: an order whose
+**root** `lab_account_id` is omitted, nested only in `order_set`, or an unknown UUID is
+placed on the lab's platform account (`lab_account_id: null` on POST and GET, no listed
+`allowed_billing` check), while a root ID naming a listed account keeps its identity and
+policy. `expected-contract` keeps the strict behavior (unknown ID → 400, omission → the
+house account).
+
 The explicit profiles also accept `order_set.add_on` with `provider_ids` or `marker_ids`
 from one lab's configured marker catalog. The selected markers determine the synthetic
 custom panel; unresolved or cross-lab combinations refuse without placing an order.
