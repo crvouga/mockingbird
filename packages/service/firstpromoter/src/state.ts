@@ -1,4 +1,4 @@
-import { Collection } from "@crvouga/mockingbird-service"
+import { Collection, opaqueToken } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 
 /** A referral reward a campaign gives the referred friend (our checkout reads its coupon). */
@@ -80,6 +80,9 @@ export type CommissionRecord = {
   event_id: string | null
   plan_id: string | null
   created_at: string
+  /** Set through `PUT /v2/company/commissions/{id}`; absent on commissions stored before it existed. */
+  internal_note?: string | null
+  external_note?: string | null
 }
 export type CommissionBatch = {
   id: number
@@ -127,6 +130,13 @@ export type Settings = {
    * integration would already have seen the sale. Default `true`.
    */
   autoConvert: boolean
+  /**
+   * Let `POST /v2/track/sale` with a seeded `promo_code` (and `email`) create the missing referral
+   * for that promoter and assign the sale in one step, as the vendor documents for `tid` and
+   * `ref_id`. The vendor documents nothing for `promo_code` ("For promo code tracking"), so this
+   * is opt-in. Default `false`.
+   */
+  promoCodeCreatesReferral: boolean
 }
 
 export const DEFAULT_CAMPAIGNS: Campaign[] = [
@@ -171,7 +181,10 @@ export const DEFAULT_SETTINGS: Settings = {
   defaultCampaignId: 1,
   campaigns: DEFAULT_CAMPAIGNS,
   autoConvert: true,
+  promoCodeCreatesReferral: false,
 }
+
+export type PromoterLookup = "id" | "cust_id" | "auth_token" | "ref_token" | "promo_code" | "email"
 
 const PROMOTER_ID_BASE = 4_800_000
 const REFERRAL_ID_BASE = 91_000_000
@@ -249,12 +262,23 @@ export class FirstPromoterState {
     return this.promoters.get(String(id))
   }
 
+  /** The opaque dashboard auth token of a promoter (`find_by=auth_token`); derived, never stored. */
+  authToken(promoter: PromoterRecord): string {
+    return opaqueToken(`auth_token:${promoter.id}`, 32)
+  }
+
   /** `GET /v2/company/promoters/{value}?find_by=…` */
-  find(value: string, by: "id" | "cust_id" | "ref_token" | "email"): PromoterRecord | undefined {
+  find(value: string, by: PromoterLookup): PromoterRecord | undefined {
     if (by === "id") return /^\d+$/.test(value) ? this.byId(Number(value)) : undefined
+    if (by === "promo_code") {
+      const code = this.promoCodes.get(value)
+      if (!code) return undefined
+      return this.all().find((p) => p.campaigns.some((c) => c.id === code.promoter_campaign_id))
+    }
     return this.all().find((p) => {
       if (by === "cust_id") return p.cust_id === value
       if (by === "email") return p.email.toLowerCase() === value.toLowerCase()
+      if (by === "auth_token") return this.authToken(p) === value
       return p.campaigns.some((c) => c.ref_token === value)
     })
   }

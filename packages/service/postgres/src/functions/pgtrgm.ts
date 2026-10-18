@@ -1,4 +1,4 @@
-import type { CreateIndexStmt } from "../ast/nodes.ts";
+import type { CreateIndexStmt, Expr } from "../ast/nodes.ts";
 import { pgError, unsupported } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import type { DatabaseState, FunctionData, TableData } from "../storage/database-state.ts";
@@ -99,10 +99,15 @@ export function evalTrgmWordSimilar(ctx: EngineCtx, left: TypedValue, right: Typ
 
 /**
  * Reject `gin_trgm_ops` unless pg_trgm is installed for access method gin.
- * A single text/varchar column is stored as an ordinary non-unique index:
+ * A single text/varchar column or expression is stored as an ordinary non-unique index:
  * lookup speed is not modelled.
  */
-export function assertGinTrgmIndex(state: DatabaseState, table: TableData, stmt: CreateIndexStmt): void {
+export function assertGinTrgmIndex(
+  state: DatabaseState,
+  table: TableData,
+  stmt: CreateIndexStmt,
+  expressionType: (expr: Expr) => TypeId,
+): void {
   const trgmCols = stmt.columns.filter((col) => isGinTrgmOpclass(col.opclass));
   if (trgmCols.length === 0) return;
   if (trgmCols.length !== stmt.columns.length || stmt.columns.length !== 1) {
@@ -122,11 +127,10 @@ export function assertGinTrgmIndex(state: DatabaseState, table: TableData, stmt:
   if (stmt.unique) {
     throw pgError("feature_not_supported", `access method "gin" does not support unique indexes`, "0A000");
   }
-  if (col.expr.type !== "colref" || col.expr.parts.length !== 1) {
-    throw unsupported("expression gin_trgm_ops");
-  }
-  const index = table.columnIndex(col.expr.parts[0]!);
-  const typeId = table.columns[index]!.type.id;
+  const typeId =
+    col.expr.type === "colref" && col.expr.parts.length === 1
+      ? table.columns[table.columnIndex(col.expr.parts[0]!)]!.type.id
+      : expressionType(col.expr);
   if (!GIN_TRGM_TYPES.has(typeId)) {
     throw pgError(
       "datatype_mismatch",

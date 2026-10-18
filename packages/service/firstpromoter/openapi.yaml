@@ -259,7 +259,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [id, cust_id, ref_token, email]
+            enum: [id, cust_id, auth_token, ref_token, promo_code, email]
       responses:
         "200":
           description: The promoter
@@ -718,6 +718,60 @@ paths:
                   items:
                     type: integer
                     minimum: 1
+  /v2/company/commissions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Id of the commission.
+        schema:
+          type: integer
+    put:
+      operationId: UpdateCommission
+      description: Update the notes of a commission (the vendor's `CommissionUpdate` schema).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                internal_note:
+                  type: string
+                  description: Visible only to the team
+                external_note:
+                  type: string
+                  description: Visible to the promoter
+      responses:
+        "200":
+          description: Commission updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Commission"
+        "401":
+          description: Missing API key or Account-ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Commission not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
   /v2/company/batch_processes:
     get:
       operationId: ListBatchProcesses

@@ -1,5 +1,7 @@
 /// <reference types="node" />
+import { readFileSync } from "node:fs"
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
+import { type Catalog, DEFAULT_CATALOG, mergeCatalog, parseCatalogDocument } from "./catalog.js"
 import {
   createRuntime,
   type WholescriptsRuntime,
@@ -41,6 +43,29 @@ export const createServer = async (
 const text = (value: string | boolean | undefined) =>
   typeof value === "string" ? value : undefined
 
+/**
+ * Read a catalog file (`{products?, medPaxPills?, privateLabelCartons?}`, or a bare array of
+ * products) and lay it onto {@link DEFAULT_CATALOG} (`merge`, the default: a SKU the default has
+ * is replaced in place, any other is added) or use it as the whole catalog (`replace`: a list the
+ * file leaves out is empty).
+ */
+export const loadCatalogFile = (path: string, mode: "merge" | "replace" = "merge"): Catalog => {
+  let raw: string
+  try {
+    raw = readFileSync(path, "utf8")
+  } catch {
+    throw new Error(`wholescripts catalog not found: ${path}`)
+  }
+  try {
+    const parsed = parseCatalogDocument(JSON.parse(raw))
+    return mode === "replace"
+      ? { products: [], medPaxPills: [], privateLabelCartons: [], ...parsed }
+      : mergeCatalog(DEFAULT_CATALOG, parsed)
+  } catch (error) {
+    throw new Error(`wholescripts catalog ${path}: ${(error as Error).message}`)
+  }
+}
+
 /** How `serve` (and `serve --config`) builds the Wholescripts mock from flags. */
 export const serveTarget: ServeTarget = {
   name: "wholescripts",
@@ -61,6 +86,18 @@ export const serveTarget: ServeTarget = {
       value: "<ms:Status,Status,…>",
       description: 'Walk every new order along a path, e.g. "2000:Processing,Complete"',
     },
+    catalog: {
+      type: "string",
+      value: "<file.json>",
+      description:
+        "Catalog rows every namespace starts with and resets to: {products?, medPaxPills?, privateLabelCartons?} or a bare array of products, merged onto the default catalog by SKU",
+    },
+    "catalog-mode": {
+      type: "string",
+      value: "<merge|replace>",
+      description:
+        "With --catalog: merge onto the default catalog (default) or use the file as the whole catalog",
+    },
   },
   create: (values, common) => {
     const username = text(values.username)
@@ -68,8 +105,15 @@ export const serveTarget: ServeTarget = {
     const auto = text(values["auto-advance"])
     const plan = auto ? /^(\d+):(.+)$/.exec(auto) : null
     if (auto && !plan) throw new Error('--auto-advance must look like "2000:Processing,Complete"')
+    const catalogPath = text(values.catalog)
+    const mode = text(values["catalog-mode"])
+    if (mode !== undefined && mode !== "merge" && mode !== "replace")
+      throw new Error('--catalog-mode must be "merge" or "replace"')
+    if (mode !== undefined && catalogPath === undefined)
+      throw new Error("--catalog-mode needs --catalog")
     return createRuntime({
       tickMs: 100,
+      ...(catalogPath ? { catalog: loadCatalogFile(catalogPath, mode) } : {}),
       settings: {
         ...(username && password ? { accounts: [{ username, password }] } : {}),
         ...(plan

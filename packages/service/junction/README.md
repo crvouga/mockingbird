@@ -56,7 +56,11 @@ npx mockingbird-junction serve --help
 | `--port <n>` | `8787` | Port to listen on (`0` for any free port; the bound URL is printed) |
 | `--host <host>` | `127.0.0.1` | Interface to bind |
 | `--corpus <default\|none\|file>` | `default` | The shipped corpus, no corpus (synthetic data), or a file from `corpus pull` |
-| `--geo <corpus\|synthetic>` | `corpus` with a corpus | How unknown ZIPs are answered; see [Geo](#geo-corpus-or-synthetic) |
+| `--geo <corpus\|synthetic\|corpus+synthetic>` | `corpus` with a corpus | How unknown ZIPs are answered; see [Geo](#geo-corpus-or-synthetic) |
+| `--zip-overlays <file>` | — | [ZIP aliases and per-ZIP overrides](#hybrid-geo-and-zip-overlays) |
+| `--catalog-overlays <file>` | — | [Lab tests derived from catalog ones](#catalog-overlays-and-a-la-carte-markers) at boot |
+| `--marker-catalog <file>` | — | Markers `GET /v3/lab_tests/markers` offers, with [pricing](#catalog-overlays-and-a-la-carte-markers) |
+| `--add-on-source-markers` | off | Name the markers behind each add-on result line |
 | `--lab-accounts <file>` | built-in fixtures | [Lab accounts](#lab-accounts): a JSON array, or `{ "presets": [...], "accounts": [...] }` |
 | `--team-id <uuid>` | the corpus's team | The [team](#team-identity) the emulator answers as |
 | `--max-users <n>` | unlimited | Enforce the sandbox's [live-user cap](#sandbox-limits) |
@@ -245,10 +249,11 @@ Every Mockingbird service answers the same control surface, outside the vendor's
 | `GET` / `POST` / `DELETE /__admin/faults` | List, add or clear [fault rules](#faults-and-error-shapes) (`DELETE ?id=` removes one) |
 | `POST /__admin/faults/presets/{name}` | Add a named Junction fault; body may override `count`, `rate`, `operationId`… |
 | `GET /__admin/metrics` | Requests by operation and status, fault count, and **unmatched routes** |
-| `GET /__admin/orders` | Orders in the namespace with their current status and the `lab_account_id` each was placed with (`null`: Junction's platform account) |
+| `GET /__admin/orders` | Orders in the namespace with their current status, the `lab_account_id` each was placed with (`null`: Junction's platform account) and `lab_account_request` (below) |
 | `POST /__admin/orders/{id}/transition` | Move an order: `{ "to": "completed", "result": "abnormal" }` ([order control](#order-control)) |
 | `GET` / `PUT /__admin/results/{id}` | Read or install an exact result payload / PDF for an order |
 | `GET /__admin/result-fixtures` | The named results |
+| `GET` / `PUT /__admin/quirks` | Read or replace the namespace's opt-in [sandbox quirks](#sandbox-quirks) (`{ "quirks": { "sameSecondCancelStatus": true } }`) |
 | `GET` / `PUT /__admin/lab-accounts` | Read or replace the namespace's [lab accounts](#lab-accounts) (`{ "accounts": [...], "presets": [...] }`; `{ "accounts": null }` restores the default) |
 | `POST /__admin/lab-accounts` | Add one account; 409 if the id exists |
 | `PATCH` / `DELETE /__admin/lab-accounts/{id}` | Merge fields into an account (`{ "status": "suspended" }`, `{ "states": [...] }`) / remove it; 404 if absent |
@@ -327,6 +332,92 @@ a radius with no recording, or any read with parameters the corpus did not recor
 `capabilities`), gets the same 424, because `within_radius` counts cannot be derived. In
 `--geo synthetic` the derivation still applies, and only reads with nothing to derive from are
 invented.
+
+### Hybrid geo and ZIP overlays
+
+`--geo corpus+synthetic` (`geo: "corpus+synthetic"`) replays the recording for the ZIPs the corpus
+covers and synthesizes every other ZIP, so a suite needs no second, synthetic runtime as a
+fallback. A covered ZIP is still never answered next to its recording: a read the recording cannot
+answer (see above) refuses with the same 424 as `--geo corpus`. Switch it per namespace with
+`PUT /__admin/geo {"mode": "corpus+synthetic"}`.
+
+`zipOverlays` (`--zip-overlays <file>`, or `PUT /__admin/geo {"overlays": {...}}`) edits answers
+for individual ZIPs, in any geo mode:
+
+```json
+{
+  "aliases": { "07105": "85004" },
+  "overrides": { "07105": { "phlebotomy_served": true }, "10118": { "no_pscs": true } }
+}
+```
+
+An alias makes a ZIP answer as another one (coverage, recordings and the synthetic model all use
+the target; the response echoes the requested ZIP). `phlebotomy_served` sets
+`phlebotomy.is_served` (and `providers`) on `area/info`; `no_pscs` empties the `psc/info` list and
+zeroes the `within_radius` counts on `area/info`. An override is looked up by the requested ZIP,
+then by its alias target. Overlays are configuration: they survive `reset()`.
+
+The sealed sandbox recording agrees with the report behind this feature that NJ `07030` is not
+served for at-home phlebotomy, and the synthetic model reports `10118`, `11201`, `12207`, `07030`
+and `07601` as not served. It does not know that NJ `07105` is served (the synthetic model only
+serves a handful of ZIP prefixes), so set that one with an override.
+
+## Catalog overlays and a-la-carte markers
+
+**Catalog overlays** (`catalogOverlays`, `--catalog-overlays <file>`) add lab tests derived from
+ones the catalog already holds, with no network access, to every namespace at boot and again on
+every `reset()`:
+
+```ts
+import { createRuntime } from "@crvouga/mockingbird-service-junction"
+
+createRuntime({
+  catalogOverlays: [
+    {
+      from: "lipid_panel_athome", // id or slug of a catalog lab test (or an earlier overlay)
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Lipid Panel: Quest",
+      slug: "lipid_panel_quest", // default: derived from name
+      lab: "sonora_quest", // a lab slug the catalog lists, or a lab record { id, slug, name, ... }
+      stripAoe: true, // markers lose their ask-on-order questions
+      autoGenerated: true, // lists with generation_method=auto, not by default
+    },
+  ],
+})
+```
+
+`method`, `price` (dollars) and `status` can be overridden too. Moving the clone to a lab gives its
+markers and expected results that lab's id. A bad overlay (unknown `from`, non-UUID or duplicate
+`id`, unknown `lab`) fails at boot naming `catalogOverlays[n].<field>`.
+
+**A-la-carte markers.** `GET /v3/lab_tests/markers` lists the markers a team can order one by one:
+those embedded in active catalog lab tests, plus `markerCatalog` entries (`--marker-catalog
+<file>`) with their own `price`, `pricing`, `aoe`, `expected_results` and `a_la_carte_enabled`. It
+takes `lab_id`, `lab_slug` (wins over `lab_id`), `name` (a name substring, or a provider test code),
+`a_la_carte_enabled`, `lab_account_id` (narrows to the account's lab), `include_pricing`, `page` and
+`size`, and answers `{ markers, total, page, size, pages }` (plus `pricing: { currency, data }` keyed
+by marker id for the page's markers with `include_pricing=true`). A marker price is read as dollars
+(`"12.50"` is `base_amount_minor: 1250`); `"N/A"` is `{ "unspecified": "price_unavailable" }`.
+
+`POST /v3/lab_test/estimate_order_set_pricing` prices each order set (`lab_test_ids` and/or
+`add_on.marker_ids` / `provider_ids`) as one `lab_charge` component: the sum of the lab tests'
+`price` and the add-on markers' prices, with a `marker_breakdown` for add-ons. If any add-on marker
+has no stated price the whole estimate is `price_unavailable`. `modality`, `us_state` and `billing`
+are validated but do not change the price, and no other charge components are modelled.
+
+Both routes follow the published contract
+([markers](https://docs.junction.com/api-reference/lab-testing/biomarkers),
+[estimate](https://docs.junction.com/api-reference/lab-testing/estimate-order-set-pricing)); neither
+has been compared with the live sandbox (prices are contract-owned), so their parity is disabled and
+the 400 messages for unknown tests/markers are borrowed from `create_order`.
+
+`addOnSourceMarkers: true` (`--add-on-source-markers`) makes each biomarker line of an add-on order
+carry `source_markers: [{ marker_id, name, slug, provider_id }]`. It is off by default, because the
+default result lines carry no `source_markers`, and was reported from a sandbox probe that has not
+been re-verified.
+
+`GET /v3/lab_tests` lists every lab test unless filtered; pass `status=active` to exclude inactive
+ones. The documented default of that filter is not stated, so the emulator does not change it.
 
 ## Lab accounts
 
@@ -445,7 +536,20 @@ but NJ, NY and RI (47).
 | `bioreference_platform` | `bioreference` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | recorded ("Junction BioReference Account") |
 | `bioreference_patient_bill_passthrough` | `bioreference` | `not_delegated` | `patient_bill_passthrough`: NJ, NY | the team | recorded |
 | `quest_platform` / `labcorp_platform` | `quest` / `labcorp` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | recorded ("Junction Quest/Labcorp Account") |
+| `bioreference_current_platform` | `bioreference` | `not_delegated` | `patient_bill_passthrough`: NJ, NY | `[]` | team listing reported 2026-10-18 (#475) |
+| `quest_sandbox_platform` | `quest` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES`; `commercial_insurance`: all 50 | `[]` | sandbox listing reported 2026-10-18 (#475) |
+| `sonora_quest_production_platform` | `sonora_quest` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | production listing reported 2026-10-18 (#475) |
 | `suspended_bioreference` / `suspended_quest` / `suspended_labcorp` | as above | `not_delegated` | as the platform accounts | `[]` | the platform shapes with `status: "suspended"` |
+
+The September recording's `bioreference_platform` is **illustrative, not a current listing**: the
+house BioReference account now lists only `patient_bill_passthrough` for NJ and NY (use
+`bioreference_current_platform`, and see
+[omitted house-account billing](#omitted-house-account-billing-467) for how production still
+accepts `client_bill` when no account is named). No account at any lab lists DC, so no preset does
+either. `bioreference_current_platform`, `quest_sandbox_platform` and `sonora_quest_production_platform`
+follow listings an agent
+reported from `GET /v3/lab_test/lab_account` (a consumer-audit report with synthetic ids, not a
+repository probe); the older presets keep their shapes so pinned suites do not change.
 
 Every preset is `status: "active"` unless named `suspended_*`. `GET /__admin/lab-accounts/presets`
 returns the full records, the deprecated `aliases`, and the `synthetic` presets (not a recorded
@@ -584,6 +688,8 @@ valid choices, never approximated. `result` picks a named result — `normal`, `
 shape. For an exact payload, `PUT /__admin/results/{id}` with `{ "results": [...],
 "missing_results": null, "interpretation": "critical", "pdf_base64": "…" }`.
 
+**Same-second cancel.** See the opt-in [sandbox quirks](#sandbox-quirks).
+
 There is no `isTestCancelled` in Junction's contract; cancelling produces the vendor's
 `cancelled.<method>.cancelled` event and webhook, which is what a consumer derives that flag from.
 
@@ -629,6 +735,23 @@ after an optional `delayMs`. A rule added through the admin API defaults to the 
 so one worker's injected failure never lands on another's request; one added in-process, as above,
 applies to every namespace unless given a `namespace`. Over HTTP: `POST /__admin/faults` with the same fields, or
 `POST /__admin/faults/presets/sandbox_user_quota`.
+
+A rule can also match on the request itself: `path`, `pathPattern`, `requestHeaders`, `query`, and
+`requestBody`, a map from a dotted path in the JSON body to the value it must equal. That targets
+one member when the backend sends no namespace header, with an optional `body` to answer with:
+
+```bash
+# Refuse one member's order
+curl -X POST localhost:8787/__admin/faults -d '{"method":"POST","path":"/v3/order",
+  "requestBody":{"patient_details.email":"member-a@example.test"},"status":503}'
+# No phlebotomy slots for one ZIP code
+curl -X POST localhost:8787/__admin/faults -d '{"method":"POST",
+  "pathPrefix":"/v3/order/phlebotomy/appointment/availability",
+  "requestBody":{"zip_code":"00000"},"status":200,"body":{"slots":[],"timezone":"America/Phoenix"}}'
+```
+
+A body that is missing, not JSON, or not a JSON object never matches. See the
+[fault rule reference](../../../docs/admin-controls/FAULTS.md#match-on-the-request-body).
 
 ## Webhooks
 
@@ -730,7 +853,7 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 
 | Export | Description |
 | --- | --- |
-| `createRuntime` | `(options?: JunctionRuntimeOptions) => JunctionRuntime` — the served emulator (health, admin, namespaces, clock, faults, metrics, journal, webhooks) as one `fetch`. Options: `corpus`, `geo`, `labAccounts`, `teamId`, `limits`, `identity`, `defaultBillingTypes`, `fixtures`, `journalSize`, `webhooks`, `onWebhook`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`. |
+| `createRuntime` | `(options?: JunctionRuntimeOptions) => JunctionRuntime` — the served emulator (health, admin, namespaces, clock, faults, metrics, journal, webhooks) as one `fetch`. Options: `corpus`, `geo`, `zipOverlays`, `catalogOverlays`, `markerCatalog`, `addOnSourceMarkers`, `labAccounts`, `teamId`, `limits`, `identity`, `defaultBillingTypes`, `labAccountBehavior`, `quirks`, `fixtures`, `journalSize`, `webhooks`, `onWebhook`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`. |
 | `JunctionAPI` | Class. `new JunctionAPI(options?)`: one namespace's emulator, implementing `fetch(request: Request): Promise<Response>`. |
 | `JUNCTION_NAMESPACE` | `"junction"` — the default namespace's storage key when sharing a `sqlite` client. |
 | `document` | The vendored Junction OpenAPI document (Mockingbird subset) that drives routing. |
@@ -801,7 +924,8 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `reset()` | `Promise<void>` — clear state; re-install the corpus or default catalog, and the configured lab accounts. |
 | `installCorpus(corpus)` | Install a `SealedCorpus`: observations (shared, read-only), catalog, labs, lab accounts, ZIP coverage. |
 | `corpusInfo()` | `CorpusInfo \| undefined` — label, recording date, source and counts. |
-| `geoMode` | `"corpus" \| "synthetic"`, settable. |
+| `geoMode` | `"corpus" \| "synthetic" \| "corpus+synthetic"`, settable. |
+| `zipOverlays` | [ZIP aliases and overrides](#hybrid-geo-and-zip-overlays) for this namespace; settable, kept across `reset()`. |
 | `configureLabAccounts(layout?)` / `labAccounts()` | Replace (a list, or `{ presets, accounts }`; `undefined` restores the default) / read the team's lab accounts. |
 | `addLabAccount(input)` / `addLabAccountPreset(name, id?)` / `patchLabAccount(id, patch)` / `removeLabAccount(id)` | Change one account; kept across `reset()`. |
 | `teamId` | The team this namespace answers as. |
@@ -828,7 +952,11 @@ type JunctionAPIOptions = {
   namespace?: string             // storage namespace; default "junction"
   now?: () => number             // clock in ms; default Date.now
   corpus?: SealedCorpus          // installed now and on every reset()
-  geo?: "corpus" | "synthetic"   // default "corpus" with a corpus, else "synthetic"
+  geo?: "corpus" | "synthetic" | "corpus+synthetic"   // default "corpus" with a corpus, else "synthetic"
+  zipOverlays?: { aliases?: Record<string, string>; overrides?: Record<string, { phlebotomy_served?: boolean; no_pscs?: boolean }> }
+  catalogOverlays?: CatalogOverlay[]    // lab tests cloned from catalog ones, now and on every reset()
+  markerCatalog?: MarkerCatalogEntry[]  // markers GET /v3/lab_tests/markers offers on top of the catalog's
+  addOnSourceMarkers?: boolean          // add-on result lines carry source_markers; default false
   labAccounts?: LabAccountInput[] | { presets?: (string | { name; id? })[]; accounts?: LabAccountInput[] }
   teamId?: string                // default: the corpus's recorded team, else MOCK_TEAM_ID
   limits?: { maxUsers?: number | null; simulateRequiresSandbox?: boolean; rateLimitPerSecond?: number | null }
@@ -967,3 +1095,71 @@ until the combined-panel semantics are verified. Malformed add-ons also refuse w
 an order; requested add-on markers are never silently discarded.
 Panel and custom orders share account/billing checks for home and walk-in collection.
 The native profile keeps its existing panel-only contract.
+
+### Observed profile and oracle label
+
+`profile: "observed"` with `oracle: "sandbox" | "production"` is the general form of
+`sandbox-observed` (an alias that always reports `oracle: "sandbox"`), so
+`GET /__admin/lab-account-behavior` says which vendor environment a configuration reproduces.
+Account-owned `rejectBilling` / `allowBilling` observations apply to either oracle, per
+account and never as a blanket delegated-account rule: a delegated customer account refuses
+explicit `client_bill` only when its own entry says so. The October 2026 sandbox omission
+recordings (#439) are sandbox observations, so they apply only to `oracle: "sandbox"`; with
+`oracle: "production"` an omitted account selects the house account as `expected-contract`
+does. Whether production also refuses a delegated account when `billing_type` is omitted is
+unverified, so it is not modelled. `oracle` on any other profile, or `production` on the
+`sandbox-observed` alias, is refused.
+
+### Omitted house-account billing (#467)
+
+A reporter observed production accepting an AZ `client_bill` order with no `lab_account_id` on
+a team whose house BioReference account lists only `patient_bill_passthrough` for NY and NJ,
+placing it on the house account (its requisition prints the house account number). That is a
+single consumer report, not a repository probe, so the default is unchanged (the listing is
+enforced). Opt in per lab:
+
+```ts
+import { createRuntime } from "@crvouga/mockingbird-service-junction"
+
+createRuntime({
+  labAccountBehavior: {
+    profile: "expected-contract",
+    omittedAccountBilling: { bioreference: "unchecked" },
+  },
+})
+```
+
+With `unchecked`, an order whose **root** `lab_account_id` is omitted (a nested-only id is
+ignored) and that resolves to a Junction-owned account (`org_id: null`) skips that account's
+listed billing and state check. The order keeps the house account's identity on POST, GET and
+the requisition. Explicit selection of the house account keeps its listed policy (or an
+account-owned `rejectBilling`), and a customer-owned account chosen by routing keeps its own
+listing. `GET/PUT /__admin/lab-account-behavior` read and change `omittedAccountBilling`.
+
+### Where an order's account id was sent (#473)
+
+`GET /__admin/orders` adds `lab_account_request: { labAccountId, nestedLabAccountId }` per order
+(`instance().orderLabAccountRequest(id)`): the id carried at the request root, which selects
+the account, and the one nested in `order_set`, which Junction ignores. Each is `null` when
+absent. The request body itself is still not stored; orders seeded by a fixture have
+`lab_account_request: null`.
+
+### Sandbox quirks
+
+Behaviors the sandbox shows that clients must tolerate, every one off by default
+(`createRuntime({ quirks })`, or per namespace `GET/PUT /__admin/quirks`; they survive `reset()`).
+
+| Quirk | Effect |
+| --- | --- |
+| `sameSecondCancelStatus` (#474) | `POST /v3/order/{id}/cancel` in the same wall-clock second as the order's creation records a `cancelled.<method>.cancelled` event with the same timestamp, but `status`, `last_event` and `updated_at` stay `received`; a repeat cancel is a no-op. A cancel at least one second later reads back `cancelled`. |
+
+This was reported from the sandbox (not re-measured here, production unverified). The quirk does
+not publish a webhook or cascade-cancel appointments for the stale cancel; the report does not say
+what the vendor does there.
+
+### Requisition text layout (#464)
+
+The synthetic requisition PDF prints two text lines: `Requisition <order id>` and
+`Account number: <provider number>` (`unknown` when the order has no frozen number), so an
+extractor that accepts a field label only at the start of a line finds it. The layout is for
+interoperability, not vendor pixel fidelity.

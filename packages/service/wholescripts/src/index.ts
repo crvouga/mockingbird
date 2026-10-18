@@ -30,7 +30,12 @@ export type {
   PrivateLabelCarton,
   Product,
 } from "./catalog.js"
-export { DEFAULT_CATALOG, MEDPAX_BOX_SKU } from "./catalog.js"
+export {
+  DEFAULT_CATALOG,
+  MEDPAX_BOX_SKU,
+  mergeCatalog,
+  parseCatalogDocument,
+} from "./catalog.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 export type { AutoAdvance, OrderRecord, Settings, Tracking } from "./state.js"

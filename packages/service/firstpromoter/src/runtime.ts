@@ -185,7 +185,15 @@ const adminRoutes = (runtime: ServiceRuntime<FirstPromoterAPI>): AdminRoutes => 
       : adminError(400, "unknown or mismatched promoter campaign/referral")
   },
   "GET /promoters": ({ namespace }) =>
-    json(200, { promoters: runtime.instance(namespace).state.all() }),
+    json(200, {
+      promoters: runtime
+        .instance(namespace)
+        .state.all()
+        .map((promoter) => ({
+          ...promoter,
+          auth_token: runtime.instance(namespace).state.authToken(promoter),
+        })),
+    }),
   "POST /promoters": ({ body, namespace }) => {
     if (!isRecord(body) || typeof body.email !== "string") {
       return adminError(400, 'expected {"email", "cust_id"?, "first_name"?, "ref_token"?}')
@@ -201,7 +209,7 @@ const adminRoutes = (runtime: ServiceRuntime<FirstPromoterAPI>): AdminRoutes => 
       ...(text("ref_token") !== undefined ? { ref_token: text("ref_token") } : {}),
       ...(typeof body.campaign_id === "number" ? { campaign_id: body.campaign_id } : {}),
     })
-    return json(201, api.render(promoter))
+    return json(201, { ...api.render(promoter), auth_token: api.state.authToken(promoter) })
   },
   "POST /clicks": ({ body, namespace }) => {
     if (!isRecord(body) || typeof body.ref_token !== "string") {
@@ -231,6 +239,8 @@ const adminRoutes = (runtime: ServiceRuntime<FirstPromoterAPI>): AdminRoutes => 
     if (typeof body.website === "string") patch.website = body.website
     if (typeof body.defaultCampaignId === "number") patch.defaultCampaignId = body.defaultCampaignId
     if (typeof body.autoConvert === "boolean") patch.autoConvert = body.autoConvert
+    if (typeof body.promoCodeCreatesReferral === "boolean")
+      patch.promoCodeCreatesReferral = body.promoCodeCreatesReferral
     if (body.campaigns !== undefined) {
       if (!Array.isArray(body.campaigns)) return adminError(400, "campaigns: Campaign[]")
       patch.campaigns = body.campaigns as Campaign[]

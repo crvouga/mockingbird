@@ -167,7 +167,7 @@ export function createRuntime(options: OAuthRuntimeOptions = {}): OAuthRuntime {
               id: value.id,
               name: value.name,
               redirectUris: value.redirectUris,
-              requirePkce: value.requirePkce ?? value.secret === undefined,
+              requirePkce: value.requirePkce ?? (value.secret === undefined && !value.pkceOptional),
             })),
         }),
       "POST /clients": ({ namespace, body }) => {

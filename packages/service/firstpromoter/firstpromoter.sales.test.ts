@@ -6,10 +6,16 @@ const harness = () => {
   const runtime = createRuntime({ settings: { autoConvert: false } })
   runtime.clock.freeze()
   runtime.clock.set(Date.parse("2026-10-04T12:00:00Z"))
-  const send = (path: string, body?: unknown, namespace = "default", auth = true) =>
+  const send = (
+    path: string,
+    body?: unknown,
+    namespace = "default",
+    auth = true,
+    method?: string,
+  ) =>
     runtime.fetch(
       new Request(`http://firstpromoter.test${path}`, {
-        method: body === undefined ? "GET" : "POST",
+        method: method ?? (body === undefined ? "GET" : "POST"),
         headers: {
           "content-type": "application/json",
           "x-mockingbird-namespace": namespace,
@@ -18,8 +24,8 @@ const harness = () => {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       }),
     )
-  const json = async (path: string, body?: unknown, status = 200) => {
-    const response = await send(path, body)
+  const json = async (path: string, body?: unknown, status = 200, method?: string) => {
+    const response = await send(path, body, "default", true, method)
     expect(response.status).toBe(status)
     return response.json()
   }
@@ -164,6 +170,114 @@ describe("FirstPromoter sale tracking", () => {
     expect(runtime.instance("default").state.byId(next.promoter.id)).toMatchObject({
       earnings_cash: 123,
     })
+  })
+
+  test("tid creates the lead and assigns the sale in one step", async () => {
+    const { runtime, json, send } = harness()
+    const promoter = (await json("/__admin/promoters", { email: "tid@example.test" }, 201)) as {
+      id: number
+      promoter_campaigns: { ref_token: string }[]
+    }
+    const click = (await json(
+      "/__admin/clicks",
+      { ref_token: promoter.promoter_campaigns[0]?.ref_token },
+      201,
+    )) as { tid: string }
+    const body = {
+      event_id: "one-step-tid",
+      amount: 2000,
+      email: "buyer@example.test",
+      tid: click.tid,
+    }
+    const sale = (await json("/v2/track/sale", body)) as {
+      referral: { id: number; email: string; uid: string | null }
+      commissions: { amount: number; promoter_campaign: { promoter_id: number } }[]
+    }
+    expect(sale.referral).toMatchObject({ email: "buyer@example.test", uid: null })
+    expect(sale.commissions).toMatchObject([
+      { amount: 200, promoter_campaign: { promoter_id: promoter.id } },
+    ])
+    expect(await json(`/v2/company/referrals/${sale.referral.id}`)).toMatchObject({
+      state: "active",
+      entry_source: "cookie",
+      promoter_campaign: { promoter_id: promoter.id },
+    })
+    expect(runtime.instance("default").state.byId(promoter.id)).toMatchObject({
+      referrals: 1,
+      customers: 1,
+      earnings_cash: 200,
+    })
+    expect(((await json("/__admin/webhooks/events")) as { events: unknown[] }).events).toHaveLength(
+      1,
+    )
+    // The lead exists now, so a renewal needs no attribution and signup tracking sees it taken.
+    await json("/v2/track/sale", { event_id: "renewal", amount: 1000, email: "buyer@example.test" })
+    const retake = await send("/v2/track/signup", { email: "buyer@example.test", tid: click.tid })
+    expect(retake.status).toBe(422)
+  })
+
+  test("ref_id creates the lead and assigns the sale in one step; unresolvable attribution does not", async () => {
+    const { json, send } = harness()
+    const promoter = (await json("/__admin/promoters", { email: "ref@example.test" }, 201)) as {
+      id: number
+      promoter_campaigns: { ref_token: string }[]
+    }
+    const refId = promoter.promoter_campaigns[0]?.ref_token
+    for (const extra of [{ ref_id: "unknown" }, { tid: "unknown" }, {}]) {
+      const response = await send("/v2/track/sale", {
+        event_id: "ref-fail",
+        amount: 500,
+        email: "ref-buyer@example.test",
+        ...extra,
+      })
+      expect(response.status).toBe(404)
+    }
+    expect(await json("/v2/company/referrals")).toEqual([])
+    // Naming the lead needs an email; a uid alone cannot create one.
+    expect(
+      (await send("/v2/track/sale", { event_id: "ref-fail", amount: 500, uid: "x", ref_id: refId }))
+        .status,
+    ).toBe(404)
+    const sale = (await json("/v2/track/sale", {
+      event_id: "ref-ok",
+      amount: 500,
+      email: "ref-buyer@example.test",
+      ref_id: refId,
+    })) as { referral: { email: string }; commissions: unknown[] }
+    expect(sale.referral.email).toBe("ref-buyer@example.test")
+    expect(sale.commissions).toHaveLength(1)
+    expect(await json("/v2/company/referrals")).toHaveLength(1)
+  })
+
+  test("promo_code creates the lead only when promoCodeCreatesReferral is enabled", async () => {
+    const { runtime, json, send } = harness()
+    const promoter = (await json("/__admin/promoters", { email: "promo@example.test" }, 201)) as {
+      id: number
+      promoter_campaigns: { id: number }[]
+    }
+    await json(
+      "/__admin/promo-codes",
+      { promo_code: "SYNTH10", promoter_campaign_id: promoter.promoter_campaigns[0]?.id },
+      201,
+    )
+    const body = {
+      event_id: "promo-one-step",
+      amount: 1000,
+      email: "promo-buyer@example.test",
+      promo_code: "SYNTH10",
+    }
+    const refused = await send("/v2/track/sale", body)
+    expect(refused.status).toBe(404)
+    expect(await json("/v2/company/referrals")).toEqual([])
+    await json("/__admin/settings", { promoCodeCreatesReferral: true }, 200, "PUT")
+    expect((await send("/v2/track/sale", { ...body, promo_code: "UNSEEDED" })).status).toBe(404)
+    const sale = (await json("/v2/track/sale", body)) as {
+      referral: { email: string }
+      commissions: { promoter_campaign: { promoter_id: number } }[]
+    }
+    expect(sale.referral.email).toBe("promo-buyer@example.test")
+    expect(sale.commissions[0]?.promoter_campaign.promoter_id).toBe(promoter.id)
+    expect(runtime.instance("default").state.byId(promoter.id)).toMatchObject({ referrals: 1 })
   })
 
   test("served raw-fetch client tracks, lists and rejects replay with namespace-preserving URLs", async () => {

@@ -11,7 +11,14 @@ export type {
   MockingbirdConfig,
   ServeTarget,
 } from "./cli.js"
-export { resolveServeControls, runCli, serveCommand } from "./cli.js"
+export {
+  readJsonOption,
+  resolveServeControls,
+  resolveServeIdBase,
+  resolveServeSettings,
+  runCli,
+  serveCommand,
+} from "./cli.js"
 export { providerServeOptions, providerServeValues } from "./fixtures.js"
 export type {
   EndpointManifest,

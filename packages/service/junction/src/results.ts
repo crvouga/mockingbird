@@ -5,6 +5,7 @@ import {
   type OperationContext,
   opaqueToken,
 } from "@crvouga/mockingbird-service"
+import { sourceMarkerOf } from "./markers.js"
 import { applySimulateTransition, requireOrder } from "./scheduling.js"
 import type { JunctionState, OrderRecord } from "./state.js"
 
@@ -58,9 +59,15 @@ type BiomarkerLine = {
   low_value: number | null
   high_value: number | null
   provider_id: string | null
+  /** Only on add-on orders, when the runtime names the markers behind each line (#470). */
+  source_markers?: ReturnType<typeof sourceMarkerOf>[]
 }
 
-const biomarkerLines = (order: OrderRecord, flags: SimulationFlagsState): BiomarkerLine[] => {
+const biomarkerLines = (
+  order: OrderRecord,
+  flags: SimulationFlagsState,
+  withSourceMarkers = false,
+): BiomarkerLine[] => {
   const collected = order.last_event.created_at
   return (order.lab_test.markers ?? []).map((marker, index) => {
     const type = pickResultType(flags.resultTypes, index)
@@ -82,6 +89,7 @@ const biomarkerLines = (order: OrderRecord, flags: SimulationFlagsState): Biomar
       low_value: null,
       high_value: null,
       provider_id: marker.provider_id,
+      ...(withSourceMarkers ? { source_markers: [sourceMarkerOf(marker)] } : {}),
     }
     if (type === "numeric") {
       base.value = numericValueFor(marker.slug)
@@ -169,19 +177,27 @@ const metadataOf = (order: OrderRecord, _userClient: string) => {
   }
 }
 
-/** Minimal single-page PDF with a deterministic title; valid enough for byte-shape checks. */
-const deterministicPdf = (title: string): Uint8Array => {
+/**
+ * Minimal single-page PDF with deterministic text; valid enough for byte-shape checks. Each
+ * entry of `lines` is its own text line (`T*` moves to the next), so a text extractor sees
+ * them separately.
+ */
+const deterministicPdf = (lines: string | readonly string[]): Uint8Array => {
   // Escape PDF literal strings, including non-ASCII UTF-8 bytes as octal, so lengths and xref offsets stay correct.
-  const literal = [...new TextEncoder().encode(title)]
-    .map((byte) =>
-      byte < 32 || byte > 126
-        ? `\\${byte.toString(8).padStart(3, "0")}`
-        : byte === 40 || byte === 41 || byte === 92
-          ? `\\${String.fromCharCode(byte)}`
-          : String.fromCharCode(byte),
-    )
-    .join("")
-  const text = `BT /F1 14 Tf 72 720 Td (${literal}) Tj ET`
+  const literal = (line: string) =>
+    [...new TextEncoder().encode(line)]
+      .map((byte) =>
+        byte < 32 || byte > 126
+          ? `\\${byte.toString(8).padStart(3, "0")}`
+          : byte === 40 || byte === 41 || byte === 92
+            ? `\\${String.fromCharCode(byte)}`
+            : String.fromCharCode(byte),
+      )
+      .join("")
+  const shown = (typeof lines === "string" ? [lines] : lines)
+    .map((line) => `(${literal(line)}) Tj`)
+    .join(" T* ")
+  const text = `BT /F1 14 Tf 72 720 Td 18 TL ${shown} ET`
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -216,7 +232,9 @@ export const resultsHandlers = (state: JunctionState) => ({
     if (!resultsReady(order)) resultsNotAvailable(order.id)
     const flags = flagsOf(order)
     const fixture = state.resultFixtures.get(order.id)
-    const results = fixture?.results ?? biomarkerLines(order, flags)
+    const results =
+      fixture?.results ??
+      biomarkerLines(order, flags, state.addOnSourceMarkers && order.lab_test.auto_generated)
     const missing =
       fixture?.missing_results !== undefined
         ? fixture.missing_results
@@ -284,7 +302,9 @@ export const resultsHandlers = (state: JunctionState) => ({
     const orderId = context.params.order_id ?? ""
     const order = requireOrder(state, orderId, context)
     const number = state.orderLabAccounts.get(order.id)?.provider_account_id ?? "unknown"
-    const bytes = deterministicPdf(`Requisition ${order.id} - Account number: ${number}`)
+    // #464: the order and the account number are separate text lines, so an extractor that
+    // only accepts a field label at the start of a line finds `Account number:`.
+    const bytes = deterministicPdf([`Requisition ${order.id}`, `Account number: ${number}`])
     return new Response(bytes as unknown as BodyInit, {
       status: 200,
       headers: { "content-type": "application/pdf" },

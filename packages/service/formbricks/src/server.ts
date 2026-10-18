@@ -1,7 +1,9 @@
 /// <reference types="node" />
+import { readFileSync } from "node:fs"
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
+import { appendSurveys, parseBootSettings, parseSurveysDocument } from "./boot.js"
 import { createRuntime, type FormbricksRuntime, type FormbricksRuntimeOptions } from "./runtime.js"
-import { DEFAULT_SETTINGS } from "./state.js"
+import { CORPUS_SURVEYS, DEFAULT_SETTINGS, type Settings, type Survey } from "./state.js"
 
 /** Port `mockingbird-formbricks serve` listens on when none is given. */
 export const DEFAULT_PORT = 8813
@@ -31,10 +33,35 @@ export const createServer = async (
 const text = (value: string | boolean | undefined) =>
   typeof value === "string" ? value : undefined
 
+/**
+ * Read a surveys file (a list, or `{surveys: [...]}`) and lay it after the corpus surveys
+ * (`append`, the default; a survey whose id the corpus or an earlier row has is skipped) or use it
+ * as the whole corpus (`replace`). A survey without a `workspaceId` is served by every workspace.
+ */
+export const loadSurveysFile = (
+  path: string,
+  mode: "append" | "replace" = "append",
+  legacyEnvironmentIds: Record<string, string> = DEFAULT_SETTINGS.legacyEnvironmentIds,
+): Survey[] => {
+  let raw: string
+  try {
+    raw = readFileSync(path, "utf8")
+  } catch {
+    throw new Error(`formbricks surveys not found: ${path}`)
+  }
+  try {
+    const surveys = parseSurveysDocument(JSON.parse(raw), legacyEnvironmentIds)
+    return appendSurveys(mode === "replace" ? [] : CORPUS_SURVEYS, surveys)
+  } catch (error) {
+    throw new Error(`formbricks surveys ${path}: ${(error as Error).message}`)
+  }
+}
+
 /** How `serve` (and `serve --config`) builds the Formbricks mock from flags. */
 export const serveTarget: ServeTarget = {
   name: "formbricks",
   defaultPort: DEFAULT_PORT,
+  parseSettings: (settings) => parseBootSettings(settings),
   options: {
     "webhook-url": {
       type: "string",
@@ -56,20 +83,52 @@ export const serveTarget: ServeTarget = {
       value: "<id>",
       description: "An extra workspace id that serves the survey corpus",
     },
+    surveys: {
+      type: "string",
+      value: "<file.json>",
+      description:
+        "Surveys every namespace starts with, as a list or {surveys: [...]}, added after the corpus surveys (a repeated id is skipped)",
+    },
+    "surveys-mode": {
+      type: "string",
+      value: "<append|replace>",
+      description:
+        "With --surveys: add to the corpus (default) or use the file as the whole corpus",
+    },
   },
   create: (values, common) => {
     const url = text(values["webhook-url"])
     const token = text(values["webhook-token"])
     const secret = text(values["webhook-secret"])
     const workspace = text(values["workspace-id"])
+    const surveysPath = text(values.surveys)
+    const mode = text(values["surveys-mode"])
+    if (mode !== undefined && mode !== "append" && mode !== "replace")
+      throw new Error('--surveys-mode must be "append" or "replace"')
+    if (mode !== undefined && surveysPath === undefined)
+      throw new Error("--surveys-mode needs --surveys")
+    const boot = common.settings as Partial<Settings> | undefined
+    const settings: Partial<Settings> = {
+      ...boot,
+      ...(workspace
+        ? { workspaces: [workspace, ...(boot?.workspaces ?? DEFAULT_SETTINGS.workspaces)] }
+        : {}),
+    }
     const target =
       url && token
         ? `${url}${url.includes("?") ? "&" : "?"}token=${encodeURIComponent(token)}`
         : url
     return createRuntime({
       ...(target ? { webhooks: { url: target, ...(secret ? { secret } : {}) } } : {}),
-      ...(workspace
-        ? { settings: { workspaces: [workspace, ...DEFAULT_SETTINGS.workspaces] } }
+      ...(Object.keys(settings).length > 0 ? { settings } : {}),
+      ...(surveysPath
+        ? {
+            surveys: loadSurveysFile(
+              surveysPath,
+              mode,
+              settings.legacyEnvironmentIds ?? DEFAULT_SETTINGS.legacyEnvironmentIds,
+            ),
+          }
         : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),

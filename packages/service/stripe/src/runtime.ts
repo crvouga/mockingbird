@@ -22,6 +22,8 @@ import { ACME_CORPUS } from "./corpus-data.js"
 import { StripeError } from "./errors.js"
 import { document } from "./generated/openapi.js"
 import { StripeAPI, type StripeAPIOptions } from "./index.js"
+import type { StripeWebhookEvent } from "./internal.js"
+import { SigningPins } from "./payment-holds.js"
 import { openDispute, paymentMethodFromCard } from "./payments.js"
 import { moveRefund } from "./refunds.js"
 import { renderCharge, renderCheckoutSession, renderDispute, renderRefund } from "./render.js"
@@ -234,8 +236,18 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
   const accounts = new AccountDirectory(options.accounts ?? [])
   const baseClock = options.clock ?? createClock()
   const timers = options.clock ? createClockTimers(options.clock) : undefined
+  const hubNow = options.webhooks?.now ?? (options.clock ? () => baseClock.now() : Date.now)
+  // A released event keeps the `Stripe-Signature` timestamp it would have been signed with when it
+  // was held (its first delivery to each endpoint); retries are signed afresh, as Stripe does.
+  const pins = new SigningPins()
+  const stripeSigner = signers.timestamped("Stripe-Signature")
   const hub = createWebhookHub({
-    signer: signers.timestamped("Stripe-Signature"),
+    signer: (input) => {
+      const pinned = pins.firstSigning(input.messageId, input.url)
+      return pinned === undefined
+        ? stripeSigner(input)
+        : stripeSigner({ ...input, timestampSeconds: pinned })
+    },
     ...(options.webhooks?.retryDelaysMs ? { retryDelaysMs: options.webhooks.retryDelaysMs } : {}),
     ...(options.webhooks?.fetch ? { fetch: options.webhooks.fetch } : {}),
     ...(options.clock ? { now: () => baseClock.now() } : {}),
@@ -247,6 +259,17 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
     endpoints: options.webhooks?.endpoints ?? [],
   })
   let runtimeRef: ServiceRuntime<StripeAPI> | undefined
+
+  const publishEvent = (namespace: string, event: StripeWebhookEvent, pinnedAt?: number) => {
+    if (pinnedAt !== undefined) pins.pin(event.id, pinnedAt)
+    hub.publish({
+      namespace,
+      type: event.type,
+      body: event.body,
+      id: event.id,
+      tags: { account: event.account },
+    })
+  }
 
   /** Endpoints of a namespace: admin-configured, account-configured, and API-created. */
   const derivedEndpoints = (namespace: string): WebhookEndpoint[] => {
@@ -312,6 +335,7 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
         for (const row of api.adminWebhookEndpoints.list()) api.adminWebhookEndpoints.delete(row.id)
       }
       hub.clear(namespace)
+      pins.clear()
       if (namespace === undefined) syncAll()
       else syncEndpoints(namespace)
     },
@@ -509,6 +533,37 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
       const charge = scope?.account.charges.get(id)
       return charge ? json(200, renderCharge(charge)) : adminError(404, `no charge ${id}`)
     },
+    "GET /payment-holds": ({ namespace }) =>
+      json(200, { holds: runtime.instance(namespace).holds.list() }),
+    "PUT /payment-holds/:customer": ({ params, body, namespace }) => {
+      const customer = params.customer as string
+      const flag = (key: string) => (isRecord(body) && key in body ? body[key] : true)
+      const webhooks = flag("webhooks")
+      const lookups = flag("lookups")
+      if (typeof webhooks !== "boolean" || typeof lookups !== "boolean")
+        return adminError(400, 'expected {"webhooks"?: boolean, "lookups"?: boolean}')
+      if (!webhooks && !lookups) return adminError(400, "a hold needs webhooks or lookups")
+      const hold = runtime.instance(namespace).holds.set(customer, { webhooks, lookups })
+      return json(200, hold)
+    },
+    "POST /payment-holds/:customer/release": ({ params, namespace }) => {
+      const customer = params.customer as string
+      const holds = runtime.instance(namespace).holds
+      if (!holds.has(customer)) return adminError(404, `no payment hold on ${customer}`)
+      const released = holds.release(customer)
+      // Oldest first, each signed with the timestamp it was held at.
+      for (const entry of released) publishEvent(namespace, entry.event, entry.signedAt)
+      return json(200, {
+        customer,
+        released: released.map((entry) => ({ id: entry.event.id, type: entry.event.type })),
+      })
+    },
+    "DELETE /payment-holds/:customer": ({ params, namespace }) => {
+      const customer = params.customer as string
+      const holds = runtime.instance(namespace).holds
+      if (!holds.has(customer)) return adminError(404, `no payment hold on ${customer}`)
+      return json(200, { customer, discarded: holds.discard(customer) })
+    },
     "POST /tick": ({ namespace }) => {
       runtime.instance(namespace).tick(true)
       return json(200, { status: "ok" })
@@ -537,8 +592,8 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
       accounts: accounts.list().map((account) => account.id),
       webhooks: hub.endpoints("default").length > 0 ? "on" : "off",
     }),
-    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock: instanceClock }) =>
-      new StripeAPI({
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock: instanceClock }) => {
+      const api: StripeAPI = new StripeAPI({
         sqlite,
         namespace,
         now: instanceClock.now,
@@ -566,15 +621,18 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
         onEndpointsChanged: () => syncEndpoints(publicNamespace),
         onWebhook: (event) => {
           options.onWebhook?.(event)
-          hub.publish({
-            namespace: publicNamespace,
-            type: event.type,
-            body: event.body,
-            id: event.id,
-            tags: { account: event.account },
-          })
+          const held = api.holds.webhookHold(event)
+          if (held === undefined) publishEvent(publicNamespace, event)
+          else
+            api.holds.enqueue({
+              event,
+              customer: held,
+              signedAt: Math.floor(hubNow() / 1000),
+            })
         },
-      }),
+      })
+      return api
+    },
     admin,
   })
   runtimeRef = runtime

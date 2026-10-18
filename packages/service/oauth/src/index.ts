@@ -12,6 +12,7 @@ import type {
   GrantView,
   NotificationDelivery,
   Provider,
+  RedirectPolicy,
   Token,
 } from "./types.js"
 import { consentPage, escapeHtml, loginPage, page, redirectPage } from "./ui.js"
@@ -37,6 +38,7 @@ export type {
   GrantView,
   NotificationDelivery,
   Provider,
+  RedirectPolicy,
 } from "./types.js"
 
 export type OAuthAPIOptions = APIOptions &
@@ -74,6 +76,7 @@ const formTarget = (redirectUri: string) => {
   return WEB_SCHEMES.has(u.protocol) ? u.origin : u.protocol
 }
 const formAction = (redirectUri: string) => `'self' ${formTarget(redirectUri)}`
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "[::1]", "localhost"])
 const FORBIDDEN_REDIRECT_SCHEMES = new Set(["blob:", "data:", "file:", "javascript:", "vbscript:"])
 const safeRedirect = (s: string) => {
   try {
@@ -88,6 +91,46 @@ const safeRedirect = (s: string) => {
   } catch {
     return false
   }
+}
+// Exact registered URIs always match. An opt-in `redirectPolicy` widens that to variants of a
+// registered URI (never to arbitrary URIs): same scheme, path and query, with only the loopback
+// port (RFC 8252 section 7.3) or the host and port of a listed dev-client scheme free to differ.
+const redirectAllowed = (client: Client, redirectUri: string) => {
+  if (client.redirectUris.includes(redirectUri)) return true
+  const policy = client.redirectPolicy
+  if (!policy || !safeRedirect(redirectUri)) return false
+  const requested = new URL(redirectUri)
+  const schemes = new Set((policy.schemes ?? []).map((s) => s.toLowerCase()))
+  const tail = (u: URL) => `${u.pathname}${u.search}`
+  return client.redirectUris.some((registered) => {
+    const base = new URL(registered)
+    if (base.protocol !== requested.protocol || tail(base) !== tail(requested)) return false
+    if (schemes.has(base.protocol.toLowerCase())) return true
+    return (
+      policy.loopbackAnyPort === true &&
+      base.protocol === "http:" &&
+      LOOPBACK_HOSTS.has(base.hostname) &&
+      base.hostname === requested.hostname
+    )
+  })
+}
+const validRedirectPolicy = (policy: unknown): policy is RedirectPolicy => {
+  if (typeof policy !== "object" || policy === null || Array.isArray(policy)) return false
+  const { loopbackAnyPort, schemes, ...rest } = policy as Record<string, unknown>
+  return (
+    Object.keys(rest).length === 0 &&
+    (loopbackAnyPort === undefined || typeof loopbackAnyPort === "boolean") &&
+    (schemes === undefined ||
+      (Array.isArray(schemes) &&
+        schemes.every(
+          (s) =>
+            typeof s === "string" &&
+            /^[a-z][a-z0-9+.-]*:$/i.test(s) &&
+            !FORBIDDEN_REDIRECT_SCHEMES.has(s.toLowerCase()) &&
+            s.toLowerCase() !== "http:" &&
+            s.toLowerCase() !== "https:",
+        )))
+  )
 }
 
 /** Portable OAuth/OIDC provider. State is isolated and included in runtime snapshots. */
@@ -212,6 +255,27 @@ export class OAuthAPI {
     )
       throw new Error(
         "Client requires id, name and exact safe redirectUris without fragments or credentials",
+      )
+    if (client.redirectPolicy !== undefined && !validRedirectPolicy(client.redirectPolicy))
+      throw new Error(
+        "redirectPolicy accepts loopbackAnyPort (boolean) and schemes (custom schemes such as exp:, never http: or https:)",
+      )
+    if (
+      client.pkceOptional !== undefined &&
+      (typeof client.pkceOptional !== "boolean" ||
+        (client.pkceOptional &&
+          (client.requirePkce === true || client.secret !== undefined || client.apple)))
+    )
+      throw new Error(
+        "pkceOptional is a boolean for public clients: it conflicts with requirePkce, secret and apple",
+      )
+    if (
+      client.alwaysIssueRefreshToken !== undefined &&
+      (typeof client.alwaysIssueRefreshToken !== "boolean" ||
+        (client.alwaysIssueRefreshToken && ["google", "apple", "github"].includes(this.provider)))
+    )
+      throw new Error(
+        "alwaysIssueRefreshToken is a boolean for the oidc and microsoft profiles; google, apple and github keep their own refresh rules",
       )
     if (
       client.apple &&
@@ -885,7 +949,7 @@ export class OAuthAPI {
     const redirectUri =
       p.get("redirect_uri") ?? (this.provider === "github" ? (client?.redirectUris[0] ?? "") : "")
     // Never redirect errors until both the client and exact callback are trusted.
-    if (!client?.redirectUris.includes(redirectUri))
+    if (!client || !redirectAllowed(client, redirectUri))
       return fail("invalid_request", "Unknown client or redirect_uri mismatch")
     const mode = p.get("response_mode") ?? "query"
     const auth: Authorization = {
@@ -922,7 +986,11 @@ export class OAuthAPI {
     const supported = this.supportedScopes()
     if (!auth.scope || [...scopes(auth.scope)].some((s) => !supported.includes(s)))
       return error("invalid_scope", "Unsupported scope")
-    if ((client.requirePkce || (client.secret === undefined && !client.apple)) && !auth.challenge)
+    if (
+      (client.requirePkce ||
+        (client.secret === undefined && !client.apple && !client.pkceOptional)) &&
+      !auth.challenge
+    )
       return error("invalid_request", "PKCE is required for this client")
     if (
       auth.challenge &&
@@ -1229,11 +1297,12 @@ export class OAuthAPI {
       })
     const googleRefresh = behavior.google?.refreshToken ?? "first-consent"
     const issueRefresh =
-      this.provider === "google"
+      this.clients.get(auth.clientId)?.alwaysIssueRefreshToken === true ||
+      (this.provider === "google"
         ? auth.offline &&
           googleRefresh !== "never" &&
           (googleRefresh === "always" || auth.forceConsent || !previous)
-        : this.provider === "apple" || scopes(scope).has("offline_access")
+        : this.provider === "apple" || scopes(scope).has("offline_access"))
     const code = this.credentials.token()
     const grant: Grant = {
       ...auth,

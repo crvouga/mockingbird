@@ -7,13 +7,17 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { junctionAdminRoutes, junctionFaultPresets } from "./admin.js"
+import type { CatalogOverlay } from "./catalog-overlays.js"
 import type { IdentityMode, JunctionFixtures } from "./fixtures.js"
 import { document } from "./generated/openapi.js"
+import type { ZipOverlays } from "./geo-overlay.js"
 import { JUNCTION_NAMESPACE, JunctionAPI } from "./index.js"
 import { type LabAccountBehavior, labAccountBehaviorFrom } from "./lab-account-behavior.js"
 import type { LabAccountLayout } from "./lab-account-presets.js"
 import type { BillingType, LabAccountOmissionPolicy } from "./lab-accounts.js"
 import type { JunctionLimitsInput } from "./limits.js"
+import type { MarkerCatalogEntry } from "./markers.js"
+import { type JunctionQuirks, quirksFrom } from "./quirks.js"
 import type { SealedCorpus } from "./sealed-corpus.js"
 import type { GeoMode, WebhookPublisher } from "./state.js"
 import {
@@ -30,11 +34,21 @@ export type JunctionRuntimeOptions = {
   corpus?: SealedCorpus
   /** Default: `corpus` when a corpus is loaded, otherwise `synthetic`. */
   geo?: GeoMode
+  /** ZIP aliases and per-ZIP overrides on serviceability answers; see {@link JunctionAPIOptions.zipOverlays}. */
+  zipOverlays?: ZipOverlays
+  /** Lab tests derived from catalog ones at boot; see {@link JunctionAPIOptions.catalogOverlays}. */
+  catalogOverlays?: readonly CatalogOverlay[]
+  /** Markers `GET /v3/lab_tests/markers` offers; see {@link JunctionAPIOptions.markerCatalog}. */
+  markerCatalog?: readonly MarkerCatalogEntry[]
+  /** Name the markers behind add-on result lines; see {@link JunctionAPIOptions.addOnSourceMarkers}. */
+  addOnSourceMarkers?: boolean
   /** The team's lab accounts, or `{ presets, accounts }`; see {@link JunctionAPIOptions.labAccounts}. */
   labAccounts?: LabAccountLayout
   /** Per-lab multiple-account omission policy; default platform. */
   labAccountOmissionPolicies?: Record<string, LabAccountOmissionPolicy>
   labAccountBehavior?: Partial<LabAccountBehavior>
+  /** Opt-in sandbox quirks, every one off by default (#474). */
+  quirks?: JunctionQuirks
   /** The team the mock answers as. Default: the corpus's recorded team, else a fixed id. */
   teamId?: string
   /** Sandbox-only restrictions, every one off by default; per namespace via `PUT /__admin/limits`. */
@@ -81,6 +95,7 @@ export type JunctionRuntime = ServiceRuntime<JunctionAPI> & {
 export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRuntime => {
   if (options.labAccountBehavior)
     labAccountBehaviorFrom({ profile: "native", ...options.labAccountBehavior })
+  if (options.quirks) quirksFrom(options.quirks)
   const webhooks = options.webhooks ? createWebhookDispatcher(options.webhooks) : undefined
   const runtime: ServiceRuntime<JunctionAPI> = createServiceRuntime<JunctionAPI>({
     name: JUNCTION_NAMESPACE,
@@ -101,11 +116,18 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
         webhook: { seed: rng.seed },
         ...(options.corpus ? { corpus: options.corpus } : {}),
         ...(options.geo ? { geo: options.geo } : {}),
+        ...(options.zipOverlays ? { zipOverlays: options.zipOverlays } : {}),
+        ...(options.catalogOverlays ? { catalogOverlays: options.catalogOverlays } : {}),
+        ...(options.markerCatalog ? { markerCatalog: options.markerCatalog } : {}),
+        ...(options.addOnSourceMarkers !== undefined
+          ? { addOnSourceMarkers: options.addOnSourceMarkers }
+          : {}),
         ...(options.labAccounts ? { labAccounts: options.labAccounts } : {}),
         ...(options.labAccountOmissionPolicies
           ? { labAccountOmissionPolicies: options.labAccountOmissionPolicies }
           : {}),
         ...(options.labAccountBehavior ? { labAccountBehavior: options.labAccountBehavior } : {}),
+        ...(options.quirks ? { quirks: options.quirks } : {}),
         ...(options.teamId !== undefined ? { teamId: options.teamId } : {}),
         ...(options.limits ? { limits: options.limits } : {}),
         ...(options.identity ? { identity: options.identity } : {}),

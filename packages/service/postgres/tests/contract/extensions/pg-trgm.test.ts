@@ -32,6 +32,55 @@ sequenceParity(
   ],
 );
 
+sequenceParity(
+  "gin_trgm_ops indexes a text expression, qualified or not, and keeps the operator class in the catalog",
+  [
+    "CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public",
+    "CREATE TABLE public.repro (name text, label varchar(20), n int)",
+  ],
+  [
+    { sql: "CREATE INDEX repro_idx ON public.repro USING gin (lower(name) public.gin_trgm_ops)" },
+    { sql: "CREATE INDEX repro_unqualified ON public.repro USING gin (lower(name) gin_trgm_ops)" },
+    { sql: "CREATE INDEX repro_dump ON public.repro USING gin (lower((name)::text) public.gin_trgm_ops)" },
+    { sql: "CREATE INDEX repro_varchar ON public.repro USING gin (lower(label) gin_trgm_ops)" },
+    { sql: "CREATE INDEX repro_concat ON public.repro USING gin ((name || label) gin_trgm_ops)" },
+    { sql: "CREATE INDEX repro_column ON public.repro USING gin (name public.gin_trgm_ops)" },
+    { sql: "INSERT INTO public.repro VALUES ('Hello World', 'Label', 1), (NULL, NULL, 2)" },
+    { sql: "SELECT indexname FROM pg_indexes WHERE tablename = 'repro' ORDER BY indexname", query: true },
+    {
+      sql: `SELECT c.relname, i.indnatts, i.indisunique, i.indexprs IS NOT NULL AS has_expr, am.amname
+            FROM pg_index i
+            JOIN pg_class c ON c.oid = i.indexrelid
+            JOIN pg_am am ON am.oid = c.relam
+            JOIN pg_class t ON t.oid = i.indrelid
+            WHERE t.relname = 'repro'
+            ORDER BY c.relname`,
+      query: true,
+    },
+    { sql: "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'repro' ORDER BY indexname", query: true },
+    { sql: "SELECT name FROM public.repro WHERE lower(name) LIKE '%world%'", query: true },
+  ],
+);
+
+for (const [label, expr] of [
+  ["an integer expression", "(n + 1)"],
+  ["a cast to integer", "(name::int)"],
+] as const) {
+  errorParity(
+    `gin_trgm_ops rejects ${label} as an operator class datatype mismatch`,
+    ["CREATE EXTENSION pg_trgm", "CREATE TABLE repro (name text, n int)"],
+    `CREATE INDEX repro_idx ON repro USING gin (${expr} gin_trgm_ops)`,
+    "datatype_mismatch",
+  );
+}
+
+errorParity(
+  "gin_trgm_ops expression over a missing column is an undefined column",
+  ["CREATE EXTENSION pg_trgm", "CREATE TABLE repro (name text)"],
+  "CREATE INDEX repro_idx ON repro USING gin (lower(missing) gin_trgm_ops)",
+  "undefined_column",
+);
+
 errorParity(
   "gin_trgm_ops without pg_trgm is an undefined operator class",
   ["CREATE TABLE geviti_msg (body text)"],

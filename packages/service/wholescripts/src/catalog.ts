@@ -226,3 +226,143 @@ export const unitPrice = (catalog: Catalog, sku: string): number => {
   }
   return 0
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const text = (row: Record<string, unknown>, key: string, where: string, fallback?: string) => {
+  const value = row[key]
+  if (value === undefined && fallback !== undefined) return fallback
+  if (typeof value !== "string") throw new Error(`${where}.${key} must be a string`)
+  return value
+}
+
+const count = (row: Record<string, unknown>, key: string, where: string) => {
+  const value = row[key] ?? 0
+  if (typeof value !== "number" || !Number.isFinite(value))
+    throw new Error(`${where}.${key} must be a number`)
+  return value
+}
+
+const list = (value: unknown, where: string): Record<string, unknown>[] => {
+  if (!Array.isArray(value)) throw new Error(`${where} must be an array`)
+  return value.map((row, index) => {
+    if (!isRecord(row)) throw new Error(`${where}[${index}] must be an object`)
+    return row
+  })
+}
+
+/**
+ * Check a catalog document and fill the fields a row may leave out. The document is
+ * `{products?, medPaxPills?, privateLabelCartons?}` (or a bare array of products); a row needs
+ * its `sku` (and a product its `productName`), and every other string defaults to `""`,
+ * every number to `0`, and `defaultDosing` to none. Throws a message naming the bad field.
+ */
+export const parseCatalogDocument = (input: unknown): Partial<Catalog> => {
+  const document = Array.isArray(input) ? { products: input } : input
+  if (!isRecord(document))
+    throw new Error("expected {products?, medPaxPills?, privateLabelCartons?}")
+  for (const key of Object.keys(document))
+    if (!["products", "medPaxPills", "privateLabelCartons"].includes(key))
+      throw new Error(`unknown key ${JSON.stringify(key)}`)
+  const out: Partial<Catalog> = {}
+  if (document.products !== undefined)
+    out.products = list(document.products, "products").map((row, index): Product => {
+      const where = `products[${index}]`
+      const sku = text(row, "sku", where)
+      if (!sku) throw new Error(`${where}.sku must not be empty`)
+      const base = {
+        productName: text(row, "productName", where),
+        sku,
+        medPaxSku: text(row, "medPaxSku", where, ""),
+        categories: text(row, "categories", where, ""),
+        retailPrice: count(row, "retailPrice", where),
+        upc: text(row, "upc", where, ""),
+        descriptionShort: text(row, "descriptionShort", where, ""),
+        brand: text(row, "brand", where, ""),
+        productImage: text(row, "productImage", where, ""),
+        quantity: count(row, "quantity", where),
+        countUnit: text(row, "countUnit", where, ""),
+        wholesalePrice: count(row, "wholesalePrice", where),
+        supplementFactsHTML: text(row, "supplementFactsHTML", where, ""),
+        defaultDosing: Array.isArray(row.defaultDosing)
+          ? (row.defaultDosing as Product["defaultDosing"])
+          : [],
+      }
+      return {
+        ...base,
+        ...(row.descriptionFull !== undefined
+          ? { descriptionFull: text(row, "descriptionFull", where) }
+          : {}),
+        ...(row.medPaxDetails !== undefined
+          ? {
+              medPaxDetails:
+                row.medPaxDetails === null
+                  ? null
+                  : (() => {
+                      const details = row.medPaxDetails
+                      if (!isRecord(details))
+                        throw new Error(`${where}.medPaxDetails must be an object`)
+                      const at = `${where}.medPaxDetails`
+                      return {
+                        name: text(details, "name", at, ""),
+                        genericName: text(details, "genericName", at, ""),
+                        quantity: count(details, "quantity", at),
+                        wholesalePrice: count(details, "wholesalePrice", at),
+                        retailPrice: count(details, "retailPrice", at),
+                      }
+                    })(),
+            }
+          : {}),
+      }
+    })
+  if (document.medPaxPills !== undefined)
+    out.medPaxPills = list(document.medPaxPills, "medPaxPills").map((row, index) => {
+      const where = `medPaxPills[${index}]`
+      const sku = text(row, "sku", where)
+      if (!sku) throw new Error(`${where}.sku must not be empty`)
+      return {
+        sku,
+        genericName: text(row, "genericName", where, ""),
+        privateLabelName: text(row, "privateLabelName", where, ""),
+        quantity: count(row, "quantity", where),
+      }
+    })
+  if (document.privateLabelCartons !== undefined)
+    out.privateLabelCartons = list(document.privateLabelCartons, "privateLabelCartons").map(
+      (row, index) => {
+        const where = `privateLabelCartons[${index}]`
+        const sku = text(row, "sku", where)
+        if (!sku) throw new Error(`${where}.sku must not be empty`)
+        return {
+          sku,
+          name: text(row, "name", where, ""),
+          cartonImage: text(row, "cartonImage", where, ""),
+          quantity: count(row, "quantity", where),
+        }
+      },
+    )
+  return out
+}
+
+const mergeRows = <T extends { sku: string }>(
+  base: readonly T[],
+  extra: readonly T[] = [],
+): T[] => {
+  const replacements = new Map(extra.map((row) => [row.sku, row]))
+  const kept = base.map((row) => replacements.get(row.sku) ?? row)
+  const present = new Set(base.map((row) => row.sku))
+  const added = new Map<string, T>()
+  for (const row of extra) if (!present.has(row.sku)) added.set(row.sku, row)
+  return [...kept, ...added.values()]
+}
+
+/**
+ * Lay `extra` onto `base`: a row with a SKU `base` already has replaces it in place, any other
+ * is appended, and a list `extra` leaves out is kept as it is.
+ */
+export const mergeCatalog = (base: Catalog, extra: Partial<Catalog>): Catalog => ({
+  products: mergeRows(base.products, extra.products),
+  medPaxPills: mergeRows(base.medPaxPills, extra.medPaxPills),
+  privateLabelCartons: mergeRows(base.privateLabelCartons, extra.privateLabelCartons),
+})

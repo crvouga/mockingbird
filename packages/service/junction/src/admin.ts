@@ -14,6 +14,7 @@ import {
   type OrderFixture,
   type UserFixture,
 } from "./fixtures.js"
+import type { ZipOverlays } from "./geo-overlay.js"
 import type { JunctionAPI } from "./index.js"
 import { labAccountBehaviorFrom } from "./lab-account-behavior.js"
 import {
@@ -30,6 +31,7 @@ import {
   renderLabAccount,
 } from "./lab-accounts.js"
 import { sandboxUserQuotaBody } from "./limits.js"
+import { quirksFrom } from "./quirks.js"
 import type { GeoMode, ResultFixture } from "./state.js"
 import type { WebhookDispatcher } from "./webhooks.js"
 
@@ -284,6 +286,7 @@ export const junctionAdminRoutes =
               status: order.last_event.status,
               updated_at: order.updated_at,
               lab_account_id: api(request).orderLabAccount(order.id) ?? null,
+              lab_account_request: api(request).orderLabAccountRequest(order.id) ?? null,
             })),
         }),
 
@@ -450,6 +453,14 @@ export const junctionAdminRoutes =
           return jsonRes(200, api(request).labAccountBehavior)
         }),
 
+      "GET /quirks": (request) => jsonRes(200, { quirks: api(request).quirks }),
+      "PUT /quirks": (request) =>
+        guarded(() => {
+          const body = isRecord(request.body) ? request.body : {}
+          api(request).quirks = quirksFrom(body.quirks ?? {})
+          return jsonRes(200, { quirks: api(request).quirks })
+        }),
+
       "GET /default-billing-types": (request) =>
         jsonRes(200, { defaultBillingTypes: api(request).defaultBillingTypes }),
       "PUT /default-billing-types": (request) => {
@@ -522,12 +533,31 @@ export const junctionAdminRoutes =
           geo: api(request).geoMode,
         }),
       "PUT /geo": (request) => {
-        const mode = isRecord(request.body) ? request.body.mode : undefined
-        if (mode !== "corpus" && mode !== "synthetic") {
-          return adminError(400, 'body needs "mode": "corpus" or "synthetic"')
+        const body = isRecord(request.body) ? request.body : {}
+        const mode = body.mode
+        const overlays = body.overlays
+        if (mode === undefined && overlays === undefined) {
+          return adminError(
+            400,
+            'body needs "mode": "corpus", "synthetic" or "corpus+synthetic", and/or "overlays": { aliases, overrides }',
+          )
         }
-        api(request).geoMode = mode as GeoMode
-        return jsonRes(200, { geo: mode })
+        if (
+          mode !== undefined &&
+          mode !== "corpus" &&
+          mode !== "synthetic" &&
+          mode !== "corpus+synthetic"
+        ) {
+          return adminError(400, '"mode" must be "corpus", "synthetic" or "corpus+synthetic"')
+        }
+        if (overlays !== undefined && !isRecord(overlays)) {
+          return adminError(400, '"overlays" must be { aliases?, overrides? }')
+        }
+        return guarded(() => {
+          if (overlays !== undefined) api(request).zipOverlays = overlays as ZipOverlays
+          if (mode !== undefined) api(request).geoMode = mode as GeoMode
+          return jsonRes(200, { geo: api(request).geoMode, overlays: api(request).zipOverlays })
+        })
       },
 
       "GET /webhooks/events": (request) => jsonRes(200, { events: api(request).webhookEvents() }),

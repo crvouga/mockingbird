@@ -22,6 +22,7 @@ import {
   type CampaignReward,
   type CommissionUnit,
   FirstPromoterState,
+  type PromoterLookup,
   type PromoterRecord,
   type ReferralRecord,
   type Settings,
@@ -118,6 +119,15 @@ const validation = (context: OperationContext): Response | undefined => {
   return unprocessable(errors)
 }
 
+const PROMOTER_LOOKUPS: readonly PromoterLookup[] = [
+  "id",
+  "cust_id",
+  "auth_token",
+  "ref_token",
+  "promo_code",
+  "email",
+]
+
 const rewardJson = (reward: CampaignReward) => ({
   apply_on: reward.apply_on,
   product_ids: null,
@@ -169,6 +179,7 @@ export class FirstPromoterAPI implements FetchAPI {
       ListReferrals: (context) => this.listReferrals(context),
       GetReferral: (context) => this.getReferral(context),
       ListCommissions: (context) => this.commissions.list(context.url.searchParams),
+      UpdateCommission: (context) => this.updateCommission(context),
       FulfillCommissions: (context) => this.commissionBatch(context, "mark_fulfilled"),
       DestroyCommissions: (context) => this.commissionBatch(context, "destroy"),
       ListBatchProcesses: (context) =>
@@ -238,6 +249,24 @@ export class FirstPromoterAPI implements FetchAPI {
 
   private iso(): string {
     return new Date(this.now()).toISOString()
+  }
+
+  private updateCommission(context: OperationContext): Response {
+    const body = record(context)
+    const id = /^\d+$/.test(context.params.id ?? "") ? Number(context.params.id) : undefined
+    if (id === undefined || !this.state.commissions.has(String(id)))
+      return jsonRes(404, { message: "Commission not found", code: "not_found" })
+    const invalid = validation(context)
+    if (invalid) return invalid
+    const row = this.commissions.updateNotes(id, {
+      ...(typeof body.internal_note === "string" ? { internal_note: body.internal_note } : {}),
+      ...(typeof body.external_note === "string" ? { external_note: body.external_note } : {}),
+    })
+    return row
+      ? annotateResponse(jsonRes(200, this.commissions.render(row)), {
+          ids: { commissionId: String(row.id) },
+        })
+      : jsonRes(404, { message: "Commission not found", code: "not_found" })
   }
 
   private commissionBatch(
@@ -524,13 +553,10 @@ export class FirstPromoterAPI implements FetchAPI {
 
   private getPromoter(context: OperationContext): Response {
     const by = context.url.searchParams.get("find_by") ?? "id"
-    if (!["id", "cust_id", "ref_token", "email"].includes(by)) {
-      return error(400, `find_by must be one of id, cust_id, ref_token, email`)
+    if (!PROMOTER_LOOKUPS.includes(by as PromoterLookup)) {
+      return error(400, `find_by must be one of ${PROMOTER_LOOKUPS.join(", ")}`)
     }
-    const promoter = this.state.find(
-      context.params.id ?? "",
-      by as "id" | "cust_id" | "ref_token" | "email",
-    )
+    const promoter = this.state.find(context.params.id ?? "", by as PromoterLookup)
     if (!promoter) return error(404, "Promoter not found")
     return this.promoterResponse(context, promoter)
   }
@@ -647,24 +673,13 @@ export class FirstPromoterAPI implements FetchAPI {
       .at(0)?.value
     if (existing) return unprocessable({ email: ["has already been taken"] })
     const enrolment = promoter.campaigns[0]
-    const referral: ReferralRecord = {
-      id: this.state.nextReferralId(),
+    const referral = this.createReferral(
+      promoter,
+      enrolment,
       email,
-      uid: typeof body.uid === "string" ? body.uid : null,
-      state: "signup",
-      promoter_id: promoter.id,
-      campaign_id: enrolment?.campaign_id ?? null,
-      ref_token: enrolment?.ref_token ?? null,
+      typeof body.uid === "string" ? body.uid : null,
       tid,
-      created_at: this.iso(),
-      customer_since: null,
-    }
-    this.state.referrals.insert(String(referral.id), referral)
-    this.state.promoters.update(String(promoter.id), {
-      ...promoter,
-      referrals: promoter.referrals + 1,
-      updated_at: this.iso(),
-    })
+    )
     const converted = this.state.current().autoConvert ? this.convert(referral.id) : undefined
     const shown = converted ?? referral
     return annotateResponse(
@@ -688,6 +703,69 @@ export class FirstPromoterAPI implements FetchAPI {
     )
   }
 
+  /** A new lead attributed to `promoter` through `enrolment`; counts toward the promoter's referrals. */
+  private createReferral(
+    promoter: PromoterRecord,
+    enrolment: PromoterRecord["campaigns"][number] | undefined,
+    email: string,
+    uid: string | null,
+    tid: string | null,
+  ): ReferralRecord {
+    const referral: ReferralRecord = {
+      id: this.state.nextReferralId(),
+      email,
+      uid,
+      state: "signup",
+      promoter_id: promoter.id,
+      campaign_id: enrolment?.campaign_id ?? null,
+      ref_token: enrolment?.ref_token ?? null,
+      tid,
+      created_at: this.iso(),
+      customer_since: null,
+    }
+    this.state.referrals.insert(String(referral.id), referral)
+    this.state.promoters.update(String(promoter.id), {
+      ...promoter,
+      referrals: promoter.referrals + 1,
+      updated_at: this.iso(),
+    })
+    return referral
+  }
+
+  /**
+   * Who a sale with no tracked lead is credited to, from `tid`, `ref_id` or (opt-in) `promo_code`:
+   * the vendor's "bypass the signup tracking" path, which creates the lead and assigns the sale
+   * in one step. `email` is required to name the new lead.
+   */
+  private saleOrigin(body: Json):
+    | {
+        promoter: PromoterRecord
+        enrolment: PromoterRecord["campaigns"][number]
+        tid: string | null
+      }
+    | undefined {
+    const live = (promoter: PromoterRecord | undefined) =>
+      promoter && promoter.state !== "archived" ? promoter : undefined
+    if (typeof body.tid === "string") {
+      const click = this.state.clicks.get(body.tid)
+      const promoter = click ? live(this.state.byId(click.promoter_id)) : undefined
+      const enrolment = promoter?.campaigns.find((c) => c.ref_token === click?.ref_token)
+      return promoter && enrolment ? { promoter, enrolment, tid: body.tid } : undefined
+    }
+    if (typeof body.ref_id === "string") {
+      const promoter = live(this.state.find(body.ref_id, "ref_token"))
+      const enrolment = promoter?.campaigns.find((c) => c.ref_token === body.ref_id)
+      return promoter && enrolment ? { promoter, enrolment, tid: null } : undefined
+    }
+    if (typeof body.promo_code === "string" && this.state.current().promoCodeCreatesReferral) {
+      const code = this.state.promoCodes.get(body.promo_code)
+      const owner = code ? this.commissions.enrolment(code.promoter_campaign_id) : undefined
+      const promoter = live(owner?.promoter)
+      return promoter && owner ? { promoter, enrolment: owner.entry, tid: null } : undefined
+    }
+    return undefined
+  }
+
   private trackSale(context: OperationContext): Response {
     const body = record(context)
     if (!Number.isSafeInteger(body.amount) || Number(body.amount) <= 0)
@@ -703,18 +781,32 @@ export class FirstPromoterAPI implements FetchAPI {
           "Referral corresponding to email or uid parameter not found or promoter is banned.",
         code: "not_found",
       })
-    const referral = this.state.referrals.list({
+    const tracked = this.state.referrals.list({
       where: (row) =>
         typeof body.uid === "string"
           ? row.uid === body.uid
           : row.email.toLowerCase() === String(body.email).toLowerCase(),
     })[0]?.value
+    const origin = tracked ? undefined : this.saleOrigin(body)
+    if (!tracked && (!origin || typeof body.email !== "string")) return missing()
+    if (
+      !tracked &&
+      this.state.referrals.list({
+        where: (row) => row.email.toLowerCase() === String(body.email).toLowerCase(),
+      }).length > 0
+    )
+      return unprocessable({ email: ["has already been taken"] })
     const promoter =
-      referral?.promoter_id === null || !referral
-        ? undefined
-        : this.state.byId(referral.promoter_id)
-    const enrolment = promoter?.campaigns.find((c) => c.campaign_id === referral?.campaign_id)
-    if (!referral || !promoter || promoter.state === "archived" || !enrolment) return missing()
+      tracked === undefined
+        ? origin?.promoter
+        : tracked.promoter_id === null
+          ? undefined
+          : this.state.byId(tracked.promoter_id)
+    const enrolment =
+      tracked === undefined
+        ? origin?.enrolment
+        : promoter?.campaigns.find((c) => c.campaign_id === tracked.campaign_id)
+    if (!promoter || promoter.state === "archived" || !enrolment) return missing()
     if (typeof body.ref_id === "string" && body.ref_id !== enrolment.ref_token) return missing()
     if (
       typeof body.tid === "string" &&
@@ -744,7 +836,16 @@ export class FirstPromoterAPI implements FetchAPI {
       "discount_per",
     ]
     const unit: CommissionUnit = units.find((value) => value === reward?.unit) ?? "cash"
-    const sale = this.sqlite.transaction(() => {
+    const { sale, referral } = this.sqlite.transaction(() => {
+      const referral =
+        tracked ??
+        this.createReferral(
+          promoter,
+          enrolment,
+          String(body.email),
+          typeof body.uid === "string" ? body.uid : null,
+          origin?.tid ?? null,
+        )
       const commission = reward
         ? this.commissions.seed({
             promoter_campaign_id: enrolment.id,
@@ -773,7 +874,7 @@ export class FirstPromoterAPI implements FetchAPI {
       }
       this.state.sales.insert(eventId, row)
       this.convertReferral(referral.id, saleAmount, unit === "cash" ? earned : 0)
-      return row
+      return { sale: row, referral }
     })
     return jsonRes(200, {
       id: sale.id,

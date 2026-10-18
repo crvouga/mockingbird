@@ -1080,12 +1080,10 @@
             "maxLength": 200
           },
           "html": {
-            "type": "string",
-            "maxLength": 5000
+            "type": "string"
           },
           "text": {
-            "type": "string",
-            "maxLength": 5000
+            "type": "string"
           },
           "cc": {
             "$ref": "#/components/schemas/Recipients"

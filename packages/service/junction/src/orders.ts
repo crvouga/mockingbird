@@ -6,7 +6,9 @@ import {
   opaqueToken,
 } from "@crvouga/mockingbird-service"
 import { requireUser } from "./fixtures.js"
+import { isObservedProfile } from "./lab-account-behavior.js"
 import {
+  ALL_BILLING_STATES,
   effectiveBilling,
   isLinkedToTeam,
   LAB_ACCOUNT_STATUSES,
@@ -125,7 +127,7 @@ const parseMarkersInt = (raw: FormValue | undefined, name: string, fallback: num
  * `pages` is ceil(overall/size) over the whole marker list, and page/size accept
  * 1..100 with 422s outside those bounds.
  */
-const paginateMarkers = (
+export const paginateMarkers = (
   query: OperationContext["query"],
   markers: readonly Record<string, unknown>[],
 ) => {
@@ -1119,8 +1121,12 @@ export const orderHandlers = (state: JunctionState) => ({
     // one. An omitted, nested-only or unknown id falls to the platform account, which stores
     // a null association and is not checked against any listed allowed_billing.
     const requestedAccountId = typeof body.lab_account_id === "string" ? body.lab_account_id : null
+    // These are sandbox recordings: an `observed` configuration for the production oracle
+    // keeps the documented routing (an omitted id selects the house account, #467/#468).
+    const behavior = state.labAccountBehavior
     const sandboxPlatformFallback =
-      state.labAccountBehavior.profile === "sandbox-observed" &&
+      isObservedProfile(behavior) &&
+      behavior.oracle === "sandbox" &&
       PLATFORM_ACCOUNT_LABS.includes(labSlug) &&
       (requestedAccountId === null ||
         !state.listLabAccounts().some((a) => a.id === requestedAccountId))
@@ -1145,7 +1151,7 @@ export const orderHandlers = (state: JunctionState) => ({
         : undefined
     const billingType = requestedBilling ?? state.defaultBillingTypes[labSlug] ?? "client_bill"
     const sandboxPolicy =
-      state.labAccountBehavior.profile === "sandbox-observed" &&
+      isObservedProfile(behavior) &&
       labAccount !== "platform" &&
       typeof body.lab_account_id === "string"
         ? state.labAccountBehavior.accounts[labAccount.id]
@@ -1154,10 +1160,20 @@ export const orderHandlers = (state: JunctionState) => ({
       ? sandboxPolicy?.rejectBilling?.[requestedBilling as import("./lab-accounts.js").BillingType]
       : undefined
     if (rejection) throw new HttpError(400, { detail: rejection })
-    const allowedStates =
-      (requestedBilling
-        ? sandboxPolicy?.allowBilling?.[requestedBilling as import("./lab-accounts.js").BillingType]
-        : undefined) ?? effectiveBilling(labAccount)[billingType]
+    // #467: with no root account id, a lab configured `unchecked` places the order on its
+    // Junction-owned account without checking that account's listed billing or states.
+    const omittedHouseUnchecked =
+      requestedAccountId === null &&
+      labAccount !== "platform" &&
+      labAccount.org_id === null &&
+      behavior.omittedAccountBilling?.[labSlug] === "unchecked"
+    const allowedStates = omittedHouseUnchecked
+      ? ALL_BILLING_STATES
+      : ((requestedBilling
+          ? sandboxPolicy?.allowBilling?.[
+              requestedBilling as import("./lab-accounts.js").BillingType
+            ]
+          : undefined) ?? effectiveBilling(labAccount)[billingType])
     if (!allowedStates)
       throw new HttpError(400, {
         // An omitted billing_type that resolves to one the account lacks is reported against
@@ -1222,9 +1238,18 @@ export const orderHandlers = (state: JunctionState) => ({
       context.now,
     )
     persistOrderRecord(state, order, labTest, details, address)
+    // #473: where the client put an account id (root selects; nested is ignored by Junction).
+    const nestedAccountId =
+      typeof rawOrderSet === "object" && rawOrderSet !== null && !Array.isArray(rawOrderSet)
+        ? (rawOrderSet as Record<string, unknown>).lab_account_id
+        : undefined
     state.orderLabAccounts.insert(orderId, {
       lab_account_id: labAccount === "platform" ? null : labAccount.id,
       provider_account_id: labAccount === "platform" ? null : labAccount.provider_account_id,
+      request: {
+        labAccountId: requestedAccountId,
+        nestedLabAccountId: typeof nestedAccountId === "string" ? nestedAccountId : null,
+      },
     })
     const responseOrder = { ...order } as Record<string, unknown>
     if (state.labAccountBehavior.profile !== "native")
@@ -1277,14 +1302,29 @@ export const orderHandlers = (state: JunctionState) => ({
         : typeof order.details?.type === "string" && order.details.type.length > 0
           ? order.details.type
           : "at_home_phlebotomy"
-    order.status = "cancelled"
-    order.updated_at = now
     const event = {
       id: order.events.length + 1,
       created_at: now,
       status: `cancelled.${method}.cancelled`,
       status_detail: null,
     }
+    // #474 (opt-in): event timestamps have one-second precision, and a cancel in the creation
+    // second is not later than the order's own event, so the sandbox logs it but the order
+    // keeps its status, last event and updated_at. A repeated cancel is then a no-op.
+    if (
+      state.quirks.sameSecondCancelStatus === true &&
+      Math.floor(Date.parse(order.created_at) / 1000) === Math.floor(context.now() / 1000)
+    ) {
+      order.events.push(event)
+      state.orders.update(id, order)
+      const staleOrder = { ...order } as Record<string, unknown>
+      if (state.labAccountBehavior.profile !== "native")
+        staleOrder.lab_account_id = state.orderLabAccounts.get(order.id)?.lab_account_id ?? null
+      if (staleOrder.result_types === null) delete staleOrder.result_types
+      return jsonRes(200, { order: staleOrder, status: "success", message: "order cancelled" })
+    }
+    order.status = "cancelled"
+    order.updated_at = now
     order.events.push(event)
     order.last_event = event
     order.order_transaction.status = "cancelled"

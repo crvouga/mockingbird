@@ -101,6 +101,33 @@ paths:
       responses:
         "200": { description: A login code, content: { application/json: { schema: { $ref: "#/components/schemas/LoginResponse" } } } }
         "400": { description: Invalid login or profile, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+  /auth/resetpassword:
+    post:
+      operationId: PostAuthResetPassword
+      security: []
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Creates a UserSecurityRequest; covered by the auth acceptance tests." }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ResetPasswordRequest" } } }
+      responses:
+        "200": { description: All OK, whether or not the account exists, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "400": { description: Invalid email, or the domain uses external auth, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+  /auth/setpassword:
+    post:
+      operationId: PostAuthSetPassword
+      security: []
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Consumes a UserSecurityRequest; covered by the auth acceptance tests." }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SetPasswordRequest" } } }
+      responses:
+        "200": { description: Password changed, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "400": { description: Invalid request, used request, wrong secret or weak password, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "404": { description: Unknown security request, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
   /auth/me:
     get:
       operationId: GetAuthMe
@@ -608,6 +635,21 @@ components:
         scope: { type: string }
         codeChallenge: { type: string }
         codeChallengeMethod: { type: string, enum: [plain, S256] }
+    ResetPasswordRequest:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string }
+        projectId: { type: string }
+        redirectUri: { type: string }
+        sendEmail: { type: boolean }
+    SetPasswordRequest:
+      type: object
+      required: [id, secret, password]
+      properties:
+        id: { type: string }
+        secret: { type: string }
+        password: { type: string }
     LoginResponse:
       type: object
       required: [login]
@@ -619,13 +661,17 @@ components:
       type: object
       required: [grant_type]
       properties:
-        grant_type: { type: string, enum: [client_credentials, authorization_code, refresh_token] }
+        grant_type: { type: string, enum: [client_credentials, authorization_code, refresh_token, "urn:ietf:params:oauth:grant-type:token-exchange"] }
         client_id: { type: string }
         client_secret: { type: string }
         code: { type: string }
         code_verifier: { type: string }
         refresh_token: { type: string }
         scope: { type: string }
+        subject_token: { type: string, description: "Token exchange: an access token of the client's identityProvider" }
+        subject_token_type: { type: string, enum: ["urn:ietf:params:oauth:token-type:access_token"] }
+        membership_id: { type: string, description: "Token exchange: restrict the sign-in to this ProjectMembership" }
+        nonce: { type: string }
     TokenResponse:
       type: object
       required: [token_type, expires_in, access_token]

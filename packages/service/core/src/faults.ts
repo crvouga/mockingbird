@@ -40,6 +40,15 @@ export type FaultRule = {
   /** Fault only requests carrying these query parameters. `"*"` matches any value. */
   query?: Record<string, string>
   /**
+   * Fault only requests whose JSON body carries these fields. Each key is a dotted path into
+   * the parsed body (`"patient_details.email"`; a number steps into an array, `"items.0.sku"`)
+   * and each value is what the field must equal: a string, number, boolean or `null`, compared
+   * strictly (`3` is not `"3"`). `"*"` matches any value that is present. A request whose body
+   * is missing, is not JSON, or is not a JSON object never matches. Not `body`, which is the
+   * response a rule injects.
+   */
+  requestBody?: Record<string, RequestBodyValue>
+  /**
    * Fault only this namespace. Omit (or `"*"`) to fault every namespace — which is what
    * an in-process caller usually wants, and what a parallel worker usually does not:
    * rules added through `POST /__admin/faults` default to the calling namespace.
@@ -107,6 +116,9 @@ export type FaultRule = {
   /** The preset this rule was expanded from, if any. */
   fromPreset?: string
 }
+
+/** What a field of the request body must equal in {@link FaultRule.requestBody}. */
+export type RequestBodyValue = string | number | boolean | null
 
 /** A fault that fired for one request. */
 export type FaultHit = {
@@ -210,6 +222,11 @@ export type FaultCandidate = {
   /** Request headers and query, for rules that match on them. */
   headers?: Headers
   query?: URLSearchParams
+  /**
+   * The request body parsed as JSON, read only when a rule matches on `requestBody`. Resolve
+   * `undefined` for a body that is missing or not JSON. It must leave the request readable.
+   */
+  readJson?: () => Promise<unknown>
   /** The namespace clock, for `from` / `until`. Rules with a window are skipped without it. */
   now?: number
   /** How to spend a delay for this request. Default: the registry's own sleep. */
@@ -277,6 +294,7 @@ const RULE_KEYS = new Set([
   "pathPattern",
   "requestHeaders",
   "query",
+  "requestBody",
   "namespace",
   "after",
   "every",
@@ -307,6 +325,24 @@ const stringMap = (value: unknown, label: string): Record<string, string> => {
   if (!isRecord(value) || !Object.values(value).every((each) => typeof each === "string"))
     throw new ControlError(`${label}: expected an object of strings`)
   return value as Record<string, string>
+}
+
+const requestBodyMap = (value: unknown): Record<string, RequestBodyValue> => {
+  if (!isRecord(value)) throw new ControlError("fault.requestBody: expected an object")
+  for (const [path, expected] of Object.entries(value)) {
+    if (path === "" || path.split(".").includes(""))
+      throw new ControlError(`fault.requestBody: ${JSON.stringify(path)} is not a dotted path`)
+    const scalar =
+      expected === null ||
+      typeof expected === "string" ||
+      typeof expected === "boolean" ||
+      (typeof expected === "number" && Number.isFinite(expected))
+    if (!scalar)
+      throw new ControlError(
+        `fault.requestBody.${path}: expected a string, number, boolean or null`,
+      )
+  }
+  return value as Record<string, RequestBodyValue>
 }
 
 const count = (value: unknown, label: string, min: number): number => {
@@ -392,6 +428,7 @@ export const normalizeFault = (
       ]),
     )
   if (input.query !== undefined) rule.query = stringMap(input.query, "fault.query")
+  if (input.requestBody !== undefined) rule.requestBody = requestBodyMap(input.requestBody)
   const namespace = input.namespace ?? context.namespace
   if (namespace !== undefined) {
     // A rule for a namespace that cannot exist would be stored and never fire.
@@ -464,7 +501,31 @@ const matchesAll = (
   return true
 }
 
-const matches = (entry: Entry, candidate: FaultCandidate): boolean => {
+/** The value at a dotted path of a parsed JSON body; `undefined` when any step is missing. */
+const field = (body: unknown, path: string): unknown => {
+  let at = body
+  for (const step of path.split(".")) {
+    if (Array.isArray(at)) {
+      if (!/^(0|[1-9]\d*)$/.test(step)) return undefined
+      at = at[Number(step)]
+    } else if (isRecord(at) && Object.hasOwn(at, step)) at = at[step]
+    else return undefined
+  }
+  return at
+}
+
+/** Whether the parsed body has every field `wanted` names. Only a JSON object can. */
+const bodyMatches = (wanted: Record<string, RequestBodyValue>, body: unknown): boolean => {
+  if (!isRecord(body)) return false
+  for (const [path, expected] of Object.entries(wanted)) {
+    const actual = field(body, path)
+    if (actual === undefined) return false
+    if (expected !== "*" && actual !== expected) return false
+  }
+  return true
+}
+
+const matches = (entry: Entry, candidate: FaultCandidate, body: { value: unknown }): boolean => {
   const { rule } = entry
   if (entry.scope !== GLOBAL && entry.scope !== candidate.namespace) return false
   if (rule.operationId !== undefined && rule.operationId !== candidate.operationId) return false
@@ -476,6 +537,7 @@ const matches = (entry: Entry, candidate: FaultCandidate): boolean => {
   if (entry.pattern && !entry.pattern.test(candidate.path)) return false
   if (!matchesAll(rule.requestHeaders, (name) => candidate.headers?.get(name))) return false
   if (!matchesAll(rule.query, (name) => candidate.query?.get(name))) return false
+  if (rule.requestBody && !bodyMatches(rule.requestBody, body.value)) return false
   if (rule.from !== undefined || rule.until !== undefined) {
     if (candidate.now === undefined) return false
     if (rule.from !== undefined && candidate.now < (rule.from as number)) return false
@@ -630,10 +692,17 @@ export const createFaultRegistry = (
       const hits: FaultHit[] = []
       const wait = candidate.wait ?? sleep
       const draw = stream(candidate.namespace)
+      // Parsed once, and only if a rule that reaches the body gets this far.
+      const body: { value: unknown } = { value: undefined }
+      let read = false
       // A copy: a rule added while this request waits must not join it halfway.
       for (const entry of [...entries]) {
         if (entry.remaining === 0) continue
-        if (!matches(entry, candidate)) continue
+        if (entry.rule.requestBody && !read) {
+          read = true
+          body.value = await candidate.readJson?.().catch(() => undefined)
+        }
+        if (!matches(entry, candidate, body)) continue
         const { rule } = entry
         entry.seen++
         const position = entry.seen - (rule.after ?? 0)

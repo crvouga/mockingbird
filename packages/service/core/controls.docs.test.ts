@@ -47,6 +47,7 @@ const FAULT_FIELDS = [
   "pathPattern",
   "requestHeaders",
   "query",
+  "requestBody",
   "namespace",
   "after",
   "every",

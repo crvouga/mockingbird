@@ -9,9 +9,11 @@ import type {
 } from "@crvouga/mockingbird-service"
 import {
   normalizeBootControls,
+  normalizeIdBase,
   parseFaultHeader,
   resolveAdminPrefix,
 } from "@crvouga/mockingbird-service"
+import { checkSettings } from "./boot-settings.js"
 import { type FleetTarget, type ProtocolTarget, startFleet } from "./fleet.js"
 import { createInstalledServiceLoader } from "./fleet-loader.js"
 import { fleetCommands } from "./fleet-tools.js"
@@ -136,6 +138,12 @@ export type CommonServeOptions = {
   /** Synthetic provider fixture objects supplied by a fleet entry. */
   fixtures?: Record<string, unknown>
   baseUrl?: string
+  /**
+   * Boot settings from `--settings`, `MOCKINGBIRD_SETTINGS` or a fleet entry's `settings`,
+   * already checked by the target's {@link ServeTarget.parseSettings}. Pass them to the
+   * service's own `settings` option so they become every namespace's defaults.
+   */
+  settings?: Record<string, unknown>
 }
 
 /**
@@ -149,6 +157,13 @@ export type ServeTarget = {
   defaultPort: number
   /** Serve flags beyond the common ones. */
   options?: Record<string, CliOption>
+  /**
+   * Check the boot settings a caller supplied (`--settings`, `MOCKINGBIRD_SETTINGS`, a fleet
+   * entry's `settings`) against the service's settings schema, returning them normalized
+   * or throwing a message naming the bad field. A target without one takes no boot settings,
+   * and supplying some is refused before a port is bound.
+   */
+  parseSettings?(settings: Record<string, unknown>): Record<string, unknown>
   create(
     values: CliValues,
     common: CommonServeOptions,
@@ -176,6 +191,18 @@ const COMMON_SERVE_OPTIONS: Record<string, CliOption> = {
     type: "string",
     value: "<seed>",
     description: "Seed for every random choice (env MOCKINGBIRD_SEED)",
+  },
+  "id-base": {
+    type: "string",
+    value: "<n|boot>",
+    description:
+      "Start generated ids at this base so a restart does not reissue the last boot's ids; boot derives one from the clock (env MOCKINGBIRD_ID_BASE; default 0, the same ids every boot)",
+  },
+  settings: {
+    type: "string",
+    value: "<json|file>",
+    description:
+      "Service settings to boot with, as JSON or a JSON file; every namespace starts from them (env MOCKINGBIRD_SETTINGS; only for services that declare settings)",
   },
   "admin-controls": {
     type: "string",
@@ -293,6 +320,51 @@ const readJsonFile = async (path: string, label: string): Promise<unknown> => {
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
+/** A JSON option given inline (it starts with `{`, or `[`) or as the path of a JSON file. */
+export const readJsonOption = async (source: string, label: string): Promise<unknown> => {
+  const trimmed = source.trim()
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+    try {
+      return JSON.parse(trimmed) as unknown
+    } catch {
+      throw new Error(`${label}: not valid JSON`)
+    }
+  }
+  return readJsonFile(source, label)
+}
+
+/**
+ * The id base a `serve` invocation asks for: `--id-base` or `MOCKINGBIRD_ID_BASE`, a
+ * non-negative integer or `boot`. Checked before a port is bound. `undefined` when not asked for.
+ */
+export const resolveServeIdBase = (
+  values: CliValues,
+  env: Record<string, string | undefined> = process.env,
+): string | undefined => {
+  const source = asString(values["id-base"]) ?? env.MOCKINGBIRD_ID_BASE
+  if (source === undefined || source.trim() === "") return undefined
+  normalizeIdBase(source.trim(), "--id-base")
+  return source.trim()
+}
+
+/**
+ * The boot settings a `serve` invocation asks for: `--settings` (or `MOCKINGBIRD_SETTINGS`) as
+ * JSON or a JSON file, checked by the target's own settings schema. `undefined` when not asked for.
+ */
+export const resolveServeSettings = async (
+  target: Pick<ServeTarget, "name" | "parseSettings">,
+  values: CliValues,
+  env: Record<string, string | undefined> = process.env,
+): Promise<Record<string, unknown> | undefined> => {
+  const flag = asString(values.settings)
+  const source = flag ?? env.MOCKINGBIRD_SETTINGS
+  if (source === undefined || source.trim() === "") return undefined
+  const label = flag !== undefined ? "--settings" : "MOCKINGBIRD_SETTINGS"
+  const parsed = await readJsonOption(source, label)
+  if (!isObject(parsed)) throw new Error(`${label}: expected a JSON object`)
+  return checkSettings(target, parsed, label)
+}
+
 /**
  * The boot controls a `serve` invocation asks for: `--admin-controls` (or `MOCKINGBIRD_ADMIN_CONTROLS`) as
  * the base document, with the single-purpose flags on top. Checked here, so a bad value stops
@@ -306,14 +378,9 @@ export const resolveServeControls = async (
   const source = asString(values["admin-controls"]) ?? env.MOCKINGBIRD_ADMIN_CONTROLS
   let document: Record<string, unknown> = isObject(base) ? { ...base } : {}
   if (source !== undefined && source.trim() !== "") {
-    let parsed: unknown
-    if (source.trim().startsWith("{")) {
-      try {
-        parsed = JSON.parse(source)
-      } catch {
-        throw new Error("--admin-controls: not valid JSON")
-      }
-    } else parsed = await readJsonFile(source, "--admin-controls")
+    const parsed = source.trim().startsWith("{")
+      ? await readJsonOption(source, "--admin-controls")
+      : await readJsonFile(source, "--admin-controls")
     if (!isObject(parsed)) throw new Error("--admin-controls: expected a JSON object")
     document = { ...document, ...parsed }
   }
@@ -363,6 +430,13 @@ export type ConfigService = {
   adminPrefix?: string
   adminKey?: string
   seed?: string
+  /**
+   * Where this service's generated ids start: a non-negative integer or `"boot"` (derived from
+   * the clock). Replaces the fleet-wide `idBase`. Default: the same ids on every boot.
+   */
+  idBase?: number | string
+  /** Boot settings, checked by the service's settings schema; every namespace starts from them. */
+  settings?: Record<string, unknown>
   /** Admin controls this service boots with. A key given here replaces the fleet-wide one. */
   adminControls?: MockControls
   fixtures?: Record<string, unknown>
@@ -386,6 +460,8 @@ export type MockingbirdConfig = {
   log?: LogFormat
   adminPrefix?: string
   adminKey?: string
+  /** Where every HTTP service's generated ids start unless the service names its own `idBase`. */
+  idBase?: number | string
   /** Admin controls every HTTP service in the fleet boots with. */
   adminControls?: MockControls
   namespace?: string
@@ -406,6 +482,8 @@ const start = async (
     adminPrefix?: string
     adminKey?: string
     seed?: string
+    idBase?: string
+    settings?: Record<string, unknown>
     adminControls?: MockControls
     log: LogFormat
   },
@@ -416,8 +494,10 @@ const start = async (
     adminKey: config.adminKey,
     seed: config.seed,
     onLog: formatLog(config.log),
+    ...(config.settings !== undefined ? { settings: config.settings } : {}),
     ...(config.adminControls !== undefined ? { adminControls: config.adminControls } : {}),
   })
+  if (config.idBase !== undefined) runtime.setIdBase?.(config.idBase)
   const listening = await listen(runtime, { port: config.port, host: config.host })
   target.listening?.(listening)
   console.log(`${target.name} emulator listening on ${listening.url}`)
@@ -476,6 +556,14 @@ export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand =
         // Flags and MOCKINGBIRD_ADMIN_CONTROLS apply on top of the config file's own controls.
         const adminControls = await resolveServeControls(values, process.env, config.adminControls)
         if (adminControls !== undefined) config.adminControls = adminControls
+        // Settings belong to one service's schema, so a fleet names them per service.
+        if (values.settings !== undefined)
+          throw new Error(
+            "--settings serves a single service; give each service its own `settings` in the config",
+          )
+        // The fleet-wide id base: the config's own, else --id-base / MOCKINGBIRD_ID_BASE.
+        const idBase = config.idBase ?? resolveServeIdBase(values)
+        if (idBase !== undefined) config.idBase = idBase
         const fleet = await startFleet(config, {
           load: (name) => loadTarget(name, target),
           onLog: formatLog(config.log ?? log),
@@ -506,8 +594,12 @@ export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand =
     let listening: Listening
     try {
       const adminControls = await resolveServeControls(values)
+      const idBase = resolveServeIdBase(values)
+      const settings = await resolveServeSettings(target, values)
       listening = await start(target, values, {
         ...(adminControls !== undefined ? { adminControls } : {}),
+        ...(idBase !== undefined ? { idBase } : {}),
+        ...(settings !== undefined ? { settings } : {}),
         adminPrefix: resolveAdminPrefix(
           asString(values["admin-prefix"]) ?? process.env.MOCKINGBIRD_ADMIN_PREFIX,
         ),

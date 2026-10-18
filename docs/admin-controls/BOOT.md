@@ -8,9 +8,9 @@ An emulator starts with whatever controls you give it. That starting point is al
 
 | Carrier | How |
 | --- | --- |
-| In code | `createRuntime({ seed, adminControls })` · `createServer({ seed, adminControls })` |
+| In code | `createRuntime({ seed, adminControls })` · `createServer({ seed, adminControls })` · `idBase` · `settings` |
 | Command line | `serve --admin-controls <json\|file>` and one flag per control |
-| Environment | `MOCKINGBIRD_ADMIN_CONTROLS` · `MOCKINGBIRD_SEED` · `MOCKINGBIRD_ADMIN_KEY` · `MOCKINGBIRD_ADMIN_PREFIX` |
+| Environment | `MOCKINGBIRD_ADMIN_CONTROLS` · `MOCKINGBIRD_SEED` · `MOCKINGBIRD_ID_BASE` · `MOCKINGBIRD_SETTINGS` · `MOCKINGBIRD_ADMIN_KEY` · `MOCKINGBIRD_ADMIN_PREFIX` |
 | Fleet | `adminControls` in `mockingbird.json`, for every service or for one |
 | Admin page | Not a screen. Reset returns to whatever boot set |
 
@@ -60,6 +60,8 @@ npx mockingbird-stripe serve --admin-controls '{"latency": "40ms"}'
 | `--virtual-time` | | `virtualTime` | [Latency and timeouts](LATENCY_AND_TIMEOUTS.md#virtual-time) |
 | `--fault <fault>` | | One more entry in `faults`, in [header syntax](FAULTS.md#request-header) | [Faults](FAULTS.md) |
 | `--snapshot <file>` | | `snapshot` | [Snapshot and restore](SNAPSHOT_AND_RESTORE.md) |
+| `--id-base <n\|boot>` | `MOCKINGBIRD_ID_BASE` | Where generated ids start, so a restart does not reissue the last boot's ids | [Seed and determinism](SEED_AND_DETERMINISM.md#ids-that-outlive-a-boot) |
+| `--settings <json\|file>` | `MOCKINGBIRD_SETTINGS` | The emulator's own settings (the ones `createRuntime({ settings })` and `PUT /__admin/settings` take), for every namespace. Only emulators that have settings accept it | [Settings](#settings) |
 | `--admin-key <key>` | `MOCKINGBIRD_ADMIN_KEY` | Who may use the controls | [Reference](REFERENCE.md#access) |
 | `--admin-prefix <path>` | `MOCKINGBIRD_ADMIN_PREFIX` | Where the controls live. Default `/__admin` | [Reference](REFERENCE.md#access) |
 
@@ -68,6 +70,21 @@ How they combine:
 - `--admin-controls` is used instead of `MOCKINGBIRD_ADMIN_CONTROLS` when both are set.
 - A control flag replaces the matching key of the document. `--fault` adds to the document's `faults` instead of replacing them.
 - A value that cannot be read stops the command before anything listens, and names the flag or key.
+
+## Settings
+
+Some emulators have settings of their own beyond the controls (Formbricks' `legacyEnvironmentIds`, for one). `--settings` boots one with them without a wrapper process or a `PUT` after boot:
+
+```bash
+npx mockingbird-formbricks serve --settings '{"legacyEnvironmentIds": {"env_old": "ws_main"}}'
+npx mockingbird-formbricks serve --settings ./settings.json
+MOCKINGBIRD_SETTINGS=./settings.json npx mockingbird-formbricks serve
+```
+
+- The object is the emulator's settings document, checked by the emulator's own schema; a bad field stops the command before anything listens and names the field.
+- Every namespace starts from these settings, and a [reset](RESET.md) returns to them.
+- An emulator that has no settings refuses `--settings` instead of ignoring it.
+- `--settings` is for one emulator. In a fleet, give the service its own `settings` entry.
 
 ## Per namespace, and by credential
 
@@ -102,7 +119,7 @@ In a fleet's `mockingbird.json`, `adminControls` at the top level boots every HT
 }
 ```
 
-Flags and `MOCKINGBIRD_ADMIN_CONTROLS` apply on top of the file. See [Fleets](../FLEETS.md).
+A service entry also takes `settings` (the emulator's settings, as `--settings` does) and `idBase`; a top-level `idBase` is the default for every HTTP service. Flags and `MOCKINGBIRD_ADMIN_CONTROLS` apply on top of the file, and `--id-base` or `MOCKINGBIRD_ID_BASE` fills in a top-level `idBase` the file leaves out. See [Fleets](../FLEETS.md).
 
 ## Rules
 

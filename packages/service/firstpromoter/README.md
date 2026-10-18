@@ -74,11 +74,12 @@ await server.close()
 | --- | --- |
 | `POST /v2/company/promoters` | `{email, cust_id?, profile?: {first_name, last_name}, drip_emails?, initial_campaign_id?}` → the promoter (`FirstPromoterV2ResponseSchema`), enrolled in the default campaign with a `ref_token` (first name + digits) and `ref_link` `https://acme.example/referrals?fpr=<token>`. A live promoter with the same email or `cust_id` is 422 `{message, errors: {email: ["has already been taken"]}}`. |
 | `GET /v2/company/promoters?page=&per_page=` | `{data: [promoter], meta: {pending_count}}`; archived promoters are left out. |
-| `GET /v2/company/promoters/{value}?find_by=id\|cust_id\|ref_token\|email` | One promoter (archived ones too, with `archived_at`), or 404 `{message: "Promoter not found"}`. |
+| `GET /v2/company/promoters/{value}?find_by=id\|cust_id\|auth_token\|ref_token\|promo_code\|email` | One promoter (archived ones too, with `archived_at`), or 404 `{message: "Promoter not found"}`. `promo_code` resolves codes seeded through `POST /__admin/promo-codes` to the promoter owning that campaign enrolment. `auth_token` is a deterministic per-promoter token that `POST` / `GET /__admin/promoters` report as `auth_token` (the vendor's promoter schema has no such field, so the promoter body does not carry it). Any other `find_by` is 400. |
 | `PUT /v2/company/promoters/{id}` | `{cust_id?, email?, note?, profile?}` → the promoter; 404 / 422 as above. |
 | `POST /v2/company/promoters/archive` | `{ids: [..]}` → a completed batch `{id, status, total, selected_total, processed_count, failed_count, action_label, progress, processing_errors, …}`. |
 | `POST /v2/promoters/iframe_login?promoter_id=` | `{access_token, expires_in}`, or 404. |
 | `POST /v2/track/signup` | `{email, tid? \| promoter_id? \| ref_id?, uid?, skip_email_notification?}` → the referral. An unknown `tid`, promoter or ref token is 404; none of them is 400; an email already tracked is 422. With `autoConvert` (default on) the referral becomes a customer at once and `lead_becomes_referral` is posted. |
+| `PUT /v2/company/commissions/{id}` | `{internal_note?, external_note?}` (the vendor's `CommissionUpdate`) → the updated commission, reflected in `GET /v2/company/commissions`; other fields are not writable. An unknown id is 404 `{message: "Commission not found", code: "not_found"}`. |
 | `GET /v2/company/referrals` | A bare array of stored referrals and live promoter/campaign metadata. `q` searches email/uid; `ids[]`, `filters[type]=lead\|customer`, `filters[state]`, `filters[promoter_id]`, and inclusive `filters[created_at\|customer_since][from\|to]` filter before paging. `page` starts at 1; `per_page` defaults to 20 (max 100). Exhausted pages and unmatched searches return `[]`. |
 | `GET /v2/company/referrals/{id}` | The same referral projection as listing. A numeric ID or `find_by=email\|uid` selects it; missing records are 404. |
 
@@ -146,6 +147,16 @@ Codes must be seeded through the admin control; tokens must belong to the referr
 campaign. All validation precedes sale/commission/balance writes; snapshots/reset include event
 deduplication. A successful sale preserves the existing conversion webhook behavior.
 
+When no lead matches `email` / `uid`, the vendor's [tracking contract](https://github.com/firstpromoter/docs/blob/d4e9e6f16bf4801c524508d2809a425ea6419d7d/api-reference-v2/api-admin/tracking-api/openapi-v2-tracking.json)
+lets `tid` or `ref_id` "bypass the signup tracking": the lead is created and the sale assigned in
+one request. The emulator does the same when the `tid` (a click from `POST /__admin/clicks`) or
+`ref_id` resolves to a live promoter and the request names the lead by `email`; the new lead counts
+toward the promoter's referrals, becomes a customer and posts `lead_becomes_referral`. The
+vendor documents nothing further for `promo_code` ("For promo code tracking"), so creating a lead
+from a seeded `promo_code` alone is opt-in: `PUT /__admin/settings {"promoCodeCreatesReferral": true}`
+(default `false`, where it stays a 404). `uid` alone cannot name a new lead, and an `email` that is
+already a lead under another `uid` is 422 (as in signup tracking).
+
 ### Namespaces
 
 `x-mockingbird-namespace`, a `/__admin/ns/<name>` prefix in `FIRST_PROMOTER_API_URL`, or by API key:
@@ -161,7 +172,7 @@ deduplication. A successful sale preserves the existing conversion webhook behav
 - Refunds, standalone commission creation/editing/approval, cash payouts and commission filters
   beyond those listed above; fraud checks;
   public promo-code provisioning; the hosted affiliate portal behind the iframe token.
-- Sale tracking requires an existing referral (the vendor's one-step signup bypass is unmodelled).
+- Creating a lead from `promo_code` alone is off by default (`promoCodeCreatesReferral`): the vendor documents the one-step bypass only for `tid` and `ref_id` and the promo-code behavior is unverified against the live API.
   Currency is recorded without foreign-exchange conversion; plan-specific rewards, quantity/MRR
   calculations, multiple reward tiers, split commissions and notification emails are unmodelled.
   Commission rounding and immediate approval are deterministic emulator policies, not live-verified

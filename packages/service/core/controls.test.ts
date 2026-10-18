@@ -528,6 +528,166 @@ describe("faults", () => {
     }
   })
 
+  describe("requestBody", () => {
+    const post = (runtime: Mock, body: unknown, headers: Record<string, string> = {}) =>
+      send(runtime, "POST", "/v1/notes", { body, headers })
+
+    test("targets one member by a dotted field of the JSON body; others pass through", async () => {
+      const runtime = mock()
+      const added = await add(runtime, {
+        method: "POST",
+        path: "/v1/notes",
+        requestBody: { "patient.email": "member-a@example.test" },
+        status: 503,
+      })
+      expect(added.status).toBe(201)
+      expect(added.body).toMatchObject({
+        requestBody: { "patient.email": "member-a@example.test" },
+      })
+      const a = await post(runtime, { text: "a", patient: { email: "member-a@example.test" } })
+      expect(a.status).toBe(503)
+      expect(a.headers.get(FAULT_HEADER)).toBe("fault_1")
+      expect(
+        (await post(runtime, { text: "b", patient: { email: "member-b@example.test" } })).status,
+      ).toBe(200)
+      expect((await post(runtime, { text: "c" })).status).toBe(200)
+      expect((await post(runtime, { text: "d", patient: "member-a@example.test" })).status).toBe(
+        200,
+      )
+      // The mock still reads the body of a request that no rule faulted.
+      expect((await list(runtime)).map((note) => note.text)).toEqual(["b", "c", "d"])
+      expect((await admin(runtime, "GET", "/faults/fault_1")).body).toMatchObject({
+        hits: 1,
+        // Only a request whose body matches counts as seen.
+        seen: 1,
+      })
+    })
+
+    test("compares strings, numbers, booleans and null exactly; reaches into arrays", async () => {
+      const cases: [Record<string, unknown>, unknown, boolean][] = [
+        [{ n: 3 }, { text: "x", n: 3 }, true],
+        [{ n: 3 }, { text: "x", n: "3" }, false],
+        [{ n: "3" }, { text: "x", n: 3 }, false],
+        [{ ok: true }, { text: "x", ok: true }, true],
+        [{ ok: true }, { text: "x", ok: "true" }, false],
+        [{ ok: false }, { text: "x", ok: false }, true],
+        [{ gone: null }, { text: "x", gone: null }, true],
+        [{ gone: null }, { text: "x" }, false],
+        [{ "items.1.sku": "b" }, { text: "x", items: [{ sku: "a" }, { sku: "b" }] }, true],
+        [{ "items.0.sku": "b" }, { text: "x", items: [{ sku: "a" }, { sku: "b" }] }, false],
+        [{ "a.b": "x", "a.c": 1 }, { text: "x", a: { b: "x", c: 1 } }, true],
+        [{ "a.b": "x", "a.c": 1 }, { text: "x", a: { b: "x", c: 2 } }, false],
+        [{ "a.b": "*" }, { text: "x", a: { b: "anything" } }, true],
+        [{ "a.b": "*" }, { text: "x", a: {} }, false],
+        [{ "a.toString": "*" }, { text: "x" }, false],
+      ]
+      for (const [requestBody, body, hit] of cases) {
+        const runtime = mock()
+        await add(runtime, { requestBody, status: 599 })
+        const status = (await post(runtime, body)).status
+        expect([JSON.stringify(requestBody), JSON.stringify(body), status === 599]).toEqual([
+          JSON.stringify(requestBody),
+          JSON.stringify(body),
+          hit,
+        ])
+      }
+    })
+
+    test("a body that is not a JSON object never matches", async () => {
+      const runtime = mock()
+      await add(runtime, { requestBody: { text: "a" }, status: 599 })
+      await add(runtime, { requestBody: { "0.text": "a" }, status: 598 })
+      // The notes handler may choke on a body that is not an object. The rules must not fire.
+      const raw = async (contentType: string, body?: string) => {
+        try {
+          const response = await runtime.fetch(
+            new Request("http://mock.local/v1/notes", {
+              method: "POST",
+              headers: { "content-type": contentType },
+              ...(body !== undefined ? { body } : {}),
+            }),
+          )
+          return response.status
+        } catch {
+          return 500
+        }
+      }
+      const json = "application/json"
+      const fired = [598, 599]
+      for (const body of ["not json {", '[{"text":"a"}]', '"a"', "3", "null", ""])
+        expect([body, fired.includes(await raw(json, body))]).toEqual([body, false])
+      expect(fired).not.toContain(await raw(json))
+      expect(fired).not.toContain(await raw("application/x-www-form-urlencoded", "text=a"))
+      // Not a GET with no body either.
+      expect((await send(runtime, "GET", "/v1/notes")).status).toBe(200)
+      expect((await post(runtime, { text: "a" })).status).toBe(599)
+    })
+
+    test("combines with the other match fields, and with a body to inject", async () => {
+      const runtime = mock()
+      await add(runtime, {
+        method: "POST",
+        requestBody: { text: "empty" },
+        status: 200,
+        body: { slots: [] },
+      })
+      await add(runtime, {
+        method: "GET",
+        requestBody: { text: "empty" },
+        status: 599,
+      })
+      const empty = await post(runtime, { text: "empty" })
+      expect(empty.status).toBe(200)
+      expect(await empty.json()).toEqual({ slots: [] })
+      expect(empty.headers.get(FAULT_HEADER)).toBe("fault_1")
+      expect((await post(runtime, { text: "other" })).headers.get(FAULT_HEADER)).toBeNull()
+      // A GET has no body to match, whatever the rule says about the method.
+      expect((await send(runtime, "GET", "/v1/notes")).status).toBe(200)
+    })
+
+    test("a rule without requestBody matches exactly as before, even on bodies that are not JSON", async () => {
+      const runtime = mock()
+      await add(runtime, { method: "POST", status: 599 })
+      const garbage = await runtime.fetch(
+        new Request("http://mock.local/v1/notes", {
+          method: "POST",
+          headers: { "content-type": "text/plain" },
+          body: "not json",
+        }),
+      )
+      expect(garbage.status).toBe(599)
+      expect((await post(runtime, { text: "a" })).status).toBe(599)
+      expect((await admin(runtime, "GET", "/faults/fault_1")).body).not.toHaveProperty(
+        "requestBody",
+      )
+    })
+
+    test("a malformed rule is rejected", async () => {
+      const runtime = mock()
+      for (const requestBody of [
+        "member-a",
+        ["a"],
+        null,
+        { email: ["a"] },
+        { email: { nested: "a" } },
+        { "": "a" },
+        { "a..b": "a" },
+      ])
+        expect((await add(runtime, { requestBody, status: 503 })).status).toBe(400)
+      expect((await add(runtime, { requestBody: {}, status: 503 })).status).toBe(201)
+    })
+
+    test("a rule in a request header cannot choose requests by body", async () => {
+      const runtime = mock()
+      const response = await send(runtime, "GET", "/v1/notes", {
+        headers: {
+          [CONTROL_HEADERS.fault]: JSON.stringify({ status: 503, requestBody: { a: "b" } }),
+        },
+      })
+      expect(response.status).toBe(400)
+    })
+  })
+
   test("schedules with after, every and count", async () => {
     const runtime = mock()
     await add(runtime, { status: 500, after: 2, every: 2, count: 2 })

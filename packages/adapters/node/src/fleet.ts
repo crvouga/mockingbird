@@ -16,6 +16,7 @@ import {
   resolveAdminPrefix,
   restoreClock,
 } from "@crvouga/mockingbird-service"
+import { checkSettings } from "./boot-settings.js"
 import type { CommonServeOptions, ConfigService, MockingbirdConfig, ServeTarget } from "./cli.js"
 import { FleetManagement, type ManagementOptions } from "./fleet-management.js"
 import type { EndpointManifest } from "./fleet-manifest.js"
@@ -86,7 +87,7 @@ export type ProtocolTarget = {
  * accepts their opaque runtime and validates the fleet protocol before starting a listener. */
 export type FleetHttpTarget = Pick<
   ServeTarget,
-  "name" | "defaultPort" | "options" | "packageVersion" | "listening"
+  "name" | "defaultPort" | "options" | "packageVersion" | "listening" | "parseSettings"
 > & {
   create(values: Parameters<ServeTarget["create"]>[0], common: CommonServeOptions): unknown
 }
@@ -220,6 +221,9 @@ const httpChild = async (
       options.onLog?.(entry)
     },
     ...(entry.adminControls !== undefined ? { adminControls: entry.adminControls } : {}),
+    ...(entry.settings !== undefined
+      ? { settings: checkSettings(target, entry.settings, "settings") }
+      : {}),
     ...(entry.fixtures !== undefined ? { fixtures: entry.fixtures } : {}),
     ...((advertisedHttpBase(entry) ?? entry.baseUrl) !== undefined
       ? { baseUrl: advertisedHttpBase(entry) ?? entry.baseUrl }
@@ -245,6 +249,7 @@ const httpChild = async (
       "HTTP target does not implement the fleet runtime protocol; build/install matching supported service versions",
     )
   const runtime = created as unknown as ServiceRuntime<ServiceInstance>
+  if (entry.idBase !== undefined) runtime.setIdBase?.(entry.idBase)
   const unobserve = runtime.webhooks?.observeDeliveries(observer.delivery)
   if (options.outbound && runtime.webhooks)
     runtime.webhooks.setTransportPolicy(ownedTransport(options.outbound))
@@ -942,6 +947,9 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
                   ...entry,
                   adminPrefix: resolveAdminPrefix(entry.adminPrefix ?? adminPrefix),
                   ...(adminKey !== undefined ? { adminKey } : {}),
+                  ...((entry.idBase ?? config.idBase) !== undefined
+                    ? { idBase: entry.idBase ?? config.idBase }
+                    : {}),
                   // Fleet-wide controls, with the service's own keys replacing them.
                   ...(config.adminControls !== undefined || entry.adminControls !== undefined
                     ? { adminControls: { ...config.adminControls, ...entry.adminControls } }

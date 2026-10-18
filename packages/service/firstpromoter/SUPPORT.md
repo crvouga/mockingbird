@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **16**
-- supported by the emulator: **16**
-- parity enabled: **16**
+- operations in spec: **17**
+- supported by the emulator: **17**
+- parity enabled: **17**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -20,6 +20,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `ListCommissions` | `GET /v2/company/commissions` | ✅ supported | ✅ |  |
 | `FulfillCommissions` | `POST /v2/company/commissions/mark_fulfilled` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `DestroyCommissions` | `DELETE /v2/company/commissions/destroy` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `UpdateCommission` | `PUT /v2/company/commissions/{id}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `ListBatchProcesses` | `GET /v2/company/batch_processes` | ✅ supported | ✅ |  |
 | `BatchProcessProgress` | `GET /v2/company/batch_processes/progress` | ✅ supported | ✅ |  |
 | `GetBatchProcess` | `GET /v2/company/batch_processes/{id}` | ✅ supported | ✅ |  |

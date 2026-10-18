@@ -8,6 +8,7 @@ import {
   createReference,
   forbidden,
   getReferenceString,
+  getStatus,
   MEDPLUM_VERSION,
   multipleMatches,
   normalizeErrorString,
@@ -18,23 +19,30 @@ import {
   parseReference,
   resolveId,
   stringify,
+  tooManyRequests,
   unauthorized,
   type WithId,
 } from "@medplum/core"
 import type {
   Binary,
   ClientApplication,
+  DomainConfiguration,
+  IdentityProvider,
   Login,
   OperationOutcome,
+  Patient,
   Practitioner,
   Project,
   ProjectMembership,
   Reference,
+  RelatedPerson,
   Resource,
   User,
+  UserSecurityRequest,
 } from "@medplum/fhirtypes"
 import { getAccessPolicyForMembership } from "./auth/access-policy.js"
 import {
+  decodeJwt,
   generateSigningKey,
   type JwtPayload,
   type SigningKey,
@@ -86,6 +94,26 @@ export type MedplumUserFixture = {
   profileType?: "Practitioner" | "Patient" | "RelatedPerson"
   /** Project admin. Default false. */
   admin?: boolean
+  /** Pin the id of the profile resource (the profile is written with `PUT` semantics). Default: generated. */
+  profileId?: string
+  /**
+   * Extra fields merged over the generated profile (`name`, `telecom`), for example `extension`,
+   * `identifier` or `birthDate`. `resourceType` and `id` come from `profileType` and `profileId`.
+   */
+  profile?: Partial<Practitioner | Patient | RelatedPerson>
+}
+
+/** A `UserSecurityRequest` as the emulator's stand-in for the email Medplum would have sent. */
+export type MedplumSecurityRequest = {
+  id: string
+  type: NonNullable<UserSecurityRequest["type"]>
+  secret: string
+  /** The recipient's email address. */
+  email: string
+  /** The link the email carries: `<appBaseUrl>setpassword/<id>/<secret>`. */
+  url: string
+  redirectUri?: string
+  used: boolean
 }
 
 export type MedplumAPIOptions = {
@@ -120,6 +148,22 @@ export type MedplumAPIOptions = {
         /** Users with a password login in the default project. */
         users?: MedplumUserFixture[]
       }
+  /**
+   * Resources written as the system once the users are seeded (ids are kept, so a fixture can pin
+   * them and `reference`s between them hold). `meta.project` defaults to the default project.
+   * They are re-seeded by `reset()`.
+   */
+  resources?: Resource[]
+  /** The web app's base URL (`config.appBaseUrl`), the host of password-reset links. Default `http://localhost:3000/`. */
+  appBaseUrl?: string
+  /**
+   * Called when `/auth/resetpassword` creates a `UserSecurityRequest`, in place of the email the
+   * server would send (not called when the request body has `sendEmail: false`). The requests are
+   * also listed by `GET /__admin/medplum/security-requests`.
+   */
+  onSecurityRequest?: (request: MedplumSecurityRequest) => void
+  /** `fetch` used to call a client's `identityProvider.userInfoUrl` during token exchange. Default: global `fetch`. */
+  externalFetch?: (input: string, init?: RequestInit) => Promise<Response>
   /** Largest `_offset` accepted (`maxSearchOffset`). Default unlimited, as on the server. */
   maxSearchOffset?: number
 }
@@ -147,6 +191,12 @@ const tokenError = (error: string, description?: string, status = 400): Response
   json(status, { error, error_description: description })
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+const TOKEN_EXCHANGE_GRANT = "urn:ietf:params:oauth:grant-type:token-exchange"
+const ACCESS_TOKEN_TYPE = "urn:ietf:params:oauth:token-type:access_token"
+const MIN_PASSWORD_LENGTH = 8
+const MAX_PASSWORD_LENGTH = 72
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Stateful mock of a self-hosted Medplum server: FHIR R4 REST (CRUD, versioning, history,
@@ -366,7 +416,10 @@ export class MedplumAPI implements FetchAPI {
     })
 
     const defaults = this.options.project
-    if (defaults === false) return
+    if (defaults === false) {
+      await this.seedResources(undefined)
+      return
+    }
     const project = await system.updateResource<Project>({
       resourceType: "Project",
       id: defaults?.id ?? DEFAULT_PROJECT_ID,
@@ -389,6 +442,12 @@ export class MedplumAPI implements FetchAPI {
       ...(defaults?.clientAdmin === false ? {} : { admin: true }),
     })
     for (const fixture of defaults?.users ?? []) await this.addUserNow(fixture, project.id)
+    await this.seedResources(project.id)
+  }
+
+  private async seedResources(projectId: string | undefined): Promise<void> {
+    for (const resource of this.options.resources ?? [])
+      await this.putResourceNow(resource, projectId)
   }
 
   private async hashPassword(password: string): Promise<string> {
@@ -401,13 +460,21 @@ export class MedplumAPI implements FetchAPI {
     firstName: string,
     lastName: string,
     email: string | undefined,
+    pinned?: { id?: string; fields?: Partial<Practitioner | Patient | RelatedPerson> },
   ): Promise<WithId<Practitioner>> {
-    return (await this.systemRepo().createResource({
-      resourceType,
-      meta: { project: project.id },
+    const { meta, ...fields } = pinned?.fields ?? {}
+    const profile = {
       name: [{ given: [firstName], family: lastName }],
       telecom: email ? [{ system: "email", use: "work", value: email }] : undefined,
-    } as Practitioner)) as WithId<Practitioner>
+      ...fields,
+      resourceType,
+      meta: { ...meta, project: project.id },
+      ...(pinned?.id ? { id: pinned.id } : {}),
+    } as Practitioner
+    const system = this.systemRepo()
+    return (await (profile.id
+      ? system.updateResource(profile as WithId<Practitioner>)
+      : system.createResource(profile))) as WithId<Practitioner>
   }
 
   private createMembership(
@@ -455,6 +522,7 @@ export class MedplumAPI implements FetchAPI {
       fixture.firstName ?? "Mock",
       fixture.lastName ?? "User",
       fixture.email,
+      { id: fixture.profileId, fields: fixture.profile },
     )
     const membership = await this.createMembership(
       user,
@@ -988,7 +1056,313 @@ export class MedplumAPI implements FetchAPI {
       const updated = this.saveLogin({ ...login, refreshSecret: this.idSource.secret(32) })
       return this.issueTokens(updated, client)
     }
+    if (grantType === TOKEN_EXCHANGE_GRANT) return this.handleTokenExchange(request, body)
     return tokenError("invalid_request", "Unsupported grant_type")
+  }
+
+  /**
+   * RFC 8693 token exchange (`exchangeExternalAuthToken`, oauth/token.ts): the subject token is an
+   * access token of the identity provider configured on the client application. It is verified
+   * by calling the provider's userinfo endpoint; the user is found by the returned email (or
+   * `sub` with `useSubject`) in the client's project, and the first membership is signed in.
+   */
+  private async handleTokenExchange(request: Request, body: unknown): Promise<Response> {
+    const clientId = stringField(body, "client_id")
+    const subjectToken = stringField(body, "subject_token")
+    if (!clientId) return tokenError("invalid_request", "Invalid client")
+    if (!subjectToken) return tokenError("invalid_request", "Invalid subject_token")
+    if (stringField(body, "subject_token_type") !== ACCESS_TOKEN_TYPE)
+      return tokenError("invalid_request", "Invalid subject_token_type")
+    const client = this.readSystem<ClientApplication>({
+      reference: `ClientApplication/${clientId}`,
+    })
+    const idp = client?.identityProvider
+    if (!client || !idp) return tokenError("invalid_request", "Invalid client")
+    const projectId = client.meta?.project
+    if (!idp.userInfoUrl) return tokenError("invalid_request", "Missing user info URL")
+    let userInfo: Record<string, unknown>
+    try {
+      userInfo = await this.externalUserInfo(idp, subjectToken)
+    } catch (error) {
+      const outcome = normalizeOperationOutcome(error)
+      return tokenError("invalid_request", normalizeErrorString(error), getStatus(outcome))
+    }
+    const email = idp.useSubject ? undefined : (userInfo.email as string | undefined)
+    const externalId = idp.useSubject ? (userInfo.sub as string | undefined) : undefined
+    if (!externalId && !email)
+      throw new OperationOutcomeError(badRequest("Missing email or externalId", "externalId"))
+    if (externalId && !projectId)
+      throw new OperationOutcomeError(
+        badRequest("Project ID is required for external ID", "projectId"),
+      )
+    const user = externalId
+      ? this.userByExternalId(externalId, projectId as string)
+      : this.userByEmail(email as string, projectId)
+    if (!user) throw new OperationOutcomeError(badRequest("User not found"))
+    const scope = stringField(body, "scope") || "openid offline_access"
+    const scopes = scope.split(" ")
+    const refresh =
+      scopes.includes("offline") ||
+      scopes.includes("offline_access") ||
+      client.grantType?.includes("refresh_token")
+    let login: LoginRecord = {
+      resourceType: "Login",
+      id: this.idSource.uuid(),
+      client: createReference(client),
+      project: projectId ? { reference: `Project/${projectId}` } : undefined,
+      user: createReference(user),
+      authMethod: "exchange",
+      authTime: new Date(this.now()).toISOString(),
+      code: this.idSource.secret(16),
+      cookie: this.idSource.secret(16),
+      refreshSecret: refresh ? this.idSource.secret(32) : undefined,
+      scope,
+      nonce: stringField(body, "nonce") || this.idSource.uuid(),
+      remoteAddress: remoteAddressOf(request),
+      userAgent: request.headers.get("user-agent") ?? undefined,
+    }
+    const membershipId = stringField(body, "membership_id")
+    const memberships = this.membershipsForLogin(login).filter(
+      (m) => !membershipId || m.id === membershipId,
+    )
+    if (memberships.length === 0) throw new OperationOutcomeError(badRequest("User not found"))
+    login = this.saveLogin(login)
+    login = this.setLoginMembership(login, memberships[0] as WithId<ProjectMembership>)
+    return this.issueTokens(login, client)
+  }
+
+  /** `getExternalUserInfo` (oauth/utils.ts): the identity provider's userinfo for an access token. */
+  private async externalUserInfo(
+    idp: IdentityProvider,
+    token: string,
+  ): Promise<Record<string, unknown>> {
+    const failed = () =>
+      new OperationOutcomeError(
+        badRequest("Failed to verify code - check your identity provider configuration"),
+      )
+    let url = idp.userInfoUrl as string
+    let init: RequestInit
+    if (idp.userInfoMode === "gcip") {
+      if (!idp.userInfoApiKey) {
+        throw new OperationOutcomeError(
+          badRequest("Missing user info API key - check your identity provider configuration"),
+        )
+      }
+      const keyed = new URL(url)
+      keyed.searchParams.set("key", idp.userInfoApiKey)
+      url = keyed.toString()
+      init = {
+        method: "POST",
+        headers: { accept: "application/json", "content-type": "application/json" },
+        body: JSON.stringify({ idToken: token }),
+      }
+    } else {
+      init = {
+        method: "GET",
+        headers: { accept: "application/json", authorization: `Bearer ${token}` },
+      }
+    }
+    let response: Response
+    try {
+      response = await (this.options.externalFetch ?? ((input, init) => fetch(input, init)))(url, {
+        ...init,
+        signal: AbortSignal.timeout(10000),
+      })
+    } catch {
+      throw failed()
+    }
+    if (response.status === 429) throw new OperationOutcomeError(tooManyRequests)
+    if (response.status !== 200) {
+      await response.body?.cancel()
+      throw failed()
+    }
+    const contentType = response.headers.get("content-type")
+    try {
+      if (contentType?.includes("application/json")) {
+        const payload = (await response.json()) as Record<string, unknown>
+        if (idp.userInfoMode !== "gcip") return payload
+        const user = Array.isArray(payload.users) ? payload.users[0] : undefined
+        if (!isRecord(user)) {
+          throw new OperationOutcomeError(
+            badRequest("Failed to verify code - invalid user info response"),
+          )
+        }
+        if (!user.localId) {
+          throw new OperationOutcomeError(
+            badRequest("Failed to verify code - missing localId in user info response"),
+          )
+        }
+        return { ...user, sub: user.localId }
+      }
+      if (contentType?.includes("application/jwt")) {
+        const claims = decodeJwt((await response.text()).trim())
+        if (!claims) throw failed()
+        return claims.payload
+      }
+    } catch (error) {
+      if (error instanceof OperationOutcomeError) throw error
+      throw failed()
+    }
+    throw new OperationOutcomeError(
+      badRequest(`Failed to verify code - unsupported content type: ${contentType}`),
+    )
+  }
+
+  /** `getUserByExternalId`: a project membership's `externalId`, else the legacy `User.externalId`. */
+  private userByExternalId(externalId: string, projectId: string): WithId<User> | undefined {
+    const membership = this.store
+      .rows("ProjectMembership")
+      .filter((row) => !row.deleted && row.content)
+      .map((row) => row.content as WithId<ProjectMembership>)
+      .find((m) => m.externalId === externalId && m.project?.reference === `Project/${projectId}`)
+    if (membership) return this.readSystem<User>(membership.user)
+    return this.store
+      .rows("User")
+      .filter((row) => !row.deleted && row.content)
+      .map((row) => row.content as WithId<User>)
+      .find(
+        (u) =>
+          (u as User & { externalId?: string }).externalId === externalId &&
+          u.project?.reference === `Project/${projectId}`,
+      )
+  }
+
+  // ------------------------------------------------------------------ password reset
+
+  /** `POST /auth/resetpassword` (auth/resetpassword.ts). */
+  private async handleResetPassword(body: unknown): Promise<Response> {
+    const rawEmail = stringField(body, "email")
+    if (!rawEmail || !EMAIL.test(rawEmail) || rawEmail.length < 3 || rawEmail.length > 72) {
+      return this.invalidRequest([
+        { field: "email", msg: "Valid email address between 3 and 72 characters is required" },
+      ])
+    }
+    const email = rawEmail.toLowerCase()
+    const domain = email.split("@")[1] as string
+    const external = this.store
+      .rows("DomainConfiguration")
+      .filter((row) => !row.deleted && row.content)
+      .map((row) => row.content as DomainConfiguration)
+      .find(
+        (config) =>
+          config.domain?.toLowerCase() === domain &&
+          config.identityProvider?.authorizeUrl &&
+          config.identityProvider.clientId,
+      )
+    if (external) {
+      throw new OperationOutcomeError(
+        badRequest("Cannot reset password for external auth. Contact your system administrator."),
+      )
+    }
+    const projectId = stringField(body, "projectId")
+    const match = this.store
+      .rows("User")
+      .filter((row) => !row.deleted && row.content)
+      .map((row) => row.content as WithId<User>)
+      .find(
+        (u) =>
+          u.email === email &&
+          (projectId ? u.project?.reference === `Project/${projectId}` : !u.project),
+      )
+    // Per OWASP guidelines the answer is the same whether or not the account exists.
+    if (!match) return sendOutcome(allOk, this.freshIds())
+    const record = await this.createSecurityRequest(
+      match,
+      "reset",
+      stringField(body, "redirectUri"),
+    )
+    const sendEmail = isRecord(body) ? body.sendEmail : undefined
+    if (sendEmail !== false) this.options.onSecurityRequest?.(record)
+    return sendOutcome(allOk, this.freshIds())
+  }
+
+  private freshIds(): RequestIds {
+    return { requestId: this.idSource.uuid(), traceId: this.idSource.uuid() }
+  }
+
+  /** `resetPassword` (auth/resetpassword.ts): persist a `UserSecurityRequest` for the user. */
+  private async createSecurityRequest(
+    user: WithId<User>,
+    type: NonNullable<UserSecurityRequest["type"]>,
+    redirectUri: string | undefined,
+  ): Promise<MedplumSecurityRequest> {
+    const created = await this.putResourceNow<UserSecurityRequest>(
+      {
+        resourceType: "UserSecurityRequest",
+        id: this.idSource.uuid(),
+        type,
+        user: createReference(user),
+        secret: this.idSource.secret(16),
+        redirectUri,
+      },
+      user.project ? resolveId(user.project) : undefined,
+    )
+    return this.describeSecurityRequest(created)
+  }
+
+  private describeSecurityRequest(request: WithId<UserSecurityRequest>): MedplumSecurityRequest {
+    const user = this.readSystem<User>(request.user)
+    const base = this.options.appBaseUrl ?? "http://localhost:3000/"
+    return {
+      id: request.id,
+      type: request.type ?? "reset",
+      secret: request.secret as string,
+      email: user?.email ?? "",
+      url: `${base.endsWith("/") ? base : `${base}/`}setpassword/${request.id}/${request.secret}`,
+      ...(request.redirectUri ? { redirectUri: request.redirectUri } : {}),
+      used: request.used === true,
+    }
+  }
+
+  /** The `UserSecurityRequest`s created so far, oldest first: what the emails would have carried. */
+  async securityRequests(): Promise<MedplumSecurityRequest[]> {
+    return (await this.resources<UserSecurityRequest>("UserSecurityRequest")).map((request) =>
+      this.describeSecurityRequest(request),
+    )
+  }
+
+  /** `POST /auth/setpassword` (auth/setpassword.ts). */
+  private async handleSetPassword(body: unknown): Promise<Response> {
+    const id = stringField(body, "id")
+    const secret = stringField(body, "secret")
+    const password = stringField(body, "password")
+    const issues: { field: string; msg: string }[] = []
+    if (!id || !UUID.test(id)) issues.push({ field: "id", msg: "Invalid request ID" })
+    if (!secret) issues.push({ field: "secret", msg: "Missing secret" })
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
+      issues.push({
+        field: "password",
+        msg: `Password must be at least ${MIN_PASSWORD_LENGTH} characters`,
+      })
+    } else if (new TextEncoder().encode(password).length > MAX_PASSWORD_LENGTH) {
+      issues.push({
+        field: "password",
+        msg: `Password must be no more than ${MAX_PASSWORD_LENGTH} characters`,
+      })
+    }
+    if (issues.length > 0) return this.invalidRequest(issues)
+    const request = this.readSystem<UserSecurityRequest>({
+      reference: `UserSecurityRequest/${id}`,
+    })
+    if (!request) throw new OperationOutcomeError(notFound)
+    if (request.used) throw new OperationOutcomeError(badRequest("Already used"))
+    if (request.type === "verify-email")
+      throw new OperationOutcomeError(badRequest("Invalid request type"))
+    if (request.secret !== secret) throw new OperationOutcomeError(badRequest("Incorrect secret"))
+    const user = this.readSystem<User>(request.user)
+    if (!user) throw new OperationOutcomeError(notFound)
+    const system = this.systemRepo()
+    await system.updateResource<User>({
+      ...user,
+      emailVerified: true,
+      passwordHash: await this.hashPassword(password as string),
+    })
+    for (const entry of this.logins.list()) {
+      if (entry.value.user?.reference === `User/${user.id}` && !entry.value.revoked)
+        this.saveLogin({ ...entry.value, revoked: true })
+    }
+    await system.updateResource<UserSecurityRequest>({ ...request, used: true })
+    return sendOutcome(allOk, this.freshIds())
   }
 
   private handleMe(auth: AuthState): Response {
@@ -1530,6 +1904,10 @@ export class MedplumAPI implements FetchAPI {
       if (incoming.method === "POST" && path === "/auth/login")
         return await this.handleLogin(incoming, body)
       if (incoming.method === "POST" && path === "/auth/profile") return this.handleProfile(body)
+      if (incoming.method === "POST" && path === "/auth/resetpassword")
+        return await this.handleResetPassword(body)
+      if (incoming.method === "POST" && path === "/auth/setpassword")
+        return await this.handleSetPassword(body)
       if (incoming.method === "POST" && path === "/oauth2/token")
         return await this.handleToken(incoming, parsed)
 
@@ -1770,6 +2148,8 @@ export class MedplumAPI implements FetchAPI {
     name?: string
     projectId?: string
     admin?: boolean
+    /** The external identity provider whose access tokens this client exchanges (RFC 8693). */
+    identityProvider?: IdentityProvider
   }): Promise<{ id: string; secret: string; projectId: string }> {
     await this.ensureSeeded()
     const system = this.systemRepo()
@@ -1785,6 +2165,7 @@ export class MedplumAPI implements FetchAPI {
       id: input.id,
       name: input.name ?? `Client ${input.id}`,
       secret,
+      ...(input.identityProvider ? { identityProvider: input.identityProvider } : {}),
     })
     const existing = this.membershipFor({ reference: `ClientApplication/${client.id}` })
     const membership: ProjectMembership = {
@@ -1832,6 +2213,13 @@ export class MedplumAPI implements FetchAPI {
   ): Promise<WithId<T>> {
     projectId ??= this.defaultProjectId()
     await this.ensureSeeded()
+    return this.putResourceNow(resource, projectId)
+  }
+
+  private putResourceNow<T extends Resource>(
+    resource: T,
+    projectId: string | undefined,
+  ): Promise<WithId<T>> {
     const system = this.systemRepo()
     const withProject = {
       ...resource,
