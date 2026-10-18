@@ -11,6 +11,7 @@ import {
   isLinkedToTeam,
   LAB_ACCOUNT_STATUSES,
   type LabAccountStatus,
+  PLATFORM_ACCOUNT_LABS,
   renderLabAccount,
   selectLabAccount,
 } from "./lab-accounts.js"
@@ -1114,13 +1115,24 @@ export const orderHandlers = (state: JunctionState) => ({
     // Lab-account routing: the account must be active, linked to the team and associated
     // with the ordered lab; with no explicit id, linked accounts decide the branch.
     const labSlug = typeof labTest.lab?.slug === "string" ? labTest.lab.slug.toLowerCase() : ""
-    const labAccount = selectLabAccount(
-      labSlug,
-      typeof body.lab_account_id === "string" ? body.lab_account_id : null,
-      state.teamId,
-      state.listLabAccounts(),
-      state.labAccountOmissionPolicies,
-    )
+    // Recorded sandbox behavior (#439): only a root-level id naming a listed account selects
+    // one. An omitted, nested-only or unknown id falls to the platform account, which stores
+    // a null association and is not checked against any listed allowed_billing.
+    const requestedAccountId = typeof body.lab_account_id === "string" ? body.lab_account_id : null
+    const sandboxPlatformFallback =
+      state.labAccountBehavior.profile === "sandbox-observed" &&
+      PLATFORM_ACCOUNT_LABS.includes(labSlug) &&
+      (requestedAccountId === null ||
+        !state.listLabAccounts().some((a) => a.id === requestedAccountId))
+    const labAccount = sandboxPlatformFallback
+      ? "platform"
+      : selectLabAccount(
+          labSlug,
+          requestedAccountId,
+          state.teamId,
+          state.listLabAccounts(),
+          state.labAccountOmissionPolicies,
+        )
     if (
       state.labAccountBehavior.profile === "expected-contract" &&
       labAccount !== "platform" &&

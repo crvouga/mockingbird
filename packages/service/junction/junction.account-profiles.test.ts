@@ -283,3 +283,69 @@ test("explicit profiles refuse malformed, unresolved and combined panel/add-on i
     }
   }
 })
+
+test("sandbox-observed omission and negative controls place the order on the platform account with a null association (#439)", async () => {
+  const ny = {
+    first_line: "1 Example St",
+    city: "New York",
+    state: "NY",
+    zip: "10001",
+    country: "US",
+  }
+  const mock = runtime(
+    [
+      account(customer, { delegated_flow: "order_delegated" }),
+      account(other, { allowed_billing: { patient_bill_passthrough: ["NY", "NJ"] } }),
+      account(house, { allowed_billing: { patient_bill_passthrough: ["NY", "NJ"] } }),
+    ],
+    { profile: "sandbox-observed", accounts: {} },
+  )
+  const ids = (extra: object) => async () => {
+    const created = await order(mock, extra)
+    const read =
+      created.status === 200
+        ? await (await call(mock, "GET", `/v3/order/${created.body.order.id}`)).json()
+        : undefined
+    return {
+      status: created.status,
+      post: created.body.order?.lab_account_id,
+      get: read?.lab_account_id,
+    }
+  }
+  const unknown = "99999999-9999-4999-8999-999999999999"
+  const controls = {
+    "omitted root": {},
+    "delegated id only nested": {
+      order_set: { lab_test_ids: [labTest.id], lab_account_id: customer },
+    },
+    "unknown id only nested": {
+      order_set: { lab_test_ids: [labTest.id], lab_account_id: unknown },
+    },
+    "wrong-state id only nested": {
+      order_set: { lab_test_ids: [labTest.id], lab_account_id: other },
+    },
+    "unknown explicit root": { lab_account_id: unknown },
+    "customer id only nested, NY passthrough": {
+      order_set: { lab_test_ids: [labTest.id], lab_account_id: other },
+      billing_type: "patient_bill_passthrough",
+      patient_address: ny,
+    },
+  }
+  for (const [name, extra] of Object.entries(controls))
+    expect({ name, ...(await ids(extra)()) }).toEqual({
+      name,
+      status: 200,
+      post: null,
+      get: null,
+    })
+  // Positive control: a valid root-selected customer account keeps its identity.
+  const selected = await ids({
+    lab_account_id: other,
+    billing_type: "patient_bill_passthrough",
+    patient_address: ny,
+  })()
+  expect(selected).toEqual({ status: 200, post: other, get: other })
+  // The expected-contract profile still reflects the account the order was routed to.
+  await call(mock, "PUT", "/__admin/lab-account-behavior", { profile: "expected-contract" })
+  expect((await order(mock, { lab_account_id: unknown })).status).toBe(400)
+})
