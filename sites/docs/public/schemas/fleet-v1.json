@@ -33,6 +33,9 @@
     "adminControls": {
       "$ref": "#/$defs/controls"
     },
+    "idBase": {
+      "$ref": "#/$defs/idBase"
+    },
     "namespace": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_.-]{1,64}$"
@@ -122,6 +125,12 @@
         "adminControls": {
           "$ref": "#/$defs/controls"
         },
+        "idBase": {
+          "$ref": "#/$defs/idBase"
+        },
+        "settings": {
+          "type": "object"
+        },
         "fixtures": {
           "type": "object"
         },
@@ -167,6 +176,18 @@
           "type": "string"
         }
       }
+    },
+    "idBase": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^(boot|[0-9]+)$"
+        }
+      ]
     },
     "controls": {
       "type": "object",

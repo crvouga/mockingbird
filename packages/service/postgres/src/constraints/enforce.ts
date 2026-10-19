@@ -1,3 +1,4 @@
+import type { Expr } from "../ast/nodes.ts";
 import { pgError } from "../errors/error.ts";
 import type { ExecEnv } from "../executor/relation.ts";
 import { RowScope } from "../executor/relation.ts";
@@ -7,11 +8,27 @@ import { indexStoreFor } from "../indexes/maintain.ts";
 import type { IndexMeta, TableData } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import { datumKey } from "../types/compare.ts";
-import { type Datum, datumText, tv } from "../types/value.ts";
+import { type Datum, datumText, type TypeId, tv } from "../types/value.ts";
 
 function tableScope(table: TableData, row: Datum[]): RowScope {
   const cols = table.columns.map((c) => ({ name: c.name, type: c.type.id, table: table.name }));
   return new RowScope(cols, row, null, new Set([table.name]));
+}
+
+/**
+ * The type an expression over `table` yields, found by evaluating it against an all-NULL row.
+ * Binding errors (unknown column or function) surface as they would when PostgreSQL parses the expression.
+ */
+export function expressionTypeOf(env: ExecEnv, table: TableData, expr: Expr): TypeId {
+  const scope = makeEvalScope(
+    env,
+    tableScope(
+      table,
+      table.columns.map(() => null),
+    ),
+  );
+  const v = evalExpr(env.ctx, scope, expr);
+  return v.t === "unknown" ? "text" : v.t;
 }
 
 /** NOT NULL column constraints (23502). */

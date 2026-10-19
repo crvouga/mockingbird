@@ -830,7 +830,7 @@ function pgTrigger(ctx: EngineCtx): Relation {
   let oid = 40000;
   for (const t of allTables(ctx.state)) {
     for (const tr of t.triggers) {
-      rows.push([oid++, tr.name, t.oid, !tr.forEachRow]);
+      rows.push([oid++, tr.name, t.oid, !tr.forEachRow, tr.oldTable ?? null, tr.newTable ?? null]);
     }
   }
   return rel(
@@ -839,6 +839,8 @@ function pgTrigger(ctx: EngineCtx): Relation {
       ["tgname", "name"],
       ["tgrelid", "oid"],
       ["tgisinternal", "bool"],
+      ["tgoldtable", "name"],
+      ["tgnewtable", "name"],
     ],
     rows,
     "pg_trigger",

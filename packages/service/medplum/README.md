@@ -137,11 +137,12 @@ A client is recognized from Basic auth, from a bearer token's `client_id`, or fr
 | Route | Does |
 | --- | --- |
 | `GET /__admin/medplum` | The namespace's base URL, default project and client, and super admin |
-| `PUT /__admin/medplum/clients/:id` `{"secret"?, "name"?, "projectId"?, "admin"?}` | Create or replace a client application with a chosen id and secret |
-| `POST /__admin/medplum/users` `{"email", "password", "firstName"?, "lastName"?, "profileType"?, "admin"?, "projectId"?}` | Add a user with a password login and a membership |
+| `PUT /__admin/medplum/clients/:id` `{"secret"?, "name"?, "projectId"?, "admin"?, "identityProvider"?}` | Create or replace a client application with a chosen id and secret; `identityProvider` (`{"userInfoUrl", "useSubject"?, …}`) enables token exchange |
+| `POST /__admin/medplum/users` `{"email", "password", "firstName"?, "lastName"?, "profileType"?, "profileId"?, "profile"?, "admin"?, "projectId"?}` | Add a user with a password login and a membership; `profileId` pins the profile's id and `profile` adds fields to it (`extension`, `birthDate`, …) |
 | `POST /__admin/medplum/token` `{"clientId"?}` | A bearer token for a client (default: the default client) |
 | `POST /__admin/medplum/resources[?projectId=]` | Seed a resource, an array, or a Bundle's entries, keeping given ids |
 | `GET /__admin/medplum/resources/:type` | Every current resource of a type, across projects |
+| `GET /__admin/medplum/security-requests` | The `UserSecurityRequest`s created by `/auth/resetpassword`, with the secret and the link the email would have carried |
 | `POST /__admin/medplum/logins/revoke` | Revoke every login, so all issued tokens stop working |
 
 The standard contract also serves `POST /__admin/reset`, snapshot and restore, the clock, faults,
@@ -178,6 +179,45 @@ The standard contract also serves `POST /__admin/reset`, snapshot and restore, t
   matches nothing either way, as on the server.
 - Super admins get no refresh token from a password login, as on the server.
 
+### Token exchange (RFC 8693)
+
+`POST /oauth2/token` with `grant_type=urn:ietf:params:oauth:grant-type:token-exchange` follows
+`exchangeExternalAuthToken` in the server's `oauth/token.ts` (v5.1.37; the same code serves the
+deprecated `/auth/exchange`). Give a client application an `identityProvider` (`putClient({ id,
+identityProvider: { userInfoUrl } })`) and post `client_id`, `subject_token` and
+`subject_token_type=urn:ietf:params:oauth:token-type:access_token`:
+
+1. The emulator calls `identityProvider.userInfoUrl` with `Authorization: Bearer <subject_token>`
+   (a JSON or `application/jwt` answer is read; `userInfoMode: "gcip"` posts `{idToken}` to the
+   URL with `userInfoApiKey`). Pass `externalFetch` to route that call without a network.
+2. The user is the one in the client's project (else a project-less one) whose email is the
+   userinfo `email`; with `useSubject` it is the membership whose `externalId` is the userinfo
+   `sub`. The first membership signs in (or the one named by `membership_id`).
+3. The answer is the usual token response. The default scope is `openid offline_access`, so a
+   refresh token comes with it.
+
+Errors are the server's: `invalid_request` with `Invalid client`, `Invalid subject_token`,
+`Invalid subject_token_type`, `Missing user info URL`, or `Failed to verify code - check your
+identity provider configuration` (a 429 from the provider answers 429); an unknown user is the
+`User not found` OperationOutcome. Not modelled: server-wide `externalAuthProviders` config, the
+`jwksUrl` verification path, and the server's block on private userinfo addresses.
+
+### Password reset
+
+`POST /auth/resetpassword {email, projectId?, redirectUri?, sendEmail?}` and `POST /auth/setpassword
+{id, secret, password}` follow `auth/resetpassword.ts` and `auth/setpassword.ts` (v5.1.37). A reset
+answers all-OK for any well-formed email, and creates a `UserSecurityRequest` (type `reset`) for
+the matching user: with `projectId`, in that project; without it, among project-less users, as on
+the server. A domain with an external-auth `DomainConfiguration` is refused. `setpassword` answers
+404 for an unknown request, and 400 for a used request, a `verify-email` request, a wrong secret,
+or a password outside 8-72 characters; it marks the request used, sets `emailVerified`, and
+revokes the user's logins.
+
+No email is sent. A suite stands in for the mailbox with `onSecurityRequest(request)` (id, secret,
+email and the `<appBaseUrl>setpassword/<id>/<secret>` link; not called for `sendEmail: false`),
+`api.securityRequests()`, or `GET /__admin/medplum/security-requests`. Not modelled: reCAPTCHA
+(the server enforces it only when a secret key is configured) and the breached-password lookup.
+
 ### Rest-hook subscriptions
 
 Active, project-scoped `Subscription` resources with `channel.type: "rest-hook"` deliver a POST
@@ -212,7 +252,7 @@ These answer the server's 404 (or are stored but inert):
 - bulk `$export`
 - bots (`Bot/$execute`)
 - subscription channels other than `rest-hook`, server-scoped subscriptions, and webhook retries
-- email
+- email (password-reset and verification mail is replaced by `onSecurityRequest`)
 - self-registration (`/auth/newuser`)
 - the super-admin maintenance routes (`/admin/super/*`)
 
@@ -245,7 +285,8 @@ emulated.
 | `ready()` | Resolves once the definitions are loaded and the namespace is seeded (`fetch` waits for it). |
 | `reset()` | Drop everything and reseed. |
 | `describe()` | `{ baseUrl, project, superAdmin }` — the seeded credentials. |
-| `putClient({ id, secret?, name?, projectId?, admin? })` | Create or replace a client application. |
+| `putClient({ id, secret?, name?, projectId?, admin?, identityProvider? })` | Create or replace a client application. |
+| `securityRequests()` | The `UserSecurityRequest`s so far, with their secrets and links. |
 | `addUser(fixture, projectId?)` | Add a user with a password login and a membership. |
 | `accessToken(clientId?)` | A bearer token for a client (default: the default client). |
 | `putResource(resource, projectId?)` | Write a resource as the system, keeping a given id. |
@@ -264,9 +305,13 @@ type MedplumAPIOptions = {
   sqlite?: SqliteClient     // default @crvouga/mockingbird-service-sqlite
   superAdmin?: { email?, password?, clientId?, clientSecret? }
   project?: false | { id?, name?, clientId?, clientSecret?, clientAdmin?, users?: MedplumUserFixture[] }
+  resources?: Resource[]    // seeded as the system after the users; ids kept; meta.project defaults to the default project
+  appBaseUrl?: string       // host of password-reset links; default "http://localhost:3000/"
+  onSecurityRequest?: (request: MedplumSecurityRequest) => void  // the password-reset "email"
+  externalFetch?: (input: string, init?: RequestInit) => Promise<Response>  // token-exchange userinfo calls; default fetch
   maxSearchOffset?: number  // largest _offset accepted; default unlimited, as on the server
 }
-type MedplumUserFixture = { email; password; firstName?; lastName?; profileType?: "Practitioner" | "Patient" | "RelatedPerson"; admin? }
+type MedplumUserFixture = { email; password; firstName?; lastName?; profileType?: "Practitioner" | "Patient" | "RelatedPerson"; profileId?; profile?: Partial<Practitioner | Patient | RelatedPerson>; admin? }
 type MedplumRuntimeOptions = Omit<MedplumAPIOptions, "now" | "namespace"> & { clock?; adminKey?; onLog?; journalSize? }
 ```
 

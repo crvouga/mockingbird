@@ -37,12 +37,42 @@ export type Account = {
     }[]
   }
 }
+export type RedirectPolicy = {
+  /**
+   * RFC 8252 section 7.3: an `http://` loopback redirect (`127.0.0.1`, `[::1]` or `localhost`) may
+   * use any port. It must match a registered loopback URI on the same host, path and query.
+   */
+  loopbackAnyPort?: boolean
+  /**
+   * Custom schemes (for example `["exp:"]` for Expo dev clients) whose host and port may vary per
+   * request, such as a LAN address. A request must still match a registered URI with the same
+   * scheme, path and query. `http:`/`https:` and executable schemes are rejected.
+   */
+  schemes?: string[]
+}
 export type Client = {
   id: string
   name: string
   redirectUris: string[]
   secret?: string
   requirePkce?: boolean
+  /**
+   * Cognito-style public app client: let a client without a secret omit PKCE. A challenge that is
+   * sent is still verified. Default `false`: public clients must use S256 PKCE. Incompatible with
+   * `requirePkce: true` and with a client `secret`/`apple` configuration.
+   */
+  pkceOptional?: boolean
+  /**
+   * Cognito-style refresh tokens: every authorization-code exchange returns a `refresh_token`,
+   * whether or not `offline_access` was requested. Default `false`: the profile's own rule applies
+   * (`offline_access` for OIDC and Microsoft, `access_type=offline` for Google; Apple always).
+   */
+  alwaysIssueRefreshToken?: boolean
+  /**
+   * Opt-in redirect matching for dev clients. Exact registered URIs always match; this adds
+   * variants of registered URIs, never arbitrary URIs. Default: exact match only.
+   */
+  redirectPolicy?: RedirectPolicy
   /** Apple developer/app grouping or OIDC pairwise identity sector. */
   subjectGroup?: string
   /** Verify an Apple ES256 client-secret JWT instead of a static fixture secret. */

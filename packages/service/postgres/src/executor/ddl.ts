@@ -25,7 +25,13 @@ import type {
   TableConstraint,
   TruncateStmt,
 } from "../ast/nodes.ts";
-import { checkChecks, checkForeignKeys, checkUnique, referencingConstraints } from "../constraints/enforce.ts";
+import {
+  checkChecks,
+  checkForeignKeys,
+  checkUnique,
+  expressionTypeOf,
+  referencingConstraints,
+} from "../constraints/enforce.ts";
 import { type PostgresError, pgError, unsupported } from "../errors/error.ts";
 import { sequenceNextval } from "../functions/misc-fns.ts";
 import { assertGinTrgmIndex } from "../functions/pgtrgm.ts";
@@ -672,7 +678,7 @@ export function executeCreateIndex(env: ExecEnv, stmt: CreateIndexStmt): ExecRes
       }
     }
   }
-  assertGinTrgmIndex(state, table, stmt);
+  assertGinTrgmIndex(state, table, stmt, (expr) => expressionTypeOf(env, table, expr));
   const method = stmt.using ?? "btree";
   if (!ACCESS_METHODS.has(method) || method === "heap") {
     throw pgError("undefined_object", `access method "${method}" does not exist`, "42704");
@@ -949,6 +955,53 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
   return commandResult("CREATE FUNCTION", 0);
 }
 
+/** The `REFERENCING` clause checks of CREATE TRIGGER, in the order PostgreSQL applies them. */
+function validateTransitionTables(stmt: CreateTriggerStmt): { oldTable?: string; newTable?: string } {
+  const transitions = stmt.transitions ?? [];
+  if (transitions.length === 0) return {};
+  const invalid = (message: string): PostgresError => pgError("invalid_table_definition", message, "42P17");
+  const unsupportedClause = (message: string): PostgresError => pgError("feature_not_supported", message, "0A000");
+  if (stmt.timing !== "after") throw invalid("transition table name can only be specified for an AFTER trigger");
+  if (stmt.events.some((e) => e.event === "truncate")) {
+    throw unsupportedClause("TRUNCATE triggers with transition tables are not supported");
+  }
+  if (stmt.events.some((e) => e.columns !== null)) {
+    throw unsupportedClause("transition tables cannot be specified for triggers with column lists");
+  }
+  if (stmt.events.length > 1) {
+    throw unsupportedClause("transition tables cannot be specified for triggers with more than one event");
+  }
+  const event = stmt.events[0]!.event;
+  let oldTable: string | undefined;
+  let newTable: string | undefined;
+  for (const transition of transitions) {
+    if (transition.isNew) {
+      if (event !== "insert" && event !== "update") {
+        throw invalid("NEW TABLE can only be specified for an INSERT or UPDATE trigger");
+      }
+      if (newTable !== undefined) throw invalid("NEW TABLE cannot be specified multiple times");
+      newTable = transition.name;
+    } else {
+      if (event !== "delete" && event !== "update") {
+        throw invalid("OLD TABLE can only be specified for a DELETE or UPDATE trigger");
+      }
+      if (oldTable !== undefined) throw invalid("OLD TABLE cannot be specified multiple times");
+      oldTable = transition.name;
+    }
+  }
+  if (oldTable !== undefined && oldTable === newTable) {
+    throw invalid("OLD TABLE name and NEW TABLE name cannot be the same");
+  }
+  // Row triggers fire as each row changes here, so they cannot see the whole statement's transition relation.
+  if (stmt.forEachRow) {
+    throw pgError("unsupported", "transition tables on FOR EACH ROW triggers are not supported", "0A000");
+  }
+  return {
+    ...(oldTable !== undefined ? { oldTable } : {}),
+    ...(newTable !== undefined ? { newTable } : {}),
+  };
+}
+
 export function executeCreateTrigger(env: ExecEnv, stmt: CreateTriggerStmt): ExecResult {
   if (stmt.constraint && (stmt.timing !== "after" || !stmt.forEachRow))
     throw pgError("syntax", "constraint triggers must be AFTER ROW triggers", "42601");
@@ -958,6 +1011,7 @@ export function executeCreateTrigger(env: ExecEnv, stmt: CreateTriggerStmt): Exe
     throw pgError("undefined_table", `relation "${stmt.table.join(".")}" does not exist`, "42P01");
   }
   const table = state.ensureWritableTable(found);
+  const transitionTables = validateTransitionTables(stmt);
   const fnSchema = stmt.funcName.length >= 2 ? stmt.funcName[stmt.funcName.length - 2]! : null;
   const fnName = stmt.funcName[stmt.funcName.length - 1]!;
   const fns = state.findFunctions(stmt.funcName);
@@ -976,6 +1030,7 @@ export function executeCreateTrigger(env: ExecEnv, stmt: CreateTriggerStmt): Exe
     timing: stmt.timing,
     events: stmt.events,
     forEachRow: stmt.forEachRow,
+    ...transitionTables,
     when: stmt.when,
     funcSchema: fnSchema ?? fns[0]!.schema,
     funcName: fnName,

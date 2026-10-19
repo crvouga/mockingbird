@@ -67,6 +67,14 @@ describe("the service contract", () => {
     expect(missing.headers.get("x-mockingbird")).toMatch(/^resend@.+; ns=default$/)
   })
 
+  test("html and text carry no per-field length cap: Resend documents only a 40MB message limit (#491)", async () => {
+    const { send } = harness()
+    const page = `<html><body>${"<p>full page</p>".repeat(1000)}</body></html>`
+    expect(page.length).toBeGreaterThan(15_000)
+    expect((await send(email({ html: page, text: "t".repeat(15_000) }))).status).toBe(200)
+    expect((await send(email({ html: "x".repeat(1_000_000) }))).status).toBe(200)
+  })
+
   test("namespaces by header, by /__admin/ns/ prefix and by API key are isolated", async () => {
     const { call, send } = harness()
     await call("/__admin/credentials", {

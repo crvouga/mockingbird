@@ -199,4 +199,41 @@ describe("FirstPromoter commission reconciliation", () => {
     expect(await json("/v2/company/commissions")).toEqual([])
     expect((await send(`/v2/company/batch_processes/${pending.id}`)).status).toBe(404)
   })
+
+  test("PUT /v2/company/commissions/{id} updates the notes and listings reflect them", async () => {
+    const { json, send, seed } = harness()
+    const rows = await seed()
+    const target = rows[3] as Commission
+    const updated = await json(
+      `/v2/company/commissions/${target.id}`,
+      { internal_note: "audited", external_note: "paid in cash" },
+      200,
+      "PUT",
+    )
+    expect(updated).toMatchObject({
+      id: target.id,
+      status: target.status,
+      amount: target.amount,
+      internal_note: "audited",
+      external_note: "paid in cash",
+    })
+    const listed = (await json(`/v2/company/commissions?ids[]=${target.id}`)) as unknown[]
+    expect(listed).toEqual([updated])
+    const partial = await json(
+      `/v2/company/commissions/${target.id}`,
+      { external_note: "revised" },
+      200,
+      "PUT",
+    )
+    expect(partial).toMatchObject({ internal_note: "audited", external_note: "revised" })
+    expect(await json(`/v2/company/commissions?ids[]=${rows[4]?.id}`)).toEqual([rows[4]])
+    const missing = await send("/v2/company/commissions/99999999", { internal_note: "x" }, "PUT")
+    expect(missing.status).toBe(404)
+    expect(await missing.json()).toEqual({ message: "Commission not found", code: "not_found" })
+    const invalid = await send(`/v2/company/commissions/${target.id}`, { internal_note: 5 }, "PUT")
+    expect(invalid.status).toBe(422)
+    expect(
+      (await send(`/v2/company/commissions/${target.id}`, {}, "PUT", "default", false)).status,
+    ).toBe(401)
+  })
 })

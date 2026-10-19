@@ -10,7 +10,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { MEDPLUM_VERSION, tooManyRequests, unauthorized } from "@medplum/core"
-import type { Resource } from "@medplum/fhirtypes"
+import type { IdentityProvider, Resource } from "@medplum/fhirtypes"
 import { MedplumAPI, type MedplumAPIOptions, type MedplumUserFixture } from "./api.js"
 import { decodeJwt } from "./auth/jwt.js"
 import { document } from "./generated/openapi.js"
@@ -153,6 +153,9 @@ const adminRoutes = (runtime: ServiceRuntime<MedplumAPI>): AdminRoutes => ({
         ...(typeof input.name === "string" ? { name: input.name } : {}),
         ...(typeof input.projectId === "string" ? { projectId: input.projectId } : {}),
         ...(typeof input.admin === "boolean" ? { admin: input.admin } : {}),
+        ...(isRecord(input.identityProvider)
+          ? { identityProvider: input.identityProvider as IdentityProvider }
+          : {}),
       })
       return json(200, client)
     } catch (error) {
@@ -214,6 +217,8 @@ const adminRoutes = (runtime: ServiceRuntime<MedplumAPI>): AdminRoutes => ({
         .instance(namespace)
         .resources(params.type as Resource["resourceType"]),
     }),
+  "GET /medplum/security-requests": async ({ namespace }) =>
+    json(200, { securityRequests: await runtime.instance(namespace).securityRequests() }),
   "POST /medplum/logins/revoke": ({ namespace }) =>
     json(200, { revoked: runtime.instance(namespace).revokeAllLogins() }),
 })

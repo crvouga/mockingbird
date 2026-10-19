@@ -27,7 +27,7 @@ import { datumKey } from "../types/compare.ts";
 import { type Datum, type TypedValue, type TypeId, tv, UNKNOWN } from "../types/value.ts";
 import { commandResult, type ExecEnv, type ExecResult, inferColumnName, type Relation, RowScope } from "./relation.ts";
 import { applyWith, buildFrom, evalPredicate, evalScalar, executeSelectStmt } from "./select.ts";
-import { fireRowTriggers } from "./triggers.ts";
+import { fireRowTriggers, fireStatementTriggers } from "./triggers.ts";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -300,8 +300,15 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
 
   const insertedRows: Datum[][] = [];
   let insertedCount = 0;
+  // Rows the statement inserted, and the (old, new) pairs ON CONFLICT DO UPDATE rewrote: the transition tables.
+  const addedRows: Datum[][] = [];
+  const conflictOldRows: Datum[][] = [];
+  const conflictNewRows: Datum[][] = [];
+  const updatesOnConflict = stmt.onConflict !== null && stmt.onConflict.action !== "nothing";
 
   return withStatementRollback(env, () => {
+    fireStatementTriggers(env, table, "before", "insert");
+    if (updatesOnConflict) fireStatementTriggers(env, table, "before", "update");
     for (const srcRow of sourceRows) {
       // assemble the full row
       const row: Datum[] = table.columns.map(() => null);
@@ -359,6 +366,7 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
         }
         if (conflictIdx !== null && conflictWhereOk) {
           if (stmt.onConflict.action === "nothing") continue;
+          const replaced = rows[conflictIdx]!;
           const did = applyOnConflictUpdate(
             env,
             table,
@@ -371,6 +379,8 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
           if (did) {
             insertedCount++;
             insertedRows.push(rows[conflictIdx]!);
+            conflictOldRows.push(replaced);
+            conflictNewRows.push(rows[conflictIdx]!);
             fireRowTriggers(env, table, "after", "update", null, rows[conflictIdx]!);
           }
           continue;
@@ -386,9 +396,14 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
       indexInsertRow(env, table, rows.length - 1, newRow);
       insertedCount++;
       insertedRows.push(newRow);
+      addedRows.push(newRow);
       fireRowTriggers(env, table, "after", "insert", null, newRow);
     }
 
+    fireStatementTriggers(env, table, "after", "insert", { oldRows: [], newRows: addedRows });
+    if (updatesOnConflict) {
+      fireStatementTriggers(env, table, "after", "update", { oldRows: conflictOldRows, newRows: conflictNewRows });
+    }
     env.ctx.state.changes = insertedCount;
     if (stmt.returning) {
       const res = evalReturning(env, table, label, stmt.returning, insertedRows, "INSERT");
@@ -477,6 +492,7 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "update");
   const label = stmt.alias ?? table.name;
+  fireStatementTriggers(env, table, "before", "update");
 
   // FROM items build an auxiliary relation each target row can join against
   const fromSource = stmt.from.length > 0 ? buildFrom(env, stmt.from) : null;
@@ -484,6 +500,7 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   const rows = table.mutableRows();
   const targetCols = table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label }));
   const updatedRows: Datum[][] = [];
+  const replacedRows: Datum[][] = [];
   let updateCount = 0;
 
   for (let ri = 0; ri < rows.length; ri++) {
@@ -532,9 +549,11 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
     handleReferencedUpdate(env, table, [oldRow], [finalRow]);
     updateCount++;
     updatedRows.push(finalRow);
+    replacedRows.push(oldRow);
     fireRowTriggers(env, table, "after", "update", oldRow, finalRow);
   }
 
+  fireStatementTriggers(env, table, "after", "update", { oldRows: replacedRows, newRows: updatedRows });
   env.ctx.state.changes = updateCount;
   if (stmt.returning) {
     const res = evalReturning(env, table, label, stmt.returning, updatedRows, "UPDATE");
@@ -551,6 +570,7 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "delete from");
   const label = stmt.alias ?? table.name;
+  fireStatementTriggers(env, table, "before", "delete");
 
   const rows = table.mutableRows();
   const usingSource = stmt.using.length > 0 ? buildFrom(env, stmt.using) : null;
@@ -593,6 +613,7 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   }
   if (deletedRows.length > 0) rebuildTableIndexes(env, table);
 
+  fireStatementTriggers(env, table, "after", "delete", { oldRows: deletedRows, newRows: [] });
   env.ctx.state.changes = deletedRows.length;
   if (stmt.returning) {
     const res = evalReturning(env, table, label, stmt.returning, deletedRows, "DELETE");

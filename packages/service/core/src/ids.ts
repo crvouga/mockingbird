@@ -30,8 +30,52 @@ export const opaqueToken = (input: string, length: number): string => {
 }
 
 /**
+ * What names an id base: a non-negative safe integer (or its decimal string) or `"boot"`,
+ * which derives the base from the wall clock when the runtime is created.
+ */
+export type IdBase = number | string
+
+const ID_BASES = new WeakMap<SqliteClient, number>()
+
+/**
+ * Resolve an id base. `"boot"` is the wall clock in epoch milliseconds, so every boot gets
+ * a different base. Anything else must be a non-negative safe integer or a string of digits.
+ */
+export const normalizeIdBase = (
+  value: unknown,
+  label = "idBase",
+  wallNow: () => number = Date.now,
+): number => {
+  if (value === "boot") return wallNow()
+  const base =
+    typeof value === "string" && /^\d+$/.test(value.trim())
+      ? Number(value.trim())
+      : typeof value === "number"
+        ? value
+        : Number.NaN
+  if (!Number.isSafeInteger(base) || base < 0)
+    throw new RangeError(
+      `${label} must be a non-negative integer or "boot" (got ${JSON.stringify(value)})`,
+    )
+  return base
+}
+
+/**
+ * Give every {@link IdSequence} over `sqlite` this base. `0` is the default and changes
+ * nothing; any other base yields a different, unrelated run of ids from the same counters.
+ */
+export const setIdBase = (sqlite: SqliteClient, base: number): void => {
+  if (base === 0) ID_BASES.delete(sqlite)
+  else ID_BASES.set(sqlite, base)
+}
+
+/** The id base in force over `sqlite` (`0` unless one was set). */
+export const idBaseOf = (sqlite: SqliteClient): number => ID_BASES.get(sqlite) ?? 0
+
+/**
  * Sequential id source persisted in SQLite. Ids are deterministic for a given
  * sequence history (`cus_` + 14 opaque chars), so reproductions stay stable.
+ * A runtime's `idBase` is mixed in, so a different base reissues none of another's ids.
  */
 export class IdSequence {
   constructor(
@@ -54,7 +98,9 @@ export class IdSequence {
            ON CONFLICT(namespace, name, kind) DO UPDATE SET value = excluded.value`,
         )
         .run(this.namespace, prefix, value)
-      return `${prefix}${opaqueToken(`${this.salt}:${prefix}:${value}`, length)}`
+      const base = idBaseOf(this.sqlite)
+      const seed = base === 0 ? this.salt : `${this.salt}#${base}`
+      return `${prefix}${opaqueToken(`${seed}:${prefix}:${value}`, length)}`
     })
   }
 }

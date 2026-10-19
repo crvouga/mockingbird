@@ -714,7 +714,9 @@ const derivedFromRecording = (
  * uncovered ZIP instead of inventing sites and labs next to recorded ones.
  */
 const requireRecordedRead = (state: JunctionState, context: OperationContext, zip: string) => {
-  if (state.geoMode !== "corpus") return
+  if (state.geoMode === "synthetic") return
+  // `corpus+synthetic` replays a covered ZIP's recording only; any other ZIP is synthesized.
+  if (state.geoMode === "corpus+synthetic" && !state.coveredZips.has(zip)) return
   const query = [...context.url.searchParams.entries()]
     .map(([key, value]) => `${key}=${value}`)
     .join("&")

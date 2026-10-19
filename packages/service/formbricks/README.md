@@ -36,6 +36,25 @@ npx mockingbird-formbricks serve --port 8813 \
   --webhook-secret "whsec_…"
 ```
 
+Boot it with your own settings and surveys, without a wrapper process or a `PUT` after boot:
+
+```bash
+npx mockingbird-formbricks serve \
+  --settings '{"workspaces": ["cworkspace000000000000002"], "legacyEnvironmentIds": {"cenvironment0000000000002": "cworkspace000000000000002"}}' \
+  --surveys ./surveys.json
+```
+
+`--settings <json|file>` (or `MOCKINGBIRD_SETTINGS`, or a fleet entry's `settings`) takes the
+fields of `GET|PUT /__admin/settings`, checked with their types (a misspelled key is an error). They
+are every namespace's defaults, a reset returns to them, and a field you give replaces the
+built-in value whole (give `legacyEnvironmentIds` and the default environment alias is gone).
+`--workspace-id` adds to the booted `workspaces`. `--surveys <file>` (a list, or `{surveys: [...]}`)
+adds your surveys after the corpus ones for every namespace, and they survive a reset. A survey
+whose id the corpus (or an earlier row) already has is skipped, a survey with no `workspaceId` is served by
+every configured workspace, and `type`, `status` and a legacy `environmentId` are handled as
+`PUT /__admin/surveys` handles them. `--surveys-mode replace` uses the file as the whole corpus.
+In a fleet, set `options: {"surveys": "surveys.json"}`.
+
 ```ts
 import { WORKSPACE_ID } from "@crvouga/mockingbird-service-formbricks"
 import { createServer } from "@crvouga/mockingbird-service-formbricks/server"
@@ -135,7 +154,7 @@ string), `management_unauthorized`, `connection_drop`, `duplicate` (the next web
 | Export | Kind | Description |
 | --- | --- | --- |
 | `FormbricksAPI` | class | The in-process emulator: `fetch(request)`, `reset()`, `responses()`, `render(record)`, `wireSurvey(survey)`, `pipeline(event, record, survey)`, `state`. Options: `sqlite`, `now`, `namespace`, `surveys`, `settings`, `onWebhook`. |
-| `createRuntime` | function | The emulator with the full service contract (health, admin, namespaces, credentials, presets, webhooks). Options: `webhooks: {url, secret?, events?, retryDelaysMs?, fetch?}`, `surveys`, `settings`, `clock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
+| `createRuntime` | function | The emulator with the full service contract (health, admin, namespaces, credentials, presets, webhooks). Options: `webhooks: {url, secret?, events?, retryDelaysMs?, fetch?}`, `surveys` (replaces the corpus; `serve --surveys` appends), `settings`, `clock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
 | `FORMBRICKS_PRESETS` | object | Every named fault preset. |
 | `FORMBRICKS_NAMESPACE` | string | The service name, `"formbricks"`. |
 | `WEBHOOK_PATH` | string | A conventional receiver path for examples, `/webhooks/formbricks`. |

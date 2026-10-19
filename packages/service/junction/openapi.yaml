@@ -343,6 +343,42 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LabTestResourcesResponse"
+  /v3/lab_test/estimate_order_set_pricing:
+    post:
+      operationId: estimate_order_set_pricing_v3_lab_test_estimate_order_set_pricing_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            prices are contract-owned; the emulator prices from the configured catalog
+            (lab test price, marker price) and models the documented shape only
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EstimateOrderSetPricingBody"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EstimateOrderSetPricingResponse"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /v3/lab_test/lab_account:
     get:
       operationId: get_team_lab_accounts_v3_lab_test_lab_account_get
@@ -553,6 +589,82 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClientFacingLab"
+  /v3/lab_tests/markers:
+    get:
+      operationId: get_markers_v3_lab_tests_markers_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          safe: true
+          reason: >-
+            the marker inventory is the team's catalog (and any configured marker catalog);
+            prices and availability are account-owned, so the emulator models the documented
+            shape and filters, not a live inventory
+      parameters:
+        - name: lab_id
+          in: query
+          required: false
+          schema:
+            type: array
+            items:
+              type: integer
+        - name: lab_slug
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+        - name: name
+          in: query
+          required: false
+          schema:
+            type: string
+            default: ""
+        - name: a_la_carte_enabled
+          in: query
+          required: false
+          schema:
+            type: ["boolean", "null"]
+        - name: include_pricing
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+        - name: lab_account_id
+          in: query
+          required: false
+          schema:
+            type: ["string", "null"]
+            format: uuid
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetMarkersResponse"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
   /v3/lab_tests/{lab_test_id}/markers:
     parameters:
       - name: lab_test_id
@@ -2282,6 +2394,101 @@ components:
           type: ["integer", "null"]
         pages:
           type: ["integer", "null"]
+        pricing:
+          anyOf:
+            - $ref: "#/components/schemas/MarkerPricingResponse"
+            - type: "null"
+    MarkerPricingResponse:
+      type: object
+      required: [data]
+      properties:
+        currency:
+          type: string
+          default: USD
+        data:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/Pricing"
+    Pricing:
+      type: object
+      additionalProperties: true
+      properties:
+        base_amount_minor:
+          type: integer
+        modifiers:
+          type: ["array", "null"]
+          items:
+            type: object
+            additionalProperties: true
+        unspecified:
+          type: string
+    EstimateOrderSetPricingBody:
+      type: object
+      required: [order_sets, modality, us_state]
+      properties:
+        order_sets:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            additionalProperties: true
+            properties:
+              lab_test_ids:
+                type: ["array", "null"]
+                items:
+                  type: string
+              add_on:
+                type: ["object", "null"]
+                additionalProperties: true
+                properties:
+                  marker_ids:
+                    type: ["array", "null"]
+                    items:
+                      type: integer
+                  provider_ids:
+                    type: ["array", "null"]
+                    items:
+                      type: string
+              lab_account_id:
+                type: ["string", "null"]
+              parameters:
+                type: ["object", "null"]
+                additionalProperties: true
+        modality:
+          type: string
+        us_state:
+          type: string
+        billing:
+          type: string
+          default: client_bill
+    EstimateOrderSetPricingResponse:
+      type: object
+      required: [currency, data]
+      properties:
+        currency:
+          type: string
+        data:
+          type: array
+          items:
+            type: object
+            required: [aggregate_pricing, components]
+            properties:
+              aggregate_pricing:
+                $ref: "#/components/schemas/Pricing"
+              components:
+                type: array
+                items:
+                  type: object
+                  required: [id, pricing]
+                  properties:
+                    id:
+                      type: string
+                    pricing:
+                      $ref: "#/components/schemas/Pricing"
+                    marker_breakdown:
+                      type: ["object", "null"]
+                      additionalProperties:
+                        $ref: "#/components/schemas/Pricing"
     ClientFacingExpectedResult:
       type: object
       required: [id, name, slug, required]

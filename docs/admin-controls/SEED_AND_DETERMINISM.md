@@ -113,6 +113,26 @@ Because they are separate, adding latency never shifts which requests a fault hi
 - **Every namespace draws from the same seed**, and each has its own streams and counters, `default` included. A test gives the same result in `worker-1` as in `worker-7`, and one worker's requests never shift another's.
 - **[Reset](RESET.md) rewinds the streams** to the boot seed. **[Restore](SNAPSHOT_AND_RESTORE.md)** puts them back where the snapshot left them. A test replays whether it runs first or last.
 
+## Ids that outlive a boot
+
+Id counters restart at 0 on every boot, so by default every boot issues the previous boot's ids, and `seed` does not change that. A consumer whose database outlives the emulator then meets unique-key collisions. The **id base** is a separate, boot-time choice that moves a boot onto its own run of ids:
+
+| Carrier | How |
+| --- | --- |
+| In code | `createRuntime({ idBase: 7 })` · `runtime.setIdBase(7)` |
+| Command line | `serve --id-base <n\|boot>` · `MOCKINGBIRD_ID_BASE` |
+| Fleet | `idBase` at the top level of `mockingbird.json`, or on one service (which replaces the fleet's) |
+
+```bash
+npx mockingbird-twilio serve --id-base 7
+npx mockingbird-twilio serve --id-base boot
+```
+
+- A base is a non-negative integer. The same base issues the same ids, a different base issues none of them, and the default `0` is today's ids, so nothing changes until you ask.
+- `boot` takes the base from the wall clock when the emulator starts, so every boot gets a fresh run. That run is not reproducible; use a number when you need one.
+- The base is a property of the boot, not of the state: [reset](RESET.md) and [restore](SNAPSHOT_AND_RESTORE.md) leave it as it was.
+- A value that is not a non-negative integer or `boot` stops the command before anything listens.
+
 ## Outside the seed
 
 - **Key material.** Signing keys, vault keys and encryption nonces come from the platform's random source by design. Pin them with the emulator's own fixture option (a `vaultKey`, a signing key).

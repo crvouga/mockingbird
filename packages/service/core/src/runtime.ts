@@ -59,6 +59,7 @@ import {
   type FaultRule,
   normalizeFault,
 } from "./faults.js"
+import { type IdBase, normalizeIdBase, setIdBase } from "./ids.js"
 import {
   createJournal,
   DEFAULT_JOURNAL_SIZE,
@@ -131,6 +132,13 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   sqlite?: SqliteClient
   /** Defaults to a live clock over `Date.now`. */
   clock?: Clock
+  /**
+   * Where this boot's generated ids start. Counters restart at 0 on every boot, so by default
+   * every boot reissues the previous boot's ids; a different base gives an unrelated run of ids
+   * (a reset returns to the same run). A non-negative integer, or `"boot"` for one derived from
+   * the wall clock when the runtime is created. Default `0`: the same ids on every boot.
+   */
+  idBase?: IdBase
   /** Seeds every random choice the runtime makes (fault rates, jitter). Default `0`. */
   seed?: number | string
   /**
@@ -216,6 +224,12 @@ export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   mount(prefix: string): MountedAPI
   readonly sqlite: SqliteClient
   readonly clock: Clock
+  /**
+   * Change the id base ({@link RuntimeOptions.idBase}) for ids generated from now on, and
+   * return the number it resolved to. Set it before the first request so a boot's ids stay
+   * one run.
+   */
+  setIdBase(base: IdBase): number
   readonly faults: FaultRegistry
   /** Baseline response time per namespace. */
   readonly latency: LatencyRegistry
@@ -484,6 +498,8 @@ export const createRuntime = <T extends ServiceInstance>(
   // Named outright, the seed is a boot control like any other: it wins over a boot snapshot's.
   if (options.seed !== undefined) boot.shared.seed = seed
   const sqlite = bootSqlite(options.sqlite)
+  if (options.idBase !== undefined)
+    setIdBase(sqlite, normalizeIdBase(options.idBase, "idBase", options.io?.wallNow))
   const clock = options.clock ?? createClock()
   // The shared boot clock is the base clock, which every namespace follows. What a namespace
   // keeps of it for itself is how far its own clock steps before each request.
@@ -1130,6 +1146,11 @@ export const createRuntime = <T extends ServiceInstance>(
       }),
     sqlite,
     clock,
+    setIdBase(base) {
+      const resolved = normalizeIdBase(base, "idBase", options.io?.wallNow)
+      setIdBase(sqlite, resolved)
+      return resolved
+    },
     faults,
     latency,
     metrics,
@@ -1439,6 +1460,14 @@ export const createRuntime = <T extends ServiceInstance>(
         namespace,
         headers: request.headers,
         query: url.searchParams,
+        // Read from a copy, so the service still gets the body. Not JSON: nothing to match.
+        readJson: async (): Promise<unknown> => {
+          try {
+            return JSON.parse(await request.clone().text())
+          } catch {
+            return undefined
+          }
+        },
         wait,
       }
       let hits: FaultHit[]

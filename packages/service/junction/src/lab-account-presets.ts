@@ -7,6 +7,13 @@
  * NY/NJ client-bill shape a consumer asked for, kept because suites depend on it, and
  * listed in `SYNTHETIC_LAB_ACCOUNT_PRESETS`.
  *
+ * The 2026-09-21 `bioreference_platform` preset lists `client_bill` in 47 states, but the
+ * current house BioReference account lists only `patient_bill_passthrough` in NJ and NY, so
+ * treat it as illustrative (#475). The `bioreference_current_platform`,
+ * `quest_sandbox_platform` and `sonora_quest_production_platform` presets follow the listings
+ * an agent reported from `GET /v3/lab_test/lab_account` on 2026-10-18 (a consumer-audit
+ * report, not a repository probe); they are additions, so no existing preset changes.
+ *
  * `*_platform` presets are Junction's own accounts (`org_id: null`, allowlist `[]`); every
  * other active preset is customer-owned (it belongs to an Org and is linked to the team).
  */
@@ -54,6 +61,30 @@ const labcorpPlatform: Preset = {
   team_id_allowlist: [],
 }
 
+/** The house BioReference account's current listing: passthrough billing in NJ and NY only. */
+const bioreferenceCurrentPlatform: Preset = {
+  lab: "bioreference",
+  account_name: "Junction BioReference Account",
+  delegated_flow: "not_delegated",
+  org_id: null,
+  allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] },
+  team_id_allowlist: [],
+}
+/** The sandbox Quest house account also lists commercial insurance in all 50 states. */
+const questSandboxPlatform: Preset = {
+  ...questPlatform,
+  allowed_billing: { client_bill: PLATFORM_ACCOUNT_STATES, commercial_insurance: US_STATES },
+}
+/** The production Sonora Quest house account client-bills like Quest and Labcorp's. */
+const sonoraQuestProductionPlatform: Preset = {
+  lab: "sonora_quest",
+  account_name: "Junction Sonora Quest Account",
+  delegated_flow: "not_delegated",
+  org_id: null,
+  allowed_billing: { client_bill: PLATFORM_ACCOUNT_STATES },
+  team_id_allowlist: [],
+}
+
 /**
  * Every preset, without its id. A preset with no `team_id_allowlist` is linked to the
  * configured team; the platform presets carry `[]`, as Junction's own accounts do.
@@ -77,6 +108,9 @@ export const LAB_ACCOUNT_PRESETS: Readonly<Record<string, Preset>> = {
   },
   quest_platform: questPlatform,
   labcorp_platform: labcorpPlatform,
+  bioreference_current_platform: bioreferenceCurrentPlatform,
+  quest_sandbox_platform: questSandboxPlatform,
+  sonora_quest_production_platform: sonoraQuestProductionPlatform,
   suspended_bioreference: { ...bioreferencePlatform, status: "suspended" },
   suspended_quest: { ...questPlatform, status: "suspended" },
   suspended_labcorp: { ...labcorpPlatform, status: "suspended" },

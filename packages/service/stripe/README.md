@@ -147,6 +147,17 @@ Every state change records an event in the account's log (`GET /v1/events`, filt
 - Delivery faults: presets `webhook_duplicate` (same event id twice — our receiver's in-flight
   dedupe answers 500), `webhook_reorder` (the next two swapped), `webhook_drop` (never delivered,
   still in `GET /v1/events` for the replay worker).
+- Payment holds, per customer and namespace, for delayed-payment flows:
+  `PUT /__admin/payment-holds/:customer {"webhooks"?: true, "lookups"?: true}` (both default on).
+  While `webhooks` is on, events whose `data.object.customer` is that customer are not delivered but
+  queued (the in-process `onWebhook` still sees them, and they are in `GET /v1/events`). While
+  `lookups` is on, secret-key `GET`s filtered by `?customer=` that customer, and the retrieve of a
+  PaymentIntent it owns, answer 503 `api_error`; publishable-key calls (Stripe.js) are unaffected.
+  `POST /__admin/payment-holds/:customer/release` ends the hold and delivers the queue oldest first,
+  each event signed with the `Stripe-Signature` timestamp it was held at (so a receiver's tolerance
+  check sees the age; retries are signed afresh). `DELETE` ends the hold and drops the queue.
+  `GET /__admin/payment-holds` lists holds with their queued event ids. A reset clears them; snapshots
+  do not include them.
 - Metadata is copied verbatim, so the PC route's quarantine rule (`metadata.intent ∈ {pc_order,
   kb_membership, shop_purchase, stripe_membership}` or `source=supplement` + `billingInvoiceId`)
   only fires for sessions that would trip it on Stripe.
@@ -344,7 +355,9 @@ hides objects younger than 60 s — search is consistent otherwise), `webhook_du
 {status, failure_reason}` (emits `refund.failed` / `refund.updated`), `POST /__admin/disputes
 {payment_intent|charge, reason?, amount?}` (emits `charge.dispute.created`),
 `POST /__admin/checkout/sessions/:id/complete|expire|async_payment_succeeded`,
-`POST /__admin/setup_intents/:id/succeed`, `GET /__admin/charges/:id`, `POST /__admin/tick`. The
+`POST /__admin/setup_intents/:id/succeed`, `GET /__admin/charges/:id`, `POST /__admin/tick`,
+`GET /__admin/payment-holds`, `PUT|DELETE /__admin/payment-holds/:customer`,
+`POST /__admin/payment-holds/:customer/release`. The
 standard ones (`/__admin/health`, reset, snapshots, clock, faults, metrics, `GET /__admin/requests`,
 credentials, webhooks) come from the shared runtime. The journal records operation, status and ids
 only — never bodies, card numbers or emails.
@@ -375,6 +388,7 @@ The filter composes with `active`, `coupon`, customer, created-time and paginati
 | `createRuntime` | `(options?) => StripeRuntime` — the emulator with the full contract. Options: `accounts`, `webhooks {endpoints, retryDelaysMs, fetch}`, `corpus`, `publicUrl`, `webhookApiVersion`, `lifecycle`, `tickMs`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`, `onWebhook`. The runtime adds `webhooks`, `accounts`, `tick()`, `stop()`. |
 | `StripeAPI` | Class; `new StripeAPI(options?)` implements `fetch(request)`. Members: `reset()`, `tick(force?)`, `webhookEvents(account?)`, `webhookDeliveryAttempts(account?)`, `apiWebhookEndpoints()`, `accountIds()`, `scopeFor(account)`, `importStateFrom(source)`, `accounts`, `app`, `sqlite`. |
 | `STRIPE_PRESETS` | The named fault presets above. |
+| `PaymentHolds` | Per-customer holds behind `/__admin/payment-holds` (`set`, `list`, `has`, `release`, `discard`, `clear`); `StripeAPI.holds` is the registry. |
 | `AccountDirectory` | Keys → accounts (`configure`, `accountFor`, `config`, `list`, `resolve`). |
 | `DEFAULT_WEBHOOK_API_VERSION` | `"2024-06-20"`. |
 | `accountOfKey` | `(key) => string` — the account id of an unconfigured key. |

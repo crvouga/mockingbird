@@ -2,8 +2,8 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **52**
-- supported by the emulator: **52**
+- operations in spec: **54**
+- supported by the emulator: **54**
 - parity enabled: **5**
 
 | operationId | route | emulator | parity | notes |
@@ -16,6 +16,8 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GetSmartConfiguration` | `GET /.well-known/smart-configuration` | ✅ supported | ❌ disabled | Discovery document; endpoints use the configured public base and namespace; fleet origin/prefix ingress is covered by acceptance tests. |
 | `PostAuthLogin` | `POST /auth/login` | ✅ supported | ❌ disabled | Password flows are covered by the auth scenarios. |
 | `PostAuthProfile` | `POST /auth/profile` | ✅ supported | ❌ disabled | Multi-membership login step. |
+| `PostAuthResetPassword` | `POST /auth/resetpassword` | ✅ supported | ❌ disabled | Creates a UserSecurityRequest; covered by the auth acceptance tests. |
+| `PostAuthSetPassword` | `POST /auth/setpassword` | ✅ supported | ❌ disabled | Consumes a UserSecurityRequest; covered by the auth acceptance tests. |
 | `GetAuthMe` | `GET /auth/me` | ✅ supported | ❌ disabled | Covered by the auth and admin scenarios. |
 | `PostOauth2Token` | `POST /oauth2/token` | ✅ supported | ❌ disabled | Tokens are minted per call; covered by the auth scenarios. |
 | `GetOauth2UserInfo` | `GET /oauth2/userinfo` | ✅ supported | ❌ disabled | Covered by the auth scenarios. |

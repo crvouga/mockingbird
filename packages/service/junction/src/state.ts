@@ -270,8 +270,10 @@ export type ResultFixture = {
  * - `synthetic`: invent plausible coverage. Right for property tests that walk random ZIPs.
  * - `corpus`: refuse with a documented Mockingbird error. Right for a mock standing in for
  *   the vendor, where invented coverage would silently disagree with production.
+ * - `corpus+synthetic`: replay the recording for the ZIPs it covers (a read it cannot answer
+ *   still refuses), and invent coverage for every other ZIP.
  */
-export type GeoMode = "synthetic" | "corpus"
+export type GeoMode = "synthetic" | "corpus" | "corpus+synthetic"
 
 export type WebhookPublisher = (event: JunctionWebhookEvent) => void
 
@@ -313,6 +315,8 @@ export class JunctionState {
   readonly orderLabAccounts: Collection<{
     lab_account_id: string | null
     provider_account_id?: string | null
+    /** Where `POST /v3/order` carried an account id; absent for fixture-seeded orders (#473). */
+    request?: { labAccountId: string | null; nestedLabAccountId: string | null }
   }>
   readonly webhookEvents: Collection<WebhookEventRecord>
   readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
@@ -335,6 +339,7 @@ export class JunctionState {
     Record<string, import("./lab-accounts.js").LabAccountOmissionPolicy>
   > = {}
   defaultBillingTypes: Readonly<Record<string, string>> = {}
+  quirks: import("./quirks.js").JunctionQuirks = {}
   labAccountBehavior: import("./lab-account-behavior.js").LabAccountBehavior = {
     profile: "native",
     accounts: {},
@@ -343,6 +348,12 @@ export class JunctionState {
   identity: IdentityMode = "strict"
   private webhooksMuted = 0
   private readonly adoptedRequests = new WeakSet<Request>()
+  /** Configuration: ZIP aliases and per-ZIP overrides on serviceability answers. */
+  zipOverlays: import("./geo-overlay.js").ZipOverlays = {}
+  /** Configuration: markers offered on top of those in catalog lab tests (`GET /v3/lab_tests/markers`). */
+  markerCatalog: readonly import("./markers.js").MarkerCatalogEntry[] = []
+  /** Configuration: biomarker result lines of add-on orders name the markers they came from. */
+  addOnSourceMarkers = false
   /** ZIPs the loaded corpus has serviceability records for. */
   coveredZips: ReadonlySet<string> = new Set()
   /** Identifies the loaded corpus in errors and `/__admin/health`. */

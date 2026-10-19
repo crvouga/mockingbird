@@ -73,9 +73,28 @@ A rule says what it **matches**, **when** it fires among the matching requests, 
 | `pathPattern` | string | Paths matching this regular expression |
 | `requestHeaders` | object of strings | Requests carrying these headers. `"*"` matches any value |
 | `query` | object of strings | Requests carrying these query parameters. `"*"` matches any value |
+| `requestBody` | object | Requests whose JSON body has these fields. See [Match on the request body](#match-on-the-request-body) |
 | `namespace` | string | Default: the calling namespace. `"*"` faults every namespace |
 
 A rule with no match fields matches every vendor request in its namespace.
+
+#### Match on the request body
+
+`requestBody` maps a dotted path into the parsed JSON body to the value the field must equal: a string, number, boolean or `null`. All paths must match. A rule can then target one member of a shared emulator when the caller sends no namespace header:
+
+```sh
+curl -X POST localhost:8787/__admin/faults -d '{
+  "method": "POST", "path": "/v3/order",
+  "requestBody": {"patient_details.email": "member-a@example.test"},
+  "status": 503
+}'
+```
+
+- A number in the path steps into an array: `items.0.sku`. A key that itself contains a dot cannot be addressed.
+- Values compare strictly: `3` does not equal `"3"`. `"*"` matches any value that is present, so a string field cannot be matched against a literal `"*"`.
+- A request whose body is missing, is not JSON, or is a JSON array or scalar never matches. A rule without `requestBody` is unaffected and never reads the body.
+- Not `body`, which is the response the rule injects. A rule can combine both to answer matching requests with a fixed body, such as `{"requestBody": {"patient_details.zip": "00000"}, "status": 200, "body": {"slots": []}}`.
+- `seen` counts only requests whose body matched. A rule in an `x-mockingbird-fault` header cannot use `requestBody`: that request is already chosen.
 
 ### When
 

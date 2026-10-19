@@ -146,6 +146,7 @@ const CHOOSES_REQUESTS = [
   "pathPattern",
   "requestHeaders",
   "query",
+  "requestBody",
   "namespace",
   "after",
   "every",

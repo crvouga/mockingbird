@@ -23,7 +23,7 @@ import {
   type ServerHttp2Stream,
 } from "node:http2"
 import { type AddressInfo, connect, createServer as createNetServer, type Socket } from "node:net"
-import { Readable } from "node:stream"
+import type { Readable } from "node:stream"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 
 export type H2cListenOptions = {
@@ -53,8 +53,54 @@ const CONNECTION_HEADERS = new Set([
   "host",
 ])
 
-const toWebBody = (stream: Readable): ReadableStream<Uint8Array> =>
-  Readable.toWeb(stream) as unknown as ReadableStream<Uint8Array>
+/**
+ * A Fetch request body fed from a Node readable's `data`/`end` events. `Readable.toWeb()`
+ * on an HTTP/2 server stream never closes on Node 22, so the body never ends and the
+ * handler hangs; the events fire on every runtime. `pause`/`resume` carry backpressure.
+ */
+const toWebBody = (stream: Readable): ReadableStream<Uint8Array> => {
+  let finished = false
+  const detach = () => {
+    stream.off("data", onData)
+    stream.off("end", onEnd)
+    stream.off("error", onError)
+    stream.off("close", onClose)
+  }
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  const settle = (action: () => void) => {
+    if (finished) return
+    finished = true
+    detach()
+    action()
+  }
+  const onData = (chunk: Buffer | string) => {
+    if (finished) return
+    controller.enqueue(
+      typeof chunk === "string" ? new TextEncoder().encode(chunk) : new Uint8Array(chunk),
+    )
+    if ((controller.desiredSize ?? 1) <= 0) stream.pause()
+  }
+  const onEnd = () => settle(() => controller.close())
+  const onError = (error: Error) => settle(() => controller.error(error))
+  // A stream torn down before `end` (client reset) must not leave the reader waiting forever.
+  const onClose = () => settle(() => controller.error(new Error("request stream closed early")))
+  return new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c
+      stream.on("data", onData)
+      stream.on("end", onEnd)
+      stream.on("error", onError)
+      stream.on("close", onClose)
+    },
+    pull() {
+      stream.resume()
+    },
+    cancel() {
+      settle(() => undefined)
+      stream.resume()
+    },
+  })
+}
 
 const isDrop = (error: unknown) => (error as { code?: string } | null)?.code === "MOCKINGBIRD_DROP"
 

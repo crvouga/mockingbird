@@ -643,6 +643,8 @@ export interface CreateTriggerStmt {
   readonly when: Expr | null;
   readonly funcName: string[];
   readonly funcArgs: string[];
+  /** `REFERENCING { OLD | NEW } TABLE [AS] name` items in source order; validated when the trigger is created */
+  readonly transitions?: ReadonlyArray<{ isNew: boolean; name: string }>;
 }
 
 export type AlterTableAction =

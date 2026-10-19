@@ -2496,8 +2496,6 @@ export class Parser {
     } while (this.eatKw("or"));
     this.expectKw("on");
     const table = this.qualifiedName();
-    // referencing / deferrable clauses
-    if (this.eatKw("referencing")) throw unsupported("trigger transition tables");
     let deferrable = false;
     let initiallyDeferred = false;
     if (this.eatKw("not")) this.expectKw("deferrable");
@@ -2510,6 +2508,23 @@ export class Parser {
       this.errorAt(this.peek(), "only constraint triggers can be deferred");
     if (initiallyDeferred && !deferrable)
       this.errorAt(this.peek(), "constraint declared INITIALLY DEFERRED must be DEFERRABLE");
+    const transitions: Array<{ isNew: boolean; name: string }> = [];
+    if (!constraint && this.eatKw("referencing")) {
+      do {
+        const isNew = this.eatKw("new");
+        if (!isNew) this.expectKw("old");
+        if (this.eatKw("row")) {
+          throw pgError(
+            "feature_not_supported",
+            "ROW variable naming in the REFERENCING clause is not supported",
+            "0A000",
+          );
+        }
+        this.expectKw("table");
+        this.eatKw("as");
+        transitions.push({ isNew, name: this.ident() });
+      } while (this.atKw("new") || this.atKw("old"));
+    }
     let forEachRow = false;
     if (this.eatKw("for")) {
       this.eatKw("each");
@@ -2548,6 +2563,7 @@ export class Parser {
       when,
       funcName,
       funcArgs,
+      ...(transitions.length > 0 ? { transitions } : {}),
     };
   }
 

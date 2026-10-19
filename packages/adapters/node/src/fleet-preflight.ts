@@ -1,7 +1,12 @@
 import { readFile, realpath } from "node:fs/promises"
 import { createRequire } from "node:module"
 import { basename, dirname, resolve } from "node:path"
-import { normalizeBootControls, resolveAdminPrefix } from "@crvouga/mockingbird-service"
+import {
+  normalizeBootControls,
+  normalizeIdBase,
+  resolveAdminPrefix,
+} from "@crvouga/mockingbird-service"
+import { checkSettings } from "./boot-settings.js"
 import type { MockingbirdConfig } from "./cli.js"
 import type { FleetOptions, FleetTarget } from "./fleet.js"
 import { validateCompatibilityTags } from "./fleet-archive.js"
@@ -44,6 +49,7 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
     )
   resolveAdminPrefix(config.adminPrefix)
   normalizeBootControls(config.adminControls)
+  if (config.idBase !== undefined) normalizeIdBase(config.idBase, "idBase")
   const targets = new Map<string, FleetTarget>()
   const ports = new Set<string>()
   for (const [name, entry] of Object.entries(config.services)) {
@@ -90,6 +96,12 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
           )
             throw new Error("invalid protocol namespace selector")
         }
+      }
+      if (entry.idBase !== undefined) normalizeIdBase(entry.idBase, "idBase")
+      if (entry.settings !== undefined) {
+        if (protocol !== "http" || !("create" in target))
+          throw new Error("settings: only HTTP services take boot settings")
+        checkSettings(target, entry.settings, "settings")
       }
       const port = entry.port ?? target.defaultPort
       if (port !== 0) {

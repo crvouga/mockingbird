@@ -89,6 +89,7 @@ export type {
   FaultRegistry,
   FaultRule,
   FaultSnapshot,
+  RequestBodyValue,
 } from "./faults.js"
 export { createFaultRegistry, normalizeFault, STANDARD_FAULT_PRESETS } from "./faults.js"
 export type { FormIssue, ParsedForm } from "./form-schema.js"
@@ -97,7 +98,8 @@ export type { FieldResult } from "./http.js"
 export { codePointLength, coerce, HttpError, jsonRes, jsonRes as jsonResponse } from "./http.js"
 export type { IdempotencyErrors } from "./idempotency.js"
 export { IdempotencyStore, requestFingerprint, stableStringify } from "./idempotency.js"
-export { IdSequence, opaqueToken } from "./ids.js"
+export type { IdBase } from "./ids.js"
+export { IdSequence, idBaseOf, normalizeIdBase, opaqueToken, setIdBase } from "./ids.js"
 export type { Journal, JournalEntry, JournalQuery, ResponseNotes } from "./journal.js"
 export {
   annotateResponse,

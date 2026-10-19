@@ -82,6 +82,10 @@ export interface TriggerMeta {
   timing: "before" | "after" | "instead_of";
   events: CreateTriggerStmt["events"];
   forEachRow: boolean;
+  /** `REFERENCING OLD TABLE AS …` name; only on AFTER statement triggers for UPDATE or DELETE */
+  oldTable?: string;
+  /** `REFERENCING NEW TABLE AS …` name; only on AFTER statement triggers for INSERT or UPDATE */
+  newTable?: string;
   when: Expr | null;
   funcSchema: string;
   funcName: string;

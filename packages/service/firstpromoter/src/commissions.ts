@@ -61,8 +61,8 @@ export class Commissions {
       event_id: row.event_id,
       plan_id: row.plan_id,
       tier: 1,
-      internal_note: null,
-      external_note: null,
+      internal_note: row.internal_note ?? null,
+      external_note: row.external_note ?? null,
       unit: row.unit,
       fraud_check: "no_suspicion",
       amount: row.amount,
@@ -92,6 +92,22 @@ export class Commissions {
       reward: { id: reward?.reward_id ?? 0, name: reward?.name ?? "Custom commission" },
       split_details: null,
     }
+  }
+
+  /** `PUT /v2/company/commissions/{id}`: only the two notes are writable. */
+  updateNotes(
+    id: number,
+    notes: { internal_note?: string; external_note?: string },
+  ): CommissionRecord | undefined {
+    const row = this.state.commissions.get(String(id))
+    if (!row) return undefined
+    const next: CommissionRecord = {
+      ...row,
+      ...(notes.internal_note !== undefined ? { internal_note: notes.internal_note } : {}),
+      ...(notes.external_note !== undefined ? { external_note: notes.external_note } : {}),
+    }
+    this.state.commissions.update(String(id), next)
+    return next
   }
 
   list(query: URLSearchParams): Response {

@@ -32,6 +32,13 @@ entry's own `adminControls` replaces the keys it names. `--admin-controls`, `--c
 `--freeze`, `--latency`, `--fault` and `MOCKINGBIRD_ADMIN_CONTROLS` apply on top of the file.
 A document that cannot be read stops the fleet before any listener opens, and names the service.
 
+Two more keys boot HTTP services apart from one run to the next. `idBase` (a non-negative integer
+or `"boot"`, top-level for every service or on one entry, which replaces the fleet's) starts
+generated ids at a base so a restart does not reissue the last boot's ids; `--id-base` and
+`MOCKINGBIRD_ID_BASE` fill in a top-level one the file leaves out. A service entry's `settings`
+object is that emulator's own boot settings, the same document `serve --settings` takes, checked by
+the emulator's schema before any listener opens (see [Boot](admin-controls/BOOT.md#settings)).
+
 ```json
 {
   "adminControls": { "clock": { "now": "2030-01-01T00:00:00Z", "frozen": true } },

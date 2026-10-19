@@ -13,6 +13,11 @@ import {
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import {
+  applyCatalogOverlays,
+  type CatalogOverlay,
+  validateCatalogOverlays,
+} from "./catalog-overlays.js"
+import {
   fixtureErrorMessage,
   hardDeleteUser,
   IDENTITY_MODES,
@@ -26,6 +31,7 @@ import {
   type UserFixture,
 } from "./fixtures.js"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
+import { validateZipOverlays, withZipOverlays, type ZipOverlays } from "./geo-overlay.js"
 import { type LabAccountBehavior, labAccountBehaviorFrom } from "./lab-account-behavior.js"
 import {
   expandLabAccountLayout,
@@ -50,7 +56,9 @@ import {
   mergeLimits,
   RateWindow,
 } from "./limits.js"
+import { type MarkerCatalogEntry, markerHandlers, validateMarkerCatalog } from "./markers.js"
 import { orderHandlers } from "./orders.js"
+import { type JunctionQuirks, quirksFrom } from "./quirks.js"
 import { resultsHandlers } from "./results.js"
 import { forceOrderStatus, schedulingHandlers } from "./scheduling.js"
 import type { SealedCorpus } from "./sealed-corpus.js"
@@ -197,6 +205,27 @@ export type JunctionAPIOptions = APIOptions & {
    */
   geo?: GeoMode
   /**
+   * ZIP aliases and per-ZIP overrides on serviceability answers, whatever the geo mode: an
+   * alias makes a ZIP answer as another, an override sets `phlebotomy.is_served` or empties the
+   * PSC list. Per namespace via `PUT /__admin/geo`.
+   */
+  zipOverlays?: ZipOverlays
+  /**
+   * Lab tests derived from catalog ones (new id, name, slug, lab; AOE questions stripped;
+   * `auto_generated`), added to every namespace after the catalog loads and again on `reset()`.
+   */
+  catalogOverlays?: readonly CatalogOverlay[]
+  /**
+   * Markers `GET /v3/lab_tests/markers` offers on top of those in catalog lab tests, with their
+   * pricing, AOE questions and expected results.
+   */
+  markerCatalog?: readonly MarkerCatalogEntry[]
+  /**
+   * Name the markers behind each biomarker result line of an add-on order
+   * (`source_markers[].marker_id`). Default off: the line then carries `source_markers: null`.
+   */
+  addOnSourceMarkers?: boolean
+  /**
    * The team's lab accounts, replacing the built-in fixtures (and any from the corpus):
    * a list of accounts, or `{ presets: [...], accounts: [...] }`. `create_order` routes,
    * accepts and rejects `lab_account_id` against these.
@@ -221,6 +250,8 @@ export type JunctionAPIOptions = APIOptions & {
   labAccountOmissionPolicies?: Record<string, LabAccountOmissionPolicy>
   /** Named policy; native preserves legacy behavior. Sandbox exceptions are account-owned. */
   labAccountBehavior?: Partial<LabAccountBehavior>
+  /** Opt-in sandbox quirks (#474), every one off by default; see {@link JunctionQuirks}. */
+  quirks?: JunctionQuirks
   /** Users and orders to load into every namespace, re-applied on every `reset()`. */
   fixtures?: JunctionFixtures
 }
@@ -287,6 +318,7 @@ export class JunctionAPI implements FetchAPI {
   private readonly rateWindow = new RateWindow()
   private corpus: SealedCorpus | undefined
   private labAccountConfig: StoredLabAccount[] | undefined
+  private readonly catalogOverlays: readonly CatalogOverlay[]
 
   constructor(options: JunctionAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
@@ -304,14 +336,45 @@ export class JunctionAPI implements FetchAPI {
       profile: "native",
       ...options.labAccountBehavior,
     })
+    state.quirks = quirksFrom(options.quirks ?? {})
     state.defaultBillingTypes = defaultBillingTypesFrom(options.defaultBillingTypes ?? {})
     state.labAccountOmissionPolicies = omissionPoliciesFrom(
       options.labAccountOmissionPolicies ?? {},
     )
+    if (options.zipOverlays) validateZipOverlays(options.zipOverlays)
+    if (options.catalogOverlays) validateCatalogOverlays(options.catalogOverlays)
+    if (options.markerCatalog) validateMarkerCatalog(options.markerCatalog)
+    state.zipOverlays = options.zipOverlays ?? {}
+    state.markerCatalog = options.markerCatalog ?? []
+    state.addOnSourceMarkers = options.addOnSourceMarkers === true
+    this.catalogOverlays = options.catalogOverlays ?? []
+    const scheduling = schedulingHandlers(state)
     const handlers = defineOperations<SupportedOperationId>({
       ...userHandlers(state),
       ...orderHandlers(state),
-      ...schedulingHandlers(state),
+      ...markerHandlers(state),
+      ...scheduling,
+      get_area_info_v3_order_area_info_get: withZipOverlays(
+        state,
+        "area",
+        scheduling.get_area_info_v3_order_area_info_get,
+      ),
+      get_psc_info_v3_order_psc_info_get: withZipOverlays(
+        state,
+        "psc",
+        scheduling.get_psc_info_v3_order_psc_info_get,
+      ),
+      get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post:
+        withZipOverlays(
+          state,
+          "availability",
+          scheduling.get_phlebotomy_appointment_availability_v3_order_phlebotomy_appointment_availability_post,
+        ),
+      get_psc_appointment_availability_v3_order_psc_appointment_availability_post: withZipOverlays(
+        state,
+        "availability",
+        scheduling.get_psc_appointment_availability_v3_order_psc_appointment_availability_post,
+      ),
       ...resultsHandlers(state),
     })
     this.service = createService({
@@ -338,6 +401,7 @@ export class JunctionAPI implements FetchAPI {
     if (options.corpus) this.installCorpus(options.corpus)
     else this.seedLabAccounts()
     state.geoMode = options.geo ?? (options.corpus ? "corpus" : "synthetic")
+    applyCatalogOverlays(state, this.catalogOverlays)
     this.fixtures = options.fixtures
     if (this.fixtures) importFixturesInto(state, this.fixtures, this.now)
   }
@@ -363,6 +427,7 @@ export class JunctionAPI implements FetchAPI {
       this.state.seedDefaultCatalog()
       this.seedLabAccounts()
     }
+    applyCatalogOverlays(this.state, this.catalogOverlays)
     if (this.fixtures) importFixturesInto(this.state, this.fixtures, this.now)
   }
 
@@ -484,6 +549,15 @@ export class JunctionAPI implements FetchAPI {
     this.state.labAccountBehavior = labAccountBehaviorFrom(input)
   }
 
+  /** Opt-in sandbox quirks for this namespace; kept across reset. */
+  get quirks(): JunctionQuirks {
+    return { ...this.state.quirks }
+  }
+
+  set quirks(input: JunctionQuirks) {
+    this.state.quirks = quirksFrom(input)
+  }
+
   get defaultBillingTypes(): Record<string, BillingType> {
     return { ...this.state.defaultBillingTypes } as Record<string, BillingType>
   }
@@ -541,6 +615,16 @@ export class JunctionAPI implements FetchAPI {
     }
   }
 
+  /** ZIP aliases and overrides for this namespace; kept across reset. */
+  get zipOverlays(): ZipOverlays {
+    return structuredClone(this.state.zipOverlays)
+  }
+
+  set zipOverlays(overlays: ZipOverlays) {
+    validateZipOverlays(overlays)
+    this.state.zipOverlays = structuredClone(overlays)
+  }
+
   get geoMode(): GeoMode {
     return this.state.geoMode
   }
@@ -566,6 +650,19 @@ export class JunctionAPI implements FetchAPI {
     return this.state.orderLabAccounts.get(id)?.lab_account_id
   }
 
+  /**
+   * Where `POST /v3/order` carried a lab account id: `labAccountId` at the root (which
+   * selects the account) and `nestedLabAccountId` inside `order_set` (which Junction
+   * ignores). `null` for an order that was not placed through the API (a fixture), and
+   * `undefined` for an unknown order.
+   */
+  orderLabAccountRequest(
+    id: string,
+  ): { labAccountId: string | null; nestedLabAccountId: string | null } | null | undefined {
+    const stored = this.state.orderLabAccounts.get(id)
+    return stored === undefined ? undefined : (stored.request ?? null)
+  }
+
   /** Frozen provider number used by the synthetic requisition; null means unknown. */
   requisitionFixture(id: string): { provider_account_id: string | null } | undefined {
     if (!this.state.orders.get(id)) return undefined
@@ -576,6 +673,7 @@ export class JunctionAPI implements FetchAPI {
     if (!this.state.orders.get(id)) return false
     const current = this.state.orderLabAccounts.get(id)
     this.state.orderLabAccounts.insert(id, {
+      ...current,
       lab_account_id: current?.lab_account_id ?? null,
       provider_account_id: providerAccountId,
     })
@@ -749,8 +847,14 @@ const normalizePath = (request: Request): Request => {
   return new Request(next, request)
 }
 
+export type { CatalogOverlay } from "./catalog-overlays.js"
+export type { ZipOverlays, ZipOverride } from "./geo-overlay.js"
 export type {
   LabAccountBehavior,
+  LabAccountOracle,
   LabAccountProfile,
   LabAccountSandboxPolicy,
+  OmittedAccountBilling,
 } from "./lab-account-behavior.js"
+export type { MarkerCatalogEntry, MarkerPricing } from "./markers.js"
+export type { JunctionQuirks } from "./quirks.js"

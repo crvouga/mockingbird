@@ -110,7 +110,18 @@ The default catalog is the rows our consumers' own tests use
 (the consumer app's `wholescripts-service.test.ts`), with their repeated
 `medPaxSku`s made unique, plus the scheduler's MedPax box `000000000200095263` and `medPaxDetails`
 rows the scheduler's catalog sync reads. `Protein Powder` (`PP001`) is out of stock. No sandbox
-recording exists; pass `catalog` (or `PUT /__admin/catalog`) to load recorded rows.
+recording exists; load recorded rows with `serve --catalog <file>`, the `catalog` option, or
+`PUT /__admin/catalog`.
+
+`serve --catalog rows.json` lays a JSON file onto the default catalog for every namespace, and
+a reset returns to it (unlike `PUT /__admin/catalog`, which replaces the catalog until the next reset). The file is
+`{products?, medPaxPills?, privateLabelCartons?}`, or a bare array of products. A row needs its
+`sku` (and a product its `productName`); every other string defaults to `""` and every number to
+`0`, so give `quantity` for a product that should survive `instockonly=true`. By default
+(`--catalog-mode merge`) a row whose SKU the default already has replaces it in place, any other is
+appended, and a list the file leaves out is kept. `--catalog-mode replace` makes the file the whole
+catalog (a list it leaves out is empty). In a fleet, set `options: {"catalog": "rows.json",
+"catalog-mode": "replace"}`. The `catalog` option of `createRuntime` still takes a whole `Catalog`.
 
 ### Deliberately not modelled
 
@@ -133,6 +144,7 @@ recording exists; pass `catalog` (or `PUT /__admin/catalog`) to load recorded ro
 | `basicUsername` | function | The Basic username a request carries (how credentials map to namespaces). |
 | `canonicalStatus` | function | The canonical casing of a transition target (`complete` → `Complete`). |
 | `DEFAULT_CATALOG` | object | The default `{products, medPaxPills, privateLabelCartons}`. |
+| `parseCatalogDocument`, `mergeCatalog` | functions | Check a `--catalog` document (filling omitted fields) and lay it onto a catalog by SKU. |
 | `MEDPAX_BOX_SKU` | string | The supplement scheduler's MedPax box SKU, `000000000200095263`. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (auto-advance ticks every 100 ms); the `serve` CLI target; port 8803. |

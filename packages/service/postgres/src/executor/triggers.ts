@@ -7,7 +7,7 @@ import { triggerScope } from "./triggers-scope.ts";
 import { unsupported } from "../errors/error.ts";
 import type { TableData, TriggerMeta } from "../storage/database-state.ts";
 import type { Datum } from "../types/value.ts";
-import type { ExecEnv } from "./relation.ts";
+import type { ExecEnv, Relation } from "./relation.ts";
 
 export type TriggerEvent = "insert" | "update" | "delete";
 
@@ -79,6 +79,53 @@ export function hasRowTriggers(
   event: TriggerEvent,
 ): boolean {
   return table.triggers.some((t) => t.timing === timing && matches(t, event) && t.forEachRow);
+}
+
+/** The rows a statement changed, as the `REFERENCING` transition tables of its AFTER statement triggers. */
+export interface TransitionRows {
+  /** rows before the change (UPDATE, DELETE) */
+  oldRows: Datum[][];
+  /** rows after the change (INSERT, UPDATE); position-aligned with `oldRows` for UPDATE */
+  newRows: Datum[][];
+}
+
+function transitionRelation(table: TableData, name: string, rows: Datum[][]): Relation {
+  return {
+    columns: table.columns.map((c) => ({ name: c.name, type: c.type.id, table: name })),
+    rows,
+  };
+}
+
+/**
+ * Fire the statement-level triggers of `table` for `event`, once, in trigger-name order. AFTER triggers
+ * that declare transition tables read them as relations named by their `REFERENCING` clause; the
+ * function body sees nothing else of the statement (no outer CTEs, parameters or scope).
+ */
+export function fireStatementTriggers(
+  env: ExecEnv,
+  table: TableData,
+  timing: "before" | "after",
+  event: TriggerEvent,
+  transitions?: TransitionRows,
+): void {
+  const fired = table.triggers
+    .filter((t) => !t.forEachRow && t.timing === timing && matches(t, event))
+    .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const t of fired) {
+    if (!executor) throw unsupported(`trigger "${t.name}" execution`);
+    const ctes = new Map<string, Relation>();
+    if (t.oldTable !== undefined)
+      ctes.set(t.oldTable, transitionRelation(table, t.oldTable, transitions?.oldRows ?? []));
+    if (t.newTable !== undefined)
+      ctes.set(t.newTable, transitionRelation(table, t.newTable, transitions?.newRows ?? []));
+    // Statement triggers run inside the statement that fired them: its row count is not theirs to change.
+    const changes = env.ctx.state.changes;
+    try {
+      executor({ ctx: env.ctx, params: null, ctes, outer: null }, table, t, event, null, null);
+    } finally {
+      env.ctx.state.changes = changes;
+    }
+  }
 }
 
 const keyOf = (schema: string, name: string) => JSON.stringify([schema, name]);

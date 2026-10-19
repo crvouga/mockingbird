@@ -2,8 +2,8 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **40**
-- supported by the emulator: **40**
+- operations in spec: **42**
+- supported by the emulator: **42**
 - parity enabled: **22**
 
 | operationId | route | emulator | parity | notes |
@@ -17,10 +17,12 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `patch_user_info_v2_user__user_id__info_patch` | `PATCH /v2/user/{user_id}/info` | ✅ supported | ✅ |  |
 | `get_latest_user_info_user_v2_user__user_id__info_latest_get` | `GET /v2/user/{user_id}/info/latest` | ✅ supported | ✅ |  |
 | `get_paginated_lab_tests_for_team_v3_lab_test_get` | `GET /v3/lab_test` | ✅ supported | ✅ |  |
+| `estimate_order_set_pricing_v3_lab_test_estimate_order_set_pricing_post` | `POST /v3/lab_test/estimate_order_set_pricing` | ✅ supported | ❌ disabled | prices are contract-owned; the emulator prices from the configured catalog (lab test price, marker price) and models the documented shape only |
 | `get_team_lab_accounts_v3_lab_test_lab_account_get` | `GET /v3/lab_test/lab_account` | ✅ supported | ❌ disabled | lab-account inventory is fixture-owned; the emulator models the documented shape, filters and routing rules, not a live account inventory |
 | `get_lab_tests_for_team_v3_lab_tests_get` | `GET /v3/lab_tests` | ✅ supported | ✅ |  |
 | `get_lab_test_for_team_v3_lab_tests__lab_test_id__get` | `GET /v3/lab_tests/{lab_test_id}` | ✅ supported | ✅ |  |
 | `get_labs_v3_lab_tests_labs_get` | `GET /v3/lab_tests/labs` | ✅ supported | ✅ |  |
+| `get_markers_v3_lab_tests_markers_get` | `GET /v3/lab_tests/markers` | ✅ supported | ❌ disabled | the marker inventory is the team's catalog (and any configured marker catalog); prices and availability are account-owned, so the emulator models the documented shape and filters, not a live inventory |
 | `get_markers_for_lab_test_v3_lab_tests__lab_test_id__markers_get` | `GET /v3/lab_tests/{lab_test_id}/markers` | ✅ supported | ✅ |  |
 | `list_order_set_markers_v3_lab_tests_list_order_set_markers_post` | `POST /v3/lab_tests/list_order_set_markers` | ✅ supported | ✅ |  |
 | `create_order_v3_order_post` | `POST /v3/order` | ✅ supported | ✅ | Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders, without production parity certification. |

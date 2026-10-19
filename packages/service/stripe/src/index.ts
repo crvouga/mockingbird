@@ -50,6 +50,7 @@ import { invoiceItemHandlers } from "./invoice-items.js"
 import { invoicePaymentHandlers } from "./invoice-payments.js"
 import { invoiceHandlers } from "./invoices.js"
 import { ledgerHandlers } from "./ledger.js"
+import { PaymentHolds } from "./payment-holds.js"
 import { paymentIntentHandlers } from "./payment-intents.js"
 import { paymentMethodHandlers } from "./payment-methods.js"
 import { priceHandlers } from "./prices.js"
@@ -77,6 +78,8 @@ export { ACME_CORPUS } from "./corpus-data.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 export type { StripeWebhookEvent, WebhookPublisher } from "./internal.js"
+export type { HeldEvent, PaymentHold } from "./payment-holds.js"
+export { PaymentHolds } from "./payment-holds.js"
 export {
   QA_AMOUNTS,
   QA_COUPON_CODES,
@@ -174,6 +177,8 @@ export class StripeAPI implements FetchAPI {
   readonly sqlite: SqliteClient
   readonly accounts: AccountDirectory
   readonly adminWebhookEndpoints: Collection<WebhookEndpoint>
+  /** Customers whose webhooks are held and whose lookups fail (`/__admin/payment-holds`). */
+  readonly holds = new PaymentHolds()
   private readonly service: Service
   private readonly state: StripeState
   private readonly services: Services
@@ -387,6 +392,18 @@ export class StripeAPI implements FetchAPI {
     if (config?.corpus && this.corpus) seedCorpus(partition, this.corpus)
     this.tick()
 
+    const heldLookup = this.heldLookup(request, url, partition)
+    if (heldLookup)
+      return this.decorate(
+        this.errorResponse({
+          status: 503,
+          type: "api_error",
+          message: "An unknown error occurred",
+        }),
+        version,
+        cors,
+      )
+
     const idempotencyKey = request.method === "POST" ? request.headers.get("idempotency-key") : null
     if (idempotencyKey !== null && (idempotencyKey.length === 0 || idempotencyKey.length > 255))
       return fail({ status: 400, message: INVALID_IDEMPOTENCY_KEY })
@@ -423,6 +440,27 @@ export class StripeAPI implements FetchAPI {
       )
     }
     return this.decorate(response, version, cors)
+  }
+
+  /**
+   * A secret-key read a payment hold fails: a list filtered by a held customer, or the retrieve
+   * of a PaymentIntent that customer owns. Publishable-key calls (Stripe.js) are not affected.
+   */
+  private heldLookup(
+    request: Request,
+    url: URL,
+    partition: ReturnType<StripeState["for"]>,
+  ): boolean {
+    if (!this.holds.active || request.method !== "GET" || requestInfo(request).publishable)
+      return false
+    if (this.holds.holdsLookups(url.searchParams.get("customer"))) return true
+    const intentId = /^\/v1\/payment_intents\/([^/]+)$/.exec(url.pathname)?.[1]
+    if (intentId === undefined) return false
+    let id = intentId
+    try {
+      id = decodeURIComponent(intentId)
+    } catch {}
+    return this.holds.holdsLookups(partition.paymentIntents.get(id)?.customer)
   }
 
   /** Expand and version-shape a JSON response. */
@@ -539,6 +577,7 @@ export class StripeAPI implements FetchAPI {
 
   async reset(): Promise<void> {
     this.lastTick = Number.NEGATIVE_INFINITY
+    this.holds.clear()
     await this.service.reset()
   }
 }

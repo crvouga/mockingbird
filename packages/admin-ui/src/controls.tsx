@@ -504,6 +504,7 @@ const FAULT_MATCH = [
   "pathPattern",
   "requestHeaders",
   "query",
+  "requestBody",
 ]
 const FAULT_SCHEDULE = ["after", "every", "rate", "count", "from", "until"]
 const FAULT_ACTION = [
@@ -734,7 +735,7 @@ export function FaultsView({ api, revision }: { api: Api; revision: number }) {
               <Form layout="vertical">
                 <Form.Item
                   label="Rule JSON"
-                  extra="Any rule field, including pathPattern, requestHeaders, query, namespace, from, until, headers, effect and params."
+                  extra="Any rule field, including pathPattern, requestHeaders, query, requestBody, namespace, from, until, headers, effect and params."
                 >
                   <Input.TextArea
                     aria-label="Fault rule JSON"
