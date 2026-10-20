@@ -575,6 +575,14 @@ components:
               type: string
             param:
               type: string
+    CheckoutSessionMetadata:
+      type: object
+      description: >-
+        Flex sets no limit on the number of keys or the length of a key or value. It refuses the
+        whole object with a 422 when its compact JSON is more than 4096 bytes of UTF-8, measured
+        against test mode; the emulator enforces that limit in code.
+      additionalProperties:
+        type: string
     StringMap:
       type: object
       maxProperties: 50
@@ -702,7 +710,6 @@ components:
         quantity:
           type: integer
           minimum: 1
-          maximum: 100
     Recurring:
       type: object
       description: >-
@@ -750,11 +757,10 @@ components:
               maxLength: 255
             line_items:
               type: array
-              maxItems: 20
               items:
                 $ref: "#/components/schemas/LineItem"
             metadata:
-              $ref: "#/components/schemas/StringMap"
+              $ref: "#/components/schemas/CheckoutSessionMetadata"
             mode:
               type: string
               enum: [payment, subscription, off_session, setup]

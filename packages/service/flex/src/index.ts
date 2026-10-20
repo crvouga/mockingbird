@@ -143,6 +143,24 @@ const error = (status: number, type: string, message: string, extra: Record<stri
 const invalid = (message: string, param?: string) =>
   error(400, "invalid_request_error", message, param ? { param } : {})
 
+/** Flex counts session metadata as compact JSON in UTF-8 and refuses more than 4096 bytes. */
+const CHECKOUT_SESSION_METADATA_MAX_BYTES = 4096
+
+const metadataBytes = (metadata: Record<string, unknown>) =>
+  new TextEncoder().encode(JSON.stringify(metadata)).length
+
+/** Flex answers body validation with a FastAPI-style 422, not the 400 error envelope. */
+const metadataTooLarge = () =>
+  jsonRes(422, {
+    detail: [
+      {
+        loc: ["body", "checkout_session", "metadata"],
+        msg: `metadata must be less than or equal to ${CHECKOUT_SESSION_METADATA_MAX_BYTES} bytes`,
+        type: "value_error",
+      },
+    ],
+  })
+
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
@@ -420,6 +438,12 @@ export class FlexAPI implements FetchAPI {
     const problem = this.validate(context)
     if (problem) return problem
     const input = envelope(context, "checkout_session")
+    if (
+      isRecord(input.metadata) &&
+      metadataBytes(input.metadata) > CHECKOUT_SESSION_METADATA_MAX_BYTES
+    ) {
+      return metadataTooLarge()
+    }
     const mode = (input.mode ?? "payment") as SessionMode
     const lines = (input.line_items ?? []) as {
       price_data: { product: string; unit_amount: number; recurring?: Recurring }
