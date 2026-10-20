@@ -219,6 +219,131 @@ test("sandbox billing exceptions are fixture-owned, explicit and independent of 
   expect(() => runtime(accounts, { profile: "typo" } as never)).toThrow("profile")
 })
 
+test("best-guess NY/NJ explicit client billing preserves the selected nondelegated account and advertised inventory (#441)", async () => {
+  for (const profile of ["sandbox-observed", "observed"] as const) {
+    const allowed_billing = { patient_bill_passthrough: ["NY", "NJ"] }
+    const mock = runtime([account(other, { delegated_flow: "not_delegated", allowed_billing })], {
+      profile,
+      ...(profile === "observed" ? { oracle: "sandbox" as const } : {}),
+      accounts: { [other]: { allowBilling: { client_bill: ["NY", "NJ"] } } },
+    })
+    mock.instance().defaultBillingTypes = { bioreference: "patient_bill_passthrough" }
+    const listedAccount = async () => {
+      const response = await call(mock, "GET", "/v3/lab_test/lab_account")
+      expect(response.status).toBe(200)
+      return (await response.json()).data.find((entry: { id: string }) => entry.id === other)
+    }
+    expect(await listedAccount()).toMatchObject({
+      id: other,
+      delegated_flow: "not_delegated",
+      allowed_billing,
+    })
+    for (const state of ["NY", "NJ"]) {
+      const patient_address = {
+        first_line: "1 Example St",
+        city: state === "NY" ? "New York" : "Newark",
+        state,
+        zip: state === "NY" ? "10001" : "07102",
+        country: "US",
+      }
+      // Explicit client billing must place the order with this account, even
+      // though the fixture advertises only passthrough and that is the default.
+      const created = await order(mock, { lab_account_id: other, patient_address })
+      expect(created.status).toBe(200)
+      expect(created.body.order).toMatchObject({
+        lab_account_id: other,
+        billing_type: "client_bill",
+      })
+      const response = await call(mock, "GET", `/v3/order/${created.body.order.id}`)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toMatchObject({
+        lab_account_id: other,
+        billing_type: "client_bill",
+      })
+      const omitted = await order(mock, {
+        lab_account_id: other,
+        patient_address,
+        billing_type: undefined,
+      })
+      expect(omitted.status).toBe(200)
+      expect(omitted.body.order).toMatchObject({
+        lab_account_id: other,
+        billing_type: "patient_bill_passthrough",
+      })
+    }
+    // An order-specific exception must not rewrite the advertised account contract.
+    expect((await listedAccount()).allowed_billing).toEqual(allowed_billing)
+  }
+})
+
+test("best-guess client billing acceptance stays scoped to explicit account/state fixtures and preserves strict defaults (#441)", async () => {
+  const unconfigured = "77777777-7777-4777-8777-777777777777"
+  const allowed_billing = { patient_bill_passthrough: ["NY", "NJ"] }
+  const accounts = [
+    account(other, { delegated_flow: "not_delegated", allowed_billing }),
+    account(unconfigured, { delegated_flow: "not_delegated", allowed_billing }),
+    account(customer, { delegated_flow: "order_delegated", allowed_billing }),
+  ]
+  const policies = {
+    [other]: { allowBilling: { client_bill: ["NY", "NJ"] } },
+    [customer]: {
+      rejectBilling: {
+        client_bill: "Lab 13 does not support billing type patient_bill_passthrough",
+      },
+    },
+  }
+  const mock = runtime(accounts, { profile: "sandbox-observed", accounts: policies })
+  const ny = {
+    first_line: "1 Example St",
+    city: "New York",
+    state: "NY",
+    zip: "10001",
+    country: "US",
+  }
+  const controls = [
+    {
+      extra: { lab_account_id: other },
+      detail:
+        "Billing type client_bill is not available in state AZ for the lab account used for this order",
+    },
+    {
+      extra: { lab_account_id: unconfigured, patient_address: ny },
+      detail: "Billing type client_bill is not supported by the lab account used for this order",
+    },
+    {
+      extra: { lab_account_id: customer, patient_address: ny },
+      detail: "Lab 13 does not support billing type patient_bill_passthrough",
+    },
+    {
+      extra: { lab_account_id: other, patient_address: ny, billing_type: undefined },
+      detail: "Lab 13 does not support billing type client_bill",
+    },
+    {
+      extra: { lab_account_id: other, patient_address: ny, billing_type: "patient_bill" },
+      detail: "Billing type patient_bill is not supported by the lab account used for this order",
+    },
+  ]
+  for (const { extra, detail } of controls) {
+    const refused = await order(mock, extra)
+    expect(refused.status).toBe(400)
+    expect<unknown>(refused.body).toEqual({ detail })
+  }
+  expect((await (await call(mock, "GET", "/v3/orders")).json()).orders).toHaveLength(0)
+  expect(mock.instance().webhookEvents()).toHaveLength(0)
+
+  for (const profile of ["native", "expected-contract"] as const) {
+    // Merely attaching fixture exceptions must not enable them in strict profiles.
+    const strict = runtime(accounts, { profile, accounts: policies })
+    const refused = await order(strict, { lab_account_id: other, patient_address: ny })
+    expect(refused.status).toBe(400)
+    expect<unknown>(refused.body).toEqual({
+      detail: "Billing type client_bill is not supported by the lab account used for this order",
+    })
+    expect((await (await call(strict, "GET", "/v3/orders")).json()).orders).toHaveLength(0)
+    expect(strict.instance().webhookEvents()).toHaveLength(0)
+  }
+})
+
 test("best-guess account refusal stays explicit with a physician present and omitted billing stays independent (#440)", async () => {
   for (const oracle of ["sandbox", "production"] as const) {
     const detail = `Lab ${oracle === "sandbox" ? 13 : 14} does not support billing type patient_bill_passthrough`
