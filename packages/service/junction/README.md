@@ -1049,32 +1049,71 @@ from the public contract, **not measured production parity**. Both `expected-con
 and `sandbox-observed` return the persisted account association in POST/GET; a synthetic
 requisition uses that same stored provider account number.
 
-`sandbox-observed` uses explicit, account-owned observations, never a global delegated
-account billing override. For example, with synthetic fixture IDs:
+For [#440](https://github.com/crvouga/mockingbird/issues/440), the scoped account-owned
+billing control is a **best guess, not oracle-verified**. The reporter observed an explicit
+`client_bill` refusal for a root-selected delegated BioReference account even though its listing
+allowed that billing in AZ. They reported `400 {"detail":"Lab 13 does not support billing type patient_bill_passthrough"}`
+in the sandbox and the same error with `Lab 14` in production, including sandbox panel/add-on,
+home/walk-in and physician-present controls. These are report-derived errors; neither their
+cause nor a general vendor billing rule has been established. The repository's
+[2026-10-20 sanitized probe](https://github.com/crvouga/mockingbird/actions/runs/39397939244)
+could not find matching account/test inventory, recorded no order observations and created no
+user or orders. This evidence limit does not prevent a suite from testing the explicit fallback.
+
+Configure the reported refusal against the ID of a synthetic account loaded by `labAccounts`
+or your corpus. For example:
 
 ```ts
 import { createRuntime } from "@crvouga/mockingbird-service-junction"
 
+const delegatedAccountId = "11111111-1111-4111-8111-111111111111"
 const runtime = createRuntime({
+  labAccounts: [{
+    id: delegatedAccountId,
+    lab: "bioreference",
+    org_id: "55555555-5555-4555-8555-555555555555",
+    delegated_flow: "order_delegated",
+    allowed_billing: { client_bill: ["AZ"] },
+  }],
   labAccountBehavior: {
-    profile: "sandbox-observed",
+    profile: "observed",
+    oracle: "sandbox",
     accounts: {
-      "synthetic-delegated-id": {
+      [delegatedAccountId]: {
         rejectBilling: { client_bill: "Lab 13 does not support billing type patient_bill_passthrough" },
       },
-      "synthetic-ny-id": { allowBilling: { client_bill: ["NY", "NJ"] } },
     },
   },
 })
 ```
 
-These controls encode the independently reported observations in #440/#441. For #440 the
-reporter states that production returns the same refusal for a delegated BioReference
-account with explicit `client_bill` ("Lab 14 ..." there, "Lab 13 ..." in the sandbox);
-that is a reported observation, not a repository probe, and the vendor has not explained it,
-so no billing rule is built in. Exceptions apply only to explicit
-root account IDs and explicit billing. `defaultBillingTypes` still governs omitted
-billing independently. `GET/PUT /__admin/lab-account-behavior` inspect/change one
+Load a BioReference panel or marker catalog in the same runtime's corpus, then submit your
+normal valid order with root `lab_account_id: delegatedAccountId` and
+`billing_type: "client_bill"`. This configuration returns the exact configured 400 detail before
+creating an order or webhook, including when `physician` is present. It applies to both panel
+and add-on orders and home/walk-in collection. To model the production report, choose
+`oracle: "production"` and change the configured detail to `Lab 14 ...`; the oracle label
+describes the intended environment, not proof of verification. `sandbox-observed` remains an
+alias for `observed` with `oracle: "sandbox"`.
+
+The fallback is deliberately narrow: only that listed account's explicit root ID and explicit
+billing activate `rejectBilling`. Other delegated accounts keep their own policies. Omitting
+`billing_type` still uses `defaultBillingTypes` (or `client_bill` when no default is configured)
+and checks the account's listed billing. Thus this fixture accepts an omitted default
+`client_bill` even though it refuses explicit `client_bill`; configuring an omitted
+`patient_bill_passthrough` default rejects because the account lacks that billing, independently
+of `rejectBilling`. This distinction is the chosen emulator contract, not a verified production
+omission behavior. Nested-only IDs do not select the customer account. In the sandbox profile
+they follow the platform fallback with null POST/GET association; a successful root-selected
+account retains its persisted ID on both responses. Never treat nested-only acceptance as a
+successful delegated-account selection or retry a rejected customer order by dropping its ID.
+
+These controls do not model why Junction overrides the requested billing, validate physician
+selection, or establish any production omission/returned-identity rule. Native behavior remains
+the default. For the separately reported NY/NJ exception in #441, `allowBilling` can map an
+explicit billing type to allowed states on that fixture's account, for example
+`{ allowBilling: { client_bill: ["NY", "NJ"] } }`; this too is a best guess, not oracle-verified.
+`GET/PUT /__admin/lab-account-behavior` inspect/change one
 namespace's policy; changes survive its reset and never affect another namespace.
 Unknown profile names are rejected. CLI/server equivalents are `--lab-account-profile`
 and `--lab-account-sandbox-policies <json-file>` (the account-policy object).

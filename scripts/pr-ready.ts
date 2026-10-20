@@ -629,15 +629,24 @@ async function prHeadSha(branch: string): Promise<string> {
 }
 
 async function readPr(branch: string): Promise<PrView | null> {
+  // A reused task branch may still resolve to its previous merged/closed PR with `pr view`.
+  // Only an open PR against trunk can represent the current batch.
   const res = await gh([
     "pr",
-    "view",
+    "list",
+    "--state",
+    "open",
+    "--head",
     branch,
+    "--base",
+    TRUNK_BRANCH,
+    "--limit",
+    "1",
     "--json",
     "number,url,state,title,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName,headRefOid",
   ])
   if (res.code !== 0) return null
-  return JSON.parse(res.stdout) as PrView
+  return (JSON.parse(res.stdout) as PrView[])[0] ?? null
 }
 
 type ReviewThread = {

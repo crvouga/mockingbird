@@ -219,6 +219,62 @@ test("sandbox billing exceptions are fixture-owned, explicit and independent of 
   expect(() => runtime(accounts, { profile: "typo" } as never)).toThrow("profile")
 })
 
+test("best-guess account refusal stays explicit with a physician present and omitted billing stays independent (#440)", async () => {
+  for (const oracle of ["sandbox", "production"] as const) {
+    const detail = `Lab ${oracle === "sandbox" ? 13 : 14} does not support billing type patient_bill_passthrough`
+    const mock = runtime(
+      [
+        account(customer, { delegated_flow: "order_delegated" }),
+        account(other, { delegated_flow: "order_delegated" }),
+      ],
+      {
+        profile: "observed",
+        oracle,
+        accounts: { [customer]: { rejectBilling: { client_bill: detail } } },
+      },
+    )
+    // The shape matches ClientFacingPhysician and the synthetic order physician.
+    // This only tests that a physician cannot bypass the billing control; physician
+    // selection/validation is not modelled by this profile.
+    const physician = { first_name: "Synthetic", last_name: "Physician", npi: "0000000000" }
+    const refused = await order(mock, { lab_account_id: customer, physician })
+    expect(refused.status).toBe(400)
+    expect<unknown>(refused.body).toEqual({ detail })
+    expect((await (await call(mock, "GET", "/v3/orders")).json()).orders).toHaveLength(0)
+    expect(mock.instance().webhookEvents()).toHaveLength(0)
+
+    // No global delegated-account rule: the same request on an unconfigured
+    // delegated account still follows that account's listed billing.
+    const unconfigured = await order(mock, { lab_account_id: other, physician })
+    expect(unconfigured.status).toBe(200)
+    expect(unconfigured.body.order.lab_account_id).toBe(other)
+
+    // This is the chosen fallback contract, not a vendor omission observation:
+    // explicit-only rejectBilling must not reject an omitted default client_bill.
+    const omitted = await order(mock, { lab_account_id: customer, billing_type: undefined })
+    expect(omitted.status).toBe(200)
+    expect(omitted.body.order.billing_type).toBe("client_bill")
+    expect(omitted.body.order.lab_account_id).toBe(customer)
+    const read = await (await call(mock, "GET", `/v3/order/${omitted.body.order.id}`)).json()
+    expect(read.billing_type).toBe("client_bill")
+    expect(read.lab_account_id).toBe(customer)
+
+    mock.instance().defaultBillingTypes = { bioreference: "patient_bill_passthrough" }
+    const omittedWithDefault = await order(mock, {
+      lab_account_id: customer,
+      billing_type: undefined,
+    })
+    expect(omittedWithDefault.status).toBe(400)
+    expect<unknown>(omittedWithDefault.body).toEqual({
+      detail: "Lab 13 does not support billing type patient_bill_passthrough",
+    })
+    // An explicit client_bill still hits the account-owned refusal after changing the default.
+    const explicitWithDefault = await order(mock, { lab_account_id: customer, physician })
+    expect(explicitWithDefault.status).toBe(400)
+    expect<unknown>(explicitWithDefault.body).toEqual({ detail })
+  }
+})
+
 test("profiles apply to panel/add-on and home/walk-in consistently, keeping rejected orders/webhooks absent (#444)", async () => {
   for (const collection_method of ["at_home_phlebotomy", "walk_in_test"]) {
     for (const order_set of [

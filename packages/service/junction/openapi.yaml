@@ -757,7 +757,7 @@ paths:
         parity:
           enabled: true
           safe: true
-          reason: Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders, without production parity certification.
+          reason: Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders as a best guess, not oracle-verified. Account-specific billing refusals are opt-in report-derived behavior, not a global vendor rule.
       requestBody:
         required: true
         content:
