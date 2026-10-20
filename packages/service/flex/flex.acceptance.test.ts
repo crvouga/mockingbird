@@ -1157,6 +1157,45 @@ describe("hosted checkout: subscription and one-time modes (Flex API reference)"
     expect(h.runtime.instance().subscriptions()).toEqual([])
   })
 
+  test("checkout session metadata is limited only by 4096 bytes of compact UTF-8 JSON, like Flex", async () => {
+    const h = docsHarness()
+    const create = (metadata: Record<string, string>) =>
+      h.call("POST", "/v1/checkout/sessions", {
+        checkout_session: {
+          mode: "payment",
+          success_url: SUCCESS,
+          metadata,
+          line_items: [
+            { price_data: { product: MEMBERSHIP_FLEX_PRODUCT, unit_amount: 500 }, quantity: 3 },
+          ],
+        },
+      })
+    const tooLarge = {
+      detail: [
+        {
+          loc: ["body", "checkout_session", "metadata"],
+          msg: "metadata must be less than or equal to 4096 bytes",
+          type: "value_error",
+        },
+      ],
+    }
+    // Boundaries measured against Flex's test mode: {"k":"x"*4088} and {"k":"®"*2044} are 4096 bytes.
+    expect((await create({ k: "x".repeat(4088) })).status).toBe(200)
+    const overAscii = await create({ k: "x".repeat(4089) })
+    expect(overAscii.status).toBe(422)
+    expect(overAscii.body).toEqual(tooLarge)
+    expect((await create({ k: "®".repeat(2044) })).status).toBe(200)
+    const overUtf8 = await create({ k: "®".repeat(2045) })
+    expect(overUtf8.status).toBe(422)
+    expect(overUtf8.body).toEqual(tooLarge)
+    expect((await create({ a: "y", k: "x".repeat(4080) })).status).toBe(200)
+    expect((await create({ a: "y", k: "x".repeat(4081) })).status).toBe(422)
+    // Flex caps neither a value's length nor the number of keys, only the total.
+    expect((await create({ k: "x".repeat(3500) })).status).toBe(200)
+    const sixtyKeys = Object.fromEntries(Array.from({ length: 60 }, (_unused, i) => [`k${i}`, "v"]))
+    expect((await create(sixtyKeys)).status).toBe(200)
+  })
+
   test("a declined subscription checkout starts nothing; paying again starts exactly one subscription", async () => {
     const h = docsHarness()
     const created = await h.call("POST", "/v1/checkout/sessions", {
