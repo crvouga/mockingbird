@@ -144,7 +144,7 @@ const invalid = (message: string, param?: string) =>
   error(400, "invalid_request_error", message, param ? { param } : {})
 
 /** Flex counts session metadata as compact JSON in UTF-8 and refuses more than 4096 bytes. */
-export const CHECKOUT_SESSION_METADATA_MAX_BYTES = 4096
+const CHECKOUT_SESSION_METADATA_MAX_BYTES = 4096
 
 const metadataBytes = (metadata: Record<string, unknown>) =>
   new TextEncoder().encode(JSON.stringify(metadata)).length
