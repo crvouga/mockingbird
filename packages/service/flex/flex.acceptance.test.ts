@@ -1196,6 +1196,45 @@ describe("hosted checkout: subscription and one-time modes (Flex API reference)"
     expect((await create(sixtyKeys)).status).toBe(200)
   })
 
+  test("a checkout session takes any number of line items, like Flex", async () => {
+    const h = docsHarness()
+    const create = (count: number) =>
+      h.call("POST", "/v1/checkout/sessions", {
+        checkout_session: {
+          mode: "payment",
+          success_url: SUCCESS,
+          line_items: Array.from({ length: count }, () => ({
+            price_data: { product: MEMBERSHIP_FLEX_PRODUCT, unit_amount: 34 },
+            quantity: 1,
+          })),
+        },
+      })
+    // Flex's test mode accepted 100, 300, 500, 700, 900 and 1,142 line items in one session.
+    for (const count of [21, 100]) {
+      const created = await create(count)
+      expect(created.status).toBe(200)
+      expect((created.body.checkout_session as Json).amount_total).toBe(34 * count)
+    }
+  })
+
+  test("a line item takes any quantity, like Flex", async () => {
+    const h = docsHarness()
+    // Flex's test mode accepted quantities of 101, 180, 1,142 and 5,000 on one line item.
+    for (const quantity of [101, 5000]) {
+      const created = await h.call("POST", "/v1/checkout/sessions", {
+        checkout_session: {
+          mode: "payment",
+          success_url: SUCCESS,
+          line_items: [
+            { price_data: { product: MEMBERSHIP_FLEX_PRODUCT, unit_amount: 34 }, quantity },
+          ],
+        },
+      })
+      expect(created.status).toBe(200)
+      expect((created.body.checkout_session as Json).amount_total).toBe(34 * quantity)
+    }
+  })
+
   test("a declined subscription checkout starts nothing; paying again starts exactly one subscription", async () => {
     const h = docsHarness()
     const created = await h.call("POST", "/v1/checkout/sessions", {

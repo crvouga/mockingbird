@@ -710,7 +710,6 @@ components:
         quantity:
           type: integer
           minimum: 1
-          maximum: 100
     Recurring:
       type: object
       description: >-
@@ -758,7 +757,6 @@ components:
               maxLength: 255
             line_items:
               type: array
-              maxItems: 20
               items:
                 $ref: "#/components/schemas/LineItem"
             metadata:
