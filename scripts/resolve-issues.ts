@@ -12,8 +12,9 @@
  *     --yes            skip the confirmation prompt
  *
  * The queue is /resolve-issues' order: the oldest open `agent-reported` issues, parity first, then
- * bug, then feature, that nobody has claimed (no assignee), that wait on nobody (no `needs-info` or
- * `needs-oracle-check`) and that no open PR already closes.
+ * bug, then feature, that nobody has claimed (no assignee), that need no further report details
+ * (no `needs-info`) and that no open PR already closes. `needs-oracle-check` issues stay eligible
+ * for documented best guesses or explicit unsupported errors.
  *
  * Safeguards, in the order a run meets them:
  *   - You confirm the plan (issues, model, ref) before anything is created.
@@ -76,8 +77,8 @@ const POLL_MS = 5_000
 /** Queue order: /resolve-issues takes parity first, then bug, then feature. */
 export const QUEUE_KINDS = ["parity", "bug", "feature"] as const
 
-/** Labels that mean the issue waits on someone else. */
-export const WAITING_LABELS = ["needs-info", "needs-oracle-check"] as const
+/** Missing report details can block; missing oracle evidence must not stall the queue. */
+export const WAITING_LABELS = ["needs-info"] as const
 
 export const DEFAULT_MAX = 3
 

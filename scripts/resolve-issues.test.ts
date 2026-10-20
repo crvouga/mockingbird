@@ -41,13 +41,24 @@ test("skips claimed, waiting, already-fixed, new-service and unreported issues",
   const queue = [
     issue(1, ["bug"], { assignees: [{ login: "someone" }] }),
     issue(2, ["bug", "needs-info"]),
-    issue(3, ["parity", "needs-oracle-check"]),
     issue(4, ["feature"], { closedByPullRequestsReferences: [{ number: 99 }] }),
     issue(5, ["new-service"]),
     { ...issue(6, []), labels: [{ name: "bug" }] },
     issue(7, ["feature"]),
   ]
   expect(pickFromQueue(queue, 10)).toEqual([7])
+})
+
+test("oracle-unverified issues remain eligible for documented fallback resolutions", () => {
+  const queue = [
+    issue(1, ["bug"]),
+    issue(2, ["parity", "needs-oracle-check"]),
+    issue(3, ["feature", "needs-oracle-check"]),
+    issue(4, ["parity", "needs-oracle-check", "needs-info"]),
+    issue(5, ["parity", "needs-oracle-check"], { assignees: [{ login: "someone" }] }),
+  ]
+  expect(pickFromQueue(queue, 10)).toEqual([2, 1, 3])
+  expect(pickFromQueue(queue, 1)).toEqual([2])
 })
 
 test("parses issue numbers, with or without #, once each", () => {
