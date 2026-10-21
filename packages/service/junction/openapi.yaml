@@ -757,7 +757,7 @@ paths:
         parity:
           enabled: true
           safe: true
-          reason: Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders as a best guess, not oracle-verified. Account-specific billing refusals are opt-in report-derived behavior, not a global vendor rule.
+          reason: Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders as a best guess, not oracle-verified. Account-specific billing refusals and NY/NJ explicit client_bill acceptance (#441) are opt-in report-derived behavior, not a global vendor rule; the acceptance preserves POST/GET account identity and billing without changing advertised allowed_billing.
       requestBody:
         required: true
         content:

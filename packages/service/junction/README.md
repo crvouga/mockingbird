@@ -1110,9 +1110,8 @@ successful delegated-account selection or retry a rejected customer order by dro
 
 These controls do not model why Junction overrides the requested billing, validate physician
 selection, or establish any production omission/returned-identity rule. Native behavior remains
-the default. For the separately reported NY/NJ exception in #441, `allowBilling` can map an
-explicit billing type to allowed states on that fixture's account, for example
-`{ allowBilling: { client_bill: ["NY", "NJ"] } }`; this too is a best guess, not oracle-verified.
+the default. The separately reported NY/NJ acceptance uses the
+[`allowBilling` positive control](#explicit-nynj-customer-account-billing-441) below.
 `GET/PUT /__admin/lab-account-behavior` inspect/change one
 namespace's policy; changes survive its reset and never affect another namespace.
 Unknown profile names are rejected. CLI/server equivalents are `--lab-account-profile`
@@ -1134,6 +1133,54 @@ until the combined-panel semantics are verified. Malformed add-ons also refuse w
 an order; requested add-on markers are never silently discarded.
 Panel and custom orders share account/billing checks for home and walk-in collection.
 The native profile keeps its existing panel-only contract.
+
+### Explicit NY/NJ customer-account billing (#441)
+
+The positive control for [#441](https://github.com/crvouga/mockingbird/issues/441) is a
+**best guess, not oracle-verified**. The reporter observed a non-delegated customer-owned
+BioReference account accepting explicit `client_bill` in NY despite advertising only
+`patient_bill_passthrough` for NY/NJ. The reported POST and independent GET both retained
+the requested account ID and `client_bill`. The
+[public billing rules](https://docs.junction.com/lab/overview/lab-accounts#billing-types)
+require the requested billing type and patient state to be listed; they do not establish this
+account-specific exception. The repository's
+[2026-10-20 sandbox probe](https://github.com/crvouga/mockingbird/actions/runs/39397939244)
+returned `complete: false` with `matching account inventory unavailable`, no observations and
+no resources created. No vendor acceptance was verified by that run.
+
+Load a synthetic active BioReference customer account with `delegated_flow: "not_delegated"`
+and `allowed_billing: { patient_bill_passthrough: ["NY", "NJ"] }`, plus an orderable
+BioReference panel. Set `labAccountBehavior` to the following, replacing the synthetic UUID
+with that fixture account's ID:
+
+```json
+{
+  "profile": "observed",
+  "oracle": "sandbox",
+  "accounts": {
+    "22222222-2222-4222-8222-222222222222": {
+      "allowBilling": { "client_bill": ["NY", "NJ"] }
+    }
+  }
+}
+```
+
+Submit a valid order with that ID at the root `lab_account_id`, explicit
+`billing_type: "client_bill"` and a NY or NJ patient address. POST and independent GET
+preserve both the selected account ID and `client_bill`; the account listing still advertises
+only its original `patient_bill_passthrough` states. This models an ordering exception without
+rewriting inventory or changing the requested billing. Including NJ is an explicit fixture
+assumption from the reported NY/NJ account, not an observed NJ oracle response.
+
+The exception applies only to the configured account, explicit billing type and configured
+states under `observed` (or its `sandbox-observed` alias). An unconfigured account or a state
+outside NY/NJ still fails the listed billing/state checks. Omitting `billing_type` evaluates
+`defaultBillingTypes` against the listed account billing: the default `client_bill` rejects,
+while an explicitly configured `patient_bill_passthrough` default accepts in NY/NJ and is
+returned as such. Native and `expected-contract` profiles retain their existing validation.
+The separate delegated refusal in #440 still requires its own `rejectBilling` entry; neither
+control establishes a universal rule based on delegation or lab. See
+`junction.account-profiles.test.ts` for the acceptance cases and strict negative controls.
 
 ### Observed profile and oracle label
 
