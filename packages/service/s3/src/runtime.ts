@@ -13,6 +13,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { document } from "./generated/openapi.js"
+import { DEFAULT_VIRTUAL_HOSTS, toPathStyle } from "./hosting.js"
 import { accessKeyCredential, S3_NAMESPACE, S3API } from "./index.js"
 import type { S3SeedObject } from "./state.js"
 
@@ -64,6 +65,11 @@ export type S3RuntimeOptions = {
   buckets?: readonly string[]
   objects?: readonly S3SeedObject[]
   credentials?: Readonly<Record<string, string>>
+  /**
+   * Base hosts for virtual-hosted-style addressing: `Host: <bucket>.<base>` names the bucket and
+   * the path is the key. Default `["localhost"]`; `[]` leaves every request path-style.
+   */
+  virtualHosts?: readonly string[]
   webhooks?: {
     endpoints?: WebhookEndpoint[]
     retryDelaysMs?: readonly number[]
@@ -179,6 +185,7 @@ export const createRuntime = (options: S3RuntimeOptions = {}): S3Runtime => {
         ...(options.buckets ? { buckets: options.buckets } : {}),
         ...(options.objects ? { objects: options.objects } : {}),
         ...(options.credentials ? { credentials: options.credentials } : {}),
+        ...(options.virtualHosts ? { virtualHosts: options.virtualHosts } : {}),
         onNotification: (event) =>
           hub.publish({
             namespace,
@@ -203,5 +210,13 @@ export const createRuntime = (options: S3RuntimeOptions = {}): S3Runtime => {
       }),
     admin,
   })
-  return Object.assign(runtime, { webhooks: hub })
+  // Route by bucket host before the shared runtime sees the path, so the operation id (faults,
+  // latency, metrics) is the one the request means. The admin plane keeps its path on any host.
+  const bases = options.virtualHosts ?? DEFAULT_VIRTUAL_HOSTS
+  const adminPrefix = (options.adminPrefix ?? "/__admin").replace(/\/+$/, "")
+  const fetch = runtime.fetch.bind(runtime)
+  return Object.assign(runtime, {
+    webhooks: hub,
+    fetch: (request: Request) => fetch(toPathStyle(request, bases, adminPrefix)),
+  })
 }
