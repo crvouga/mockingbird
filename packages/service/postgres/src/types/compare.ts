@@ -1,6 +1,7 @@
 import { pgError } from "../errors/error.ts";
 import { type Interval, intervalCmp } from "./datetime.ts";
 import { jsonbCompare } from "./jsonb.ts";
+import { networkCompare } from "./network.ts";
 import { isNumeric, type Numeric, numericCmp, numericStripTrailingZeros, numericText } from "./numeric.ts";
 import {
   arrayElemType,
@@ -85,7 +86,11 @@ export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DE
     case "tsquery":
     case "bit":
     case "varbit":
+    case "macaddr":
       return cmpString(a as string, b as string);
+    case "inet":
+    case "cidr":
+      return networkCompare(a as string, b as string);
     case "bytea": {
       const ba = a as Uint8Array;
       const bb = b as Uint8Array;
@@ -216,6 +221,9 @@ export function datumKey(t: TypeId, v: Datum): string {
     case "tsquery":
     case "bit":
     case "varbit":
+    case "inet":
+    case "cidr":
+    case "macaddr":
       return `s${v}`;
     case "bytea":
       return `b${byteaText(v as Uint8Array)}`;

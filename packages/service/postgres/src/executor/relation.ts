@@ -1,17 +1,21 @@
 import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import type { Datum, TypedValue, TypeId } from "../types/value.ts";
-import { tv } from "../types/value.ts";
+import { normalizeTypeName, tv, type TypeMod } from "../types/value.ts";
 
 /** A column of an intermediate or final result relation. */
 export interface RelColumn {
   name: string;
   type: TypeId;
+  /** type modifier (`varchar(32)`, `numeric(10,2)`) of a column read straight from a table or cast to a typed name */
+  mod?: TypeMod | null;
   /** range-variable (table alias) the column belongs to; null for computed columns */
   table: string | null;
   /** hidden columns (e.g. ORDER BY helpers) are excluded from final output */
   hidden?: boolean;
   system?: boolean;
+  /** the only column of a function in FROM that returns a base type: a whole-row reference to the range variable is this value */
+  scalarFunction?: boolean;
 }
 
 export interface Relation {
@@ -93,6 +97,8 @@ export class RowScope {
       }
     }
     if (types.length === 0) return undefined;
+    const only = this.columns.find((c) => c.table === rangeVar && !c.system);
+    if (types.length === 1 && only?.scalarFunction) return tv(types[0]!, values[0] ?? null);
     return tv("record", { kind: "pgrecord", types, values, names });
   }
 
@@ -138,7 +144,7 @@ export function withCtes(env: ExecEnv, ctes: Map<string, Relation>): ExecEnv {
 
 /** Final result surfaced by the API layer. */
 export interface ExecResult {
-  columns: Array<{ name: string; type: TypeId }>;
+  columns: Array<{ name: string; type: TypeId; mod?: TypeMod | null }>;
   rows: Datum[][];
   command: string;
   rowCount: number;
@@ -147,7 +153,7 @@ export interface ExecResult {
 export function relationResult(rel: Relation, command: string): ExecResult {
   const visible = rel.columns.map((c, i) => ({ i, c })).filter(({ c }) => !c.hidden);
   return {
-    columns: visible.map(({ c }) => ({ name: c.name, type: c.type })),
+    columns: visible.map(({ c }) => ({ name: c.name, type: c.type, mod: c.mod ?? null })),
     rows: rel.rows.map((r) => visible.map(({ i }) => r[i] ?? null)),
     command,
     rowCount: rel.rows.length,
@@ -158,52 +164,72 @@ export function commandResult(command: string, rowCount: number): ExecResult {
   return { columns: [], rows: [], command, rowCount };
 }
 
-/** column name PG infers for an expression without an alias */
-export function inferColumnName(e: import("../ast/nodes.ts").Expr): string {
+/** What the parser calls a function that PostgreSQL's grammar calls something else (or nothing). */
+const INTERNAL_FUNCTION_LABELS: Record<string, string> = {
+  __any_array: "?column?",
+  __all_array: "?column?",
+  __overlaps: "overlaps",
+};
+
+/**
+ * PostgreSQL's FigureColname: the label of an expression and how strongly it names it. A column
+ * reference or function call (2) beats the type name of a cast around it (1), which beats nothing (0).
+ */
+function figureColumnName(e: import("../ast/nodes.ts").Expr): { name: string; strength: number } {
+  const named = (name: string, strength = 2) => ({ name, strength });
   switch (e.type) {
     case "colref":
-      return e.parts[e.parts.length - 1]!;
-    case "func":
-      return e.name[e.name.length - 1]!;
+      return named(e.parts[e.parts.length - 1]!);
+    case "func": {
+      const name = e.name[e.name.length - 1]!;
+      return name in INTERNAL_FUNCTION_LABELS ? named(INTERNAL_FUNCTION_LABELS[name]!, 0) : named(name);
+    }
     case "cast": {
-      const inner = inferColumnName(e.expr);
-      if (inner !== "?column?") return inner;
-      return e.target.parts[e.target.parts.length - 1]!;
+      const inner = figureColumnName(e.expr);
+      if (inner.strength > 1) return inner;
+      const last = e.target.parts[e.target.parts.length - 1]!;
+      // the grammar spells `int`, `boolean`, `double precision`... as their pg_catalog names (int4, bool, float8)
+      return named(e.target.parts.length === 1 ? (normalizeTypeName(last) ?? last) : last, 1);
     }
     case "collate":
-      return inferColumnName(e.expr);
+      return figureColumnName(e.expr);
     case "case":
-      return "case";
+      return named("case", 1);
     case "array_ctor":
     case "array_query":
-      return "array";
+      return named("array");
     case "row":
-      return "row";
+      return named("row");
     case "subquery_expr":
-      return e.kind === "exists" ? "exists" : "?column?";
+      return e.kind === "exists" ? named("exists") : named("?column?", 0);
     case "bool_lit":
-      return "bool";
+      return named("bool", 1);
     case "extract":
-      return "extract";
+      return named("extract");
     case "position":
-      return "position";
+      return named("position");
     case "substring_sql":
-      return "substring";
+      return named("substring");
     case "overlay":
-      return "overlay";
+      return named("overlay");
     case "trim":
-      return e.side === "leading" ? "ltrim" : e.side === "trailing" ? "rtrim" : "btrim";
+      return named(e.side === "leading" ? "ltrim" : e.side === "trailing" ? "rtrim" : "btrim");
     case "field_select":
-      return e.field === "*" ? "?column?" : e.field;
+      return e.field === "*" ? named("?column?", 0) : named(e.field);
     case "at_time_zone":
-      return "timezone";
+      return named("timezone");
     case "grouping_func":
-      return "grouping";
+      return named("grouping");
     case "subscript":
-      return inferColumnName(e.base);
+      return figureColumnName(e.base);
     default:
-      return "?column?";
+      return named("?column?", 0);
   }
+}
+
+/** column name PG infers for an expression without an alias */
+export function inferColumnName(e: import("../ast/nodes.ts").Expr): string {
+  return figureColumnName(e).name;
 }
 
 export type { EngineCtx };

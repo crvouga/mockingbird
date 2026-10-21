@@ -8,7 +8,16 @@ import type { SequenceData } from "../storage/database-state.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import { castTo } from "../types/cast.ts";
 import { parseRelationInput } from "../types/regnamespace.ts";
-import { makeArray, tv, typeDisplayName } from "../types/value.ts";
+import {
+  arrayElemType,
+  enumTypeName,
+  isArrayType,
+  isEnumType,
+  makeArray,
+  tv,
+  type TypeId,
+  typeDisplayName,
+} from "../types/value.ts";
 import { argBigInt, argInt, argText, type ScalarFn, strict } from "./util.ts";
 
 export const PG_VERSION_TEXT = "PostgreSQL 18.3 (postgres-mem) on TypeScript, in-memory engine";
@@ -180,7 +189,16 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set("txid_current", () => tv("int8", 1n));
   m.set("pg_current_xact_id", () => tv("int8", 1n));
   m.set("pg_sleep", () => tv("void", null));
-  m.set("pg_typeof", (_ctx, args) => tv("regtype", typeDisplayName(args[0]!.t === "unknown" ? "unknown" : args[0]!.t)));
+  // like regtypeout, an enum is schema-qualified only when its schema is not the one its bare name resolves to
+  const visibleTypeName = (ctx: EngineCtx, t: TypeId): string => {
+    if (isArrayType(t)) return `${visibleTypeName(ctx, arrayElemType(t))}[]`;
+    if (!isEnumType(t)) return typeDisplayName(t);
+    const qualified = enumTypeName(t);
+    const dot = qualified.indexOf(".");
+    const [schema, name] = [qualified.slice(0, dot), qualified.slice(dot + 1)];
+    return ctx.state.findEnum([name])?.schema === schema ? name : typeDisplayName(t);
+  };
+  m.set("pg_typeof", (ctx, args) => tv("regtype", visibleTypeName(ctx, args[0]!.t)));
   m.set(
     "pg_column_size",
     strict("int4", (ctx, args) => {

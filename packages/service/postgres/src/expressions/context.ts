@@ -44,7 +44,11 @@ export class EngineCtx implements CastEnv, CompareCtx {
     if (parts.length === 3) {
       const database = databaseCatalogContext(this.state).name;
       if (parts[0] !== database) {
-        throw pgError("feature_not_supported", `cross-database references are not implemented: "${parts.join(".")}"`, "0A000");
+        throw pgError(
+          "feature_not_supported",
+          `cross-database references are not implemented: "${parts.join(".")}"`,
+          "0A000",
+        );
       }
     }
     const target = this.state.resolveRelationSchema(parts);

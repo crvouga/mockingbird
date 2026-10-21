@@ -48,6 +48,7 @@ import {
   typeDisplayName,
   wrapJsonb,
 } from "./value.ts";
+import { networkCastText, networkInput, networkToCidr } from "./network.ts";
 import { oidFromInteger } from "./regnamespace.ts";
 
 export interface CastEnv extends OutputCtx, InputCtx {
@@ -112,6 +113,7 @@ const IMPLICIT_CASTS = new Set([
   "int4->oid",
   "int8->oid",
   "regnamespace->oid",
+  "cidr->inet",
   "regclass->oid",
   "oid->regclass",
   "int2->regclass",
@@ -226,6 +228,7 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
   if (TEXT_TYPES.has(target)) {
     let text: string;
     if (from === "bool") text = (v as boolean) ? "true" : "false";
+    else if (from === "inet") text = networkCastText(v as string);
     else text = datumText(from, v, env);
     return tv(target, applyTypmod(env, target, text, opts));
   }
@@ -307,6 +310,10 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
     );
     return tv(target, makeArray(toElem, items, arr.dims.slice(), arr.lbs.slice()));
   }
+
+  // cidr -> inet keeps the address and mask; inet -> cidr drops the host bits (an assignment cast)
+  if (from === "cidr" && target === "inet") return tv(target, networkInput("inet", v as string));
+  if (from === "inet" && target === "cidr") return tv(target, networkToCidr(v as string));
 
   // oid family
   if (from === "oid" && (target === "regnamespace" || target === "regclass")) return tv(target, v);

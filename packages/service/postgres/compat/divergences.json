@@ -103,9 +103,9 @@
     {
       "id": "dump-compat-noop",
       "scope": "sql",
-      "predicate": "DO blocks and ALTER TABLE SET (storage/reloptions) execute as no-ops so schema dumps can load without intercepts; PL/pgSQL and storage parameters are NOT APPLICABLE",
-      "specifiedBehavior": "exec() loads schema dumps. DO $$ … $$ and ALTER TABLE … SET (fillfactor=…) succeed and change nothing. PGlite executes plpgsql; these cases are memory-only.",
-      "pinnedBy": ["API-dump-01", "API-do-01", "API-set-01"]
+      "predicate": "ALTER TABLE SET (storage/reloptions) executes as a no-op so schema dumps can load without intercepts; storage parameters are NOT APPLICABLE",
+      "specifiedBehavior": "exec() loads schema dumps. ALTER TABLE … SET (fillfactor=…) succeeds and changes nothing. DO blocks run (see API-do-01); RAISE NOTICE / WARNING inside them is discarded.",
+      "pinnedBy": ["API-dump-01", "API-set-01"]
     },
     {
       "id": "empty-script-rejected",

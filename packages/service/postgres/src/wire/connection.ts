@@ -12,6 +12,7 @@ import { parse as parseSql } from "../parser/index.ts";
 import { setDatabaseCatalogContext } from "../runtime/database-context.ts";
 import { datumText, typeOid, UTC_OUTPUT } from "../types/value.ts";
 import { type Cluster, LockWait, type Session } from "./cluster.ts";
+import { lockedMutationQuery } from "./lock-probe.ts";
 import { binaryEncodable, binaryResult, decodeBinaryParam } from "./binary.ts";
 import { type DurableCommit, storageFailure } from "./durable.ts";
 import { inferParamOids } from "./param-types.ts";
@@ -29,6 +30,7 @@ import {
 import { ScramServer } from "./scram.ts";
 import { splitStatements } from "./split.ts";
 import { applyStartupSettings, StartupError, startupSettings } from "./startup.ts";
+import { wireTypeModifier } from "./type-modifier.ts";
 
 /** One statement's outcome, before it is written to the wire. */
 type Outcome = { empty: true } | { empty: false; result: TextResultSet; tag: string };
@@ -133,31 +135,8 @@ const identifier = (quoted: string | undefined, plain: string | undefined): stri
 const ROW_LOCK =
   /\s+for\s+(?:no\s+key\s+update|key\s+share|update|share)(?:\s+of\s+(?:(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?)(?:\s*,\s*(?:(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?))*)?(?:\s+(nowait|skip\s+locked))?(?:\s+limit\s+(\d+))?(?:\s+offset\s+(\d+))?\s*$/i;
 const LIMIT = /\s+limit\s+(\d+)(?:\s+offset\s+(\d+))?\s*$/i;
-const SQL_NAME = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)`;
 const SQL_RELATION = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?`;
 const FROM_TABLE = new RegExp(String.raw`\bfrom\s+(${SQL_RELATION})`, "i");
-const UPDATE_TARGET = new RegExp(
-  String.raw`^update\s+(${SQL_RELATION})(?:\s+(?:as\s+)?(${SQL_NAME}))?\s+set\s+[\s\S]*?(?:\s+where\s+([\s\S]*?))?(?:\s+returning\s+[\s\S]*)?$`,
-  "i",
-);
-const DELETE_TARGET = new RegExp(
-  String.raw`^delete\s+from\s+(${SQL_RELATION})(?:\s+(?:as\s+)?(${SQL_NAME}))?(?:\s+where\s+([\s\S]*?))?(?:\s+returning\s+[\s\S]*)?$`,
-  "i",
-);
-
-/**
- * Row-lock probe for UPDATE / DELETE. The alias has to survive: `UPDATE t AS ap`
- * is locked with `SELECT * FROM t AS ap`, or `ap.column` in WHERE is unknown.
- */
-const lockedMutationQuery = (sql: string): string | null => {
-  const match = UPDATE_TARGET.exec(sql) ?? DELETE_TARGET.exec(sql);
-  const relation = match?.[1];
-  if (!relation) return null;
-  const alias = match?.[2];
-  const where = match?.[3];
-  const from = alias ? `${relation} AS ${alias}` : relation;
-  return `SELECT * FROM ${from}${where ? ` WHERE ${where}` : ""}`;
-};
 
 /** Text form of a literal or bound parameter, matching the row-lock identity. */
 const lockLiteral = (expr: Expr | undefined, params: readonly BindValue[]): string | null | undefined => {
@@ -196,6 +175,7 @@ const TYPLEN: Record<string, number> = {
   timestamp: 8,
   timestamptz: 8,
   uuid: 16,
+  macaddr: 6,
 };
 
 const pgError = (category: "internal" | "syntax", message: string, code: string) =>
@@ -1383,7 +1363,13 @@ export class Connection implements Session {
     const formats = this.columnFormats(result, requested);
     return result.columns.map((name, i) => {
       const type = result.columnTypes[i] as string;
-      return { name, typeOid: typeOid(type), typeLen: TYPLEN[type] ?? -1, format: formats[i] as 0 | 1 };
+      return {
+        name,
+        typeOid: typeOid(type),
+        typeLen: TYPLEN[type] ?? -1,
+        typeMod: wireTypeModifier(type, result.columnMods?.[i]),
+        format: formats[i] as 0 | 1,
+      };
     });
   }
 

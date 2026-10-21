@@ -1,5 +1,5 @@
 import type { Expr, SelectStmt, Statement, TypeName } from "../ast/nodes.ts";
-import { pgError, unsupported } from "../errors/error.ts";
+import { isPostgresError, pgError, unsupported } from "../errors/error.ts";
 import { tokenize } from "../lexer/tokenize.ts";
 import { parse } from "../parser/index.ts";
 import type { FunctionData } from "../storage/database-state.ts";
@@ -8,13 +8,157 @@ import { datumEquals } from "../types/compare.ts";
 import { resolveTypeName } from "../types/resolve.ts";
 import type { Datum, TypedValue, TypeId } from "../types/value.ts";
 import { tv } from "../types/value.ts";
-import { type ExecEnv, type Relation, RowScope } from "./relation.ts";
+import { commandResult, type ExecEnv, type ExecResult, type Relation, type RelColumn, RowScope } from "./relation.ts";
 import { evalPredicate, evalScalar, executeSelectStmt, runStatement } from "./select.ts";
 
 /**
- * plpgsql-lite: DECLARE, nested BEGIN/EXCEPTION WHEN others, IF, CASE,
- * assignment, RETURN / RETURN NEXT, PERFORM, FOR-IN-SELECT.
+ * plpgsql-lite: DECLARE, nested BEGIN/EXCEPTION WHEN <condition>, IF, CASE,
+ * assignment, RETURN / RETURN NEXT, PERFORM, FOR-IN-SELECT, RAISE, EXECUTE of
+ * a dynamic command, and DDL / DML statements. Also runs anonymous DO blocks.
  */
+
+/** Exception condition names a handler can list (`WHEN duplicate_object`), with their SQLSTATE. */
+const CONDITION_NAMES: Record<string, string> = {
+  integrity_constraint_violation: "23000",
+  restrict_violation: "23001",
+  not_null_violation: "23502",
+  foreign_key_violation: "23503",
+  unique_violation: "23505",
+  check_violation: "23514",
+  exclusion_violation: "23P01",
+  data_exception: "22000",
+  string_data_right_truncation: "22001",
+  null_value_not_allowed: "22004",
+  numeric_value_out_of_range: "22003",
+  invalid_datetime_format: "22007",
+  datetime_field_overflow: "22008",
+  division_by_zero: "22012",
+  invalid_parameter_value: "22023",
+  invalid_text_representation: "22P02",
+  invalid_binary_representation: "22P03",
+  bad_copy_file_format: "22P04",
+  untranslatable_character: "22P05",
+  invalid_escape_sequence: "22025",
+  invalid_regular_expression: "2201B",
+  invalid_json_text: "22032",
+  array_subscript_error: "2202E",
+  feature_not_supported: "0A000",
+  invalid_transaction_state: "25000",
+  active_sql_transaction: "25001",
+  no_active_sql_transaction: "25P01",
+  in_failed_sql_transaction: "25P02",
+  invalid_schema_name: "3F000",
+  invalid_savepoint_specification: "3B001",
+  dependent_objects_still_exist: "2BP01",
+  invalid_cursor_name: "34000",
+  invalid_catalog_name: "3D000",
+  serialization_failure: "40001",
+  deadlock_detected: "40P01",
+  transaction_rollback: "40000",
+  syntax_error_or_access_rule_violation: "42000",
+  syntax_error: "42601",
+  insufficient_privilege: "42501",
+  cannot_coerce: "42846",
+  grouping_error: "42803",
+  windowing_error: "42P20",
+  invalid_recursion: "42P19",
+  invalid_foreign_key: "42830",
+  invalid_name: "42602",
+  name_too_long: "42622",
+  reserved_name: "42939",
+  datatype_mismatch: "42804",
+  indeterminate_datatype: "42P18",
+  collation_mismatch: "42P21",
+  indeterminate_collation: "42P22",
+  wrong_object_type: "42809",
+  generated_always: "428C9",
+  undefined_column: "42703",
+  undefined_function: "42883",
+  undefined_table: "42P01",
+  undefined_parameter: "42P02",
+  undefined_object: "42704",
+  duplicate_column: "42701",
+  duplicate_cursor: "42P03",
+  duplicate_database: "42P04",
+  duplicate_function: "42723",
+  duplicate_prepared_statement: "42P05",
+  duplicate_schema: "42P06",
+  duplicate_table: "42P07",
+  duplicate_alias: "42712",
+  duplicate_object: "42710",
+  ambiguous_column: "42702",
+  ambiguous_function: "42725",
+  ambiguous_parameter: "42P08",
+  ambiguous_alias: "42P09",
+  invalid_column_reference: "42P10",
+  invalid_column_definition: "42611",
+  invalid_cursor_definition: "42P11",
+  invalid_database_definition: "42P12",
+  invalid_function_definition: "42P13",
+  invalid_prepared_statement_definition: "42P14",
+  invalid_schema_definition: "42P15",
+  invalid_table_definition: "42P16",
+  invalid_object_definition: "42P17",
+  with_check_option_violation: "44000",
+  object_not_in_prerequisite_state: "55000",
+  object_in_use: "55006",
+  lock_not_available: "55P03",
+  insufficient_resources: "53000",
+  disk_full: "53100",
+  out_of_memory: "53200",
+  too_many_connections: "53300",
+  program_limit_exceeded: "54000",
+  statement_too_complex: "54001",
+  too_many_columns: "54011",
+  too_many_arguments: "54023",
+  query_canceled: "57014",
+  internal_error: "XX000",
+  data_corrupted: "XX001",
+  index_corrupted: "XX002",
+  raise_exception: "P0001",
+  no_data_found: "P0002",
+  too_many_rows: "P0003",
+  assert_failure: "P0004",
+};
+
+/** A handler condition as stored: `others`, a five-character SQLSTATE, or a class (`23000` matches `23xxx`). */
+function resolveCondition(name: string): string {
+  if (name === "others") return name;
+  const sqlState = CONDITION_NAMES[name];
+  if (sqlState === undefined) throw pgError("undefined_object", `unrecognized exception condition "${name}"`, "42704");
+  return sqlState;
+}
+
+function conditionMatches(condition: string, sqlState: string): boolean {
+  if (condition === "others") return true;
+  if (condition === sqlState) return true;
+  // a class-level condition (`integrity_constraint_violation`) matches every code in its class
+  return condition.endsWith("000") && sqlState.startsWith(condition.slice(0, 2));
+}
+
+/** Statements that start a plain SQL command run through the engine's executor. */
+const SQL_STATEMENT_KEYWORDS = new Set([
+  "insert",
+  "update",
+  "delete",
+  "with",
+  "create",
+  "alter",
+  "drop",
+  "truncate",
+  "comment",
+  "grant",
+  "revoke",
+  "refresh",
+  "reindex",
+  "lock",
+  "set",
+  "reset",
+  "analyze",
+  "vacuum",
+]);
+
+const RAISE_LEVELS = new Set(["debug", "log", "info", "notice", "warning", "exception"]);
 
 export type PlStmt =
   | { kind: "assign"; target: string[]; expr: Expr }
@@ -31,9 +175,18 @@ export type PlStmt =
       elseBody: PlStmt[];
     }
   | { kind: "null" }
-  | { kind: "raise"; message: string }
+  | {
+      kind: "raise";
+      level: string;
+      format: string | null;
+      args: Expr[];
+      errcode: string | null;
+      options: Array<{ name: string; expr: Expr }>;
+    }
+  | { kind: "reraise" }
+  | { kind: "execute"; expr: Expr }
   | { kind: "perform"; expr: Expr }
-  | { kind: "block"; body: PlStmt[]; handler: PlStmt[] | null }
+  | { kind: "block"; body: PlStmt[]; handlers: Array<{ conditions: string[]; body: PlStmt[] }> | null }
   | { kind: "for"; targets: string[]; query: SelectStmt; body: PlStmt[] }
   | { kind: "sql"; text: string };
 
@@ -100,7 +253,7 @@ class PlParser {
     if (this.atKw("declare")) throw unsupported("trigger body: DECLARE section");
     const block = this.parseBlock();
     if (this.peek().type !== "eof") throw unsupported(`trigger body: trailing content near "${this.peek().value}"`);
-    return block.kind === "block" && block.handler === null ? block.body : [block];
+    return block.kind === "block" && block.handlers === null ? block.body : [block];
   }
 
   private parseDecl(): PlDecl {
@@ -132,21 +285,38 @@ class PlParser {
   private parseBlock(): Extract<PlStmt, { kind: "block" }> {
     this.expectKw("begin");
     const body = this.parseStmts(new Set(["end", "exception"]));
-    let handler: PlStmt[] | null = null;
+    let handlers: Array<{ conditions: string[]; body: PlStmt[] }> | null = null;
     if (this.atKw("exception")) {
       this.pos++;
+      handlers = [];
       this.expectKw("when");
-      if (!this.atKw("others")) throw unsupported(`plpgsql EXCEPTION WHEN ${this.peek().value}`);
-      this.pos++;
-      this.expectKw("then");
-      handler = this.parseStmts(new Set(["end", "when"]));
-      while (this.atKw("when")) {
-        throw unsupported("plpgsql EXCEPTION WHEN (only OTHERS is implemented)");
+      for (;;) {
+        const conditions: string[] = [];
+        for (;;) {
+          if (this.atKw("sqlstate")) {
+            this.pos++;
+            const code = this.next();
+            if (code.type !== "string" || !/^[0-9A-Z]{5}$/.test(code.value)) {
+              throw pgError("syntax", `invalid SQLSTATE code "${code.value}"`, "42601");
+            }
+            conditions.push(code.value);
+          } else {
+            const name = this.next();
+            if (name.type !== "ident") throw unsupported(`plpgsql EXCEPTION WHEN near "${name.value}"`);
+            conditions.push(resolveCondition(name.value));
+          }
+          if (!this.atKw("or")) break;
+          this.pos++;
+        }
+        this.expectKw("then");
+        handlers.push({ conditions, body: this.parseStmts(new Set(["end", "when"])) });
+        if (!this.atKw("when")) break;
+        this.pos++;
       }
     }
     this.expectKw("end");
     if (this.peek().type === "punct" && this.peek().value === ";") this.pos++;
-    return { kind: "block", body, handler };
+    return { kind: "block", body, handlers };
   }
 
   private parseStmts(stop: Set<string>): PlStmt[] {
@@ -232,16 +402,17 @@ class PlParser {
       this.expectSemi();
       return { kind: "null" };
     }
-    if (this.atKw("raise")) {
+    if (this.atKw("raise")) return this.parseRaise();
+    if (this.atKw("execute")) {
       this.pos++;
-      if (this.peek().type === "ident") this.pos++;
-      let message = "";
-      while (!(this.peek().type === "punct" && this.peek().value === ";") && this.peek().type !== "eof") {
-        const t = this.next();
-        if (t.type === "string" && message === "") message = t.value;
+      const text = this.parseSqlTextUntilSemi();
+      // EXECUTE ... INTO / USING bind a result or parameters; only the plain dynamic command is run
+      for (const t of tokenize(text)) {
+        if (t.type === "ident" && (t.value === "into" || t.value === "using")) {
+          throw unsupported(`plpgsql EXECUTE ... ${t.value.toUpperCase()}`);
+        }
       }
-      this.expectSemi();
-      return { kind: "raise", message: message || "raised exception" };
+      return { kind: "execute", expr: parseSqlExpr(text) };
     }
     if (this.atKw("perform")) {
       this.pos++;
@@ -268,7 +439,9 @@ class PlParser {
       this.expectSemi();
       return { kind: "for", targets, query, body };
     }
-    if (this.atKw("update") || this.atKw("insert") || this.atKw("delete")) {
+    const head = this.peek();
+    const assigns = this.peek(1).type === "op" && (this.peek(1).value === ":=" || this.peek(1).value === "=");
+    if (head.type === "ident" && SQL_STATEMENT_KEYWORDS.has(head.value) && !assigns) {
       return { kind: "sql", text: this.parseSqlTextUntilSemi() };
     }
     const target: string[] = [];
@@ -287,6 +460,89 @@ class PlParser {
       throw unsupported(`plpgsql: expected assignment near "${opTok.value}"`);
     }
     return { kind: "assign", target, expr: this.parseExprUntilSemi() };
+  }
+
+  /**
+   * `RAISE [level] ['format', arg, ...] [USING option = expr, ...]`, `RAISE level condition` /
+   * `RAISE level SQLSTATE 'code'`, and the bare `RAISE` that re-raises the handled error.
+   */
+  private parseRaise(): PlStmt {
+    this.pos++;
+    let level = "exception";
+    const first = this.peek();
+    if (first.type === "ident" && RAISE_LEVELS.has(first.value)) {
+      level = first.value;
+      this.pos++;
+    } else if (first.type === "punct" && first.value === ";") {
+      this.pos++;
+      return { kind: "reraise" };
+    }
+    let format: string | null = null;
+    let errcode: string | null = null;
+    const args: Expr[] = [];
+    const options: Array<{ name: string; expr: Expr }> = [];
+    const atClauseEnd = (t: Tok): boolean =>
+      t.type === "eof" || (t.type === "punct" && t.value === ";") || (t.type === "ident" && t.value === "using");
+    if (this.peek().type === "string") {
+      format = this.next().value;
+      while (this.peek().type === "punct" && this.peek().value === ",") {
+        this.pos++;
+        args.push(this.parseExprUntilAny((t) => atClauseEnd(t) || (t.type === "punct" && t.value === ",")));
+      }
+    } else if (this.atKw("sqlstate")) {
+      this.pos++;
+      const code = this.next();
+      if (code.type !== "string" || !/^[0-9A-Z]{5}$/.test(code.value)) {
+        throw pgError("syntax", `invalid SQLSTATE code "${code.value}"`, "42601");
+      }
+      errcode = code.value;
+    } else if (this.peek().type === "ident" && !atClauseEnd(this.peek())) {
+      errcode = resolveCondition(this.next().value);
+    }
+    if (this.atKw("using")) {
+      this.pos++;
+      for (;;) {
+        const name = this.next();
+        if (name.type !== "ident") throw unsupported(`plpgsql RAISE USING near "${name.value}"`);
+        const eq = this.next();
+        if (!(eq.type === "op" && (eq.value === "=" || eq.value === ":="))) {
+          throw pgError("syntax", `syntax error at or near "${eq.value}"`, "42601");
+        }
+        const bareCondition =
+          name.value === "errcode" &&
+          this.peek().type === "ident" &&
+          (atClauseEnd(this.peek(1)) || (this.peek(1).type === "punct" && this.peek(1).value === ","));
+        if (bareCondition) {
+          // `ERRCODE = unique_violation` names the condition without quotes
+          options.push({ name: name.value, expr: { type: "string_lit", value: this.next().value } });
+        } else {
+          options.push({
+            name: name.value,
+            expr: this.parseExprUntilAny((t) => atClauseEnd(t) || (t.type === "punct" && t.value === ",")),
+          });
+        }
+        if (this.peek().type === "punct" && this.peek().value === ",") {
+          this.pos++;
+          continue;
+        }
+        break;
+      }
+    }
+    this.expectSemi();
+    return { kind: "raise", level, format, args, errcode, options };
+  }
+
+  private parseExprUntilAny(stop: (t: Tok) => boolean): Expr {
+    const start = this.peek().pos;
+    let depth = 0;
+    for (;;) {
+      const t = this.peek();
+      if (t.type === "eof") throw unsupported("plpgsql: unterminated statement");
+      if (t.type === "punct" && (t.value === "(" || t.value === "[")) depth++;
+      if (t.type === "punct" && (t.value === ")" || t.value === "]")) depth--;
+      if (depth === 0 && stop(t)) return parseSqlExpr(this.src.slice(start, t.pos));
+      this.pos++;
+    }
   }
 
   private parseSqlTextUntilSemi(): string {
@@ -354,7 +610,13 @@ class PlParser {
       if (t.type === "ident" && t.value === kw && depth === 0) {
         const text = this.src.slice(start, t.pos).trim();
         this.pos++;
-        const stmts = parse(text);
+        let stmts: Statement[];
+        try {
+          stmts = parse(text);
+        } catch {
+          // `FOR i IN 1..3` and cursor loops are not queries
+          throw unsupported("plpgsql FOR loop over anything but a query");
+        }
         const q = stmts[0];
         if (q?.type !== "select") throw unsupported(`plpgsql FOR query: expected SELECT`);
         return q;
@@ -411,9 +673,15 @@ class PlReturn {
 }
 
 class PlVars {
+  /** Run EXCEPTION blocks as subtransactions (DO blocks); a function body keeps its writes. */
+  subtransactions = false;
+  /** Errors being handled, innermost last (what a bare RAISE re-raises). */
+  readonly caught: unknown[] = [];
   readonly names: string[] = [];
   readonly types: TypeId[] = [];
   readonly values: Datum[] = [];
+  /** The scope's columns, kept in step with the names so a scope taken earlier sees later variables. */
+  private readonly columns: RelColumn[] = [];
 
   declare(name: string, type: TypeId, value: Datum): void {
     const i = this.names.indexOf(name);
@@ -421,10 +689,21 @@ class PlVars {
       this.names.push(name);
       this.types.push(type);
       this.values.push(value);
+      this.columns.push({ name, type, table: null });
     } else {
       this.types[i] = type;
       this.values[i] = value;
+      this.columns[i] = { name, type, table: null };
     }
+  }
+
+  drop(name: string): void {
+    const i = this.names.indexOf(name);
+    if (i === -1) return;
+    this.names.splice(i, 1);
+    this.types.splice(i, 1);
+    this.values.splice(i, 1);
+    this.columns.splice(i, 1);
   }
 
   set(name: string, v: TypedValue, env: ExecEnv): void {
@@ -441,9 +720,72 @@ class PlVars {
   }
 
   scope(): RowScope {
-    const cols = this.names.map((n, i) => ({ name: n, type: this.types[i]!, table: null as string | null }));
-    return new RowScope(cols, this.values, null);
+    return new RowScope(this.columns, this.values, null);
   }
+}
+
+const errorSqlState = (e: unknown): string => (isPostgresError(e) ? e.sqlState : "XX000");
+
+/** The EXCEPTION clause that catches `e`, if any. */
+export function findHandler<H extends { conditions: string[] }>(handlers: H[], e: unknown): H | undefined {
+  const sqlState = errorSqlState(e);
+  return handlers.find((h) => h.conditions.some((c) => conditionMatches(c, sqlState)));
+}
+
+/** The text RAISE prints for a value; NULL prints as `<NULL>`. */
+function raiseText(env: ExecEnv, v: TypedValue): string {
+  return v.v === null ? "<NULL>" : (castTo(env.ctx, v, "text", {}).v as string);
+}
+
+export function runRaise(env: ExecEnv, stmt: Extract<PlStmt, { kind: "raise" }>, scope: RowScope): void {
+  const values = stmt.args.map((arg) => raiseText(env, evalScalar(env, scope, arg)));
+  const options = new Map<string, string>();
+  for (const option of stmt.options) {
+    const value = evalScalar(env, scope, option.expr);
+    options.set(option.name, value.v === null ? "" : (castTo(env.ctx, value, "text", {}).v as string));
+  }
+  let message: string | undefined;
+  if (stmt.format !== null) {
+    let used = 0;
+    message = stmt.format.replace(/%%|%/g, (token) => {
+      if (token === "%%") return "%";
+      if (used >= values.length) throw pgError("syntax", "too few parameters specified for RAISE", "42601");
+      return values[used++]!;
+    });
+    if (used < values.length) throw pgError("syntax", "too many parameters specified for RAISE", "42601");
+  }
+  // notices, warnings and log lines are not delivered to the client: only EXCEPTION does anything
+  if (stmt.level !== "exception") return;
+  const code = options.has("errcode") ? resolveErrcode(options.get("errcode")!) : (stmt.errcode ?? "P0001");
+  message ??= options.get("message");
+  message ??= Object.entries(CONDITION_NAMES).find(([, sqlState]) => sqlState === code)?.[0] ?? code;
+  throw pgError("raise_exception", message, code);
+}
+
+/** `ERRCODE = 'unique_violation'` or `ERRCODE = '23505'`. */
+function resolveErrcode(value: string): string {
+  return /^[0-9A-Z]{5}$/.test(value) ? value : resolveCondition(value);
+}
+
+interface Subtransaction {
+  release(): void;
+  rollback(): void;
+}
+
+/** An EXCEPTION block's implicit savepoint: what its body wrote is taken back when a handler catches an error. */
+function beginSubtransaction(env: ExecEnv): Subtransaction {
+  const state = env.ctx.state;
+  state.freezeShared();
+  const snapshot = state.cloneShallow();
+  const prng = state.prng.getState();
+  return {
+    release: () => state.thawShared(),
+    rollback: () => {
+      state.restoreFrom(snapshot);
+      state.prng.setState(prng);
+      state.thawShared();
+    },
+  };
 }
 
 function runStmts(
@@ -516,17 +858,62 @@ function runStmt(env: ExecEnv, stmt: PlStmt, vars: PlVars, emit: Datum[][] | nul
     case "null":
       return;
     case "raise":
-      throw pgError("raise_exception", stmt.message, "P0001");
+      runRaise(env, stmt, scope());
+      return;
+    case "reraise": {
+      const error = vars.caught.at(-1);
+      if (error === undefined) {
+        throw pgError("internal", "RAISE without parameters cannot be used outside an exception handler", "0Z002");
+      }
+      throw error;
+    }
+    case "execute": {
+      const command = evalScalar(env, scope(), stmt.expr);
+      if (command.v === null) {
+        throw pgError("null_value_not_allowed", "query string argument of EXECUTE is null", "22004");
+      }
+      for (const dynamic of parse(castTo(env.ctx, command, "text", {}).v as string)) {
+        runStatement(env, dynamic as Statement);
+      }
+      return;
+    }
     case "perform":
       evalScalar(env, scope(), stmt.expr);
       return;
     case "block": {
+      if (stmt.handlers === null) {
+        runStmts(env, stmt.body, vars, emit, tableNames);
+        return;
+      }
+      const subtransaction = vars.subtransactions ? beginSubtransaction(env) : null;
       try {
         runStmts(env, stmt.body, vars, emit, tableNames);
+        subtransaction?.release();
       } catch (e) {
-        if (e instanceof PlReturn) throw e;
-        if (stmt.handler === null) throw e;
-        runStmts(env, stmt.handler, vars, emit, tableNames);
+        if (e instanceof PlReturn) {
+          subtransaction?.release();
+          throw e;
+        }
+        const sqlState = errorSqlState(e);
+        const handler = findHandler(stmt.handlers, e);
+        if (handler === undefined) {
+          subtransaction?.release();
+          throw e;
+        }
+        // the failed block's writes are undone, as PostgreSQL's implicit savepoint does
+        subtransaction?.rollback();
+        const hadErrm = vars.names.includes("sqlerrm");
+        const hadState = vars.names.includes("sqlstate");
+        vars.declare("sqlerrm", "text", e instanceof Error ? e.message : String(e));
+        vars.declare("sqlstate", "text", sqlState);
+        vars.caught.push(e);
+        try {
+          runStmts(env, handler.body, vars, emit, tableNames);
+        } finally {
+          vars.caught.pop();
+          if (!hadErrm) vars.drop("sqlerrm");
+          if (!hadState) vars.drop("sqlstate");
+        }
       }
       return;
     }
@@ -571,14 +958,14 @@ function bindArgs(env: ExecEnv, fn: FunctionData, args: TypedValue[]): TypedValu
   return bound;
 }
 
-function initVars(env: ExecEnv, fn: FunctionData, bound: TypedValue[], program: PlProgram): PlVars {
+function initVars(env: ExecEnv, fn: FunctionData | null, bound: TypedValue[], program: PlProgram): PlVars {
   const vars = new PlVars();
-  for (let i = 0; i < fn.argNames.length; i++) {
-    const n = fn.argNames[i];
+  for (let i = 0; i < (fn?.argNames.length ?? 0); i++) {
+    const n = fn!.argNames[i];
     if (n == null) continue;
-    vars.declare(n, fn.argTypes[i]!, bound[i]?.v ?? null);
+    vars.declare(n, fn!.argTypes[i]!, bound[i]?.v ?? null);
   }
-  if (fn.returnsTable) {
+  if (fn?.returnsTable) {
     for (const c of fn.returnsTable) vars.declare(c.name, c.type, null);
   }
   const seed = (): ExecEnv => ({
@@ -664,4 +1051,35 @@ export function callPlpgsqlSet(env: ExecEnv, fn: FunctionData, args: TypedValue[
     return { columns: cols, rows };
   }
   return { columns: cols, rows: emit };
+}
+
+/**
+ * `DO [LANGUAGE plpgsql] $$ ... $$`: the anonymous block runs once, atomically (an error leaves none
+ * of its writes), and its EXCEPTION blocks undo what their bodies wrote before a handler runs.
+ */
+export function executeDo(env: ExecEnv, language: string, body: string): ExecResult {
+  const lang = language.toLowerCase();
+  if (lang !== "plpgsql") {
+    if (lang === "sql" || lang === "c" || lang === "internal") {
+      throw pgError("unsupported", `language "${lang}" does not support inline code execution`, "0A000");
+    }
+    throw pgError("undefined_object", `language "${lang}" does not exist`, "42704");
+  }
+  const program = compilePlpgsql(body);
+  const vars = initVars(env, null, [], program);
+  vars.subtransactions = true;
+  const doEnv = plpgsqlEnv(env, [], vars);
+  const subtransaction = beginSubtransaction(env);
+  try {
+    runStmts(doEnv, program.body, vars, null, null);
+  } catch (e) {
+    if (!(e instanceof PlReturn)) {
+      subtransaction.rollback();
+      throw e;
+    }
+  }
+  subtransaction.release();
+  // the block's own INSERT / UPDATE / DELETE are not the DO command's row count
+  env.ctx.state.changes = 0;
+  return commandResult("DO", 0);
 }

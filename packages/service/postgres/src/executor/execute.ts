@@ -33,6 +33,7 @@ import { executeDelete, executeInsert, executeUpdate, withStatementRollback } fr
 import { executeCreateExtension } from "./extensions.ts";
 import { executeComment } from "./comment.ts";
 import { executeAnalyze, executeReindex } from "./maintenance.ts";
+import { executeDo } from "./plpgsql.ts";
 import { commandResult, type ExecEnv, type ExecResult, relationResult } from "./relation.ts";
 import { executeSelectStmt, setStatementRunner } from "./select.ts";
 import {
@@ -184,7 +185,7 @@ function dispatchStatement(env: ExecEnv, stmt: Statement): ExecResult {
     case "no_op":
       return commandResult(stmt.what.toUpperCase(), 0);
     case "do":
-      return commandResult("DO", 0);
+      return executeDo(env, stmt.language, stmt.body);
     default: {
       const t: never = stmt;
       throw pgError("internal", `unhandled statement type ${(t as { type: string }).type}`);

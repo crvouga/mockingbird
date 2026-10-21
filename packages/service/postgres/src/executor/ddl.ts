@@ -72,6 +72,7 @@ import {
   setColumnStorage,
   setSequenceLogged,
 } from "./alter-column.ts";
+import { addConstraintUsingIndex } from "./constraint-using-index.ts";
 import { assertNotExtensionMember, executeDropExtension } from "./extensions.ts";
 import { executeRenameEnum } from "./rename-type.ts";
 import { commandResult, type ExecEnv, type ExecResult, inferColumnName, RowScope } from "./relation.ts";
@@ -1308,6 +1309,9 @@ export function executeAlterTable(env: ExecEnv, stmt: AlterTableStmt): ExecResul
         }
         break;
       }
+      case "add_constraint_using_index":
+        addConstraintUsingIndex(state, table, action.constraint, action.name, action.index);
+        break;
       case "drop_constraint": {
         const idx = table.constraints.findIndex((c) => c.name === action.name);
         if (idx === -1) {

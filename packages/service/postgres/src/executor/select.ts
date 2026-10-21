@@ -22,14 +22,14 @@ import { checkBoolExprType, evalAsPredicate, evalExpr } from "../expressions/eva
 import { createAggregate, isAggregateName, isOrderedSetAggregate, unifyAggType } from "../functions/aggregates.ts";
 import { evalPgcryptoFunction } from "../functions/pgcrypto.ts";
 import { evalPgTrgmFunction } from "../functions/pgtrgm.ts";
-import { getSrfFunctions, isSrfName } from "../functions/srf.ts";
+import { getSrfFunctions, isSrfName, type SrfColumnDefs } from "../functions/srf.ts";
 import { conjunctions, joinKeyFromRow, rowsMatchEqKeys, tryIndexedFromItem } from "../planner/access.ts";
 import { catalogRelation } from "../schema/catalog.ts";
 import type { FunctionData } from "../storage/database-state.ts";
 import { canImplicitCast, castTo, unifyTypes } from "../types/cast.ts";
 import { datumCompare, datumKey } from "../types/compare.ts";
 import { resolveTypeName } from "../types/resolve.ts";
-import { type Datum, type TypedValue, type TypeId, tv, UNKNOWN } from "../types/value.ts";
+import { type Datum, type TypedValue, type TypeId, type TypeMod, tv, UNKNOWN } from "../types/value.ts";
 import { callPlpgsqlScalar, callPlpgsqlSet } from "./plpgsql.ts";
 import {
   childEnv,
@@ -350,6 +350,7 @@ function applyCteColumnNames(rel: Relation, cte: CommonTableExpr): Relation {
   const columns = rel.columns.map((c, i) => ({
     name: cte.columns?.[i] ?? c.name,
     type: c.type,
+    mod: c.mod,
     table: null as string | null,
   }));
   if (cte.columns && cte.columns.length > rel.columns.length) {
@@ -523,7 +524,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null): 
         table.materializeSlab();
         const rel: Relation = {
           columns: [
-            ...table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label })),
+            ...table.columns.map((c) => ({ name: c.name, type: c.type.id, mod: c.type.mod, table: label })),
             { name: "xmin", type: "xid", table: label, hidden: true, system: true },
           ],
           rows: table.rows.map((row) => [...row, table.rowXmins.get(row) ?? 2]),
@@ -590,7 +591,13 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null): 
   }
 }
 
-function srfCallRelation(env: ExecEnv, call: Expr, scope: RowScope | null, alias: string | null): Relation {
+function srfCallRelation(
+  env: ExecEnv,
+  call: Expr,
+  scope: RowScope | null,
+  alias: string | null,
+  columnDefs?: SrfColumnDefs,
+): Relation {
   if (call.type !== "func") {
     // e.g. FROM (expression) is not valid; parser shouldn't produce it
     throw pgError("syntax", "unexpected expression in FROM function position");
@@ -613,7 +620,7 @@ function srfCallRelation(env: ExecEnv, call: Expr, scope: RowScope | null, alias
   }
   const srf = getSrfFunctions().get(bare);
   if (srf) {
-    const res = srf(env.ctx, args, alias ?? bare);
+    const res = srf(env.ctx, args, alias ?? bare, columnDefs);
     return {
       columns: res.columns.map((c) => ({ name: c.name, type: c.type, table: null })),
       rows: res.rows,
@@ -643,7 +650,25 @@ function materializeFunc(env: ExecEnv, item: Extract<FromItem, { type: "from_fun
     }
     rel = { columns, rows };
   } else {
-    rel = srfCallRelation(env, item.call, effScope, item.alias);
+    const columnDefs =
+      item.colAliases && item.colTypes
+        ? item.colAliases.map((name, i) => ({
+            name,
+            column: resolveTypeName(env.ctx.state, item.colTypes![i]!).column,
+          }))
+        : undefined;
+    const names = new Set<string>();
+    for (const def of columnDefs ?? []) {
+      if (names.has(def.name)) {
+        throw pgError("duplicate_column", `column name "${def.name}" specified more than once`, "42701");
+      }
+      names.add(def.name);
+    }
+    rel = srfCallRelation(env, item.call, effScope, item.alias, columnDefs);
+  }
+  if (!item.rowsFrom && !item.withOrdinality && rel.columns.length === 1 && rel.columns[0]!.type !== "record") {
+    // `FROM jsonb_array_elements(x) AS e`: `e` on its own is the value, not a one-field record
+    rel = { columns: [{ ...rel.columns[0]!, scalarFunction: true }], rows: rel.rows };
   }
   if (item.withOrdinality) {
     rel = {
@@ -1967,6 +1992,24 @@ function expandTargets(core: SelectCore, columns: Relation["columns"]): ProjItem
   return items;
 }
 
+/**
+ * The type modifier a projected column carries to the client (RowDescription's `atttypmod`): that
+ * of a table column read as is, or of the type a cast names. Anything computed has none.
+ */
+function projectedMod(
+  ctx: ExecEnv["ctx"],
+  srcCols: Relation["columns"],
+  item: { kind: string; colIdx: number; expr: Expr | null },
+): TypeMod | null {
+  if (item.kind === "col") return srcCols[item.colIdx]?.mod ?? null;
+  let expr = item.expr;
+  while (expr?.type === "collate") expr = expr.expr;
+  if (expr?.type === "cast") return resolveTypeName(ctx.state, expr.target).column.mod;
+  if (expr?.type !== "colref") return null;
+  const at = resolveColIdx(srcCols, expr.parts);
+  return at === null ? null : (srcCols[at]?.mod ?? null);
+}
+
 /** Plan-time boolean typing for WHERE/HAVING (PostgreSQL rejects non-bool before scanning). */
 function checkPredicateType(
   env: ExecEnv,
@@ -2273,6 +2316,7 @@ export function executeCore(
   const outColumns: Relation["columns"] = projItems.map((p) => ({
     name: p.name,
     type: p.kind === "col" ? srcCols[p.colIdx]!.type : UNKNOWN,
+    mod: projectedMod(ctx, srcCols, p),
     table: null,
     hidden: p.hidden,
   }));

@@ -46,7 +46,9 @@ export function executeRenameEnum(env: ExecEnv, enumData: EnumData, newName: str
         if (col.defaultExpr) col.defaultExpr = rewrite(col.defaultExpr);
         if (col.generated) col.generated = rewrite(col.generated);
       });
-      writable.constraints = writable.constraints.map((c) => (c.kind === "check" ? { ...c, expr: rewrite(c.expr) } : c));
+      writable.constraints = writable.constraints.map((c) =>
+        c.kind === "check" ? { ...c, expr: rewrite(c.expr) } : c,
+      );
     }
 
     for (const view of [...sch.views.values()]) {
@@ -123,10 +125,7 @@ function retypeArray(datum: Datum, retype: (id: TypeId) => TypeId): Datum {
  * Deep-copy `node` with the type names `isTarget` accepts renamed to `newName`; a subtree with nothing
  * to rename is returned as is, so `rewrite(x) === x` tells whether anything changed.
  */
-function typeNameRewriter(
-  isTarget: (parts: string[]) => boolean,
-  newName: string,
-): <T extends object>(node: T) => T {
+function typeNameRewriter(isTarget: (parts: string[]) => boolean, newName: string): <T extends object>(node: T) => T {
   const walk = (node: unknown): unknown => {
     if (node === null || typeof node !== "object") return node;
     if (Array.isArray(node)) {

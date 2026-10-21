@@ -356,6 +356,8 @@ export interface FromFunc {
   readonly withOrdinality: boolean;
   readonly alias: string | null;
   readonly colAliases: string[] | null;
+  /** column definition list `AS r(a int, b text)` for functions returning `record` (types parallel `colAliases`) */
+  readonly colTypes?: TypeName[] | null;
   /** ROWS FROM (f1(), f2()) */
   readonly rowsFrom: Expr[] | null;
 }

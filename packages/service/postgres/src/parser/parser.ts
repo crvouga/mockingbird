@@ -181,6 +181,9 @@ const TYPE_LITERAL_NAMES = new Set([
   "regtype",
   "tsvector",
   "tsquery",
+  "inet",
+  "cidr",
+  "macaddr",
   "double",
   "character",
   "bit",
@@ -1167,8 +1170,8 @@ export class Parser {
       this.pos = save;
       const call = this.parseExpr();
       const withOrdinality = this.parseWithOrdinality();
-      const { alias, colAliases } = this.parseAliasClause();
-      return { type: "from_func", call, lateral, withOrdinality, alias, colAliases, rowsFrom: null };
+      const { alias, colAliases, colTypes } = this.parseAliasClause();
+      return { type: "from_func", call, lateral, withOrdinality, alias, colAliases, colTypes, rowsFrom: null };
     }
     if (this.eatOp("*")) {
       // trailing * (inheritance marker) — accept and ignore
@@ -1186,7 +1189,7 @@ export class Parser {
     return false;
   }
 
-  private parseAliasClause(): { alias: string | null; colAliases: string[] | null } {
+  private parseAliasClause(): { alias: string | null; colAliases: string[] | null; colTypes: TypeName[] | null } {
     let alias: string | null = null;
     if (this.eatKw("as")) {
       alias = this.ident(true);
@@ -1197,11 +1200,13 @@ export class Parser {
       }
     }
     let colAliases: string[] | null = null;
+    let colTypes: TypeName[] | null = null;
     if (alias !== null && this.atPunct("(")) {
       // could be column aliases t(a, b) — only idents inside
       const save = this.pos;
       this.pos++;
       const cols: string[] = [];
+      const types: TypeName[] = [];
       let ok = true;
       for (;;) {
         const t = this.peek();
@@ -1218,7 +1223,7 @@ export class Parser {
         // optional type spec for record-returning fn aliases: name type
         if (this.peek().type === "ident" && !this.atPunct(",") && !this.atPunct(")")) {
           try {
-            this.parseTypeName();
+            types.push(this.parseTypeName());
           } catch {
             ok = false;
             break;
@@ -1229,10 +1234,13 @@ export class Parser {
         ok = false;
         break;
       }
-      if (ok) colAliases = cols;
-      else this.pos = save;
+      if (ok) {
+        colAliases = cols;
+        // a column definition list types every column or none
+        if (types.length === cols.length) colTypes = types;
+      } else this.pos = save;
     }
-    return { alias, colAliases };
+    return { alias, colAliases, colTypes };
   }
 
   // --- INSERT / UPDATE / DELETE -----------------------------------------------

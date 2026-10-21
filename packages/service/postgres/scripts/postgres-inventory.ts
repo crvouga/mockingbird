@@ -60,6 +60,7 @@ export const SUPPORTED_OPERATORS = new Set([
   "?&",
   "#-",
   "@@",
+  "@?",
   "@",
   "|/",
   "||/",

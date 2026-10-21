@@ -5,7 +5,7 @@ import { refusedInTransactionBlock } from "../executor/maintenance.ts";
 import type { ExecEnv, ExecResult } from "../executor/relation.ts";
 import { EngineCtx } from "../expressions/context.ts";
 import { parse } from "../parser/index.ts";
-import type { TypedValue } from "../types/value.ts";
+import type { TypedValue, TypeMod } from "../types/value.ts";
 import { datumText, UNKNOWN } from "../types/value.ts";
 import { type BindValue, bindValueToTyped, datumToJs, type QueryRow } from "./bind.ts";
 import type { Database } from "./database.ts";
@@ -22,6 +22,8 @@ export interface RunResult {
 export interface TextResultSet {
   columns: string[];
   columnTypes: string[];
+  /** type modifier per column (`varchar(32)`, `numeric(10,2)`), null where there is none; absent when unknown */
+  columnMods?: (TypeMod | null)[];
   rows: (string | null)[][];
   rowCount: number;
   command: string;
@@ -92,6 +94,7 @@ export class Statement {
     return {
       columns: res.columns.map((c) => c.name),
       columnTypes: res.columns.map((c) => (c.type === UNKNOWN ? "text" : c.type)),
+      columnMods: res.columns.map((c) => c.mod ?? null),
       rows: res.rows.map((row) =>
         res.columns.map((c, i) => {
           const v = row[i] ?? null;

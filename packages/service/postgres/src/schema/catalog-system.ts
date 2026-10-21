@@ -61,7 +61,12 @@ export function columnDefaults(ctx: EngineCtx): Array<{ tableOid: number; attnum
  * hands it back unchanged.
  */
 function pgAttrdef(ctx: EngineCtx): Relation {
-  const rows: Datum[][] = columnDefaults(ctx).map((d) => [attrdefOid(d.tableOid, d.attnum), d.tableOid, d.attnum, d.text]);
+  const rows: Datum[][] = columnDefaults(ctx).map((d) => [
+    attrdefOid(d.tableOid, d.attnum),
+    d.tableOid,
+    d.attnum,
+    d.text,
+  ]);
   return rel(
     [
       ["oid", "oid"],
@@ -141,7 +146,20 @@ function pgCollation(): Relation {
     collate: string | null,
     locale: string | null,
     version: string | null,
-  ): Datum[] => [oid, name, PG_CATALOG, SUPERUSER_OID, provider, true, encoding, collate, collate, locale, null, version];
+  ): Datum[] => [
+    oid,
+    name,
+    PG_CATALOG,
+    SUPERUSER_OID,
+    provider,
+    true,
+    encoding,
+    collate,
+    collate,
+    locale,
+    null,
+    version,
+  ];
   return rel(
     [
       ["oid", "oid"],

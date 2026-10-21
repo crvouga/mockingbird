@@ -144,17 +144,18 @@ sequenceParity(
   ],
   { compareFinalState: true },
 );
-sequenceParity(
-  "#531 rename inside a rolled-back transaction",
+sequenceParity("#531 rename inside a rolled-back transaction", enumSetup, [
+  { sql: "BEGIN" },
+  { sql: "ALTER TYPE s.mood RENAME TO mood2" },
+  { sql: "ROLLBACK" },
+  { sql: typeNames, query: true },
+]);
+errorParity(
+  "#531 rename onto an existing type name",
   enumSetup,
-  [
-    { sql: "BEGIN" },
-    { sql: "ALTER TYPE s.mood RENAME TO mood2" },
-    { sql: "ROLLBACK" },
-    { sql: typeNames, query: true },
-  ],
+  "ALTER TYPE s.mood RENAME TO mood_x",
+  "duplicate_object",
 );
-errorParity("#531 rename onto an existing type name", enumSetup, "ALTER TYPE s.mood RENAME TO mood_x", "duplicate_object");
 errorParity("#531 rename a type that does not exist", enumSetup, "ALTER TYPE s.nope RENAME TO x", "undefined_object");
 test("#531 the new name never carries a schema (42601, as in PostgreSQL)", () => {
   expect(sqlStateOf("ALTER TYPE s.mood RENAME TO public.mood3", enumSetup)).toBe("42601");

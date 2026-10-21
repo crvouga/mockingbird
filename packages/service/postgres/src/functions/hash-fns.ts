@@ -1,11 +1,13 @@
+import { castTo } from "../types/cast.ts";
+import { tv } from "../types/value.ts";
+import { digestBytes } from "./pgcrypto.ts";
 import type { ScalarFn } from "./util.ts";
 import { argBigInt, argText, strict } from "./util.ts";
-import { tv } from "../types/value.ts";
 
 /**
- * `hashtext(text)` and `hashtextextended(text, bigint)`: PostgreSQL's `hash_any` /
- * `hash_any_extended` (src/common/hashfn.c, Bob Jenkins' lookup3) over the UTF-8 bytes of the
- * string, so a key hashed here is the key a real server computes (advisory-lock keys, sharding).
+ * `sha224` .. `sha512(bytea)`, plus `hashtext(text)` and `hashtextextended(text, bigint)`: PostgreSQL's
+ * `hash_any` / `hash_any_extended` (src/common/hashfn.c, Bob Jenkins' lookup3) over the UTF-8 bytes of
+ * the string, so a key hashed here is the key a real server computes (advisory-lock keys, sharding).
  */
 
 const utf8 = new TextEncoder();
@@ -103,5 +105,15 @@ export function getHashFunctions(): Map<string, ScalarFn> {
     "hashtextextended",
     strict("int8", (ctx, args) => tv("int8", hashTextExtended(argText(ctx, args[0]!), argBigInt(ctx, args[1]!)))),
   );
+  // the core SHA-2 family (PostgreSQL 11+), unlike pgcrypto's digest() needing no extension
+  for (const name of ["sha224", "sha256", "sha384", "sha512"]) {
+    m.set(
+      name,
+      strict("bytea", (ctx, args) => {
+        const bytes = castTo(ctx, args[0]!, "bytea", { explicit: true }).v as Uint8Array;
+        return tv("bytea", digestBytes(bytes, name));
+      }),
+    );
+  }
   return m;
 }

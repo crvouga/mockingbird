@@ -17,7 +17,21 @@ import type { CellValue, ContractDb, ContractStatement, QueryResult, SqlValue } 
 
 let shared: Promise<{ db: PGlite; parsers: Record<number, (x: string) => string> }> | null = null;
 
+/**
+ * PGlite leaks WASM stack for every statement that raises an error: after roughly 1850 of them in one
+ * instance, statements that check the stack depth fail with `54001 stack depth limit exceeded`. The
+ * suite raises thousands, so the shared instance is replaced well before that.
+ */
+const ERRORS_PER_INSTANCE = 800;
+let errorsRaised = 0;
+
 async function getShared(): Promise<{ db: PGlite; parsers: Record<number, (x: string) => string> }> {
+  if (shared && errorsRaised >= ERRORS_PER_INSTANCE) {
+    const retired = shared;
+    shared = null;
+    errorsRaised = 0;
+    void retired.then(({ db }) => db.close()).catch(() => {});
+  }
   if (!shared) {
     shared = (async () => {
       // pgcrypto and pg_trgm are available but not installed; tests that need them run CREATE EXTENSION.
@@ -155,6 +169,7 @@ export class PgliteAdapter implements ContractDb {
       const values = (res.rows as unknown as unknown[][]).map((row) => row.map(toCell));
       return okResult(columns, values, res.affectedRows ?? 0, res.command, this.inTxn);
     } catch (error) {
+      errorsRaised++;
       const e = error as PgliteError;
       const message = normalizeErrorMessage(e.message ?? String(error));
       const sqlstate = typeof e.code === "string" && e.code.length === 5 ? e.code : undefined;
