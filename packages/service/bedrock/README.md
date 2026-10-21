@@ -264,6 +264,7 @@ cannot add headers, so map each worker's access key id:
 | `accessKeyCredential` | function | The SigV4 access key id of a request (how credentials map to namespaces). |
 | `clockSleep` | function | A sleep that waits on a (possibly frozen) emulator clock. |
 | `titanEmbedding` | function | The deterministic unit vector Titan answers with. |
+| `lexicalEmbedding`, `EMBEDDING_MODES` | function, array | The opt-in similarity-preserving embedding and the `embeddingMode` values. |
 | `sampleSchema` | function | The minimal instance of a JSON Schema (the unscripted structured output). |
 | `parseScript` | function | Validate one script (what `PUT /__admin/scripts` runs). |
 | `MODEL_OPERATIONS`, `STOP_REASONS`, `TURN_FAULTS` | arrays | The values `operation`, `stopReason` and `fault` accept. |

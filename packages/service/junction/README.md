@@ -417,7 +417,9 @@ default result lines carry no `source_markers`, and was reported from a sandbox 
 been re-verified.
 
 `GET /v3/lab_tests` lists every lab test unless filtered; pass `status=active` to exclude inactive
-ones. The documented default of that filter is not stated, so the emulator does not change it.
+ones. The documented default of that filter is not stated, so the emulator does not change it:
+default-excludes-inactive (as #470 reports) is an unverified claim and is **not implemented**
+(best guess, not oracle-verified; `junction.markers-overlays.test.ts` pins the current contract).
 
 ## Lab accounts
 

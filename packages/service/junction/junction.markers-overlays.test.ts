@@ -36,6 +36,8 @@ const call = async (
 }
 
 const LIPID = "b439efda-1e07-4d2c-8afb-51771c7cc0cb"
+const OVERLAY_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+const OVERLAY_ID_2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 const FEMALE_WELLNESS = "0cb9f34f-c3df-4a13-8ca1-19429a82611b"
 
 const catalog: NonNullable<JunctionRuntimeOptions["markerCatalog"]> = [
@@ -173,6 +175,22 @@ test("#470: inactive lab tests and non-orderable markers are not offered", async
   expect(res.body.markers.map((m: Json) => m.id)).not.toContain(9200)
 })
 
+test("#470: GET /v3/lab_tests lists inactive tests unless status=active is passed (best guess, default unverified)", async () => {
+  const mock = createRuntime({
+    catalogOverlays: [
+      { from: "lipid_panel_athome", id: OVERLAY_ID, name: "Retired", status: "inactive" },
+    ],
+  })
+  const ids = async (query: string) =>
+    ((await call(mock, "GET", `/v3/lab_tests${query}`)).body as Json[]).map((test) => test.id)
+  // The vendor default of the filter is undocumented, so the emulator keeps listing every test.
+  expect(await ids("?generation_method=all")).toContain(OVERLAY_ID)
+  // The documented-by-us opt-in: status=active excludes the inactive test and nothing else.
+  const active = await ids("?generation_method=all&status=active")
+  expect(active).not.toContain(OVERLAY_ID)
+  expect(active).toContain(LIPID)
+})
+
 test("#470: estimate_order_set_pricing prices lab tests and add-on markers", async () => {
   const mock = createRuntime({ markerCatalog: catalog })
   const path = "/v3/lab_test/estimate_order_set_pricing"
@@ -308,9 +326,6 @@ test("#470: add-on result lines name their source markers only when asked to", a
     { marker_id: 1975, name: "Lipid Panel", slug: "lipid-panel", provider_id: "303756" },
   ])
 })
-
-const OVERLAY_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-const OVERLAY_ID_2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 
 test("#471: catalog overlays clone a lab test under a new id, name, slug and lab", async () => {
   const mock = createRuntime({

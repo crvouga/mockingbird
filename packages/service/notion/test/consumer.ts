@@ -70,7 +70,7 @@ export const pageMarkdown = async (
       else if (block.type === "callout") lines.push(`${indent}> ${text}`)
       else if (block.type === "code") {
         const caption = plain(body.caption)
-        lines.push(`${indent}\`\`\`${body.language ?? ""}`, text, `${indent}\`\`\``)
+        lines.push(`${indent}\`\`\`${body.language ?? ""}`, `${indent}${text}`, `${indent}\`\`\``)
         if (caption) lines.push(`${indent}${caption}`)
       } else lines.push(`${indent}${text}`)
       if (block.has_children)
