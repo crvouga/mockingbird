@@ -39,6 +39,11 @@ export type SqsRuntimeOptions = {
   region?: string
   accountId?: string
   queues?: readonly SqsSeedQueue[]
+  /**
+   * Hold an empty ReceiveMessage for its `WaitTimeSeconds` on the emulator clock, as SQS does.
+   * Default true; `false` answers every receive at once, as before.
+   */
+  longPoll?: boolean
 }
 export type SqsRuntime = ServiceRuntime<SqsAPI>
 
@@ -132,8 +137,9 @@ const admin = (runtime: ServiceRuntime<SqsAPI>): AdminRoutes => ({
   },
 })
 
-export const createRuntime = (options: SqsRuntimeOptions = {}): SqsRuntime =>
-  serviceRuntime({
+export const createRuntime = (options: SqsRuntimeOptions = {}): SqsRuntime => {
+  let built: SqsRuntime | undefined
+  const runtime = serviceRuntime({
     name: SQS_NAMESPACE,
     document,
     presets: SQS_PRESETS,
@@ -145,14 +151,20 @@ export const createRuntime = (options: SqsRuntimeOptions = {}): SqsRuntime =>
     ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
     credential: accessKeyCredential,
-    create: ({ sqlite, namespace, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, clock }) =>
       new SqsAPI({
         sqlite,
         namespace,
         now: clock.now,
+        advance: (ms) => clock.advance(ms),
+        virtualTime: () => built?.controls(publicNamespace).virtualTime ?? false,
+        ...(options.longPoll !== undefined ? { longPoll: options.longPoll } : {}),
         ...(options.region ? { region: options.region } : {}),
         ...(options.accountId ? { accountId: options.accountId } : {}),
         ...(options.queues ? { queues: options.queues } : {}),
       }),
     admin,
   })
+  built = runtime
+  return runtime
+}
