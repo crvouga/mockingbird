@@ -246,7 +246,9 @@ const adminRoutes = (runtime: ServiceRuntime<GarminHealthAPI>, hub: WebhookHub):
     }
     const paths = isRecord(body.paths)
       ? (Object.fromEntries(
-          Object.entries(body.paths).filter(([k, v]) => k in WEBHOOK_PATHS && typeof v === "string"),
+          Object.entries(body.paths).filter(
+            ([k, v]) => k in WEBHOOK_PATHS && typeof v === "string",
+          ),
         ) as GarminHealthWebhooks["paths"])
       : undefined
     const set = hub.setEndpoints(
@@ -263,7 +265,8 @@ const adminRoutes = (runtime: ServiceRuntime<GarminHealthAPI>, hub: WebhookHub):
     guarded(() => json(200, runtime.instance(namespace).deregisterUser(params.userId as string))),
   "POST /users/:userId/permissions": ({ params, body, namespace }) =>
     guarded(() => {
-      const permissions = isRecord(body) && isRecord(body.permissions) ? body.permissions : undefined
+      const permissions =
+        isRecord(body) && isRecord(body.permissions) ? body.permissions : undefined
       if (!permissions || !Object.values(permissions).every((v) => typeof v === "boolean"))
         return adminError(400, "expected {permissions: {<name>: boolean}}")
       return json(

@@ -19,9 +19,7 @@ const response = await fetch("https://apis.garmin.com/wellness-api/rest/user/id"
 })
 const body = (await response.json()) as { userId?: unknown }
 if (response.status !== 200 || typeof body.userId !== "string") {
-  console.error(
-    `garmin-health: user id check failed (HTTP ${response.status}); contents withheld`,
-  )
+  console.error(`garmin-health: user id check failed (HTTP ${response.status}); contents withheld`)
   process.exit(1)
 }
 console.log(

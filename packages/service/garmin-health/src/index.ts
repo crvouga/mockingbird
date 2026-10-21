@@ -32,7 +32,14 @@ export {
 } from "./runtime.js"
 
 export const GARMIN_HEALTH_NAMESPACE = "garmin-health"
-export const SUMMARY_TYPES = ["activities", "sleeps", "dailies", "epochs", "bodyComps", "hrv"] as const
+export const SUMMARY_TYPES = [
+  "activities",
+  "sleeps",
+  "dailies",
+  "epochs",
+  "bodyComps",
+  "hrv",
+] as const
 export type SummaryType = (typeof SUMMARY_TYPES)[number]
 /** Longest backfill window one request may cover (best guess, not oracle-verified). */
 export const MAX_BACKFILL_SECONDS = 90 * 86400
@@ -221,7 +228,10 @@ export const isSummaryType = (value: string): value is SummaryType =>
   (SUMMARY_TYPES as readonly string[]).includes(value)
 
 /** The second a summary belongs to: `measurementTimeInSeconds` for body composition, else `startTimeInSeconds`. */
-export const summaryTime = (type: SummaryType, data: Record<string, unknown>): number | undefined => {
+export const summaryTime = (
+  type: SummaryType,
+  data: Record<string, unknown>,
+): number | undefined => {
   const value = data[type === "bodyComps" ? "measurementTimeInSeconds" : "startTimeInSeconds"]
   return typeof value === "number" && Number.isFinite(value) ? value : undefined
 }
@@ -385,13 +395,16 @@ export class GarminHealthAPI implements FetchAPI {
     return next
   }
   addSummary(seed: SummarySeed): Summary {
-    if (!isSummaryType(seed.type)) throw new Error(`type must be one of ${SUMMARY_TYPES.join(", ")}`)
+    if (!isSummaryType(seed.type))
+      throw new Error(`type must be one of ${SUMMARY_TYPES.join(", ")}`)
     if (typeof seed.userId !== "string" || !seed.userId) throw new Error("userId is required")
     if (summaryTime(seed.type, seed.data) === undefined)
       throw new Error(
         `data.${seed.type === "bodyComps" ? "measurementTimeInSeconds" : "startTimeInSeconds"} is required`,
       )
-    const key = seed.key ?? `${seed.userId}:${seed.type}:${String(seed.data.summaryId ?? this.summaries.count() + 1)}`
+    const key =
+      seed.key ??
+      `${seed.userId}:${seed.type}:${String(seed.data.summaryId ?? this.summaries.count() + 1)}`
     const summary: Summary = { key, userId: seed.userId, type: seed.type, data: seed.data }
     if (this.summaries.has(key)) this.summaries.update(key, summary)
     else this.summaries.insert(key, summary)
@@ -405,7 +418,11 @@ export class GarminHealthAPI implements FetchAPI {
       .filter((s) => {
         const time = summaryTime(s.type, s.data)
         return (
-          s.userId === userId && s.type === type && time !== undefined && time >= start && time < end
+          s.userId === userId &&
+          s.type === type &&
+          time !== undefined &&
+          time >= start &&
+          time < end
         )
       })
   }
@@ -498,7 +515,10 @@ export class GarminHealthAPI implements FetchAPI {
       return new Response(null, { status: 302, headers: { location: target.toString() } })
     }
     if (q.get("response_type") !== "code")
-      return back({ error: "unsupported_response_type", error_description: "response_type must be code." })
+      return back({
+        error: "unsupported_response_type",
+        error_description: "response_type must be code.",
+      })
     const challenge = q.get("code_challenge") ?? ""
     if (!challenge || q.get("code_challenge_method") !== "S256")
       return back({
@@ -533,8 +553,7 @@ export class GarminHealthAPI implements FetchAPI {
     if (!client || client.secret !== (basic?.password ?? body.get("client_secret")))
       return oauthError("invalid_client", "Client authentication failed.", basic ? 401 : 400)
     const settings = this.settings()
-    let userId: string,
-      refreshToken: string | undefined
+    let userId: string, refreshToken: string | undefined
     if (body.get("grant_type") === "refresh_token") {
       const previous = this.grants
         .list({ order: "oldest" })
@@ -646,7 +665,14 @@ export class GarminHealthAPI implements FetchAPI {
         body:
           user.delivery === "push"
             ? { [type]: found.map((s) => ({ ...s.data, userId: s.userId })) }
-            : { [type]: [{ userId: user.userId, callbackURL: this.callbackUrl(c, user.userId, type, start, end) }] },
+            : {
+                [type]: [
+                  {
+                    userId: user.userId,
+                    callbackURL: this.callbackUrl(c, user.userId, type, start, end),
+                  },
+                ],
+              },
       }
       this.notifications.insert(notificationId, notification)
       if (this.settings().autoDeliver) this.send(notification)

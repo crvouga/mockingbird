@@ -541,6 +541,20 @@
     "logo": "/brands/firstpromoter.png",
     "logoSource": "site"
   },
+  "fitbit": {
+    "vendor": "Fitbit",
+    "website": "https://www.fitbit.com",
+    "docs": "https://dev.fitbit.com/build/reference/web-api/",
+    "description": "Fitbit wearable activity and sleep data API.",
+    "input": {
+      "website": "https://www.fitbit.com",
+      "docs": "https://dev.fitbit.com/build/reference/web-api/",
+      "description": "Fitbit wearable activity and sleep data API."
+    },
+    "color": "#00B0B9",
+    "logo": "/brands/fitbit.svg",
+    "logoSource": "simple-icons"
+  },
   "flex": {
     "vendor": "Flex",
     "website": "https://www.withflex.com",
@@ -579,6 +593,20 @@
     },
     "color": null,
     "logo": "/brands/fullscript.svg",
+    "logoSource": "site"
+  },
+  "garmin-health": {
+    "vendor": "Garmin Health",
+    "website": "https://developer.garmin.com/gc-developer-program/health-api/",
+    "docs": "https://developer.garmin.com/gc-developer-program/health-api/",
+    "description": "Garmin Connect Developer Program Health API for wearable summaries.",
+    "input": {
+      "website": "https://developer.garmin.com/gc-developer-program/health-api/",
+      "docs": "https://developer.garmin.com/gc-developer-program/health-api/",
+      "description": "Garmin Connect Developer Program Health API for wearable summaries."
+    },
+    "color": null,
+    "logo": "/brands/garmin-health.ico",
     "logoSource": "site"
   },
   "genebygene": {
@@ -1129,6 +1157,20 @@
     "logo": "/brands/plane.png",
     "logoSource": "site"
   },
+  "polar": {
+    "vendor": "Polar",
+    "website": "https://www.polar.com",
+    "docs": "https://www.polar.com/accesslink-api/",
+    "description": "Polar AccessLink API for Polar Flow wearable training data.",
+    "input": {
+      "website": "https://www.polar.com",
+      "docs": "https://www.polar.com/accesslink-api/",
+      "description": "Polar AccessLink API for Polar Flow wearable training data."
+    },
+    "color": null,
+    "logo": "/brands/polar.ico",
+    "logoSource": "site"
+  },
   "postgres": {
     "vendor": "PostgreSQL",
     "website": "https://www.postgresql.org",
@@ -1520,6 +1562,20 @@
     },
     "color": "#FF9900",
     "logo": "/brands/support.png",
+    "logoSource": "site"
+  },
+  "suunto": {
+    "vendor": "Suunto",
+    "website": "https://www.suunto.com",
+    "docs": "https://apizone.suunto.com/how-to-start",
+    "description": "Suunto Cloud API for sports watch workouts and 24/7 health samples.",
+    "input": {
+      "website": "https://www.suunto.com",
+      "docs": "https://apizone.suunto.com/how-to-start",
+      "description": "Suunto Cloud API for sports watch workouts and 24/7 health samples."
+    },
+    "color": null,
+    "logo": "/brands/suunto.png",
     "logoSource": "site"
   },
   "swf": {

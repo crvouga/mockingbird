@@ -30,7 +30,10 @@ test(
       sleep: async () => {},
       log: () => {},
     })
-    expect(Object.keys(report.exercised).sort()).toEqual([...supportedOperationIds].sort())
+    // Authorize is an interactive redirect (parity disabled in the contract); the acceptance tests cover it.
+    expect(Object.keys(report.exercised).sort()).toEqual(
+      supportedOperationIds.filter((id) => id !== "Authorize").sort(),
+    )
   },
   { timeout: 60_000 },
 )

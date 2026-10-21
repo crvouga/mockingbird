@@ -55,9 +55,9 @@ const tokenResponse = await fetch(tokenUrl, {
 })
 const { access_token } = (await tokenResponse.json()) as { access_token: string }
 const exercises = await fetch(`${apiOrigin}/v3/exercises?samples=false&zones=false&route=false`, {
-  headers: { authorization: `Bearer mock_polar_token`, accept: "application/json" },
+  headers: { authorization: `Bearer ${access_token}`, accept: "application/json" },
 })
-console.log(access_token, await exercises.json())
+console.log(await exercises.json())
 
 await server.close()
 ```

@@ -35,7 +35,9 @@ paths:
               schema: { $ref: '#/components/schemas/OAuthError' }
       x-mockingbird:
         supported: true
-        parity: { enabled: true, safe: false }
+        parity:
+          enabled: false
+          reason: Interactive consent redirects are exercised by the acceptance tests through the consumer.
   /di-oauth2-service/oauth/token:
     post:
       operationId: OAuthToken
