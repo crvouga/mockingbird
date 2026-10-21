@@ -1,0 +1,192 @@
+openapi: 3.1.0
+info:
+  title: Garmin Health API
+  version: wellness-api
+  description: >-
+    Garmin Connect Developer Program Health API: OAuth 2.0 with PKCE, user id, backfill requests,
+    push and ping webhooks and deregistration. The vendor endpoint specification is behind the
+    approved-developer portal, so every wire detail here is what a consumer sends and parses, not
+    vendor-verified (best guess, see the README).
+  x-mockingbird-upstream:
+    url: https://developer.garmin.com/gc-developer-program/health-api/
+servers:
+  - url: https://apis.garmin.com
+paths:
+  /oauth2Confirm:
+    get:
+      operationId: Authorize
+      summary: Consent page (connect.garmin.com in production); redirects back with a code
+      parameters:
+        - { name: response_type, in: query, required: true, schema: { type: string, enum: [code] } }
+        - { name: client_id, in: query, required: true, schema: { type: string, example: mock_garmin_client } }
+        - { name: redirect_uri, in: query, required: true, schema: { type: string, example: 'http://localhost:8000/api/v1/garmin/callback' } }
+        - { name: state, in: query, schema: { type: string, example: state-1 } }
+        - { name: code_challenge, in: query, required: true, schema: { type: string, minLength: 43, maxLength: 128, example: E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM } }
+        - { name: code_challenge_method, in: query, required: true, schema: { type: string, enum: [S256] } }
+      responses:
+        '302':
+          description: Redirect to redirect_uri with code and state, or error=access_denied
+          headers:
+            location: { schema: { type: string } }
+        '400':
+          description: Unknown client or unregistered redirect_uri (never redirected to)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: false }
+  /di-oauth2-service/oauth/token:
+    post:
+      operationId: OAuthToken
+      summary: Token endpoint (diauth.garmin.com in production); client credentials in the body
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type]
+              properties:
+                grant_type: { type: string, enum: [authorization_code, refresh_token] }
+                code: { type: string }
+                redirect_uri: { type: string }
+                code_verifier: { type: string }
+                refresh_token: { type: string }
+                client_id: { type: string }
+                client_secret: { type: string }
+      responses:
+        '200':
+          description: Tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, token_type, expires_in]
+                properties:
+                  access_token: { type: string, x-mockingbird-volatile: { kind: token } }
+                  token_type: { type: string }
+                  expires_in: { type: integer }
+                  refresh_token: { type: string, x-mockingbird-volatile: { kind: token } }
+        '400':
+          description: OAuth error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+        '401':
+          description: invalid_client when the client authenticated with a Basic header
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/OAuthError' }
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: false }
+  /wellness-api/rest/user/id:
+    get:
+      operationId: GetUserId
+      responses:
+        '200':
+          description: The Garmin user id behind the access token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [userId]
+                properties:
+                  userId: { type: string, x-mockingbird-volatile: { kind: opaque } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: true }
+  /wellness-api/rest/backfill/{type}:
+    get:
+      operationId: RequestBackfill
+      summary: Ask Garmin to deliver one window of summaries to the webhook, once per type and window
+      parameters:
+        - { name: type, in: path, required: true, schema: { $ref: '#/components/schemas/SummaryType' } }
+        - { name: summaryStartTimeInSeconds, in: query, required: true, schema: { type: integer, minimum: 0, example: 1767225600 } }
+        - { name: summaryEndTimeInSeconds, in: query, required: true, schema: { type: integer, minimum: 0, example: 1767312000 } }
+      responses:
+        '202':
+          description: Accepted; summaries follow on the webhook. Empty body.
+        '400':
+          description: Missing or non-integer bounds, end not after start, or a window over 90 days
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404':
+          description: A type outside activities, sleeps, dailies, epochs, bodyComps and hrv
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '409':
+          description: The same window was already requested for this type
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+        '429':
+          description: Rate limited (a fault preset); Retry-After in seconds
+          headers:
+            retry-after: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: false }
+  /wellness-api/rest/user/registration:
+    delete:
+      operationId: DeleteRegistration
+      summary: Deregister the user; every token of that user stops working
+      responses:
+        '204':
+          description: Deregistered
+        '401': { $ref: '#/components/responses/Unauthorized' }
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: false }
+  /wellness-api/rest/{type}:
+    get:
+      operationId: GetCallbackSummaries
+      summary: The callbackURL of a ping notification; authenticated by its token query parameter, not a header
+      parameters:
+        - { name: type, in: path, required: true, schema: { $ref: '#/components/schemas/SummaryType' } }
+        - { name: uploadStartTimeInSeconds, in: query, required: true, schema: { type: integer, minimum: 0, example: 1767225600 } }
+        - { name: uploadEndTimeInSeconds, in: query, required: true, schema: { type: integer, minimum: 0, example: 1767312000 } }
+        - { name: token, in: query, required: true, schema: { type: string, example: cb_1 } }
+      responses:
+        '200':
+          description: The summaries of the notification
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object, additionalProperties: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: true }
+components:
+  responses:
+    Unauthorized:
+      description: Missing, unknown, expired or deregistered access token
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+  schemas:
+    SummaryType:
+      type: string
+      enum: [activities, sleeps, dailies, epochs, bodyComps, hrv]
+    ApiError:
+      type: object
+      required: [error, message]
+      properties:
+        error: { type: string }
+        message: { type: string }
+    OAuthError:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        error_description: { type: string }

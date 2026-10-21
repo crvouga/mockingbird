@@ -1388,6 +1388,32 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/service/fitbit": {
+      "name": "@crvouga/mockingbird-service-fitbit",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-fitbit": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/flex": {
       "name": "@crvouga/mockingbird-service-flex",
       "version": "0.0.0-development",
@@ -1468,6 +1494,32 @@
         "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
         "zod": "3.25.76",
+      },
+    },
+    "packages/service/garmin-health": {
+      "name": "@crvouga/mockingbird-service-garmin-health",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-garmin-health": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
       },
     },
     "packages/service/genebygene": {
@@ -2465,6 +2517,32 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/service/polar": {
+      "name": "@crvouga/mockingbird-service-polar",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-polar": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/postgres": {
       "name": "@crvouga/mockingbird-service-postgres",
       "version": "0.0.0-development",
@@ -3102,6 +3180,32 @@
         "@crvouga/mockingbird-openapi-metadata": "workspace:*",
         "@crvouga/mockingbird-parity": "workspace:*",
         "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/service/suunto": {
+      "name": "@crvouga/mockingbird-service-suunto",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-suunto": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@crvouga/mockingbird-sqlite": "workspace:*",
         "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
@@ -4199,11 +4303,15 @@
 
     "@crvouga/mockingbird-service-firstpromoter": ["@crvouga/mockingbird-service-firstpromoter@workspace:packages/service/firstpromoter"],
 
+    "@crvouga/mockingbird-service-fitbit": ["@crvouga/mockingbird-service-fitbit@workspace:packages/service/fitbit"],
+
     "@crvouga/mockingbird-service-flex": ["@crvouga/mockingbird-service-flex@workspace:packages/service/flex"],
 
     "@crvouga/mockingbird-service-formbricks": ["@crvouga/mockingbird-service-formbricks@workspace:packages/service/formbricks"],
 
     "@crvouga/mockingbird-service-fullscript": ["@crvouga/mockingbird-service-fullscript@workspace:packages/service/fullscript"],
+
+    "@crvouga/mockingbird-service-garmin-health": ["@crvouga/mockingbird-service-garmin-health@workspace:packages/service/garmin-health"],
 
     "@crvouga/mockingbird-service-genebygene": ["@crvouga/mockingbird-service-genebygene@workspace:packages/service/genebygene"],
 
@@ -4283,6 +4391,8 @@
 
     "@crvouga/mockingbird-service-plane": ["@crvouga/mockingbird-service-plane@workspace:packages/service/plane"],
 
+    "@crvouga/mockingbird-service-polar": ["@crvouga/mockingbird-service-polar@workspace:packages/service/polar"],
+
     "@crvouga/mockingbird-service-postgres": ["@crvouga/mockingbird-service-postgres@workspace:packages/service/postgres"],
 
     "@crvouga/mockingbird-service-posthog": ["@crvouga/mockingbird-service-posthog@workspace:packages/service/posthog"],
@@ -4334,6 +4444,8 @@
     "@crvouga/mockingbird-service-sts": ["@crvouga/mockingbird-service-sts@workspace:packages/service/sts"],
 
     "@crvouga/mockingbird-service-support": ["@crvouga/mockingbird-service-support@workspace:packages/service/support"],
+
+    "@crvouga/mockingbird-service-suunto": ["@crvouga/mockingbird-service-suunto@workspace:packages/service/suunto"],
 
     "@crvouga/mockingbird-service-swf": ["@crvouga/mockingbird-service-swf@workspace:packages/service/swf"],
 

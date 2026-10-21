@@ -1,0 +1,315 @@
+openapi: 3.1.0
+info:
+  title: Fitbit legacy Web API emulator
+  version: '1'
+  description: |
+    The Fitbit legacy Web API subset a scheduled health sync calls: OAuth 2.0 authorization code
+    with PKCE (authorize, token, refresh, revoke), the profile, the activity log list, the sleep
+    log by date and the daily activity summary. Vendor reference:
+    https://dev.fitbit.com/build/reference/web-api/. The vendor documents support for the legacy
+    API ending 2026-09-30; error envelopes the reference does not pin down are documented best
+    guesses (see README.md), not oracle-verified.
+servers:
+  - url: https://api.fitbit.com
+paths:
+  /oauth2/authorize:
+    get:
+      operationId: Authorize
+      summary: Consent page; redirects to redirect_uri with a code or an error
+      description: |
+        The browser consent page (https://www.fitbit.com/oauth2/authorize on the vendor). The
+        emulator decides consent from its consent setting (approve by default) and redirects.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: Interactive consent redirects are exercised by the acceptance tests through the consumer.
+      parameters:
+        - { name: response_type, in: query, schema: { type: string, example: code } }
+        - { name: client_id, in: query, schema: { type: string, example: mock_client } }
+        - { name: redirect_uri, in: query, schema: { type: string } }
+        - { name: scope, in: query, schema: { type: string, example: activity heartrate profile settings sleep } }
+        - { name: state, in: query, schema: { type: string } }
+        - { name: code_challenge, in: query, schema: { type: string } }
+        - { name: code_challenge_method, in: query, schema: { type: string, example: S256 } }
+        - { name: prompt, in: query, schema: { type: string } }
+        - { name: expires_in, in: query, schema: { type: string } }
+      responses:
+        '302':
+          description: Redirect to redirect_uri with code and state, or with error and state
+          headers:
+            location: { schema: { type: string } }
+        '400':
+          description: The client or redirect_uri is not usable, so nothing can be redirected
+          content:
+            text/html:
+              schema: { type: string }
+  /oauth2/token:
+    post:
+      operationId: OAuthToken
+      summary: Exchange an authorization code or a refresh token
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: false }
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type]
+              properties:
+                grant_type: { type: string, example: refresh_token }
+                code: { type: string }
+                redirect_uri: { type: string }
+                code_verifier: { type: string }
+                refresh_token: { type: string }
+                client_id: { type: string }
+      responses:
+        '200':
+          description: Token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, refresh_token, expires_in, token_type, scope, user_id]
+                properties:
+                  access_token:
+                    type: string
+                    x-mockingbird-volatile: { kind: token }
+                  refresh_token:
+                    type: string
+                    x-mockingbird-volatile: { kind: token }
+                  expires_in: { type: integer }
+                  token_type: { type: string }
+                  scope: { type: string }
+                  user_id: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /oauth2/revoke:
+    post:
+      operationId: RevokeToken
+      summary: Revoke an access or refresh token and every sibling token
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: false }
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+                token_type_hint: { type: string }
+      responses:
+        '200':
+          description: Revoked (an unknown token is also 200, as RFC 7009 asks)
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+  /1/user/{userId}/profile.json:
+    get:
+      operationId: GetProfile
+      summary: The authorized user's profile
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: true }
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: Profile
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user:
+                    type: object
+                    required: [encodedId]
+                    properties:
+                      encodedId: { type: string }
+                    additionalProperties: true
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /1/user/{userId}/activities/list.json:
+    get:
+      operationId: ListActivityLogs
+      summary: Activity log entries before or after a date, paginated
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: true }
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - { name: afterDate, in: query, schema: { type: string, example: '2026-09-01' } }
+        - { name: beforeDate, in: query, schema: { type: string, example: '2026-10-01' } }
+        - { name: sort, in: query, schema: { type: string, example: asc } }
+        - { name: limit, in: query, schema: { type: string, example: '20' } }
+        - { name: offset, in: query, schema: { type: string, example: '0' } }
+      responses:
+        '200':
+          description: Activity logs and the pagination block
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [activities, pagination]
+                properties:
+                  activities:
+                    type: array
+                    items:
+                      type: object
+                      required: [logId, startTime]
+                      properties:
+                        logId: { type: integer }
+                        startTime: { type: string }
+                      additionalProperties: true
+                  pagination:
+                    type: object
+                    required: [limit, next, offset, previous, sort]
+                    properties:
+                      afterDate: { type: string }
+                      beforeDate: { type: string }
+                      limit: { type: integer }
+                      next: { type: string }
+                      offset: { type: integer }
+                      previous: { type: string }
+                      sort: { type: string }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /1/user/{userId}/activities/date/{date}.json:
+    get:
+      operationId: GetDailyActivitySummary
+      summary: The activities, goals and summary of one day
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: true }
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Date'
+      responses:
+        '200':
+          description: Daily summary
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [activities, goals, summary]
+                properties:
+                  activities: { type: array, items: { type: object, additionalProperties: true } }
+                  goals: { type: object, additionalProperties: true }
+                  summary:
+                    type: object
+                    required: [steps, floors, distances, activityCalories]
+                    properties:
+                      steps: { type: integer }
+                      floors: { type: integer }
+                      activityCalories: { type: integer }
+                      restingHeartRate: { type: integer }
+                      distances:
+                        type: array
+                        items:
+                          type: object
+                          required: [activity, distance]
+                          properties:
+                            activity: { type: string }
+                            distance: { type: number }
+                    additionalProperties: true
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /1/user/{userId}/sleep/date/{date}.json:
+    get:
+      operationId: GetSleepByDate
+      summary: The sleep logs that ended on one day (path version 1)
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: true }
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Date'
+      responses:
+        '200': { $ref: '#/components/responses/SleepLogs' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+  /1.2/user/{userId}/sleep/date/{date}.json:
+    get:
+      operationId: GetSleepByDateV12
+      summary: The sleep logs that ended on one day (path version 1.2, as the reference documents)
+      x-mockingbird:
+        supported: true
+        parity: { enabled: true, safe: true }
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+        - $ref: '#/components/parameters/Date'
+      responses:
+        '200': { $ref: '#/components/responses/SleepLogs' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Error' }
+        '403': { $ref: '#/components/responses/Error' }
+components:
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      description: '"-" for the authorized user, or that user''s encoded id'
+      schema: { type: string, minLength: 1, example: '-' }
+    Date:
+      name: date
+      in: path
+      required: true
+      description: A YYYY-MM-DD date (or "today")
+      schema: { type: string, minLength: 1, example: '2026-09-10' }
+  responses:
+    Error:
+      description: Fitbit error envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [errors, success]
+            properties:
+              errors:
+                type: array
+                items:
+                  type: object
+                  required: [errorType, message]
+                  properties:
+                    errorType: { type: string }
+                    message: { type: string }
+                    fieldName: { type: string }
+              success: { type: boolean }
+    SleepLogs:
+      description: Sleep logs for the day and their summary
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [sleep, summary]
+            properties:
+              sleep:
+                type: array
+                items:
+                  type: object
+                  required: [logId, startTime, endTime]
+                  properties:
+                    logId: { type: integer }
+                    startTime: { type: string }
+                    endTime: { type: string }
+                  additionalProperties: true
+              summary:
+                type: object
+                required: [totalMinutesAsleep, totalSleepRecords, totalTimeInBed]
+                properties:
+                  totalMinutesAsleep: { type: integer }
+                  totalSleepRecords: { type: integer }
+                  totalTimeInBed: { type: integer }
+                  stages: { type: object, additionalProperties: true }

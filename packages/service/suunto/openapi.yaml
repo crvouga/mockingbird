@@ -1,0 +1,661 @@
+openapi: 3.1.0
+info:
+  title: Suunto Cloud API (Mockingbird subset)
+  description: 'Stateful emulator subset of the Suunto Cloud API: the OAuth 2.0 authorization-code flow
+    (authorize, token with authorization_code and refresh_token grants), workouts, and the 24/7 sleep,
+    activity and daily-statistics samples, behind the API management gateway''s subscription key.
+    Hand-authored from the consumer''s wire shapes (a Python httpx client). The per-operation schemas
+    live in the Suunto API Zone developer portal and are not public; only the authorize, token and
+    subscription-key behavior is documented at https://apizone.suunto.com/how-to-start. Every other
+    path, field and status here is a best guess, not oracle-verified (see README.md).
+
+    '
+  version: '3'
+  x-mockingbird-upstream:
+    note: Wire shapes from the consumer's requests; Suunto's per-operation schemas are behind an API Zone login.
+servers:
+- url: https://cloudapi.suunto.com
+security:
+- bearerAuth: []
+paths:
+  /oauth/authorize:
+    get:
+      operationId: Authorize
+      description: 'The consent page, served by the OAuth origin (cloudapi-oauth.suunto.com). With the default
+        consent mode it approves as the configured user and redirects to redirect_uri with a one-time code
+        and the state unchanged; in deny mode the redirect carries error=access_denied.'
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: Browser redirect flow whose one-time codes only the acceptance tests can redeem.
+      parameters:
+      - name: response_type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - code
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: redirect_uri
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '302':
+          description: Redirect back to redirect_uri with code and state, or error and error_description
+          headers:
+            Location:
+              schema:
+                type: string
+        '400':
+          description: Missing or unknown client_id, redirect_uri or response_type (never redirected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+  /oauth/token:
+    post:
+      operationId: OAuthToken
+      description: 'Exchange an authorization code, or refresh an access token. The client authenticates with
+        HTTP Basic (client_id:client_secret). The access and refresh tokens are JWTs; the access token
+        carries sub (subject id) and user (Suunto username) claims.'
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthTokenResponse'
+        '400':
+          description: invalid_request, invalid_grant or unsupported_grant_type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '401':
+          description: invalid_client (missing or wrong Basic credentials)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+  /v3/workouts/:
+    get:
+      operationId: ListWorkouts
+      description: 'The user''s workouts, oldest first, in the {error, payload} envelope. since is epoch seconds
+        (values of 1e11 and above are read as milliseconds); filter-by-modification-time=true compares it with
+        each workout''s modification time instead of its start time.'
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - name: since
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          examples:
+          - 0
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          examples:
+          - 100
+      - name: offset
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+          examples:
+          - 0
+      - name: filter-by-modification-time
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - 'true'
+          - 'false'
+      responses:
+        '200':
+          description: Workouts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutsResponse'
+        '400':
+          description: Malformed since, limit or offset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Gateway rejection (subscription key or access token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+  /v3/workouts/{workoutKey}:
+    get:
+      operationId: GetWorkout
+      description: One workout, passed through in the {error, payload} envelope.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - name: workoutKey
+        in: path
+        required: true
+        schema:
+          type: string
+          enum:
+          - '1001'
+          - '1002'
+          - '1003'
+          - missing
+      responses:
+        '200':
+          description: Workout
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkoutResponse'
+        '401':
+          description: Gateway rejection (subscription key or access token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+        '404':
+          description: Unknown workout, or one that belongs to another user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+  /247samples/sleep:
+    get:
+      operationId: ListSleepSamples
+      description: 'Sleep samples with timestamp in [from, to] (epoch milliseconds), oldest first, as a
+        top-level array. A window longer than the vendor limit is a 400.'
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - $ref: '#/components/parameters/From'
+      - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Samples
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SleepSample'
+        '400':
+          description: Missing or malformed window, or a window longer than the limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Gateway rejection (subscription key or access token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+  /247samples/activity:
+    get:
+      operationId: ListActivitySamples
+      description: 'Activity samples with timestamp in [from, to] (epoch milliseconds), oldest first, as a
+        top-level array. A window longer than the vendor limit is a 400.'
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - $ref: '#/components/parameters/From'
+      - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: Samples
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ActivitySample'
+        '400':
+          description: Missing or malformed window, or a window longer than the limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Gateway rejection (subscription key or access token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+  /247/daily-activity-statistics:
+    get:
+      operationId: ListDailyActivityStatistics
+      description: 'Daily statistics (stepcount, energyconsumption) between startdate and enddate
+        (YYYY-MM-DDTHH:MM:SS, read as UTC), one entry per Name with Sources[].Samples[], as a top-level array.'
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - name: startdate
+        in: query
+        required: true
+        schema:
+          type: string
+          examples:
+          - '2026-09-01T00:00:00'
+      - name: enddate
+        in: query
+        required: true
+        schema:
+          type: string
+          examples:
+          - '2026-09-15T00:00:00'
+      responses:
+        '200':
+          description: Statistics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DailyStatistic'
+        '400':
+          description: Missing or malformed window, or a window longer than the limit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Gateway rejection (subscription key or access token)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+        '429':
+          description: Rate limited
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GatewayError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    From:
+      name: from
+      in: query
+      required: true
+      description: Window start, epoch milliseconds
+      schema:
+        type: integer
+        minimum: 0
+        examples:
+        - 1788220800000
+    To:
+      name: to
+      in: query
+      required: true
+      description: Window end, epoch milliseconds
+      schema:
+        type: integer
+        minimum: 0
+        examples:
+        - 1789430400000
+  schemas:
+    TokenRequest:
+      type: object
+      required:
+      - grant_type
+      properties:
+        grant_type:
+          type: string
+        code:
+          type: string
+        redirect_uri:
+          type: string
+        refresh_token:
+          type: string
+    OAuthTokenResponse:
+      type: object
+      required:
+      - access_token
+      - token_type
+      - refresh_token
+      - expires_in
+      - scope
+      properties:
+        access_token:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        token_type:
+          type: string
+        refresh_token:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        expires_in:
+          type: integer
+        scope:
+          type: string
+    OAuthError:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
+    GatewayError:
+      type: object
+      required:
+      - statusCode
+      - message
+      properties:
+        statusCode:
+          type: integer
+        message:
+          type: string
+    ApiError:
+      type: object
+      required:
+      - error
+      - code
+      properties:
+        error:
+          type: string
+        code:
+          type: integer
+        payload:
+          type: 'null'
+    Workout:
+      type: object
+      required:
+      - workoutId
+      - activityId
+      - startTime
+      - stopTime
+      - totalTime
+      properties:
+        workoutId:
+          type: integer
+        workoutKey:
+          type: string
+        activityId:
+          type: integer
+        startTime:
+          type: integer
+          description: Epoch milliseconds
+        stopTime:
+          type: integer
+          description: Epoch milliseconds
+        totalTime:
+          type: number
+          description: Seconds
+        totalDistance:
+          type: number
+        stepCount:
+          type: integer
+        energyConsumption:
+          type: number
+        maxSpeed:
+          type: number
+        avgSpeed:
+          type: number
+        totalAscent:
+          type: number
+        totalDescent:
+          type: number
+        maxAltitude:
+          type: number
+        minAltitude:
+          type: number
+        avgPower:
+          type: number
+        maxPower:
+          type: number
+        avgCadence:
+          type: number
+        maxCadence:
+          type: number
+        name:
+          type: string
+        notes:
+          type: string
+        hrdata:
+          type: object
+          additionalProperties: true
+          properties:
+            workoutMaxHR:
+              type: number
+            workoutAvgHR:
+              type: number
+            userMaxHR:
+              type: number
+            avg:
+              type: number
+            hrmax:
+              type: number
+            max:
+              type: number
+            min:
+              type: number
+        gear:
+          type: object
+          additionalProperties: true
+          properties:
+            manufacturer:
+              type: string
+            name:
+              type: string
+            displayName:
+              type: string
+            serialNumber:
+              type: string
+            swVersion:
+              type: string
+            hwVersion:
+              type: string
+      additionalProperties: true
+    WorkoutsResponse:
+      type: object
+      required:
+      - error
+      - payload
+      properties:
+        error:
+          type: 'null'
+        payload:
+          type: array
+          items:
+            $ref: '#/components/schemas/Workout'
+    WorkoutResponse:
+      type: object
+      required:
+      - error
+      - payload
+      properties:
+        error:
+          type: 'null'
+        payload:
+          $ref: '#/components/schemas/Workout'
+    SleepSample:
+      type: object
+      required:
+      - timestamp
+      - entryData
+      properties:
+        timestamp:
+          type: integer
+          description: Epoch milliseconds
+        entryData:
+          type: object
+          additionalProperties: true
+          properties:
+            BedtimeStart:
+              type: string
+            BedtimeEnd:
+              type: string
+            Duration:
+              type: number
+            DeepSleepDuration:
+              type: number
+            LightSleepDuration:
+              type: number
+            REMSleepDuration:
+              type: number
+            SleepQualityScore:
+              type: number
+            IsNap:
+              type: boolean
+            HRAvg:
+              type: number
+            HRMin:
+              type: number
+            AvgHRV:
+              type: number
+            MaxSpo2:
+              type: number
+            Feeling:
+              type: number
+            SleepId:
+              type: [integer, string]
+    ActivitySample:
+      type: object
+      required:
+      - timestamp
+      - entryData
+      properties:
+        timestamp:
+          type: integer
+          description: Epoch milliseconds
+        entryData:
+          type: object
+          additionalProperties: true
+          properties:
+            HR:
+              type: number
+            HRExt:
+              type: number
+            StepCount:
+              type: number
+            SpO2:
+              type: number
+            EnergyConsumption:
+              type: number
+            HRV:
+              type: number
+    DailyStatistic:
+      type: object
+      required:
+      - Name
+      - Aggregation
+      - Sources
+      properties:
+        Name:
+          type: string
+        Aggregation:
+          type: string
+        Sources:
+          type: array
+          items:
+            type: object
+            required:
+            - Name
+            - Samples
+            properties:
+              Name:
+                type: string
+              Samples:
+                type: array
+                items:
+                  type: object
+                  required:
+                  - Value
+                  - TimeISO8601
+                  properties:
+                    Value:
+                      type: number
+                    TimeISO8601:
+                      type: string
