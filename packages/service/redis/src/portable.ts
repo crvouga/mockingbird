@@ -58,6 +58,7 @@ export function assertPortableDatabase(value: unknown): void {
     !numericMap(value.expires) ||
     !numericMap(value.gens) ||
     !numericMap(value.lru) ||
+    (value.touched !== undefined && !numericMap(value.touched)) ||
     !Array.isArray(value.order) ||
     !value.order.every((k) => typeof k === "string") ||
     !Number.isSafeInteger(value.tick)
@@ -69,7 +70,12 @@ export function assertPortableDatabase(value: unknown): void {
       continue
     if (row.kind === "set" && stringMap(row.members) && [...row.members.values()].every(bytes))
       continue
-    if (row.kind === "hash" && stringMap(row.fields) && [...row.fields.values()].every(bytes))
+    if (
+      row.kind === "hash" &&
+      stringMap(row.fields) &&
+      [...row.fields.values()].every(bytes) &&
+      (row.fieldExpires === undefined || numericMap(row.fieldExpires))
+    )
       continue
     if (
       row.kind === "zset" &&

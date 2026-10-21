@@ -64,7 +64,7 @@ also accept `Authorization: Basic app_id:app_key`, which our adapter sends).
 
 | Route | Behaviour |
 | --- | --- |
-| `GET /api/food-database/v2/parser` | `ingr` is parsed into a leading quantity ("2", "1/2", "a", "two"), a measure the food has ("cup", "large", "slice", "g", "oz") and the best-matching food → `parsed[]`; every food sharing a word → `hints[]` with `measures`. Filters: `categoryLabel` (`food` drops meals), `category`, `health` (repeatable), `calories` (per 100 g). `upc` looks up a packaged food (unknown UPC 404). |
+| `GET /api/food-database/v2/parser` | `ingr` is parsed into a leading quantity ("2", "1/2", "a", "two"), a measure the food has ("cup", "large", "slice", "g", "oz") and the best-matching food → `parsed[]`; every food sharing a word → `hints[]` with `measures`. Filters: `categoryLabel` (`food` drops meals), `category`, `health` (repeatable), `calories` (per 100 g), `nutrients[CODE]` (per 100 g, see below). `upc` looks up a packaged food (unknown UPC 404). |
 | `POST /api/food-database/v2/nutrients` | `{ingredients: [{quantity, measureURI, foodId}]}` → `calories`, `totalWeight`, `totalNutrients`, `totalDaily`, `dietLabels`, `healthLabels`, `ingredients[].parsed[]`; an unknown food or measure is 422. |
 | `POST /api/food-database/nutrients-from-image?beta=true` | `{image: data URL or http URL}` → `{parsed: {food, quantity, measure}, recipe: {label, calories, totalNutrients}}`, deterministic per image (or pinned with `PUT /__admin/vision`). |
 | `GET /api/nutrition-data?ingr=` | One ingredient line; unparsable is 422. |
@@ -108,6 +108,18 @@ and the Python client, which concatenate paths; the meal adapter resolves paths 
 
 - Edamam's NLP and databases: the parser understands leading quantities, known measures and
   corpus food names only; real food and recipe content needs a recorded corpus.
+- Parser `nutrients[CODE]` is a **best guess, not oracle-verified** (vendor docs only say the
+  Food Database can "search for food by given nutrient quantity"; the query syntax, the error for a
+  malformed range and any plan restriction were never observed live). The emulator reads
+  `nutrients[PROCNT]=20+`, `=5` (at most) and `=5-15` (inclusive) like `calories`, against the
+  food's per-100 g `nutrients`, and a raw `+` that decoded to a space still means "or more".
+  Several codes, a repeated code and `health` / `calories` / `category` / `categoryLabel` all must
+  hold; nothing matching is `200` with `hints: []` and `parsed: []`. A food with no value for the
+  code never matches. Any code shaped like a nutrient code is accepted, but the built-in corpus
+  carries only `ENERC_KCAL`, `PROCNT`, `FAT`, `CHOCDF`, `FIBTG` and `SUGAR`, so codes such as `NA` or
+  `FE` match only foods seeded with `POST /__admin/foods` that carry them (an emulator limitation,
+  not a vendor answer). A malformed range or code is `400 bad_request`. The `upc` lookup ignores the
+  filters, as it does for `calories`.
 - Food Database autocomplete, brand search and `nutrients` qualifiers; Recipe Search user
   recipes (`type=user`), `field=` projection and images other than the URL.
 - Meal Planner plan-level `fit` beyond a day-calorie check, `mark` weighting, nested

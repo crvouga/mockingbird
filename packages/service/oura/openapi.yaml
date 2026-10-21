@@ -919,6 +919,84 @@
         }
       }
     },
+    "/v2/usercollection/personal_info": {
+      "get": {
+        "operationId": "GetPersonalInfo",
+        "description": "Personal info of the token's user, gated by the personal scope.",
+        "x-mockingbird": {
+          "parity": {
+            "safe": true
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Personal info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalInfoResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Vendor error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Vendor error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No personal info for the user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Vendor error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Vendor error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/oauth/token": {
       "post": {
         "operationId": "OAuthToken",
@@ -1023,6 +1101,154 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/oauth/authorize": {
+      "get": {
+        "operationId": "OAuthAuthorize",
+        "description": "Authorization endpoint (cloud.ouraring.com/oauth/authorize on the live service). The emulator has no consent page: the consent row for the client decides, and the browser is redirected to redirect_uri with code and state, or error and state. An unknown client or unregistered redirect_uri is answered in place, never redirected to.",
+        "x-mockingbird": {
+          "parity": {
+            "safe": false
+          }
+        },
+        "parameters": [
+          {
+            "name": "response_type",
+            "in": "query",
+            "description": "Must be `code`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "description": "The registered client.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Optional when the client has exactly one registered redirect URI; otherwise must match one exactly.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "Space-delimited scopes. Omitted: all scopes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Opaque value, echoed unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "description": "Optional PKCE challenge.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "description": "Only `S256`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to redirect_uri with code and state, or error, error_description and state",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "client_id missing, or redirect_uri missing or not registered (never redirected)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PersonalInfoResponse": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "age": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "weight": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "height": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "biological_sex": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }

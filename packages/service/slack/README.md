@@ -64,7 +64,7 @@ await server.close()
 
 | Route | Behaviour |
 | --- | --- |
-| `POST /services/{T}/{B}/{X}` | Incoming webhook. JSON `{text, blocks?, attachments?, thread_ts?}` (or form `payload=<json>`) → `200 ok` (text/plain). `400 invalid_payload` (not a JSON object), `400 no_text` (no text, blocks or attachments), `400 invalid_blocks`, `400 too_many_attachments`, `404 no_service` (unregistered hook, once any hook is registered), `404 channel_not_found`, `410 channel_is_archived`. |
+| `POST /services/{T}/{B}/{X}` | Incoming webhook. JSON `{text, blocks?, attachments?, thread_ts?}` (or form `payload=<json>`) → `200 ok` (text/plain). `400 invalid_payload` (not a JSON object), `400 no_text` (no text, blocks or attachments), `400 invalid_blocks` (structure and Block Kit limits, also inside `attachments[].blocks`; see below), `400 too_many_attachments`, `404 no_service` (unregistered hook, once any hook is registered), `404 channel_not_found`, `410 channel_is_archived`. |
 | `POST /api/chat.postMessage` | `{channel, text?, blocks?, attachments?, thread_ts?, unfurl_links?}` → `{ok, channel, ts, message}`. `channel` is an id or `#name`; unknown channels are created on first use unless `strictChannels`. The outbox keeps `text`, `blocks`, `unfurl_links`, `thread_ts`, and `workspace` (the team id). Errors: `channel_not_found`, `no_text`, `invalid_blocks`, `invalid_blocks_format`, `msg_too_long`, `is_archived`. |
 | `POST /api/chat.update` | `{channel, ts, text?, blocks?}` → `{ok, channel, ts, text, message}` with `edited`; `message_not_found`, `cant_update_message` (webhook posts). Omitted blocks are kept. |
 | `POST /api/chat.postEphemeral` | `{channel, user, text}` → `{ok, message_ts}`; `user_not_found`. Recorded in the outbox with `ephemeral: true`. |
@@ -132,6 +132,20 @@ maps a bot token or a webhook's `T/B/X` path to a namespace.
   trigger-id expiry for `views.open`.
 - Message formatting (mrkdwn parsing, link unfurling, mention resolution): text and blocks are
   stored verbatim.
+- Block Kit limits are a **best guess, not oracle-verified** (from the per-block pages on
+  docs.slack.dev; the exact status and message Slack returns for each rule was never observed
+  live). `blocks` and each `attachments[].blocks` are rejected as `invalid_blocks` (webhook: `400
+  invalid_blocks`; `chat.postMessage`, `chat.update`, `chat.postEphemeral`: `200 {ok: false, error:
+  "invalid_blocks", response_metadata: {messages}}`, the messages being the emulator's own wording)
+  when: there are more than 50 blocks (in each array; whether Slack applies 50 inside attachments is
+  unconfirmed); a block's `type` is not a Block Kit block type; a `section` `text` is over 3000
+  characters or its `fields` are over 10 items or 2000 characters each; a `header` `text` is not
+  `plain_text` or is over 150 characters; `context` has over 10 `elements` or `actions` over 25; a
+  `block_id` is over 255 characters; a text object is empty. Exactly-at-limit values are accepted
+  and stored verbatim, and a rejected message stores nothing (an update leaves the original
+  untouched). Required-field rules (a `section` with neither `text` nor `fields`, an `image`
+  without `alt_text`), element-level validation inside `actions` / `context` / `input` / `rich_text`,
+  and the other attachment fields are not modelled.
 
 ## API
 

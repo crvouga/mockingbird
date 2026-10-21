@@ -14,7 +14,8 @@ import {
   parseTimestampTz,
 } from "./datetime.ts";
 import { type JsonbValue, jsonbText, parseJsonText, validateJsonText } from "./jsonb.ts";
-import { parseJsonpath } from "./jsonpath.ts";
+import { jsonpathText } from "./jsonpath.ts";
+import { macaddrInput, networkInput } from "./network.ts";
 import { type Numeric, numericText, parseNumeric } from "./numeric.ts";
 import { namespaceText, parseNamespaceInput, parseOidText, parseRelationInput } from "./regnamespace.ts";
 
@@ -147,6 +148,9 @@ const TYPE_ALIASES: Record<string, TypeId> = {
   "timestamp with time zone": "timestamptz",
   interval: "interval",
   uuid: "uuid",
+  inet: "inet",
+  cidr: "cidr",
+  macaddr: "macaddr",
   json: "json",
   jsonb: "jsonb",
   jsonpath: "jsonpath",
@@ -264,6 +268,9 @@ export const TYPE_OIDS: Record<string, number> = {
   regnamespace: 4089,
   record: 2249,
   uuid: 2950,
+  cidr: 650,
+  macaddr: 829,
+  inet: 869,
   jsonb: 3802,
   jsonpath: 4072,
   tsvector: 3614,
@@ -272,7 +279,7 @@ export const TYPE_OIDS: Record<string, number> = {
   unknown: 705,
 };
 
-const ARRAY_OIDS: Record<string, number> = {
+export const ARRAY_OIDS: Record<string, number> = {
   bool: 1000,
   bytea: 1001,
   name: 1003,
@@ -296,6 +303,9 @@ const ARRAY_OIDS: Record<string, number> = {
   numeric: 1231,
   record: 2287,
   uuid: 2951,
+  cidr: 651,
+  macaddr: 1040,
+  inet: 1041,
   jsonb: 3807,
 };
 
@@ -694,6 +704,9 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
     case "interval":
       return formatInterval(v as Interval);
     case "uuid":
+    case "inet":
+    case "cidr":
+    case "macaddr":
       return v as string;
     case "jsonb":
       return jsonbText((v as JsonbWrap).value);
@@ -724,7 +737,7 @@ export const UTC_INPUT: InputCtx = { zoneOffsetForNaive: () => 0 };
 /** Parse PG wire text into a datum of type `t` (typinput). */
 export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
   if (t === "regclass") {
-    const parsed = parseRelationInput(text);
+    const parsed = parseRelationInput(text, "improper");
     if ("oid" in parsed) return parsed.oid;
     if (!ctx.relationOid) throw unsupported("regclass input without a catalog");
     return ctx.relationOid(parsed.parts);
@@ -773,8 +786,7 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     case "jsonb":
       return wrapJsonb(parseJsonText(text));
     case "jsonpath":
-      parseJsonpath(text);
-      return text;
+      return jsonpathText(text);
     case "bytea":
       return parseByteaText(text);
     case "date":
@@ -790,6 +802,11 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
       return parseInterval(text);
     case "uuid":
       return parseUuidText(text);
+    case "inet":
+    case "cidr":
+      return networkInput(t, text);
+    case "macaddr":
+      return macaddrInput(text);
     case "tsvector":
       return parseTsvector(text);
     case "tsquery": {

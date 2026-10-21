@@ -36,9 +36,11 @@ import type { createRuntime as createEventBridge } from "@crvouga/mockingbird-se
 import type { createRuntime as createFcm } from "@crvouga/mockingbird-service-fcm"
 import type { createRuntime as createFirehose } from "@crvouga/mockingbird-service-firehose"
 import type { createRuntime as createFirstpromoter } from "@crvouga/mockingbird-service-firstpromoter"
+import type { createRuntime as createFitbit } from "@crvouga/mockingbird-service-fitbit"
 import type { createRuntime as createFlex } from "@crvouga/mockingbird-service-flex"
 import type { createRuntime as createFormbricks } from "@crvouga/mockingbird-service-formbricks"
 import type { createRuntime as createFullscript } from "@crvouga/mockingbird-service-fullscript"
+import type { createRuntime as createGarminHealth } from "@crvouga/mockingbird-service-garmin-health"
 import type { createRuntime as createGenebygene } from "@crvouga/mockingbird-service-genebygene"
 import type { createRuntime as createGithub } from "@crvouga/mockingbird-service-github"
 import type { createRuntime as createGoogle } from "@crvouga/mockingbird-service-google"
@@ -78,6 +80,7 @@ import type { createRuntime as createPayloadCms } from "@crvouga/mockingbird-ser
 import type { createRuntime as createPersona } from "@crvouga/mockingbird-service-persona"
 import type { createRuntime as createPharmetika } from "@crvouga/mockingbird-service-pharmetika"
 import type { createRuntime as createPlane } from "@crvouga/mockingbird-service-plane"
+import type { createRuntime as createPolar } from "@crvouga/mockingbird-service-polar"
 import type { createRuntime as createPosthog } from "@crvouga/mockingbird-service-posthog"
 import type { createRuntime as createPrism } from "@crvouga/mockingbird-service-prism"
 import type { createRuntime as createRecaptcha } from "@crvouga/mockingbird-service-recaptcha"
@@ -101,6 +104,7 @@ import type { createRuntime as createStepFunctions } from "@crvouga/mockingbird-
 import type { createRuntime as createStripe } from "@crvouga/mockingbird-service-stripe"
 import type { createRuntime as createSts } from "@crvouga/mockingbird-service-sts"
 import type { createRuntime as createSupport } from "@crvouga/mockingbird-service-support"
+import type { createRuntime as createSuunto } from "@crvouga/mockingbird-service-suunto"
 import type { createRuntime as createSwf } from "@crvouga/mockingbird-service-swf"
 import type { createRuntime as createTavily } from "@crvouga/mockingbird-service-tavily"
 import type { createRuntime as createTempo } from "@crvouga/mockingbird-service-tempo"
@@ -243,4 +247,8 @@ export type SurfaceProof = [
   Assert<typeof createEc2>,
   Assert<typeof createResourceGroups>,
   Assert<typeof createRoute53>,
+  Assert<typeof createFitbit>,
+  Assert<typeof createGarminHealth>,
+  Assert<typeof createPolar>,
+  Assert<typeof createSuunto>,
 ]

@@ -293,9 +293,23 @@ again when a reported setting changes. `SET LOCAL` and `DISCARD ALL` keep their 
 (see [COMPATIBILITY.md](COMPATIBILITY.md)).
 
 **Not modelled by the server:** transaction ID and snapshot-inspection functions, predicate and
-table locks, isolation levels beyond `READ COMMITTED`, and the binary parameter formats beyond the
-common scalar types (a client that sends another binary type gets `0A000`, and can switch that
-parameter to text). Binary `COPY` is not supported.
+table locks, isolation levels beyond `READ COMMITTED`, and binary formats for types outside the
+list below (binary parameters of such a type, and a binary result column that the client did not
+`Describe`, get `0A000`; a described portal reports text for that column in its `RowDescription`).
+Binary `COPY` is not supported.
+
+**Describe and binary formats.** `Describe` of a statement answers `ParameterDescription` with one
+OID per `$n`: the type `Parse` declared, else the one PostgreSQL infers (a cast, the compared or
+assigned column, `LIMIT`/`OFFSET` as `bigint`), else `text`; and a `RowDescription` for a
+row-returning statement even when its parameters are untyped, which is what asyncpg and
+`psql \gdesc` rely on. The column types come from the catalog the session sees, so a table created
+earlier in the open transaction is described. Binary results and parameters use PostgreSQL's
+`send`/`recv` layouts, checked against a real server's bytes, for `bool`, `int2`/`int4`/`int8`,
+`oid`, `float4`/`float8`, `numeric`, `money`, `bytea`, `uuid`, `text`/`varchar`/`bpchar`/`name`,
+`json`, `jsonb` (version byte), `date`, `time`, `timestamp`, `timestamptz` (microsecond
+precision), `interval`, `bit`/`varbit`, enums and one-dimensional or multi-dimensional arrays of
+those. Inference is by the SQL's shape, so a parameter that only appears in an expression the
+emulator does not analyse is reported as `text` (PostgreSQL would raise `42P18` for some of these).
 
 #### Durable mode (opt-in)
 
@@ -503,10 +517,15 @@ Intentional differences: custom `PGMM` snapshots; seeded `random()` / fixed `now
 - Collation is `C` semantics (byte order); locale/ICU-dependent ordering is out of scope
 - Column `STORAGE` modes (`pg_attribute.attstorage`) and `UNLOGGED` persistence (`pg_class.relpersistence`) follow PostgreSQL's SQL and catalog contract but are metadata only: there is no TOAST and no WAL, so an unlogged table is stored, snapshotted and kept like any other
 - `pg_available_extensions` / `pg_extension` list only what `CREATE EXTENSION` can install here (`pgcrypto`, `pg_trgm`) plus the built-in `plpgsql`; any other extension is absent from the views and `CREATE EXTENSION` fails with `0A000`
+- pgvector is not modelled: `CREATE EXTENSION vector` fails with `0A000 extension "vector" is not available`, exactly as stock PostgreSQL 18 (which does not ship it) answers, and `vector(n)` / `<=>` do not exist (`42704`)
+- Range, multirange, geometric, `xml`, `pg_lsn` and `macaddr8` types fail with `0A000` (`type "int4range" is not supported`); `inet`, `cidr` and `macaddr` have input, output, ordering and casts, and the `family` / `masklen` / `host` / `network` / `broadcast` / `netmask` functions, but none of their operators (`<<`, `>>=`, `&&`, `+`)
+- SQL/JSON path covers `lax` / `strict`, filters, variables, arithmetic and the `type` / `size` / `double` / `ceiling` / `floor` / `abs` methods; `.**`, `.keyvalue()`, datetime methods and the `.bigint()` / `.string()` conversions fail with `0A000`
+- `jsonb_populate_record(set)` is not implemented (composite types); `pg_depend`, `pg_authid`, `pg_locks`, `pg_stat_activity` and the other catalogs tools probe list only what the engine models (one role, one backend, no inheritance)
+- `RowDescription` carries the type modifier (`varchar(32)`, `numeric(10,2)`) of table columns and typed casts; set operations, `VALUES` and `RETURNING` report `-1`
 
 **Also supported (oracle parity):** schemas + `search_path`, `pg_catalog` / `information_schema`
 introspection, sequences (`serial`, identity, `nextval`/`currval`/`setval`), enums, domains,
-`LANGUAGE sql` functions, plpgsql-lite UDFs (`DECLARE`, `EXCEPTION WHEN others`, `RETURN NEXT`),
+`LANGUAGE sql` functions, plpgsql-lite UDFs and anonymous `DO` blocks (`DECLARE`, `EXCEPTION WHEN <condition>`, `RAISE`, `EXECUTE`, `RETURN NEXT`),
 row-level triggers, recursive + data-modifying CTEs, window functions with full frame specs,
 `GROUPING SETS`/`ROLLUP`/`CUBE`, `DISTINCT ON`, `LATERAL`, arrays + `unnest` + subscripting,
 JSON/JSONB operator + function surface including `jsonb_path_query_first`, `tsvector` text

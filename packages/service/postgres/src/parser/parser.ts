@@ -181,6 +181,9 @@ const TYPE_LITERAL_NAMES = new Set([
   "regtype",
   "tsvector",
   "tsquery",
+  "inet",
+  "cidr",
+  "macaddr",
   "double",
   "character",
   "bit",
@@ -746,7 +749,15 @@ export class Parser {
     if (w === null && this.atKw("with")) w = this.parseWithClause();
     const body = this.parseSelectBody();
     const orderBy = this.parseOrderByClause();
+    // PostgreSQL takes the locking clause on either side of LIMIT / OFFSET / FETCH (not both sides)
+    let lockingClause = this.parseLockingClauses();
     const { limit, offset, limitWithTies } = this.parseLimitOffset();
+    if (lockingClause === null) lockingClause = this.parseLockingClauses();
+    return { type: "select", with: w, body, orderBy, limit, limitWithTies, offset, lockingClause };
+  }
+
+  /** `FOR UPDATE | NO KEY UPDATE | SHARE | KEY SHARE [OF t, ...] [NOWAIT | SKIP LOCKED]`, repeated. */
+  private parseLockingClauses(): string | null {
     let lockingClause: string | null = null;
     while (this.atKw("for")) {
       this.pos++;
@@ -768,7 +779,7 @@ export class Parser {
       this.eatKw("nowait");
       if (this.eatKw("skip")) this.expectKw("locked");
     }
-    return { type: "select", with: w, body, orderBy, limit, limitWithTies, offset, lockingClause };
+    return lockingClause;
   }
 
   private parseSelectBody(): SelectBody {
@@ -1159,8 +1170,8 @@ export class Parser {
       this.pos = save;
       const call = this.parseExpr();
       const withOrdinality = this.parseWithOrdinality();
-      const { alias, colAliases } = this.parseAliasClause();
-      return { type: "from_func", call, lateral, withOrdinality, alias, colAliases, rowsFrom: null };
+      const { alias, colAliases, colTypes } = this.parseAliasClause();
+      return { type: "from_func", call, lateral, withOrdinality, alias, colAliases, colTypes, rowsFrom: null };
     }
     if (this.eatOp("*")) {
       // trailing * (inheritance marker) — accept and ignore
@@ -1178,7 +1189,7 @@ export class Parser {
     return false;
   }
 
-  private parseAliasClause(): { alias: string | null; colAliases: string[] | null } {
+  private parseAliasClause(): { alias: string | null; colAliases: string[] | null; colTypes: TypeName[] | null } {
     let alias: string | null = null;
     if (this.eatKw("as")) {
       alias = this.ident(true);
@@ -1189,11 +1200,13 @@ export class Parser {
       }
     }
     let colAliases: string[] | null = null;
+    let colTypes: TypeName[] | null = null;
     if (alias !== null && this.atPunct("(")) {
       // could be column aliases t(a, b) — only idents inside
       const save = this.pos;
       this.pos++;
       const cols: string[] = [];
+      const types: TypeName[] = [];
       let ok = true;
       for (;;) {
         const t = this.peek();
@@ -1210,7 +1223,7 @@ export class Parser {
         // optional type spec for record-returning fn aliases: name type
         if (this.peek().type === "ident" && !this.atPunct(",") && !this.atPunct(")")) {
           try {
-            this.parseTypeName();
+            types.push(this.parseTypeName());
           } catch {
             ok = false;
             break;
@@ -1221,10 +1234,13 @@ export class Parser {
         ok = false;
         break;
       }
-      if (ok) colAliases = cols;
-      else this.pos = save;
+      if (ok) {
+        colAliases = cols;
+        // a column definition list types every column or none
+        if (types.length === cols.length) colTypes = types;
+      } else this.pos = save;
     }
-    return { alias, colAliases };
+    return { alias, colAliases, colTypes };
   }
 
   // --- INSERT / UPDATE / DELETE -----------------------------------------------
@@ -1842,6 +1858,26 @@ export class Parser {
     if (this.atKw("exclude")) throw unsupported("EXCLUDE constraints");
     this.pos = save;
     return null;
+  }
+
+  /** `[CONSTRAINT name] { UNIQUE | PRIMARY KEY } USING INDEX index` after ADD, or null (position restored). */
+  private tryParseConstraintUsingIndex(): AlterTableAction | null {
+    const save = this.pos;
+    const name = this.eatKw("constraint") ? this.ident() : null;
+    let constraint: "primary_key" | "unique" | null = null;
+    if (this.eatKw("unique")) constraint = "unique";
+    else if (this.atKw("primary") && this.atKw("key", 1)) {
+      this.pos += 2;
+      constraint = "primary_key";
+    }
+    if (constraint === null || !(this.atKw("using") && this.atKw("index", 1))) {
+      this.pos = save;
+      return null;
+    }
+    this.pos += 2;
+    const index = this.ident();
+    this.skipConstraintTail();
+    return { kind: "add_constraint_using_index", name, constraint, index };
   }
 
   private skipConstraintTail(): void {
@@ -2666,6 +2702,7 @@ export class Parser {
         } satisfies AlterEnumStmt;
       }
       if (this.eatKw("rename")) {
+        if (this.eatKw("to")) return { type: "alter_enum", name, action: { kind: "rename_type", to: this.ident() } };
         this.expectKw("value");
         const from = this.next();
         this.expectKw("to");
@@ -2697,6 +2734,8 @@ export class Parser {
         const ifNotExists = this.parseIfNotExists();
         return { kind: "add_column", column: this.parseColumnDef(), ifNotExists };
       }
+      const usingIndex = this.tryParseConstraintUsingIndex();
+      if (usingIndex) return usingIndex;
       const constraint = this.tryParseTableConstraint();
       if (constraint) {
         let skipValidation = false;

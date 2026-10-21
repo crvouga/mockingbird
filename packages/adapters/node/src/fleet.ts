@@ -87,7 +87,13 @@ export type ProtocolTarget = {
  * accepts their opaque runtime and validates the fleet protocol before starting a listener. */
 export type FleetHttpTarget = Pick<
   ServeTarget,
-  "name" | "defaultPort" | "options" | "packageVersion" | "listening" | "parseSettings"
+  | "name"
+  | "defaultPort"
+  | "options"
+  | "packageVersion"
+  | "listening"
+  | "parseSettings"
+  | "maxBodyBytes"
 > & {
   create(values: Parameters<ServeTarget["create"]>[0], common: CommonServeOptions): unknown
 }
@@ -342,6 +348,7 @@ const httpChild = async (
     server = await listen(api, {
       port: entry.port ?? target.defaultPort,
       host: entry.host ?? "127.0.0.1",
+      ...(target.maxBodyBytes !== undefined ? { maxBodyBytes: target.maxBodyBytes } : {}),
     })
     target.listening?.(server)
   } catch (error) {

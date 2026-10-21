@@ -47,4 +47,12 @@ export const PG_CATALOG_RELATIONS: ReadonlySet<string> = new Set([
   "pg_roles",
   "pg_user",
   "pg_trigger",
+  "pg_attrdef",
+  "pg_depend",
+  "pg_inherits",
+  "pg_collation",
+  "pg_opclass",
+  "pg_authid",
+  "pg_locks",
+  "pg_stat_activity",
 ]);

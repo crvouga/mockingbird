@@ -7,7 +7,17 @@ import { deparseIndex, deparseIndexColumn } from "../sql/deparse-index.ts";
 import type { SequenceData } from "../storage/database-state.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import { castTo } from "../types/cast.ts";
-import { makeArray, tv, typeDisplayName } from "../types/value.ts";
+import { parseRelationInput } from "../types/regnamespace.ts";
+import {
+  arrayElemType,
+  enumTypeName,
+  isArrayType,
+  isEnumType,
+  makeArray,
+  tv,
+  type TypeId,
+  typeDisplayName,
+} from "../types/value.ts";
 import { argBigInt, argInt, argText, type ScalarFn, strict } from "./util.ts";
 
 export const PG_VERSION_TEXT = "PostgreSQL 18.3 (postgres-mem) on TypeScript, in-memory engine";
@@ -138,6 +148,22 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
     }),
   );
 
+  // regclassin with soft errors: a name that is malformed or names no relation is NULL
+  m.set(
+    "to_regclass",
+    strict("regclass", (ctx, args) => {
+      const text = argText(ctx, args[0]!);
+      try {
+        const parsed = parseRelationInput(text, "improper");
+        if ("oid" in parsed) return tv("regclass", parsed.oid);
+        return tv("regclass", ctx.findRelationOid(parsed.parts));
+      } catch (error) {
+        if (isPostgresError(error) && ["42602", "42P01"].includes(error.sqlState)) return tv("regclass", null);
+        throw error;
+      }
+    }),
+  );
+
   // statistics are never pending here: every read already sees the current counters
   m.set("pg_stat_force_next_flush", () => tv("void", null));
 
@@ -163,7 +189,16 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set("txid_current", () => tv("int8", 1n));
   m.set("pg_current_xact_id", () => tv("int8", 1n));
   m.set("pg_sleep", () => tv("void", null));
-  m.set("pg_typeof", (_ctx, args) => tv("regtype", typeDisplayName(args[0]!.t === "unknown" ? "unknown" : args[0]!.t)));
+  // like regtypeout, an enum is schema-qualified only when its schema is not the one its bare name resolves to
+  const visibleTypeName = (ctx: EngineCtx, t: TypeId): string => {
+    if (isArrayType(t)) return `${visibleTypeName(ctx, arrayElemType(t))}[]`;
+    if (!isEnumType(t)) return typeDisplayName(t);
+    const qualified = enumTypeName(t);
+    const dot = qualified.indexOf(".");
+    const [schema, name] = [qualified.slice(0, dot), qualified.slice(dot + 1)];
+    return ctx.state.findEnum([name])?.schema === schema ? name : typeDisplayName(t);
+  };
+  m.set("pg_typeof", (ctx, args) => tv("regtype", visibleTypeName(ctx, args[0]!.t)));
   m.set(
     "pg_column_size",
     strict("int4", (ctx, args) => {

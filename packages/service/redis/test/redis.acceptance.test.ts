@@ -71,7 +71,7 @@ describe("expiration and locks", () => {
     const redis = createRedis({ clock })
     const client = redis.client()
     expect(await client.call("SET", "lock", "token", "PX", 1500)).toBe("OK")
-    expect(await client.call("TTL", "lock")).toBe(1)
+    expect(await client.call("TTL", "lock")).toBe(2)
     expect(await client.call("PTTL", "lock")).toBe(1500)
     expect(await client.call("EXPIRE", "lock", 5, "NX")).toBe(0)
     redis.advance(1500)

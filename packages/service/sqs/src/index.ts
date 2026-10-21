@@ -19,13 +19,50 @@ export type SqsAPIOptions = APIOptions & {
   region?: string
   accountId?: string
   queues?: readonly SqsSeedQueue[]
+  /** Hold an empty ReceiveMessage for its wait time, as SQS does. Default true; false answers at once. */
+  longPoll?: boolean
+  /** Whether the namespace spends waits on the clock instead of sleeping (virtual time). */
+  virtualTime?: () => boolean
+  /** Move the namespace's clock forward; used by virtual time to spend a long-poll wait. */
+  advance?: (ms: number) => void
 }
 
 type Input = Record<string, unknown>
+/** The operations this emulator answers, the rest of SQS's API as `UNIMPLEMENTED_OPERATIONS`. */
+const OPERATIONS = new Set([
+  "CreateQueue",
+  "ListQueues",
+  "GetQueueUrl",
+  "DeleteQueue",
+  "SetQueueAttributes",
+  "TagQueue",
+  "UntagQueue",
+  "ListQueueTags",
+  "ListDeadLetterSourceQueues",
+  "GetQueueAttributes",
+  "SendMessage",
+  "SendMessageBatch",
+  "DeleteMessageBatch",
+  "ChangeMessageVisibilityBatch",
+  "ReceiveMessage",
+  "DeleteMessage",
+  "ChangeMessageVisibility",
+  "PurgeQueue",
+])
+/** Operations SQS has (API_Operations) that the emulator does not model. */
+const UNIMPLEMENTED_OPERATIONS = new Set([
+  "AddPermission",
+  "RemovePermission",
+  "StartMessageMoveTask",
+  "CancelMessageMoveTask",
+  "ListMessageMoveTasks",
+])
 const jsonHeaders = (requestId: string) => ({
   "content-type": "application/x-amz-json-1.0",
   "x-amzn-requestid": requestId,
 })
+/** How often a held long-poll receive re-reads the clock, in real milliseconds. */
+const LONG_POLL_TICK_MS = 25
 const sha256 = async (value: string) =>
   [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)))]
     .map((byte) => byte.toString(16).padStart(2, "0"))
@@ -47,6 +84,8 @@ export class SqsAPI {
   private readonly now: () => number
   private readonly region: string
   private readonly accountId: string
+  /** Held long-poll receives; each resolver releases one to re-check its queue. */
+  private readonly waiters = new Set<() => void>()
   constructor(private readonly options: SqsAPIOptions = {}) {
     this.sqlite = bootSqlite(options.sqlite)
     this.namespace = options.namespace ?? SQS_NAMESPACE
@@ -64,6 +103,24 @@ export class SqsAPI {
   async reset() {
     clearNamespace(this.sqlite, this.namespace)
     this.seed()
+    this.wake()
+  }
+  private wake() {
+    for (const release of [...this.waiters]) release()
+  }
+  /** Sleep up to `ms` of real time, or until a send, a reset or the caller's disconnect. */
+  private pause(ms: number, signal: AbortSignal) {
+    return new Promise<void>((resolve) => {
+      const release = () => {
+        clearTimeout(timer)
+        signal.removeEventListener("abort", release)
+        this.waiters.delete(release)
+        resolve()
+      }
+      const timer = setTimeout(release, ms)
+      signal.addEventListener("abort", release, { once: true })
+      this.waiters.add(release)
+    })
   }
   private requestId() {
     return this.state.ids.next("req-", 20)
@@ -190,6 +247,7 @@ export class SqsAPI {
       ...(sequenceNumber ? { sequenceNumber } : {}),
     }
     this.state.messages.insert(id, message)
+    this.wake()
     if (deduplicationId)
       this.state.deduplications.insert(
         `${queue.name}:${queue.attributes.DeduplicationScope === "messageGroup" ? `${groupId}:` : ""}${deduplicationId}`,
@@ -286,6 +344,42 @@ export class SqsAPI {
       })),
     }
   }
+  /**
+   * ReceiveMessage with long polling. An empty queue holds the request for `WaitTimeSeconds`
+   * (or the queue's `ReceiveMessageWaitTimeSeconds`) on the emulator clock: a frozen clock
+   * waits until a test advances it, a live clock waits in real time, and virtual time spends
+   * the wait on the clock at once. A send, a visibility change or a reset re-checks the queue
+   * immediately; a disconnect stops the wait before anything is received for it.
+   */
+  private async receiveHeld(name: string, input: Input, signal: AbortSignal): Promise<Response> {
+    const first = this.state.queues.get(name)
+    const seconds = Number(
+      input.WaitTimeSeconds ?? first?.attributes.ReceiveMessageWaitTimeSeconds ?? 0,
+    )
+    const deadline = this.now() + (this.options.longPoll === false ? 0 : seconds * 1000)
+    for (;;) {
+      const queue = this.state.queues.get(name)
+      if (!queue) return this.nonExistentQueue()
+      if (signal.aborted) return this.response({})
+      this.expire(queue)
+      const received = this.receive(queue, input)
+      const remaining = deadline - this.now()
+      if (received.Messages || remaining <= 0) return this.response(received)
+      // The next moment a delayed or in-flight message of this queue becomes visible.
+      const due = this.state.messages
+        .list({ where: (message) => message.queue === name && message.visibleAt > this.now() })
+        .reduce((soonest, { value }) => Math.min(soonest, value.visibleAt - this.now()), remaining)
+      if (this.options.virtualTime?.() && this.options.advance)
+        this.options.advance(Math.max(1, due))
+      else await this.pause(Math.min(LONG_POLL_TICK_MS, Math.max(1, due)), signal)
+    }
+  }
+  private nonExistentQueue() {
+    return this.error(
+      "AWS.SimpleQueueService.NonExistentQueue",
+      "The specified queue does not exist.",
+    )
+  }
   private byReceipt(queue: SqsQueue, receipt: unknown) {
     return this.state.messages
       .list({
@@ -296,6 +390,15 @@ export class SqsAPI {
   async fetch(request: Request): Promise<Response> {
     if (request.method !== "POST") return this.error("InvalidAction", "Only POST is supported")
     const target = (request.headers.get("x-amz-target") ?? "").split(".").at(-1) ?? ""
+    // An operation is answered or refused before any queue is looked up, so a misspelled or
+    // missing operation never reads as a missing queue (AWS JSON 1.0: `__type` names the failure).
+    if (!OPERATIONS.has(target))
+      return this.error(
+        "UnknownOperationException",
+        UNIMPLEMENTED_OPERATIONS.has(target)
+          ? `${target} is an Amazon SQS operation this emulator does not implement.`
+          : `Unknown operation ${target || "(no X-Amz-Target)"}`,
+      )
     const input = (await request.json().catch(() => ({}))) as Input
     if (target === "CreateQueue") {
       const name = typeof input.QueueName === "string" ? input.QueueName : ""
@@ -355,11 +458,7 @@ export class SqsAPI {
           )
     }
     const queue = this.queue(input)
-    if (!queue)
-      return this.error(
-        "AWS.SimpleQueueService.NonExistentQueue",
-        "The specified queue does not exist.",
-      )
+    if (!queue) return this.nonExistentQueue()
     this.expire(queue)
     if (target === "DeleteQueue") {
       for (const row of this.state.messages.list({
@@ -514,7 +613,7 @@ export class SqsAPI {
         )
           return this.error("InvalidParameterValue", `Invalid ${name}`)
       }
-      return this.response(this.receive(queue, input))
+      return this.receiveHeld(queue.name, input, request.signal)
     }
     if (target === "DeleteMessage" || target === "ChangeMessageVisibility")
       return this.receiptOperation(queue, input, target === "DeleteMessage") ?? this.response({})
@@ -531,7 +630,7 @@ export class SqsAPI {
       this.state.queues.insert(queue.name, { ...queue, lastPurgeAt: this.now() })
       return this.response({})
     }
-    return this.error("InvalidAction", `Unknown operation ${target}`)
+    return this.error("UnknownOperationException", `Unknown operation ${target}`)
   }
   private receiptOperation(queue: SqsQueue, input: Input, remove: boolean): Response | undefined {
     const message = this.byReceipt(queue, input.ReceiptHandle)
@@ -548,6 +647,7 @@ export class SqsAPI {
         ...message,
         visibleAt: this.now() + visibility * 1000,
       })
+      this.wake()
     }
     return undefined
   }

@@ -168,6 +168,8 @@ export type ServeTarget = {
     values: CliValues,
     common: CommonServeOptions,
   ): Promise<ServiceRuntime<ServiceInstance>> | ServiceRuntime<ServiceInstance>
+  /** Largest request body the HTTP server accepts. Default 16 MiB. */
+  maxBodyBytes?: number
   /** Startup lines after the listen address, e.g. the loaded corpus version. */
   banner?(runtime: ServiceRuntime<ServiceInstance>): string[]
   /** After the HTTP server is bound. A service that speaks more than HTTP attaches it here. */
@@ -498,7 +500,11 @@ const start = async (
     ...(config.adminControls !== undefined ? { adminControls: config.adminControls } : {}),
   })
   if (config.idBase !== undefined) runtime.setIdBase?.(config.idBase)
-  const listening = await listen(runtime, { port: config.port, host: config.host })
+  const listening = await listen(runtime, {
+    port: config.port,
+    host: config.host,
+    ...(target.maxBodyBytes !== undefined ? { maxBodyBytes: target.maxBodyBytes } : {}),
+  })
   target.listening?.(listening)
   console.log(`${target.name} emulator listening on ${listening.url}`)
   console.log(`${target.name} health: GET ${listening.url}${adminPrefix}/health`)

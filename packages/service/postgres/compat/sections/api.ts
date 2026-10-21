@@ -29,6 +29,6 @@ export const API_SECTION: CatalogSection = section("API", "JavaScript surface co
   ["int8-02", "int8 mode string surfaces decimal text", D, "JS API overlay, no oracle analog", undefined, DIV],
   ["fn-01", "registerFunction installs a JS scalar", D, "JS API overlay, not in PGMM", undefined, DIV],
   ["dump-01", "exec loads dump no-ops", D, "dump-compat overlay", undefined, "dump-compat-noop"],
-  ["do-01", "DO blocks are no-ops", D, "PL/pgSQL is NOT APPLICABLE", undefined, "dump-compat-noop"],
+  ["do-01", "DO blocks run their plpgsql body"],
   ["set-01", "ALTER TABLE SET storage parameters are no-ops", D, "storage params are NOT APPLICABLE", undefined, "dump-compat-noop"],
 ]);

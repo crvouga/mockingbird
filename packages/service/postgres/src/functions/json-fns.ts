@@ -14,7 +14,7 @@ import {
   parseJsonText,
   validateJsonText,
 } from "../types/jsonb.ts";
-import { jsonpathQueryFirst } from "../types/jsonpath.ts";
+import { jsonpathExists, jsonpathMatch, jsonpathQuery } from "../types/jsonpath.ts";
 import { type Numeric, numericFromBigInt, numericFromNumber } from "../types/numeric.ts";
 import {
   arrayElemType,
@@ -30,6 +30,7 @@ import {
   type TypedValue,
   type TypeId,
   tv,
+  typeDisplayName,
   UNKNOWN,
   UTC_INPUT,
   wrapJsonb,
@@ -103,6 +104,51 @@ function outJsonb(v: JsonbValue): TypedValue {
   return tv("jsonb", wrapJsonb(v));
 }
 
+/** `jsonb_path_*(target, path [, vars [, silent]])`: the path as text (a `jsonpath` datum is its text). */
+function jsonpathArg(ctx: EngineCtx, arg: TypedValue): string {
+  return arg.t === "jsonpath" ? (arg.v as string) : (castTo(ctx, arg, "text", { explicit: true }).v as string);
+}
+
+/** The `vars` object of a jsonpath call as `$name` bindings. */
+export function jsonpathVars(ctx: EngineCtx, arg: TypedValue | undefined): Map<string, JsonbValue> {
+  if (!arg || arg.v === null) return new Map();
+  const vars = jsonArg(ctx, arg);
+  if (vars.j !== "obj") {
+    throw pgError("invalid_parameter_value", '"vars" argument is not an object', "22023");
+  }
+  return new Map(vars.v);
+}
+
+function jsonpathFunction(name: string): ScalarFn {
+  const resultType: TypeId = name === "jsonb_path_exists" || name === "jsonb_path_match" ? "bool" : "jsonb";
+  return (ctx, args) => {
+    if (args.length < 2 || args.length > 4) {
+      throw pgError(
+        "undefined_function",
+        `function ${name}(${args.map((a) => typeDisplayName(a.t)).join(", ")}) does not exist`,
+        "42883",
+      );
+    }
+    if (args[0]!.v === null || args[1]!.v === null) return tv(resultType, null);
+    const doc = jsonArg(ctx, args[0]!);
+    const path = jsonpathArg(ctx, args[1]!);
+    const vars = jsonpathVars(ctx, args[2]);
+    const silent = args[3] ? castTo(ctx, args[3], "bool", {}).v === true : false;
+    switch (name) {
+      case "jsonb_path_exists":
+        return tv("bool", jsonpathExists(doc, path, vars, silent));
+      case "jsonb_path_match":
+        return tv("bool", jsonpathMatch(doc, path, vars, silent));
+      case "jsonb_path_query_array":
+        return outJsonb(jsonbArr(jsonpathQuery(doc, path, vars, silent)));
+      default: {
+        const first = jsonpathQuery(doc, path, vars, silent)[0];
+        return first === undefined ? tv("jsonb", null) : outJsonb(first);
+      }
+    }
+  };
+}
+
 export function getJsonFunctions(): Map<string, ScalarFn> {
   const m = new Map<string, ScalarFn>();
 
@@ -160,36 +206,9 @@ export function getJsonFunctions(): Map<string, ScalarFn> {
   m.set("json_typeof", typeofFn);
   m.set("jsonb_typeof", typeofFn);
 
-  const jsonpathArg = (ctx: EngineCtx, arg: TypedValue): string =>
-    arg.t === "jsonpath" ? (arg.v as string) : argText(ctx, arg);
-
-  m.set("jsonb_path_query_first", (ctx, args) => {
-    if (args.length < 2) {
-      throw pgError(
-        "undefined_function",
-        `function jsonb_path_query_first(${args.map((a) => a.t).join(", ")}) does not exist`,
-        "42883",
-      );
-    }
-    if (args[0]!.v === null || args[1]!.v === null) return tv("jsonb", null);
-    const doc = jsonArg(ctx, args[0]!);
-    const found = jsonpathQueryFirst(doc, jsonpathArg(ctx, args[1]!));
-    if (found === null) return tv("jsonb", null);
-    return outJsonb(found);
-  });
-
-  m.set("jsonb_path_exists", (ctx, args) => {
-    if (args.length < 2) {
-      throw pgError(
-        "undefined_function",
-        `function jsonb_path_exists(${args.map((a) => a.t).join(", ")}) does not exist`,
-        "42883",
-      );
-    }
-    if (args[0]!.v === null || args[1]!.v === null) return tv("bool", null);
-    const doc = jsonArg(ctx, args[0]!);
-    return tv("bool", jsonpathQueryFirst(doc, jsonpathArg(ctx, args[1]!)) !== null);
-  });
+  for (const name of ["jsonb_path_query_first", "jsonb_path_exists", "jsonb_path_match", "jsonb_path_query_array"]) {
+    for (const key of [name, `${name}_tz`]) m.set(key, jsonpathFunction(name));
+  }
 
   m.set(
     "json_array_length",

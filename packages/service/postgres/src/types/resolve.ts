@@ -1,5 +1,5 @@
 import type { TypeName } from "../ast/nodes.ts";
-import { pgError } from "../errors/error.ts";
+import { pgError, unsupported } from "../errors/error.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import type { ColumnType, TypeId, TypeMod } from "./value.ts";
 import { arrayTypeOf, normalizeTypeName } from "./value.ts";
@@ -26,6 +26,34 @@ function modOf(t: TypeId, mods: number[]): TypeMod | null {
   if (t === "numeric") return { a: mods[0], b: mods[1] ?? 0 };
   return { a: mods[0] };
 }
+
+/** PostgreSQL types the engine does not model: a name that is none of its types and one of these is refused as unsupported. */
+const UNMODELLED_TYPES: ReadonlySet<string> = new Set([
+  "int4range",
+  "int8range",
+  "numrange",
+  "tsrange",
+  "tstzrange",
+  "daterange",
+  "int4multirange",
+  "int8multirange",
+  "nummultirange",
+  "tsmultirange",
+  "tstzmultirange",
+  "datemultirange",
+  "point",
+  "line",
+  "lseg",
+  "box",
+  "path",
+  "polygon",
+  "circle",
+  "macaddr8",
+  "xml",
+  "pg_lsn",
+  "txid_snapshot",
+  "pg_snapshot",
+]);
 
 /**
  * Resolve a parsed type name against the catalog: builtin alias, enum, or
@@ -68,5 +96,6 @@ export function resolveTypeName(state: DatabaseState, tn: TypeName): ResolvedTyp
     };
   }
 
+  if (bare !== null && UNMODELLED_TYPES.has(bare)) throw unsupported(`type "${bare}"`);
   throw pgError("undefined_object", `type "${joined}" does not exist`);
 }

@@ -5,7 +5,7 @@ import { parse } from "../parser/index.ts";
 import type { TableData, TriggerMeta } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import type { Datum } from "../types/value.ts";
-import { compileTriggerBody, type PlStmt } from "./plpgsql.ts";
+import { compileTriggerBody, findHandler, type PlStmt, runRaise } from "./plpgsql.ts";
 import type { ExecEnv, RowScope } from "./relation.ts";
 import { evalPredicate, evalScalar, runStatement } from "./select.ts";
 import { setTriggerExecutor, type TriggerEvent } from "./triggers.ts";
@@ -73,14 +73,16 @@ function runTriggerBody(
       case "null":
         break;
       case "raise":
-        throw pgError("raise_exception", stmt.message, "P0001");
+        runRaise(env, stmt, scope());
+        break;
       case "block": {
         try {
           runTriggerBody(env, table, stmt.body, vars);
         } catch (e) {
           if (e instanceof ReturnSignal) throw e;
-          if (stmt.handler === null) throw e;
-          runTriggerBody(env, table, stmt.handler, vars);
+          const handler = stmt.handlers === null ? undefined : findHandler(stmt.handlers, e);
+          if (handler === undefined) throw e;
+          runTriggerBody(env, table, handler.body, vars);
         }
         break;
       }

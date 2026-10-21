@@ -11,10 +11,11 @@ import {
   splitTs,
   USECS_PER_DAY,
 } from "../types/datetime.ts";
-import { type JsonbValue, jsonbCompactText, parseJsonText } from "../types/jsonb.ts";
+import { type JsonbValue, jsonbCompactText, jsonbText, parseJsonText } from "../types/jsonb.ts";
 import { type Numeric, numericAdd, numericCmp, numericSign } from "../types/numeric.ts";
 import {
   arrayElemType,
+  type ColumnType,
   type Datum,
   isArrayType,
   isJsonbWrap,
@@ -27,6 +28,8 @@ import {
   UNKNOWN,
   wrapJsonb,
 } from "../types/value.ts";
+import { jsonpathQuery } from "../types/jsonpath.ts";
+import { jsonpathVars } from "./json-fns.ts";
 import { argInt, argText } from "./util.ts";
 
 export interface SrfResult {
@@ -34,7 +37,10 @@ export interface SrfResult {
   rows: Datum[][];
 }
 
-export type SrfFn = (ctx: EngineCtx, args: TypedValue[], alias: string) => SrfResult;
+/** The column definition list of `FROM f(...) AS r(a int, b text)`, for the functions that return `record`. */
+export type SrfColumnDefs = Array<{ name: string; column: ColumnType }>;
+
+export type SrfFn = (ctx: EngineCtx, args: TypedValue[], alias: string, columnDefs?: SrfColumnDefs) => SrfResult;
 
 function jsonInput(ctx: EngineCtx, a: TypedValue): JsonbValue {
   void ctx;
@@ -314,6 +320,104 @@ function jsonKeysSrf(): SrfFn {
 }
 SRFS.set("json_object_keys", jsonKeysSrf());
 SRFS.set("jsonb_object_keys", jsonKeysSrf());
+
+/**
+ * One JSON value as a datum of a column of the definition list, the way `json[b]_populate_record`
+ * does: JSON null is SQL NULL, json/jsonb columns keep the value, arrays take JSON arrays element by
+ * element, and everything else goes through the type's text input (a JSON string is its text,
+ * a number or boolean its JSON text, so `1.5` into an `int` column is an input error).
+ */
+function jsonToColumn(ctx: EngineCtx, value: JsonbValue, column: ColumnType): Datum {
+  if (value.j === "null") return null;
+  const { id } = column;
+  if (id === "jsonb") return wrapJsonb(value);
+  if (id === "json") return jsonbText(value);
+  if (isArrayType(id) && value.j === "arr") {
+    const elem: ColumnType = { id: arrayElemType(id), mod: column.mod };
+    const dims: number[] = [];
+    const items: Datum[] = [];
+    const walk = (v: JsonbValue, depth: number) => {
+      if (v.j === "arr" && !isArrayType(elem.id)) {
+        if (dims[depth] === undefined) dims[depth] = v.v.length;
+        else if (dims[depth] !== v.v.length) {
+          throw pgError("invalid_text_representation", "malformed JSON array: the array must be rectangular", "22P02");
+        }
+        for (const item of v.v) walk(item, depth + 1);
+      } else {
+        items.push(jsonToColumn(ctx, v, elem));
+      }
+    };
+    walk(value, 0);
+    return makeArray(elem.id, items, dims.length > 0 && items.length > 0 ? dims : undefined);
+  }
+  const text = value.j === "str" ? value.v : jsonbText(value);
+  return castTo(ctx, tv("text", text), id, { explicit: true, assignment: true, mod: column.mod }).v;
+}
+
+/** One row of the definition list from a JSON object; a key that is absent is NULL. */
+function recordRow(ctx: EngineCtx, object: Map<string, JsonbValue>, defs: SrfColumnDefs): Datum[] {
+  return defs.map((def) => {
+    const value = object.get(def.name);
+    return value === undefined ? null : jsonToColumn(ctx, value, def.column);
+  });
+}
+
+function requireColumnDefs(columnDefs: SrfColumnDefs | undefined): SrfColumnDefs {
+  if (!columnDefs) {
+    throw pgError("syntax", 'a column definition list is required for functions returning "record"', "42601");
+  }
+  return columnDefs;
+}
+
+function jsonToRecordSrf(name: string, set: boolean): SrfFn {
+  return (ctx, args, _alias, columnDefs) => {
+    const defs = requireColumnDefs(columnDefs);
+    const columns = defs.map((d) => ({ name: d.name, type: d.column.id }));
+    if (args[0]!.v === null) return { columns, rows: [] };
+    const v = jsonInput(ctx, args[0]!);
+    if (!set) {
+      if (v.j !== "obj") {
+        throw pgError(
+          "invalid_parameter_value",
+          `cannot call populate_composite on ${v.j === "arr" ? "an array" : "a scalar"}`,
+          "22023",
+        );
+      }
+      return { columns, rows: [recordRow(ctx, v.v, defs)] };
+    }
+    if (v.j !== "arr") throw pgError("invalid_parameter_value", `cannot call ${name} on a non-array`, "22023");
+    const rows = v.v.map((item) => {
+      if (item.j !== "obj") {
+        throw pgError("invalid_parameter_value", `argument of ${name} must be an array of objects`, "22023");
+      }
+      return recordRow(ctx, item.v, defs);
+    });
+    return { columns, rows };
+  };
+}
+for (const prefix of ["json", "jsonb"]) {
+  SRFS.set(`${prefix}_to_record`, jsonToRecordSrf(`${prefix}_to_record`, false));
+  SRFS.set(`${prefix}_to_recordset`, jsonToRecordSrf(`${prefix}_to_recordset`, true));
+}
+
+// jsonb_path_query(target, path [, vars [, silent]]): one row per selected item
+for (const name of ["jsonb_path_query", "jsonb_path_query_tz"]) {
+  SRFS.set(name, (ctx, args) => {
+    const columns = [{ name: "jsonb_path_query", type: "jsonb" as TypeId }];
+    if (args.length < 2 || args.length > 4) {
+      throw pgError(
+        "undefined_function",
+        `function ${name}(${args.map((a) => a.t).join(", ")}) does not exist`,
+        "42883",
+      );
+    }
+    if (args[0]!.v === null || args[1]!.v === null) return { columns, rows: [] };
+    const path = args[1]!.t === "jsonpath" ? (args[1]!.v as string) : argText(ctx, args[1]!);
+    const silent = args[3] ? castTo(ctx, args[3], "bool", {}).v === true : false;
+    const items = jsonpathQuery(jsonInput(ctx, args[0]!), path, jsonpathVars(ctx, args[2]), silent);
+    return { columns, rows: items.map((item) => [wrapJsonb(item)]) };
+  });
+}
 
 export function getSrfFunctions(): Map<string, SrfFn> {
   return SRFS;

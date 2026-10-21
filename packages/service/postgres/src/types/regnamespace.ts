@@ -56,7 +56,10 @@ export function parseNamespaceInput(text: string): { oid: number } | { name: str
   return { name: parsed.parts[0]! };
 }
 
-export function parseRelationInput(text: string): { oid: number } | { parts: string[] } {
+export function parseRelationInput(
+  text: string,
+  tooManyNames: "invalid" | "improper" = "invalid",
+): { oid: number } | { parts: string[] } {
   if (text === "-") return { oid: 0 };
   if (/^\d+$/.test(text)) return { oid: parseOidText(text) };
   const names: string[] = [];
@@ -93,6 +96,9 @@ export function parseRelationInput(text: string): { oid: number } | { parts: str
     skipSpace();
     // a separator must be followed by another name
     if (at === text.length) invalidName();
+  }
+  if (tooManyNames === "improper" && names.length > 3) {
+    throw pgError("syntax", `improper relation name (too many dotted names): ${text}`, "42601");
   }
   if (names.length === 0 || names.length > 3) invalidName();
   return { parts: names };

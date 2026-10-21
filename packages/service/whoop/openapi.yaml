@@ -518,6 +518,198 @@
         }
       }
     },
+    "/developer/v2/user/profile/basic": {
+      "get": {
+        "tags": [
+          "User"
+        ],
+        "description": "Get the user's basic profile, including their name and email.",
+        "operationId": "GetProfileBasic",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserBasicProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Provider error (preset body is a scripted fixture)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Provider error (preset body is a scripted fixture)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No profile for the user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Provider error (preset body is a scripted fixture)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Provider error (preset body is a scripted fixture)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth": [
+              "read:profile"
+            ]
+          }
+        ],
+        "x-mockingbird": {
+          "parity": {
+            "safe": true
+          }
+        }
+      }
+    },
+    "/oauth/oauth2/auth": {
+      "get": {
+        "operationId": "OAuthAuthorize",
+        "description": "Authorization endpoint (Ory Hydra on WHOOP). The emulator has no consent page: the consent row for the client decides, and the browser is redirected to redirect_uri with code and state, or error and state. An unknown client or unregistered redirect_uri is answered in place, never redirected to.",
+        "x-mockingbird": {
+          "parity": {
+            "safe": false
+          }
+        },
+        "security": [],
+        "parameters": [
+          {
+            "name": "response_type",
+            "in": "query",
+            "description": "Must be `code`.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "description": "The registered client.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "Must match a redirect URI registered for the client exactly.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "description": "Space-delimited scopes.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Opaque CSRF value, echoed unchanged. At least 8 characters.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "description": "Optional PKCE challenge.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "description": "Only `S256`.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to redirect_uri with code and state, or error, error_description and state",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "redirect_uri missing or not registered, or client_id missing (never redirected)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unknown client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/oauth/oauth2/token": {
       "post": {
         "operationId": "OAuthToken",
@@ -1395,6 +1587,38 @@
           }
         },
         "description": "Breakdown of the amount of sleep a user needed before the sleep activity. Summing all individual components results in the amount of sleep the user needed prior to this sleep activity"
+      },
+      "UserBasicProfile": {
+        "required": [
+          "user_id",
+          "email",
+          "first_name",
+          "last_name"
+        ],
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "description": "The WHOOP User",
+            "format": "int64",
+            "example": 10129
+          },
+          "email": {
+            "type": "string",
+            "description": "User's Email",
+            "example": "jsmith123@whoop.com"
+          },
+          "first_name": {
+            "type": "string",
+            "description": "User's First Name",
+            "example": "John"
+          },
+          "last_name": {
+            "type": "string",
+            "description": "User's Last Name",
+            "example": "Smith"
+          }
+        }
       }
     },
     "securitySchemes": {

@@ -1,0 +1,486 @@
+openapi: 3.0.3
+info:
+  title: Polar AccessLink API v3 (Mockingbird subset)
+  description: 'Stateful emulator subset of the Polar AccessLink v3 API: OAuth 2.0 authorization code (consent
+    redirect and token exchange), user registration and the non-transactional exercise endpoints.
+    Hand-authored from the AccessLink reference (https://www.polar.com/accesslink-api/) and the
+    consumer''s wire shapes. The real API spans three origins (www.polaraccesslink.com for /v3,
+    polarremote.com for /v2/oauth2/token, flow.polar.com for /oauth2/authorization); the emulator serves
+    all three route sets from one origin. Access tokens do not expire and there is no refresh grant.
+
+    '
+  version: '3'
+  x-mockingbird-upstream:
+    note: Wire shapes from the AccessLink v3 reference; fields the reference does not pin down
+      (error bodies, the unregistered-user status, the refresh_token grant error) are documented
+      best guesses in the README, not oracle-verified.
+servers:
+- url: https://www.polaraccesslink.com
+security:
+- bearerAuth: []
+paths:
+  /oauth2/authorization:
+    get:
+      operationId: Authorize
+      description: 'The consent page (flow.polar.com/oauth2/authorization). Redirects to redirect_uri with a one-time
+        code and the state, or with error=access_denied when consent is denied.'
+      security: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: Browser redirect flow; covered by acceptance tests.
+      parameters:
+      - name: response_type
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - code
+      - name: client_id
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: redirect_uri
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: state
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: scope
+        in: query
+        required: false
+        schema:
+          type: string
+          example: accesslink.read_all
+      responses:
+        '302':
+          description: Redirect back with ?code=&state= (or ?error=&state=)
+          headers:
+            Location:
+              schema:
+                type: string
+        '400':
+          description: Unknown client or unusable redirect_uri (the user agent is not redirected)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+  /v2/oauth2/token:
+    post:
+      operationId: OAuthToken
+      description: 'Exchange an authorization code (polarremote.com/v2/oauth2/token). Basic auth with the
+        client id and secret; grant_type is always authorization_code. Tokens do not expire and
+        there is no refresh grant.'
+      security:
+      - basicAuth: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: invalid_request / invalid_client / invalid_grant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthError'
+  /v3/users:
+    post:
+      operationId: RegisterUser
+      description: Register the token's user with the client. 200 with the user profile, 409 when the user (or the
+        member-id) is already registered.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterUserRequest'
+      responses:
+        '200':
+          description: User registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          description: Invalid body
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing, invalid or revoked access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '409':
+          description: User already registered, or member-id in use
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '415':
+          description: Body is not application/json
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limited (RateLimit-* headers)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Scripted server failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /v3/exercises:
+    get:
+      operationId: ListExercises
+      description: 'Exercises the registered user uploaded after registration and within the last 30 days,
+        as a JSON array (empty when there are none).'
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - $ref: '#/components/parameters/samples'
+      - $ref: '#/components/parameters/zones'
+      - $ref: '#/components/parameters/route'
+      responses:
+        '200':
+          description: Exercises
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Exercise'
+        '400':
+          description: Invalid flag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing, invalid or revoked access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: The user is not registered with the client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limited (RateLimit-* headers)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Scripted server failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+  /v3/exercises/{id}:
+    get:
+      operationId: GetExercise
+      description: One exercise by its hashed id; 404 when unknown, not the token user's, or outside the visible
+        window.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          example: 2AC312F
+      - $ref: '#/components/parameters/samples'
+      - $ref: '#/components/parameters/zones'
+      - $ref: '#/components/parameters/route'
+      responses:
+        '200':
+          description: Exercise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Exercise'
+        '400':
+          description: Invalid flag
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '401':
+          description: Missing, invalid or revoked access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '403':
+          description: The user is not registered with the client
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '404':
+          description: Unknown exercise
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '429':
+          description: Rate limited (RateLimit-* headers)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+        '500':
+          description: Scripted server failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    basicAuth:
+      type: http
+      scheme: basic
+  parameters:
+    samples:
+      name: samples
+      in: query
+      required: false
+      description: Include the exercise samples.
+      schema:
+        type: boolean
+        default: false
+    zones:
+      name: zones
+      in: query
+      required: false
+      description: Include the heart rate zones.
+      schema:
+        type: boolean
+        default: false
+    route:
+      name: route
+      in: query
+      required: false
+      description: Include the route points.
+      schema:
+        type: boolean
+        default: false
+  schemas:
+    TokenRequest:
+      type: object
+      required:
+      - grant_type
+      properties:
+        grant_type:
+          type: string
+          example: authorization_code
+        code:
+          type: string
+          maxLength: 200
+        redirect_uri:
+          type: string
+          maxLength: 500
+    TokenResponse:
+      type: object
+      required:
+      - access_token
+      - token_type
+      - expires_in
+      - x_user_id
+      properties:
+        access_token:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        token_type:
+          type: string
+          enum:
+          - bearer
+        expires_in:
+          type: integer
+        x_user_id:
+          type: integer
+    OAuthError:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+        error_description:
+          type: string
+    ApiError:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          required:
+          - status
+          - errorType
+          - message
+          properties:
+            timestamp:
+              type: string
+              x-mockingbird-volatile:
+                kind: timestamp
+            status:
+              type: integer
+            errorType:
+              type: string
+            message:
+              type: string
+    RegisterUserRequest:
+      type: object
+      required:
+      - member-id
+      properties:
+        member-id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          example: member-1
+    User:
+      type: object
+      required:
+      - polar-user-id
+      - member-id
+      - registration-date
+      properties:
+        polar-user-id:
+          type: integer
+        member-id:
+          type: string
+        registration-date:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        first-name:
+          type: string
+        last-name:
+          type: string
+        birthdate:
+          type: string
+        gender:
+          type: string
+        weight:
+          type: number
+        height:
+          type: number
+        extra-info:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+    Exercise:
+      type: object
+      required:
+      - id
+      - upload_time
+      - polar_user
+      - device
+      - start_time
+      - start_time_utc_offset
+      - duration
+      - sport
+      properties:
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: exercise
+            identity: true
+        upload_time:
+          type: string
+        polar_user:
+          type: string
+        device:
+          type: string
+        device_id:
+          type: string
+        start_time:
+          type: string
+        start_time_utc_offset:
+          type: integer
+        duration:
+          type: string
+        calories:
+          type: integer
+        distance:
+          type: number
+        heart_rate:
+          type: object
+          properties:
+            average:
+              type: integer
+            maximum:
+              type: integer
+        sport:
+          type: string
+        detailed_sport_info:
+          type: string
+        has_route:
+          type: boolean
+        samples:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        heart_rate_zones:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        route:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      additionalProperties: true

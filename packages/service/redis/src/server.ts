@@ -6,7 +6,7 @@ import {
   resolveAdminPrefix,
 } from "@crvouga/mockingbird-service"
 import { createRedis, type Redis, RedisConnectionError } from "./engine.ts"
-import { asCommand, encodeReply, type Reply, RespParser } from "./protocol.ts"
+import { encodeReply, err, type Reply, RequestParser, RespParser } from "./protocol.ts"
 
 /** HTTP port for `serve --config`. The RESP socket binds an ephemeral port. */
 export const DEFAULT_PORT = 8827
@@ -60,8 +60,12 @@ export function serve(redis: Redis, options: ServeOptions = {}): Promise<RedisLi
 function attach(redis: Redis, socket: Socket, onGone: () => void, controlPrivileged = false): void {
   const session = redis.createSession()
   session.controlPrivileged = controlPrivileged
-  const parser = new RespParser()
-  const pending: Array<{ name: string; args: Uint8Array[] }> = []
+  session.localPort = socket.localPort
+  if (socket.remoteAddress)
+    session.remoteAddr = `${socket.remoteAddress.replace(/^::ffff:/, "")}:${socket.remotePort}`
+  const parser = new RequestParser()
+  // A protocol error is queued behind the commands before it, then closes the connection.
+  const pending: Array<{ name: string; args: Uint8Array[] } | { fatal: string }> = []
   let pumping = false
   const write = (reply: Reply) => {
     if (!socket.destroyed) socket.write(encodeReply(reply, session.protocol))
@@ -76,14 +80,9 @@ function attach(redis: Redis, socket: Socket, onGone: () => void, controlPrivile
     onGone()
   }
   socket.on("data", (chunk: Uint8Array) => {
-    for (const reply of parser.push(chunk)) {
-      const command = asCommand(reply)
-      if ("t" in command) {
-        write(command)
-        continue
-      }
-      pending.push(command)
-    }
+    const { requests, error } = parser.push(chunk)
+    pending.push(...requests)
+    if (error !== null) pending.push({ fatal: error })
     void pump()
   })
   const pump = async () => {
@@ -93,6 +92,12 @@ function attach(redis: Redis, socket: Socket, onGone: () => void, controlPrivile
       while (pending.length > 0) {
         const command = pending.shift()
         if (!command) break
+        if ("fatal" in command) {
+          write(err(`ERR Protocol error: ${command.fatal}`))
+          socket.end()
+          pending.length = 0
+          break
+        }
         try {
           const reply = await redis.perform(session, command.name, command.args)
           write(reply)

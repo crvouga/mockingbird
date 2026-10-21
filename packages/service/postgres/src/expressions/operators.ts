@@ -22,6 +22,7 @@ import {
   jsonbText,
   parseJsonText as parseJsonbText,
 } from "../types/jsonb.ts";
+import { jsonpathExists, jsonpathMatch } from "../types/jsonpath.ts";
 import {
   isNumeric,
   makeNumeric,
@@ -235,13 +236,28 @@ export function evalBinary(ctx: EngineCtx, op: string, l0: TypedValue, r0: Typed
       return evalJsonbExists(ctx, op, l, r);
     case "#-":
       return evalJsonbDeletePath(ctx, l, r);
+    case "@?":
+      return evalJsonpathOp(ctx, op, l, r);
     case "@@":
+      if (l.t === "jsonb" && (r.t === "jsonpath" || r.t === "unknown")) return evalJsonpathOp(ctx, op, l, r);
       return evalTextSearchMatch(ctx, l, r);
     case "<%":
       return evalTrgmWordSimilar(ctx, l, r);
     default:
       opNotExist(op, l.t, r.t);
   }
+}
+
+/** `jsonb @? jsonpath` (does the path select anything) and `jsonb @@ jsonpath` (is its predicate true); errors give NULL. */
+function evalJsonpathOp(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue): TypedValue {
+  if (l.t !== "jsonb" || (r.t !== "jsonpath" && r.t !== "unknown")) opNotExist(op, l.t, r.t);
+  if (l.v === null || r.v === null) return tv("bool", null);
+  const path = castTo(ctx, r, "jsonpath", { explicit: true }).v as string;
+  const doc = (l.v as JsonbWrap).value;
+  return tv(
+    "bool",
+    op === "@?" ? jsonpathExists(doc, path, new Map(), true) : jsonpathMatch(doc, path, new Map(), true),
+  );
 }
 
 function resolveJsonUnknowns(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue): [TypedValue, TypedValue] {
@@ -258,6 +274,9 @@ function resolveJsonUnknowns(ctx: EngineCtx, op: string, l: TypedValue, r: Typed
   }
   if ((op === "?|" || op === "?&" || op === "#-") && l.t === "jsonb" && r.t === "unknown") {
     return [l, castTo(ctx, r, "text[]")];
+  }
+  if ((op === "@?" || op === "@@") && l.t === "jsonb" && r.t === "unknown") {
+    return [l, castTo(ctx, r, "jsonpath")];
   }
   if (op === "@>" || op === "<@") {
     if (l.t === "jsonb" && r.t === "unknown") return [l, castTo(ctx, r, "jsonb")];

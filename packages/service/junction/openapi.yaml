@@ -757,7 +757,7 @@ paths:
         parity:
           enabled: true
           safe: true
-          reason: Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders as a best guess, not oracle-verified. Account-specific billing refusals and NY/NJ explicit client_bill acceptance (#441) are opt-in report-derived behavior, not a global vendor rule; the acceptance preserves POST/GET account identity and billing without changing advertised allowed_billing.
+          reason: Native profile parity only; explicit account profiles add fixture-owned billing policies and custom-marker orders as a best guess, not oracle-verified. Account-specific billing refusals and NY/NJ explicit client_bill acceptance (#441) are opt-in report-derived behavior, not a global vendor rule; the acceptance preserves POST/GET account identity and billing without changing advertised allowed_billing. The sandbox-observed omission/nested/unknown-id controls (#439), the explicit Junction-owned account state refusal (#494) and the production-oracle omitted-id house-account placement (#495) are recorded or reported observations, best guess, not oracle-verified by this repository.
       requestBody:
         required: true
         content:
@@ -1497,6 +1497,7 @@ paths:
         parity:
           enabled: true
           safe: true
+          reason: Default cancel always reads back cancelled; the sandbox same-second stale-status behavior is the opt-in quirk sameSecondCancelStatus (#474), reported from the sandbox, best guess, not oracle-verified.
       responses:
         "200":
           description: Successful Response

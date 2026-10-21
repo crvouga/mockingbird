@@ -8,7 +8,24 @@ import {
   sigV4AccessKeyId,
 } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
+import { CHECKSUM_ALGORITHMS, type ChecksumAlgorithm, checksum } from "./checksums.js"
+import { decodeAwsChunked, isAwsChunked } from "./chunked.js"
+import {
+  CORS_METHODS,
+  type CorsRule,
+  corsHeaders,
+  invalidCors,
+  matchRule,
+  PREFLIGHT_VARY,
+  parseCors,
+} from "./cors.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
+import {
+  DEFAULT_VIRTUAL_HOSTS,
+  toPathStyle,
+  VIRTUAL_BUCKET_HEADER,
+  virtualBucket,
+} from "./hosting.js"
 import { type S3Object, type S3SeedObject, S3State } from "./state.js"
 
 export type { S3Runtime, S3RuntimeOptions } from "./runtime.js"
@@ -16,11 +33,18 @@ export { createRuntime, S3_PRESETS } from "./runtime.js"
 export type { S3Object, S3SeedObject } from "./state.js"
 export { document, operationIds, supportedOperationIds }
 export const S3_NAMESPACE = "s3"
+/** S3 accepts at most 5 GB in a single PUT and in each multipart part. */
+export const S3_MAX_UPLOAD_BYTES = 5 * 1024 ** 3
 export const accessKeyCredential = sigV4AccessKeyId
 export type S3APIOptions = APIOptions & {
   buckets?: readonly string[]
   objects?: readonly S3SeedObject[]
   credentials?: Readonly<Record<string, string>>
+  /**
+   * Base hosts for virtual-hosted-style addressing: `Host: <bucket>.<base>` names the bucket and
+   * the path is the key. Default `["localhost"]`; `[]` leaves every request path-style.
+   */
+  virtualHosts?: readonly string[]
   onNotification?: (event: S3Notification) => void
   /** A seeded stream of `[0, 1)` for request ids, so an error body replays from its seed. */
   random?: () => number
@@ -68,6 +92,18 @@ const hmac = async (key: Uint8Array, value: string) => {
   )
   return new Uint8Array(await crypto.subtle.sign("HMAC", imported, encoder.encode(value)))
 }
+/** GetObject / HeadObject `response-*` query parameters and the response header each replaces. */
+const RESPONSE_OVERRIDES = [
+  ["response-cache-control", "cache-control"],
+  ["response-content-disposition", "content-disposition"],
+  ["response-content-encoding", "content-encoding"],
+  ["response-content-language", "content-language"],
+  ["response-content-type", "content-type"],
+  ["response-expires", "expires"],
+] as const
+const CHECKSUM_HEADER = /^x-amz-checksum-(?!algorithm$|type$)/
+const hexBytes = (value: string) =>
+  Uint8Array.from([...value.matchAll(/../g)].map((match) => Number.parseInt(match[0], 16)))
 const awsEncode = (value: string) =>
   encodeURIComponent(value).replace(
     /[!'()*]/g,
@@ -104,7 +140,7 @@ export class S3API {
     const object: S3Object = {
       bucket: input.bucket,
       key: input.key,
-      bytes: [...bytes],
+      bytes,
       etag: input.etag ?? (await digest(bytes)),
       lastModified: input.lastModified ?? this.now(),
       metadata: input.metadata,
@@ -129,10 +165,19 @@ export class S3API {
     this.state.objects.insert(this.state.objectId(input.bucket, input.key), object)
     return object
   }
-  private error(code: string, message: string, status: number, resource: string) {
+  private error(
+    code: string,
+    message: string,
+    status: number,
+    resource: string,
+    extra: Record<string, string> = {},
+  ) {
     const id = requestId(this.options.random)
+    const fields = Object.entries(extra)
+      .map(([name, value]) => `<${name}>${xmlEscape(value)}</${name}>`)
+      .join("")
     return xml(
-      `<Error><Code>${code}</Code><Message>${xmlEscape(message)}</Message><Resource>${xmlEscape(resource)}</Resource><RequestId>${id}</RequestId><HostId>mockingbird</HostId></Error>`,
+      `<Error><Code>${code}</Code><Message>${xmlEscape(message)}</Message>${fields}<Resource>${xmlEscape(resource)}</Resource><RequestId>${id}</RequestId><HostId>mockingbird</HostId></Error>`,
       status,
       { "x-amz-request-id": id, "x-amz-id-2": "mockingbird" },
     )
@@ -150,7 +195,11 @@ export class S3API {
       occurredAt: new Date(this.now()).toISOString(),
     })
   }
-  private async verifyPresign(request: Request, url: URL): Promise<Response | undefined> {
+  private async verifyPresign(
+    request: Request,
+    url: URL,
+    path: string,
+  ): Promise<Response | undefined> {
     if (!url.searchParams.has("X-Amz-Signature")) return
     const algorithm = url.searchParams.get("X-Amz-Algorithm")
     const credential = url.searchParams.get("X-Amz-Credential") ?? ""
@@ -165,15 +214,10 @@ export class S3API {
       parts[3] !== "s3" ||
       parts[4] !== "aws4_request"
     )
-      return this.error(
-        "AuthorizationQueryParametersError",
-        "Invalid credential scope",
-        400,
-        url.pathname,
-      )
+      return this.error("AuthorizationQueryParametersError", "Invalid credential scope", 400, path)
     const [accessKey, date, region] = parts as [string, string, string]
     const secret = (this.options.credentials ?? { fixture: "fixture" })[accessKey]
-    if (!secret) return this.error("AccessDenied", "Invalid access key", 403, url.pathname)
+    if (!secret) return this.error("AccessDenied", "Invalid access key", 403, path)
     const signedAt = /^\d{8}T\d{6}Z$/.test(stamp)
       ? Date.UTC(
           Number(stamp.slice(0, 4)),
@@ -193,15 +237,10 @@ export class S3API {
       signedAt > this.now() + 900000 ||
       this.now() > signedAt + expires * 1000
     )
-      return this.error("AccessDenied", "Request has expired", 403, url.pathname)
+      return this.error("AccessDenied", "Request has expired", 403, path)
     const names = signedHeaders.split(";").filter(Boolean)
     if (!names.includes("host"))
-      return this.error(
-        "SignatureDoesNotMatch",
-        "SignedHeaders must include host",
-        403,
-        url.pathname,
-      )
+      return this.error("SignatureDoesNotMatch", "SignedHeaders must include host", 403, path)
     const canonicalHeaders = names
       .map(
         (name) =>
@@ -215,7 +254,7 @@ export class S3API {
       .join("&")
     const canonical = [
       request.method,
-      url.pathname,
+      path,
       canonicalQuery,
       canonicalHeaders,
       signedHeaders,
@@ -232,7 +271,7 @@ export class S3API {
         "SignatureDoesNotMatch",
         "The request signature we calculated does not match the signature you provided",
         403,
-        url.pathname,
+        path,
       )
     return undefined
   }
@@ -254,14 +293,34 @@ export class S3API {
       headers.set(`x-amz-meta-${name}`, value)
     return headers
   }
-  async fetch(request: Request): Promise<Response> {
+  async fetch(input: Request): Promise<Response> {
     await this.ready
+    const bases = this.options.virtualHosts ?? DEFAULT_VIRTUAL_HOSTS
+    const request = toPathStyle(input, bases)
     const url = new URL(request.url)
-    const invalidPresign = await this.verifyPresign(request, url)
-    if (invalidPresign) return invalidPresign
     const slash = url.pathname.indexOf("/", 1)
     const bucket = decodeURIComponent(url.pathname.slice(1, slash < 0 ? undefined : slash))
     const key = slash < 0 ? "" : decodeURIComponent(url.pathname.slice(slash + 1))
+    // A rewritten virtual-hosted request was signed without its bucket in the path.
+    const signedPath =
+      virtualBucket(url.host, bases) !== undefined &&
+      request.headers.get(VIRTUAL_BUCKET_HEADER) === bucket
+        ? url.pathname.slice(bucket.length + 1) || "/"
+        : url.pathname
+    // A browser preflight carries no credentials, so a presigned query string is not checked.
+    if (request.method === "OPTIONS" && bucket) return this.preflight(bucket, request, url)
+    const response = await this.handle(request, url, bucket, key, signedPath)
+    return this.withCors(bucket, request, response)
+  }
+  private async handle(
+    request: Request,
+    url: URL,
+    bucket: string,
+    key: string,
+    signedPath: string,
+  ): Promise<Response> {
+    const invalidPresign = await this.verifyPresign(request, url, signedPath)
+    if (invalidPresign) return invalidPresign
     if (!bucket) {
       if (request.method === "GET")
         return xml(
@@ -285,7 +344,9 @@ export class S3API {
       return new Response(null, { status: 200, headers: { location: `/${bucket}` } })
     }
     if (!exists)
-      return this.error("NoSuchBucket", "The specified bucket does not exist", 404, url.pathname)
+      return this.error("NoSuchBucket", "The specified bucket does not exist", 404, url.pathname, {
+        BucketName: bucket,
+      })
     if (request.method === "HEAD" && !key)
       return new Response(null, { status: 200, headers: { "x-amz-bucket-region": "us-east-1" } })
     const config = await this.bucketConfiguration(bucket, key, request, url)
@@ -358,6 +419,18 @@ export class S3API {
     if (request.method === "PUT") return this.put(bucket, key, request)
     if (request.method === "DELETE")
       return this.removeObject(bucket, key, url.searchParams.get("versionId"))
+    const overrides = RESPONSE_OVERRIDES.filter(([param]) => url.searchParams.has(param))
+    if (
+      overrides.length &&
+      !request.headers.has("authorization") &&
+      !url.searchParams.has("X-Amz-Signature")
+    )
+      return this.error(
+        "InvalidRequest",
+        "Request specific response headers cannot be used for anonymous GET requests.",
+        400,
+        url.pathname,
+      )
     const object = url.searchParams.has("versionId")
       ? this.state.versions.get(
           this.versionKey(bucket, key, url.searchParams.get("versionId") as string),
@@ -379,9 +452,57 @@ export class S3API {
     const condition = this.conditions(object, request)
     if (condition) return condition
     if (request.method === "HEAD")
-      return new Response(null, { status: 200, headers: this.objectHeaders(object) })
-    if (request.method === "GET") return this.get(object, request, url.pathname)
+      return this.overridden(
+        new Response(null, { status: 200, headers: this.objectHeaders(object) }),
+        url,
+        overrides,
+      )
+    if (request.method === "GET")
+      return this.overridden(this.get(object, request, url.pathname), url, overrides)
     return this.error("MethodNotAllowed", "The specified method is not allowed", 405, url.pathname)
+  }
+  /** `response-*` query parameters replace the stored headers on a 200 or 206. */
+  private overridden(
+    response: Response,
+    url: URL,
+    overrides: readonly (readonly [string, string])[],
+  ) {
+    if (response.status === 200 || response.status === 206)
+      for (const [param, header] of overrides) {
+        const value = url.searchParams.get(param)
+        if (value) response.headers.set(header, value)
+      }
+    return response
+  }
+  /**
+   * `x-amz-copy-source-if-*`, evaluated as the CopyObject reference describes: a true if-match
+   * overrides a false if-unmodified-since, and a failed condition is always 412, never 304.
+   */
+  private copyConditions(source: S3Object, request: Request): Response | undefined {
+    const unquote = (value: string) => value.trim().replace(/^W\//, "").replace(/^"|"$/g, "")
+    const etags = (header: string | null) =>
+      header === null ? undefined : header.split(",").map(unquote)
+    const have = unquote(source.etag)
+    const hit = (list: string[] | undefined) => list?.includes("*") || list?.includes(have)
+    const modified = Math.floor(source.lastModified / 1000) * 1000
+    const date = (name: string) => Date.parse(request.headers.get(name) ?? "")
+    const ifMatch = etags(request.headers.get("x-amz-copy-source-if-match"))
+    const ifNoneMatch = etags(request.headers.get("x-amz-copy-source-if-none-match"))
+    const since = date("x-amz-copy-source-if-modified-since")
+    const until = date("x-amz-copy-source-if-unmodified-since")
+    const failed = (name: string) =>
+      this.error(
+        "PreconditionFailed",
+        "At least one of the pre-conditions you specified did not hold",
+        412,
+        new URL(request.url).pathname,
+        { Condition: name },
+      )
+    if (ifMatch && !hit(ifMatch)) return failed("x-amz-copy-source-If-Match")
+    if (!ifMatch && modified > until) return failed("x-amz-copy-source-If-Unmodified-Since")
+    if (ifNoneMatch && hit(ifNoneMatch)) return failed("x-amz-copy-source-If-None-Match")
+    if (!ifNoneMatch && modified <= since) return failed("x-amz-copy-source-If-Modified-Since")
+    return undefined
   }
   private async put(bucket: string, key: string, request: Request) {
     const condition = this.conditions(this.state.object(bucket, key), request, true)
@@ -405,11 +526,13 @@ export class S3API {
           : this.state.object(sourceBucket, sourceKey.join("/"))
         : undefined
       if (!source) return this.error("NoSuchKey", "The specified key does not exist.", 404, copy)
+      const sourceCondition = this.copyConditions(source, request)
+      if (sourceCondition) return sourceCondition
       const stored = await this.putSeed({
         ...source,
         bucket,
         key,
-        body: new Uint8Array(source.bytes),
+        body: source.bytes,
         metadata:
           request.headers.get("x-amz-metadata-directive") === "REPLACE"
             ? metadata(request.headers)
@@ -428,20 +551,16 @@ export class S3API {
         `<CopyObjectResult><LastModified>${new Date(stored.lastModified).toISOString()}</LastModified><ETag>${stored.etag}</ETag></CopyObjectResult>`,
       )
     }
-    const bytes = new Uint8Array(await request.arrayBuffer())
-    const checksumError = this.validateChecksums(bytes, request)
-    if (checksumError) return checksumError
+    const received = await this.payload(request)
+    if (received instanceof Response) return received
+    const { bytes, checksums } = received
     const object = await this.putSeed({
       bucket,
       key,
       body: bytes,
       metadata: metadata(request.headers),
       tags: Object.fromEntries(new URLSearchParams(request.headers.get("x-amz-tagging") ?? "")),
-      checksums: Object.fromEntries(
-        [...request.headers].filter(
-          ([name]) => name.startsWith("x-amz-checksum-") && name !== "x-amz-checksum-algorithm",
-        ),
-      ),
+      checksums,
       storageClass: request.headers.get("x-amz-storage-class") ?? "STANDARD",
       ...(request.headers.get("content-type")
         ? { contentType: request.headers.get("content-type") as string }
@@ -550,14 +669,14 @@ export class S3API {
         400,
         url.pathname,
       )
-    const bytes = new Uint8Array(await request.arrayBuffer())
-    const checksumError = this.validateChecksums(bytes, request)
-    if (checksumError) return checksumError
+    const received = await this.payload(request)
+    if (received instanceof Response) return received
+    const { bytes } = received
     const etag = await digest(bytes)
     this.state.parts.insert(`${id}:${partNumber}`, {
       uploadId: id,
       partNumber,
-      bytes: [...bytes],
+      bytes,
       etag,
     })
     return new Response(null, { status: 200, headers: { etag } })
@@ -615,7 +734,12 @@ export class S3API {
       )
     const condition = this.conditions(this.state.object(bucket, key), request, true)
     if (condition) return condition
-    const bytes = new Uint8Array(parts.flatMap((part) => part.bytes))
+    const bytes = new Uint8Array(parts.reduce((total, part) => total + part.bytes.length, 0))
+    let offset = 0
+    for (const part of parts) {
+      bytes.set(part.bytes, offset)
+      offset += part.bytes.length
+    }
     const hashes = Uint8Array.from(
       parts.flatMap((part) =>
         [...part.etag.replace(/"/g, "").matchAll(/../g)].map((match) =>
@@ -646,7 +770,7 @@ export class S3API {
     let input: Record<string, unknown>
     try {
       input = awsParseXml(await request.text()).Delete as Record<string, unknown>
-      if (!input || !input.Object) throw new TypeError()
+      if (!input?.Object) throw new TypeError()
     } catch {
       return this.error("MalformedXML", "Malformed XML", 400, `/${bucket}`)
     }
@@ -705,7 +829,7 @@ export class S3API {
       const marker: S3Object = {
         bucket,
         key,
-        bytes: [],
+        bytes: new Uint8Array(),
         etag: "",
         lastModified: this.now(),
         metadata: {},
@@ -764,23 +888,75 @@ export class S3API {
     }
     return undefined
   }
-  private validateChecksums(bytes: Uint8Array, request: Request): Response | undefined {
-    const md5 = request.headers.get("content-md5")
-    const actual = btoa(
-      String.fromCharCode(
-        ...Uint8Array.from(
-          [...awsMd5(bytes).matchAll(/../g)].map((match) => Number.parseInt(match[0], 16)),
-        ),
-      ),
+  /**
+   * The object bytes of a PutObject or UploadPart: an `aws-chunked` stream is decoded (the framing
+   * and trailers are not part of the object), the decoded length and every supplied checksum are
+   * verified, and the checksums to keep come back as the `x-amz-checksum-*` headers they were.
+   */
+  private async payload(
+    request: Request,
+  ): Promise<{ bytes: Uint8Array; checksums: Record<string, string> } | Response> {
+    const path = new URL(request.url).pathname
+    const chunked = isAwsChunked(request.headers)
+    const declared = Number(
+      (chunked ? request.headers.get("x-amz-decoded-content-length") : null) ??
+        request.headers.get("content-length"),
     )
-    if (md5 && md5 !== actual)
+    if (declared > S3_MAX_UPLOAD_BYTES)
+      return this.error(
+        "EntityTooLarge",
+        "Your proposed upload exceeds the maximum allowed size",
+        400,
+        path,
+        { ProposedSize: String(declared), MaxSizeAllowed: String(S3_MAX_UPLOAD_BYTES) },
+      )
+    let bytes: Uint8Array = new Uint8Array(await request.arrayBuffer())
+    const checksums: Record<string, string> = Object.fromEntries(
+      [...request.headers].filter(([name]) => CHECKSUM_HEADER.test(name)),
+    )
+    if (chunked) {
+      const decoded = decodeAwsChunked(bytes)
+      if (!decoded)
+        return this.error(
+          "IncompleteBody",
+          "The aws-chunked request body is malformed or ends before its last chunk",
+          400,
+          path,
+        )
+      bytes = decoded.payload
+      const length = request.headers.get("x-amz-decoded-content-length")
+      if (length !== null && Number(length) !== bytes.length)
+        return this.error(
+          "IncompleteBody",
+          "You did not provide the number of bytes specified by the x-amz-decoded-content-length HTTP header",
+          400,
+          path,
+        )
+      for (const [name, value] of Object.entries(decoded.trailers))
+        if (CHECKSUM_HEADER.test(name)) checksums[name] = value
+    }
+    const md5 = request.headers.get("content-md5")
+    if (md5 && md5 !== btoa(String.fromCharCode(...hexBytes(awsMd5(bytes)))))
       return this.error(
         "BadDigest",
         "The Content-MD5 you specified did not match what we received",
         400,
-        new URL(request.url).pathname,
+        path,
       )
-    return undefined
+    for (const [name, expected] of Object.entries(checksums)) {
+      const algorithm = name.slice("x-amz-checksum-".length) as ChecksumAlgorithm
+      if (
+        CHECKSUM_ALGORITHMS.includes(algorithm) &&
+        (await checksum(algorithm, bytes)) !== expected
+      )
+        return this.error(
+          "BadDigest",
+          `The ${algorithm.toUpperCase()} you specified did not match the calculated checksum.`,
+          400,
+          path,
+        )
+    }
+    return { bytes, checksums }
   }
   private async bucketConfiguration(
     bucket: string,
@@ -825,6 +1001,10 @@ export class S3API {
       }
       if (kind === "versioning" && !/<Status>(Enabled|Suspended)<\/Status>/.test(body))
         return this.error("MalformedXML", "Invalid versioning status", 400, url.pathname)
+      if (kind === "cors") {
+        const invalid = invalidCors(parseCors(body))
+        if (invalid) return this.error(invalid[0], invalid[1], 400, url.pathname)
+      }
       this.state.configurations.insert(id, { body })
       return new Response(null, { status: 200 })
     }
@@ -843,6 +1023,72 @@ export class S3API {
         : xml(`<${root} xmlns="http://s3.amazonaws.com/doc/2006-03-01/"/>`)
     }
     return this.error("MethodNotAllowed", "Method not allowed", 405, url.pathname)
+  }
+  private corsRules(bucket: string): CorsRule[] | undefined {
+    const stored = this.state.configurations.get(`${bucket}:cors`)
+    return stored ? parseCors(stored.body) : undefined
+  }
+  /**
+   * The browser preflight (`OPTIONS` on a bucket or object URL). S3 refuses one it cannot match
+   * with 403 AccessForbidden "CORSResponse: ..." and no `Access-Control-*` headers.
+   */
+  private preflight(bucket: string, request: Request, url: URL): Response {
+    if (!this.state.buckets.has(bucket))
+      return this.error("NoSuchBucket", "The specified bucket does not exist", 404, url.pathname, {
+        BucketName: bucket,
+      })
+    const origin = request.headers.get("origin")
+    if (!origin)
+      return this.error(
+        "BadRequest",
+        "Insufficient information. Origin request header needed.",
+        400,
+        url.pathname,
+      )
+    const method = request.headers.get("access-control-request-method")
+    if (!method || !CORS_METHODS.includes(method))
+      return this.error(
+        "BadRequest",
+        `Invalid Access-Control-Request-Method: ${method}`,
+        400,
+        url.pathname,
+      )
+    const requested = (request.headers.get("access-control-request-headers") ?? "")
+      .split(",")
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean)
+    const rules = this.corsRules(bucket)
+    const refuse = (message: string) =>
+      this.error("AccessForbidden", `CORSResponse: ${message}`, 403, url.pathname, {
+        Method: method,
+        ResourceType: url.pathname.indexOf("/", 1) < 0 ? "BUCKET" : "OBJECT",
+      })
+    if (!rules) return refuse("CORS is not enabled for this bucket.")
+    const rule = matchRule(rules, origin, method, requested)
+    if (!rule)
+      return refuse(
+        "This CORS request is not allowed. This is usually because the evalution of Origin, request method / Access-Control-Request-Method or Access-Control-Request-Headers are not whitelisted by the resource's CORS spec.",
+      )
+    return new Response(null, {
+      status: 200,
+      headers: {
+        ...corsHeaders(rule, origin),
+        ...(requested.length ? { "access-control-allow-headers": requested.join(", ") } : {}),
+        ...(rule.maxAge ? { "access-control-max-age": rule.maxAge } : {}),
+        vary: PREFLIGHT_VARY,
+      },
+    })
+  }
+  /** A matching rule adds the `Access-Control-*` headers to an actual cross-origin response. */
+  private withCors(bucket: string, request: Request, response: Response): Response {
+    const origin = request.headers.get("origin")
+    if (!origin || !bucket || !this.state.buckets.has(bucket)) return response
+    const rule = matchRule(this.corsRules(bucket) ?? [], origin, request.method)
+    if (!rule) return response
+    for (const [name, value] of Object.entries(corsHeaders(rule, origin)))
+      response.headers.set(name, value)
+    response.headers.append("vary", "Origin")
+    return response
   }
   private async objectTagging(bucket: string, key: string, request: Request, url: URL) {
     const object = url.searchParams.has("versionId")

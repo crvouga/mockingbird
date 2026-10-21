@@ -22,6 +22,7 @@ import { BUILTIN_NAMESPACES, builtinNamespaceOid } from "../types/regnamespace.t
 import { setCatalogBuilder } from "./catalog.ts";
 import { ACCESS_METHODS, indexAttributeCount, indexMethod, isKeyConstraint } from "./index-catalog.ts";
 import { extensionCatalogRelation } from "./catalog-extensions.ts";
+import { attrdefOid, columnDefaults, systemCatalogRelation } from "./catalog-system.ts";
 import { type Persistence, relPersistence } from "./persistence.ts";
 import { columnStorage } from "./storage.ts";
 
@@ -220,6 +221,8 @@ function pgClass(ctx: EngineCtx): Relation {
 
 function pgAttribute(ctx: EngineCtx): Relation {
   const rows: Datum[][] = [];
+  // atthasdef: a default expression or a stored generated column (an identity column has neither)
+  const withDefault = new Set(columnDefaults(ctx).map((d) => attrdefOid(d.tableOid, d.attnum)));
   for (const t of allTables(ctx.state)) {
     t.columns.forEach((c, i) => {
       rows.push([
@@ -230,7 +233,7 @@ function pgAttribute(ctx: EngineCtx): Relation {
         attTypmod(c.type.mod, c.type.id),
         -1,
         c.notNull,
-        c.defaultExpr !== null || c.identity !== null,
+        withDefault.has(attrdefOid(t.oid, i + 1)),
         false,
         c.identity ? (c.identity.always ? "a" : "d") : "",
         c.generated ? "s" : "",
@@ -1144,7 +1147,10 @@ function buildCatalogRelation(ctx: EngineCtx, schema: string, name: string): Rel
       case "pg_trigger":
         return pgTrigger(ctx);
       default:
-        return extensionCatalogRelation(ctx.state, name, (ns) => namespaceOid(ctx.state, ns));
+        return (
+          systemCatalogRelation(ctx, name) ??
+          extensionCatalogRelation(ctx.state, name, (ns) => namespaceOid(ctx.state, ns))
+        );
     }
   }
   switch (name) {

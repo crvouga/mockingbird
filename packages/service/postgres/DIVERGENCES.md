@@ -2,7 +2,7 @@
 
 > Auto-generated from [`compat/divergences.json`](compat/divergences.json). Do not edit by hand — run `bun run divergences`.
 
-Generated: 2026-10-11 · 23 entries
+Generated: 2026-10-21 · 23 entries
 
 | ID | Scope | Predicate | Pinned by |
 | --- | --- | --- | --- |
@@ -11,7 +11,7 @@ Generated: 2026-10-11 · 23 entries
 | `pgmm-snapshot-codec` | engine | snapshot()/encode()/decode() use the custom PGMM binary codec (magic 'PGMM' + LE u32 version), not pg_dump or the on-disk PostgreSQL format | `SNP-rt-01`, `SNP-rt-02`, `SNP-rt-03`, `SNP-rt-04`, `SNP-rt-05`, `SNP-byte-01`, `SNP-hdr-01`, `SNP-hdr-02`, `SNP-hdr-03`, `SNP-hdr-04`, `SNP-txn-01`, `SNP-open-01`, `SNP-open-02`, `tests/contract/snapshots/basic.test.ts` |
 | `copy-stdin-api` | api | COPY ... FROM STDIN is fed through the copyFrom(sql, text) API hook and COPY ... TO STDOUT returns the rendered text from exec; PGlite exposes a different (protocol-level) COPY interface | `CPY-from-01`, `CPY-from-02`, `CPY-from-03`, `CPY-from-04`, `CPY-from-05`, `CPY-csv-01`, `CPY-csv-02`, `CPY-csv-03`, `CPY-to-01`, `CPY-to-02`, `CPY-to-03`, `CPY-to-04`, `CPY-rt-01`, `CPY-api-01`, `tests/contract/copy/basic.test.ts` |
 | `sync-api-surface` | api | The public Database/Statement API is synchronous (exec/query/prepare/transaction/snapshot/restore/close return values, not Promises); PGlite and pg clients are asynchronous | `API-exec-01`, `API-exec-02`, `API-query-01`, `API-prep-01`, `API-run-01`, `API-run-02`, `API-run-03`, `API-bind-02`, `API-bind-03`, `API-ret-01`, `API-ret-02`, `API-close-01`, `API-txn-01`, `API-txn-02`, `API-sync-01`, `API-copy-01`, `API-int8-01`, `API-int8-02`, `API-fn-01`, `tests/contract/api/basic.test.ts` |
-| `dump-compat-noop` | sql | DO blocks and ALTER TABLE SET (storage/reloptions) execute as no-ops so schema dumps can load without intercepts; PL/pgSQL and storage parameters are NOT APPLICABLE | `API-dump-01`, `API-do-01`, `API-set-01` |
+| `dump-compat-noop` | sql | ALTER TABLE SET (storage/reloptions) executes as a no-op so schema dumps can load without intercepts; storage parameters are NOT APPLICABLE | `API-dump-01`, `API-set-01` |
 | `empty-script-rejected` | sql | exec of a statement-free script (comments/whitespace only) raises an empty-statement error; PostgreSQL accepts it as a no-op | `TOK-cmt-04` |
 | `row-value-subquery-arity` | sql | Row-constructor arity mismatches surface at execution (21000) instead of parse time (42601), and multi-column row-value IN (SELECT ...) is rejected as unsupported | `PAR-row-03`, `EXP-in-03` |
 | `float8-overflow-saturates` | sql | '1e400'::float8 saturates to Infinity instead of raising 22003 out of range | `TYP-float-04` |
@@ -54,7 +54,7 @@ API shape mirrors sqlite-mem: run/all/get/result, $1..$n parameters, bigint for 
 
 ### `dump-compat-noop`
 
-exec() loads schema dumps. DO $$ … $$ and ALTER TABLE … SET (fillfactor=…) succeed and change nothing. PGlite executes plpgsql; these cases are memory-only.
+exec() loads schema dumps. ALTER TABLE … SET (fillfactor=…) succeeds and changes nothing. DO blocks run (see API-do-01); RAISE NOTICE / WARNING inside them is discarded.
 
 ### `empty-script-rejected`
 

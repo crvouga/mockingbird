@@ -56,7 +56,10 @@ export function labAccountBehaviorFrom(input: unknown): LabAccountBehavior {
   const omitted = input.omittedAccountBilling ?? {}
   if (!record(omitted))
     throw new TypeError("omittedAccountBilling must map lab slugs to listed or unchecked")
-  const omittedAccountBilling: Record<string, OmittedAccountBilling> = {}
+  // #495: the production recording has an omitted id land on the Junction-owned BioReference
+  // account without checking its listing; an explicit entry (e.g. `listed`) overrides it.
+  const omittedAccountBilling: Record<string, OmittedAccountBilling> =
+    oracle === "production" ? { bioreference: "unchecked" } : {}
   for (const [lab, policy] of Object.entries(omitted)) {
     if (!lab.trim() || (policy !== "listed" && policy !== "unchecked"))
       throw new TypeError("omittedAccountBilling must map lab slugs to listed or unchecked")

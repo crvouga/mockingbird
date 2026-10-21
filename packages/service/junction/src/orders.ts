@@ -1160,6 +1160,28 @@ export const orderHandlers = (state: JunctionState) => ({
       ? sandboxPolicy?.rejectBilling?.[requestedBilling as import("./lab-accounts.js").BillingType]
       : undefined
     if (rejection) throw new HttpError(400, { detail: rejection })
+    // #494 (sandbox observation): an explicit root id naming a Junction-owned account that
+    // lists no billing type for the patient's state is refused as a state error, separate from
+    // the billing-type refusals. Account-owned `allowBilling` exceptions count as coverage.
+    if (
+      isObservedProfile(behavior) &&
+      behavior.oracle === "sandbox" &&
+      labAccount !== "platform" &&
+      labAccount.org_id === null &&
+      typeof body.lab_account_id === "string"
+    ) {
+      const stateCode = String(address.state ?? "")
+        .trim()
+        .toUpperCase()
+      const covered = [
+        ...Object.values(labAccount.allowed_billing),
+        ...Object.values(sandboxPolicy?.allowBilling ?? {}),
+      ].some((states) => states.includes(stateCode))
+      if (stateCode !== "" && !covered)
+        throw new HttpError(400, {
+          detail: `Lab ${String(labTest.lab?.name ?? labSlug)} does not support state ${stateCode}`,
+        })
+    }
     // #467: with no root account id, a lab configured `unchecked` places the order on its
     // Junction-owned account without checking that account's listed billing or states.
     const omittedHouseUnchecked =

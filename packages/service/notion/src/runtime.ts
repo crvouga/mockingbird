@@ -1,4 +1,5 @@
 import {
+  type AdminRoutes,
   bearerToken,
   type Clock,
   createRuntime as createServiceRuntime,
@@ -65,12 +66,37 @@ export type NotionRuntimeOptions = Omit<NotionAPIOptions, "now" | "namespace"> &
   onLog?: (entry: RequestLog) => void
 }
 export type NotionRuntime = ServiceRuntime<NotionAPI>
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+const adminError = (status: number, message: string) =>
+  json(status, { error: { type: "mockingbird_admin", message } })
+const adminRoutes = (runtime: NotionRuntime): AdminRoutes => ({
+  "PUT /pages/:id/blocks": ({ params, body, namespace }) => {
+    if (typeof body !== "object" || body === null || Array.isArray(body))
+      return adminError(
+        400,
+        'expected {"blocks": [{type, text?, children?}], "workspaceId"?, "title"?}',
+      )
+    const { blocks, workspaceId, title } = body as Record<string, unknown>
+    if (
+      (workspaceId !== undefined && typeof workspaceId !== "string") ||
+      (title !== undefined && typeof title !== "string")
+    )
+      return adminError(400, "workspaceId and title must be strings")
+    const seeded = runtime.instance(namespace).seedBlocks(params.id as string, blocks, {
+      ...(workspaceId !== undefined ? { workspaceId } : {}),
+      ...(title !== undefined ? { title } : {}),
+    })
+    return typeof seeded === "string" ? adminError(400, seeded) : json(200, seeded)
+  },
+})
 export const createRuntime = (options: NotionRuntimeOptions = {}): NotionRuntime =>
   createServiceRuntime({
     name: NOTION_NAMESPACE,
     document,
     presets: NOTION_PRESETS,
     credential: bearerToken,
+    admin: adminRoutes,
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
     ...(options.clock ? { clock: options.clock } : {}),
     ...(options.seed !== undefined ? { seed: options.seed } : {}),

@@ -110,7 +110,7 @@ is `user:pass`. Non-2xx answers are retried; `GET /__admin/webhooks`, `…/event
 | `POST /__admin/referrals/:id/convert` | `{saleAmount?}`: the lead paid; credits the promoter (percent reward × amount) and posts the webhook. |
 | `POST /__admin/commissions` | Seed a commission against an existing `{promoter_campaign_id, amount, unit?, status?, fulfilled?, is_paid?, referral_id?, sale_amount?, event_id?}`. Defaults: approved, points, unfulfilled/unpaid. A referral must belong to that promoter and campaign. |
 | `POST /__admin/promo-codes` | Seed `{promo_code, promoter_campaign_id}` against an existing promoter campaign for sale attribution tests. |
-| `GET\|PUT /__admin/settings` | `{website?, defaultCampaignId?, autoConvert?, campaigns?}` (campaigns carry `referralRewards` / `promoterRewards` with `coupon`, `amount`, `unit`, `per_of_sale`). The default campaign's referral coupon is `ACME50`. |
+| `GET\|PUT /__admin/settings` | `{website?, defaultCampaignId?, autoConvert?, promoCodeCreatesReferral?, campaigns?}` (campaigns carry `referralRewards` / `promoterRewards` with `coupon`, `amount`, `unit`, `per_of_sale`). The default campaign's referral coupon is `ACME50`. |
 
 Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /__admin/faults/presets`):
 `created_but_500` (stored, then 500: the retry must adopt by `cust_id`), `lookup_unavailable`
@@ -151,11 +151,19 @@ When no lead matches `email` / `uid`, the vendor's [tracking contract](https://g
 lets `tid` or `ref_id` "bypass the signup tracking": the lead is created and the sale assigned in
 one request. The emulator does the same when the `tid` (a click from `POST /__admin/clicks`) or
 `ref_id` resolves to a live promoter and the request names the lead by `email`; the new lead counts
-toward the promoter's referrals, becomes a customer and posts `lead_becomes_referral`. The
-vendor documents nothing further for `promo_code` ("For promo code tracking"), so creating a lead
-from a seeded `promo_code` alone is opt-in: `PUT /__admin/settings {"promoCodeCreatesReferral": true}`
-(default `false`, where it stays a 404). `uid` alone cannot name a new lead, and an `email` that is
-already a lead under another `uid` is 422 (as in signup tracking).
+toward the promoter's referrals, becomes a customer and posts `lead_becomes_referral`. This is
+docs-verified (the tracking OpenAPI above), not oracle-verified. `uid` alone cannot name a new lead,
+and an `email` that is already a lead under another `uid` is 422 (as in signup tracking).
+
+**`promo_code` alone: best guess, not oracle-verified.** The vendor documents nothing further for
+`promo_code` ("For promo code tracking"), so whether a sale carrying only a promo code creates the
+lead is unobserved. Default (`promoCodeCreatesReferral: false`): a sale for an unknown buyer with
+only `promo_code` is the same 404 as any unattributed sale, and nothing is stored. Opt in with
+`PUT /__admin/settings {"promoCodeCreatesReferral": true}` to have a code seeded through
+`POST /__admin/promo-codes` create the lead (needs `email`), assign the sale to the promoter owning
+that campaign enrolment, and post `lead_becomes_referral`, exactly like `tid` / `ref_id`. An
+unseeded code is 404 in both modes. Treat a test that depends on this setting as depending on an
+emulator assumption until a live response is captured.
 
 ### Namespaces
 
@@ -172,8 +180,8 @@ already a lead under another `uid` is 422 (as in signup tracking).
 - Refunds, standalone commission creation/editing/approval, cash payouts and commission filters
   beyond those listed above; fraud checks;
   public promo-code provisioning; the hosted affiliate portal behind the iframe token.
-- Creating a lead from `promo_code` alone is off by default (`promoCodeCreatesReferral`): the vendor documents the one-step bypass only for `tid` and `ref_id` and the promo-code behavior is unverified against the live API.
-  Currency is recorded without foreign-exchange conversion; plan-specific rewards, quantity/MRR
+- Creating a lead from `promo_code` alone is off by default (`promoCodeCreatesReferral`): the vendor documents the one-step bypass only for `tid` and `ref_id`, so the opt-in behavior is a best guess, not oracle-verified.
+- Currency is recorded without foreign-exchange conversion; plan-specific rewards, quantity/MRR
   calculations, multiple reward tiers, split commissions and notification emails are unmodelled.
   Commission rounding and immediate approval are deterministic emulator policies, not live-verified
   campaign policy. The default campaign reward remains 10 percent, as before.

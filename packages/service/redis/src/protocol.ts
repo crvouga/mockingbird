@@ -48,6 +48,8 @@ export function unknownCommand(name: string, args: Uint8Array[]): Reply {
   return err(`ERR unknown command '${name}', with args beginning with: ${extra}`)
 }
 
+export const invalidExpire = (command: string): Reply =>
+  err(`ERR invalid expire time in '${command}' command`)
 export const notInteger = (): Reply => err("ERR value is not an integer or out of range")
 export const notFloat = (): Reply => err("ERR value is not a valid float")
 export const noScript = (): Reply => err("NOSCRIPT No matching script. Please use EVAL.")
@@ -359,6 +361,201 @@ export class RespParser {
   }
 }
 
+export interface Request {
+  name: string
+  args: Uint8Array[]
+}
+
+/** Largest bulk string and multibulk count Redis accepts in a request. */
+const MAX_BULK_LENGTH = 512 * 1024 * 1024
+const MAX_MULTIBULK_LENGTH = 2147483647
+/** Longest header or inline line Redis buffers while waiting for its newline. */
+const MAX_LINE_LENGTH = 64 * 1024
+
+/** Redis `string2ll`: canonical base-10 integers only, no sign `+`, no leading zeros. */
+function parseLength(bytes: Uint8Array): bigint | null {
+  const value = latin1(bytes)
+  return /^(?:0|-?[1-9]\d*)$/.test(value) ? BigInt(value) : null
+}
+
+const isSpace = (c: number) => c === 32 || (c >= 9 && c <= 13)
+const hexValue = (c: number | undefined): number =>
+  c === undefined
+    ? -1
+    : c >= 48 && c <= 57
+      ? c - 48
+      : c >= 97 && c <= 102
+        ? c - 87
+        : c >= 65 && c <= 70
+          ? c - 55
+          : -1
+
+/** Redis `sdssplitargs`: inline command line to arguments, or null on unbalanced quotes. */
+function splitInline(line: Uint8Array): Uint8Array[] | null {
+  const out: Uint8Array[] = []
+  const end = line.length
+  let i = 0
+  for (;;) {
+    while (i < end && isSpace(line[i] ?? 0)) i++
+    if (i >= end) return out
+    const current: number[] = []
+    let inDouble = false
+    let inSingle = false
+    let done = false
+    while (!done) {
+      const c = i < end ? (line[i] ?? 0) : 0
+      if (inDouble) {
+        const escaped = line[i + 1]
+        if (
+          c === 92 &&
+          escaped === 120 &&
+          hexValue(line[i + 2]) >= 0 &&
+          hexValue(line[i + 3]) >= 0
+        ) {
+          current.push(hexValue(line[i + 2]) * 16 + hexValue(line[i + 3]))
+          i += 3
+        } else if (c === 92 && i + 1 < end) {
+          i++
+          const e = line[i] ?? 0
+          current.push(
+            e === 110 ? 10 : e === 114 ? 13 : e === 116 ? 9 : e === 98 ? 8 : e === 97 ? 7 : e,
+          )
+        } else if (c === 34) {
+          if (i + 1 < end && !isSpace(line[i + 1] ?? 0)) return null
+          done = true
+        } else if (i >= end) return null
+        else current.push(c)
+      } else if (inSingle) {
+        if (c === 92 && line[i + 1] === 39) {
+          i++
+          current.push(39)
+        } else if (c === 39) {
+          if (i + 1 < end && !isSpace(line[i + 1] ?? 0)) return null
+          done = true
+        } else if (i >= end) return null
+        else current.push(c)
+      } else if (i >= end || isSpace(c) || c === 0) done = true
+      else if (c === 34) inDouble = true
+      else if (c === 39) inSingle = true
+      else current.push(c)
+      if (i < end) i++
+    }
+    out.push(Uint8Array.from(current))
+  }
+}
+
+export interface RequestBatch {
+  requests: Request[]
+  /** Set once the stream is malformed: the reply text after `-ERR Protocol error: `. */
+  error: string | null
+}
+
+/**
+ * Incremental parser for client requests (RESP multibulk or inline), following Redis
+ * `networking.c`: a malformed frame is a fatal protocol error, `*0`, `*-1` and blank inline lines
+ * are no-ops, and nothing after a protocol error is parsed.
+ */
+export class RequestParser {
+  private buf = new Uint8Array(0)
+  private pos = 0
+  private remaining = 0
+  private bulkLength = -1
+  private args: Uint8Array[] = []
+  private failed = false
+
+  push(chunk: Uint8Array): RequestBatch {
+    const requests: Request[] = []
+    if (this.failed) return { requests, error: null }
+    if (this.pos > 0) this.buf = this.buf.slice(this.pos)
+    this.pos = 0
+    if (chunk.length > 0) {
+      const next = new Uint8Array(this.buf.length + chunk.length)
+      next.set(this.buf)
+      next.set(chunk, this.buf.length)
+      this.buf = next
+    }
+    const fail = (message: string): RequestBatch => {
+      this.failed = true
+      this.buf = new Uint8Array(0)
+      this.pos = 0
+      return { requests, error: message }
+    }
+    while (this.pos < this.buf.length) {
+      if (this.remaining === 0) {
+        if (this.buf[this.pos] === 42) {
+          const header = this.header()
+          if (header === null) {
+            if (this.buf.length - this.pos > MAX_LINE_LENGTH)
+              return fail("too big mbulk count string")
+            break
+          }
+          const count = parseLength(header.subarray(1))
+          if (count === null || count > BigInt(MAX_MULTIBULK_LENGTH)) {
+            return fail("invalid multibulk length")
+          }
+          if (count > 0n) {
+            this.remaining = Number(count)
+            this.args = []
+          }
+        } else {
+          const newline = this.buf.indexOf(10, this.pos)
+          if (newline < 0) {
+            if (this.buf.length - this.pos > MAX_LINE_LENGTH) return fail("too big inline request")
+            break
+          }
+          let end = newline
+          if (end > this.pos && this.buf[end - 1] === 13) end--
+          const line = this.buf.subarray(this.pos, end)
+          this.pos = newline + 1
+          const args = splitInline(line)
+          if (args === null) return fail("unbalanced quotes in request")
+          if (args.length > 0) requests.push(toRequest(args))
+        }
+        continue
+      }
+      if (this.bulkLength < 0) {
+        if (this.buf[this.pos] !== 36) {
+          const got = String.fromCharCode(this.buf[this.pos] ?? 0)
+          return fail(`expected '$', got '${got}'`)
+        }
+        const header = this.header()
+        if (header === null) {
+          if (this.buf.length - this.pos > MAX_LINE_LENGTH) return fail("too big bulk count string")
+          break
+        }
+        const length = parseLength(header.subarray(1))
+        if (length === null || length < 0n || length > BigInt(MAX_BULK_LENGTH)) {
+          return fail("invalid bulk length")
+        }
+        this.bulkLength = Number(length)
+      }
+      if (this.buf.length - this.pos < this.bulkLength + 2) break
+      this.args.push(this.buf.slice(this.pos, this.pos + this.bulkLength))
+      this.pos += this.bulkLength + 2
+      this.bulkLength = -1
+      if (--this.remaining === 0) {
+        requests.push(toRequest(this.args))
+        this.args = []
+      }
+    }
+    return { requests, error: null }
+  }
+
+  /** A `*N` or `$N` header line ending in CRLF, consumed; null while the CRLF has not arrived. */
+  private header(): Uint8Array | null {
+    const cr = this.buf.indexOf(13, this.pos)
+    if (cr < 0 || cr + 1 >= this.buf.length) return null
+    const line = this.buf.subarray(this.pos, cr)
+    this.pos = cr + 2
+    return line
+  }
+}
+
+function toRequest(args: Uint8Array[]): Request {
+  return { name: latin1(args[0] ?? new Uint8Array(0)), args: args.slice(1) }
+}
+
+/** Reply-shaped command frame to a command, used by the parity script; servers use `RequestParser`. */
 export function asCommand(reply: Reply): { name: string; args: Uint8Array[] } | Reply {
   if (reply.t !== "array" || reply.v === null || reply.v.length === 0) {
     return err("ERR protocol error: expected command array")

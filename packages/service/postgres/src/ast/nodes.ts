@@ -356,6 +356,8 @@ export interface FromFunc {
   readonly withOrdinality: boolean;
   readonly alias: string | null;
   readonly colAliases: string[] | null;
+  /** column definition list `AS r(a int, b text)` for functions returning `record` (types parallel `colAliases`) */
+  readonly colTypes?: TypeName[] | null;
   /** ROWS FROM (f1(), f2()) */
   readonly rowsFrom: Expr[] | null;
 }
@@ -596,7 +598,8 @@ export interface AlterEnumStmt {
   readonly name: string[];
   readonly action:
     | { kind: "add_value"; label: string; ifNotExists: boolean; before: string | null; after: string | null }
-    | { kind: "rename_value"; from: string; to: string };
+    | { kind: "rename_value"; from: string; to: string }
+    | { kind: "rename_type"; to: string };
 }
 
 export interface CreateDomainStmt {
@@ -659,6 +662,8 @@ export type AlterTableAction =
   | { kind: "set_storage"; column: string; mode: string }
   | { kind: "set_logged"; logged: boolean }
   | { kind: "add_constraint"; constraint: TableConstraint; skipValidation: boolean }
+  /** `ADD [CONSTRAINT name] { UNIQUE | PRIMARY KEY } USING INDEX index`; the name defaults to the index's */
+  | { kind: "add_constraint_using_index"; name: string | null; constraint: "primary_key" | "unique"; index: string }
   | { kind: "drop_constraint"; name: string; ifExists: boolean; cascade: boolean }
   | { kind: "rename_column"; from: string; to: string }
   | { kind: "rename_constraint"; from: string; to: string }

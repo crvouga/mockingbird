@@ -273,11 +273,13 @@ runCatalog(API_SECTION, [
   },
   {
     id: "API-do-01",
-    kind: "divergence",
-    fn: (db) => {
-      db.exec("DO $$ BEGIN PERFORM 1; END $$");
-      db.exec("DO LANGUAGE plpgsql $$ BEGIN NULL; END $$");
-    },
+    kind: "sequence",
+    setup: ["CREATE TABLE t (id int)"],
+    steps: [
+      { sql: "DO $$ BEGIN PERFORM 1; END $$" },
+      { sql: "DO LANGUAGE plpgsql $$ BEGIN INSERT INTO t VALUES (1); END $$" },
+      { sql: "SELECT id FROM t", query: true },
+    ],
   },
   {
     id: "API-set-01",
