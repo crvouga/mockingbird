@@ -1,8 +1,8 @@
-import { expect, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { createClock } from "@crvouga/mockingbird-service"
 import { createRuntime, DEFAULT_DATABASES, type OAuthCode } from "./src/index.js"
 import { createServer } from "./src/server.js"
-import { client } from "./test/consumer.js"
+import { client, pageMarkdown } from "./test/consumer.js"
 
 const origin = "http://notion.test",
   databaseId = "00000000-0000-4000-8000-000000000001"
@@ -158,4 +158,255 @@ test("served HTTP version errors and scripted quota failures remain vendor-shape
   } finally {
     await server.close()
   }
+})
+describe("GET /v1/blocks/{block_id}/children (docs-verified shape; pagination and errors best guess)", () => {
+  const pageId = "1429989f-e8ac-4eff-bc8f-57f56486db54"
+  const seed = (runtime: ReturnType<typeof createRuntime>, body: unknown, id = pageId) =>
+    runtime.fetch(
+      new Request(`${origin}/__admin/pages/${id}/blocks`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    )
+  const faq = [
+    { type: "heading_2", text: "Support FAQ" },
+    { type: "paragraph", text: "Reach us any time." },
+    { type: "paragraph", text: "Replies take a day." },
+  ]
+
+  test("a seeded page lists its children in order as Notion block objects", async () => {
+    const { runtime, consumer } = setup()
+    expect((await seed(runtime, { blocks: faq })).status).toBe(200)
+    const response = await consumer.blockChildren(pageId)
+    expect(response.status).toBe(200)
+    const list = await response.json()
+    expect(list).toMatchObject({
+      object: "list",
+      next_cursor: null,
+      has_more: false,
+      type: "block",
+      block: {},
+    })
+    expect(list.results.map((block: { type: string }) => block.type)).toEqual([
+      "heading_2",
+      "paragraph",
+      "paragraph",
+    ])
+    expect(list.results[1]).toMatchObject({
+      object: "block",
+      type: "paragraph",
+      has_children: false,
+      parent: { type: "page_id", page_id: pageId },
+      archived: false,
+      paragraph: {
+        rich_text: [
+          {
+            type: "text",
+            text: { content: "Reach us any time.", link: null },
+            plain_text: "Reach us any time.",
+          },
+        ],
+      },
+    })
+    expect(list.results[1].id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/,
+    )
+    // The same page without hyphens resolves too.
+    expect((await consumer.blockChildren(pageId.replaceAll("-", ""))).status).toBe(200)
+  })
+
+  test("more children than page_size are paged with start_cursor and next_cursor", async () => {
+    const { runtime, fetchImpl } = setup()
+    await seed(runtime, {
+      blocks: Array.from({ length: 5 }, (_, index) => ({
+        type: "paragraph",
+        text: `line ${index}`,
+      })),
+    })
+    const get = async (query: string) =>
+      (await (
+        await fetchImpl(`${origin}/v1/blocks/${pageId}/children?${query}`, {
+          headers: { authorization: "Bearer mock_notion_token", "notion-version": "2022-06-28" },
+        })
+      ).json()) as {
+        results: { id: string; paragraph: { rich_text: { plain_text: string }[] } }[]
+        has_more: boolean
+        next_cursor: string | null
+      }
+    const text = (page: Awaited<ReturnType<typeof get>>) =>
+      page.results.map((block) => block.paragraph.rich_text[0]?.plain_text)
+    const first = await get("page_size=2")
+    expect(first.has_more).toBe(true)
+    expect(typeof first.next_cursor).toBe("string")
+    expect(text(first)).toEqual(["line 0", "line 1"])
+    const second = await get(`page_size=2&start_cursor=${first.next_cursor}`)
+    expect(text(second)).toEqual(["line 2", "line 3"])
+    expect(second.has_more).toBe(true)
+    const last = await get(`page_size=2&start_cursor=${second.next_cursor}`)
+    expect(text(last)).toEqual(["line 4"])
+    expect([last.has_more, last.next_cursor]).toEqual([false, null])
+    const response = await fetchImpl(`${origin}/v1/blocks/${pageId}/children?start_cursor=nope`, {
+      headers: { authorization: "Bearer mock_notion_token", "notion-version": "2022-06-28" },
+    })
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ object: "error", code: "validation_error" })
+  })
+
+  test("a block that reports has_children lists its nested blocks, and the loader flattens the tree", async () => {
+    const { runtime, fetchImpl, consumer } = setup()
+    await seed(runtime, {
+      blocks: [
+        { type: "heading_1", text: "FAQ" },
+        {
+          type: "toggle",
+          text: "How do refunds work?",
+          children: [
+            { type: "paragraph", text: "Within 30 days." },
+            {
+              type: "bulleted_list_item",
+              text: "Ask support",
+              children: [{ type: "to_do", text: "Attach receipt", checked: true }],
+            },
+            { type: "code", text: "refund --all", language: "bash", caption: "Run it" },
+          ],
+        },
+        { type: "numbered_list_item", text: "One" },
+        { type: "quote", text: "Quoted" },
+        { type: "callout", text: "Heads up" },
+        { type: "heading_3", text: "Small" },
+      ],
+    })
+    const top = await (await consumer.blockChildren(pageId)).json()
+    const toggle = top.results[1]
+    expect(toggle).toMatchObject({ type: "toggle", has_children: true })
+    const nested = await (await consumer.blockChildren(toggle.id)).json()
+    expect(nested.results.map((block: { type: string }) => block.type)).toEqual([
+      "paragraph",
+      "bulleted_list_item",
+      "code",
+    ])
+    expect(nested.results[0].parent).toEqual({ type: "block_id", block_id: toggle.id })
+    expect(nested.results[2].code).toMatchObject({
+      language: "bash",
+      caption: [{ plain_text: "Run it" }],
+      rich_text: [{ plain_text: "refund --all" }],
+    })
+    const deeper = await (await consumer.blockChildren(nested.results[1].id)).json()
+    expect(deeper.results[0]).toMatchObject({ type: "to_do", to_do: { checked: true } })
+    expect(await pageMarkdown(fetchImpl, origin, pageId)).toBe(
+      [
+        "# FAQ",
+        "How do refunds work?",
+        "  Within 30 days.",
+        "  - Ask support",
+        "    - [x] Attach receipt",
+        "  ```bash",
+        "  refund --all",
+        "  ```",
+        "  Run it",
+        "1. One",
+        "> Quoted",
+        "> Heads up",
+        "### Small",
+      ].join("\n"),
+    )
+  })
+
+  test("a page with no seeded blocks lists none; an unknown id or an unshared page is 404; a non-UUID is 400", async () => {
+    const { runtime, fetchImpl, consumer } = setup()
+    const created = await (
+      await consumer.create(databaseId, { Name: { title: [{ text: { content: "Empty" } }] } })
+    ).json()
+    expect(await (await consumer.blockChildren(created.id)).json()).toMatchObject({
+      results: [],
+      has_more: false,
+    })
+    const unknown = await consumer.blockChildren("00000000-0000-4000-8000-00000000dead")
+    expect(unknown.status).toBe(404)
+    expect(await unknown.json()).toMatchObject({
+      object: "error",
+      status: 404,
+      code: "object_not_found",
+    })
+    const invalid = await consumer.blockChildren("not-a-uuid")
+    expect(invalid.status).toBe(400)
+    expect(await invalid.json()).toMatchObject({
+      object: "error",
+      status: 400,
+      code: "validation_error",
+    })
+    // A page in another workspace, and one in a database the grant does not cover.
+    await seed(runtime, { blocks: faq, workspaceId: "someone-else" })
+    expect((await consumer.blockChildren(pageId)).status).toBe(404)
+    runtime.instance().grants.insert("narrow", {
+      token: "narrow",
+      workspaceId: "mock-workspace",
+      databaseIds: [],
+      write: false,
+    })
+    expect((await client(fetchImpl, origin, "narrow").blockChildren(created.id)).status).toBe(404)
+  })
+
+  test("a missing or unknown token is 401 and a rate_limited fault is 429 with Retry-After", async () => {
+    const { runtime, fetchImpl, consumer } = setup()
+    await seed(runtime, { blocks: faq })
+    expect((await client(fetchImpl, origin, "wrong").blockChildren(pageId)).status).toBe(401)
+    const anonymous = await fetchImpl(`${origin}/v1/blocks/${pageId}/children`, {
+      headers: { "notion-version": "2022-06-28" },
+    })
+    expect(anonymous.status).toBe(401)
+    expect(await anonymous.json()).toMatchObject({ code: "unauthorized" })
+    runtime.applyPreset("rate_limited", "default", { count: 1 })
+    const limited = await consumer.blockChildren(pageId)
+    expect(limited.status).toBe(429)
+    expect(limited.headers.get("retry-after")).toBe("1")
+    expect(await limited.json()).toMatchObject({ code: "rate_limited" })
+    expect((await consumer.blockChildren(pageId)).status).toBe(200)
+  })
+
+  test("a bad page_size is 400 validation_error", async () => {
+    const { runtime, fetchImpl } = setup()
+    await seed(runtime, { blocks: faq })
+    for (const size of ["0", "101", "x", "1.5"]) {
+      const response = await fetchImpl(`${origin}/v1/blocks/${pageId}/children?page_size=${size}`, {
+        headers: { authorization: "Bearer mock_notion_token", "notion-version": "2022-06-28" },
+      })
+      expect([size, response.status]).toEqual([size, 400])
+    }
+  })
+
+  test("seeding an invalid outline is a 400 that changes nothing; re-seeding replaces the tree", async () => {
+    const { runtime, consumer } = setup()
+    await seed(runtime, { blocks: faq })
+    const before = runtime.instance().blocks.count()
+    for (const blocks of [
+      [{ type: "bogus" }],
+      [{ type: "paragraph", text: 1 }],
+      [{ type: "paragraph", checked: true }],
+      [{ type: "paragraph", children: "x" }],
+      [{ type: "divider", children: [{ type: "paragraph" }] }],
+      "nope",
+    ]) {
+      const response = await seed(runtime, { blocks })
+      expect([JSON.stringify(blocks), response.status]).toEqual([JSON.stringify(blocks), 400])
+    }
+    expect((await seed(runtime, { blocks: faq }, "nope")).status).toBe(400)
+    expect(runtime.instance().blocks.count()).toBe(before)
+    await seed(runtime, { blocks: [{ type: "divider" }] })
+    const list = await (await consumer.blockChildren(pageId)).json()
+    expect(list.results).toHaveLength(1)
+    expect(list.results[0]).toMatchObject({ type: "divider", divider: {} })
+    expect(runtime.instance().blocks.count()).toBe(1)
+  })
+
+  test("blocks are isolated by namespace and cleared by reset", async () => {
+    const { runtime, fetchImpl } = setup()
+    await seed(runtime, { blocks: faq })
+    const other = client(fetchImpl, `${origin}/__admin/ns/other`)
+    expect((await other.blockChildren(pageId)).status).toBe(404)
+    await runtime.reset()
+    expect(runtime.instance().blocks.count()).toBe(0)
+    expect(runtime.instance().pages.count()).toBe(0)
+  })
 })

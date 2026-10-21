@@ -619,3 +619,118 @@ describe("served over HTTP", () => {
     }
   })
 })
+
+describe("Block Kit limits (best guess from docs.slack.dev, not oracle-verified)", () => {
+  const section = (length: number) => ({
+    type: "section",
+    text: { type: "mrkdwn", text: "a".repeat(length) },
+  })
+  const header = (length: number, type = "plain_text") => ({
+    type: "header",
+    text: { type, text: "a".repeat(length) },
+  })
+  const rejected: [string, unknown[]][] = [
+    ["a section over 3000 characters", [section(3001)]],
+    ["a header over 150 characters", [header(151)]],
+    ["a header with mrkdwn text", [header(10, "mrkdwn")]],
+    ["an unknown block type", [{ type: "bogus" }]],
+    ["more than 50 blocks", Array(51).fill({ type: "divider" })],
+    ["more than 10 section fields", [{ type: "section", fields: Array(11).fill(section(1).text) }]],
+    ["a section field over 2000 characters", [{ type: "section", fields: [section(2001).text] }]],
+    [
+      "more than 10 context elements",
+      [{ type: "context", elements: Array(11).fill(section(1).text) }],
+    ],
+    ["a block_id over 255 characters", [{ type: "divider", block_id: "b".repeat(256) }]],
+  ]
+  const accepted: [string, unknown[]][] = [
+    ["a section of exactly 3000 characters", [section(3000)]],
+    ["a header of exactly 150 characters", [header(150)]],
+    ["exactly 50 blocks", Array(50).fill({ type: "divider" })],
+    [
+      "10 section fields of 2000 characters",
+      [{ type: "section", fields: Array(10).fill(section(2000).text) }],
+    ],
+  ]
+  const attachmentShapes: [string, (blocks: unknown[]) => Record<string, unknown>][] = [
+    ["top-level blocks", (blocks) => ({ blocks })],
+    ["attachments[].blocks", (blocks) => ({ attachments: [{ color: "#E01E5A", blocks }] })],
+  ]
+
+  for (const [where, shape] of attachmentShapes) {
+    test(`webhook: invalid ${where} answer 400 invalid_blocks and store nothing`, async () => {
+      const { fetchImpl, outbox } = harness()
+      for (const [label, blocks] of rejected) {
+        const response = await fetchImpl(HOOK, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(shape(blocks)),
+        })
+        expect([label, response.status, await response.text()]).toEqual([
+          label,
+          400,
+          "invalid_blocks",
+        ])
+      }
+      expect(await outbox()).toEqual([])
+    })
+
+    test(`webhook: ${where} at the limits are accepted and stored verbatim`, async () => {
+      const { fetchImpl, outbox } = harness()
+      for (const [label, blocks] of accepted) {
+        const payload = shape(blocks)
+        const response = await fetchImpl(HOOK, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        expect([label, response.status]).toEqual([label, 200])
+      }
+      const stored = await outbox()
+      expect(stored).toHaveLength(accepted.length)
+      accepted.forEach(([, blocks], index) => {
+        const message = stored[index]
+        if (where === "top-level blocks") expect(message?.blocks).toEqual(blocks)
+        else expect(message?.attachments).toEqual([{ color: "#E01E5A", blocks }])
+      })
+    })
+
+    test(`Web API: invalid ${where} answer ok:false invalid_blocks for chat.postMessage and chat.update`, async () => {
+      const { fetchImpl, outbox } = harness()
+      const call = async (method: string, body: Record<string, unknown>) => {
+        const response = await fetchImpl(`${API}/${method}`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${TOKEN}`, "content-type": "application/json" },
+          body: JSON.stringify(body),
+        })
+        expect(response.status).toBe(200)
+        return (await response.json()) as Record<string, unknown>
+      }
+      const original = await call("chat.postMessage", { channel: "#alerts", text: "original" })
+      for (const [label, blocks] of rejected) {
+        for (const [method, extra] of [
+          ["chat.postMessage", {}],
+          ["chat.update", { ts: original.ts }],
+        ] as const) {
+          const result = await call(method, { channel: "#alerts", ...extra, ...shape(blocks) })
+          expect([label, method, result.ok, result.error]).toEqual([
+            label,
+            method,
+            false,
+            "invalid_blocks",
+          ])
+          expect(result.response_metadata).toMatchObject({ messages: expect.any(Array) })
+        }
+      }
+      // Nothing was stored and the original message is untouched.
+      const messages = await outbox()
+      expect(messages).toHaveLength(1)
+      expect(messages[0]).toMatchObject({ text: "original", edited: null })
+      expect(messages[0]?.blocks ?? null).toBeNull()
+      for (const [label, blocks] of accepted) {
+        const result = await call("chat.postMessage", { channel: "#alerts", ...shape(blocks) })
+        expect([label, result.ok]).toEqual([label, true])
+      }
+    })
+  }
+})

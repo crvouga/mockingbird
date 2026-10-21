@@ -97,6 +97,16 @@ paths:
           - 50-200
           - 300+
           - '100'
+      - name: nutrients[PROCNT]
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - 20+
+          - 5-15
+          - '5'
+        description: 'Per 100 g range (`MIN-MAX`, `MIN+` or `MAX`) on a nutrient code. Any nutrient code is accepted as `nutrients[CODE]` and repeats combine (best guess, not oracle-verified; see README).'
       responses:
         '200':
           description: Parser result

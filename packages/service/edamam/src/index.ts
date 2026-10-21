@@ -231,6 +231,17 @@ export class EdamamAPI implements FetchAPI {
     if (caloriesParam && !calories) {
       return foodError(400, "bad_request", `Illegal value for calories: ${caloriesParam}`)
     }
+    // `nutrients[CODE]=range` per 100 g; repeated codes and several codes must all hold.
+    const nutrientRanges: { code: string; min: number; max: number }[] = []
+    for (const [key, value] of url.searchParams) {
+      const code = /^nutrients\[(.*)\]$/.exec(key)?.[1]
+      if (code === undefined) continue
+      const range = parseRange(value)
+      if (!/^[A-Za-z][A-Za-z0-9_.]*$/.test(code) || !range) {
+        return foodError(400, "bad_request", `Illegal value for ${key}: ${value}`)
+      }
+      nutrientRanges.push({ code, ...range })
+    }
     const categories: Record<string, Food["category"]> = {
       "generic-foods": "Generic foods",
       "packaged-foods": "Packaged foods",
@@ -240,6 +251,10 @@ export class EdamamAPI implements FetchAPI {
       (!categoryLabel || food.categoryLabel === categoryLabel) &&
       (!category || food.category === categories[category]) &&
       health.every((h) => food.healthLabels.includes(h)) &&
+      nutrientRanges.every(({ code, min, max }) => {
+        const quantity = (food.nutrients as Record<string, number | undefined>)[code]
+        return quantity !== undefined && quantity >= min && quantity <= max
+      }) &&
       (!calories ||
         (food.nutrients.ENERC_KCAL !== undefined &&
           food.nutrients.ENERC_KCAL >= calories.min &&

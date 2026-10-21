@@ -450,3 +450,103 @@ describe("served over HTTP", () => {
     }
   })
 })
+
+describe("Food Database parser nutrients[CODE] filter (best guess from the issue, not oracle-verified)", () => {
+  type ParserBody = {
+    parsed: { food: { label: string } }[]
+    hints: { food: { label: string; nutrients: Record<string, number> } }[]
+  }
+  const parser = async (query: string) => {
+    const { runtime } = harness()
+    const response = await runtime.fetch(
+      new Request(`${API}/api/food-database/v2/parser?app_id=fixture&app_key=fixture&${query}`),
+    )
+    return { response, body: (await response.json()) as ParserBody }
+  }
+  const labels = (body: ParserBody) => body.hints.map((hint) => hint.food.label)
+
+  test("MIN+ keeps the foods at or above MIN per 100 g", async () => {
+    expect(labels((await parser("ingr=chicken")).body)).toEqual(
+      expect.arrayContaining(["Chicken Breast", "Chicken Salad"]),
+    )
+    const { response, body } = await parser("ingr=chicken&nutrients%5BPROCNT%5D=20%2B")
+    expect(response.status).toBe(200)
+    expect(labels(body)).toContain("Chicken Breast")
+    expect(labels(body)).not.toContain("Chicken Salad")
+    for (const hint of body.hints) expect(hint.food.nutrients.PROCNT).toBeGreaterThanOrEqual(20)
+    // A raw "+" decodes to a space on the wire; it still means "or more".
+    expect(labels((await parser("ingr=chicken&nutrients[PROCNT]=20+")).body)).toEqual(labels(body))
+  })
+
+  test("MAX keeps foods at or below it and MIN-MAX is inclusive", async () => {
+    const low = (await parser("ingr=chicken&nutrients%5BPROCNT%5D=14")).body
+    expect(labels(low)).toContain("Chicken Salad")
+    expect(labels(low)).not.toContain("Chicken Breast")
+    expect(labels((await parser("ingr=chicken&nutrients%5BPROCNT%5D=13.2")).body)).toContain(
+      "Chicken Salad",
+    )
+    const band = (await parser("ingr=chicken&nutrients%5BPROCNT%5D=13.2-31")).body
+    expect(labels(band)).toEqual(expect.arrayContaining(["Chicken Breast", "Chicken Salad"]))
+    expect(labels((await parser("ingr=chicken&nutrients%5BPROCNT%5D=13.3-30.9")).body)).not.toEqual(
+      expect.arrayContaining(["Chicken Breast"]),
+    )
+  })
+
+  test("several nutrient codes, repeated codes, calories, health and category all must hold", async () => {
+    const both = (await parser("ingr=chicken&nutrients[PROCNT]=10%2B&nutrients[FAT]=5")).body
+    expect(labels(both)).toContain("Chicken Breast")
+    expect(labels(both)).not.toContain("Chicken Salad")
+    const repeated = (await parser("ingr=chicken&nutrients[PROCNT]=10%2B&nutrients[PROCNT]=13"))
+      .body
+    expect(labels(repeated)).toEqual([])
+    const withCalories = (
+      await parser("ingr=chicken&nutrients[PROCNT]=10%2B&calories=200-300&category=generic-meals")
+    ).body
+    expect(labels(withCalories)).toContain("Chicken Salad")
+    expect(labels(withCalories)).not.toContain("Chicken Breast")
+    const withHealth = (await parser("ingr=chicken&nutrients[PROCNT]=10%2B&health=vegan")).body
+    expect(labels(withHealth)).toEqual([])
+  })
+
+  test("a filter nothing satisfies answers 200 with empty hints and parsed", async () => {
+    for (const query of [
+      "ingr=chicken&nutrients%5BPROCNT%5D=40%2B",
+      "ingr=chicken&nutrients%5BPROCNT%5D=0-5",
+      "ingr=chicken&nutrients%5BNA%5D=1%2B",
+    ]) {
+      const { response, body } = await parser(query)
+      expect([query, response.status, body.hints, body.parsed]).toEqual([query, 200, [], []])
+    }
+  })
+
+  test("a nutrient the corpus carries only on a seeded food matches that food", async () => {
+    const { runtime, admin } = harness()
+    await admin("/foods", {
+      foodId: "food_salty",
+      label: "Salty Chicken",
+      nutrients: { PROCNT: 1, NA: 900 },
+      measures: [{ uri: `${MEASURE_URI}gram`, label: "Gram", weight: 1 }],
+    })
+    const response = await runtime.fetch(
+      new Request(
+        `${API}/api/food-database/v2/parser?app_id=x&app_key=y&ingr=chicken&nutrients%5BNA%5D=500%2B`,
+      ),
+    )
+    const body = (await response.json()) as ParserBody
+    expect(labels(body)).toEqual(["Salty Chicken"])
+  })
+
+  test("a malformed range or code is a 400 bad_request, never silently ignored", async () => {
+    for (const query of [
+      "ingr=chicken&nutrients%5BPROCNT%5D=lots",
+      "ingr=chicken&nutrients%5BPROCNT%5D=",
+      "ingr=chicken&nutrients%5BPROCNT%5D=5-1x",
+      "ingr=chicken&nutrients%5B%5D=5",
+      "ingr=chicken&nutrients%5B%20%5D=5",
+    ]) {
+      const { response, body } = await parser(query)
+      expect([query, response.status]).toEqual([query, 400])
+      expect(body).toMatchObject({ status: "error", error: "bad_request" })
+    }
+  })
+})

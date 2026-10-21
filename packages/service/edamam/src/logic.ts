@@ -125,7 +125,8 @@ export const relatedFoods = (text: string, foods: readonly Food[]): Food[] => {
 export const parseRange = (value: string): { min: number; max: number } | undefined => {
   const both = /^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/.exec(value)
   if (both) return { min: Number(both[1]), max: Number(both[2]) }
-  const plus = /^(\d+(?:\.\d+)?)\+$/.exec(value)
+  // A raw `+` in a query string decodes to a space, so `20+` may arrive as `20 `.
+  const plus = /^(\d+(?:\.\d+)?)[+ ]$/.exec(value)
   if (plus) return { min: Number(plus[1]), max: Number.POSITIVE_INFINITY }
   if (/^\d+(\.\d+)?$/.test(value)) return { min: 0, max: Number(value) }
   return undefined

@@ -266,10 +266,14 @@ describe("FirstPromoter sale tracking", () => {
       email: "promo-buyer@example.test",
       promo_code: "SYNTH10",
     }
+    // Best guess, not oracle-verified: off by default, an explicit opt-in.
+    expect(await json("/__admin/settings")).toMatchObject({ promoCodeCreatesReferral: false })
     const refused = await send("/v2/track/sale", body)
     expect(refused.status).toBe(404)
     expect(await json("/v2/company/referrals")).toEqual([])
+    expect(runtime.instance("default").state.sales.has("promo-one-step")).toBe(false)
     await json("/__admin/settings", { promoCodeCreatesReferral: true }, 200, "PUT")
+    expect(await json("/__admin/settings")).toMatchObject({ promoCodeCreatesReferral: true })
     expect((await send("/v2/track/sale", { ...body, promo_code: "UNSEEDED" })).status).toBe(404)
     const sale = (await json("/v2/track/sale", body)) as {
       referral: { email: string }

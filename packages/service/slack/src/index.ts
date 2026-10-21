@@ -25,6 +25,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { Hono } from "hono"
+import { attachmentBlockIssues, blockIssues } from "./blocks.js"
 import { syncFromExpanded, syncToExpanded } from "./expanded-state.js"
 import { document } from "./generated/openapi.js"
 import { type NativeOperationId, nativeOperationIds } from "./native-operations.js"
@@ -164,14 +165,25 @@ const flag = (value: unknown): boolean | null => {
   return null
 }
 
-/** Blocks must be an array of objects with a `type`, at most 50. */
+const invalidBlocks = (issues: string[]) =>
+  new SlackError("invalid_blocks", {
+    response_metadata: { messages: issues.map((issue) => `[ERROR] ${issue}`) },
+  })
+
+/** Blocks must be an array of Block Kit blocks within their documented limits (see `blocks.ts`). */
 const checkBlocks = (blocks: unknown): unknown[] | null => {
   if (blocks === undefined || blocks === null || blocks === "") return null
-  if (!Array.isArray(blocks) || blocks.length > 50) throw new SlackError("invalid_blocks")
-  for (const block of blocks) {
-    if (!isRecord(block) || typeof block.type !== "string") throw new SlackError("invalid_blocks")
-  }
-  return blocks
+  const issues = blockIssues(blocks)
+  if (issues.length > 0) throw invalidBlocks(issues)
+  return blocks as unknown[]
+}
+
+/** The same limits for the `blocks` carried inside `attachments[]`; the attachments are stored as sent. */
+const checkAttachments = (attachments: unknown): unknown[] | null => {
+  if (!Array.isArray(attachments)) return null
+  const issues = attachmentBlockIssues(attachments)
+  if (issues.length > 0) throw invalidBlocks(issues)
+  return attachments
 }
 
 /**
@@ -455,12 +467,13 @@ export class SlackAPI implements FetchAPI {
     } else return text(400, "invalid_payload")
     if (!isRecord(payload)) return text(400, "invalid_payload")
     let blocks: unknown[] | null
+    let attachments: unknown[] | null
     try {
       blocks = checkBlocks(payload.blocks)
+      attachments = checkAttachments(payload.attachments)
     } catch {
       return text(400, "invalid_blocks")
     }
-    const attachments = Array.isArray(payload.attachments) ? payload.attachments : null
     if (attachments && attachments.length > 100) return text(400, "too_many_attachments")
     const messageText = typeof payload.text === "string" ? payload.text : null
     if (!messageText && !blocks && !attachments) return text(400, "no_text")
@@ -491,7 +504,7 @@ export class SlackAPI implements FetchAPI {
     const channel = this.channel(args.channel, context)
     if (channel.is_archived) throw new SlackError("is_archived")
     const blocks = checkBlocks(args.blocks)
-    const attachments = Array.isArray(args.attachments) ? args.attachments : null
+    const attachments = checkAttachments(args.attachments)
     const messageText = typeof args.text === "string" ? args.text : null
     if (!messageText && !blocks && !attachments) throw new SlackError("no_text")
     if (messageText && messageText.length > 40_000) throw new SlackError("msg_too_long")
@@ -529,6 +542,7 @@ export class SlackAPI implements FetchAPI {
     if (!message) throw new SlackError("message_not_found")
     if (message.source !== "api") throw new SlackError("cant_update_message")
     const blocks = checkBlocks(args.blocks)
+    checkAttachments(args.attachments)
     const messageText = typeof args.text === "string" ? args.text : null
     if (!messageText && !blocks && args.blocks === undefined) throw new SlackError("no_text")
     const next: SlackMessage = {
@@ -558,6 +572,7 @@ export class SlackAPI implements FetchAPI {
     const user = userId ? this.state.users.get(userId) : undefined
     if (!user) throw new SlackError("user_not_found")
     const blocks = checkBlocks(args.blocks)
+    checkAttachments(args.attachments)
     const messageText = typeof args.text === "string" ? args.text : null
     if (!messageText && !blocks) throw new SlackError("no_text")
     const message = this.record({
