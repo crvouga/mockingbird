@@ -214,12 +214,7 @@ export class S3API {
       parts[3] !== "s3" ||
       parts[4] !== "aws4_request"
     )
-      return this.error(
-        "AuthorizationQueryParametersError",
-        "Invalid credential scope",
-        400,
-        path,
-      )
+      return this.error("AuthorizationQueryParametersError", "Invalid credential scope", 400, path)
     const [accessKey, date, region] = parts as [string, string, string]
     const secret = (this.options.credentials ?? { fixture: "fixture" })[accessKey]
     if (!secret) return this.error("AccessDenied", "Invalid access key", 403, path)
@@ -245,12 +240,7 @@ export class S3API {
       return this.error("AccessDenied", "Request has expired", 403, path)
     const names = signedHeaders.split(";").filter(Boolean)
     if (!names.includes("host"))
-      return this.error(
-        "SignatureDoesNotMatch",
-        "SignedHeaders must include host",
-        403,
-        path,
-      )
+      return this.error("SignatureDoesNotMatch", "SignedHeaders must include host", 403, path)
     const canonicalHeaders = names
       .map(
         (name) =>
@@ -472,7 +462,11 @@ export class S3API {
     return this.error("MethodNotAllowed", "The specified method is not allowed", 405, url.pathname)
   }
   /** `response-*` query parameters replace the stored headers on a 200 or 206. */
-  private overridden(response: Response, url: URL, overrides: readonly (readonly [string, string])[]) {
+  private overridden(
+    response: Response,
+    url: URL,
+    overrides: readonly (readonly [string, string])[],
+  ) {
     if (response.status === 200 || response.status === 206)
       for (const [param, header] of overrides) {
         const value = url.searchParams.get(param)
@@ -776,7 +770,7 @@ export class S3API {
     let input: Record<string, unknown>
     try {
       input = awsParseXml(await request.text()).Delete as Record<string, unknown>
-      if (!input || !input.Object) throw new TypeError()
+      if (!input?.Object) throw new TypeError()
     } catch {
       return this.error("MalformedXML", "Malformed XML", 400, `/${bucket}`)
     }

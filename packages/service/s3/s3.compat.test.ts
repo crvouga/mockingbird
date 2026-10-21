@@ -13,8 +13,9 @@ import {
   UploadPartCommand,
 } from "@aws-sdk/client-s3"
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner"
+import { S3_MAX_UPLOAD_BYTES } from "./src/index.js"
 import { createRuntime } from "./src/runtime.js"
-import { createServer } from "./src/server.js"
+import { createServer, serveTarget } from "./src/server.js"
 
 const credentials = { fixturekey: "fixturesecret" }
 const signing = { accessKeyId: "fixturekey", secretAccessKey: "fixturesecret" }
@@ -95,7 +96,10 @@ describe("GetObject response-* overrides (#510)", () => {
       body: "abcdef",
       headers: { "content-type": "text/plain", "cache-control": "max-age=60" },
     })
-    const signed = { authorization: "AWS4-HMAC-SHA256 Credential=fixturekey/20300101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=00" }
+    const signed = {
+      authorization:
+        "AWS4-HMAC-SHA256 Credential=fixturekey/20300101/us-east-1/s3/aws4_request, SignedHeaders=host, Signature=00",
+    }
     const ranged = await runtime.fetch(
       new Request("http://mock/docs/a.txt?response-content-type=text%2Fcsv", {
         headers: { ...signed, range: "bytes=1-2" },
@@ -158,9 +162,9 @@ describe("CopyObject copy-source conditionals (#511)", () => {
 
   test("a satisfied precondition copies", async () => {
     const { etag, copy, exists } = await setup()
-    expect(
-      (await copy("m", { "x-amz-copy-source-if-match": etag.replace(/"/g, "") })).status,
-    ).toBe(200)
+    expect((await copy("m", { "x-amz-copy-source-if-match": etag.replace(/"/g, "") })).status).toBe(
+      200,
+    )
     expect(
       (await copy("n", { "x-amz-copy-source-if-none-match": '"00000000000000000000000000000000"' }))
         .status,
@@ -247,7 +251,13 @@ describe("aws-chunked streaming PutObject (#512)", () => {
       const head = await s3.send(new HeadObjectCommand({ Bucket: "results", Key: "stream.bin" }))
       expect(head.ContentLength).toBe(1000)
       const got = await s3.send(new GetObjectCommand({ Bucket: "results", Key: "stream.bin" }))
-      expect(Buffer.from(await (got.Body as { transformToByteArray(): Promise<Uint8Array> }).transformToByteArray())).toEqual(data)
+      expect(
+        Buffer.from(
+          await (
+            got.Body as { transformToByteArray(): Promise<Uint8Array> }
+          ).transformToByteArray(),
+        ),
+      ).toEqual(data)
     } finally {
       s3.destroy()
       await server.close()
@@ -285,7 +295,11 @@ describe("aws-chunked streaming PutObject (#512)", () => {
       `${data.length.toString(16)}${signed ? `;chunk-signature=${"0".repeat(64)}` : ""}\r\n${data}\r\n`
     return `${chunk(payload.slice(0, 4))}${chunk(payload.slice(4))}${signed ? `0;chunk-signature=${"0".repeat(64)}\r\n` : "0\r\n"}${tail}\r\n`
   }
-  const raw = (runtime: ReturnType<typeof createRuntime>, body: string, headers: Record<string, string>) =>
+  const raw = (
+    runtime: ReturnType<typeof createRuntime>,
+    body: string,
+    headers: Record<string, string>,
+  ) =>
     put(runtime, "/docs/chunked.bin", {
       body,
       headers: {
@@ -300,7 +314,11 @@ describe("aws-chunked streaming PutObject (#512)", () => {
     const payload = "0123456789"
     // CRC32 of "0123456789" is 0xA684C7C6.
     const crc = Buffer.from([0xa6, 0x84, 0xc7, 0xc6]).toString("base64")
-    const signedBody = chunked(payload, `x-amz-checksum-crc32:${crc}\r\nx-amz-trailer-signature:${"0".repeat(64)}\r\n`, true)
+    const signedBody = chunked(
+      payload,
+      `x-amz-checksum-crc32:${crc}\r\nx-amz-trailer-signature:${"0".repeat(64)}\r\n`,
+      true,
+    )
     const ok = await raw(runtime, signedBody, {
       "x-amz-content-sha256": "STREAMING-AWS4-HMAC-SHA256-PAYLOAD-TRAILER",
       "x-amz-trailer": "x-amz-checksum-crc32",
@@ -313,21 +331,17 @@ describe("aws-chunked streaming PutObject (#512)", () => {
       "x-amz-content-sha256": "STREAMING-AWS4-HMAC-SHA256-PAYLOAD",
     })
     expect(plain.status).toBe(200)
-    expect(
-      await (await runtime.fetch(new Request("http://mock/docs/chunked.bin"))).text(),
-    ).toBe(payload)
+    expect(await (await runtime.fetch(new Request("http://mock/docs/chunked.bin"))).text()).toBe(
+      payload,
+    )
   })
 
   test("a wrong trailer checksum or decoded length is rejected without storing", async () => {
     const runtime = seeded()
-    const bad = await raw(
-      runtime,
-      chunked("0123456789", "x-amz-checksum-crc32:AAAAAA==\r\n"),
-      {
-        "x-amz-content-sha256": "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
-        "x-amz-trailer": "x-amz-checksum-crc32",
-      },
-    )
+    const bad = await raw(runtime, chunked("0123456789", "x-amz-checksum-crc32:AAAAAA==\r\n"), {
+      "x-amz-content-sha256": "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
+      "x-amz-trailer": "x-amz-checksum-crc32",
+    })
     expect(bad.status).toBe(400)
     expect(await xmlCode(bad)).toBe("BadDigest")
     const short = await raw(runtime, chunked("012345678", ""), {
@@ -370,15 +384,25 @@ describe("bodies above 16 MiB (#513)", () => {
         new PutObjectCommand({ Bucket: "videos", Key: "raw/17.webm", ContentType: "video/webm" }),
         { expiresIn: 60 },
       )
-      expect((await fetch(url, { method: "PUT", headers: { "content-type": "video/webm" }, body })).status).toBe(200)
       expect(
-        (await s3.send(new HeadObjectCommand({ Bucket: "videos", Key: "raw/17.webm" }))).ContentLength,
+        (await fetch(url, { method: "PUT", headers: { "content-type": "video/webm" }, body }))
+          .status,
+      ).toBe(200)
+      expect(
+        (await s3.send(new HeadObjectCommand({ Bucket: "videos", Key: "raw/17.webm" })))
+          .ContentLength,
       ).toBe(body.length)
       const { UploadId } = await s3.send(
         new CreateMultipartUploadCommand({ Bucket: "videos", Key: "raw/mp.webm" }),
       )
       const part = await s3.send(
-        new UploadPartCommand({ Bucket: "videos", Key: "raw/mp.webm", UploadId, PartNumber: 1, Body: body }),
+        new UploadPartCommand({
+          Bucket: "videos",
+          Key: "raw/mp.webm",
+          UploadId,
+          PartNumber: 1,
+          Body: body,
+        }),
       )
       expect(part.ETag).toBeString()
     } finally {
@@ -387,10 +411,17 @@ describe("bodies above 16 MiB (#513)", () => {
     }
   }, 60_000)
 
+  test("the serve CLI and fleet target raise the adapter cap to the S3 maximum", () => {
+    expect(serveTarget.maxBodyBytes).toBe(S3_MAX_UPLOAD_BYTES)
+  })
+
   test("maxBodyBytes lowers the limit, and S3 itself refuses more than 5 GiB", async () => {
     const server = await createServer({ buckets: ["videos"], maxBodyBytes: 1024 })
     try {
-      const res = await fetch(`${server.url}/videos/big`, { method: "PUT", body: Buffer.alloc(2048) })
+      const res = await fetch(`${server.url}/videos/big`, {
+        method: "PUT",
+        body: Buffer.alloc(2048),
+      })
       expect(res.status).toBe(413)
     } finally {
       await server.close()
@@ -415,9 +446,7 @@ describe("virtual-hosted-style addressing (#514)", () => {
 
   test("PUT, GET and ListObjectsV2 address the bucket named in the Host", async () => {
     const runtime = seeded()
-    const stored = await runtime.fetch(
-      vhost("/signatures/p1.png", { method: "PUT", body: "png" }),
-    )
+    const stored = await runtime.fetch(vhost("/signatures/p1.png", { method: "PUT", body: "png" }))
     expect(stored.status).toBe(200)
     expect(stored.headers.get("etag")).toBeString()
     const got = await runtime.fetch(vhost("/signatures/p1.png"))
@@ -450,9 +479,15 @@ describe("virtual-hosted-style addressing (#514)", () => {
 
   test("CreateBucket and DeleteBucket work on the bucket host", async () => {
     const runtime = seeded()
-    expect((await runtime.fetch(vhost("/", { method: "PUT" }, "fresh.localhost:9000"))).status).toBe(200)
-    expect((await runtime.fetch(vhost("/", { method: "HEAD" }, "fresh.localhost:9000"))).status).toBe(200)
-    expect((await runtime.fetch(vhost("/", { method: "DELETE" }, "fresh.localhost:9000"))).status).toBe(204)
+    expect(
+      (await runtime.fetch(vhost("/", { method: "PUT" }, "fresh.localhost:9000"))).status,
+    ).toBe(200)
+    expect(
+      (await runtime.fetch(vhost("/", { method: "HEAD" }, "fresh.localhost:9000"))).status,
+    ).toBe(200)
+    expect(
+      (await runtime.fetch(vhost("/", { method: "DELETE" }, "fresh.localhost:9000"))).status,
+    ).toBe(204)
   })
 
   test("other base hosts are configurable, and dotted bucket names work", async () => {
@@ -463,9 +498,7 @@ describe("virtual-hosted-style addressing (#514)", () => {
     expect(stored.status).toBe(200)
     expect(await (await runtime.fetch(new Request("http://x/my.bucket/k"))).text()).toBe("v")
     // `localhost` is no longer a base host here, so it is plain path-style.
-    expect(
-      (await runtime.fetch(vhost("/", {}, "docs.localhost:9000"))).status,
-    ).toBe(200)
+    expect((await runtime.fetch(vhost("/", {}, "docs.localhost:9000"))).status).toBe(200)
   })
 
   test("a presigned GET minted for the bucket host verifies against that Host", async () => {
@@ -651,7 +684,7 @@ describe("bucket CORS enforcement (#515)", () => {
 
   test("a rule with wildcard origin answers *, and the first matching rule wins", async () => {
     const runtime = await configured(
-      `<CORSConfiguration><CORSRule><AllowedOrigin>https://*.example.test</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedHeader>x-amz-*</AllowedHeader></CORSRule><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>PUT</AllowedMethod></CORSRule></CORSConfiguration>`,
+      `<CORSConfiguration><CORSRule><AllowedOrigin>https://*.example.test</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedHeader>x-amz-*</AllowedHeader></CORSRule><CORSRule><AllowedOrigin>*</AllowedOrigin><AllowedMethod>GET</AllowedMethod><AllowedMethod>PUT</AllowedMethod><AllowedHeader>*</AllowedHeader></CORSRule></CORSConfiguration>`,
     )
     const wildcard = await runtime.fetch(
       preflight("/docs/k", {
@@ -693,7 +726,9 @@ describe("bucket CORS enforcement (#515)", () => {
       const body = await response.text()
       expect(body).toContain("<Code>AccessForbidden</Code>")
       expect(body).toContain("CORSResponse: This CORS request is not allowed.")
-      expect([...response.headers.keys()].some((name) => name.startsWith("access-control"))).toBe(false)
+      expect([...response.headers.keys()].some((name) => name.startsWith("access-control"))).toBe(
+        false,
+      )
     }
   })
 
@@ -742,7 +777,9 @@ describe("bucket CORS enforcement (#515)", () => {
     })
     expect(bad.status).toBe(400)
     expect(await xmlCode(bad)).toBe("InvalidRequest")
-    const empty = await put(runtime, "/docs?cors", { body: "<CORSConfiguration></CORSConfiguration>" })
+    const empty = await put(runtime, "/docs?cors", {
+      body: "<CORSConfiguration></CORSConfiguration>",
+    })
     expect(empty.status).toBe(400)
     expect(await xmlCode(empty)).toBe("MalformedXML")
     const noOrigin = await put(runtime, "/docs?cors", {

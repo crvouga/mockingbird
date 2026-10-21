@@ -22,11 +22,7 @@ export const virtualBucket = (host: string, bases: readonly string[]): string | 
  * The same request addressed path-style, with the bucket in the path. Paths under `keep`
  * (the admin prefix) and requests that are not virtual-hosted are returned unchanged.
  */
-export const toPathStyle = (
-  request: Request,
-  bases: readonly string[],
-  keep?: string,
-): Request => {
+export const toPathStyle = (request: Request, bases: readonly string[], keep?: string): Request => {
   const url = new URL(request.url)
   const bucket = virtualBucket(url.host, bases)
   if (!bucket || request.headers.get(VIRTUAL_BUCKET_HEADER) === bucket) return request

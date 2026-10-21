@@ -7,6 +7,8 @@ export type ListenOptions = {
   port?: number
   /** Default `127.0.0.1`: a mock should not be reachable off the machine by accident. */
   host?: string
+  /** Largest request body accepted. Default 16 MiB. */
+  maxBodyBytes?: number
 }
 
 /** A running server, with the address it actually bound. */
@@ -20,7 +22,11 @@ export type Listening = {
 
 export const listen = async (api: FetchAPI, options: ListenOptions = {}): Promise<Listening> => {
   const host = options.host ?? "127.0.0.1"
-  const server = await serve(api, { port: options.port ?? 0, host })
+  const server = await serve(api, {
+    port: options.port ?? 0,
+    host,
+    ...(options.maxBodyBytes !== undefined ? { maxBodyBytes: options.maxBodyBytes } : {}),
+  })
   const address = server.address()
   const port = typeof address === "object" && address !== null ? address.port : (options.port ?? 0)
   const shown = host.includes(":") ? `[${host}]` : host

@@ -27,7 +27,12 @@ export type MultipartUpload = {
   cacheControl?: string
   contentDisposition?: string
 }
-export type MultipartPart = { uploadId: string; partNumber: number; bytes: Uint8Array; etag: string }
+export type MultipartPart = {
+  uploadId: string
+  partNumber: number
+  bytes: Uint8Array
+  etag: string
+}
 export type S3SeedObject = Omit<S3Object, "etag" | "lastModified" | "bytes"> & {
   body: Uint8Array | string
   etag?: string
@@ -75,7 +80,9 @@ class BlobCollection<T extends { bytes: Uint8Array }> {
   delete(id: string) {
     return this.inner.delete(id)
   }
-  list(options: { where?: (value: Omit<T, "bytes">) => boolean; order?: "newest" | "oldest" } = {}) {
+  list(
+    options: { where?: (value: Omit<T, "bytes">) => boolean; order?: "newest" | "oldest" } = {},
+  ) {
     return this.inner
       .list({
         ...(options.order ? { order: options.order } : {}),

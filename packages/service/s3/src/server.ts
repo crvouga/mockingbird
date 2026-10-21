@@ -41,6 +41,7 @@ export const createServer = async (
 export const serveTarget: ServeTarget = {
   name: "s3",
   defaultPort: DEFAULT_PORT,
+  maxBodyBytes: S3_MAX_UPLOAD_BYTES,
   options: {
     "virtual-host": {
       type: "string",

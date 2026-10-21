@@ -23,7 +23,10 @@ export const decodeAwsChunked = (input: Uint8Array): ChunkedBody | undefined => 
   const line = (from: number) => {
     for (let index = from; index + 1 < input.length; index++)
       if (input[index] === CR && input[index + 1] === LF)
-        return { text: new TextDecoder("latin1").decode(input.subarray(from, index)), next: index + 2 }
+        return {
+          text: new TextDecoder("latin1").decode(input.subarray(from, index)),
+          next: index + 2,
+        }
     return undefined
   }
   const chunks: Uint8Array[] = []
@@ -49,7 +52,9 @@ export const decodeAwsChunked = (input: Uint8Array): ChunkedBody | undefined => 
     if (trailer.text === "") break
     const colon = trailer.text.indexOf(":")
     if (colon < 1) return undefined
-    trailers[trailer.text.slice(0, colon).trim().toLowerCase()] = trailer.text.slice(colon + 1).trim()
+    trailers[trailer.text.slice(0, colon).trim().toLowerCase()] = trailer.text
+      .slice(colon + 1)
+      .trim()
   }
   const payload = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0))
   let offset = 0
