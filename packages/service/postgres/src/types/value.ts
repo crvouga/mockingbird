@@ -272,7 +272,7 @@ export const TYPE_OIDS: Record<string, number> = {
   unknown: 705,
 };
 
-const ARRAY_OIDS: Record<string, number> = {
+export const ARRAY_OIDS: Record<string, number> = {
   bool: 1000,
   bytea: 1001,
   name: 1003,
@@ -724,7 +724,7 @@ export const UTC_INPUT: InputCtx = { zoneOffsetForNaive: () => 0 };
 /** Parse PG wire text into a datum of type `t` (typinput). */
 export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
   if (t === "regclass") {
-    const parsed = parseRelationInput(text);
+    const parsed = parseRelationInput(text, "improper");
     if ("oid" in parsed) return parsed.oid;
     if (!ctx.relationOid) throw unsupported("regclass input without a catalog");
     return ctx.relationOid(parsed.parts);

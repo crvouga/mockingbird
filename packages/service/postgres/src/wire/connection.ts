@@ -12,7 +12,9 @@ import { parse as parseSql } from "../parser/index.ts";
 import { setDatabaseCatalogContext } from "../runtime/database-context.ts";
 import { datumText, typeOid, UTC_OUTPUT } from "../types/value.ts";
 import { type Cluster, LockWait, type Session } from "./cluster.ts";
+import { binaryEncodable, binaryResult, decodeBinaryParam } from "./binary.ts";
 import { type DurableCommit, storageFailure } from "./durable.ts";
+import { inferParamOids } from "./param-types.ts";
 import {
   type ByteReader,
   backend,
@@ -31,7 +33,14 @@ import { applyStartupSettings, StartupError, startupSettings } from "./startup.t
 /** One statement's outcome, before it is written to the wire. */
 type Outcome = { empty: true } | { empty: false; result: TextResultSet; tag: string };
 
-type Prepared = { name: string; sql: string; paramOids: number[] };
+type Prepared = {
+  name: string;
+  sql: string;
+  /** The OIDs `Parse` declared; zero where the client left the type to the server. */
+  paramOids: number[];
+  /** `paramOids` with the zeros replaced by the types inferred from the SQL. */
+  resolvedOids?: number[];
+};
 type LoggedStatement =
   | { kind: "sql"; sql: string; params: BindValue[] }
   | { kind: "copy"; stmt: CopyStmt; data: string };
@@ -45,6 +54,8 @@ type Portal = {
   prepared: Prepared;
   params: BindValue[];
   resultFormats: number[];
+  /** The client described this portal, so the formats it read there are the ones it expects. */
+  described?: boolean;
   /** Set once executed (by Describe or Execute); rows are handed out from `cursor`. */
   outcome?: Outcome;
   cursor: number;
@@ -120,7 +131,7 @@ const RENAME_DATABASE = new RegExp(`^alter\\s+database\\s+${IDENT}\\s+rename\\s+
 const identifier = (quoted: string | undefined, plain: string | undefined): string =>
   quoted === undefined ? (plain as string).toLowerCase() : quoted.replaceAll('""', '"');
 const ROW_LOCK =
-  /\s+for\s+(?:no\s+key\s+update|key\s+share|update|share)(?:\s+of\s+(?:(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?)(?:\s*,\s*(?:(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?))*)?(?:\s+(nowait|skip\s+locked))?\s*$/i;
+  /\s+for\s+(?:no\s+key\s+update|key\s+share|update|share)(?:\s+of\s+(?:(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?)(?:\s*,\s*(?:(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?))*)?(?:\s+(nowait|skip\s+locked))?(?:\s+limit\s+(\d+))?(?:\s+offset\s+(\d+))?\s*$/i;
 const LIMIT = /\s+limit\s+(\d+)(?:\s+offset\s+(\d+))?\s*$/i;
 const SQL_NAME = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)`;
 const SQL_RELATION = String.raw`(?:"[^"]+"|[A-Za-z_][\w$]*)(?:\.(?:"[^"]+"|[A-Za-z_][\w$]*))?`;
@@ -187,9 +198,6 @@ const TYPLEN: Record<string, number> = {
   uuid: 16,
 };
 
-const TEXT_TYPES = new Set(["text", "varchar", "bpchar", "name", "json", "xml", "unknown"]);
-const PG_EPOCH_MS = 946_684_800_000;
-
 const pgError = (category: "internal" | "syntax", message: string, code: string) =>
   new PostgresError(category, message, code);
 
@@ -217,63 +225,6 @@ const commandTag = (result: TextResultSet): string => {
     return `${command} ${result.rowCount}`;
   return command;
 };
-
-/** Binary result encoding for the types clients ask for in binary; null when only text is offered. */
-const binaryValue = (type: string, text: string): Uint8Array | null => {
-  const dv = (n: number) => {
-    const b = new Uint8Array(n);
-    return { b, v: new DataView(b.buffer) };
-  };
-  switch (type) {
-    case "bool":
-      return new Uint8Array([text === "t" ? 1 : 0]);
-    case "int2": {
-      const { b, v } = dv(2);
-      v.setInt16(0, Number(text));
-      return b;
-    }
-    case "int4":
-    case "oid": {
-      const { b, v } = dv(4);
-      v.setInt32(0, Number(text));
-      return b;
-    }
-    case "int8": {
-      const { b, v } = dv(8);
-      v.setBigInt64(0, BigInt(text));
-      return b;
-    }
-    case "float4": {
-      const { b, v } = dv(4);
-      v.setFloat32(0, Number(text));
-      return b;
-    }
-    case "float8": {
-      const { b, v } = dv(8);
-      v.setFloat64(0, Number(text));
-      return b;
-    }
-    case "bytea": {
-      const hex = text.startsWith("\\x") ? text.slice(2) : null;
-      if (hex === null || hex.length % 2 !== 0) return null;
-      const out = new Uint8Array(hex.length / 2);
-      for (let i = 0; i < out.length; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-      return out;
-    }
-    case "uuid": {
-      const hex = text.replaceAll("-", "");
-      if (hex.length !== 32) return null;
-      const out = new Uint8Array(16);
-      for (let i = 0; i < 16; i++) out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-      return out;
-    }
-    default:
-      return TEXT_TYPES.has(type) ? utf8.encode(text) : null;
-  }
-};
-
-const binaryEncodable = (type: string): boolean =>
-  TEXT_TYPES.has(type) || ["bool", "int2", "int4", "oid", "int8", "float4", "float8", "bytea", "uuid"].includes(type);
 
 /** set_config is a SELECT with session side effects that must survive workspace replay. */
 const setsSessionConfig = (node: unknown): boolean => {
@@ -330,51 +281,6 @@ const mayCommitWrite = (db: Database, sql: string): boolean => {
       stmt.type === "select" || stmt.type === "explain" || (stmt.type === "copy" && stmt.direction === "to");
     return !reads || containsWrite(db, stmt);
   });
-};
-
-/** A bound parameter as the engine takes it: text binds as an untyped literal, binary by its OID. */
-const decodeParam = (oid: number, format: number, bytes: Uint8Array | null): BindValue => {
-  if (bytes === null) return null;
-  if (format === 0) return utf8.decode(bytes);
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  switch (oid) {
-    case 16:
-      return bytes[0] !== 0;
-    case 21:
-      return view.getInt16(0);
-    case 23:
-    case 26:
-      return view.getInt32(0);
-    case 20:
-      return view.getBigInt64(0);
-    case 700:
-      return view.getFloat32(0);
-    case 701:
-      return view.getFloat64(0);
-    case 17:
-      return new Uint8Array(bytes);
-    case 2950: {
-      const hex = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
-      return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-    }
-    case 1114:
-    case 1184:
-      return new Date(Number(view.getBigInt64(0) / 1000n) + PG_EPOCH_MS);
-    case 1082: {
-      const date = new Date(PG_EPOCH_MS + view.getInt32(0) * 86_400_000);
-      return date.toISOString().slice(0, 10);
-    }
-    case 0:
-    case 19:
-    case 25:
-    case 114:
-    case 1042:
-    case 1043:
-    case 3802:
-      return utf8.decode(bytes);
-    default:
-      throw pgError("internal", `binary parameter format is not supported for type oid ${oid}`, "0A000");
-  }
 };
 
 /**
@@ -1121,9 +1027,12 @@ export class Connection implements Session {
     }
 
     let query = text.slice(0, lock.index).trimEnd();
-    const limitMatch = LIMIT.exec(query);
-    const limit = limitMatch ? Number(limitMatch[1]) : Number.POSITIVE_INFINITY;
-    const offset = limitMatch ? Number(limitMatch[2] ?? 0) : 0;
+    // the limit may follow the locking clause (`FOR UPDATE SKIP LOCKED LIMIT 1`) or precede it
+    const limitMatch = lock[2] === undefined && lock[3] === undefined ? LIMIT.exec(query) : null;
+    const limitText = lock[2] ?? limitMatch?.[1];
+    const offsetText = lock[3] ?? limitMatch?.[2];
+    const limit = limitText === undefined ? Number.POSITIVE_INFINITY : Number(limitText);
+    const offset = offsetText === undefined ? 0 : Number(offsetText);
     if (limitMatch) query = query.slice(0, limitMatch.index).trimEnd();
     return this.lockRows(db, query, params, lock[1]?.toLowerCase().replace(/\s+/g, "_") ?? "wait", limit, offset);
   }
@@ -1419,7 +1328,9 @@ export class Connection implements Session {
   private sendOutcome(
     outcome: Outcome,
     resultFormats: number[],
-    opts: { rowDescription: boolean; from?: number; limit?: number } = { rowDescription: false },
+    opts: { rowDescription: boolean; from?: number; limit?: number; strictBinary?: boolean } = {
+      rowDescription: false,
+    },
   ): "done" | "suspended" {
     const from = opts.from ?? 0;
     const limit = opts.limit ?? 0;
@@ -1431,7 +1342,7 @@ export class Connection implements Session {
     if (from === 0 && result.columns.length > 0 && opts.rowDescription) {
       this.write(backend.rowDescription(this.fields(result, resultFormats)));
     }
-    const formats = this.columnFormats(result, resultFormats);
+    const formats = this.columnFormats(result, resultFormats, opts.strictBinary === true);
     const end = limit > 0 ? Math.min(result.rows.length, from + limit) : result.rows.length;
     for (let i = from; i < end; i++) {
       const row = result.rows[i] as (string | null)[];
@@ -1440,7 +1351,7 @@ export class Connection implements Session {
           row.map((value, c) => {
             if (value === null) return null;
             const type = result.columnTypes[c] as string;
-            return formats[c] === 1 ? (binaryValue(type, value) ?? utf8.encode(value)) : utf8.encode(value);
+            return formats[c] === 1 ? (binaryResult(type, value) ?? utf8.encode(value)) : utf8.encode(value);
           }),
         ),
       );
@@ -1453,10 +1364,18 @@ export class Connection implements Session {
     return "done";
   }
 
-  private columnFormats(result: TextResultSet, requested: number[]): (0 | 1)[] {
+  /**
+   * The format each column is sent in. A type without a binary encoding is sent as text, which
+   * is only honest when the client read that in a `RowDescription`: with no Describe of the
+   * portal the client decodes whatever it asked for, so `strict` refuses with `0A000`.
+   */
+  private columnFormats(result: TextResultSet, requested: number[], strict = false): (0 | 1)[] {
     return result.columnTypes.map((type, i) => {
       const want = requested.length === 0 ? 0 : requested.length === 1 ? requested[0] : requested[i];
-      return want === 1 && binaryEncodable(type) ? 1 : 0;
+      if (want !== 1) return 0;
+      if (binaryEncodable(type)) return 1;
+      if (strict) throw pgError("internal", `binary result format is not supported for type ${type}`, "0A000");
+      return 0;
     });
   }
 
@@ -1498,11 +1417,15 @@ export class Connection implements Session {
     for (let i = 0; i < formatCount; i++) paramFormats.push(body.i16());
     const paramCount = body.i16();
     const params: BindValue[] = [];
+    // A binary value is read by its type: the declared one, else the one Describe or inference gave.
+    const oidOf = (i: number): number => prepared.paramOids[i] || this.resolveParamOids(prepared)[i] || 0;
     for (let i = 0; i < paramCount; i++) {
       const length = body.i32();
       const bytes = length === -1 ? null : body.take(length);
       const format = paramFormats.length === 0 ? 0 : paramFormats.length === 1 ? paramFormats[0] : paramFormats[i];
-      params.push(decodeParam(prepared.paramOids[i] ?? 0, format ?? 0, bytes));
+      if (bytes === null) params.push(null);
+      else if (format === 1) params.push(decodeBinaryParam(oidOf(i), bytes));
+      else params.push(utf8.decode(bytes));
     }
     const resultCount = body.i16();
     const resultFormats: number[] = [];
@@ -1520,8 +1443,9 @@ export class Connection implements Session {
     if (kind === "S") {
       const prepared = this.prepared.get(name);
       if (!prepared) throw pgError("internal", `prepared statement "${name}" does not exist`, "26000");
-      this.write(backend.parameterDescription(prepared.paramOids.map((oid) => (oid === 0 ? 25 : oid))));
-      const shape = await this.shapeOf(prepared);
+      const oids = this.resolveParamOids(prepared, true);
+      this.write(backend.parameterDescription(oids));
+      const shape = await this.shapeOf(prepared, oids.length);
       this.write(shape ? backend.rowDescription(this.fields(shape, [])) : backend.noData());
       return;
     }
@@ -1529,9 +1453,40 @@ export class Connection implements Session {
     if (!portal) throw pgError("internal", `portal "${name}" does not exist`, "34000");
     this.busy = true;
     portal.outcome ??= await this.execute(portal.prepared.sql, portal.params);
+    portal.described = true;
     const outcome = portal.outcome;
     if (outcome.empty || outcome.result.columns.length === 0) this.write(backend.noData());
     else this.write(backend.rowDescription(this.fields(outcome.result, portal.resultFormats)));
+  }
+
+  /**
+   * The parameter types of a prepared statement: what `Parse` declared, and for each `$n` it
+   * left at zero the type PostgreSQL infers from the SQL (`text` when nothing does). The
+   * catalog is the one this session sees, so a table created earlier in its open transaction
+   * is known. Cached on the statement; `fresh` re-reads it (Describe), as DDL may have run.
+   */
+  private resolveParamOids(prepared: Prepared, fresh = false): number[] {
+    if (prepared.resolvedOids && !fresh) return prepared.resolvedOids;
+    let oids: number[];
+    try {
+      oids = this.withCatalog((db) => inferParamOids(db, prepared.sql, prepared.paramOids));
+    } catch {
+      oids = prepared.paramOids.map((oid) => oid || 25);
+    }
+    prepared.resolvedOids = oids;
+    return oids;
+  }
+
+  /** Run `fn` on the catalog this session sees: its open transaction's workspace, else the database. */
+  private withCatalog<T>(fn: (db: Database) => T): T {
+    if (this.transaction === null) return this.inSession(this.database, () => fn(this.database));
+    const workspace = this.openWorkspace();
+    try {
+      return fn(workspace);
+    } finally {
+      workspace.transactions.rollback();
+      workspace.close();
+    }
   }
 
   /**
@@ -1539,17 +1494,34 @@ export class Connection implements Session {
    * `INSERT`/`UPDATE`/`DELETE ... RETURNING` is described from the catalog: a trial run binds
    * nulls and fails NOT NULL, and Describe would answer NoData. Bun then reads one DataRow cell
    * and treats the rest of the message as a broken protocol frame.
-   * Other row-returning statements are a trial run with null parameters, rolled back. A trial
-   * that fails is described as returning no data.
+   * Other row-returning statements are a trial run with a null for each `$n`, rolled back. A
+   * trial that fails is described as returning no data. Inside a transaction block the trial
+   * runs on the session's workspace, which holds the tables the block has created.
    */
-  private async shapeOf(prepared: Prepared): Promise<TextResultSet | null> {
+  private async shapeOf(prepared: Prepared, paramCount: number): Promise<TextResultSet | null> {
+    const params = Array.from({ length: paramCount }, () => null);
+    if (this.transaction !== null) {
+      await this.cluster.acquireTurn(this);
+      try {
+        return this.withCatalog(
+          (workspace) =>
+            returningShape(workspace, prepared.sql) ??
+            (RETURNS_ROWS.test(prepared.sql)
+              ? this.cluster.as(this, () => workspace.prepare(prepared.sql).textResult(...params))
+              : null),
+        );
+      } catch {
+        return null;
+      } finally {
+        this.cluster.releaseTurn(this);
+      }
+    }
     const described = this.inSession(this.database, () => returningShape(this.database, prepared.sql));
     if (described) return described;
     if (!RETURNS_ROWS.test(prepared.sql)) return null;
     const db = this.database;
     await this.cluster.acquireTurn(this);
     try {
-      const params = prepared.paramOids.map(() => null);
       return this.inSession(db, () => {
         if (db.transactions.inTransaction) {
           const name = `__describe_${this.pid}`;
@@ -1591,6 +1563,7 @@ export class Connection implements Session {
       rowDescription: false,
       from: portal.cursor,
       limit: maxRows,
+      strictBinary: portal.described !== true,
     });
     if (state === "suspended") portal.cursor += maxRows;
     else {

@@ -1,5 +1,7 @@
 import { quoteIdentifier } from "../sql/keywords.ts";
 import { pgError } from "../errors/error.ts";
+import { catalogRelationByOid, catalogRelationOid } from "../schema/catalog-oids.ts";
+import { databaseCatalogContext } from "../runtime/database-context.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import type { CastEnv } from "../types/cast.ts";
 import type { CompareCtx } from "../types/compare.ts";
@@ -37,19 +39,48 @@ export class EngineCtx implements CastEnv, CompareCtx {
     return this.state.getSetting("timezone") ?? "UTC";
   }
 
-  relationOid(parts: string[]): number {
+  /** The oid of the relation `parts` names, or null when there is none (the soft form `to_regclass` needs). */
+  findRelationOid(parts: string[]): number | null {
+    if (parts.length === 3) {
+      const database = databaseCatalogContext(this.state).name;
+      if (parts[0] !== database) {
+        throw pgError("feature_not_supported", `cross-database references are not implemented: "${parts.join(".")}"`, "0A000");
+      }
+    }
     const target = this.state.resolveRelationSchema(parts);
-    const schema = target ? this.state.schemas.get(target.schema) : undefined;
-    const relation = target
-      ? (schema?.sequences.get(target.name) ?? schema?.tables.get(target.name) ?? schema?.views.get(target.name))
-      : undefined;
-    if (!relation) throw pgError("undefined_table", `relation "${parts.join(".")}" does not exist`, "42P01");
-    return relation.oid;
+    if (!target) return null;
+    const catalogOid = catalogRelationOid(target.schema, target.name);
+    if (catalogOid !== null) return catalogOid;
+    const schema = this.state.schemas.get(target.schema);
+    const relation =
+      schema?.sequences.get(target.name) ??
+      schema?.tables.get(target.name) ??
+      schema?.views.get(target.name) ??
+      schema?.indexes.get(target.name);
+    return relation?.oid ?? null;
+  }
+
+  relationOid(parts: string[]): number {
+    const oid = this.findRelationOid(parts);
+    if (oid === null) {
+      throw pgError("undefined_table", `relation "${parts.join(".")}" does not exist`, "42P01");
+    }
+    return oid;
   }
 
   relationName(oid: number): string | null {
+    const catalog = catalogRelationByOid(oid);
+    if (catalog) {
+      const [schema, name] = catalog;
+      return (schema === "pg_catalog" ? [name] : [schema, name]).map(quoteIdentifier).join(".");
+    }
     for (const schema of this.state.schemas.values()) {
-      for (const relation of [...schema.tables.values(), ...schema.sequences.values(), ...schema.views.values()]) {
+      for (const relation of [
+        ...schema.tables.values(),
+        ...schema.sequences.values(),
+        ...schema.views.values(),
+        ...schema.indexes.values(),
+      ]) {
         if (relation.oid !== oid) continue;
         const visible = this.state.resolveRelationSchema([relation.name])?.schema === schema.name;
         return (visible ? [relation.name] : [schema.name, relation.name]).map(quoteIdentifier).join(".");

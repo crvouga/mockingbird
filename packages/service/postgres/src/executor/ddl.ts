@@ -51,6 +51,7 @@ import {
 import {
   type ColumnMeta,
   type ConstraintMeta,
+  type DatabaseState,
   type IndexMeta,
   SchemaData,
   type SequenceData,
@@ -72,6 +73,7 @@ import {
   setSequenceLogged,
 } from "./alter-column.ts";
 import { assertNotExtensionMember, executeDropExtension } from "./extensions.ts";
+import { executeRenameEnum } from "./rename-type.ts";
 import { commandResult, type ExecEnv, type ExecResult, inferColumnName, RowScope } from "./relation.ts";
 import { evalScalar, executeSelectStmt } from "./select.ts";
 
@@ -324,6 +326,38 @@ interface BuiltColumns {
   sequences: SequenceData[];
 }
 
+/** The table CREATE TABLE is building: its own foreign keys may reference it before it exists. */
+interface SelfTable {
+  schema: string;
+  name: string;
+}
+
+/**
+ * The table a foreign key references: an existing one, or `self` for a key on the table being created.
+ * A self-reference without a column list is completed by `completeSelfReferences` once the whole table is built.
+ */
+function referencedTable(state: DatabaseState, parts: string[], self?: SelfTable): TableData | SelfTable {
+  const found = state.findTable(parts);
+  if (found) return found;
+  if (self && parts[parts.length - 1] === self.name) {
+    const qualifier = parts.length >= 2 ? parts[parts.length - 2] : undefined;
+    if (qualifier === undefined ? state.effectiveSearchPath().includes(self.schema) : qualifier === self.schema) {
+      return self;
+    }
+  }
+  throw pgError("undefined_table", `relation "${parts.join(".")}" does not exist`, "42P01");
+}
+
+function completeSelfReferences(self: SelfTable, constraints: ConstraintMeta[]): void {
+  const primary = constraints.find((c) => c.kind === "primary_key");
+  for (const con of constraints) {
+    if (con.kind !== "foreign_key" || con.refSchema !== self.schema || con.refTable !== self.name) continue;
+    if (con.refColumns.length > 0) continue;
+    if (!primary) throw noPrimaryKey(self.name);
+    con.refColumns = primary.columns;
+  }
+}
+
 function buildColumn(
   env: ExecEnv,
   schema: SchemaData,
@@ -331,6 +365,7 @@ function buildColumn(
   def: ColumnDef,
   out: BuiltColumns,
   taken: Set<string>,
+  self?: SelfTable,
 ): ColumnMeta {
   const state = env.ctx.state;
   const resolved = resolveTypeName(state, def.typeName);
@@ -398,12 +433,8 @@ function buildColumn(
         break;
       }
       case "references": {
-        const refParts = c.table;
-        const refTable = state.findTable(refParts);
-        if (!refTable) {
-          throw pgError("undefined_table", `relation "${refParts.join(".")}" does not exist`, "42P01");
-        }
-        const refColumns = c.columns ?? primaryKeyColumns(refTable);
+        const refTable = referencedTable(state, c.table, self);
+        const refColumns = c.columns ?? ("constraints" in refTable ? primaryKeyColumns(refTable) : []);
         const name = c.name ?? makeName(truncIdent(`${tableName}_${def.name}_fkey`), taken);
         taken.add(name);
         out.constraints.push({
@@ -451,15 +482,13 @@ function buildColumn(
   return col;
 }
 
+function noPrimaryKey(table: string): PostgresError {
+  return pgError("undefined_object", `there is no primary key for referenced table "${table}"`, "42704");
+}
+
 function primaryKeyColumns(table: TableData): string[] {
   const pk = table.constraints.find((c) => c.kind === "primary_key");
-  if (!pk) {
-    throw pgError(
-      "undefined_object",
-      `there is no unique constraint matching given keys for referenced table "${table.name}"`,
-      "42830",
-    );
-  }
+  if (!pk) throw noPrimaryKey(table.name);
   return pk.columns;
 }
 
@@ -469,6 +498,7 @@ function buildTableConstraint(
   columns: ColumnMeta[],
   con: TableConstraint,
   taken: Set<string>,
+  self?: SelfTable,
 ): ConstraintMeta {
   const state = env.ctx.state;
   const checkCols = (names: string[]) => {
@@ -498,11 +528,8 @@ function buildTableConstraint(
     }
     case "foreign_key": {
       checkCols(con.columns);
-      const refTable = state.findTable(con.refTable);
-      if (!refTable) {
-        throw pgError("undefined_table", `relation "${con.refTable.join(".")}" does not exist`, "42P01");
-      }
-      const refColumns = con.refColumns ?? primaryKeyColumns(refTable);
+      const refTable = referencedTable(state, con.refTable, self);
+      const refColumns = con.refColumns ?? ("constraints" in refTable ? primaryKeyColumns(refTable) : []);
       const name = con.name ?? makeName(truncIdent(`${tableName}_${con.columns.join("_")}_fkey`), taken);
       taken.add(name);
       return {
@@ -532,6 +559,7 @@ export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecRes
 
   const built: BuiltColumns = { columns: [], constraints: [], sequences: [] };
   const taken = new Set<string>();
+  const self: SelfTable = { schema: schema.name, name };
 
   // LIKE clauses first (columns come in order)
   for (const like of stmt.likeClauses) {
@@ -570,11 +598,12 @@ export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecRes
       throw pgError("duplicate_column", `column "${def.name}" specified more than once`, "42701");
     }
     seen.add(def.name);
-    built.columns.push(buildColumn(env, schema, name, def, built, taken));
+    built.columns.push(buildColumn(env, schema, name, def, built, taken, self));
   }
   for (const con of stmt.constraints) {
-    built.constraints.push(buildTableConstraint(env, name, built.columns, con, taken));
+    built.constraints.push(buildTableConstraint(env, name, built.columns, con, taken, self));
   }
+  completeSelfReferences(self, built.constraints);
   // each key constraint gets an index of its name, which must not be a relation already (the new table included)
   const written = new Set<string | null>(stmt.constraints.map((con) => con.name));
   for (const def of stmt.columns) {
@@ -818,10 +847,14 @@ export function executeCreateEnum(env: ExecEnv, stmt: CreateEnumStmt): ExecResul
 export function executeAlterEnum(env: ExecEnv, stmt: AlterEnumStmt): ExecResult {
   const found = env.ctx.state.findEnum(stmt.name);
   if (!found) {
+    if (stmt.action.kind === "rename_type" && env.ctx.state.findDomain(stmt.name)) {
+      throw unsupported("ALTER TYPE ... RENAME TO on a domain");
+    }
     throw pgError("undefined_object", `type "${stmt.name.join(".")}" does not exist`, "42704");
   }
-  const e = env.ctx.state.ensureWritableEnum(found);
   const a = stmt.action;
+  if (a.kind === "rename_type") return executeRenameEnum(env, found, a.to);
+  const e = env.ctx.state.ensureWritableEnum(found);
   if (a.kind === "add_value") {
     if (e.labels.includes(a.label)) {
       if (a.ifNotExists) return commandResult("ALTER TYPE", 0);

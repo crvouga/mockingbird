@@ -1,0 +1,1 @@
+["SELECT $1::text","SELECT 1.25::numeric","SELECT '2026-01-02'::date","SELECT '12:34:56'::time","SELECT '2026-01-02 03:04:05'::timestamp","SELECT '1 day 2 hours'::interval","SELECT '{\"a\": 1}'::jsonb","SELECT '{1,2}'::int4[]"]

@@ -7,6 +7,7 @@ import { deparseIndex, deparseIndexColumn } from "../sql/deparse-index.ts";
 import type { SequenceData } from "../storage/database-state.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import { castTo } from "../types/cast.ts";
+import { parseRelationInput } from "../types/regnamespace.ts";
 import { makeArray, tv, typeDisplayName } from "../types/value.ts";
 import { argBigInt, argInt, argText, type ScalarFn, strict } from "./util.ts";
 
@@ -133,6 +134,22 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
         if (isPostgresError(error) && ["42602", "3F000", "22003"].includes(error.sqlState)) {
           return tv("regnamespace", null);
         }
+        throw error;
+      }
+    }),
+  );
+
+  // regclassin with soft errors: a name that is malformed or names no relation is NULL
+  m.set(
+    "to_regclass",
+    strict("regclass", (ctx, args) => {
+      const text = argText(ctx, args[0]!);
+      try {
+        const parsed = parseRelationInput(text, "improper");
+        if ("oid" in parsed) return tv("regclass", parsed.oid);
+        return tv("regclass", ctx.findRelationOid(parsed.parts));
+      } catch (error) {
+        if (isPostgresError(error) && ["42602", "42P01"].includes(error.sqlState)) return tv("regclass", null);
         throw error;
       }
     }),

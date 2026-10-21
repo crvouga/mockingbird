@@ -3,6 +3,7 @@ import type { EngineCtx } from "../expressions/context.ts";
 import type { TypedValue } from "../types/value.ts";
 import { getArrayFunctions } from "./array-fns.ts";
 import { getDatetimeFunctions } from "./datetime-registry.ts";
+import { getHashFunctions } from "./hash-fns.ts";
 import { getJsonFunctions } from "./json-fns.ts";
 import { getMathFunctions } from "./math-fns.ts";
 import { getMiscFunctions } from "./misc-fns.ts";
@@ -27,6 +28,7 @@ export function getScalarFunctions(): Map<string, ScalarFn> {
     getArrayFunctions(),
     getTsearchFunctions(),
     getMiscFunctions(),
+    getHashFunctions(),
   ]) {
     for (const [name, fn] of source) {
       registry.set(name, fn);

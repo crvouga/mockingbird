@@ -746,7 +746,15 @@ export class Parser {
     if (w === null && this.atKw("with")) w = this.parseWithClause();
     const body = this.parseSelectBody();
     const orderBy = this.parseOrderByClause();
+    // PostgreSQL takes the locking clause on either side of LIMIT / OFFSET / FETCH (not both sides)
+    let lockingClause = this.parseLockingClauses();
     const { limit, offset, limitWithTies } = this.parseLimitOffset();
+    if (lockingClause === null) lockingClause = this.parseLockingClauses();
+    return { type: "select", with: w, body, orderBy, limit, limitWithTies, offset, lockingClause };
+  }
+
+  /** `FOR UPDATE | NO KEY UPDATE | SHARE | KEY SHARE [OF t, ...] [NOWAIT | SKIP LOCKED]`, repeated. */
+  private parseLockingClauses(): string | null {
     let lockingClause: string | null = null;
     while (this.atKw("for")) {
       this.pos++;
@@ -768,7 +776,7 @@ export class Parser {
       this.eatKw("nowait");
       if (this.eatKw("skip")) this.expectKw("locked");
     }
-    return { type: "select", with: w, body, orderBy, limit, limitWithTies, offset, lockingClause };
+    return lockingClause;
   }
 
   private parseSelectBody(): SelectBody {
@@ -1844,6 +1852,26 @@ export class Parser {
     return null;
   }
 
+  /** `[CONSTRAINT name] { UNIQUE | PRIMARY KEY } USING INDEX index` after ADD, or null (position restored). */
+  private tryParseConstraintUsingIndex(): AlterTableAction | null {
+    const save = this.pos;
+    const name = this.eatKw("constraint") ? this.ident() : null;
+    let constraint: "primary_key" | "unique" | null = null;
+    if (this.eatKw("unique")) constraint = "unique";
+    else if (this.atKw("primary") && this.atKw("key", 1)) {
+      this.pos += 2;
+      constraint = "primary_key";
+    }
+    if (constraint === null || !(this.atKw("using") && this.atKw("index", 1))) {
+      this.pos = save;
+      return null;
+    }
+    this.pos += 2;
+    const index = this.ident();
+    this.skipConstraintTail();
+    return { kind: "add_constraint_using_index", name, constraint, index };
+  }
+
   private skipConstraintTail(): void {
     for (;;) {
       if (this.eatKw("deferrable")) continue;
@@ -2666,6 +2694,7 @@ export class Parser {
         } satisfies AlterEnumStmt;
       }
       if (this.eatKw("rename")) {
+        if (this.eatKw("to")) return { type: "alter_enum", name, action: { kind: "rename_type", to: this.ident() } };
         this.expectKw("value");
         const from = this.next();
         this.expectKw("to");
@@ -2697,6 +2726,8 @@ export class Parser {
         const ifNotExists = this.parseIfNotExists();
         return { kind: "add_column", column: this.parseColumnDef(), ifNotExists };
       }
+      const usingIndex = this.tryParseConstraintUsingIndex();
+      if (usingIndex) return usingIndex;
       const constraint = this.tryParseTableConstraint();
       if (constraint) {
         let skipValidation = false;

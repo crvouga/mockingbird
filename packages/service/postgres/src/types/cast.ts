@@ -112,6 +112,11 @@ const IMPLICIT_CASTS = new Set([
   "int4->oid",
   "int8->oid",
   "regnamespace->oid",
+  "regclass->oid",
+  "oid->regclass",
+  "int2->regclass",
+  "int4->regclass",
+  "int8->regclass",
   "int8->numeric",
   "int8->float4",
   "int8->float8",
@@ -304,7 +309,7 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
   }
 
   // oid family
-  if (from === "oid" && target === "regnamespace") return tv(target, v);
+  if (from === "oid" && (target === "regnamespace" || target === "regclass")) return tv(target, v);
   if (
     (from === "regnamespace" || from === "regclass") &&
     (target === "oid" || target === "int4" || target === "int8")
