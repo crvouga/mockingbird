@@ -94,8 +94,5 @@
     "bullmq": "5.67.1",
     "ioredis": "5.11.1",
     "ioredis-5-9": "npm:ioredis@5.9.2"
-  },
-  "dependencies": {
-    "@msgpack/msgpack": "3.1.2"
   }
 }

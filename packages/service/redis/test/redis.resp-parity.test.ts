@@ -57,8 +57,12 @@ describe("SET expiry validation (#500)", () => {
     const redis = createRedis({ clock: manualClock(1_700_000_000_000) })
     const client = redis.client()
     expect(await client.call("SET", "a", "v", "EX", "9223372036854775")).toBe("OK")
-    // now + 9223372036854775 s wraps past 2^63 ms in Redis: the key is stored already expired.
-    expect(await client.call("EXISTS", "a")).toBe(0)
+    // now + 9223372036854775 s wraps past 2^63 ms; redis-server 8.4.0 keeps the key alive with a
+    // PTTL of about the requested time (oracle-observed), it does not store it already expired.
+    expect(await client.call("EXISTS", "a")).toBe(1)
+    expect(Number(await client.call("PTTL", "a"))).toBeGreaterThan(9.2e18)
+    expect(await client.call("SET", "a2", "v", "PX", "9223372036854775807")).toBe("OK")
+    expect(await client.call("GET", "a2")).toBe("v")
     expect(await client.call("SET", "b", "v", "PXAT", "9223372036854775807")).toBe("OK")
     expect(await client.call("EXISTS", "b")).toBe(1)
     // The same expiry option may repeat (last wins); mixing options, or a missing value, is a syntax error.

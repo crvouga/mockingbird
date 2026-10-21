@@ -577,7 +577,7 @@ function cmdHashTtl<S extends ExtraSession>(
   if (command === "hpersist" && !apply) return queued()
   const now = host.now()
   const results = clause.fields.map((field): Reply => {
-    if (!hash || !hash.fields.has(field)) return int(-2)
+    if (!hash?.fields.has(field)) return int(-2)
     const at = hash.fieldExpires?.get(field)
     if (at === undefined) return int(-1)
     switch (command) {

@@ -69,8 +69,16 @@ endpoints, readiness, shutdown and coordinated state controls.
 ## Deliberately not modelled
 
 - Cluster redirects (`MOVED`, `ASK`) and replica replication. `ROLE` stays `master`.
-- Redis 8 modules, and the full Redis command set.
-- Full Lua 5.1 and arbitrary untested scripts. BullMQ 5.67.1 queue/worker flows, including
-  `cmsgpack`, are covered by the public-client suite; see [SUPPORT.md](SUPPORT.md).
+- Redis 8 modules, and the full Redis command set. `ACL SETUSER`/`GETUSER`/`DELUSER`/`CAT`/`LOG`/
+  `GENPASS`/`DRYRUN`/`LOAD`/`SAVE`, `MEMORY DOCTOR`/`STATS`/`MALLOC-STATS`, `COMMAND GETKEYSANDFLAGS`
+  and `COMMAND HELP` return an explicit "not supported by the Mockingbird Redis emulator" error.
+- Best guess, not oracle-verified: `MEMORY USAGE` byte counts, `OBJECT ENCODING` thresholds, the
+  `HSCAN`/`SSCAN`/`ZSCAN` cursor of collections too large for a compact encoding, and a `SLOWLOG`
+  that never records. `MONITOR` is supported; see [SUPPORT.md](SUPPORT.md).
+- Lua coroutines (`coroutine.*` exists and raises an explicit "not supported" error), `redis.setresp(3)`
+  and a script time limit (`SCRIPT KILL` cannot interrupt a script that never returns). The rest of
+  Lua 5.1 as Redis ships it (standard libraries, `cjson`, `cmsgpack`, `struct`, `bit`) is implemented
+  and differentially checked against redis-server 8.4.0; see [SUPPORT.md](SUPPORT.md). BullMQ 5.67.1
+  queue/worker flows are covered by the public-client suite.
 - `XADD` / `XTRIM` `MAXLEN ~` trims exactly.
 - Set members are returned in byte order so results stay deterministic.

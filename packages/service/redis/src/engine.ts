@@ -13,7 +13,18 @@ import {
   monitorLine,
   monitorSkips,
 } from "./introspect.ts"
-import { LuaFailure, LuaStatus, LuaTable, type LuaValue, luaGlobals, runLua } from "./lua.ts"
+import { toInt64 } from "./lua/format.ts"
+import {
+  compileScript,
+  errorTable,
+  LuaError,
+  LuaTable,
+  type LuaValue,
+  raiseError,
+  runScript as runLuaScript,
+  ScriptFailure,
+  statusTable,
+} from "./lua.ts"
 import { assertPortableDatabase, decodePortable, encodePortable } from "./portable.ts"
 import {
   arityError,
@@ -252,6 +263,9 @@ const WRITES = new Set([
   "evalsha",
   ...EXTRA_WRITES,
 ])
+/** Script runners: a script cannot start another one. */
+const SCRIPT_DENIED_TEXT = (scriptDenied() as { v: string }).v
+const SCRIPT_NESTED = new Set(["eval", "evalsha", "eval_ro", "evalsha_ro", "fcall", "fcall_ro"])
 const SCRIPT_BLOCKED = new Set([
   "blpop",
   "brpop",
@@ -352,20 +366,17 @@ function decodeReply(reply: Reply): unknown {
 
 function luaToBytes(value: LuaValue): Uint8Array {
   if (typeof value === "string") return fromLatin1(value)
-  if (typeof value === "number")
-    return utf8(Number.isInteger(value) ? String(value) : String(value))
-  if (typeof value === "boolean") return utf8(value ? "1" : "")
-  if (value === null) return utf8("")
-  if (value instanceof LuaStatus) return utf8(value.ok)
-  return utf8("")
+  if (typeof value === "number") return utf8(String(value))
+  return raiseError("ERR Lua redis lib command arguments must be strings or integers")
 }
 
+/** A reply as the Lua value `redis.call` returns: status and error replies are `{ok=}` / `{err=}` tables. */
 function replyToLua(reply: Reply): LuaValue {
   switch (reply.t) {
     case "error":
-      throw new Error(reply.v)
+      return errorTable(reply.v)
     case "simple":
-      return new LuaStatus(reply.v)
+      return statusTable(reply.v)
     case "int":
       return typeof reply.v === "bigint" ? Number(reply.v) : reply.v
     case "bulk":
@@ -373,11 +384,8 @@ function replyToLua(reply: Reply): LuaValue {
     case "array":
     case "push": {
       if (reply.t === "array" && reply.v === null) return false
-      const items = reply.v ?? []
       const table = new LuaTable()
-      items.forEach((item, index) => {
-        table.set(index + 1, replyToLua(item))
-      })
+      table.arr = (reply.v ?? []).map((item) => replyToLua(item))
       return table
     }
     case "null":
@@ -401,23 +409,23 @@ function replyToLua(reply: Reply): LuaValue {
   }
 }
 
+/** A script's return value as a reply. Numbers truncate to integers, as in Redis. */
 function luaToReply(value: LuaValue): Reply {
-  if (value === null || value === false) return nil()
+  if (value === undefined || value === false) return nil()
   if (value === true) return int(1)
-  if (value instanceof LuaStatus) return simple(value.ok)
-  if (value instanceof LuaFailure) return err(value.err)
-  if (typeof value === "number") {
-    if (Number.isInteger(value)) return int(value)
-    return bulk(String(value))
-  }
+  if (typeof value === "number") return int(intReply(toInt64(value)))
   if (typeof value === "string") return { t: "bulk", v: fromLatin1(value) }
   if (value instanceof LuaTable) {
-    const okField = value.get("ok")
-    const errField = value.get("err")
-    if (typeof okField === "string") return simple(okField)
+    const errField = value.getStr("err")
     if (typeof errField === "string") return err(errField)
+    const okField = value.getStr("ok")
+    if (typeof okField === "string") return simple(okField)
     const items: Reply[] = []
-    for (let i = 1; value.has(i); i++) items.push(luaToReply(value.get(i)))
+    for (let i = 1; ; i++) {
+      const item = value.get(i)
+      if (item === undefined) break
+      items.push(luaToReply(item))
+    }
     return arr(items)
   }
   return nil()
@@ -879,7 +887,10 @@ export class Redis {
 
   private feedMonitors(session: Session, command: string, args: Uint8Array[], raw: string): void {
     const flags = commandFlags(command)
-    if (command === "monitor" || flags.includes("admin") || flags.includes("skip_monitor")) return
+    // EVAL and EVALSHA are `skip_monitor` only because Redis feeds monitors itself, before the script runs.
+    const scripted = command === "eval" || command === "evalsha"
+    if (command === "monitor" || flags.includes("admin")) return
+    if (flags.includes("skip_monitor") && !scripted) return
     const origin = this.scriptDepth > 0 ? "lua" : (session.remoteAddr ?? `127.0.0.1:${session.id}`)
     const line = monitorLine(this.clock.now(), session.db, origin, raw, monitorArgs(command, args))
     for (const other of this.sessions) if (other.monitor && !other.dead) other.onPush(simple(line))
@@ -1711,8 +1722,8 @@ export class Redis {
       if (amount <= 0n || (seconds && amount > I64_MAX / 1000n)) return invalidExpire(command)
       const millis = seconds ? amount * 1000n : amount
       expireAt = mode === "ex" || mode === "px" ? BigInt(database.now()) + millis : millis
-      // now + millis wraps past the 64-bit range in Redis and lands in the past: the key is gone.
-      if (expireAt > I64_MAX) expireAt = 0n
+      // Redis 8 lets now + millis wrap past 2^63 and the key stays alive, with a PTTL of about
+      // `millis`; the double-precision expiry here behaves the same (no wrap, so no past deadline).
     }
     const existing = database.get(key)
     if (get && existing && existing.kind !== "string") return wrongType()
@@ -3478,8 +3489,8 @@ export class Redis {
       return err("NOSCRIPT No matching script. Please use EVAL.")
     }
     if (args.length < 2) return arityError(command)
-    const source =
-      command === "eval" ? text(args[0]) : this.scripts.get(text(args[0]).toLowerCase())
+    const digest = command === "eval" ? sha1Hex(args[0] ?? utf8("")) : text(args[0]).toLowerCase()
+    const source = command === "eval" ? latin1(args[0] ?? utf8("")) : this.scripts.get(digest)
     if (command === "evalsha" && source === undefined) return noScript()
     const numkeys = parseI64(args[1] ?? utf8(""))
     if (numkeys === null) return notInteger()
@@ -3490,9 +3501,9 @@ export class Redis {
     if (!apply || source === undefined) return queued()
     const keys = args.slice(2, 2 + Number(numkeys))
     const argv = args.slice(2 + Number(numkeys))
-    const result = this.runScript(session, source, keys, argv)
-    if (!(result.t === "error" && result.v.includes("Error compiling script:")))
-      this.scripts.set(sha1Hex(utf8(source)), source)
+    const result = this.runScript(session, source, digest, keys, argv)
+    if (!(result.t === "error" && result.v.includes("Error compiling script")))
+      this.scripts.set(digest, source)
     return result
   }
 
@@ -3501,8 +3512,14 @@ export class Redis {
     if (sub === "LOAD") {
       if (args.length !== 2) return arityError("script|load")
       if (!apply) return queued()
-      const source = text(args[1])
-      const digest = sha1Hex(utf8(source))
+      const source = latin1(args[1] ?? utf8(""))
+      const digest = sha1Hex(args[1] ?? utf8(""))
+      try {
+        compileScript(source, digest)
+      } catch (error) {
+        if (error instanceof ScriptFailure) return err(error.message)
+        throw error
+      }
       this.scripts.set(digest, source)
       return bulk(digest)
     }
@@ -3525,31 +3542,19 @@ export class Redis {
   private runScript(
     session: Session,
     source: string,
+    digest: string,
     keys: Uint8Array[],
     argv: Uint8Array[],
   ): Reply {
     const host = {
-      call: (callArgs: LuaValue[]) => this.luaDispatch(session, callArgs, false),
-      pcall: (callArgs: LuaValue[]) => this.luaDispatch(session, callArgs, true),
+      call: (callArgs: LuaValue[], raise: boolean) => this.luaDispatch(session, callArgs, raise),
     }
-    const env = luaGlobals(host)
-    const keyTable = env.get("redis")
-    const keysTable = new LuaTable()
-    const argvTable = new LuaTable()
-    keys.forEach((key, index) => {
-      keysTable.set(index + 1, latin1(key))
-    })
-    argv.forEach((arg, index) => {
-      argvTable.set(index + 1, latin1(arg))
-    })
-    env.define("KEYS", keysTable)
-    env.define("ARGV", argvTable)
-    if (keyTable instanceof LuaTable) keyTable.set("pcall", host.pcall)
     this.scriptDepth++
     try {
-      const values = runLua(source, env)
-      return luaToReply(values[0] ?? null)
+      const value = runLuaScript(source, digest, keys.map(latin1), argv.map(latin1), host, VERSION)
+      return luaToReply(value)
     } catch (error) {
+      if (error instanceof ScriptFailure) return err(error.message)
       const message = error instanceof Error ? error.message : String(error)
       return err(`ERR Error running script: ${message}`)
     } finally {
@@ -3557,32 +3562,38 @@ export class Redis {
     }
   }
 
-  private luaDispatch(session: Session, args: LuaValue[], trap: boolean): LuaValue[] {
-    const name = typeof args[0] === "string" ? args[0].toLowerCase() : ""
-    const bytes = args.slice(1).map((arg) => luaToBytes(arg))
-    try {
-      const reply = this.execCmd(
-        session,
-        name,
-        bytes,
-        true,
-        typeof args[0] === "string" ? args[0] : name,
-      )
-      if (reply instanceof Promise)
-        throw new Error("This Redis command is not allowed from scripts")
-      if (reply.t === "error") {
-        if (!trap) throw new Error(reply.v)
-        const table = new LuaTable()
-        table.set("err", reply.v)
-        return [table]
-      }
-      return [replyToLua(reply)]
-    } catch (error) {
-      if (!trap) throw error
-      const table = new LuaTable()
-      table.set("err", error instanceof Error ? error.message : String(error))
-      return [table]
+  /** `redis.call` (`raise`) and `redis.pcall`: run one command for the script and convert its reply. */
+  private luaDispatch(session: Session, args: LuaValue[], raise: boolean): LuaValue {
+    const fail = (message: string): LuaValue => (raise ? raiseError(message) : errorTable(message))
+    if (args.length === 0)
+      return fail("ERR Please specify at least one argument for this redis lib call")
+    const head = args[0]
+    if (typeof head !== "string") {
+      return fail("ERR Lua redis lib command arguments must be strings or integers")
     }
+    const name = head.toLowerCase()
+    let bytes: Uint8Array[]
+    try {
+      bytes = args.slice(1).map((arg) => luaToBytes(arg))
+    } catch (error) {
+      if (!raise && error instanceof LuaError) return error.value
+      throw error
+    }
+    if (SCRIPT_NESTED.has(name)) return fail("ERR This Redis command is not allowed from script")
+    const reply = this.execCmd(session, name, bytes, true, head)
+    if (reply instanceof Promise) return fail("ERR This Redis command is not allowed from script")
+    if (reply.t === "error") {
+      if (reply.v === SCRIPT_DENIED_TEXT)
+        return fail("ERR This Redis command is not allowed from script")
+      if (reply.v.startsWith("ERR unknown command ")) {
+        return fail("ERR Unknown Redis command called from script")
+      }
+      if (reply.v.startsWith("ERR wrong number of arguments for ")) {
+        return fail("ERR Wrong number of args calling Redis command from script")
+      }
+      return fail(reply.v)
+    }
+    return replyToLua(reply)
   }
 
   private block(spec: {
@@ -3626,7 +3637,9 @@ export class Redis {
         const deadline = spec.deadline
         const fire = () => {
           if (this.clock.now() < deadline) return
-          this.enqueue(() => this.finishWaiter(waiter, waiter.destKey !== undefined ? nil() : nilArray()))
+          this.enqueue(() =>
+            this.finishWaiter(waiter, waiter.destKey !== undefined ? nil() : nilArray()),
+          )
         }
         waiter.unsub = this.clock.subscribe(fire)
         if (!this.clock.manual) {

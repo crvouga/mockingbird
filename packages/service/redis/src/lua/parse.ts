@@ -43,9 +43,7 @@ export type Expr =
   | { k: "table"; fields: TableField[]; line: number }
   | { k: "paren"; e: Expr }
 
-export type TableField =
-  | { kind: "pos"; value: Expr }
-  | { kind: "keyed"; key: Expr; value: Expr }
+export type TableField = { kind: "pos"; value: Expr } | { kind: "keyed"; key: Expr; value: Expr }
 
 export type Stmt =
   | { k: "local"; vars: VarInfo[]; values: Expr[]; line: number }
@@ -101,19 +99,20 @@ const KEYWORDS = new Set([
   "while",
 ])
 
-const CHUNK = "user_script"
+/** The chunk name in syntax errors; `parseChunk` sets it for the duration of one parse. */
+let chunkName = "user_script"
 
 export class LuaSyntaxError extends Error {}
 
 function fail(line: number, message: string, near?: string): never {
-  throw new LuaSyntaxError(`${CHUNK}:${line}: ${message}${near === undefined ? "" : ` near '${near}'`}`)
+  throw new LuaSyntaxError(
+    `${chunkName}:${line}: ${message}${near === undefined ? "" : ` near '${near}'`}`,
+  )
 }
 
 const isDigit = (c: string | undefined) => c !== undefined && c >= "0" && c <= "9"
 const isAlpha = (c: string | undefined) =>
   c !== undefined && ((c >= "a" && c <= "z") || (c >= "A" && c <= "Z") || c === "_")
-const isHex = (c: string | undefined) =>
-  c !== undefined && ((c >= "0" && c <= "9") || (c >= "a" && c <= "f") || (c >= "A" && c <= "F"))
 
 const ESCAPES: Record<string, string> = {
   n: "\n",
@@ -224,31 +223,21 @@ function tokenize(src: string): Token[] {
       if (src[i + 1] === "=") fail(line, "invalid long string delimiter", "[=")
     }
     if (isDigit(c) || (c === "." && isDigit(src[i + 1]))) {
+      // Lua reads digits and dots greedily, an optional exponent sign, then any word characters.
       const start = i
-      let value: number
-      if (c === "0" && (src[i + 1] === "x" || src[i + 1] === "X")) {
-        i += 2
-        while (isHex(src[i])) i++
-        value = Number(src.slice(start, i))
-      } else {
-        while (isDigit(src[i])) i++
-        if (src[i] === ".") {
-          i++
-          while (isDigit(src[i])) i++
-        }
-        if (src[i] === "e" || src[i] === "E") {
-          i++
-          if (src[i] === "+" || src[i] === "-") i++
-          while (isDigit(src[i])) i++
-        }
-        value = Number(src.slice(start, i))
+      do {
+        i++
+      } while (isDigit(src[i]) || src[i] === ".")
+      if (src[i] === "e" || src[i] === "E") {
+        i++
+        if (src[i] === "+" || src[i] === "-") i++
       }
       while (isAlpha(src[i]) || isDigit(src[i])) i++
       const text = src.slice(start, i)
-      if (Number.isNaN(value) || !/^(0[xX][0-9a-fA-F]+|(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?)$/.test(text)) {
+      if (!/^(0[xX][0-9a-fA-F]+|(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?)$/.test(text)) {
         fail(line, "malformed number", text)
       }
-      tokens.push({ t: "num", v: value, line, text })
+      tokens.push({ t: "num", v: Number(text), line, text })
       continue
     }
     if (isAlpha(c)) {
@@ -275,7 +264,9 @@ function tokenize(src: string): Token[] {
       i++
       continue
     }
-    fail(line, "unexpected symbol", c)
+    // Any other character is a one-character token the parser will reject where it matters.
+    tokens.push({ t: "sym", v: c, line, text: c })
+    i++
   }
   tokens.push({ t: "eof", v: "<eof>", line, text: "<eof>" })
   return tokens
@@ -287,6 +278,7 @@ class FuncState {
   readonly upIndex = new Map<VarInfo, number>()
   nslots = 0
   vararg = false
+  loopDepth = 0
   constructor(readonly parent: FuncState | null) {}
 
   declare(name: string): VarInfo {
@@ -391,7 +383,7 @@ class Parser {
 
   private name(): string {
     const tok = this.tok
-    if (tok.t !== "name") fail(tok.line, "<name> expected", this.near())
+    if (tok.t !== "name") fail(tok.line, "'<name>' expected", this.near())
     this.i++
     return tok.v
   }
@@ -410,7 +402,18 @@ class Parser {
   private blockEnd(): boolean {
     const tok = this.tok
     if (tok.t === "eof") return true
-    return tok.t === "kw" && (tok.v === "end" || tok.v === "else" || tok.v === "elseif" || tok.v === "until")
+    return (
+      tok.t === "kw" &&
+      (tok.v === "end" || tok.v === "else" || tok.v === "elseif" || tok.v === "until")
+    )
+  }
+
+  /** The body of a loop: a block in which `break` is allowed. */
+  private loopBlock(): Stmt[] {
+    this.fs.loopDepth++
+    const body = this.block()
+    this.fs.loopDepth--
+    return body
   }
 
   /** A block in its own scope. */
@@ -430,14 +433,13 @@ class Parser {
         if (!this.blockEnd() && !this.check(";")) values.push(...this.exprList())
         this.accept(";")
         body.push({ k: "return", values })
-        if (!this.blockEnd()) fail(this.tok.line, "'<eof>' expected", this.near())
         break
       }
       if (this.check("break")) {
         this.next()
+        if (this.fs.loopDepth === 0) fail(this.tok.line, "no loop to break", this.near())
         this.accept(";")
         body.push({ k: "break" })
-        if (!this.blockEnd()) fail(this.tok.line, "'<eof>' expected", this.near())
         break
       }
       body.push(this.statement())
@@ -457,7 +459,7 @@ class Parser {
           this.next()
           const cond = this.expr()
           this.expect("do")
-          const body = this.block()
+          const body = this.loopBlock()
           this.expectMatch("end", "while", line)
           return { k: "while", cond, body }
         }
@@ -472,7 +474,9 @@ class Parser {
         case "repeat": {
           this.next()
           const mark = this.fs.actives.length
+          this.fs.loopDepth++
           const body = this.statements()
+          this.fs.loopDepth--
           this.expectMatch("until", "repeat", line)
           const cond = this.expr()
           this.fs.actives.length = mark
@@ -499,16 +503,22 @@ class Parser {
       while (this.accept(",")) targets.push(this.suffixedExpr())
       for (const t of targets) {
         if (t.k !== "local" && t.k !== "up" && t.k !== "global" && t.k !== "index") {
-          fail(this.tok.line, "unexpected symbol", this.near())
+          fail(this.tok.line, "syntax error", this.near())
         }
       }
       this.expect("=")
       return { k: "assign", targets, values: this.exprList(), line }
     }
-    if (target.k !== "call" && target.k !== "method") {
-      fail(this.tok.line, "unexpected symbol", this.near())
+    if (target.k === "call" || target.k === "method") return { k: "call", e: target }
+    if (
+      target.k === "local" ||
+      target.k === "up" ||
+      target.k === "global" ||
+      target.k === "index"
+    ) {
+      fail(this.tok.line, "'=' expected", this.near())
     }
-    return { k: "call", e: target }
+    return fail(this.tok.line, "syntax error", this.near())
   }
 
   private ifStatement(line: number): Stmt {
@@ -540,21 +550,26 @@ class Parser {
       this.expect("do")
       const v = this.fs.declare(first)
       this.fs.actives.push(v)
-      const body = this.block()
+      const body = this.loopBlock()
       this.fs.actives.length = mark
       this.expectMatch("end", "for", line)
       return { k: "fornum", v, start, stop, step, body, line }
     }
-    if (!this.check(",") && !this.check("in")) fail(this.tok.line, "'=' or 'in' expected", this.near())
+    if (!this.check(",") && !this.check("in"))
+      fail(this.tok.line, "'=' or 'in' expected", this.near())
     const names = [first]
     while (this.accept(",")) names.push(this.name())
     this.expect("in")
     const iter = this.exprList()
     this.expect("do")
-    const hidden = [this.fs.declare("(for generator)"), this.fs.declare("(for state)"), this.fs.declare("(for control)")]
+    const hidden = [
+      this.fs.declare("(for generator)"),
+      this.fs.declare("(for state)"),
+      this.fs.declare("(for control)"),
+    ]
     const vars = names.map((n) => this.fs.declare(n))
     this.fs.actives.push(...hidden, ...vars)
-    const body = this.block()
+    const body = this.loopBlock()
     this.fs.actives.length = mark
     this.expectMatch("end", "for", line)
     return { k: "forin", vars, iter, body, line, hidden }
@@ -700,7 +715,11 @@ class Parser {
         this.expect("]")
         this.expect("=")
         fields.push({ kind: "keyed", key, value: this.expr() })
-      } else if (this.tok.t === "name" && this.toks[this.i + 1]?.v === "=" && this.toks[this.i + 1]?.t === "sym") {
+      } else if (
+        this.tok.t === "name" &&
+        this.toks[this.i + 1]?.v === "=" &&
+        this.toks[this.i + 1]?.t === "sym"
+      ) {
         const key: Expr = { k: "str", v: this.name() }
         this.next()
         fields.push({ kind: "keyed", key, value: this.expr() })
@@ -756,7 +775,10 @@ class Parser {
   expr(limit = 0): Expr {
     let left: Expr
     const tok = this.tok
-    if ((tok.t === "kw" && tok.v === "not") || (tok.t === "sym" && (tok.v === "-" || tok.v === "#"))) {
+    if (
+      (tok.t === "kw" && tok.v === "not") ||
+      (tok.t === "sym" && (tok.v === "-" || tok.v === "#"))
+    ) {
       this.next()
       const operand = this.expr(UNARY_PRIORITY)
       left =
@@ -780,7 +802,13 @@ class Parser {
 }
 
 /** Parse a chunk into a vararg function prototype. Throws `LuaSyntaxError` in Lua's message format. */
-export function parseChunk(source: string): Proto {
-  const parser = new Parser(tokenize(source), new FuncState(null))
-  return parser.chunk()
+export function parseChunk(source: string, name = "user_script"): Proto {
+  const previous = chunkName
+  chunkName = name
+  try {
+    const parser = new Parser(tokenize(source), new FuncState(null))
+    return parser.chunk()
+  } finally {
+    chunkName = previous
+  }
 }

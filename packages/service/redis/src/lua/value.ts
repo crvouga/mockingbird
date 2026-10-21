@@ -28,17 +28,18 @@ export class LuaError {
 
 /** Raise a runtime error with the `user_script:LINE:` prefix Lua adds to its own messages. */
 export function rtError(message: string): never {
-  throw new LuaError(`user_script:${pos.line}: ${message}`)
+  // A negative line marks a library function called straight from `pcall`, which has no position.
+  throw new LuaError(pos.line < 0 ? message : `user_script:${pos.line}: ${message}`)
 }
 
 export const EMPTY: LuaValue[] = []
 
 export function first(result: LuaValue | LuaValue[]): LuaValue {
-  return result instanceof Array ? result[0] : result
+  return Array.isArray(result) ? result[0] : result
 }
 
 export function toList(result: LuaValue | LuaValue[]): LuaValue[] {
-  return result instanceof Array ? result : [result]
+  return Array.isArray(result) ? result : [result]
 }
 
 export class LuaTable {
@@ -123,7 +124,7 @@ export class LuaTable {
       this.cursor = { iter: this.hash.entries(), last: undefined }
       return this.advance()
     }
-    if (this.hash === null) throw new LuaError("invalid key to 'next'")
+    if (this.hash === null) rtError("invalid key to 'next'")
     if (this.cursor === null || this.cursor.last !== key) {
       const iter = this.hash.entries()
       let found = false
@@ -200,7 +201,8 @@ export function parseNumberBase(text: string, base: number): number | undefined 
     if (digit >= base) return undefined
     value = value * base + digit
   }
-  return match[1] === "-" ? -value : value
+  // C's strtoul wraps a negative number around 2^64.
+  return match[1] === "-" ? Number(BigInt.asUintN(64, -BigInt(value))) : value
 }
 
 /** The number a string or number stands for in arithmetic, or undefined. */

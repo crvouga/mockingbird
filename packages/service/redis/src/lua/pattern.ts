@@ -59,7 +59,11 @@ function singleClass(c: number, cl: number): boolean {
       res = c >= 97 && c <= 122
       break
     case 112: // p
-      res = (c >= 33 && c <= 47) || (c >= 58 && c <= 64) || (c >= 91 && c <= 96) || (c >= 123 && c <= 126)
+      res =
+        (c >= 33 && c <= 47) ||
+        (c >= 58 && c <= 64) ||
+        (c >= 91 && c <= 96) ||
+        (c >= 123 && c <= 126)
       break
     case 115: // s
       res = c === 32 || (c >= 9 && c <= 13)
@@ -191,7 +195,8 @@ function matchCapture(ms: MatchState, s: number, l: number): number {
   const index = checkCapture(ms, l)
   const len = ms.capLen[index] as number
   const start = ms.capStart[index] as number
-  if (ms.src.length - s >= len && ms.src.substr(start, len) === ms.src.substr(s, len)) return s + len
+  if (ms.src.length - s >= len && ms.src.substr(start, len) === ms.src.substr(s, len))
+    return s + len
   return -1
 }
 

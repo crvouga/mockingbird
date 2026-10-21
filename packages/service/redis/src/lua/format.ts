@@ -131,8 +131,8 @@ const INT64_MIN = -9223372036854775808n
 /** C's `(long long) x` for a Lua number: truncates, saturates, and maps NaN to 0. */
 export function toInt64(x: number): bigint {
   if (Number.isNaN(x)) return 0n
-  if (x >= 9223372036854775807) return INT64_MAX
-  if (x <= -9223372036854775808) return INT64_MIN
+  if (x >= 2 ** 63) return INT64_MAX
+  if (x <= -(2 ** 63)) return INT64_MIN
   return BigInt(Math.trunc(x))
 }
 
