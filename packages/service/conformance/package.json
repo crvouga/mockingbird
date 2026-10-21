@@ -56,6 +56,7 @@
     "@crvouga/mockingbird-service-klaviyo": "workspace:*",
     "@crvouga/mockingbird-service-kms": "workspace:*",
     "@crvouga/mockingbird-service-lambda": "workspace:*",
+    "@crvouga/mockingbird-service-lifefile": "workspace:*",
     "@crvouga/mockingbird-service-livekit": "workspace:*",
     "@crvouga/mockingbird-service-llamacloud": "workspace:*",
     "@crvouga/mockingbird-service-mailosaur": "workspace:*",

@@ -853,6 +853,20 @@
     "logo": "/brands/lambda.png",
     "logoSource": "site"
   },
+  "lifefile": {
+    "vendor": "LifeFile",
+    "website": "https://www.lifefile.net",
+    "docs": "https://github.com/RevelationPharma/lifefile-example",
+    "description": "LifeFile provides pharmacy management software with an external order API and outbound Data Push.",
+    "input": {
+      "website": "https://www.lifefile.net",
+      "docs": "https://github.com/RevelationPharma/lifefile-example",
+      "description": "LifeFile provides pharmacy management software with an external order API and outbound Data Push."
+    },
+    "color": null,
+    "logo": "/brands/lifefile.jpg",
+    "logoSource": "site"
+  },
   "linear": {
     "vendor": "Linear",
     "website": "https://linear.app",

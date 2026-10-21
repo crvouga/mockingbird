@@ -58,6 +58,7 @@ import type { createRuntime as createKinesis } from "@crvouga/mockingbird-servic
 import type { createRuntime as createKlaviyo } from "@crvouga/mockingbird-service-klaviyo"
 import type { createRuntime as createKms } from "@crvouga/mockingbird-service-kms"
 import type { createRuntime as createLambda } from "@crvouga/mockingbird-service-lambda"
+import type { createRuntime as createLifefile } from "@crvouga/mockingbird-service-lifefile"
 import type { createRuntime as createLinear } from "@crvouga/mockingbird-service-linear"
 import type { createRuntime as createLivekit } from "@crvouga/mockingbird-service-livekit"
 import type { createRuntime as createLlamacloud } from "@crvouga/mockingbird-service-llamacloud"
@@ -170,6 +171,7 @@ export type SurfaceProof = [
   Assert<typeof createJunction>,
   Assert<typeof createKillBill>,
   Assert<typeof createKlaviyo>,
+  Assert<typeof createLifefile>,
   Assert<typeof createLivekit>,
   Assert<typeof createLlamacloud>,
   Assert<typeof createMailosaur>,

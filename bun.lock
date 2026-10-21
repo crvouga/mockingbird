@@ -911,6 +911,7 @@
         "@crvouga/mockingbird-service-klaviyo": "workspace:*",
         "@crvouga/mockingbird-service-kms": "workspace:*",
         "@crvouga/mockingbird-service-lambda": "workspace:*",
+        "@crvouga/mockingbird-service-lifefile": "workspace:*",
         "@crvouga/mockingbird-service-linear": "workspace:*",
         "@crvouga/mockingbird-service-livekit": "workspace:*",
         "@crvouga/mockingbird-service-llamacloud": "workspace:*",
@@ -1948,6 +1949,32 @@
         "@crvouga/mockingbird-openapi-metadata": "workspace:*",
         "@crvouga/mockingbird-parity": "workspace:*",
         "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "fast-check": "4.9.0",
+      },
+    },
+    "packages/service/lifefile": {
+      "name": "@crvouga/mockingbird-service-lifefile",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-lifefile": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "hono": "4.11.9",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@crvouga/mockingbird-sqlite": "workspace:*",
         "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
@@ -3719,6 +3746,7 @@
         "@crvouga/mockingbird-service-klaviyo": "workspace:*",
         "@crvouga/mockingbird-service-kms": "workspace:*",
         "@crvouga/mockingbird-service-lambda": "workspace:*",
+        "@crvouga/mockingbird-service-lifefile": "workspace:*",
         "@crvouga/mockingbird-service-livekit": "workspace:*",
         "@crvouga/mockingbird-service-llamacloud": "workspace:*",
         "@crvouga/mockingbird-service-mailosaur": "workspace:*",
@@ -4351,6 +4379,8 @@
     "@crvouga/mockingbird-service-kms": ["@crvouga/mockingbird-service-kms@workspace:packages/service/kms"],
 
     "@crvouga/mockingbird-service-lambda": ["@crvouga/mockingbird-service-lambda@workspace:packages/service/lambda"],
+
+    "@crvouga/mockingbird-service-lifefile": ["@crvouga/mockingbird-service-lifefile@workspace:packages/service/lifefile"],
 
     "@crvouga/mockingbird-service-linear": ["@crvouga/mockingbird-service-linear@workspace:packages/service/linear"],
 
