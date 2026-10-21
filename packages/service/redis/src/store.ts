@@ -46,7 +46,7 @@ export type Value =
   | { kind: "list"; items: Uint8Array[] }
   | { kind: "set"; members: Map<string, Uint8Array> }
   | { kind: "zset"; members: Map<string, ZMember> }
-  | { kind: "hash"; fields: Map<string, Uint8Array> }
+  | { kind: "hash"; fields: Map<string, Uint8Array>; fieldExpires?: Map<string, number> }
   | { kind: "stream"; stream: StreamState }
 
 export function emptyStream(): StreamState {
@@ -80,6 +80,7 @@ export class Database {
   private expires = new Map<string, number>()
   private gens = new Map<string, number>()
   private lru = new Map<string, number>()
+  private touched = new Map<string, number>()
   private order: string[] = []
   private tick = 0
 
@@ -94,6 +95,7 @@ export class Database {
       expires: this.expires,
       gens: this.gens,
       lru: this.lru,
+      touched: this.touched,
       order: this.order,
       tick: this.tick,
     })
@@ -104,6 +106,7 @@ export class Database {
       expires: Map<string, number>
       gens: Map<string, number>
       lru: Map<string, number>
+      touched?: Map<string, number>
       order: string[]
       tick: number
     }
@@ -111,6 +114,7 @@ export class Database {
     this.expires = point.expires
     this.gens = point.gens
     this.lru = point.lru
+    this.touched = point.touched ?? new Map()
     this.order = point.order
     this.tick = point.tick
   }
@@ -120,6 +124,7 @@ export class Database {
   }
 
   sweep(key: string): void {
+    this.sweepFields(key)
     const expiry = this.expires.get(key)
     if (expiry === undefined || expiry > this.clock.now()) return
     this.expires.delete(key)
@@ -127,7 +132,24 @@ export class Database {
       this.bump(key)
       this.order = this.order.filter((item) => item !== key)
       this.lru.delete(key)
+      this.touched.delete(key)
     }
+  }
+
+  /** Drop hash fields whose own TTL (`HEXPIRE`) has passed; a hash left empty goes away. */
+  private sweepFields(key: string): void {
+    const value = this.values.get(key)
+    if (value?.kind !== "hash" || !value.fieldExpires?.size) return
+    const now = this.clock.now()
+    let changed = false
+    for (const [field, at] of value.fieldExpires) {
+      if (value.fields.has(field) && at > now) continue
+      value.fieldExpires.delete(field)
+      if (value.fields.delete(field)) changed = true
+    }
+    if (!changed) return
+    this.bump(key)
+    if (value.fields.size === 0) this.delete(key)
   }
 
   generation(key: string): number {
@@ -138,8 +160,26 @@ export class Database {
   get(key: string): Value | undefined {
     this.sweep(key)
     const value = this.values.get(key)
-    if (value) this.lru.set(key, ++this.tick)
+    if (value) this.touch(key)
     return value
+  }
+
+  /** Read a value without counting as an access (`OBJECT`, `MEMORY USAGE`). */
+  peek(key: string): Value | undefined {
+    this.sweep(key)
+    return this.values.get(key)
+  }
+
+  /** Milliseconds since the key was last read or written, or null when it does not exist. */
+  idleMs(key: string): number | null {
+    this.sweep(key)
+    if (!this.values.has(key)) return null
+    return Math.max(0, this.clock.now() - (this.touched.get(key) ?? this.clock.now()))
+  }
+
+  private touch(key: string): void {
+    this.lru.set(key, ++this.tick)
+    this.touched.set(key, this.clock.now())
   }
 
   has(key: string): boolean {
@@ -151,7 +191,7 @@ export class Database {
     if (!this.values.has(key)) this.order.push(key)
     this.values.set(key, value)
     this.bump(key)
-    this.lru.set(key, ++this.tick)
+    this.touch(key)
   }
 
   /** Remove the key when a collection has no elements left. Streams are kept. */
@@ -194,6 +234,7 @@ export class Database {
       this.bump(key)
       this.order = this.order.filter((item) => item !== key)
       this.lru.delete(key)
+      this.touched.delete(key)
     }
     return had
   }
@@ -228,6 +269,7 @@ export class Database {
     this.expires.clear()
     this.order = []
     this.lru.clear()
+    this.touched.clear()
   }
 
   memory(): number {

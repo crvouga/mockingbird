@@ -57,53 +57,72 @@ export function intReply(value: bigint): number | bigint {
   return value
 }
 
-/** Redis glob: `*`, `?`, `[abc]`, `[a-z]`, `[^a]` / `[!a]`, and backslash escapes. */
+/**
+ * Redis glob, ported from `stringmatchlen` in Redis `util.c` so its edge cases agree: `*`, `?`,
+ * `[abc]`, `[a-z]` (bounds may be reversed), `[^a]` (only `^` negates, `!` is a literal),
+ * an unclosed `[` class runs to the end of the pattern, and backslash escapes.
+ */
 export function globMatch(pattern: string, value: string): boolean {
-  const match = (p: number, v: number): boolean => {
-    if (p === pattern.length) return v === value.length
-    const ch = pattern[p]
-    if (ch === "\\") {
-      if (p + 1 >= pattern.length) return false
-      if (v >= value.length || value[v] !== pattern[p + 1]) return false
-      return match(p + 2, v + 1)
-    }
-    if (ch === "*") {
-      for (let i = v; i <= value.length; i++) if (match(p + 1, i)) return true
-      return false
-    }
-    if (ch === "?") {
-      if (v >= value.length) return false
-      return match(p + 1, v + 1)
-    }
-    if (ch === "[") {
-      if (v >= value.length) return false
-      let i = p + 1
-      let negate = false
-      if (pattern[i] === "^" || pattern[i] === "!") {
-        negate = true
-        i++
-      }
-      let ok = false
-      if (pattern[i] === "]") return false
-      while (i < pattern.length && pattern[i] !== "]") {
-        if (pattern[i] === "\\" && i + 1 < pattern.length) i++
-        const start = pattern[i] ?? ""
-        if (pattern[i + 1] === "-" && pattern[i + 2] !== undefined && pattern[i + 2] !== "]") {
-          const end = pattern[i + 2] ?? ""
-          const cur = value[v] ?? ""
-          if (cur >= start && cur <= end) ok = true
-          i += 3
-        } else {
-          if (value[v] === start) ok = true
-          i++
+  // Redis short-circuits a lone `*` before matching (KEYS/SCAN), so it also matches an empty key.
+  if (pattern === "*") return true
+  let skipLonger = false
+  const match = (pStart: number, sStart: number): boolean => {
+    let p = pStart
+    let s = sStart
+    while (p < pattern.length && s < value.length) {
+      const ch = pattern[p]
+      if (ch === "*") {
+        while (p + 1 < pattern.length && pattern[p + 1] === "*") p++
+        if (p === pattern.length - 1) return true
+        while (s < value.length) {
+          if (match(p + 1, s)) return true
+          // The rest of the pattern already failed against a longer tail: no later start can win.
+          if (skipLonger) return false
+          s++
         }
+        skipLonger = true
+        return false
       }
-      if (pattern[i] !== "]") return false
-      if (ok === negate) return false
-      return match(i + 1, v + 1)
+      if (ch === "[") {
+        p++
+        const negate = pattern[p] === "^"
+        if (negate) p++
+        let matched = false
+        const cur = value.charCodeAt(s)
+        for (;;) {
+          if (pattern[p] === "\\" && p + 1 < pattern.length) {
+            p++
+            if (pattern.charCodeAt(p) === cur) matched = true
+          } else if (pattern[p] === "]") {
+            break
+          } else if (p >= pattern.length) {
+            p--
+            break
+          } else if (p + 2 < pattern.length && pattern[p + 1] === "-") {
+            let start = pattern.charCodeAt(p)
+            let end = pattern.charCodeAt(p + 2)
+            if (start > end) [start, end] = [end, start]
+            p += 2
+            if (cur >= start && cur <= end) matched = true
+          } else if (pattern.charCodeAt(p) === cur) matched = true
+          p++
+        }
+        if (matched === negate) return false
+        s++
+      } else if (ch === "?") {
+        s++
+      } else {
+        if (ch === "\\" && p + 1 < pattern.length) p++
+        if (pattern[p] !== value[s]) return false
+        s++
+      }
+      p++
+      if (s >= value.length) {
+        while (pattern[p] === "*") p++
+        break
+      }
     }
-    if (v >= value.length || value[v] !== ch) return false
-    return match(p + 1, v + 1)
+    return p >= pattern.length && s >= value.length
   }
   return match(0, 0)
 }

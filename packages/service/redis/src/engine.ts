@@ -1,5 +1,18 @@
 import { fromLatin1, globMatch, intReply, latin1, parseI64, utf8, utf8Text } from "./bytes.ts"
 import { type RedisClock, wallClock } from "./clock.ts"
+import { EXTRA_WRITES, type ExtraHost, extraCommand, moveList } from "./extra.ts"
+import {
+  type AclUser,
+  cmdAcl,
+  cmdCommand,
+  cmdMemory,
+  cmdObject,
+  cmdSlowlog,
+  commandFlags,
+  monitorArgs,
+  monitorLine,
+  monitorSkips,
+} from "./introspect.ts"
 import { LuaFailure, LuaStatus, LuaTable, type LuaValue, luaGlobals, runLua } from "./lua.ts"
 import { assertPortableDatabase, decodePortable, encodePortable } from "./portable.ts"
 import {
@@ -14,6 +27,7 @@ import {
   execAbort,
   execWithoutMulti,
   int,
+  invalidExpire,
   map,
   nestedMulti,
   nil,
@@ -104,7 +118,7 @@ interface Session {
   authenticated: boolean
   username: string
   readOnly: boolean
-  multi: Array<{ name: string; args: Uint8Array[] }> | null
+  multi: Array<{ name: string; args: Uint8Array[]; raw?: string }> | null
   multiFailed: boolean
   watching: Array<{ db: number; key: string; gen: number }>
   channels: Set<string>
@@ -112,6 +126,12 @@ interface Session {
   dead: boolean
   quit: boolean
   inExec: boolean
+  /** Port of the RESP listener this session arrived on, for INFO and CLIENT INFO. */
+  localPort?: number | undefined
+  /** `host:port` of the client socket, shown on the MONITOR stream. */
+  remoteAddr?: string | undefined
+  /** True after MONITOR: the connection receives every command other clients run. */
+  monitor?: boolean
   onPush: (reply: Reply) => void
 }
 
@@ -230,6 +250,7 @@ const WRITES = new Set([
   "xautoclaim",
   "eval",
   "evalsha",
+  ...EXTRA_WRITES,
 ])
 const SCRIPT_BLOCKED = new Set([
   "blpop",
@@ -247,9 +268,22 @@ const SCRIPT_BLOCKED = new Set([
   "psubscribe",
   "punsubscribe",
   "shutdown",
+  "monitor",
 ])
 
 const VERSION = "7.2.4"
+const I64_MAX = 9223372036854775807n
+/** Nominal figures for what a real server measures from its process and host. */
+const BASE_MEMORY = 1_048_576
+const SYSTEM_MEMORY = 17_179_869_184
+
+/** Redis `bytesToHuman`: bytes below 1 KiB, else two decimals with a K, M or G suffix. */
+function humanBytes(value: number): string {
+  if (value < 1024) return `${value}B`
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(2)}K`
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(2)}M`
+  return `${(value / 1024 ** 3).toFixed(2)}G`
+}
 
 function text(bytes: Uint8Array | undefined): string {
   return bytes ? latin1(bytes) : ""
@@ -414,6 +448,9 @@ export class Redis {
   private invoked = ""
   private scriptDepth = 0
   private commandCount = 0
+  private readonly commandStats = new Map<string, number>()
+  private peakMemory = 0
+  private startedAt = 0
   private closed = false
   private controlPaused = false
   private pendingCommands = 0
@@ -443,6 +480,7 @@ export class Redis {
     this.policy = options.maxmemoryPolicy ?? "noeviction"
     this.initialRngState = options.seed ?? 1
     this.rngState = this.initialRngState
+    this.startedAt = this.clock.now()
   }
 
   client(): RedisClient {
@@ -613,6 +651,8 @@ export class Redis {
     this.scripts.clear()
     this.faultValue = null
     this.clock.reset()
+    this.startedAt = this.clock.now()
+    this.commandStats.clear()
     this.consumersPaused = false
     for (const waiter of [...this.waiters]) {
       this.finishWaiter(waiter, nilArray())
@@ -776,12 +816,15 @@ export class Redis {
     const command = nameRaw.toLowerCase()
     this.invoked = nameRaw
     this.commandCount++
+    this.commandStats.set(command, (this.commandStats.get(command) ?? 0) + 1)
     if (this.authRequired && !session.authenticated && !PREAUTH.has(command)) return noAuth()
     if (session.channels.size + session.patterns.size > 0 && !PUBSUB_OK.has(command)) {
       return pubsubOnly(command)
     }
     if (this.faultValue === "busy" && command !== "script" && command !== "shutdown")
       return busyError()
+    if (session.monitor && this.touchesKeyspace(command))
+      return err("ERR Replica can't interact with the keyspace")
     if (session.multi && !IMMEDIATE.has(command)) {
       const checked = this.execCmd(session, command, args, false)
       if (checked instanceof Promise || checked.t === "error") {
@@ -791,13 +834,58 @@ export class Redis {
       session.multi.push({
         name: command,
         args: args.map((arg) => Uint8Array.from(arg)),
+        raw: nameRaw,
       })
       return queued()
     }
-    return this.execCmd(session, command, args, true)
+    return this.execCmd(session, command, args, true, nameRaw)
   }
 
+  /** What a MONITOR connection may not run: Redis treats it like a replica link. */
+  private touchesKeyspace(command: string): boolean {
+    if (command === "publish" || command === "spublish" || command === "eval") return true
+    if (command === "evalsha") return true
+    const flags = commandFlags(command)
+    return flags.includes("readonly") || flags.includes("write")
+  }
+
+  /**
+   * Runs one command and shows it to MONITOR connections. `raw` is the name as the client typed
+   * it, which is what Redis prints. EVAL is shown before the script's own calls (origin `lua`);
+   * everything else after it ran, so SELECT shows the new database. Commands Redis refuses
+   * before running them (unknown, wrong arity, NOAUTH, queued in MULTI) are not shown.
+   */
   private execCmd(
+    session: Session,
+    command: string,
+    args: Uint8Array[],
+    apply: boolean,
+    raw: string = command,
+  ): Reply | Promise<Reply> {
+    if (!apply || !this.monitoring()) return this.execCommand(session, command, args, apply)
+    const early = this.scriptDepth === 0 && (command === "eval" || command === "evalsha")
+    if (early) this.feedMonitors(session, command, args, raw)
+    const reply = this.execCommand(session, command, args, apply)
+    if (early) return reply
+    if (reply instanceof Promise) this.feedMonitors(session, command, args, raw)
+    else if (!monitorSkips(reply)) this.feedMonitors(session, command, args, raw)
+    return reply
+  }
+
+  private monitoring(): boolean {
+    for (const session of this.sessions) if (session.monitor) return true
+    return false
+  }
+
+  private feedMonitors(session: Session, command: string, args: Uint8Array[], raw: string): void {
+    const flags = commandFlags(command)
+    if (command === "monitor" || flags.includes("admin") || flags.includes("skip_monitor")) return
+    const origin = this.scriptDepth > 0 ? "lua" : (session.remoteAddr ?? `127.0.0.1:${session.id}`)
+    const line = monitorLine(this.clock.now(), session.db, origin, raw, monitorArgs(command, args))
+    for (const other of this.sessions) if (other.monitor && !other.dead) other.onPush(simple(line))
+  }
+
+  private execCommand(
     session: Session,
     command: string,
     args: Uint8Array[],
@@ -841,7 +929,12 @@ export class Redis {
       case "client":
         return this.cmdClient(session, args, apply)
       case "info":
-        return bulk(this.info(session, args[0] ? text(args[0]) : "default"))
+        return bulk(
+          this.info(
+            session,
+            args.map((arg) => text(arg)),
+          ),
+        )
       case "time":
         return this.cmdTime()
       case "role":
@@ -854,7 +947,20 @@ export class Redis {
       case "module":
         return args.length >= 1 && upper(args[0]) === "LIST" ? arr([]) : arityError("module")
       case "command":
-        return arr([])
+        return cmdCommand(args)
+      case "monitor":
+        if (args.length > 0) return arityError("monitor")
+        if (!apply) return queued()
+        session.monitor = true
+        return ok()
+      case "object":
+        return cmdObject(this.database(session.db), args)
+      case "memory":
+        return cmdMemory(this.database(session.db), args)
+      case "slowlog":
+        return cmdSlowlog(args)
+      case "acl":
+        return cmdAcl(this.aclUsers(), session.username, args)
       case "config":
         return this.cmdConfig(args, apply)
       case "dbsize":
@@ -899,15 +1005,14 @@ export class Redis {
       case "set":
         return this.cmdSet(session, args, apply)
       case "setnx":
-        return args.length === 2
-          ? this.cmdSet(session, [args[0] ?? utf8(""), args[1] ?? utf8(""), utf8("NX")], apply)
-          : arityError("setnx")
+        return this.cmdSetnx(session, args, apply)
       case "setex":
         return args.length === 3
           ? this.cmdSet(
               session,
               [args[0] ?? utf8(""), args[2] ?? utf8(""), utf8("EX"), args[1] ?? utf8("")],
               apply,
+              "setex",
             )
           : arityError("setex")
       case "psetex":
@@ -916,6 +1021,7 @@ export class Redis {
               session,
               [args[0] ?? utf8(""), args[2] ?? utf8(""), utf8("PX"), args[1] ?? utf8("")],
               apply,
+              "psetex",
             )
           : arityError("psetex")
       case "mget":
@@ -1062,8 +1168,47 @@ export class Redis {
       case "shutdown":
         return ok()
       default:
-        return unknownCommand(this.invoked, args)
+        return (
+          extraCommand(this.extraHost, session, command, args, apply) ??
+          unknownCommand(this.invoked, args)
+        )
     }
+  }
+
+  private readonly extraHost: ExtraHost<Session> = {
+    now: () => this.clock.now(),
+    databaseCount: () => this.dbs.length,
+    scriptDepth: () => this.scriptDepth,
+    consumersPaused: () => this.consumersPaused,
+    database: (index) => this.database(index),
+    wake: (db, key) => this.wake(db, key),
+    block: (spec) =>
+      this.block({
+        kind: "list",
+        keys: [spec.key],
+        db: spec.db,
+        side: spec.side,
+        destKey: spec.destKey,
+        destSide: spec.destSide,
+        count: 1,
+        ...(spec.deadline !== undefined ? { deadline: spec.deadline } : {}),
+        session: spec.session,
+      }),
+  }
+
+  private aclUsers(): AclUser[] {
+    const fallback = this.users.find((user) => user.name === "default")
+    const users: AclUser[] = [
+      {
+        name: "default",
+        password: this.authRequired ? (fallback?.password ?? this.password) : undefined,
+        readOnly: fallback?.readOnly === true,
+      },
+    ]
+    for (const user of this.users)
+      if (user.name !== "default")
+        users.push({ name: user.name, password: user.password, readOnly: user.readOnly === true })
+    return users
   }
 
   private guardWrite(session: Session, command: string, apply: boolean): Reply | null {
@@ -1178,6 +1323,7 @@ export class Redis {
     session.protocol = 2
     session.authenticated = !this.authRequired
     session.readOnly = false
+    session.monitor = false
     return simple("RESET")
   }
 
@@ -1210,12 +1356,20 @@ export class Redis {
   }
 
   private clientInfo(session: Session): string {
-    return `id=${session.id} addr=127.0.0.1:${session.id} laddr=127.0.0.1:6379 name=${session.name} db=${session.db} sub=${session.channels.size} psub=${session.patterns.size} multi=${session.multi ? session.multi.length : -1} lib-name=${session.libName} lib-ver=${session.libVer}`
+    return `id=${session.id} addr=127.0.0.1:${session.id} laddr=127.0.0.1:${session.localPort ?? 6379} name=${session.name} db=${session.db} sub=${session.channels.size} psub=${session.patterns.size} multi=${session.multi ? session.multi.length : -1} lib-name=${session.libName} lib-ver=${session.libVer}`
   }
 
-  private info(session: Session, section: string): string {
-    const wanted = section.toLowerCase()
-    const blocks: Array<[string, string[]]> = [
+  /**
+   * INFO. Sections and field names follow Redis 7.2; values the emulator has no process behind
+   * (CPU time, RSS, system memory) are fixed nominal numbers so parsers get well-formed fields.
+   */
+  private info(session: Session, sections: string[]): string {
+    if (session.id < 0) return ""
+    const used = this.memory() + BASE_MEMORY
+    this.peakMemory = Math.max(this.peakMemory, used)
+    const ratio = (value: number) => value.toFixed(2)
+    const uptime = Math.max(0, Math.floor((this.clock.now() - this.startedAt) / 1000))
+    const blocks = new Map<string, string[]>([
       [
         "server",
         [
@@ -1224,18 +1378,38 @@ export class Redis {
           "redis_mode:standalone",
           "os:mockingbird",
           "arch_bits:64",
-          "tcp_port:6379",
-          "uptime_in_seconds:0",
+          `tcp_port:${session.localPort ?? 6379}`,
+          `uptime_in_seconds:${uptime}`,
+          `uptime_in_days:${Math.floor(uptime / 86400)}`,
         ],
       ],
-      ["clients", ["# Clients", `connected_clients:${this.sessions.size}`]],
+      [
+        "clients",
+        [
+          "# Clients",
+          `connected_clients:${this.sessions.size}`,
+          "maxclients:10000",
+          `blocked_clients:${this.waiters.length}`,
+          "tracking_clients:0",
+        ],
+      ],
       [
         "memory",
         [
           "# Memory",
-          `used_memory:${this.memory()}`,
+          `used_memory:${used}`,
+          `used_memory_human:${humanBytes(used)}`,
+          `used_memory_rss:${used}`,
+          `used_memory_rss_human:${humanBytes(used)}`,
+          `used_memory_peak:${this.peakMemory}`,
+          `used_memory_peak_human:${humanBytes(this.peakMemory)}`,
+          `total_system_memory:${SYSTEM_MEMORY}`,
+          `total_system_memory_human:${humanBytes(SYSTEM_MEMORY)}`,
           `maxmemory:${this.maxmemory}`,
+          `maxmemory_human:${humanBytes(this.maxmemory)}`,
           `maxmemory_policy:${this.policy}`,
+          `mem_fragmentation_ratio:${ratio(1)}`,
+          "mem_allocator:mockingbird",
         ],
       ],
       [
@@ -1244,15 +1418,42 @@ export class Redis {
       ],
       ["stats", ["# Stats", `total_commands_processed:${this.commandCount}`]],
       ["replication", ["# Replication", "role:master", "connected_slaves:0"]],
+      [
+        "cpu",
+        [
+          "# CPU",
+          "used_cpu_sys:0.000000",
+          "used_cpu_user:0.000000",
+          "used_cpu_sys_children:0.000000",
+          "used_cpu_user_children:0.000000",
+        ],
+      ],
+      ["modules", ["# Modules"]],
+      [
+        "commandstats",
+        [
+          "# Commandstats",
+          ...[...this.commandStats].map(
+            ([name, calls]) =>
+              `cmdstat_${name}:calls=${calls},usec=0,usec_per_call=0.00,rejected_calls=0,failed_calls=0`,
+          ),
+        ],
+      ],
+      ["errorstats", ["# Errorstats"]],
+      ["cluster", ["# Cluster", "cluster_enabled:0"]],
       ["keyspace", ["# Keyspace", ...this.keyspaceLines()]],
-    ]
-    const chosen =
-      wanted === "default" || wanted === "all" || wanted === ""
-        ? blocks
-        : blocks.filter((block) => block[0] === wanted)
-    const lines = chosen.flatMap((block) => block[1])
-    if (session.id < 0) return ""
-    return `${lines.join("\r\n")}\r\n`
+    ])
+    // `default` is every section except commandstats; `all` and `everything` add it.
+    const group = (name: string): string[] | null => {
+      if (name === "everything" || name === "all") return [...blocks.keys()]
+      if (name === "default") return [...blocks.keys()].filter((key) => key !== "commandstats")
+      return blocks.has(name) ? [name] : null
+    }
+    const chosen: string[] = []
+    for (const name of sections.length > 0 ? sections : ["default"]) {
+      for (const key of group(name.toLowerCase()) ?? []) if (!chosen.includes(key)) chosen.push(key)
+    }
+    return chosen.map((key) => `${(blocks.get(key) ?? []).join("\r\n")}\r\n`).join("\r\n")
   }
 
   private keyspaceLines(): string[] {
@@ -1325,9 +1526,14 @@ export class Redis {
     if (!Number.isInteger(cursor) || cursor < 0) return err("ERR invalid cursor")
     let pattern = "*"
     let count = 10
+    let type: string | null = null
     for (let i = 1; i < args.length; i++) {
       const option = upper(args[i])
-      if (option === "MATCH") {
+      if (option === "TYPE") {
+        const value = args[++i]
+        if (!value) return syntaxError()
+        type = text(value).toLowerCase()
+      } else if (option === "MATCH") {
         const value = args[++i]
         if (!value) return syntaxError()
         pattern = text(value)
@@ -1338,7 +1544,11 @@ export class Redis {
         count = Number(parsed)
       } else return syntaxError()
     }
-    const keys = this.database(session.db).matching(pattern)
+    const database = this.database(session.db)
+    // An unknown type name matches nothing, as in Redis.
+    const keys = database
+      .matching(pattern)
+      .filter((key) => type === null || database.get(key)?.kind === type)
     const slice = keys.slice(cursor, cursor + count)
     const next = cursor + count >= keys.length ? 0 : cursor + count
     return arr([
@@ -1426,7 +1636,8 @@ export class Redis {
     if (args.length !== 1) return arityError(command)
     const pttl = this.database(session.db).pttl(text(args[0]))
     if (pttl < 0) return int(pttl)
-    return int(command === "pttl" ? pttl : Math.floor(pttl / 1000))
+    // Redis rounds TTL to the nearest second (half up) rather than truncating.
+    return int(command === "pttl" ? pttl : Math.floor((pttl + 500) / 1000))
   }
 
   private cmdPersist(session: Session, args: Uint8Array[], apply: boolean): Reply {
@@ -1454,51 +1665,77 @@ export class Redis {
     return value
   }
 
-  private cmdSet(session: Session, args: Uint8Array[], apply: boolean): Reply {
-    if (args.length < 2) return arityError("set")
+  /**
+   * SET and its aliases. `command` names the caller in the expire-time error, as Redis does.
+   * Options are parsed first and the expiry is validated after, like Redis, so a bad
+   * expiry is rejected before NX/XX are considered and leaves any existing value alone.
+   */
+  private cmdSet(session: Session, args: Uint8Array[], apply: boolean, command = "set"): Reply {
+    if (args.length < 2) return arityError(command)
     const key = text(args[0])
     const value = args[1]
-    if (!value) return arityError("set")
+    if (!value) return arityError(command)
     let nx = false
     let xx = false
     let get = false
     let mode: "ex" | "px" | "exat" | "pxat" | "keep" | null = null
-    let amount = 0
+    let rawAmount: Uint8Array | undefined
     for (let i = 2; i < args.length; i++) {
       const option = upper(args[i])
-      if (option === "NX") nx = true
-      else if (option === "XX") xx = true
-      else if (option === "GET") get = true
+      if (option === "NX") {
+        if (xx) return syntaxError()
+        nx = true
+      } else if (option === "XX") {
+        if (nx) return syntaxError()
+        xx = true
+      } else if (option === "GET") get = true
       else if (option === "KEEPTTL") {
-        if (mode) return syntaxError()
+        if (mode !== null && mode !== "keep") return syntaxError()
         mode = "keep"
       } else if (option === "EX" || option === "PX" || option === "EXAT" || option === "PXAT") {
-        if (mode) return syntaxError()
-        const raw = args[++i]
-        const parsed = raw ? parseI64(raw) : null
-        if (parsed === null) return notInteger()
-        mode = option.toLowerCase() as "ex" | "px" | "exat" | "pxat"
-        amount = Number(parsed)
+        const next = option.toLowerCase() as "ex" | "px" | "exat" | "pxat"
+        // Redis lets the same expiry option repeat (the last value wins) but not mix.
+        if ((mode !== null && mode !== next) || i + 1 >= args.length) return syntaxError()
+        mode = next
+        rawAmount = args[++i]
       } else return syntaxError()
     }
-    if (nx && xx) return syntaxError()
     const database = this.database(session.db)
+    let expireAt: bigint | null = null
+    // Like Redis, a bad expiry is a runtime error: inside MULTI it surfaces from EXEC.
+    if (apply && mode !== null && mode !== "keep") {
+      const amount = rawAmount ? parseI64(rawAmount) : null
+      if (amount === null) return notInteger()
+      const seconds = mode === "ex" || mode === "exat"
+      // Redis rejects zero, negative and seconds values whose millisecond form overflows.
+      if (amount <= 0n || (seconds && amount > I64_MAX / 1000n)) return invalidExpire(command)
+      const millis = seconds ? amount * 1000n : amount
+      expireAt = mode === "ex" || mode === "px" ? BigInt(database.now()) + millis : millis
+      // now + millis wraps past the 64-bit range in Redis and lands in the past: the key is gone.
+      if (expireAt > I64_MAX) expireAt = 0n
+    }
     const existing = database.get(key)
-    if (existing && existing.kind !== "string") return wrongType()
-    const previous = existing ? ({ t: "bulk", v: existing.bytes } as Reply) : nil()
+    if (get && existing && existing.kind !== "string") return wrongType()
+    const previous =
+      existing?.kind === "string" ? ({ t: "bulk", v: existing.bytes } as Reply) : nil()
     if ((nx && existing) || (xx && !existing)) return get ? previous : nil()
     if (!apply) return queued()
     const kept = mode === "keep" ? database.expiry(key) : null
     database.put(key, { kind: "string", bytes: value })
-    const now = database.now()
-    if (mode === "ex") database.setExpiry(key, now + amount * 1000)
-    else if (mode === "px") database.setExpiry(key, now + amount)
-    else if (mode === "exat") database.setExpiry(key, amount * 1000)
-    else if (mode === "pxat") database.setExpiry(key, amount)
-    else if (mode === "keep") {
-      if (kept !== null) database.setExpiry(key, kept)
-    } else database.setExpiry(key, null)
+    if (expireAt !== null) database.setExpiry(key, Number(expireAt))
+    else database.setExpiry(key, kept)
     return get ? previous : ok()
+  }
+
+  private cmdSetnx(session: Session, args: Uint8Array[], apply: boolean): Reply {
+    if (args.length !== 2) return arityError("setnx")
+    if (!apply) return queued()
+    const database = this.database(session.db)
+    const key = text(args[0])
+    if (database.has(key)) return int(0)
+    database.put(key, { kind: "string", bytes: args[1] ?? utf8("") })
+    database.setExpiry(key, null)
+    return int(1)
   }
 
   private cmdMget(session: Session, args: Uint8Array[]): Reply {
@@ -1686,6 +1923,7 @@ export class Redis {
         if (command === "hsetnx" && target.fields.has(field)) continue
         if (!target.fields.has(field)) added++
         target.fields.set(field, value)
+        target.fieldExpires?.delete(field)
       }
       database.put(key, target)
       return command === "hmset" ? ok() : int(command === "hsetnx" ? (added > 0 ? 1 : 0) : added)
@@ -1706,7 +1944,9 @@ export class Redis {
       if (!apply) return queued()
       let removed = 0
       for (let i = 1; i < args.length; i++) {
-        if (hash.fields.delete(memberKey(args[i] ?? utf8("")))) removed++
+        const field = memberKey(args[i] ?? utf8(""))
+        hash.fieldExpires?.delete(field)
+        if (hash.fields.delete(field)) removed++
       }
       database.dropIfEmpty(key)
       if (database.has(key)) database.put(key, hash)
@@ -3205,7 +3445,7 @@ export class Redis {
     session.inExec = true
     try {
       for (const command of queuedCommands) {
-        const reply = this.execCmd(session, command.name, command.args, true)
+        const reply = this.execCmd(session, command.name, command.args, true, command.raw)
         replies.push(reply instanceof Promise ? nilArray() : reply)
       }
     } finally {
@@ -3321,7 +3561,13 @@ export class Redis {
     const name = typeof args[0] === "string" ? args[0].toLowerCase() : ""
     const bytes = args.slice(1).map((arg) => luaToBytes(arg))
     try {
-      const reply = this.execCmd(session, name, bytes, true)
+      const reply = this.execCmd(
+        session,
+        name,
+        bytes,
+        true,
+        typeof args[0] === "string" ? args[0] : name,
+      )
       if (reply instanceof Promise)
         throw new Error("This Redis command is not allowed from scripts")
       if (reply.t === "error") {
@@ -3380,7 +3626,7 @@ export class Redis {
         const deadline = spec.deadline
         const fire = () => {
           if (this.clock.now() < deadline) return
-          this.enqueue(() => this.finishWaiter(waiter, nilArray()))
+          this.enqueue(() => this.finishWaiter(waiter, waiter.destKey !== undefined ? nil() : nilArray()))
         }
         waiter.unsub = this.clock.subscribe(fire)
         if (!this.clock.manual) {
@@ -3409,6 +3655,15 @@ export class Redis {
     const session = waiterSession.get(waiter)
     if (!session || session.dead) return nilArray()
     if (this.consumersPaused) return null
+    if (waiter.kind === "list" && waiter.destKey !== undefined)
+      return moveList(
+        this.extraHost,
+        waiter.db,
+        waiter.keys[0] ?? "",
+        waiter.destKey,
+        waiter.side,
+        waiter.destSide ?? "left",
+      )
     if (waiter.kind === "list") return this.takeList(waiter.db, waiter.keys, waiter.side)
     if (waiter.kind === "zset") return this.takeZset(waiter.db, waiter.keys, waiter.max === true)
     const reply = this.readStreams(
