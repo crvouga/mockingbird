@@ -1,8 +1,7 @@
 import { errorParity, parity, parityTyped } from "../helpers.ts";
 
-// #443 (needs-info): the reported statement is not isolated. The pieces of the report that can be
-// pinned are the jsonb argument types a user function sees when its argument comes from a
-// lateral subquery, a CASE, or the alias of a set-returning function in FROM.
+// #443: JSONB argument types through lateral subqueries, CASE and scalar function aliases.
+// The migration-derived empty-source regression is in jsonb-case-types.test.ts.
 const setup = [
   "CREATE SCHEMA finance",
   "CREATE TABLE finance.t (id int, payload jsonb)",

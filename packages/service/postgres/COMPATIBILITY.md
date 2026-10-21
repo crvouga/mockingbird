@@ -78,7 +78,7 @@ The oracle exposes **2787 builtin functions** and **74 operators** in `pg_catalo
 | Date/time: date, time, timestamp[tz], interval + arithmetic | VERIFIED | Timezone conversions for named zones; some interval corners partial |
 | Casts (implicit/assignment/explicit) | VERIFIED | Generated cast matrices from oracle |
 | Arrays + unnest + subscripts/slices | VERIFIED | |
-| JSON / JSONB operators + functions | VERIFIED | |
+| JSON / JSONB operators + functions | VERIFIED | JSONB CASE branches preserve the JSONB type for selected untyped NULL/literal results, including empty LATERAL sources and nested views. Type hints cover column references, casts, JSON extraction operators and nested CASE without executing unselected result expressions; arbitrary function-result branch inference remains partial (`tests/contract/regressions/jsonb-case-types.test.ts`) |
 | Window functions (frames, EXCLUDE) | VERIFIED | |
 | GROUPING SETS / ROLLUP / CUBE, DISTINCT ON, LATERAL, set ops | VERIFIED | |
 | Recursive + data-modifying CTEs | VERIFIED | |

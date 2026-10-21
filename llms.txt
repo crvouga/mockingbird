@@ -220,6 +220,9 @@ Do not work around an emulator in your own project: file a GitHub issue on crvou
 - [@crvouga/mockingbird-service-lambda](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/lambda/README.md): Work-in-progress Amazon Lambda transport scaffold; vendor operations are not implemented. Parity: Scaffold only; no vendor operations implemented or verified.
 - [@crvouga/mockingbird-service-lambda DISCOVERY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/lambda/DISCOVERY.md): coverage matrix
 - [@crvouga/mockingbird-service-lambda SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/lambda/SUPPORT.md): coverage matrix
+- [@crvouga/mockingbird-service-lifefile](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/lifefile/README.md): Best-guess LifeFile pharmacy order gateway and Basic-auth Data Push emulator. Parity: Orders, cancellation and Data Push (best guess).
+- [@crvouga/mockingbird-service-lifefile DISCOVERY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/lifefile/DISCOVERY.md): coverage matrix
+- [@crvouga/mockingbird-service-lifefile SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/lifefile/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-linear](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/linear/README.md): Stateful Linear public vendor API emulator with native namespaces, checkpoints and test controls. Parity: Vendor API workflows compared with the pinned Emulate package oracle.
 - [@crvouga/mockingbird-service-linear DISCOVERY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/linear/DISCOVERY.md): coverage matrix
 - [@crvouga/mockingbird-service-linear SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/linear/SUPPORT.md): coverage matrix

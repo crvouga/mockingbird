@@ -56,7 +56,7 @@ export function extractOperations(
           p.required &&
           !/^(authorization|content-type)$/i.test(p.name)
         ) {
-          headers[p.name] = String(value ?? "")
+          headers[p.name.toLowerCase()] = String(value ?? "")
         }
       }
 

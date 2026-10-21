@@ -477,6 +477,47 @@ function validateCaseSubExpr(ctx: EngineCtx, scope: EvalScope, e: Expr): void {
   }
 }
 
+/** Type hints for CASE results, without executing an unselected branch (which may have effects). */
+function caseBranchType(ctx: EngineCtx, scope: EvalScope, e: Expr): TypeId | null {
+  switch (e.type) {
+    case "null_lit":
+    case "string_lit":
+      return UNKNOWN;
+    case "number_lit":
+      return numberLitValue(e.raw).t;
+    case "bool_lit":
+      return "bool";
+    case "colref":
+      return scope.lookupColumn(e.parts)?.t ?? null;
+    case "cast":
+      return resolveTypeName(ctx.state, e.target).column.id;
+    case "collate":
+      return caseBranchType(ctx, scope, e.expr);
+    case "binop": {
+      const left = caseBranchType(ctx, scope, e.left);
+      if (left !== "json" && left !== "jsonb") return null;
+      if (e.op === "->" || e.op === "#>") return left;
+      if (e.op === "->>" || e.op === "#>>") return "text";
+      return null;
+    }
+    case "case": {
+      let type: TypeId = UNKNOWN;
+      const branches = [...e.whens.map((w) => w.then), ...(e.elseExpr ? [e.elseExpr] : [])];
+      for (const branch of branches) {
+        const next = caseBranchType(ctx, scope, branch);
+        if (next === null) return null;
+        if (next === UNKNOWN) continue;
+        const unified = unifyTypes(type, next);
+        if (unified === null) return null;
+        type = unified;
+      }
+      return type;
+    }
+    default:
+      return null;
+  }
+}
+
 function evalCase(ctx: EngineCtx, scope: EvalScope, e: CaseExpr): TypedValue {
   validateSearchedCaseTree(ctx, scope, e);
   let chosen: Expr | null = null;
@@ -500,8 +541,12 @@ function evalCase(ctx: EngineCtx, scope: EvalScope, e: CaseExpr): TypedValue {
     }
   }
   const resultExpr = chosen ?? e.elseExpr;
-  if (resultExpr === null) return tv(UNKNOWN, null);
-  return evalExpr(ctx, scope, resultExpr);
+  const result = resultExpr === null ? tv(UNKNOWN, null) : evalExpr(ctx, scope, resultExpr);
+  if (result.t !== UNKNOWN) return result;
+  // NULL/unknown literals inherit the other result branches' type. In particular an empty
+  // LATERAL relation probes with NULL columns: a JSONB CASE must not turn into a text column.
+  const type = caseBranchType(ctx, scope, e);
+  return type !== null && type !== UNKNOWN ? castTo(ctx, result, type, {}) : result;
 }
 
 // --- IN / BETWEEN ---------------------------------------------------------------

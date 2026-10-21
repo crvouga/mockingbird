@@ -1,0 +1,24 @@
+import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
+import { createRuntime, type LifeFileRuntime, type LifeFileRuntimeOptions } from "./runtime.js"
+export const DEFAULT_PORT = 8819
+export type LifeFileServerOptions = LifeFileRuntimeOptions & { port?: number; host?: string }
+export type LifeFileServer = Listening & { runtime: LifeFileRuntime }
+export const createServer = async (
+  options: LifeFileServerOptions = {},
+): Promise<LifeFileServer> => {
+  const { port, host, ...rest } = options
+  const runtime = createRuntime(rest)
+  return { ...(await listen(runtime, { port: port ?? 0, ...(host ? { host } : {}) })), runtime }
+}
+export const serveTarget: ServeTarget = {
+  name: "lifefile",
+  defaultPort: DEFAULT_PORT,
+  create: (_values, common) =>
+    createRuntime({
+      ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
+      ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
+      ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),
+      ...(common.seed !== undefined ? { seed: common.seed } : {}),
+      ...(common.onLog ? { onLog: common.onLog } : {}),
+    }),
+}
