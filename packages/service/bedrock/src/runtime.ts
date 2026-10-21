@@ -11,7 +11,7 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { document } from "./generated/openapi.js"
 import { accessKeyCredential, BEDROCK_NAMESPACE, BedrockAPI, clockSleep } from "./index.js"
 import { parseScript, type Script } from "./scripts.js"
-import type { Settings } from "./state.js"
+import { EMBEDDING_MODES, type EmbeddingMode, type Settings } from "./state.js"
 
 const MODEL_PATH = "/model/"
 
@@ -57,6 +57,7 @@ export const BEDROCK_PRESETS: Record<string, FaultPreset> = {
     type: "service_unavailable",
   }),
   access_denied: everyCall("403 AccessDeniedException", { type: "access_denied" }),
+  resource_not_found: everyCall("404 ResourceNotFoundException", { type: "resource_not_found" }),
   internal_server: everyCall("500 InternalServerException", { type: "internal_server" }),
 }
 
@@ -106,6 +107,8 @@ const SETTING_CHECKS: Record<keyof Settings, (value: unknown) => boolean> = {
   chunkSize: (value) => typeof value === "number" && value >= 1,
   delayMsPerChunk: (value) => typeof value === "number" && value >= 0,
   audioTurnChunks: (value) => typeof value === "number" && value >= 0,
+  embeddingMode: (value) => EMBEDDING_MODES.includes(value as EmbeddingMode),
+  validatePromptCaching: (value) => typeof value === "boolean",
 }
 
 const adminRoutes = (runtime: ServiceRuntime<BedrockAPI>): AdminRoutes => {

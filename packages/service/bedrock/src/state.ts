@@ -12,13 +12,29 @@ export type Settings = {
   delayMsPerChunk: number
   /** Nova Sonic: USER audio frames that end a spoken turn without a contentEnd (0 = off). */
   audioTurnChunks: number
+  /**
+   * How Titan embeddings are computed. `sha256` (default): a vector from SHA-256(inputText),
+   * so only byte-identical texts are similar. `lexical`: a deterministic bag-of-words vector,
+   * so texts that share words have a high cosine similarity.
+   */
+  embeddingMode: EmbeddingMode
+  /**
+   * Reject a Converse `cachePoint` on a model outside the documented prompt-caching list
+   * (best guess, see README). Set `false` when the list lags a newly supported model.
+   */
+  validatePromptCaching: boolean
 }
+
+export const EMBEDDING_MODES = ["sha256", "lexical"] as const
+export type EmbeddingMode = (typeof EMBEDDING_MODES)[number]
 
 export const DEFAULT_SETTINGS: Settings = {
   defaultText: "OK.",
   chunkSize: 16,
   delayMsPerChunk: 0,
   audioTurnChunks: 0,
+  embeddingMode: "sha256",
+  validatePromptCaching: true,
 }
 
 /** Counts for `GET /__admin/scripts` (and `/__admin/health`): metadata only. */

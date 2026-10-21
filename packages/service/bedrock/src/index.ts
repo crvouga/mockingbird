@@ -80,8 +80,8 @@ export type {
   TurnFaultType,
 } from "./scripts.js"
 export { MODEL_OPERATIONS, parseScript, STOP_REASONS, TURN_FAULTS } from "./scripts.js"
-export type { ModelStats, Settings } from "./state.js"
-export { DEFAULT_SETTINGS } from "./state.js"
+export type { EmbeddingMode, ModelStats, Settings } from "./state.js"
+export { DEFAULT_SETTINGS, EMBEDDING_MODES } from "./state.js"
 
 export const BEDROCK_NAMESPACE = "bedrock"
 
@@ -113,6 +113,11 @@ const FAULT_ERRORS: Record<string, [number, string, string]> = {
     503,
     "ServiceUnavailableException",
     "Bedrock is unable to process your request.",
+  ],
+  resource_not_found: [
+    404,
+    "ResourceNotFoundException",
+    "The specified resource ARN was not found. Check the ARN and try again.",
   ],
   internal_server: [
     500,
@@ -198,6 +203,32 @@ export const titanEmbedding = async (inputText: string, dims = 1024): Promise<nu
   }
   const norm = Math.sqrt(values.reduce((sum, v) => sum + v * v, 0)) || 1
   return values.map((v) => v / norm)
+}
+
+/**
+ * A deterministic unit vector that keeps lexical similarity: each lowercase word
+ * (letters and digits, accents folded) adds one count to a SHA-256-chosen signed dimension,
+ * so texts that differ only in case, punctuation or spacing are identical and texts that
+ * share words have a high cosine similarity. Not a language model: synonyms stay apart.
+ * Text with no words falls back to the SHA-256 vector.
+ */
+export const lexicalEmbedding = async (inputText: string, dims = 1024): Promise<number[]> => {
+  const words =
+    inputText
+      .normalize("NFKD")
+      .replace(/\p{M}/gu, "")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []
+  if (words.length === 0) return titanEmbedding(inputText, dims)
+  const values = new Array<number>(dims).fill(0)
+  for (const word of words) {
+    const digest = new DataView(await crypto.subtle.digest("SHA-256", utf8.encode(word)))
+    const at = digest.getUint32(0, false) % dims
+    values[at] = (values[at] as number) + (digest.getUint8(4) & 1 ? 1 : -1)
+  }
+  const norm = Math.sqrt(values.reduce((sum, v) => sum + v * v, 0))
+  // Opposite-sign words that collide on one dimension can cancel to the zero vector.
+  return norm === 0 ? titanEmbedding(inputText, dims) : values.map((v) => v / norm)
 }
 
 export type BedrockAPIOptions = APIOptions & {
@@ -450,7 +481,9 @@ export class BedrockAPI implements FetchAPI {
     }
     let call: CallAnalysis
     try {
-      call = analyzeConverse(operation, modelId, body)
+      call = analyzeConverse(operation, modelId, body, {
+        validatePromptCaching: this.state.current().validatePromptCaching,
+      })
     } catch (error) {
       if (error instanceof ValidationProblem)
         return bedrockError(400, "ValidationException", error.message, requestId)
@@ -562,7 +595,9 @@ export class BedrockAPI implements FetchAPI {
         ids: { modelId, script: "unscripted:titan", inputTokens: String(inputTextTokenCount) },
       })
     if (failed) return notes(failed)
-    const embedding = await titanEmbedding(inputText, dimensions as number)
+    const embed =
+      this.state.current().embeddingMode === "lexical" ? lexicalEmbedding : titanEmbedding
+    const embedding = await embed(inputText, dimensions as number)
     return notes(
       jsonRes(
         200,

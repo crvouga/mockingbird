@@ -40,6 +40,7 @@ export const TURN_FAULTS = [
   "model_timeout",
   "service_unavailable",
   "internal_server",
+  "resource_not_found",
   "mid_stream_exception",
   "max_tokens",
   "truncated_frame",
@@ -107,6 +108,18 @@ export type ScriptMatch = {
   lastUserText?: string | TextMatch
   /** SHA-256 hex of the system prompt (text blocks joined with "\n"). */
   systemHash?: string
+  /**
+   * The system prompt text (text blocks joined with "\n", `cachePoint` blocks skipped): a
+   * string = case-insensitive contains, like `lastUserText`. A call with no system prompt
+   * never matches.
+   */
+  systemText?: string | TextMatch
+  /**
+   * `outputConfig.textFormat.structure.jsonSchema.name`: a string = case-insensitive
+   * equality; `{contains, regex, flags}` for the rest. A call without a named
+   * `outputConfig` schema never matches.
+   */
+  jsonSchemaName?: string | TextMatch
   toolsInclude?: string[]
   /** `auto`, `any`, `none`, or a forced tool's name. */
   toolChoice?: string
@@ -196,6 +209,20 @@ export const matches = (
   if (match.systemHash !== undefined && match.systemHash.toLowerCase() !== context.systemHash) {
     return false
   }
+  if (match.systemText !== undefined) {
+    if (call.systemText === "" || !textMatches(match.systemText, call.systemText)) return false
+  }
+  if (match.jsonSchemaName !== undefined) {
+    const name = call.structured?.form === "outputConfig" ? call.structured.name : undefined
+    if (name === undefined) return false
+    const rule = match.jsonSchemaName
+    if (
+      typeof rule === "string"
+        ? rule.toLowerCase() !== name.toLowerCase()
+        : !textMatches(rule, name)
+    )
+      return false
+  }
   if (match.toolsInclude?.some((name) => !call.tools.includes(name))) return false
   if (match.toolChoice !== undefined) {
     const want = ["auto", "any", "none"].includes(match.toolChoice)
@@ -283,6 +310,90 @@ const checkTurn = (turn: unknown, path: string): string | undefined => {
   return undefined
 }
 
+const MATCH_KEYS = [
+  "modelId",
+  "operation",
+  "lastUserText",
+  "systemHash",
+  "systemText",
+  "jsonSchemaName",
+  "toolsInclude",
+  "toolChoice",
+  "hasDocument",
+  "hasImage",
+  "callIndex",
+] as const
+
+/** A string, or `{contains?, regex?, flags?}` with a regex that compiles. */
+const checkTextMatch = (rule: unknown, path: string): string | undefined => {
+  if (typeof rule === "string") return undefined
+  if (!isRecord(rule)) return fail(path, "a string or {contains, regex, flags}")
+  for (const key of Object.keys(rule)) {
+    if (!["contains", "regex", "flags"].includes(key)) {
+      return fail(`${path}.${key}`, "unknown text match field (one of contains, regex, flags)")
+    }
+  }
+  for (const key of ["contains", "regex", "flags"] as const) {
+    if (rule[key] !== undefined && typeof rule[key] !== "string")
+      return fail(`${path}.${key}`, "string")
+  }
+  if (typeof rule.regex === "string") {
+    try {
+      new RegExp(rule.regex, typeof rule.flags === "string" ? rule.flags : "i")
+    } catch {
+      return fail(`${path}.regex`, "not a valid regular expression (with these flags)")
+    }
+  }
+  return undefined
+}
+
+/** `match` is a closed set of criteria: an unknown key would silently match every call. */
+const checkMatch = (match: Record<string, unknown>, path: string): string | undefined => {
+  for (const key of Object.keys(match)) {
+    if (!(MATCH_KEYS as readonly string[]).includes(key)) {
+      return fail(`${path}.${key}`, `unknown match field (one of ${MATCH_KEYS.join(", ")})`)
+    }
+  }
+  if (match.operation !== undefined) {
+    const ops = Array.isArray(match.operation) ? match.operation : [match.operation]
+    for (const op of ops) {
+      if (!MODEL_OPERATIONS.includes(op as ModelOperation)) {
+        return fail(`${path}.operation`, `one of ${MODEL_OPERATIONS.join(", ")}`)
+      }
+    }
+  }
+  for (const key of ["modelId", "systemHash", "toolChoice"] as const) {
+    if (match[key] !== undefined && typeof match[key] !== "string")
+      return fail(`${path}.${key}`, "string")
+  }
+  for (const key of ["lastUserText", "systemText", "jsonSchemaName"] as const) {
+    if (match[key] === undefined) continue
+    const problem = checkTextMatch(match[key], `${path}.${key}`)
+    if (problem) return problem
+  }
+  for (const key of ["hasDocument", "hasImage"] as const) {
+    if (match[key] !== undefined && typeof match[key] !== "boolean")
+      return fail(`${path}.${key}`, "boolean")
+  }
+  if (
+    match.callIndex !== undefined &&
+    !(
+      typeof match.callIndex === "number" &&
+      Number.isInteger(match.callIndex) &&
+      match.callIndex >= 0
+    )
+  ) {
+    return fail(`${path}.callIndex`, "a non-negative integer")
+  }
+  if (
+    match.toolsInclude !== undefined &&
+    !(Array.isArray(match.toolsInclude) && match.toolsInclude.every((n) => typeof n === "string"))
+  ) {
+    return fail(`${path}.toolsInclude`, "string[]")
+  }
+  return undefined
+}
+
 /** Parse and validate one script; a string is the first problem found. */
 export const parseScript = (value: unknown, index: number): Script | string => {
   const path = `scripts[${index}]`
@@ -298,25 +409,8 @@ export const parseScript = (value: unknown, index: number): Script | string => {
   }
   if (value.match !== undefined) {
     if (!isRecord(value.match)) return fail(`${path}.match`, "an object")
-    const match = value.match
-    if (match.operation !== undefined) {
-      const ops = Array.isArray(match.operation) ? match.operation : [match.operation]
-      for (const op of ops) {
-        if (!MODEL_OPERATIONS.includes(op as ModelOperation)) {
-          return fail(`${path}.match.operation`, `one of ${MODEL_OPERATIONS.join(", ")}`)
-        }
-      }
-    }
-    if (isRecord(match.lastUserText) && typeof match.lastUserText.regex === "string") {
-      try {
-        new RegExp(match.lastUserText.regex)
-      } catch {
-        return fail(`${path}.match.lastUserText.regex`, "not a valid regular expression")
-      }
-    }
-    if (match.toolsInclude !== undefined && !Array.isArray(match.toolsInclude)) {
-      return fail(`${path}.match.toolsInclude`, "string[]")
-    }
+    const problem = checkMatch(value.match, `${path}.match`)
+    if (problem) return problem
   }
   if (value.times !== undefined && (typeof value.times !== "number" || value.times < 1)) {
     return fail(`${path}.times`, "a positive count")

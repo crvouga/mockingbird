@@ -106,7 +106,7 @@ HTTP/1.1 only — fine for the AI SDK, not for the SDK v3 Bedrock client.)
 | --- | --- |
 | `POST /model/{modelId}/converse` | Converse JSON: `output.message.content[]` (`text`, `toolUse`, `reasoningContent`), `stopReason`, `usage` (with `cacheRead/WriteInputTokens` when a `cachePoint` is present), `metrics`, `trace.guardrail` (with `guardrailConfig.trace: "enabled"`), `x-amzn-RequestId`. |
 | `POST /model/{modelId}/converse-stream` | The same answer as event frames: `messageStart`, `contentBlockStart` (tool use), `contentBlockDelta` (`text`, `toolUse.input` partial JSON, `reasoningContent`), `contentBlockStop`, `messageStop`, `metadata`; exception frames mid-stream. |
-| `POST /model/{modelId}/invoke` | `amazon.titan-embed-text-*`: `{embedding, inputTextTokenCount}` — a deterministic unit vector from SHA-256(`inputText`) (1024-d by default; `dimensions` 256/512/1024). Claude models: an Anthropic Messages body in, a Messages response out. |
+| `POST /model/{modelId}/invoke` | `amazon.titan-embed-text-*`: `{embedding, inputTextTokenCount}` — a deterministic unit vector from SHA-256(`inputText`) (1024-d by default; `dimensions` 256/512/1024), or a lexical one with `embeddingMode: "lexical"` (see Settings). Claude models: an Anthropic Messages body in, a Messages response out. |
 | `POST /model/{modelId}/invoke-with-bidirectional-stream` | Nova Sonic (`*sonic*`), HTTP/2 duplex: reads `chunk` events as they arrive (SigV4 envelopes unwrapped), answers each user turn with `textOutput` + 24 kHz PCM tone `audioOutput` + `toolUse`, then `usageEvent`; `completionEnd` after `sessionEnd`. |
 | `POST /harnesses/invoke?harnessArn=` | AgentCore harness stream: `messageStart`, `contentBlockDelta` (`text` or `toolResult[]`), `contentBlockStop`, `messageStop`, `metadata`; `validationException` / `internalServerException` / `runtimeClientError` frames. |
 
@@ -114,7 +114,8 @@ HTTP/1.1 only — fine for the AI SDK, not for the SDK v3 Bedrock client.)
 accepted without verification. Request checks Bedrock makes and our code branches on are
 enforced: role alternation, first/last message is the user (assistant **prefill** is rejected
 for Claude 4.5+), tool-use/tool-result pairing, `toolConfig` required with tool blocks, a
-document needs a sibling text block, `temperature` + `top_p` together on Claude 4.5+. Errors are
+document needs a sibling text block, `temperature` + `top_p` together on Claude 4.5+, plus the
+best-guess checks listed under "Best guesses, not oracle-verified". Errors are
 `x-amzn-ErrorType: <Name>:http://internal.amazon.com/coral/com.amazon.bedrock/` + `{"message"}`.
 Output longer than `maxTokens` (≈4 chars/token) is cut with `stopReason: "max_tokens"`.
 
@@ -127,8 +128,16 @@ how many calls it answers.
 - **Match keys:** `modelId` (glob), `operation` (`Converse`, `ConverseStream`, `InvokeModel`,
   `InvokeModelWithBidirectionalStream`, `InvokeHarness`), `lastUserText` (string = contains, or
   `{contains, regex, flags}`), `systemHash` (SHA-256 hex of the system text blocks joined with
-  `\n`), `toolsInclude`, `toolChoice` (`auto` / `any` / a tool name), `hasDocument`, `hasImage`,
-  `callIndex` (0-based index of the call in the namespace).
+  `\n`), `systemText` (the same joined system text, `cachePoint` blocks skipped; string =
+  case-insensitive contains, or `{contains, regex, flags}`; a call with no system prompt never
+  matches; for `InvokeModel` the Claude `system` string or text blocks, never stored),
+  `jsonSchemaName` (`outputConfig.textFormat.structure.jsonSchema.name`; string =
+  case-insensitive equality, or `{contains, regex, flags}`; a call without a named `outputConfig`
+  schema never matches), `toolsInclude`, `toolChoice` (`auto` / `any` / a tool name), `hasDocument`, `hasImage`,
+  `callIndex` (0-based index of the call in the namespace). `match` is a closed set: an unknown
+  or misspelled key (`lastUserTxt`) or a malformed criterion makes `PUT`/`POST /__admin/scripts`
+  answer 400 (`scripts[0].match.lastUserTxt: unknown match field (one of ...)`) instead of
+  silently matching every call; the same goes for an unknown key inside a text match.
 - **Turn selection** reads the conversation, not server state: turn *n* answers the call that
   comes after *n* assistant messages since the member last said something. So turn 0 is the
   first call of a user turn, turn 1 is the call that resumes after a tool result, and every new
@@ -166,6 +175,7 @@ applies to every model and harness call in the calling namespace):
 | `latency` (`latencyMs`) | the response starts after 2 s on the emulator clock |
 | `truncated_frame` | the stream stops half-way through a frame (both decoders throw) |
 | `model_timeout`, `service_unavailable`, `access_denied`, `internal_server` | 408 / 503 / 403 / 500 with the matching `x-amzn-ErrorType` |
+| `resource_not_found` | 404 `ResourceNotFoundException` ("The specified resource ARN was not found. Check the ARN and try again.", per the Converse API reference), before any frame, on Converse, ConverseStream and InvokeModel |
 
 Chunk pacing and latency wait on the **emulator clock**: freeze it (`POST /__admin/clock
 {"freeze": true}`) and advance it to release each chunk, so time-to-first-token tests are exact.
@@ -179,11 +189,52 @@ Chunk pacing and latency wait on the **emulator clock**: freeze it (`POST /__adm
 | `GET /__admin/scripts` | Scripts plus `stats` (`calls`, `scripted`, `unscripted`, `byScript`, `byFallback`, `byOperation`). |
 | `DELETE /__admin/scripts[?id=]` | Remove one or all. |
 | `GET /__admin/model-metrics` | Just the stats. |
-| `GET/PUT /__admin/settings` | `defaultText`, `chunkSize` (16), `delayMsPerChunk` (0), `audioTurnChunks` (0: a Nova Sonic spoken turn ends at the audio `contentEnd`; n: after n audio frames). |
+| `GET/PUT /__admin/settings` | `defaultText`, `chunkSize` (16), `delayMsPerChunk` (0), `audioTurnChunks` (0: a Nova Sonic spoken turn ends at the audio `contentEnd`; n: after n audio frames), `embeddingMode` (`sha256` default, or `lexical`), `validatePromptCaching` (`true` default; `false` disables the model check on `cachePoint`). |
+
+`embeddingMode: "lexical"` (opt-in; the test-control request in #522, not a Bedrock behaviour)
+keeps Titan vectors deterministic and unit length but makes them similarity-preserving: each
+word (lowercased, accents and punctuation dropped) adds to a SHA-256-chosen signed dimension, so
+texts differing only in case, punctuation or spacing have cosine similarity 1, texts sharing most
+words score high, and texts with no word in common score near 0. It is bag-of-words, not a
+language model: synonyms ("evening" / "night") stay apart. Scripted per-text vectors are not
+implemented. `normalize: false` is ignored in both modes (vectors are always unit length).
 
 The request journal (`GET /__admin/requests`) records per call only `modelId`, `script` (or
 `unscripted:<default>`), tool names, flags (`cachePoint`, `guardrail`, `document`, `image`,
 `structured:<form>`), `stopReason` and token counts — never prompt or message text.
+
+### Best guesses, not oracle-verified
+
+These request checks come from the AWS documentation and what consumers reported about live
+Bedrock, not from observing the service; the exact message text of the ones marked "ours" is an
+emulator choice. All answer `400 ValidationException`.
+
+- **Structured-output schemas** (`outputConfig.textFormat.structure.jsonSchema.schema`, Converse
+  and ConverseStream, [docs](https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html)):
+  `schema` that is not a JSON object (ours); `oneOf` (`Schema type 'oneOf' is not supported`);
+  `additionalProperties` set to anything other than `false` on any node, `true` or a sub-schema
+  (`For 'object' type, 'additionalProperties: <X>' is not supported. Please set
+  'additionalProperties' to false`); a string-only `enum` combined with a union `type` such as
+  `["string","null"]` (ours); `minimum`, `maximum`, `multipleOf`, `minLength`, `maxLength`,
+  `minItems` above 1, an external `$ref`, and a recursive `$ref` cycle (ours). An omitted
+  `additionalProperties` and `anyOf` / `allOf` / internal `$ref` / `$defs` pass. Only the
+  `outputConfig` form is checked, not `additionalModelRequestFields.output_config` nor
+  `InvokeModel` bodies.
+- **Document names** (`document.name`, [API reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_DocumentBlock.html)):
+  1 to 200 characters of ASCII letters, digits, whitespace, hyphens, parentheses and square
+  brackets, with no run of two whitespace characters. The message is the one a consumer recorded
+  from live Bedrock.
+- **`cachePoint`** ([docs](https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html)):
+  a `cachePoint` content block directly after a `document` block (consumer report; message ours);
+  and, on Converse / ConverseStream, a `cachePoint` in `system`, `messages` or `toolConfig.tools`
+  for a model outside the documented list (Claude 3.5 Haiku, 3.5 Sonnet v2, 3.7 Sonnet, Claude
+  4 and later Opus / Sonnet / Haiku, Fable and Mythos; Nova Micro / Lite / Pro / 2 Lite), matched
+  on the family inside plain, `us.` / `global.` and ARN forms. The list grows: turn the model
+  check off with `PUT /__admin/settings {"validatePromptCaching": false}`. The `ttl` field is
+  not checked.
+- **Unknown model ids** still answer normally (`modelId` is any id). A `knownModels` setting that
+  makes an unknown id fail was requested in #523 but not built: whether live Bedrock answers
+  `ResourceNotFoundException` or `ValidationException` for it has not been observed.
 
 ### Namespaces
 

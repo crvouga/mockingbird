@@ -28,6 +28,20 @@ const NO_PREFILL =
 const ONE_SAMPLING_PARAM =
   /claude-(?:sonnet|opus|haiku)-4-[5-9]|claude-opus-4-1|claude-(?:sonnet|opus|haiku)-[5-9]/i
 
+/**
+ * Models whose Converse API accepts a `cachePoint` (explicit prompt caching). Best guess from
+ * https://docs.aws.amazon.com/bedrock/latest/userguide/prompt-caching.html, matched on the
+ * family inside plain, `us.` / `global.` and ARN forms; not oracle-verified.
+ */
+const PROMPT_CACHING =
+  /claude-3-5-haiku|claude-3-5-sonnet-20241022|claude-3-7-sonnet|claude-(?:opus|sonnet|haiku|fable|mythos)-[4-9]|nova-(?:micro|lite|pro|2-lite)/i
+
+/** The document name alphabet the Bedrock API model documents (`DocumentBlock.name`). */
+const DOCUMENT_NAME = /^[a-zA-Z0-9\s\-()[\]]{1,200}$/
+
+const DOCUMENT_NAME_MESSAGE =
+  "The document file name can only contain alphanumeric characters, whitespace characters, hyphens, parentheses, and square brackets. The name can't contain more than one consecutive whitespace character."
+
 const parseSchema = (value: unknown): unknown => {
   if (typeof value !== "string") return value
   try {
@@ -35,6 +49,81 @@ const parseSchema = (value: unknown): unknown => {
   } catch {
     return {}
   }
+}
+
+/** Keywords Bedrock structured output documents as unsupported, anywhere in a schema node. */
+const UNSUPPORTED_KEYWORDS = ["minimum", "maximum", "multipleOf", "minLength", "maxLength"]
+
+/** Subschema positions to walk: a keyword holding one schema, a list, or a map of them. */
+const SCHEMA_SLOTS = ["items", "not", "if", "then", "else", "contains"]
+const SCHEMA_LISTS = ["anyOf", "allOf", "prefixItems"]
+const SCHEMA_MAPS = ["properties", "$defs", "definitions", "patternProperties"]
+
+/**
+ * The first reason Bedrock's structured-output grammar compiler refuses `schema`, or
+ * `undefined`. Best guess from the documented unsupported list
+ * (https://docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html) and the
+ * messages a consumer recorded for `oneOf` and `additionalProperties`; the other messages
+ * are ours. Not oracle-verified.
+ */
+export const unsupportedSchemaReason = (root: unknown): string | undefined => {
+  const resolve = (ref: string): unknown => {
+    if (ref === "#") return root
+    let node: unknown = root
+    for (const part of ref.slice(2).split("/")) {
+      node = isRecord(node) ? node[part.replaceAll("~1", "/").replaceAll("~0", "~")] : undefined
+    }
+    return node
+  }
+  const visit = (node: unknown, refs: string[]): string | undefined => {
+    if (!isRecord(node)) return undefined
+    if (node.oneOf !== undefined) return "Schema type 'oneOf' is not supported"
+    for (const key of UNSUPPORTED_KEYWORDS) {
+      if (node[key] !== undefined) return `Schema keyword '${key}' is not supported`
+    }
+    if (typeof node.minItems === "number" && node.minItems > 1) {
+      return `Schema keyword 'minItems' only supports the values 0 and 1 (got ${node.minItems})`
+    }
+    if (node.additionalProperties !== undefined && node.additionalProperties !== false) {
+      return `For 'object' type, 'additionalProperties: ${JSON.stringify(node.additionalProperties)}' is not supported. Please set 'additionalProperties' to false`
+    }
+    if (
+      Array.isArray(node.type) &&
+      Array.isArray(node.enum) &&
+      node.enum.length > 0 &&
+      node.enum.every((value) => typeof value === "string")
+    ) {
+      return `A string-only 'enum' cannot be combined with the union type ${JSON.stringify(node.type)}`
+    }
+    if (typeof node.$ref === "string") {
+      if (!node.$ref.startsWith("#")) {
+        return `External $ref '${node.$ref}' is not supported; only internal references are`
+      }
+      if (refs.includes(node.$ref)) return `Recursive schemas are not supported ('${node.$ref}')`
+      const problem = visit(resolve(node.$ref), [...refs, node.$ref])
+      if (problem) return problem
+    }
+    for (const key of SCHEMA_SLOTS) {
+      const problem = visit(node[key], refs)
+      if (problem) return problem
+    }
+    for (const key of SCHEMA_LISTS) {
+      for (const each of array(node[key])) {
+        const problem = visit(each, refs)
+        if (problem) return problem
+      }
+    }
+    for (const key of SCHEMA_MAPS) {
+      const map = node[key]
+      if (!isRecord(map)) continue
+      for (const each of Object.values(map)) {
+        const problem = visit(each, refs)
+        if (problem) return problem
+      }
+    }
+    return undefined
+  }
+  return visit(root, [])
 }
 
 const textOf = (blocks: unknown[]): string =>
@@ -159,11 +248,15 @@ const converseMessage = (value: unknown, index: number): NormalMessage => {
     hasCachePoint: false,
     chars: 0,
   }
-  for (const block of content) {
+  for (const [at, block] of content.entries()) {
     if (!isRecord(block)) continue
     out.chars += JSON.stringify(block).length
     if (typeof block.text === "string") out.hasContent = true
     if (isRecord(block.document)) {
+      const name = block.document.name
+      if (typeof name === "string" && (!DOCUMENT_NAME.test(name) || /\s{2,}/.test(name))) {
+        throw new ValidationProblem(DOCUMENT_NAME_MESSAGE)
+      }
       out.hasDocument = true
       out.hasContent = true
     }
@@ -172,7 +265,14 @@ const converseMessage = (value: unknown, index: number): NormalMessage => {
       out.hasContent = true
     }
     if (isRecord(block.video)) out.hasContent = true
-    if (isRecord(block.cachePoint)) out.hasCachePoint = true
+    if (isRecord(block.cachePoint)) {
+      if (isRecord(content[at - 1]) && isRecord((content[at - 1] as Json).document)) {
+        throw new ValidationProblem(
+          `The model returned the following errors: messages.${index}.content.${at}: a cachePoint cannot directly follow a document block.`,
+        )
+      }
+      out.hasCachePoint = true
+    }
     if (isRecord(block.toolUse)) {
       out.toolUses.push({
         id: String(block.toolUse.toolUseId ?? ""),
@@ -189,6 +289,7 @@ export const analyzeConverse = (
   operation: ModelOperation,
   modelId: string,
   body: unknown,
+  options: { validatePromptCaching?: boolean } = {},
 ): CallAnalysis => {
   if (!isRecord(body))
     throw new ValidationProblem(
@@ -247,9 +348,22 @@ export const analyzeConverse = (
       ? additional.output_config.format
       : undefined
   if (jsonSchema) {
+    let schema: unknown = jsonSchema.schema
+    if (typeof schema === "string") {
+      try {
+        schema = JSON.parse(schema) as unknown
+      } catch {
+        schema = undefined
+      }
+      if (!isRecord(schema)) {
+        throw new ValidationProblem("The structured output schema is not a valid JSON object.")
+      }
+    }
+    const reason = unsupportedSchemaReason(schema)
+    if (reason) throw new ValidationProblem(reason)
     structured = {
       form: "outputConfig",
-      schema: parseSchema(jsonSchema.schema),
+      schema,
       ...(typeof jsonSchema.name === "string" ? { name: jsonSchema.name } : {}),
     }
   } else if (nativeFormat && nativeFormat.type === "json_schema") {
@@ -264,6 +378,15 @@ export const analyzeConverse = (
 
   const facts = conversationFacts(messages)
   const systemText = textOf(system)
+  const hasCachePoint =
+    messages.some((m) => m.hasCachePoint) ||
+    system.some((b) => isRecord(b) && isRecord(b.cachePoint)) ||
+    array(toolConfig?.tools).some((t) => isRecord(t) && isRecord(t.cachePoint))
+  if (hasCachePoint && options.validatePromptCaching !== false && !PROMPT_CACHING.test(modelId)) {
+    throw new ValidationProblem(
+      "The model does not support prompt caching: remove the cachePoint block from the request.",
+    )
+  }
   return {
     operation,
     modelId,
@@ -274,10 +397,7 @@ export const analyzeConverse = (
     toolChoice,
     hasDocument: messages.some((m) => m.hasDocument),
     hasImage: messages.some((m) => m.hasImage),
-    hasCachePoint:
-      messages.some((m) => m.hasCachePoint) ||
-      system.some((b) => isRecord(b) && isRecord(b.cachePoint)) ||
-      array(toolConfig?.tools).some((t) => isRecord(t) && isRecord(t.cachePoint)),
+    hasCachePoint,
     hasGuardrail: isRecord(body.guardrailConfig),
     toolResults: facts.toolResults,
     turnIndex: facts.turnIndex,
