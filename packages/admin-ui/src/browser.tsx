@@ -55,6 +55,7 @@ import {
   SnapshotsView,
   TimelineView,
 } from "./controls.js"
+import { ManualView } from "./manual.js"
 import { Members } from "./members.js"
 import type { AdminApiConfig, AdminConfig, Api, Manifest, MembersConfig, Panel } from "./model.js"
 import { errorMessage } from "./model.js"
@@ -491,6 +492,12 @@ function Workspace({
   const hasSql = panelList.some((panel) => panel.kind === "sql")
   const coreNav = [
     { key: "overview", icon: <AppstoreOutlined />, label: "Overview" },
+    {
+      key: "manual",
+      icon: <ThunderboltOutlined />,
+      label: "Manual controls",
+      keywords: "delay timeout loading retry error manual",
+    },
     { key: "state", icon: <DatabaseOutlined />, label: "State" },
     { key: "clock", icon: <FieldTimeOutlined />, label: "Clock" },
     { key: "latency", icon: <DashboardOutlined />, label: "Latency" },
@@ -558,6 +565,9 @@ function Workspace({
   switch (selected) {
     case "overview":
       content = <Overview {...common} />
+      break
+    case "manual":
+      content = <ManualView {...common} />
       break
     case "state":
       content = <StateExplorer {...common} sql={hasSql} />
@@ -756,7 +766,7 @@ function Workspace({
                     <div style={{ minHeight: 120 }} />
                   </Spin>
                 ) : (
-                  <div key={`${namespace}:${key}:${selected}`}>{content}</div>
+                  <div key={`${apiId}:${namespace}:${key}:${selected}`}>{content}</div>
                 )}
               </Flex>
             </Layout.Content>

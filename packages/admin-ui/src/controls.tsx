@@ -26,6 +26,7 @@ import {
   useResource,
   ViewTitle,
 } from "./components.js"
+import { journalPath, type RequestTarget, requestAttempts } from "./manual-model.js"
 import type {
   Api,
   Clock,
@@ -1044,8 +1045,17 @@ export function SnapshotsView({ api, revision }: { api: Api; revision: number })
   )
 }
 
-export function JournalView({ api, revision }: { api: Api; revision: number }) {
-  const journal = useResource<Journal>(api, "/requests?limit=1000", revision)
+export function JournalView({
+  api,
+  revision,
+  target = {},
+}: {
+  api: Api
+  revision: number
+  target?: RequestTarget
+}) {
+  const [live, setLive] = useState(true)
+  const journal = useResource<Journal>(api, journalPath(target), revision, live)
   const { message, modal } = App.useApp()
   const action = useAction(api, () => {
     journal.reload()
@@ -1056,6 +1066,13 @@ export function JournalView({ api, revision }: { api: Api; revision: number }) {
       <Flex wrap gap="middle" justify="space-between" align="center">
         <ViewTitle page="journal-and-state">Request journal</ViewTitle>
         <Space>
+          <Switch
+            aria-label="Live journal"
+            checked={live}
+            onChange={setLive}
+            checkedChildren="Live"
+            unCheckedChildren="Paused"
+          />
           <Refresh loading={journal.loading} onClick={journal.reload} />
           <Button
             danger
@@ -1075,10 +1092,31 @@ export function JournalView({ api, revision }: { api: Api; revision: number }) {
         </Space>
       </Flex>
       <Typography.Paragraph type="secondary">
-        The latest 1,000 requests in this namespace. Expand a row for metadata; request bodies are
-        never stored.
+        The latest 1,000 completed matching requests in this namespace, oldest first. Live updates
+        every 1.5 seconds. Requests appear after completion or failure, including timeouts. Status 0
+        means a dropped connection. Expand a row for metadata; request bodies are never stored.
       </Typography.Paragraph>
       <ErrorNotice error={journal.error ?? action.error} retry={journal.reload} />
+      <Card title="Request attempts">
+        <Typography.Paragraph type="secondary">
+          After clicking Retry in your app, look for an increased attempt count and a new journal
+          row with the same method, path and operation. Repeated requests can also come from polling
+          or other callers; the journal records what reached the emulator.
+        </Typography.Paragraph>
+        <DataTable
+          rows={requestAttempts(journal.data?.requests ?? [])}
+          columns={[
+            "method",
+            "path",
+            "operationId",
+            "attempts",
+            "failures",
+            "firstStatus",
+            "latestStatus",
+            "latestAt",
+          ]}
+        />
+      </Card>
       <DataTable
         rows={journal.data?.requests ?? []}
         columns={[

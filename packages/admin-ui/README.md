@@ -28,3 +28,8 @@ SQL engines use the same UI as HTTP services. SQL changes remain in the live
 database. State writes, clock controls, latency, fault injection, snapshots, journals,
 route execution, namespaces, keys, branches, and checkpoints retain their existing server
 contracts.
+
+Manual controls combines bounded delay, timeout and HTTP 503 actions with request targeting,
+real/virtual waits, active rule removal, and a live filtered request journal. The journal groups
+attempts by method, path and operation so a manual retry can be checked against received traffic.
+The advanced Latency and Faults screens remain available for persistent and scheduled rules.

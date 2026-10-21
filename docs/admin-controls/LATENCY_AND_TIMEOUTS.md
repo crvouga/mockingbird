@@ -13,13 +13,39 @@ Make responses slow, or make them never arrive. Latency is how long every reques
 | Fault rule | `delay` · `jitter` · `timeout` on a [fault](FAULTS.md) |
 | At boot | `adminControls.latency` · `adminControls.virtualTime` · `--latency <duration>` · `--jitter <duration>` · `--virtual-time` |
 | In process | `runtime.latency` · `runtime.configure({ virtualTime })` |
-| Admin page | **Latency** at `/__admin/ui#latency`. Virtual time is on **Clock** |
+| Admin page | **Manual controls** at `/__admin/ui#manual`; **Latency** for baseline and operation overrides |
 
 A duration is milliseconds or a string: `"250ms"`, `"2s"`, `"15m"`, `"1h"`, `"3d"`.
 
 ## Admin page
 
-Open `http://localhost:8787/__admin/ui#latency`.
+Open `http://localhost:8787/__admin/ui#manual` for manual UI testing. Choose a method,
+exact path and/or operation ID, then arm **Delay next request**, **Timeout next request**,
+or **Fail next request (503)**. The wait defaults to 3,000 milliseconds and the count to one,
+so the next retry can recover. Blank match fields target every vendor request in the current
+namespace; background requests can consume a rule. Multiple filled fields must all match.
+
+Enable **Use real waits** to hold the response while you inspect your app. Virtual time
+finishes delays immediately. Each action adds a fault rule; existing rules and baseline latency
+still apply. The **Armed rules** table shows remaining counts and lets you remove individual
+rules without resetting state. Removing a rule affects future requests, not an existing wait.
+
+To check loading, errors and retry manually:
+
+1. Target the app's request and click **Delay next request**, then trigger the action in the app.
+   Inspect its loading indicator while the response is held.
+2. Click **Timeout next request** and trigger the action again. After the timeout, inspect the
+   error message and Retry button. Timeouts drop the connection; Bun's server returns 500 instead.
+3. Click Retry in the app without arming another fault. Watch the live journal on the same screen:
+   the attempt count increases and another row records the request and its outcome. Status `0`
+   records a dropped connection. Entries appear after completion or failure, not while pending.
+
+The journal uses the same request filters, refreshes every 1.5 seconds, and can be paused.
+Counts cover the latest 1,000 matching retained requests. Clear the journal before a fresh run
+if you want an empty baseline. Repeated requests demonstrate traffic reaching the emulator;
+polling or another caller can also increase counts, so correlate them with the action in your app.
+
+For persistent latency, open `http://localhost:8787/__admin/ui#latency`.
 
 | Control | Does |
 | --- | --- |
@@ -28,7 +54,7 @@ Open `http://localhost:8787/__admin/ui#latency`.
 | Remove on an override | The same call, without that operation |
 | Clear latency | `DELETE /__admin/latency`. Removes the baseline and every override |
 
-A timeout is not on this screen. Send `x-mockingbird-timeout` on the request, or set `timeout` on a [fault](FAULTS.md). Virtual time is the switch on [Clock](CLOCK.md#admin-page).
+For a manual timeout, use **Manual controls**. You can also send `x-mockingbird-timeout` on the request, or set `timeout` on a [fault](FAULTS.md). Virtual time is the switch on [Clock](CLOCK.md#admin-page).
 
 ## Three ways to wait
 

@@ -16,6 +16,15 @@ Three ways to see what an emulator did and what it holds: the journal lists ever
 | In process | `runtime.journal` · `runtime.metrics` · `runtime.state(key?)` |
 | Admin page | **Journal**, **State** and **Overview**. The other screens are on their own pages |
 
+## Manual retry verification
+
+**Manual controls** (`/__admin/ui#manual`) combines request targeting, bounded delay/timeout/503
+faults, and a live filtered journal. **Journal** (`/__admin/ui#journal`) also shows attempt counts
+grouped by method, path and operation, with first and latest statuses. Both refresh every
+1.5 seconds and have a Live/Paused switch. A new row after clicking Retry demonstrates another
+request reached the emulator; counts alone cannot distinguish retries from background polling.
+Requests appear when they finish or fail. Status `0` means a dropped connection.
+
 ## The journal
 
 ### `GET /__admin/requests`
