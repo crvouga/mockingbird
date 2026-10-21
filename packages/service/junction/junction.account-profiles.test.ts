@@ -530,3 +530,136 @@ test("sandbox-observed omission and negative controls place the order on the pla
   await call(mock, "PUT", "/__admin/lab-account-behavior", { profile: "expected-contract" })
   expect((await order(mock, { lab_account_id: unknown })).status).toBe(400)
 })
+
+const ny = {
+  first_line: "1 Example St",
+  city: "New York",
+  state: "NY",
+  zip: "10001",
+  country: "US",
+}
+
+test("sandbox-observed refuses an explicit Junction-owned account in a state it does not cover (#494)", async () => {
+  const accounts = [
+    account(house, { allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] } }),
+    account(customer, { allowed_billing: { client_bill: ["AZ"] } }),
+  ]
+  for (const behavior of [
+    { profile: "sandbox-observed" as const, accounts: {} },
+    { profile: "observed" as const, oracle: "sandbox" as const, accounts: {} },
+  ]) {
+    const mock = runtime(accounts, behavior)
+    const refused = await order(mock, { lab_account_id: house })
+    expect(refused.status).toBe(400)
+    // The state rule is separate from the billing-type rule.
+    expect<unknown>(refused.body).toEqual({ detail: "Lab BioReference does not support state AZ" })
+    // Refusals create nothing and publish nothing.
+    expect((await (await call(mock, "GET", "/v3/orders")).json()).orders).toHaveLength(0)
+    expect(mock.instance().webhookEvents()).toHaveLength(0)
+    // A covered state with an unlisted billing type keeps the billing refusal.
+    const billing = await order(mock, {
+      lab_account_id: house,
+      billing_type: "client_bill",
+      patient_address: ny,
+    })
+    expect(billing.status).toBe(400)
+    expect(billing.body.detail).not.toContain("does not support state")
+    // The covered state and billing type are accepted and keep the account identity.
+    const covered = await order(mock, {
+      lab_account_id: house,
+      billing_type: "patient_bill_passthrough",
+      patient_address: ny,
+    })
+    expect(covered.status).toBe(200)
+    expect(covered.body.order.lab_account_id).toBe(house)
+    // A customer-owned account that covers the state is unaffected.
+    expect((await order(mock, { lab_account_id: customer })).body.order.lab_account_id).toBe(
+      customer,
+    )
+    // An unlisted Junction-owned account still falls back to the platform account (#439).
+    const unknown = await order(mock, { lab_account_id: "99999999-9999-4999-8999-999999999999" })
+    expect(unknown.body.order.lab_account_id).toBeNull()
+  }
+})
+
+test("the Junction-owned state refusal is profile- and account-scoped (#494)", async () => {
+  const accounts = [
+    account(house, { allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] } }),
+    account(customer, { allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] } }),
+  ]
+  // Customer-owned accounts keep the listed billing/state message.
+  const sandbox = runtime(accounts, { profile: "sandbox-observed", accounts: {} })
+  const customerRefused = await order(sandbox, { lab_account_id: customer })
+  expect(customerRefused.status).toBe(400)
+  expect(customerRefused.body.detail).not.toBe("Lab BioReference does not support state AZ")
+  // Other profiles keep their messages: the rule is a sandbox observation.
+  for (const behavior of [
+    { profile: "native" as const, accounts: {} },
+    { profile: "expected-contract" as const, accounts: {} },
+    { profile: "observed" as const, oracle: "production" as const, accounts: {} },
+  ]) {
+    const result = await order(runtime(accounts, behavior), { lab_account_id: house })
+    expect(result.status).toBe(400)
+    expect(result.body.detail).not.toBe("Lab BioReference does not support state AZ")
+  }
+  // A configured account-owned exception makes the state covered.
+  const exception = runtime(accounts, {
+    profile: "sandbox-observed",
+    accounts: { [house]: { allowBilling: { client_bill: ["AZ"] } } },
+  })
+  const accepted = await order(exception, { lab_account_id: house })
+  expect(accepted.status).toBe(200)
+  expect(accepted.body.order.lab_account_id).toBe(house)
+})
+
+test("the production oracle places an omitted-account order on the house account without changing the listing (#495)", async () => {
+  const accounts = [
+    account(customer, { delegated_flow: "order_delegated", allowed_billing: { client_bill: [] } }),
+    account(house, { allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] } }),
+  ]
+  const listing = async (mock: ReturnType<typeof runtime>) =>
+    (
+      (await (await call(mock, "GET", "/v3/lab_test/lab_account")).json()) as {
+        data: { id: string; allowed_billing: Record<string, string[]> }[]
+      }
+    ).data
+  const production = runtime(accounts, { profile: "observed", oracle: "production", accounts: {} })
+  const before = await listing(production)
+  const placed = await order(production)
+  expect(placed.status).toBe(200)
+  expect(placed.body.order.lab_account_id).toBe(house)
+  expect(placed.body.order.billing_type).toBe("client_bill")
+  const read = await (await call(production, "GET", `/v3/order/${placed.body.order.id}`)).json()
+  expect(read.lab_account_id).toBe(house)
+  expect(
+    await (
+      await call(production, "GET", `/v3/order/${placed.body.order.id}/requisition/pdf`)
+    ).text(),
+  ).toContain("Account number: MOCK-HOUSE")
+  // The listing is untouched: the house account still lists client_bill for no state.
+  expect(await listing(production)).toEqual(before)
+  expect(before.find((a) => a.id === house)?.allowed_billing).toEqual({
+    patient_bill_passthrough: ["NJ", "NY"],
+  })
+  // Explicit selection of the house account keeps the listed policy.
+  expect((await order(production, { lab_account_id: house })).status).toBe(400)
+  // The default is visible, overridable and survives a round trip.
+  const behavior = (await (
+    await call(production, "GET", "/__admin/lab-account-behavior")
+  ).json()) as {
+    omittedAccountBilling: Record<string, string>
+  }
+  expect(behavior.omittedAccountBilling).toEqual({ bioreference: "unchecked" })
+  const strict = runtime(accounts, {
+    profile: "observed",
+    oracle: "production",
+    accounts: {},
+    omittedAccountBilling: { bioreference: "listed" },
+  })
+  expect((await order(strict)).status).toBe(400)
+  // The sandbox oracle and the other profiles keep their own omission behavior.
+  const sandbox = runtime(accounts, { profile: "sandbox-observed", accounts: {} })
+  expect((await order(sandbox)).body.order.lab_account_id).toBeNull()
+  for (const profile of ["native", "expected-contract"] as const)
+    expect((await order(runtime(accounts, { profile, accounts: {} }))).status).toBe(400)
+})

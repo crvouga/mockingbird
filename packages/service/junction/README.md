@@ -408,7 +408,7 @@ are validated but do not change the price, and no other charge components are mo
 Both routes follow the published contract
 ([markers](https://docs.junction.com/api-reference/lab-testing/biomarkers),
 [estimate](https://docs.junction.com/api-reference/lab-testing/estimate-order-set-pricing)); neither
-has been compared with the live sandbox (prices are contract-owned), so their parity is disabled and
+has been compared with the live sandbox (prices are contract-owned; best guess, not oracle-verified), so their parity is disabled and
 the 400 messages for unknown tests/markers are borrowed from `create_order`.
 
 `addOnSourceMarkers: true` (`--add-on-source-markers`) makes each biomarker line of an add-on order
@@ -549,7 +549,8 @@ accepts `client_bill` when no account is named). No account at any lab lists DC,
 either. `bioreference_current_platform`, `quest_sandbox_platform` and `sonora_quest_production_platform`
 follow listings an agent
 reported from `GET /v3/lab_test/lab_account` (a consumer-audit report with synthetic ids, not a
-repository probe); the older presets keep their shapes so pinned suites do not change.
+repository probe, so **best guess, not oracle-verified**); the older presets keep their shapes so
+pinned suites do not change.
 
 Every preset is `status: "active"` unless named `suspended_*`. `GET /__admin/lab-accounts/presets`
 returns the full records, the deprecated `aliases`, and the `synthetic` presets (not a recorded
@@ -1118,12 +1119,31 @@ Unknown profile names are rejected. CLI/server equivalents are `--lab-account-pr
 and `--lab-account-sandbox-policies <json-file>` (the account-policy object).
 
 `sandbox-observed` also encodes the owner-recorded October 2026 sandbox omission controls
-(#439), which are recorded observations, not a live repository probe: an order whose
+(#439), which are recorded observations, **best guess, not oracle-verified by this repository**
+(its sandbox probe still finds no matching account inventory; no live POST/GET identity
+comparison has been run here): an order whose
 **root** `lab_account_id` is omitted, nested only in `order_set`, or an unknown UUID is
 placed on the lab's platform account (`lab_account_id: null` on POST and GET, no listed
 `allowed_billing` check), while a root ID naming a listed account keeps its identity and
 policy. `expected-contract` keeps the strict behavior (unknown ID → 400, omission → the
-house account).
+house account). The `native` profile keeps its historical response shape (no `lab_account_id`
+on the order); the explicit profiles return the stored association, never the requested id, so a
+test that asserts identity on both POST and an independent GET cannot pass on an ignored id.
+`junction.account-profiles.test.ts` holds the positive control and the six negative controls.
+
+#### Explicit Junction-owned account in an uncovered state (#494)
+
+Under `sandbox-observed` (or `observed` with `oracle: "sandbox"`), a **root** `lab_account_id`
+naming a Junction-owned account (`org_id: null`) whose listing has no billing type for the
+patient's state is refused with `400 {"detail":"Lab <lab name> does not support state <ST>"}`
+(for example `Lab BioReference does not support state AZ`) before any billing-type check, and no
+order or webhook is created. This follows the reported sandbox refusal (2026-10-19); it is a
+**best guess, not oracle-verified** here, and the reporter did not re-probe a covered state. It is
+kept apart from the billing-type message (`Lab 13 does not support billing type ...`) that a
+customer-owned account returns. A state that the account lists for another billing type keeps the
+billing message, an account-owned `allowBilling` exception counts as coverage, and
+customer-owned accounts, `native`, `expected-contract` and the production oracle keep their
+existing messages (the state rule is a sandbox observation only).
 
 The explicit profiles also accept `order_set.add_on` with `provider_ids` or `marker_ids`
 from one lab's configured marker catalog. The selected markers determine the synthetic
@@ -1192,8 +1212,9 @@ account and never as a blanket delegated-account rule: a delegated customer acco
 explicit `client_bill` only when its own entry says so. The October 2026 sandbox omission
 recordings (#439) are sandbox observations, so they apply only to `oracle: "sandbox"`; with
 `oracle: "production"` an omitted account selects the house account as `expected-contract`
-does. Whether production also refuses a delegated account when `billing_type` is omitted is
-unverified, so it is not modelled. `oracle` on any other profile, or `production` on the
+does, except that the production oracle defaults `omittedAccountBilling` to
+`{ bioreference: "unchecked" }` (#495, below). Whether production also refuses a delegated account
+when `billing_type` is omitted is unverified, so it is not modelled. `oracle` on any other profile, or `production` on the
 `sandbox-observed` alias, is refused.
 
 ### Omitted house-account billing (#467)
@@ -1202,7 +1223,13 @@ A reporter observed production accepting an AZ `client_bill` order with no `lab_
 a team whose house BioReference account lists only `patient_bill_passthrough` for NY and NJ,
 placing it on the house account (its requisition prints the house account number). That is a
 single consumer report, not a repository probe, so the default is unchanged (the listing is
-enforced). Opt in per lab:
+enforced). `profile: "observed", oracle: "production"` is the named profile for this
+production recording (#495) and turns it on for BioReference by default, **best guess, not
+oracle-verified** (sandbox, by contrast, places an omitted-id order on the platform account with a
+null association, see #439 above). With it, an omitted `lab_account_id` places the order on the
+Junction-owned account, the requisition names that account's number, and the account listing is
+unchanged (it still lists `client_bill` for no state). Set `omittedAccountBilling: { bioreference:
+"listed" }` to turn it off. For any other profile, opt in per lab:
 
 ```ts
 import { createRuntime } from "@crvouga/mockingbird-service-junction"
@@ -1239,7 +1266,9 @@ Behaviors the sandbox shows that clients must tolerate, every one off by default
 | --- | --- |
 | `sameSecondCancelStatus` (#474) | `POST /v3/order/{id}/cancel` in the same wall-clock second as the order's creation records a `cancelled.<method>.cancelled` event with the same timestamp, but `status`, `last_event` and `updated_at` stay `received`; a repeat cancel is a no-op. A cancel at least one second later reads back `cancelled`. |
 
-This was reported from the sandbox (not re-measured here, production unverified). The quirk does
+This was reported from the sandbox (not re-measured here, production unverified), so it is a
+**best guess, not oracle-verified**. It is off by default; a client that tests it should read the
+event log and wait at least a second between creating and cancelling. The quirk does
 not publish a webhook or cascade-cancel appointments for the stale cancel; the report does not say
 what the vendor does there.
 
