@@ -656,7 +656,7 @@ test("only Google skips consent after choosing an account; other providers keep 
 test("neutral UI offers all appearance modes and Apple form-post scripts share one CSP nonce", async () => {
   const api = make("apple")
   const { result, html, consent } = await login(api)
-  expect(consent).toContain("OAuth Mock")
+  expect(consent).toContain("OAuth Emulator")
   expect(consent).not.toContain("Mockingbird")
   for (const mode of ["system", "light", "dark"])
     expect(consent).toContain(`name="oauth-theme" value="${mode}"`)
