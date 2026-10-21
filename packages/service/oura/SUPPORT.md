@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **8**
-- supported by the emulator: **8**
-- parity enabled: **8**
+- operations in spec: **10**
+- supported by the emulator: **10**
+- parity enabled: **10**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -15,4 +15,6 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `ListDailySpo2` | `GET /v2/usercollection/daily_spo2` | ✅ supported | ✅ |  |
 | `ListDailyReadiness` | `GET /v2/usercollection/daily_readiness` | ✅ supported | ✅ |  |
 | `ListDailySleep` | `GET /v2/usercollection/daily_sleep` | ✅ supported | ✅ |  |
+| `GetPersonalInfo` | `GET /v2/usercollection/personal_info` | ✅ supported | ✅ |  |
 | `OAuthToken` | `POST /oauth/token` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `OAuthAuthorize` | `GET /oauth/authorize` | ✅ supported | ⚠️ unsafe (opt-in) |  |

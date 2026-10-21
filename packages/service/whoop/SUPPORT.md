@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **5**
-- supported by the emulator: **5**
-- parity enabled: **5**
+- operations in spec: **7**
+- supported by the emulator: **7**
+- parity enabled: **7**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -12,4 +12,6 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `ListSleep` | `GET /developer/v2/activity/sleep` | ✅ supported | ✅ |  |
 | `ListRecovery` | `GET /developer/v2/recovery` | ✅ supported | ✅ |  |
 | `ListCycle` | `GET /developer/v2/cycle` | ✅ supported | ✅ |  |
+| `GetProfileBasic` | `GET /developer/v2/user/profile/basic` | ✅ supported | ✅ |  |
+| `OAuthAuthorize` | `GET /oauth/oauth2/auth` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `OAuthToken` | `POST /oauth/oauth2/token` | ✅ supported | ⚠️ unsafe (opt-in) |  |

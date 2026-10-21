@@ -28,7 +28,19 @@ export const COLLECTION_SCOPES = {
   daily_spo2: "spo2",
   daily_readiness: "daily",
   daily_sleep: "daily",
+  personal_info: "personal",
 } as const
+/** The scopes Oura documents; a request that omits `scope` is granted all of them. */
+export const KNOWN_SCOPES = [
+  "email",
+  "personal",
+  "daily",
+  "heartrate",
+  "workout",
+  "tag",
+  "session",
+  "spo2",
+] as const
 export type CollectionName = keyof typeof COLLECTION_SCOPES
 export type Grant = {
   token: string
@@ -47,7 +59,29 @@ export type OAuthCode = {
   challenge?: string
   expiresAt: number
 }
-export type Client = { id: string; secret: string }
+export type Client = {
+  id: string
+  secret: string
+  /** Exact-match redirect URIs. Omitted: any absolute http(s) `redirect_uri` is accepted. */
+  redirectUris?: string[]
+  /** Scopes the client may request. Omitted: the scopes Oura documents (`KNOWN_SCOPES`). */
+  scopes?: string[]
+}
+/**
+ * What `GET /oauth/authorize` does for a client (row id = client id, `*` = every client without
+ * a row of its own). The emulator has no consent page; this row is the user's answer.
+ */
+export type Consent = {
+  id: string
+  /** `approve` mints a code, `deny` redirects `access_denied`, `error` redirects `error` (default `server_error`). */
+  decision: "approve" | "deny" | "error"
+  /** The seeded user the code is issued for. Default `synthetic-user`. */
+  userId?: string
+  /** Lifetime of the code in seconds. Default 600. */
+  codeTtlSeconds?: number
+  error?: string
+  errorDescription?: string
+}
 export type DataRecord = {
   key: string
   userId: string
@@ -58,6 +92,7 @@ export type OuraAPIOptions = APIOptions & {
   grants?: Grant[]
   clients?: Client[]
   codes?: OAuthCode[]
+  consents?: Consent[]
   records?: DataRecord[]
   pageSize?: number
   tokenTtlSeconds?: number
@@ -69,18 +104,28 @@ const unauthorized = () =>
   })
 const oauthError = (error: string, description: string) =>
   jsonRes(400, { status: 400, error, error_description: description })
+const isWebUrl = (value: string) => {
+  try {
+    return ["http:", "https:"].includes(new URL(value).protocol)
+  } catch {
+    return false
+  }
+}
+const redirect = (target: URL) =>
+  new Response(null, { status: 302, headers: { location: target.toString() } })
 export class OuraAPI implements FetchAPI {
   readonly app: Hono
   readonly grants: Collection<Grant>
   readonly clients: Collection<Client>
   readonly codes: Collection<OAuthCode>
+  readonly consents: Collection<Consent>
   readonly records: Collection<DataRecord>
   private readonly initialized: Collection<{ value: boolean }>
   private readonly ids: IdSequence
   private readonly service: Service
   private readonly now: () => number
   private readonly fixtures: Required<
-    Pick<OuraAPIOptions, "grants" | "clients" | "codes" | "records">
+    Pick<OuraAPIOptions, "grants" | "clients" | "codes" | "consents" | "records">
   >
   private readonly pageSize: number
   private readonly ttl: number
@@ -91,6 +136,7 @@ export class OuraAPI implements FetchAPI {
     this.grants = new Collection(sqlite, namespace, "grants")
     this.clients = new Collection(sqlite, namespace, "clients")
     this.codes = new Collection(sqlite, namespace, "codes")
+    this.consents = new Collection(sqlite, namespace, "consents")
     this.records = new Collection(sqlite, namespace, "records")
     this.initialized = new Collection(sqlite, namespace, "initialized")
     this.ids = new IdSequence(sqlite, namespace)
@@ -111,6 +157,7 @@ export class OuraAPI implements FetchAPI {
       ],
       clients: options.clients ?? [{ id: "mock_client", secret: "mock_client_secret" }],
       codes: options.codes ?? [],
+      consents: options.consents ?? [],
       records: options.records ?? [],
     })
     this.seed()
@@ -124,7 +171,9 @@ export class OuraAPI implements FetchAPI {
         throw error
       },
       handlers: defineOperations<SupportedOperationId>({
+        OAuthAuthorize: (c) => this.authorize(c),
         OAuthToken: (c) => this.exchange(c),
+        GetPersonalInfo: (c) => this.personalInfo(c),
         ListWorkout: (c) => this.list(c, "workout"),
         ListSleep: (c) => this.list(c, "sleep"),
         ListHeartrate: (c) => this.list(c, "heartrate"),
@@ -141,6 +190,7 @@ export class OuraAPI implements FetchAPI {
     for (const g of this.fixtures.grants) this.grants.insert(g.token, g)
     for (const c of this.fixtures.clients) this.clients.insert(c.id, c)
     for (const c of this.fixtures.codes) this.codes.insert(c.code, c)
+    for (const c of this.fixtures.consents) this.consents.insert(c.id, c)
     for (const r of this.fixtures.records) this.records.insert(r.key, r)
     this.initialized.insert("seed", { value: true })
   }
@@ -150,6 +200,84 @@ export class OuraAPI implements FetchAPI {
   async reset(): Promise<void> {
     await this.service.reset()
     this.seed()
+  }
+  private authorize(c: OperationContext): Response {
+    const query = new URL(c.request.url).searchParams
+    const clientId = query.get("client_id") ?? ""
+    const failure = (status: number, error: string, description: string) =>
+      jsonRes(status, { status, error, error_description: description })
+    if (!clientId) return failure(400, "invalid_request", "Missing required parameter client_id.")
+    const client = this.clients.get(clientId)
+    if (!client) return failure(401, "invalid_client", "Client authentication failed.")
+    // Optional: a client with exactly one registered redirect URI falls back to it.
+    const sent = query.get("redirect_uri") || undefined,
+      redirectUri = sent ?? (client.redirectUris?.length === 1 ? client.redirectUris[0] : undefined)
+    if (!redirectUri)
+      return failure(400, "invalid_request", "Missing required parameter redirect_uri.")
+    // Never redirect to a URI the client did not register: answer in place instead.
+    if (client.redirectUris ? !client.redirectUris.includes(redirectUri) : !isWebUrl(redirectUri))
+      return failure(400, "invalid_request", "The redirect_uri is not registered for the client.")
+    const state = query.get("state")
+    const bounce = (error: string, description: string) => {
+      const target = new URL(redirectUri)
+      target.searchParams.set("error", error)
+      target.searchParams.set("error_description", description)
+      if (state !== null) target.searchParams.set("state", state)
+      return redirect(target)
+    }
+    const responseType = query.get("response_type")
+    if (!responseType) return bounce("invalid_request", "Missing required parameter response_type.")
+    if (responseType !== "code")
+      return bounce("unsupported_response_type", "Only response_type=code is supported.")
+    const allowed: readonly string[] = client.scopes ?? KNOWN_SCOPES,
+      requested = query.get("scope")
+    // Oura: "If left blank, the application will request all available scopes."
+    const scopes = requested?.trim()
+      ? [...new Set(requested.split(/\s+/).filter(Boolean))]
+      : [...allowed]
+    const unknown = scopes.find((s) => !allowed.includes(s))
+    if (unknown !== undefined)
+      return bounce("invalid_scope", `The scope ${unknown} is not allowed.`)
+    const challenge = query.get("code_challenge") ?? undefined
+    if (challenge !== undefined && query.get("code_challenge_method") !== "S256")
+      return bounce("invalid_request", "Only code_challenge_method=S256 is supported.")
+    const consent = this.consents.get(clientId) ?? this.consents.get("*")
+    if (consent?.decision === "deny")
+      return bounce(
+        consent.error ?? "access_denied",
+        consent.errorDescription ?? "The resource owner denied the request.",
+      )
+    if (consent?.decision === "error")
+      return bounce(
+        consent.error ?? "server_error",
+        consent.errorDescription ?? "The authorization server encountered an error.",
+      )
+    const code = this.ids.next("mock_code")
+    this.codes.insert(code, {
+      code,
+      clientId,
+      userId: consent?.userId ?? "synthetic-user",
+      scopes,
+      // Only a redirect_uri the caller sent binds the code; the token exchange must then repeat it.
+      ...(sent ? { redirectUri: sent } : {}),
+      ...(challenge ? { challenge } : {}),
+      expiresAt: this.now() + (consent?.codeTtlSeconds ?? 600) * 1000,
+    })
+    const target = new URL(redirectUri)
+    target.searchParams.set("code", code)
+    if (state !== null) target.searchParams.set("state", state)
+    return redirect(target)
+  }
+  private personalInfo(c: OperationContext): Response {
+    const grant = this.grants.get(bearerToken(c.request) ?? "")
+    if (!grant || grant.expiresAt <= this.now()) return unauthorized()
+    if (!grant.scopes.includes(COLLECTION_SCOPES.personal_info))
+      return jsonRes(403, { detail: "Access forbidden." })
+    const row = this.records
+      .list({ order: "oldest" })
+      .map((r) => r.value)
+      .find((r) => r.collection === "personal_info" && r.userId === grant.userId)
+    return row ? jsonRes(200, row.data) : jsonRes(404, { detail: "Not Found" })
   }
   private async exchange(c: OperationContext): Promise<Response> {
     const body = new URLSearchParams(
