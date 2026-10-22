@@ -78,7 +78,7 @@ endpoints, readiness, shutdown and coordinated state controls.
 - Lua coroutines (`coroutine.*` exists and raises an explicit "not supported" error), `redis.setresp(3)`
   and a script time limit (`SCRIPT KILL` cannot interrupt a script that never returns). The rest of
   Lua 5.1 as Redis ships it (standard libraries, `cjson`, `cmsgpack`, `struct`, `bit`) is implemented
-  and differentially checked against redis-server 8.4.0; see [SUPPORT.md](SUPPORT.md). BullMQ 5.67.1
+  and differentially checked against redis-server 8.4.0; see [SUPPORT.md](SUPPORT.md). BullMQ 5.76.2
   queue/worker flows are covered by the public-client suite.
 - `XADD` / `XTRIM` `MAXLEN ~` trims exactly.
 - Set members are returned in byte order so results stay deterministic.

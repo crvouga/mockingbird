@@ -108,7 +108,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.11.9",
+    "hono": "4.13.11",
     "@noble/hashes": "2.4.0",
     "@noble/ciphers": "2.4.0"
   },

@@ -126,6 +126,6 @@
     "embedded-postgres": "16.14.0-beta.17",
     "esbuild": "0.28.2",
     "fast-check": "4.9.0",
-    "miniflare": "5.20260907.0-alpha"
+    "miniflare": "5.20261006.1-alpha"
   }
 }

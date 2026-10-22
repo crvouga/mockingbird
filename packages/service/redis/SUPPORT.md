@@ -19,7 +19,7 @@ spot checks. The server reports `redis_version` 7.2.4 and `redis_mode:standalone
 | scripts | `EVAL`, `EVALSHA`, `SCRIPT LOAD`, `SCRIPT EXISTS`, `SCRIPT FLUSH` | Lua 5.1 with Redis's libraries (see "Lua scripting" below). |
 | cluster | `CLUSTER`, `READONLY`, `ASKING` | Single node: cluster support disabled. |
 
-BullMQ 5.67.1 is exercised through unmodified Queue, Worker, QueueEvents and FlowProducer clients:
+BullMQ 5.76.2 is exercised through unmodified Queue, Worker, QueueEvents and FlowProducer clients:
 completion, delays/backoff, retry and unrecoverable errors, explicit delayed transitions,
 deduplication/unique IDs, auto removal, rate limits, repeatable schedulers, global concurrency, lock ownership/renewal, stalled recovery,
 parent dependencies, and SCRIPT FLUSH/NOSCRIPT reload. Both ioredis 5.9.2 and 5.11.1 are tested.

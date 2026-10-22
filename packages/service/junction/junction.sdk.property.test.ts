@@ -205,11 +205,9 @@ describe("junction SDK drop-in", () => {
     await client.labTests.simulateOrderProcess(order.order.id, {
       finalStatus: "received.at_home_phlebotomy.requisition_created",
     })
-    // vital-node@3.1.511 serializes the booking request flat (its .d.ts still wraps it in
-    // `body`), so pass the bare AppointmentBookingRequest the runtime actually expects.
     const booked = await client.labTests.bookPhlebotomyAppointment(order.order.id, {
       bookingKey: slot.bookingKey,
-    } as unknown as Vital.BookPhlebotomyAppointmentLabTestsRequest)
+    })
     expect(booked.orderId).toBe(order.order.id)
     const fetched = await client.labTests.getPhlebotomyAppointment(order.order.id)
     expect(fetched.id).toBe(booked.id)
