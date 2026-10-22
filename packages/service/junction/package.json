@@ -118,7 +118,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.11.9"
+    "hono": "4.13.11"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20260929.1",
@@ -128,9 +128,9 @@
     "@crvouga/mockingbird-credentials": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "@tryvital/vital-node": "3.1.511",
+    "@tryvital/vital-node": "3.1.551",
     "fast-check": "4.9.0",
-    "wrangler": "^4.143.0",
+    "wrangler": "^4.151.3",
     "@crvouga/mockingbird-core": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",

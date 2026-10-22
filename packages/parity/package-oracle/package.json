@@ -32,7 +32,7 @@
     "@crvouga/mockingbird-service-resend": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",
     "@crvouga/mockingbird-service-twilio": "workspace:*",
-    "vitest": "4.1.0",
+    "vitest": "4.1.12",
     "jose": "6.2.2",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-provider": "workspace:*",

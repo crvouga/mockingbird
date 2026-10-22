@@ -98,7 +98,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.11.9",
+    "hono": "4.13.11",
     "graphql": "16.11.0"
   },
   "devDependencies": {
