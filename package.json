@@ -42,7 +42,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "generate": "turbo run generate",
-    "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:agents check:worktree check:llms check:readme check:brands check:parity-tiers check:service-discovery check:scripts check:workflows check:format",
+    "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:agents check:worktree check:llms check:readme check:brands check:parity-tiers check:service-discovery check:performance check:scripts check:workflows check:format",
     "check:full": "bun scripts/ci-local.ts",
     "pack:check": "turbo run pack:check",
     "portability": "turbo run portability",
@@ -98,7 +98,11 @@
     "health:docs": "bun scripts/health/task.ts docs",
     "health:images": "bun scripts/health/task.ts images",
     "health:repository": "bun scripts/health/task.ts repository",
-    "health:all": "bun scripts/health/task.ts --summary"
+    "health:all": "bun scripts/health/task.ts --summary",
+    "performance": "bun scripts/performance/run.ts --check",
+    "performance:profile": "bun scripts/performance/profile.ts",
+    "check:performance": "bun scripts/performance/run.ts --check",
+    "performance:browser": "turbo run build --filter=@crvouga/mockingbird-service-sqlite --filter=@crvouga/mockingbird-service-postgres && bun scripts/performance/browser.ts"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

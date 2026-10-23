@@ -95,7 +95,8 @@ jobs:
             The PR title "{title}" looks empty after the type/scope prefix.
             Use a Conventional Commits title, e.g. "feat: add junction emulator".
 
-  # Format, lint, boundaries and generated-file drift: no build, so it never waits on Changes.
+  # Root checks include the bounded SQL performance suite; its upstream builds run through turbo.
+  # The static job still starts independently of Changes.
   static:
     name: Static
     runs-on: ubuntu-latest
@@ -109,6 +110,14 @@ jobs:
 
       - name: Format, lint, boundaries, agents, worktree, llms.txt, README, brands, scripts, workflows
         run: bun scripts/ci-plan.ts static --output-logs=errors-only --continue=dependencies-successful
+
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emulator-performance
+          path: .performance/
+          retention-days: 14
+          if-no-files-found: ignore
 
       - if: always()
         uses: ./.github/actions/turbo-cache-save

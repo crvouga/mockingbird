@@ -3,7 +3,8 @@
  * which of those runners a change needs.
  *
  * `bun run check` stays the one definition of the gate. Its tasks are split two ways:
- *   static  — `lint` plus every root task (`//#…` in turbo.json): no build, a few seconds.
+ *   static  — `lint` plus every root task (`//#…` in turbo.json), including SQL type/performance
+ *             checks whose bounded upstream builds come through turbo dependencies.
  *   shard   — every other task (build, typecheck, test, pack:check, …), with the workspace
  *             packages dealt round-robin into SHARDS parallel runners. Upstream builds a shard
  *             needs come along through turbo's `dependsOn`.

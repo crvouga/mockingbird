@@ -1,0 +1,1275 @@
+{
+  "recordedAt": "2026-10-23T17:52:50.800Z",
+  "notes": [
+    "Before bundles were retained from the checkout at the start of this further optimization pass. They already include the earlier durability, point-access, tuple-COW and index optimizations. No branch/worktree changes were used.",
+    "Before/after reports use the same 33 current workload definitions: three warmups, nine samples, setup/verification/cleanup outside timings. Snapshot samples each capture and encode ten fresh 10,000-row snapshots; operations=100000 counts encoded rows, not snapshots.",
+    "Before is diagnostic without --check because it intentionally exceeds the new allocation/schema-copy limits. All correctness checks still ran. After passed --check, including deterministic allocation/work limits and WASM reference comparisons.",
+    "Paired diagnostics use both retained bundles in one process, five warmups and 31 samples per implementation, alternating before/after order every iteration. Both live fixtures are validated; insert setup/verification/cleanup are excluded from timings and fixtures are recreated each iteration. These diagnostics are separate from the CI gate.",
+    "Wall-clock measurements remain sensitive to load, JIT and GC. The paired timing report follows completion of repository checks and CPU profiling. Diagnostic profiles include process setup and verification as well as the three-second worker loop.",
+    "Browser first/reloaded reports use real WebKit IndexedDB/localStorage. The emulated IndexedDB timing in the automated report measures adapter CPU/correctness, not physical IO latency.",
+    "encodedCopyBytes counts copies of the codec output, not total adapter memory traffic or storage writes. MemoryDurabilityBackend still constructs a complete image; actual IndexedDB commits only changed pages. Sparse controller copies drop from 8 MiB to 16 KiB, unchanged flushes copy none, and dense/initial/resized writes use one full-image copy.",
+    "Paired diagnostics predate the final adapter-only IndexedDB compaction. None of the nine paired memory/encoding/collection workloads uses IndexedDB. Bundle hashes identify the final standalone reports. Final 33-workload reports and real browser reports include compaction.",
+    "Dense IndexedDB probe observes actual objectStore.put input buffers: 64 pages of a 1 MiB image submit 64 MiB of backing buffers before, 1 MiB after. Native WebKit reads back exactly 64 pages with 1 MiB of total backing buffers on both page loads. No physical disk-throughput claim is inferred from emulated timings."
+  ],
+  "bundleSHA256": {
+    "before": {
+      "sqlite": "dc3af9f454fadbcc05baa831f91e54bcd1078493075e7c1b883ebf91d736011e",
+      "postgres": "40916c3f940de29e46a5c8155c2c1958a94025e050ab4a35eac508f3d5bc0a3c"
+    },
+    "after": {
+      "sqlite": "f86f2977761c21dba38174c772937516b260db70121543491e20d58d8bd3c776",
+      "postgres": "3e41436c00b2b3190b8642211b39559c0a5393520834d02b4cece7d440d38f48"
+    }
+  },
+  "before": {
+    "schema": 1,
+    "environment": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "bun": "1.4.2"
+    },
+    "warmup": 3,
+    "results": [
+      {
+        "name": "sqlite/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 16.551832999999988,
+        "p95Ms": 124.72395800000004,
+        "perOperationUs": 3.3103665999999974,
+        "details": {}
+      },
+      {
+        "name": "sqlite/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 1.266208000000006,
+        "p95Ms": 6.423583000000008,
+        "perOperationUs": 12.66208000000006,
+        "details": {}
+      },
+      {
+        "name": "sqlite/durable-memory/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 2.1539999999999964,
+        "p95Ms": 19.576000000000022,
+        "perOperationUs": 21.539999999999964,
+        "details": {
+          "sqlMsPerBatch": 0.8828123333334285,
+          "flushMsPerBatch": 2.3848577499999997,
+          "encodeMsPerBatch": 2.327916666666662,
+          "commitMsPerBatch": 0.012868083333387403,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "sqlite/point-read/10000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 9.823249999999916,
+        "p95Ms": 15.542957999999999,
+        "perOperationUs": 1.9646499999999834,
+        "details": {}
+      },
+      {
+        "name": "sqlite/update-batch/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 2.051915999999892,
+        "p95Ms": 13.764000000000124,
+        "perOperationUs": 20.51915999999892,
+        "details": {}
+      },
+      {
+        "name": "sqlite/durable-memory/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 4.821207999999842,
+        "p95Ms": 28.009750000000167,
+        "perOperationUs": 48.21207999999842,
+        "details": {
+          "sqlMsPerBatch": 2.06071174999992,
+          "flushMsPerBatch": 9.414795250000074,
+          "encodeMsPerBatch": 9.020774333333216,
+          "commitMsPerBatch": 0.09218041666667887,
+          "pagesPerBatch": 2,
+          "bytesPerBatch": 32768,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "sqlite/update-autocommit/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.5802919999996448,
+        "p95Ms": 1.368750000000091,
+        "perOperationUs": 5.802919999996448,
+        "details": {}
+      },
+      {
+        "name": "sqlite/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 1.1062920000003942,
+        "p95Ms": 6.103458000000046,
+        "perOperationUs": 1.1062920000003942,
+        "details": {}
+      },
+      {
+        "name": "sqlite/durable-indexeddb-emulated/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 1.2511250000002292,
+        "p95Ms": 4.887249999999767,
+        "perOperationUs": 12.511250000002292,
+        "details": {
+          "sqlMsPerBatch": 0.9314029166666463,
+          "flushMsPerBatch": 1.5316526666666732,
+          "encodeMsPerBatch": 0.38969791666666725,
+          "commitMsPerBatch": 1.089930499999923,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "sqlite/snapshot-numeric/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 36.74462500000027,
+        "p95Ms": 262.67766699999993,
+        "perOperationUs": 0.3674462500000027,
+        "details": {
+          "imageBytes": 172690,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "sqlite/snapshot-text/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 214.54520799999955,
+        "p95Ms": 316.5770419999999,
+        "perOperationUs": 2.1454520799999957,
+        "details": {
+          "imageBytes": 1133462,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "postgres/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 26.615709000000606,
+        "p95Ms": 72.69495900000038,
+        "perOperationUs": 5.323141800000121,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400
+        }
+      },
+      {
+        "name": "postgres/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 1.0610829999995985,
+        "p95Ms": 4.428750000000036,
+        "perOperationUs": 10.610829999995985,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400,
+          "deepCopiedRows": 0,
+          "deepCopiedRowBudget": 0,
+          "copiedUntouchedRows": 0
+        }
+      },
+      {
+        "name": "postgres/durable-memory/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 1.160917000000154,
+        "p95Ms": 2.0663750000003347,
+        "perOperationUs": 11.60917000000154,
+        "details": {
+          "sqlMsPerBatch": 0.5699756666666266,
+          "flushMsPerBatch": 0.713055416666748,
+          "encodeMsPerBatch": 0.5819165000000339,
+          "commitMsPerBatch": 0.01603125000012066,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "postgres/point-read/10000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 16.48162500000035,
+        "p95Ms": 63.20270900000014,
+        "perOperationUs": 3.2963250000000697,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400
+        }
+      },
+      {
+        "name": "postgres/update-batch/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.3398329999999987,
+        "p95Ms": 0.5690420000000813,
+        "perOperationUs": 3.398329999999987,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400,
+          "deepCopiedRows": 0,
+          "deepCopiedRowBudget": 0,
+          "copiedUntouchedRows": 0
+        }
+      },
+      {
+        "name": "postgres/durable-memory/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 4.20850000000064,
+        "p95Ms": 63.31270899999981,
+        "perOperationUs": 42.0850000000064,
+        "details": {
+          "sqlMsPerBatch": 0.8499965833331468,
+          "flushMsPerBatch": 11.54113525000048,
+          "encodeMsPerBatch": 11.10928825000004,
+          "commitMsPerBatch": 0.24173258333333555,
+          "pagesPerBatch": 2,
+          "bytesPerBatch": 32768,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "postgres/update-autocommit/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.4165419999990263,
+        "p95Ms": 7.788624999999229,
+        "perOperationUs": 4.165419999990263,
+        "details": {}
+      },
+      {
+        "name": "postgres/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 3.1220830000002024,
+        "p95Ms": 5.899833999999828,
+        "perOperationUs": 3.1220830000002024,
+        "details": {}
+      },
+      {
+        "name": "postgres/durable-indexeddb-emulated/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 1.2846669999998994,
+        "p95Ms": 23.186749999998938,
+        "perOperationUs": 12.846669999998994,
+        "details": {
+          "sqlMsPerBatch": 3.2184825000002397,
+          "flushMsPerBatch": 1.2335349166666372,
+          "encodeMsPerBatch": 0.5560000000001916,
+          "commitMsPerBatch": 0.44395825000022643,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "postgres/snapshot-numeric/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 32.923249999999825,
+        "p95Ms": 167.8022920000003,
+        "perOperationUs": 0.32923249999999826,
+        "details": {
+          "imageBytes": 214023,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "postgres/snapshot-text/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 85.7138329999998,
+        "p95Ms": 109.40745799999968,
+        "perOperationUs": 0.857138329999998,
+        "details": {
+          "imageBytes": 1181167,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "sql.js/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 60.34599999999955,
+        "p95Ms": 74.71125000000029,
+        "perOperationUs": 12.06919999999991,
+        "details": {}
+      },
+      {
+        "name": "sql.js/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.1430419999996957,
+        "p95Ms": 0.6087499999994179,
+        "perOperationUs": 1.430419999996957,
+        "details": {}
+      },
+      {
+        "name": "sql.js/point-read/10000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 127.17699999999968,
+        "p95Ms": 240.14733299999898,
+        "perOperationUs": 25.435399999999937,
+        "details": {}
+      },
+      {
+        "name": "sql.js/update-batch/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.16312500000094587,
+        "p95Ms": 2.1267920000009326,
+        "perOperationUs": 1.6312500000094587,
+        "details": {}
+      },
+      {
+        "name": "sql.js/update-autocommit/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 8.074916999999914,
+        "p95Ms": 13.738208000000668,
+        "perOperationUs": 80.74916999999914,
+        "details": {}
+      },
+      {
+        "name": "sql.js/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 0.6950420000011945,
+        "p95Ms": 1.3856250000008004,
+        "perOperationUs": 0.6950420000011945,
+        "details": {}
+      },
+      {
+        "name": "durability/sparse-8MiB",
+        "operations": 1,
+        "samples": 9,
+        "medianMs": 7.111249999999927,
+        "p95Ms": 21.279833000000508,
+        "perOperationUs": 7111.249999999927,
+        "details": {
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "imageBytes": 8388608,
+          "encodedCopyBytes": 8388608
+        }
+      },
+      {
+        "name": "durability/dense-indexeddb-emulated-1MiB",
+        "operations": 1,
+        "samples": 9,
+        "medianMs": 31.79279200000019,
+        "p95Ms": 45.44904200000019,
+        "perOperationUs": 31792.79200000019,
+        "details": {
+          "imageBytes": 1048576,
+          "clonedBackingBytes": 67108864,
+          "pageWrites": 64
+        }
+      },
+      {
+        "name": "collection/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 23.959624999999505,
+        "p95Ms": 62.30529200000092,
+        "perOperationUs": 4.791924999999901,
+        "details": {}
+      },
+      {
+        "name": "collection/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 4.298708000000261,
+        "p95Ms": 7.398750000000291,
+        "perOperationUs": 42.98708000000261,
+        "details": {
+          "unchangedIndexForks": 0,
+          "schemaCopies": 1,
+          "indexSchemaCopies": 0
+        }
+      },
+      {
+        "name": "collection/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 232.96712500000103,
+        "p95Ms": 332.1950830000005,
+        "perOperationUs": 232.96712500000106,
+        "details": {
+          "indexForks": 200,
+          "schemaCopies": 2,
+          "indexSchemaCopies": 2
+        }
+      }
+    ],
+    "failures": []
+  },
+  "after": {
+    "schema": 1,
+    "environment": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "bun": "1.4.2"
+    },
+    "warmup": 3,
+    "results": [
+      {
+        "name": "sqlite/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 6.749749999999949,
+        "p95Ms": 69.13508300000012,
+        "perOperationUs": 1.3499499999999898,
+        "details": {}
+      },
+      {
+        "name": "sqlite/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 2.1054159999998774,
+        "p95Ms": 8.586250000000064,
+        "perOperationUs": 21.054159999998774,
+        "details": {}
+      },
+      {
+        "name": "sqlite/durable-memory/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 1.0977920000000267,
+        "p95Ms": 8.052290999999968,
+        "perOperationUs": 10.977920000000267,
+        "details": {
+          "sqlMsPerBatch": 1.8131771666666812,
+          "flushMsPerBatch": 0.4532604999999421,
+          "encodeMsPerBatch": 0.3761875833333382,
+          "commitMsPerBatch": 0.015895916666655314,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "sqlite/point-read/10000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 4.179832999999917,
+        "p95Ms": 7.465165999999954,
+        "perOperationUs": 0.8359665999999834,
+        "details": {}
+      },
+      {
+        "name": "sqlite/update-batch/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.5130830000000515,
+        "p95Ms": 0.9792919999999867,
+        "perOperationUs": 5.130830000000515,
+        "details": {}
+      },
+      {
+        "name": "sqlite/durable-memory/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 2.7326250000000982,
+        "p95Ms": 5.2442080000000715,
+        "perOperationUs": 27.326250000000982,
+        "details": {
+          "sqlMsPerBatch": 0.6760555833333038,
+          "flushMsPerBatch": 2.329274250000026,
+          "encodeMsPerBatch": 2.173159750000025,
+          "commitMsPerBatch": 0.03975350000001754,
+          "pagesPerBatch": 2,
+          "bytesPerBatch": 32768,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "sqlite/update-autocommit/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.38341600000012477,
+        "p95Ms": 0.6285000000000309,
+        "perOperationUs": 3.8341600000012477,
+        "details": {}
+      },
+      {
+        "name": "sqlite/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 0.6226670000000922,
+        "p95Ms": 0.8907080000001315,
+        "perOperationUs": 0.6226670000000922,
+        "details": {}
+      },
+      {
+        "name": "sqlite/durable-indexeddb-emulated/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.7757919999999103,
+        "p95Ms": 1.1991249999996398,
+        "perOperationUs": 7.757919999999103,
+        "details": {
+          "sqlMsPerBatch": 0.4829234166666841,
+          "flushMsPerBatch": 0.37959733333332224,
+          "encodeMsPerBatch": 0.22878475000008316,
+          "commitMsPerBatch": 0.13131250000011127,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "sqlite/snapshot-numeric/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 19.324708999999984,
+        "p95Ms": 29.586249999999836,
+        "perOperationUs": 0.19324708999999984,
+        "details": {
+          "imageBytes": 172690,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "sqlite/snapshot-text/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 43.47304200000008,
+        "p95Ms": 81.36408299999994,
+        "perOperationUs": 0.43473042000000073,
+        "details": {
+          "imageBytes": 1133462,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "postgres/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 14.892541000000165,
+        "p95Ms": 22.176084000000174,
+        "perOperationUs": 2.978508200000033,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400
+        }
+      },
+      {
+        "name": "postgres/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.5168330000001333,
+        "p95Ms": 1.3830410000000484,
+        "perOperationUs": 5.168330000001333,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400,
+          "deepCopiedRows": 0,
+          "deepCopiedRowBudget": 0,
+          "copiedUntouchedRows": 0
+        }
+      },
+      {
+        "name": "postgres/durable-memory/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 1.0517090000003009,
+        "p95Ms": 2.6672499999999673,
+        "perOperationUs": 10.517090000003009,
+        "details": {
+          "sqlMsPerBatch": 0.5878890000000562,
+          "flushMsPerBatch": 0.6062464166665981,
+          "encodeMsPerBatch": 0.49007625000001553,
+          "commitMsPerBatch": 0.01592016666662251,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "postgres/point-read/10000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 15.614583000000039,
+        "p95Ms": 28.224415999999565,
+        "perOperationUs": 3.122916600000008,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400
+        }
+      },
+      {
+        "name": "postgres/update-batch/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.3040000000000873,
+        "p95Ms": 0.6260409999999865,
+        "perOperationUs": 3.040000000000873,
+        "details": {
+          "candidateRowVisits": 100,
+          "candidateRowVisitBudget": 400,
+          "deepCopiedRows": 0,
+          "deepCopiedRowBudget": 0,
+          "copiedUntouchedRows": 0
+        }
+      },
+      {
+        "name": "postgres/durable-memory/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 5.24895800000013,
+        "p95Ms": 26.62599999999975,
+        "perOperationUs": 52.4895800000013,
+        "details": {
+          "sqlMsPerBatch": 2.6629652499999565,
+          "flushMsPerBatch": 6.238805666666735,
+          "encodeMsPerBatch": 5.595374833333381,
+          "commitMsPerBatch": 0.05383358333335764,
+          "pagesPerBatch": 2,
+          "bytesPerBatch": 32768,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "postgres/update-autocommit/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.6284170000003542,
+        "p95Ms": 1.737500000000182,
+        "perOperationUs": 6.284170000003542,
+        "details": {}
+      },
+      {
+        "name": "postgres/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 1.492917000000034,
+        "p95Ms": 2.260917000000063,
+        "perOperationUs": 1.492917000000034,
+        "details": {}
+      },
+      {
+        "name": "postgres/durable-indexeddb-emulated/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.5137910000003103,
+        "p95Ms": 1.0014580000001843,
+        "perOperationUs": 5.137910000003103,
+        "details": {
+          "sqlMsPerBatch": 0.33673958333326937,
+          "flushMsPerBatch": 0.25392008333335525,
+          "encodeMsPerBatch": 0.13517025000002528,
+          "commitMsPerBatch": 0.08843741666665512,
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "commits": 12,
+          "expectedCommits": 12
+        }
+      },
+      {
+        "name": "postgres/snapshot-numeric/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 9.056707999999617,
+        "p95Ms": 13.292374999999993,
+        "perOperationUs": 0.09056707999999616,
+        "details": {
+          "imageBytes": 214023,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "postgres/snapshot-text/10000",
+        "operations": 100000,
+        "samples": 9,
+        "medianMs": 101.45641699999942,
+        "p95Ms": 331.0149160000001,
+        "perOperationUs": 1.014564169999994,
+        "details": {
+          "imageBytes": 1181167,
+          "snapshotsPerBatch": 10
+        }
+      },
+      {
+        "name": "sql.js/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 101.38374999999996,
+        "p95Ms": 154.65970800000014,
+        "perOperationUs": 20.276749999999993,
+        "details": {}
+      },
+      {
+        "name": "sql.js/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.22950000000037107,
+        "p95Ms": 0.49783300000035524,
+        "perOperationUs": 2.2950000000037107,
+        "details": {}
+      },
+      {
+        "name": "sql.js/point-read/10000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 54.74262499999986,
+        "p95Ms": 63.141333000000486,
+        "perOperationUs": 10.948524999999972,
+        "details": {}
+      },
+      {
+        "name": "sql.js/update-batch/10000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 0.08029100000021572,
+        "p95Ms": 0.1319999999996071,
+        "perOperationUs": 0.8029100000021572,
+        "details": {}
+      },
+      {
+        "name": "sql.js/update-autocommit/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 3.0203330000003916,
+        "p95Ms": 7.131124999999884,
+        "perOperationUs": 30.203330000003916,
+        "details": {}
+      },
+      {
+        "name": "sql.js/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 0.3696250000002692,
+        "p95Ms": 0.4925829999992857,
+        "perOperationUs": 0.3696250000002692,
+        "details": {}
+      },
+      {
+        "name": "durability/sparse-8MiB",
+        "operations": 1,
+        "samples": 9,
+        "medianMs": 3.3291249999992942,
+        "p95Ms": 3.79950000000008,
+        "perOperationUs": 3329.1249999992942,
+        "details": {
+          "pagesPerBatch": 1,
+          "bytesPerBatch": 16384,
+          "imageBytes": 8388608,
+          "encodedCopyBytes": 16384
+        }
+      },
+      {
+        "name": "durability/dense-indexeddb-emulated-1MiB",
+        "operations": 1,
+        "samples": 9,
+        "medianMs": 6.631709000000228,
+        "p95Ms": 17.8125,
+        "perOperationUs": 6631.709000000228,
+        "details": {
+          "imageBytes": 1048576,
+          "clonedBackingBytes": 1048576,
+          "pageWrites": 64
+        }
+      },
+      {
+        "name": "collection/point-read/1000",
+        "operations": 5000,
+        "samples": 9,
+        "medianMs": 20.484208999999282,
+        "p95Ms": 23.090624999999818,
+        "perOperationUs": 4.096841799999856,
+        "details": {}
+      },
+      {
+        "name": "collection/update-batch/1000",
+        "operations": 100,
+        "samples": 9,
+        "medianMs": 2.0839579999992566,
+        "p95Ms": 3.924457999999504,
+        "perOperationUs": 20.839579999992566,
+        "details": {
+          "unchangedIndexForks": 0,
+          "schemaCopies": 0,
+          "indexSchemaCopies": 0
+        }
+      },
+      {
+        "name": "collection/insert/1000",
+        "operations": 1000,
+        "samples": 9,
+        "medianMs": 49.47795800000131,
+        "p95Ms": 69.89666600000055,
+        "perOperationUs": 49.47795800000131,
+        "details": {
+          "indexForks": 200,
+          "schemaCopies": 0,
+          "indexSchemaCopies": 0
+        }
+      }
+    ],
+    "failures": []
+  },
+  "paired": {
+    "environment": {
+      "platform": "darwin",
+      "arch": "arm64",
+      "bun": "1.4.2"
+    },
+    "warmup": 5,
+    "order": "alternating before/after order per iteration",
+    "results": [
+      {
+        "name": "sqlite/durable-memory/10000",
+        "before": {
+          "medianMs": 2.0548749999999814,
+          "p95Ms": 6.83883400000002,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 1.967708000000016,
+          "p95Ms": 4.467666000000008,
+          "samples": 31
+        }
+      },
+      {
+        "name": "sqlite/snapshot-numeric/10000",
+        "before": {
+          "medianMs": 12.19679199999996,
+          "p95Ms": 23.539874999999938,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 10.237708000000111,
+          "p95Ms": 29.554791999999907,
+          "samples": 31
+        }
+      },
+      {
+        "name": "sqlite/snapshot-text/10000",
+        "before": {
+          "medianMs": 49.55933399999958,
+          "p95Ms": 76.07237500000019,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 36.57499999999982,
+          "p95Ms": 46.96066699999983,
+          "samples": 31
+        }
+      },
+      {
+        "name": "postgres/durable-memory/10000",
+        "before": {
+          "medianMs": 1.768207999999504,
+          "p95Ms": 2.4429159999999683,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 1.278124999999818,
+          "p95Ms": 2.3182919999999285,
+          "samples": 31
+        }
+      },
+      {
+        "name": "postgres/snapshot-numeric/10000",
+        "before": {
+          "medianMs": 7.157500000000255,
+          "p95Ms": 8.878791000000092,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 4.761375000000044,
+          "p95Ms": 5.80566699999963,
+          "samples": 31
+        }
+      },
+      {
+        "name": "postgres/snapshot-text/10000",
+        "before": {
+          "medianMs": 54.52891699999964,
+          "p95Ms": 107.40837499999907,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 40.942167000000154,
+          "p95Ms": 84.94329099999959,
+          "samples": 31
+        }
+      },
+      {
+        "name": "durability/sparse-8MiB",
+        "before": {
+          "medianMs": 8.482916999999361,
+          "p95Ms": 13.618333000000348,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 4.614458000000013,
+          "p95Ms": 8.62708399999974,
+          "samples": 31
+        }
+      },
+      {
+        "name": "collection/update-batch/1000",
+        "before": {
+          "medianMs": 5.477375000000393,
+          "p95Ms": 8.512792000001355,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 4.713292000000365,
+          "p95Ms": 7.6492920000000595,
+          "samples": 31
+        }
+      },
+      {
+        "name": "collection/insert/1000",
+        "before": {
+          "medianMs": 40.816084000000046,
+          "p95Ms": 57.65112500000032,
+          "samples": 31
+        },
+        "after": {
+          "medianMs": 26.284750000000713,
+          "p95Ms": 47.687292000000525,
+          "samples": 31
+        }
+      }
+    ]
+  },
+  "profiles": {
+    "beforeCollectionInsert": {
+      "durationSeconds": 3.28,
+      "samples": 2577,
+      "topFunctions": "Map 18.3%, structuredClone 14.6%, map 5.9%, anonymous 4.4%, serializeIndexEntry 1.9%, sort 1.8%, anonymous 1.4%, some 1.4%, createEvalContext 1.3%, filter 1.3%"
+    },
+    "afterCollectionInsert": {
+      "durationSeconds": 3.79,
+      "samples": 2425,
+      "topFunctions": "`Map` 24.2%, `map` 5.1%, `createEvalContext` 4.2%, `some` 2.7%, `serializeIndexEntry` 2.4%, `rowValues` 2.2%, `(anonymous)` 1.9%, `resolveColumn` 1.8%, `filter` 1.3%, `(anonymous)` 1.2%",
+      "structuredCloneSelf": "0.0% (994 microseconds), as rounded by Bun CPU profiler"
+    }
+  },
+  "snapshotWireSHA256": {
+    "sqlite": "6f8deef92f12cdf840c42deae48726e22bf0f88d33b658e456116d2d194d717a",
+    "postgres": "a3569be22fd2284c9aea3ba414c0708297d06fde804dfe2d15dc494c8f16d6ba"
+  },
+  "validation": {
+    "repositoryTasksPassed": 1266,
+    "finalCoreAndSQLTasksPassed": 32,
+    "sqliteTestsPassed": 2006,
+    "postgresTestsPassed": 4245,
+    "scriptTestsPassed": 126,
+    "browserReloadRecovery": "passed",
+    "coreTestsPassed": 32,
+    "sharedServiceTestsPassed": 218,
+    "performanceWorkloadsPassed": 33,
+    "nativeBrowserPageBackingBytes": 1048576
+  },
+  "browser": {
+    "first": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+      "results": [
+        {
+          "name": "mockingbird/insert/1000",
+          "totalMs": 5.999999999999986
+        },
+        {
+          "name": "mockingbird/lookup/1000",
+          "medianMs": 0.0012,
+          "p95Ms": 0.0018,
+          "samples": 9
+        },
+        {
+          "name": "sql.js/insert/1000",
+          "totalMs": 7
+        },
+        {
+          "name": "sql.js/lookup/1000",
+          "medianMs": 0.0086,
+          "p95Ms": 0.011,
+          "samples": 9
+        },
+        {
+          "name": "mockingbird/insert/10000",
+          "totalMs": 13
+        },
+        {
+          "name": "mockingbird/lookup/10000",
+          "medianMs": 0.0012,
+          "p95Ms": 0.003,
+          "samples": 9
+        },
+        {
+          "name": "sql.js/insert/10000",
+          "totalMs": 8
+        },
+        {
+          "name": "sql.js/lookup/10000",
+          "medianMs": 0.0106,
+          "p95Ms": 0.0112,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/indexedDB/initial-save",
+          "totalMs": 8
+        },
+        {
+          "name": "sqlite/indexedDB/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/indexedDB/100-updates-and-save",
+          "medianMs": 5,
+          "p95Ms": 6,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/localStorage/initial-save",
+          "totalMs": 2
+        },
+        {
+          "name": "sqlite/localStorage/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1.0000000000002274,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/localStorage/100-updates-and-save",
+          "medianMs": 1,
+          "p95Ms": 15.999999999999773,
+          "samples": 9
+        },
+        {
+          "name": "postgres/indexedDB/initial-save",
+          "totalMs": 6
+        },
+        {
+          "name": "postgres/indexedDB/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1,
+          "samples": 9
+        },
+        {
+          "name": "postgres/indexedDB/100-updates-and-save",
+          "medianMs": 4,
+          "p95Ms": 7,
+          "samples": 9
+        },
+        {
+          "name": "postgres/localStorage/initial-save",
+          "totalMs": 10
+        },
+        {
+          "name": "postgres/localStorage/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1.0000000000002274,
+          "samples": 9
+        },
+        {
+          "name": "postgres/localStorage/100-updates-and-save",
+          "medianMs": 2,
+          "p95Ms": 9,
+          "samples": 9
+        },
+        {
+          "name": "durability/indexedDB/dense-1MiB",
+          "medianMs": 13,
+          "p95Ms": 25,
+          "samples": 9
+        }
+      ],
+      "recovery": [
+        "sqlite/indexedDB: passed",
+        "sqlite/indexedDB/prior-page: first visit",
+        "sqlite/localStorage: passed",
+        "sqlite/localStorage/prior-page: first visit",
+        "postgres/indexedDB: passed",
+        "postgres/indexedDB/prior-page: first visit",
+        "postgres/localStorage: passed",
+        "postgres/localStorage/prior-page: first visit",
+        "durability/indexedDB/compact-pages: passed"
+      ],
+      "stage": "durability/indexedDB/dense-1MiB",
+      "compactPages": {
+        "pageCount": 64,
+        "imageBytes": 1048576,
+        "backingBytes": 1048576
+      },
+      "status": "passed"
+    },
+    "reloaded": {
+      "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Safari/605.1.15",
+      "results": [
+        {
+          "name": "mockingbird/insert/1000",
+          "totalMs": 5.000000000000007
+        },
+        {
+          "name": "mockingbird/lookup/1000",
+          "medianMs": 0.001,
+          "p95Ms": 0.0012,
+          "samples": 9
+        },
+        {
+          "name": "sql.js/insert/1000",
+          "totalMs": 5
+        },
+        {
+          "name": "sql.js/lookup/1000",
+          "medianMs": 0.0078,
+          "p95Ms": 0.011,
+          "samples": 9
+        },
+        {
+          "name": "mockingbird/insert/10000",
+          "totalMs": 10
+        },
+        {
+          "name": "mockingbird/lookup/10000",
+          "medianMs": 0.0008,
+          "p95Ms": 0.001,
+          "samples": 9
+        },
+        {
+          "name": "sql.js/insert/10000",
+          "totalMs": 12
+        },
+        {
+          "name": "sql.js/lookup/10000",
+          "medianMs": 0.011000000000000022,
+          "p95Ms": 0.012400000000000045,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/indexedDB/initial-save",
+          "totalMs": 8
+        },
+        {
+          "name": "sqlite/indexedDB/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1.0000000000002274,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/indexedDB/100-updates-and-save",
+          "medianMs": 4,
+          "p95Ms": 6,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/localStorage/initial-save",
+          "totalMs": 16
+        },
+        {
+          "name": "sqlite/localStorage/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1,
+          "samples": 9
+        },
+        {
+          "name": "sqlite/localStorage/100-updates-and-save",
+          "medianMs": 1.0000000000002274,
+          "p95Ms": 9,
+          "samples": 9
+        },
+        {
+          "name": "postgres/indexedDB/initial-save",
+          "totalMs": 4.999999999999773
+        },
+        {
+          "name": "postgres/indexedDB/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1.0000000000002274,
+          "samples": 9
+        },
+        {
+          "name": "postgres/indexedDB/100-updates-and-save",
+          "medianMs": 4,
+          "p95Ms": 6,
+          "samples": 9
+        },
+        {
+          "name": "postgres/localStorage/initial-save",
+          "totalMs": 1
+        },
+        {
+          "name": "postgres/localStorage/unchanged-flush",
+          "medianMs": 0,
+          "p95Ms": 1,
+          "samples": 9
+        },
+        {
+          "name": "postgres/localStorage/100-updates-and-save",
+          "medianMs": 2.9999999999997726,
+          "p95Ms": 10,
+          "samples": 9
+        },
+        {
+          "name": "durability/indexedDB/dense-1MiB",
+          "medianMs": 16,
+          "p95Ms": 97,
+          "samples": 9
+        }
+      ],
+      "recovery": [
+        "sqlite/indexedDB: passed",
+        "sqlite/indexedDB/prior-page: 1",
+        "sqlite/localStorage: passed",
+        "sqlite/localStorage/prior-page: 1",
+        "postgres/indexedDB: passed",
+        "postgres/indexedDB/prior-page: 1",
+        "postgres/localStorage: passed",
+        "postgres/localStorage/prior-page: 1",
+        "durability/indexedDB/compact-pages: passed"
+      ],
+      "stage": "durability/indexedDB/dense-1MiB",
+      "compactPages": {
+        "pageCount": 64,
+        "imageBytes": 1048576,
+        "backingBytes": 1048576
+      },
+      "status": "passed"
+    }
+  },
+  "structuredCloneProbe": {
+    "runtime": "native WebKit benchmark tab",
+    "pageBytes": 16384,
+    "clonedBackingBytes": 1048576,
+    "clonedOffset": 16384
+  }
+}

@@ -17,3 +17,7 @@ benchmarks/results/*.html
 !benchmarks/results/ci-baseline.json
 !benchmarks/results/throttle-baseline.json
 benchmarks/browser/dist/
+
+# Recorded durability benchmark evidence referenced by DURABILITY.md.
+!benchmarks/results/durability-browser.json
+!benchmarks/results/durability-storage.json
