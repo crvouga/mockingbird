@@ -59,6 +59,27 @@ api.fetch(new Request(input, init))`, or serve it over HTTP with an adapter (see
 | `toFetchHandler` | `(api: FetchAPI) => FetchHandler` | Turn a `FetchAPI` object into a bare handler function. |
 | `fromFetchHandler` | `(handler: FetchHandler) => FetchAPI` | Wrap a bare handler as `{ fetch: handler }`. |
 | `Timeline<T>` | `new Timeline({ now?, maxCheckpoints?, id? })` | Deterministic, storage-agnostic checkpoint DAG with `commit`, `fork`, `checkout`, branch heads and bounded GC. Values are retained by reference so COW snapshots stay O(1). |
+| `openDurable<T>` | `({ backend, key, codec, pageSize? }) => Promise<Durable<T>>` | Hydrate any emulator through its binary codec. A handle provides `value`, `flush`, serialized `write`, and save-before-close `close`. |
+| `withDurability` | `(api: FetchAPI, durable) => FetchAPI` | Serialize requests and acknowledge responses only after their storage commit. Inject the handle's value into the service's existing storage port. |
+| `IndexedDBDurabilityBackend` | `new ({ name?, indexedDB?, durability? })` | Atomic binary page writes with revision checks. Default durability hint is `strict`; no browser globals are accessed until construction. |
+| `LocalStorageDurabilityBackend` | `new ({ storage?, prefix?, locks? })` | Small-image fallback. Whole-image base64 writes; Web Locks coordinate tabs when available. Otherwise use one writer per key. |
+| `MemoryDurabilityBackend` | `new ()` | Ephemeral reference implementation of the same port. |
+| `DurabilityConflictError` | `Error` | Rejects a stale writer instead of overwriting another writer's image. |
+| `applyDurablePatch`, `validateDurablePatch`, `validateDurableCommit` | Binary patch helpers | Shared validation/application utilities for custom adapters. |
+
+`DurabilityBackend` is the storage port: `load(key)` returns an owned `DurableImage` (revision,
+page size and bytes), and `commit(key, expectedRevision, patch)` must atomically check the revision,
+replace changed pages, truncate removed pages and advance the revision. Failed commits must leave
+the prior image intact. Inputs must not be mutated. `DurabilityCodec<T>` owns emulator creation,
+binary encoding/decoding and optional close. `DurableOptions<T>` injects both ports.
+
+No synchronous mutation becomes durable until an awaited `flush`, `write`, or `close` succeeds.
+Batch related SQL in the database's existing transaction API for rollback, then flush once.
+Avoid direct mutations during an outstanding save. Saves encode and compare a full image, then
+send only changed pages; encoding remains O(image size). An unchanged image skips the storage
+write. Persisted state remains subject to browser eviction and quotas. Injected adapters stay
+caller-owned; database convenience factories release their own default IndexedDB connection on
+close. The portable database packages re-export these public durability APIs for consumers.
 
 `Timeline` is the only history and branching primitive prescribed for Mockingbird state. Storage
 engines may expose immutable COW payloads named `Snapshot` for compatibility and serialization,

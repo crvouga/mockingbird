@@ -23,6 +23,22 @@
  */
 import "./serialization/codec.ts";
 
+export {
+  type DurabilityBackend,
+  type DurabilityCodec,
+  DurabilityConflictError,
+  type Durable,
+  type DurableImage,
+  type DurableOptions,
+  type DurablePatch,
+  IndexedDBDurabilityBackend,
+  type IndexedDBDurabilityOptions,
+  LocalStorageDurabilityBackend,
+  type LocalStorageDurabilityOptions,
+  MemoryDurabilityBackend,
+  openDurable,
+  withDurability,
+} from "@crvouga/mockingbird-core";
 export type { BindValue, JsValue, QueryRow } from "./api/bind.ts";
 export {
   Database,
@@ -34,12 +50,13 @@ export {
   type RegisterFunctionOptions,
   Snapshot,
 } from "./api/database.ts";
-export { type ResultSet, type RunResult, Statement } from "./api/statement.ts";
-export { type ErrorCategory, PostgresError } from "./errors/error.ts";
+export { type DurableDatabaseOptions, openDurableDatabase } from "./api/durable.ts";
 
 export {
   analyzeSchema,
+  type SchemaDiagnostic,
   type SchemaReport,
   type SchemaReportOptions,
-  type SchemaDiagnostic,
 } from "./api/schema-report.ts";
+export { type ResultSet, type RunResult, Statement } from "./api/statement.ts";
+export { type ErrorCategory, PostgresError } from "./errors/error.ts";

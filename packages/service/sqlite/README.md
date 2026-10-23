@@ -309,7 +309,53 @@ named `true`/`false` shadows the literal.
 
 ## API
 
-Stable runtime exports of the main entry:
+Browser durability is opt-in through `openDurableDatabase({ key, backend?, databaseOptions?, pageSize? })`.
+It returns a `Durable<Database>` handle: `.value` is the existing synchronous database,
+`.flush()` saves a batch, `.write(db => ...)` serializes a synchronous batch and saves it, and
+`.close()` saves before closing. Await a save before considering writes durable. Wrap related
+SQL operations in `db.transaction()` when they need rollback as well as persistence.
+
+```ts
+import { openDurableDatabase, IndexedDBDurabilityBackend } from "@crvouga/mockingbird-service-sqlite";
+
+const backend = new IndexedDBDurabilityBackend({ name: "my-app" });
+const durable = await openDurableDatabase({ key: "main", backend });
+const db = durable.value;
+// Use db.exec / db.prepare / db.transaction as before.
+await durable.flush(); // acknowledges an atomic storage commit
+await durable.close();
+await backend.close(); // release the connection when its last user finishes
+```
+
+`IndexedDBDurabilityBackend` is the default and stores binary pages with atomic revision checks;
+it sends only changed pages in one transaction. `durability: "strict"` is the default;
+`"relaxed"` is available for explicitly weaker power-loss guarantees. Both settings resolve
+only on the IndexedDB transaction's `complete` event.
+`LocalStorageDurabilityBackend({ storage?, prefix?, locks? })` is a small-image fallback with
+whole-image base64 rewrites and synchronous IO. It uses Web Locks when available; without
+Web Locks, use a single writer per key. `MemoryDurabilityBackend` is a reference adapter.
+A stale save throws `DurabilityConflictError`; reopen to reconcile rather than overwriting
+another tab. Quota/IO failures reject the save, preserve the previously committed image and
+can be retried. Saved data remains subject to the browser's storage quota and eviction policy.
+
+`openDurable({ backend, key, codec, pageSize? })` works with any emulator using an injected
+`DurabilityCodec<T>`. The `DurabilityBackend` port exposes `load` and atomic `commit` of a
+`DurablePatch` against an expected revision. `DurableImage` carries the binary image, revision
+and page size. The port and adapters are shared with `@crvouga/mockingbird-core`.
+`withDurability(api, durable)` serializes Fetch requests and flushes before returning each
+response. For other Mockingbird services, inject `durable.value` through their existing
+`sqlite` option, then send requests through this wrapper. Route all writes through the same
+handle/wrapper to preserve serialization; do not mutate the database during an outstanding save.
+
+Durability encodes one full SQLM/PGMM snapshot per batch and compares fixed-size pages (default
+16 KiB). This targets small to moderate databases, not unbounded datasets. It avoids per-row
+storage IO, but encoding is still O(database size). It is not an SQLite file or OPFS VFS.
+See [the browser benchmark](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/benchmarks/DURABILITY.md) for measurements and limits.
+
+Stable runtime exports of the main entry include `openDurableDatabase`, `openDurable`,
+`withDurability`, `IndexedDBDurabilityBackend`, `LocalStorageDurabilityBackend`,
+`MemoryDurabilityBackend`, `DurabilityConflictError`, and the existing exports:
+
 
 | Export | Description |
 | --- | --- |

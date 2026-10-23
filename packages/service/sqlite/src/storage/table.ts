@@ -72,13 +72,15 @@ export class Table {
   frozen = false;
   /** nameLower → column index; rebuilt after ALTER. */
   private colIndex = new Map<string, number>();
+  /** DML never mutates schema metadata; detach it before a schema edit. */
+  private schemaShared = false;
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
     this.name = name;
     this.columns = columns.map(cloneColumn);
     this.rows = new Map();
     this.nextRowid = 1;
-    this.constraints = cloneAst(options.constraints ?? []);
+    this.constraints = options.constraints?.length ? cloneAst(options.constraints) : [];
     this.indexes = [...(options.indexes ?? [])];
     this.originalSql = options.originalSql ?? null;
     this.withoutRowid = options.withoutRowid ?? false;
@@ -442,14 +444,42 @@ export class Table {
       withoutRowid: this.withoutRowid,
       strict: this.strict,
     });
+    return this.copyRowsTo(copy);
+  }
+
+  /** Preserve immutable schema objects while forking only the row containers for DML. */
+  cloneForDml(): Table {
+    const copy = new Table(this.name, []);
+    copy.columns = this.columns;
+    copy.constraints = this.constraints;
+    copy.indexes = this.indexes;
+    copy.originalSql = this.originalSql;
+    copy.withoutRowid = this.withoutRowid;
+    copy.strict = this.strict;
+    copy.colIndex = this.colIndex;
+    copy.schemaShared = this.schemaShared = true;
+    return this.copyRowsTo(copy);
+  }
+
+  ownSchema(): void {
+    if (!this.schemaShared) return;
+    this.columns = this.columns.map(cloneColumn);
+    this.constraints = cloneAst(this.constraints);
+    this.indexes = [...this.indexes];
+    this.colIndex = new Map(this.colIndex);
+    this.schemaShared = false;
+  }
+
+  private copyRowsTo(copy: Table): Table {
     copy.nextRowid = this.nextRowid;
     copy.maximumRowid = this.maximumRowid;
     if (this.slab) {
-      for (const row of this.slab.scan()) copy.rows.set(row.rowid, row);
+      copy.slab = this.slab;
     } else {
-      for (const [rowid, row] of this.rows) copy.rows.set(rowid, row);
+      copy.rows = new Map(this.rows);
     }
-    for (const [clusterKey, row] of this.clusteredRows) copy.clusteredRows.set(clusterKey, row);
+    copy.clusteredRows = new Map(this.clusteredRows);
+    copy.scanCache = this.scanCache;
     return copy;
   }
 
@@ -527,7 +557,17 @@ export class Table {
 
     const uniqueSets = this.uniqueColumnSets();
     if (this.indexes.length === 0) {
+      const rowidAlias = this.integerPrimaryKeyAlias();
       for (const names of uniqueSets) {
+        // insert/update already checked the canonical rowid map. Scanning this same
+        // INTEGER PRIMARY KEY again turns N inserts into quadratic work.
+        if (
+          rowidAlias &&
+          names.length === 1 &&
+          normalizeColumnName(names[0]!) === normalizeColumnName(rowidAlias.name)
+        ) {
+          continue;
+        }
         const values = names.map((name) => this.cell(row, normalizeColumnName(name)));
         if (values.some((value) => value === null)) continue;
         for (const other of this.rows.values()) {

@@ -21,6 +21,7 @@ import { pgError, unsupported } from "../errors/error.ts";
 import { applyDomainChecks } from "../expressions/eval.ts";
 import { sequenceNextval } from "../functions/misc-fns.ts";
 import { indexInsertRow, indexUpdateRow, rebuildTableIndexes } from "../indexes/maintain.ts";
+import { tryPointRowIndices } from "../planner/access.ts";
 import type { ColumnMeta, TableData } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import { datumKey } from "../types/compare.ts";
@@ -54,7 +55,7 @@ export function withStatementRollback<T>(env: ExecEnv, fn: () => T): T {
 function requireTargetTable(env: ExecEnv, parts: string[], verb: string): TableData {
   const state = env.ctx.state;
   const table = state.findTable(parts);
-  if (table) return state.ensureWritableTable(table);
+  if (table) return state.ensureWritableTableForDml(table);
   const view = state.findView(parts);
   if (view) {
     throw pgError("wrong_object_type", `cannot ${verb} view "${view.name}"`, "42809");
@@ -503,7 +504,26 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   const replacedRows: Datum[][] = [];
   let updateCount = 0;
 
-  for (let ri = 0; ri < rows.length; ri++) {
+  // Volatile SET expressions, triggers and CHECK/domain/generated expressions may mutate
+  // other tuples while scanning. Keep their established full-scan evaluation order.
+  const point =
+    !fromSource &&
+    stmt.where &&
+    table.triggers.length === 0 &&
+    !table.columns.some((column) => column.generated || column.domain) &&
+    !table.constraints.some((constraint) => constraint.kind === "check") &&
+    stmt.sets.every(
+      (set) =>
+        set.columns.every((column) => column.subscripts === null && column.fields.length === 0) &&
+        "type" in set.value &&
+        isPureUpdateValue(set.value),
+    ) &&
+    referencingConstraints(env, table).length === 0
+      ? tryPointRowIndices(env, table, label, stmt.where)
+      : null;
+
+  for (let candidate = 0; candidate < (point ? point.indices.length : rows.length); candidate++) {
+    const ri = point ? point.indices[candidate]! : candidate;
     const oldRow = rows[ri]!;
     let matchScope: RowScope | null = null;
 
@@ -560,6 +580,24 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
     return { ...res, rowCount: updateCount };
   }
   return commandResult("UPDATE", updateCount);
+}
+
+function isPureUpdateValue(expr: Expr): boolean {
+  switch (expr.type) {
+    case "param":
+    case "number_lit":
+    case "string_lit":
+    case "bool_lit":
+    case "null_lit":
+    case "colref":
+      return true;
+    case "binop":
+      return isPureUpdateValue(expr.left) && isPureUpdateValue(expr.right);
+    case "unop":
+      return isPureUpdateValue(expr.operand);
+    default:
+      return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -661,7 +699,7 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
     const idxs = referencingRowIdxs(ref, key);
     if (idxs.length === 0) continue;
     const action = con.onDelete ?? "no_action";
-    const child = env.ctx.state.ensureWritableTable(ref.table);
+    const child = env.ctx.state.ensureWritableTableForDml(ref.table);
     const childRows = child.mutableRows();
     switch (action) {
       case "cascade": {
@@ -720,7 +758,7 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
       const idxs = referencingRowIdxs(ref, oldKey);
       if (idxs.length === 0) continue;
       const action = con.onUpdate ?? "no_action";
-      const child = env.ctx.state.ensureWritableTable(ref.table);
+      const child = env.ctx.state.ensureWritableTableForDml(ref.table);
       const childRows = child.mutableRows();
       switch (action) {
         case "cascade": {

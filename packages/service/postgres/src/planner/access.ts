@@ -40,6 +40,72 @@ export function conjunctions(expr: Expr): Expr[] {
   return [expr];
 }
 
+/**
+ * Conservative point access for DML and allocation-free SELECT sources. No casts, volatile
+ * expressions or partial/expression indexes: unsupported shapes retain the existing executor.
+ * Index statistics are left to the caller (DML historically does not increment SELECT scans).
+ */
+export function tryPointRowIndices(
+  env: ExecEnv,
+  table: TableData,
+  alias: string,
+  where: Expr,
+): { indices: readonly number[]; indexName: string } | null {
+  const eqs: ConstEquality[] = [];
+  for (const part of conjunctions(where)) {
+    const eq = equalityAgainstConst(part);
+    if (!eq || !["param", "number_lit", "string_lit", "bool_lit", "null_lit"].includes(eq.valueExpr.type)) return null;
+    if (part.type !== "binop") return null;
+    const column = part.left.type === "colref" ? part.left : part.right;
+    if (column.type !== "colref") return null;
+    if (column.parts.length > 1 && column.parts[column.parts.length - 2] !== alias) return null;
+    eqs.push(eq);
+  }
+  for (const spec of uniqueSpecsFor(env, table)) {
+    if (
+      spec.where ||
+      spec.keys.length !== eqs.length ||
+      spec.keys.some((key) => key.expr) ||
+      !eqs.every((eq, index) => eq.column === spec.columnNames[index])
+    )
+      continue;
+    const values: Datum[] = table.columns.map(() => null);
+    let matches = true;
+    for (let index = 0; index < spec.keys.length; index++) {
+      const key = spec.keys[index]!;
+      const column = table.columns[key.colIdx];
+      const eq = eqs[index];
+      if (!column || !eq || column.domain) {
+        matches = false;
+        break;
+      }
+      // These expression forms cannot inspect a row or invoke user code.
+      const value = evalExpr(env.ctx, makeEvalScope(env, null), eq.valueExpr);
+      if (
+        value.t !== column.type.id &&
+        !(column.type.id === "text" && value.t === "unknown" && typeof value.v === "string")
+      ) {
+        matches = false;
+        break;
+      }
+      values[key.colIdx] = value.v;
+    }
+    if (!matches) continue;
+    const key = uniqueKeyOf(env, table, spec, values);
+    return { indices: key === null ? [] : indexStoreFor(env, table, spec).lookup(key), indexName: spec.name };
+  }
+  return null;
+}
+
+export function recordIndexScan(env: ExecEnv, table: TableData, name: string): void {
+  const schema = env.ctx.state.schemas.get(table.schema);
+  const index = schema?.indexes.get(name);
+  if (schema && index) {
+    const lastScan = env.ctx.state.clock().getTime();
+    schema.indexes.set(name, { ...index, scans: (index.scans ?? 0n) + 1n, lastScan });
+  }
+}
+
 /** Single-table PK / unique equality lookup: returns matching rows or null to scan. */
 export function tryIndexedTableRows(env: ExecEnv, table: TableData, alias: string, where: Expr): Datum[][] | null {
   const parts = conjunctions(where);
@@ -80,12 +146,7 @@ export function tryIndexedTableRows(env: ExecEnv, table: TableData, alias: strin
   const key = uniqueKeyOf(env, table, spec, probeRow);
   if (key === null) return [];
   const hits = indexStoreFor(env, table, spec).lookup(key);
-  const schema = env.ctx.state.schemas.get(table.schema);
-  const index = schema?.indexes.get(spec.name);
-  if (schema && index) {
-    const lastScan = env.ctx.state.clock().getTime();
-    schema.indexes.set(spec.name, { ...index, scans: (index.scans ?? 0n) + 1n, lastScan });
-  }
+  recordIndexScan(env, table, spec.name);
   return hits.map((i) => table.rowAt(i));
 }
 

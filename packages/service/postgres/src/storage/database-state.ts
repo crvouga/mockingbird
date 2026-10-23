@@ -112,6 +112,8 @@ export class TableData {
   shareCount = 0;
   /** Derived unique/btree index maps; null until built or invalidated. */
   indexStores: Map<string, import("../indexes/index.ts").IndexStore> | null = null;
+  /** DML replaces tuples; DDL must detach them before changing cells in place. */
+  private tuplesShared = false;
 
   constructor(schema: string, name: string, columns: ColumnMeta[], oid: number, temp = false) {
     this.schema = schema;
@@ -178,7 +180,7 @@ export class TableData {
     return this.columns.findIndex((c) => c.name === name);
   }
 
-  clone(): TableData {
+  private cloneMetadata(): TableData {
     const t = new TableData(
       this.schema,
       this.name,
@@ -186,6 +188,15 @@ export class TableData {
       this.oid,
       this.temp,
     );
+    t.unlogged = this.unlogged;
+    t.constraints = this.constraints.map((c) => ({ ...c }));
+    t.triggers = this.triggers.map((tr) => ({ ...tr }));
+    t.indexStores = this.indexStores ? new Map([...this.indexStores].map(([k, v]) => [k, v.clone()])) : null;
+    return t;
+  }
+
+  clone(): TableData {
+    const t = this.cloneMetadata();
     if (this.slab) {
       t.rows = this.slab.materialize().map((r) => r.slice());
     } else {
@@ -195,11 +206,40 @@ export class TableData {
       const xmin = this.slabXmins?.[index] ?? this.rowXmins.get(this.rows[index]!);
       if (xmin !== undefined) t.rowXmins.set(row, xmin);
     });
-    t.unlogged = this.unlogged;
-    t.constraints = this.constraints.map((c) => ({ ...c }));
-    t.triggers = this.triggers.map((tr) => ({ ...tr }));
-    t.indexStores = this.indexStores ? new Map([...this.indexStores].map(([k, v]) => [k, v.clone()])) : null;
     return t;
+  }
+
+  /** DML creates new tuple arrays; retain existing tuples and xmin bindings until DDL. */
+  cloneForDml(): TableData {
+    // A trigger can return OLD and stamp it with a new xmin, so its tuples need isolation.
+    if (this.triggers.length > 0) return this.cloneForWrite();
+    const t = this.cloneMetadata();
+    t.rowXmins = this.rowXmins;
+    if (this.slab) {
+      t.rows = this.slab.materialize();
+      if (this.slabXmins) {
+        for (let index = 0; index < t.rows.length; index++) t.rowXmins.set(t.rows[index]!, this.slabXmins[index] ?? 2);
+      }
+    } else {
+      t.rows = this.rows.slice();
+      this.tuplesShared = true;
+    }
+    t.tuplesShared = true;
+    return t;
+  }
+
+  /** A live DML fork can be unfrozen while its unchanged tuples still belong to history. */
+  ownTuples(): void {
+    if (!this.tuplesShared) return;
+    const xmins = new WeakMap<Datum[], number>();
+    this.rows = this.rows.map((row) => {
+      const copy = row.slice();
+      const xmin = this.rowXmins.get(row);
+      if (xmin !== undefined) xmins.set(copy, xmin);
+      return copy;
+    });
+    this.rowXmins = xmins;
+    this.tuplesShared = false;
   }
 
   /** Independent writable copy (row tuples copied so ALTER COLUMN is isolated). */
@@ -691,10 +731,20 @@ export class DatabaseState {
   }
 
   ensureWritableTable(table: TableData): TableData {
-    if (!table.frozen) return table;
+    if (!table.frozen) {
+      table.ownTuples();
+      return table;
+    }
     const schema = this.schemas.get(table.schema);
     const copy = table.cloneForWrite();
     schema?.tables.set(table.name, copy);
+    return copy;
+  }
+
+  ensureWritableTableForDml(table: TableData): TableData {
+    if (!table.frozen) return table;
+    const copy = table.cloneForDml();
+    this.schemas.get(table.schema)?.tables.set(table.name, copy);
     return copy;
   }
 

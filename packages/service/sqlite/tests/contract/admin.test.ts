@@ -93,11 +93,14 @@ test("SQL admin uses the configured prefix for health, UI and query routes", asy
   expect(ui.status).toBe(200);
   expect(await ui.text()).toContain('"adminPrefix":"/_control/mock"');
   expect((await admin.fetch(request("/_control/mock/sql/tables"))).status).toBe(401);
-  const query = await admin.fetch(request("/_control/mock/sql/query", {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-mockingbird-admin-key": "locked" },
-    body: JSON.stringify({ sql: "SELECT 1 AS value" }),
-  }));
+  const query = await admin.fetch(
+    request("/_control/mock/sql/query", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-mockingbird-admin-key": "locked" },
+      body: JSON.stringify({ sql: "SELECT 1 AS value" }),
+    }),
+  );
   expect(query.status).toBe(200);
-  for (const path of ["/health", "/__admin/health", "/__admin/ui", "/__admin/sql/tables"]) expect((await admin.fetch(request(path))).status).toBe(404);
+  for (const path of ["/health", "/__admin/health", "/__admin/ui", "/__admin/sql/tables"])
+    expect((await admin.fetch(request(path))).status).toBe(404);
 });

@@ -6,8 +6,20 @@ import { Database, SqliteError } from "../../../src/index.ts";
 import { expectParity, matrixBoth } from "../../harness/index.ts";
 
 describe("public API exports", () => {
-  test("main entry runtime keys are exactly Database, Snapshot, Statement, SqliteError", () => {
-    expect(Object.keys(sqliteMem).sort()).toEqual(["Database", "Snapshot", "SqliteError", "Statement"]);
+  test("main entry retains the database API and adds injectable durability", () => {
+    expect(Object.keys(sqliteMem).sort()).toEqual([
+      "Database",
+      "DurabilityConflictError",
+      "IndexedDBDurabilityBackend",
+      "LocalStorageDurabilityBackend",
+      "MemoryDurabilityBackend",
+      "Snapshot",
+      "SqliteError",
+      "Statement",
+      "openDurable",
+      "openDurableDatabase",
+      "withDurability",
+    ]);
   });
 
   test("package.json exports ., ./admin, ./socket and ./unstable", () => {

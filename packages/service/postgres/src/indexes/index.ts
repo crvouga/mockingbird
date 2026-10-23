@@ -6,6 +6,23 @@ export class IndexStore {
   readonly unique: boolean;
   private entries = new Map<string, number[]>();
 
+  private shared = false;
+  private ownedBuckets = new WeakSet<number[]>();
+
+  private writableBucket(key: string, bucket: number[]): number[] {
+    if (this.ownedBuckets.has(bucket)) return bucket;
+    const copy = bucket.slice();
+    this.entries.set(key, copy);
+    this.ownedBuckets.add(copy);
+    return copy;
+  }
+
+  private detach(): void {
+    if (!this.shared) return;
+    this.entries = new Map(this.entries);
+    this.shared = false;
+  }
+
   constructor(name: string, unique = false) {
     this.name = name;
     this.unique = unique;
@@ -27,13 +44,16 @@ export class IndexStore {
 
   insert(key: string, rowIdx: number): void {
     if (this.unique) this.checkUnique(key, rowIdx);
+    this.detach();
     const existing = this.entries.get(key);
     if (!existing) {
-      this.entries.set(key, [rowIdx]);
+      const bucket = [rowIdx];
+      this.ownedBuckets.add(bucket);
+      this.entries.set(key, bucket);
       return;
     }
     if (existing.includes(rowIdx)) return;
-    existing.push(rowIdx);
+    this.writableBucket(key, existing).push(rowIdx);
   }
 
   remove(key: string, rowIdx: number): void {
@@ -41,8 +61,13 @@ export class IndexStore {
     if (!existing) return;
     const at = existing.indexOf(rowIdx);
     if (at < 0) return;
-    existing.splice(at, 1);
-    if (existing.length === 0) this.entries.delete(key);
+    this.detach();
+    if (existing.length === 1) this.entries.delete(key);
+    else {
+      const remaining = this.writableBucket(key, existing);
+      remaining.splice(at, 1);
+      this.entries.set(key, remaining);
+    }
   }
 
   lookup(key: string): readonly number[] {
@@ -50,12 +75,16 @@ export class IndexStore {
   }
 
   clear(): void {
-    this.entries.clear();
+    this.entries = new Map();
+    this.shared = false;
   }
 
   clone(): IndexStore {
     const copy = new IndexStore(this.name, this.unique);
-    for (const [key, rowids] of this.entries) copy.entries.set(key, [...rowids]);
+    copy.entries = this.entries;
+    copy.shared = true;
+    this.shared = true;
+    this.ownedBuckets = new WeakSet();
     return copy;
   }
 }

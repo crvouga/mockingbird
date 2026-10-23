@@ -148,8 +148,8 @@ export class Statement {
     if (this.env) {
       this.env.reset(params);
       this.env.hooks.now = this.database.now;
-      this.env.hooks.random = () => this.database.prng.nextSqliteRandom();
-      this.env.hooks.randomU64 = () => this.database.prng.nextU64();
+      // The existing callbacks read this.database.prng at invocation time, including
+      // after restore. Rebuilding them on every prepared execution only allocates.
       return this.env;
     }
     this.env = new ExecutionEnv(this.database.state, this.database.transactions, params, undefined, {

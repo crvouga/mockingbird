@@ -21,6 +21,23 @@
  *
  * @module
  */
+
+export {
+  type DurabilityBackend,
+  type DurabilityCodec,
+  DurabilityConflictError,
+  type Durable,
+  type DurableImage,
+  type DurableOptions,
+  type DurablePatch,
+  IndexedDBDurabilityBackend,
+  type IndexedDBDurabilityOptions,
+  LocalStorageDurabilityBackend,
+  type LocalStorageDurabilityOptions,
+  MemoryDurabilityBackend,
+  openDurable,
+  withDurability,
+} from "@crvouga/mockingbird-core";
 export {
   Database,
   type DatabaseHistory,
@@ -29,6 +46,7 @@ export {
   type QueryOptions,
   Snapshot,
 } from "./api/database.ts";
+export { type DurableDatabaseOptions, openDurableDatabase } from "./api/durable.ts";
 export { type RunResult, Statement } from "./api/statement.ts";
 export { type ErrorCategory, SqliteError } from "./errors/index.ts";
 export type { ResultSet } from "./executor/result.ts";

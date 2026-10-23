@@ -62,8 +62,20 @@ export function indexRemoveRow(env: ExecEnv, table: TableData, rowIdx: number, r
 }
 
 export function indexUpdateRow(env: ExecEnv, table: TableData, rowIdx: number, oldRow: Datum[], newRow: Datum[]): void {
-  indexRemoveRow(env, table, rowIdx, oldRow);
-  indexInsertRow(env, table, rowIdx, newRow);
+  const specs = uniqueSpecsFor(env, table);
+  if (specs.some((spec) => spec.where || spec.keys.some((key) => key.expr))) {
+    // Preserve evaluation order for expression/partial predicates, including user functions.
+    indexRemoveRow(env, table, rowIdx, oldRow);
+    indexInsertRow(env, table, rowIdx, newRow);
+    return;
+  }
+  for (const spec of specs) {
+    const before = uniqueKeyOf(env, table, spec, oldRow);
+    const after = uniqueKeyOf(env, table, spec, newRow);
+    if (before === after) continue;
+    if (before !== null) table.indexStores?.get(spec.name)?.remove(before, rowIdx);
+    if (after !== null) indexStoreFor(env, table, spec).insert(after, rowIdx);
+  }
 }
 
 export function rebuildTableIndexes(env: ExecEnv, table: TableData): void {

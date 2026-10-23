@@ -48,6 +48,9 @@ export interface IndexInfo {
   store: IndexStore;
 }
 
+/** DML shares immutable index expressions; schema edits must detach them in either branch. */
+const sharedIndexSchemas = new WeakSet<IndexInfo>();
+
 export interface TriggerInfo {
   name: string;
   tableName: string;
@@ -616,10 +619,26 @@ export class DatabaseState {
   }
 
   ensureWritableTable(table: Table): Table {
-    if (!table.frozen) return table;
+    if (!table.frozen) {
+      table.ownSchema();
+      return table;
+    }
     const key = keyOf(table.name);
     const copy = table.clone();
     this.tables.set(key, copy);
+    return copy;
+  }
+
+  getWritableTableForDml(name: string): Table {
+    const { schema, bare } = splitQualifiedName(name);
+    if (schema !== null) return this.databaseForSchema(schema, name).getWritableTableForDml(bare);
+    return this.ensureWritableTableForDml(this.getTable(bare));
+  }
+
+  ensureWritableTableForDml(table: Table): Table {
+    if (!table.frozen) return table;
+    const copy = table.cloneForDml();
+    this.tables.set(keyOf(table.name), copy);
     return copy;
   }
 
@@ -631,7 +650,7 @@ export class DatabaseState {
   }
 
   ensureWritableIndex(index: IndexInfo): IndexInfo {
-    if (!index.store.frozen) return index;
+    if (!index.store.frozen && !sharedIndexSchemas.has(index)) return index;
     const copy: IndexInfo = {
       name: index.name,
       tableName: index.tableName,
@@ -639,8 +658,17 @@ export class DatabaseState {
       columns: structuredClone(index.columns),
       where: index.where ? structuredClone(index.where) : null,
       originalSql: index.originalSql,
-      store: index.store.clone(),
+      store: index.store.frozen ? index.store.clone() : index.store,
     };
+    this.indexes.set(keyOf(index.name), copy);
+    return copy;
+  }
+
+  ensureWritableIndexForDml(index: IndexInfo): IndexInfo {
+    if (!index.store.frozen) return index;
+    const copy = { ...index, store: index.store.clone() };
+    sharedIndexSchemas.add(index);
+    sharedIndexSchemas.add(copy);
     this.indexes.set(keyOf(index.name), copy);
     return copy;
   }

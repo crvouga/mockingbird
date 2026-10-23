@@ -97,6 +97,14 @@ export class Writer {
     this.len += 8;
   }
 
+  /** Finite integer Number, encoded identically to i64(BigInt(value)) without allocation. */
+  i64Number(value: number): void {
+    this.ensure(8);
+    this.view.setUint32(this.len, value >>> 0, true);
+    this.view.setUint32(this.len + 4, Math.floor(value / 0x1_0000_0000) >>> 0, true);
+    this.len += 8;
+  }
+
   f64(value: number): void {
     this.ensure(8);
     this.view.setFloat64(this.len, value, true);
@@ -107,6 +115,14 @@ export class Writer {
     this.ensure(value.length);
     this.buf.set(value, this.len);
     this.len += value.length;
+  }
+
+  /** Reserve one contiguous region. Fill it before any subsequent Writer call can grow the buffer. */
+  block(byteLength: number): DataView {
+    this.ensure(byteLength);
+    const block = new DataView(this.buf.buffer, this.len, byteLength);
+    this.len += byteLength;
+    return block;
   }
 
   /** Length-prefixed UTF-8. */
@@ -123,7 +139,7 @@ export class Writer {
 
   finish(): Uint8Array {
     if (this.len === this.buf.length) return this.buf;
-    return this.buf.subarray(0, this.len).slice();
+    return this.buf.slice(0, this.len);
   }
 
   fail(): never {
@@ -371,15 +387,18 @@ export function writeInternTable(w: Writer, strings: readonly string[]): void {
   writeVarintU32(w, strings.length);
   if (strings.length === 0) return;
   const offsets: number[] = [];
+  const encoded: Uint8Array[] = [];
   let total = 0;
   for (const s of strings) {
     offsets.push(total);
-    total += utf8Encode(s).length;
+    const bytes = utf8Encode(s);
+    encoded.push(bytes);
+    total += bytes.length;
   }
   writeVarintU32(w, total);
   const base = w.position + offsets.length * 4;
   for (const off of offsets) w.u32(base + off);
-  for (const s of strings) w.textBytes(s);
+  for (const bytes of encoded) w.raw(bytes);
 }
 
 export function readInternTable(r: Reader): string[] {

@@ -1,8 +1,8 @@
-import { describe, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import * as fc from "fast-check";
 import { Database } from "../../src/index.ts";
 import { fuzzAssertConfig, intArb, textArb } from "./config.ts";
-import { expectFastFullInsertParity, expectFastFullSelectParity } from "./fast-path-helpers.ts";
+import { expectFastFullInsertParity, expectFastFullSelectParity, runInternal } from "./fast-path-helpers.ts";
 import { compareOrReport, sqlLiteral, withDatabases } from "./helpers.ts";
 
 const rowArb = fc.record({
@@ -81,4 +81,44 @@ describe("fast vs full executor path", () => {
       fuzzAssertConfig(20),
     );
   });
+});
+
+test("rowid and NOT NULL inserts keep fast/full rows, errors and counters identical", () => {
+  for (const schema of [
+    "CREATE TABLE t(id INTEGER PRIMARY KEY, a INT NOT NULL, b TEXT NOT NULL)",
+    "CREATE TABLE t(id INTEGER PRIMARY KEY AUTOINCREMENT, a INT NOT NULL, b TEXT DEFAULT 'default')",
+    "CREATE TABLE t(id INT, a INT NOT NULL, b TEXT)",
+  ]) {
+    const fast = new Database();
+    const full = new Database();
+    fast.exec(schema);
+    full.exec(schema);
+    for (const sql of [
+      "INSERT INTO t VALUES (1, 2, 'a')",
+      "INSERT INTO t VALUES (2, 3, 'b')",
+      "INSERT INTO t VALUES (2, 4, 'duplicate')",
+      "INSERT INTO t VALUES (NULL, 5, 'allocated')",
+      "INSERT INTO t VALUES (4, NULL, 'not-null')",
+      "INSERT INTO t VALUES (5, 6, NULL)",
+      "INSERT INTO t(id, a) VALUES (7, 8)",
+      "INSERT INTO t VALUES ('invalid', 9, 'type')",
+      "INSERT INTO t(missing, a) VALUES (10, 11)",
+    ]) {
+      const execute = (db: Database, forceFullInsert: boolean) => {
+        try {
+          return { result: runInternal(db, sql, { forceFullInsert }) };
+        } catch (error) {
+          const e = error as Error & { category: string; code: string };
+          return { error: [e.message, e.category, e.code] };
+        }
+      };
+      expect(execute(fast, false)).toEqual(execute(full, true));
+      expect(fast.query("SELECT * FROM t ORDER BY rowid")).toEqual(full.query("SELECT * FROM t ORDER BY rowid"));
+      expect([fast.changes, fast.totalChanges, fast.lastInsertRowid]).toEqual([
+        full.changes,
+        full.totalChanges,
+        full.lastInsertRowid,
+      ]);
+    }
+  }
 });
