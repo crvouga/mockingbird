@@ -10,6 +10,7 @@ export interface Database {
   transaction<T>(run: () => T): T
   close(): void
   state: unknown
+  engineState?: unknown
   snapshot?(): { encode(): Uint8Array }
 }
 
@@ -40,8 +41,17 @@ export interface SQLModule {
   IndexedDBDurabilityBackend: new (options: {
     indexedDB: object
     name: string
+    durability?: "default" | "strict" | "relaxed"
   }) => Backend & { close(): Promise<void> }
   openDurableDatabase(options: { key: string; backend: Backend }): Promise<Durable<Database>>
+  openBufferedDurableDatabase?(options: {
+    key: string
+    backend: Backend
+    scheduler?: {
+      schedule(run: () => void, delayMs: number): unknown
+      cancel(handle: unknown): void
+    }
+  }): Promise<Durable<Database> & { readonly pending: boolean }>
   openDurable<T>(options: {
     key: string
     backend: Backend

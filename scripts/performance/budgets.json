@@ -33,7 +33,51 @@
     "durability/dense-indexeddb-emulated-1MiB": 250,
     "collection/point-read/1000": 250,
     "collection/update-batch/1000": 100,
-    "collection/insert/1000": 1000
+    "collection/insert/1000": 1000,
+    "sqlite/production/transaction-per-write/100000": 100,
+    "sqlite/production/indexed-transaction-per-write/100000": 200,
+    "sqlite/production/update-batch/100000": 100,
+    "sqlite/production/rollback/100000": 100,
+    "sqlite/production/point-read/100000": 250,
+    "sqlite/production/range-read/100000": 50,
+    "sqlite/production/durable-indexeddb-emulated/100000": 500,
+    "postgres/production/transaction-per-write/100000": 100,
+    "postgres/production/indexed-transaction-per-write/100000": 200,
+    "postgres/production/update-batch/100000": 100,
+    "postgres/production/rollback/100000": 100,
+    "postgres/production/point-read/100000": 250,
+    "postgres/production/range-read/100000": 50,
+    "postgres/production/durable-indexeddb-emulated/100000": 500,
+    "sql.js/production/transaction-per-write/100000": 100,
+    "sql.js/production/indexed-transaction-per-write/100000": 200,
+    "sql.js/production/update-batch/100000": 100,
+    "sql.js/production/rollback/100000": 100,
+    "sql.js/production/point-read/100000": 250,
+    "sql.js/production/range-read/100000": 50,
+    "sqlite/buffered/legacy-sparse-flush/100000": 1000,
+    "sqlite/buffered/sparse-flush/100000": 100,
+    "sqlite/buffered/batch-flush/100000": 100,
+    "sqlite/buffered/coalesced-flush/100000": 250,
+    "sqlite/buffered/enqueue/100000": 250,
+    "sqlite/buffered/reopen-read-close/100000": 10000,
+    "postgres/buffered/legacy-sparse-flush/100000": 1000,
+    "postgres/buffered/sparse-flush/100000": 100,
+    "postgres/buffered/batch-flush/100000": 100,
+    "postgres/buffered/coalesced-flush/100000": 250,
+    "postgres/buffered/enqueue/100000": 250,
+    "postgres/buffered/reopen-read-close/100000": 10000,
+    "sqlite/buffered/legacy-sparse-flush/1000000": 1000,
+    "sqlite/buffered/sparse-flush/1000000": 100,
+    "sqlite/buffered/batch-flush/1000000": 100,
+    "sqlite/buffered/coalesced-flush/1000000": 250,
+    "sqlite/buffered/enqueue/1000000": 250,
+    "sqlite/buffered/reopen-read-close/1000000": 10000,
+    "postgres/buffered/legacy-sparse-flush/1000000": 1000,
+    "postgres/buffered/sparse-flush/1000000": 100,
+    "postgres/buffered/batch-flush/1000000": 100,
+    "postgres/buffered/coalesced-flush/1000000": 250,
+    "postgres/buffered/enqueue/1000000": 250,
+    "postgres/buffered/reopen-read-close/1000000": 10000
   },
   "maxWork": {
     "durability/sparse-8MiB": {
@@ -66,6 +110,100 @@
     "collection/insert/1000": {
       "schemaCopies": 0,
       "indexSchemaCopies": 0
+    },
+    "sqlite/production/transaction-per-write/100000": {
+      "copiedRowReferences": 0,
+      "copiedHashEntries": 20000
+    },
+    "postgres/production/transaction-per-write/100000": {
+      "copiedRowReferences": 0,
+      "copiedHashEntries": 20000
+    },
+    "sqlite/production/range-read/100000": {
+      "candidateRowVisits": 1000
+    },
+    "postgres/production/range-read/100000": {
+      "candidateRowVisits": 1000
+    },
+    "sqlite/buffered/sparse-flush/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "sqlite/buffered/batch-flush/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 500
+    },
+    "sqlite/buffered/coalesced-flush/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "sqlite/buffered/enqueue/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 0
+    },
+    "postgres/buffered/sparse-flush/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "postgres/buffered/batch-flush/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 500
+    },
+    "postgres/buffered/coalesced-flush/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "postgres/buffered/enqueue/100000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 0
+    },
+    "sqlite/buffered/sparse-flush/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "sqlite/buffered/batch-flush/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 500
+    },
+    "sqlite/buffered/coalesced-flush/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "sqlite/buffered/enqueue/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 0
+    },
+    "postgres/buffered/sparse-flush/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "postgres/buffered/batch-flush/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 500
+    },
+    "postgres/buffered/coalesced-flush/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 8
+    },
+    "postgres/buffered/enqueue/1000000": {
+      "fullSnapshotEncodes": 0,
+      "bytesPerBatch": 65536,
+      "serializedRowVisitsPerBatch": 0
     }
   },
   "wasmRatios": {
@@ -117,6 +255,46 @@
     "postgres/insert/1000": {
       "reference": "sql.js/insert/1000",
       "factor": 12,
+      "floorMs": 10
+    },
+    "sqlite/production/transaction-per-write/100000": {
+      "reference": "sql.js/production/transaction-per-write/100000",
+      "factor": 8,
+      "floorMs": 20
+    },
+    "sqlite/production/indexed-transaction-per-write/100000": {
+      "reference": "sql.js/production/indexed-transaction-per-write/100000",
+      "factor": 8,
+      "floorMs": 20
+    },
+    "sqlite/production/point-read/100000": {
+      "reference": "sql.js/production/point-read/100000",
+      "factor": 4,
+      "floorMs": 10
+    },
+    "sqlite/production/range-read/100000": {
+      "reference": "sql.js/production/range-read/100000",
+      "factor": 4,
+      "floorMs": 10
+    },
+    "postgres/production/transaction-per-write/100000": {
+      "reference": "sql.js/production/transaction-per-write/100000",
+      "factor": 8,
+      "floorMs": 20
+    },
+    "postgres/production/indexed-transaction-per-write/100000": {
+      "reference": "sql.js/production/indexed-transaction-per-write/100000",
+      "factor": 8,
+      "floorMs": 20
+    },
+    "postgres/production/point-read/100000": {
+      "reference": "sql.js/production/point-read/100000",
+      "factor": 4,
+      "floorMs": 10
+    },
+    "postgres/production/range-read/100000": {
+      "reference": "sql.js/production/range-read/100000",
+      "factor": 4,
       "floorMs": 10
     }
   }

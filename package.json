@@ -101,8 +101,10 @@
     "health:all": "bun scripts/health/task.ts --summary",
     "performance": "bun scripts/performance/run.ts --check",
     "performance:profile": "bun scripts/performance/profile.ts",
-    "check:performance": "bun scripts/performance/run.ts --check",
-    "performance:browser": "turbo run build --filter=@crvouga/mockingbird-service-sqlite --filter=@crvouga/mockingbird-service-postgres && bun scripts/performance/browser.ts"
+    "check:performance": "bun scripts/performance/run.ts --check && bun scripts/performance/run.ts --check --production --out .performance/production.json && bun scripts/performance/run.ts --check --buffered --out .performance/buffered.json",
+    "performance:browser": "turbo run build --filter=@crvouga/mockingbird-service-sqlite --filter=@crvouga/mockingbird-service-postgres && bun scripts/performance/browser.ts",
+    "performance:production": "bun scripts/performance/run.ts --check --production",
+    "performance:buffered": "bun scripts/performance/run.ts --check --buffered"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

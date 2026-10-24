@@ -55,11 +55,13 @@ async function updateProbe(
   const originalRows = (table as { rows: unknown[][] }).rows
   type Table = {
     mutableRows(): unknown[][]
+    writeRows?(): unknown[][]
     rowAt(index: number): unknown[]
     rowCount(): number
     cloneForWrite(): Table
   }
   const prototype = Object.getPrototypeOf(table) as Table
+  const writeRows = prototype.writeRows
   const mutableRows = prototype.mutableRows
   const rowAt = prototype.rowAt
   const cloneForWrite = prototype.cloneForWrite
@@ -69,14 +71,20 @@ async function updateProbe(
     copied += this.rowCount()
     return cloneForWrite.call(this)
   }
-  prototype.mutableRows = function () {
-    return new Proxy(mutableRows.call(this), {
+  const observe = (rows: unknown[][]) =>
+    new Proxy(rows, {
       get(target, key, receiver) {
         if (typeof key === "string" && key !== "" && Number.isInteger(Number(key))) visits++
         return Reflect.get(target, key, receiver)
       },
     })
+  prototype.mutableRows = function () {
+    return observe(mutableRows.call(this))
   }
+  if (writeRows)
+    prototype.writeRows = function () {
+      return observe(writeRows.call(this))
+    }
   prototype.rowAt = function (index) {
     visits++
     return rowAt.call(this, index)
@@ -103,6 +111,7 @@ async function updateProbe(
     }
   } finally {
     prototype.mutableRows = mutableRows
+    if (writeRows) prototype.writeRows = writeRows
     prototype.rowAt = rowAt
     prototype.cloneForWrite = cloneForWrite
     db.close()

@@ -10,6 +10,16 @@ type BrowserReport = {
   runId: string
   compactPages?: { pageCount: number; imageBytes: number; backingBytes: number }
   recovery: string[]
+  production: { engine: string; priorValue: number; recoveredValue: number; rows: number }[]
+  buffered: {
+    engine: string
+    priorValue: number
+    recoveredValue: number
+    rows: number
+    automaticSave: boolean
+    fullSnapshotEncodes: number
+    maxCommitBytes: number
+  }[]
   results: { name: string; medianMs?: number; p95Ms?: number; totalMs?: number }[]
 }
 
@@ -44,6 +54,37 @@ function validate(report: BrowserReport): void {
           throw new Error(`Missing browser timing: ${engine}/${backend}/${metric}`)
       }
     }
+  for (const engine of ["sqlite", "postgres"]) {
+    const production = report.production?.find((entry) => entry.engine === engine)
+    if (
+      production?.rows !== 100_000 ||
+      production.recoveredValue !== production.priorValue + 1_000_000
+    )
+      throw new Error(`Missing large-table browser recovery: ${engine}`)
+    const timing = report.results.find(
+      (result) => result.name === `${engine}/production/indexed-100-transactions-and-save/100000`,
+    )
+    if (!timing || !Number.isFinite(timing.medianMs) || !Number.isFinite(timing.p95Ms))
+      throw new Error(`Missing large-table browser timing: ${engine}`)
+    const buffered = report.buffered?.find((entry) => entry.engine === engine)
+    if (
+      buffered?.rows !== 100_000 ||
+      buffered.recoveredValue !== buffered.priorValue + 11 ||
+      !buffered.automaticSave ||
+      buffered.fullSnapshotEncodes !== 0 ||
+      buffered.maxCommitBytes > 65536
+    )
+      throw new Error(`Missing incremental browser recovery: ${engine}`)
+    const bufferedTiming = report.results.find(
+      (result) => result.name === `${engine}/buffered/indexed-100-transactions-and-save/100000`,
+    )
+    if (
+      !bufferedTiming ||
+      !Number.isFinite(bufferedTiming.medianMs) ||
+      !Number.isFinite(bufferedTiming.p95Ms)
+    )
+      throw new Error(`Missing incremental browser timing: ${engine}`)
+  }
 }
 
 // Act verbs can require a workspace grant. Fail and surface the CLI's reason; do not bypass it.
@@ -123,6 +164,18 @@ try {
   console.log("Browser runtime and storage recovery: passed")
   await sc(["browser", "reload", "--tab", tab.id, "--json"])
   const reloaded = await completed(first.runId)
+  for (const prior of first.production) {
+    const next = reloaded.production.find((entry) => entry.engine === prior.engine)
+    if (next?.priorValue !== prior.recoveredValue)
+      throw new Error(`Browser reload lost large-table state: ${prior.engine}`)
+  }
+  for (const prior of first.buffered) {
+    if (
+      reloaded.buffered.find((entry) => entry.engine === prior.engine)?.priorValue !==
+      prior.recoveredValue
+    )
+      throw new Error(`Browser reload lost incremental state: ${prior.engine}`)
+  }
   for (const prior of first.recovery.filter((entry) => entry.includes("/prior-page:"))) {
     const [key, value] = prior.split(": ")
     const expected = (Number(value) || 0) + 1

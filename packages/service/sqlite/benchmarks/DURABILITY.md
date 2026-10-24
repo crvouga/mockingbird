@@ -203,9 +203,9 @@ do **not** represent physical browser IO latency. The browser command validates 
 and both adapters, then reloads and checks counters from the previous page. To run outside
 super.engineering, serve `benchmarks/durability-browser.ts` manually as described above.
 
-Snapshot encoding and image comparison still scale with image size. Collection inserts and
-autocommit writes also retain native Map-copy costs. These are measured workloads for small
-datasets, not a claim of universal WASM/OPFS parity.
+Snapshot encoding and image comparison still scale with image size. At this stage, collection
+inserts and transaction forks also retained native Map-copy costs; the large-table pass below
+addresses those copies. These measurements do not establish universal WASM/OPFS parity.
 
 ## Further allocation reductions
 
@@ -249,7 +249,7 @@ separate-process CI reports. Allocation/work limits provide the hardware-indepen
 sparse codec-buffer copies fall from 8 MiB to 16 KiB, and collection writes copy zero table or
 index schema objects. In the diagnostic insert profile, `structuredClone` falls from 14.6%
 of self samples to below the profiler's displayed 0.1% precision. Native Map construction is
-now the largest sampled cost; full snapshot encoding/comparison also remains linear in image
+the largest sampled cost in that profile; full snapshot encoding/comparison also remains linear in image
 size. The final 33-workload report passes all budgets, including the sql.js comparisons.
 
 The dense IndexedDB case also guards a browser-specific amplification: structured cloning a
@@ -260,6 +260,198 @@ The gate measures the actual buffer sizes passed to the object store, and real W
 verification reads all 64 stored pages back and requires exactly 1 MiB of backing buffers.
 The emulated dense timing includes acknowledgement of one 64-page transaction but is a CPU
 benchmark, not a measurement of physical browser storage latency.
+
+## Large-table transactions and range reads
+
+`bun run performance:production` runs 20 additional workloads at 100,000 rows, including
+sql.js runtime references. `bun run check` and the PR Static job run these alongside the
+original 33 cases. Setup, verification and cleanup are excluded from timings; each fixture
+checks its final rows, index lookups or persisted/reopened state. Work-count probes fail on
+whole-table reference copies or excessive range candidate visits, independently of CPU speed.
+Profile a case with:
+
+```sh
+bun run performance:profile -- --only postgres/production/rollback/100000
+```
+
+The shared core now supplies an insertion-ordered persistent map. Forks share hash directories,
+native hash buckets and 32-way order pages; writes detach only their bucket and order path.
+The directory has 1,024 buckets, so bucket-copy cost still depends on size and hash distribution.
+This trades additional entry/directory memory for smaller transaction copies. Maps below 4,096
+entries retain native storage. SQLite uses this for row/clustered stores and both engines use it
+for large index maps. PostgreSQL point updates share their base row-reference array and keep
+sparse tuple replacements in a persistent map. Scans, structural edits and public Map/Array
+access materialize native containers; existing public field identity and mutation behavior remain
+covered by compatibility tests.
+
+Bounded numeric SQLite predicates seek an index interval and retain residual filtering for
+exclusive endpoints and additional predicates. PostgreSQL adds conservative bounded int2/int4
+access through simple unique indexes, retaining heap order before projection. Unsupported
+types, expressions and query shapes use the existing executor. Ordered caches are invalidated
+when keys change and remain isolated across forks. Pure derived PostgreSQL indexes survive
+rollback in the frozen source, avoiding repeated rebuilds; expression/partial indexes and
+triggers retain their evaluation order. DDL detaches shared cell arrays, and repeated savepoint
+restore keeps catalog maps independent. SQLM/PGMM snapshot formats remain unchanged.
+
+The [large-table report](../../../../scripts/performance/results/production-optimization.json)
+records retained-bundle hashes, raw standalone results, alternating paired measurements,
+diagnostic profile summaries and both real-browser page loads. Paired medians on Bun 1.4.2,
+macOS arm64, five warmups and 21 samples per implementation, all at 100,000 rows:
+
+| Workload | Before | After | Speedup |
+| --- | ---: | ---: | ---: |
+| SQLite: 100 individual transactions | 33.96 ms | 0.86 ms | 39× |
+| SQLite: 100 individual transactions changing an indexed key | 291.06 ms | 2.17 ms | 134× |
+| PostgreSQL: 100 individual transactions changing an indexed key | 113.13 ms | 1.69 ms | 67× |
+| SQLite: ten bounded range reads | 849.75 ms | 0.81 ms | 1,048× |
+| PostgreSQL: ten bounded range reads | 304.57 ms | 0.47 ms | 644× |
+| PostgreSQL: 100 indexed updates, nested savepoint and rollback | 48.93 ms | 1.32 ms | 37× |
+
+For 100 steady-state individual transactions, whole-table reference copies fall from 10 million
+to zero in each engine. SQLite instead detaches 9,817 hash entries; PostgreSQL detaches seven
+in its sparse replacement map. Initial conversion/index construction is outside those counts.
+Ten range probes fall from 1 million visits to 330 SQLite candidates (including closed interval
+endpoints) and 640 PostgreSQL accesses (counting both rowAt and native-array reads). These are
+warm caches; the first sort/index build remains proportional to the data. The small native-map
+cases stayed within about seven percent of their paired baseline medians in this run; the
+results do not establish uniform improvements across all workloads or machines.
+
+Real WebKit also preserves 100,000 rows in both engines across close/reopen and page reload,
+including independent historical branches. Each measured group runs 100 indexed single-row
+transactions followed by **one awaited IndexedDB save**. First-page medians were 100 ms for
+SQLite and 26 ms for PostgreSQL; the second page measured 64 ms and 12 ms respectively.
+The reload verifies that each prior value advances by exactly the expected one million.
+
+The sql.js comparison is an in-memory WASM runtime reference. Grouped updates still trail
+sql.js: the standalone 100-update transaction measured 2.05 ms SQLite / 1.12 ms PostgreSQL /
+0.11 ms sql.js. Snapshot encode/compare remains linear in image size, and the browser results
+use batched durability acknowledgements. Neither the emulated IndexedDB timings nor the real
+browser recovery checks establish OPFS performance parity, general multi-session server
+concurrency, or production suitability for every workload.
+
+## Opt-in buffered incremental persistence
+
+`openBufferedDurableDatabase` is available from both SQL packages. It keeps SQL synchronous,
+coalesces mutations by physical row identity, and schedules persistence 1,000 ms after the first
+unsaved change. The deadline does not slide with continuing writes. Suspended tabs can delay
+it; this mode accepts loss of recent unacknowledged work. Use one writer per database key.
+The new factory's owned IndexedDB adapter uses relaxed durability. The existing
+`openDurableDatabase` and adapter constructor retain their strict defaults.
+
+```ts
+import { openBufferedDurableDatabase } from "@crvouga/mockingbird-service-sqlite";
+
+const durable = await openBufferedDurableDatabase({
+  key: "main",
+  flushIntervalMs: 1000,
+  onError: error => console.error("Background save failed", error),
+});
+durable.value.exec("CREATE TABLE IF NOT EXISTS counters(id INTEGER PRIMARY KEY, n INTEGER)");
+durable.value.exec("INSERT INTO counters VALUES (1,0) ON CONFLICT(id) DO UPDATE SET n = n + 1");
+await durable.flush(); // explicit acknowledgement when needed
+await durable.close(); // flush first, then release the handle
+```
+
+Ordinary saves capture only changed rows/tombstones and small schema/runtime metadata. Values
+use the existing SQLM/PGMM codecs, including numeric/binary types; PostgreSQL uses stable private
+row IDs and retains xmin. Trigger/function results are physical values, not SQL to reexecute.
+Counters, PRNG/clock, sequences, prepared/session metadata and supported schema state accompany
+the rows. Repeated changes to one key produce one final value per capture. The shared controller
+serializes storage commits while later SQL mutations remain pending; acknowledgement clears only
+the captured versions. Independent journal forks keep rollback from mutating comparison tokens.
+
+The MBDJ v1 envelope contains a complete checkpoint plus checksummed append frames. Atomic
+backend page writes advance the persisted byte length and revision. The controller retains only
+the last append page, so sparse saves do not scan/diff the existing image or rewrite its header.
+Recovery validates the envelope and applies physical records, then rebuilds derived indexes.
+Both current openers read old raw snapshots and new envelopes. An immediate writer opening an
+envelope retains a complete checkpoint envelope so richer runtime metadata survives. Existing
+raw keys stay raw unless explicitly opened in buffered mode; `Snapshot.encode/decode` formats
+are unchanged.
+
+Compaction replaces the journal after 256 successful delta batches or journal growth reaching
+`max(4 MiB, checkpoint size)`; `compactAfterBatches` and `compactAfterBytes` override these
+thresholds. Schema/opaque mutations select checkpoints. Public raw state/native Map/Array access,
+borrowed binary query results, PostgreSQL binary parameters and registered host callbacks select
+a conservative full-checkpoint fallback because retained references can mutate outside SQL.
+Expression/partial SQLite indexes also use that fallback. Buffered mode inherits the snapshot
+codec's coverage; it does not add persistence for attached/virtual-table data. LocalStorage shares
+the protocol but still performs synchronous whole-image base64 rewrites; IndexedDB is the path
+for incremental IO.
+
+`pending` reports unacknowledged mutations/queued work. `lastError` and `onError` expose IO/quota
+failures, which keep pending state for bounded-backoff retries. Revision conflicts stop the
+background writer; reopen to reconcile. Explicit `write`, `flush` and `close` await acknowledgement
+and reject on failure. Active SQL transactions defer background work and reject explicit saves.
+Close via the durability handle; closing the raw engine cancels its timer and cannot acknowledge
+unsaved changes. Page-hide saves are best effort, not an unload guarantee.
+
+The reusable `openBufferedDurable` controller depends on `IncrementalDurabilityCodec`,
+`DurabilityScheduler`, `DurabilityLifecycle` and the existing `DurabilityBackend` port. SQL-specific
+row tracking stays in engine adapters. Default in-memory databases do not install a journal,
+background scheduler or lifecycle listener.
+
+```sh
+# Twelve 100,000-row cases, including the immediate writer as a control:
+bun run performance:buffered
+
+# Optional million-row sparse-save scale check:
+bun run performance:buffered -- --rows 1000000 --only sparse-flush --samples 5
+
+# Diagnose capture, encoding, allocation and IO separately:
+bun run performance:profile -- --only postgres/buffered/sparse-flush/100000
+
+# Real IndexedDB acknowledgement, autonomous timer save and page reload recovery:
+bun run performance:browser
+```
+
+The gate separates enqueue-only SQL, sparse/batched/coalesced acknowledged saves, and recovery.
+After initial checkpoint/index construction, sparse saves require zero full snapshot encodes,
+zero unchanged-row serialization, and at most 64 KiB of submitted page bytes. A deliberate
+full-snapshot canary must fail these work limits. `bun run check` runs the twelve cases alongside
+the existing 33 general and 20 large-table workloads. Fake IndexedDB isolates CPU/work counts;
+real browser runs verify actual asynchronous transactions, 100,000-row recovery and an autonomous
+one-second timer save before any explicit flush/close. The reload must retain that exact value.
+
+The [buffered optimization report](../../../../scripts/performance/results/buffered-optimization.json)
+retains all twelve raw 100,000-row results, million-row checks, browser page loads, layout
+experiments, default-runtime diagnostics and profile summaries. Isolated Bun 1.4.2/macOS arm64
+measurements, three warmups and nine samples (five samples for the million-row check):
+
+| One-row update + acknowledged save | Immediate writer | Buffered writer | Speedup |
+| --- | ---: | ---: | ---: |
+| SQLite, 100,000 rows | 16.16 ms | 0.178 ms | 91× |
+| PostgreSQL, 100,000 rows | 18.63 ms | 0.261 ms | 71× |
+| SQLite, 1,000,000 rows | 327.56 ms | 2.27 ms | 144× |
+| PostgreSQL, 1,000,000 rows | 308.65 ms | 0.976 ms | 316× |
+
+These comparisons use the two openers in the same source revision, the same relaxed fake
+IndexedDB adapter and matching SQL/transaction boundaries. They measure ordinary delta saves
+after checkpoint/index construction, excluding periodic compaction. They are CPU/queue/adapter
+measurements, not physical disk latency. Sparse saves serialize one changed SQLite row or
+three PostgreSQL row visits across codec passes, with zero unchanged-row serialization and
+zero full snapshot encodes. Full checkpoints and recovery still scale with database size.
+
+Real WebKit measured groups of 100 indexed transactions plus one awaited IndexedDB save at
+9/6 ms (SQLite/PostgreSQL) on the first page and 4/5 ms after reload. Both engines separately
+saved an extra mutation through their autonomous timer, before any flush/close, and recovered
+exactly 11 then 22 across the two loads. Maximum observed submitted bytes were below 22 KiB;
+there were no full snapshot encodes during observed buffered saves. These results establish
+recovery for this workload, not universal WASM/OPFS or server concurrency parity.
+
+The layout experiment retained 32×32 buckets. Larger layouts improved synthetic forks but did
+not meet the required combination of a clear real-SQL write gain and repeatable read/scan
+stability. The default runtime installs durability execution hooks only on buffered statements;
+ordinary prepared execution has no per-call observer checks. Mixed-process default-runtime
+comparisons had GC/JIT variance (including small SQLite transaction slowdowns); fresh-process
+100,000-row read/scan pairs showed no repeated regression above five percent across three
+rounds, with one PostgreSQL point-read outlier. All raw rounds remain in the report.
+
+PostgreSQL CPU sampling moves from packed-column encoding, materialization and full-image page
+comparison toward adapter key handling, cloning and iteration. The buffered profile includes
+initial/recovery work and periodic compaction; profile iteration counts are not the steady-save
+benchmark. Performance gates retain their work-count budgets and deliberately fail on a forced
+full-snapshot fallback.
 
 ## Verification
 

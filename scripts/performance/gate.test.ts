@@ -168,3 +168,36 @@ test("the real performance command rejects a deliberately de-indexed query", asy
     await rm(directory, { recursive: true, force: true })
   }
 }, 30_000)
+
+test("the buffered performance gate catches a return to full snapshots", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "mockingbird-buffered-canary-"))
+  try {
+    const child = Bun.spawn(
+      [
+        process.execPath,
+        join(import.meta.dir, "run.ts"),
+        "--check",
+        "--buffered",
+        "--samples",
+        "5",
+        "--only",
+        "sqlite/buffered/sparse-flush/100000",
+        "--canary-buffered-snapshot",
+        "--out",
+        join(directory, "report.json"),
+      ],
+      { stdout: "pipe", stderr: "pipe" },
+    )
+    const [code, stderr] = await Promise.all([
+      child.exited,
+      new Response(child.stderr).text(),
+      new Response(child.stdout).text(),
+    ])
+    expect(code).toBe(1)
+    expect(stderr).toContain("fullSnapshotEncodes")
+    const report = (await Bun.file(join(directory, "report.json")).json()) as Report
+    expect(report.results[0]?.details.fullSnapshotEncodes).toBeGreaterThan(0)
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}, 30_000)

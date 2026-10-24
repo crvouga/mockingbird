@@ -19,7 +19,7 @@ const html = String.raw`<!doctype html><meta charset="utf-8">
 import * as sqlite from '/sqlite.js';
 import * as postgres from '/postgres.js';
 const result = document.querySelector('#result');
-const report = { userAgent: navigator.userAgent, url: location.href, runId: Date.now() + '-' + Math.random(), results: [], recovery: [] };
+const report = { userAgent: navigator.userAgent, url: location.href, runId: Date.now() + '-' + Math.random(), results: [], recovery: [], production: [], buffered: [] };
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const measure = async (name, run, count = 1) => {
   await run();
@@ -94,6 +94,99 @@ try {
       await probe.close();
       if (adapter === 'indexedDB') await backend.close();
     }
+  }
+  for (const [engine, module] of [['sqlite', sqlite], ['postgres', postgres]]) {
+    report.stage = engine + '/production/100000';
+    const backend = new module.IndexedDBDurabilityBackend({ name: 'mockingbird-browser-production' });
+    const key = engine + '/indexed-100000';
+    const handle = await module.openDurableDatabase({ key, backend });
+    const db = handle.value;
+    db.exec('CREATE TABLE IF NOT EXISTS t(id INTEGER PRIMARY KEY, value INTEGER UNIQUE)');
+    const prior = db.query('SELECT value FROM t WHERE id = 0')[0]?.value;
+    if (prior === undefined) {
+      const insert = db.prepare(engine === 'sqlite' ? 'INSERT INTO t VALUES (?, ?)' : 'INSERT INTO t VALUES ($1, $2)');
+      db.transaction(() => { for (let i = 0; i < 100000; i++) insert.run(i, i); });
+      await handle.flush();
+    }
+    const before = Number(prior ?? 0);
+    const historical = db.snapshot();
+    const update = db.prepare('UPDATE t SET value = value + 100000 WHERE id = ' + (engine === 'sqlite' ? '?' : '$1'));
+    await measure(engine + '/production/indexed-100-transactions-and-save/100000', () => handle.write(db => {
+      for (let i = 0; i < 100; i++) db.transaction(() => update.run(i));
+    }));
+    const branch = historical.open();
+    check(Number(branch.query('SELECT value FROM t WHERE id = 0')[0].value) === before, 'changed historical browser branch');
+    branch.close();
+    await handle.close();
+    const reopened = await module.openDurableDatabase({ key, backend });
+    const savedRows = reopened.value.query('SELECT id,value FROM t WHERE id < 100 ORDER BY id');
+    check(savedRows.length === 100, 'lost production updates');
+    for (let i = 0; i < 100; i++) check(Number(savedRows[i].value) === before + 1000000 + i, 'incorrect production value');
+    const count = Number(reopened.value.query('SELECT COUNT(*) AS n FROM t')[0].n);
+    check(count === 100000, 'lost production rows');
+    report.production.push({ engine, priorValue: before, recoveredValue: Number(savedRows[0].value), rows: count });
+    await reopened.close();
+    await backend.close();
+  }
+  for (const [engine, module] of [['sqlite', sqlite], ['postgres', postgres]]) {
+    report.stage = engine + '/buffered/100000';
+    const storage = new module.IndexedDBDurabilityBackend({ name: 'mockingbird-browser-buffered', durability: 'relaxed' });
+    let maxCommitBytes = 0;
+    let observing = false;
+    const backend = {
+      load: key => storage.load(key),
+      commit(key, revision, patch) {
+        if (observing) maxCommitBytes = Math.max(maxCommitBytes, patch.pages.reduce((sum, page) => sum + page.bytes.length, 0));
+        return storage.commit(key, revision, patch);
+      },
+    };
+    const key = engine + '/100000';
+    const handle = await module.openBufferedDurableDatabase({ key, backend });
+    const db = handle.value;
+    db.exec('CREATE TABLE IF NOT EXISTS t(id INTEGER PRIMARY KEY, k INTEGER UNIQUE, value INTEGER)');
+    if (!db.query('SELECT id FROM t WHERE id = 0').length) {
+      const insert = db.prepare(engine === 'sqlite' ? 'INSERT INTO t VALUES (?, ?, ?)' : 'INSERT INTO t VALUES ($1, $2, $3)');
+      db.transaction(() => { for (let i = 0; i < 100000; i++) insert.run(i, i, 0); });
+    }
+    await handle.flush();
+    const before = db.query('SELECT id,value FROM t WHERE id < 100 ORDER BY id').map(row => Number(row.value));
+    const historical = db.snapshot();
+    const update = db.prepare('UPDATE t SET k = k + 100000, value = value + 1 WHERE id = ' + (engine === 'sqlite' ? '?' : '$1'));
+    const encode = module.Snapshot.prototype.encode;
+    let fullSnapshotEncodes = 0;
+    module.Snapshot.prototype.encode = function () { fullSnapshotEncodes++; return encode.call(this); };
+    observing = true;
+    try {
+      await measure(engine + '/buffered/indexed-100-transactions-and-save/100000', () => handle.write(db => {
+        for (let i = 0; i < 100; i++) db.transaction(() => update.run(i));
+      }));
+      // Exercise the actual one-second host timer, without flush/write/close causing this save.
+      db.exec('UPDATE t SET value = value + 1 WHERE id = 0');
+      const deadline = performance.now() + 10000;
+      while (handle.pending && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 50));
+      check(!handle.pending && !handle.lastError, 'automatic buffered save did not complete');
+      const image = await storage.load(key);
+      const records = module.readDurableJournal(image.bytes);
+      const last = module.unpackDurableRecord(records[records.length - 1]);
+      const saved = module.Snapshot.decode(last.snapshot).open();
+      check(Number(saved.query('SELECT value FROM t WHERE id = 0')[0].value) === before[0] + 11, 'automatic save lost its row');
+      saved.close();
+      const branch = historical.open();
+      check(Number(branch.query('SELECT value FROM t WHERE id = 0')[0].value) === before[0], 'buffered save mutated history');
+      branch.close();
+      check(fullSnapshotEncodes === 0 && maxCommitBytes <= 65536, 'buffered write performed a full snapshot');
+      observing = false;
+      await handle.close();
+    } finally { module.Snapshot.prototype.encode = encode; }
+    const reopened = await module.openBufferedDurableDatabase({ key, backend });
+    const actual = reopened.value.query('SELECT id,value FROM t WHERE id < 100 ORDER BY id');
+    for (let i = 0; i < 100; i++) check(Number(actual[i].value) === before[i] + 10 + (i === 0 ? 1 : 0), 'buffered recovery lost updates');
+    const count = Number(reopened.value.query('SELECT COUNT(*) AS n FROM t')[0].n);
+    check(count === 100000, 'buffered recovery lost rows');
+    report.buffered.push({ engine, priorValue: before[0], recoveredValue: Number(actual[0].value), rows: count,
+      automaticSave: true, fullSnapshotEncodes, maxCommitBytes });
+    await reopened.close();
+    await storage.close();
   }
   // A page subarray must not make IndexedDB clone/store its whole backing image.
   report.stage = 'durability/indexedDB/dense-1MiB';

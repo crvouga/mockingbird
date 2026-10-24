@@ -1,9 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import budgets from "./budgets.json" with { type: "json" }
+import { bufferedWorkloads } from "./buffered.ts"
 import { engines } from "./engines.ts"
 import { checkReport, compareReports } from "./gate.ts"
 import { measure, profile } from "./harness.ts"
+import { productionWorkloads } from "./production.ts"
 import type { Report } from "./types.ts"
 import { workloads } from "./workloads.ts"
 
@@ -17,9 +19,19 @@ const samples = Number(argument("--samples") ?? 9)
 if (!Number.isInteger(samples) || samples < (checking ? 5 : 1))
   throw new Error("Expected at least five samples for a performance gate")
 const only = argument("--only")
-const selected = workloads(
-  await engines(!process.argv.includes("--no-wasm"), argument("--modules")),
-  process.argv.includes("--canary-scan"),
+const production = process.argv.includes("--production")
+const buffered = process.argv.includes("--buffered")
+if (buffered && production) throw new Error("Select either --buffered or --production")
+const rows = Number(argument("--rows") ?? 100_000)
+if (!Number.isSafeInteger(rows) || rows < 1000) throw new Error("Expected --rows >= 1000")
+const loaded = await engines(
+  !buffered && !process.argv.includes("--no-wasm"),
+  argument("--modules"),
+)
+const selected = (
+  buffered
+    ? bufferedWorkloads(loaded, rows, process.argv.includes("--canary-buffered-snapshot"))
+    : (production ? productionWorkloads : workloads)(loaded, process.argv.includes("--canary-scan"))
 ).filter((workload) => !only || workload.name.includes(only))
 if (selected.length === 0) throw new Error(`No performance workloads matched ${only}`)
 
@@ -55,7 +67,11 @@ if (process.argv.includes("--profile-worker")) {
         only
           ? selected.map((workload) => workload.name)
           : Object.keys(budgets.maxMedianMs).filter(
-              (name) => !process.argv.includes("--no-wasm") || !name.startsWith("sql.js/"),
+              (name) =>
+                name.includes("/production/") === production &&
+                name.includes("/buffered/") === buffered &&
+                (!buffered || name.endsWith(`/${rows}`)) &&
+                (!process.argv.includes("--no-wasm") || !name.startsWith("sql.js/")),
             ),
         budgets.maxMedianMs,
         budgets.maxWork,

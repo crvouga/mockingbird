@@ -14,6 +14,10 @@ const child = Bun.spawn(
     `--cpu-prof-name=${name.replaceAll(/[^a-zA-Z0-9-]/g, "-")}.md`,
     join(import.meta.dir, "run.ts"),
     "--profile-worker",
+    ...(name.includes("/production/") ? ["--production"] : []),
+    ...(name.includes("/buffered/")
+      ? ["--buffered", "--rows", name.split("/").at(-1) ?? "100000"]
+      : []),
     ...(name.startsWith("sql.js/") ? [] : ["--no-wasm"]),
     "--only",
     name,
