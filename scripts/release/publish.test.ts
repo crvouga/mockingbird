@@ -5,9 +5,70 @@ import {
   isRetryableGitHubError,
   releaseInOrder,
   seedSummary,
+  waitForNpmVersion,
 } from "./lib.ts"
 
 const release = (name: string, ...runtimeDeps: string[]) => ({ pkg: { name, runtimeDeps } })
+
+describe("npm publish visibility", () => {
+  test("an accepted publish waits through stale versions and a temporary 404", async () => {
+    const responses = [["1.0.0"], [], ["1.0.0", "1.1.0"]]
+    const delays: number[] = []
+    expect(
+      await waitForNpmVersion("pkg", "1.1.0", {
+        versions: async () => responses.shift() ?? [],
+        sleep: async (ms) => {
+          delays.push(ms)
+        },
+      }),
+    ).toBeNull()
+    expect(responses).toEqual([])
+    expect(delays).toEqual([10_000, 10_000])
+  })
+
+  test("an already visible version needs no delay", async () => {
+    expect(
+      await waitForNpmVersion("pkg", "1.1.0", {
+        versions: async () => ["1.1.0"],
+        sleep: async () => {
+          throw new Error("must not wait")
+        },
+      }),
+    ).toBeNull()
+  })
+
+  test("temporary registry errors are retried", async () => {
+    let calls = 0
+    expect(
+      await waitForNpmVersion("pkg", "1.1.0", {
+        versions: async () => (++calls === 1 ? { error: "registry unavailable" } : ["1.1.0"]),
+        sleep: async () => {},
+      }),
+    ).toBeNull()
+    expect(calls).toBe(2)
+  })
+
+  test("a pending or unavailable version fails after bounded retries with an actionable error", async () => {
+    for (const response of [["1.0.0"], { error: "registry unavailable" }]) {
+      let queries = 0
+      const delays: number[] = []
+      const error = await waitForNpmVersion("pkg", "1.1.0", {
+        versions: async () => {
+          queries++
+          return response
+        },
+        sleep: async (ms) => {
+          delays.push(ms)
+        },
+      })
+      expect(error).toContain("pkg@1.1.0 is not visible on npm after 5 minutes")
+      expect(error).toContain("retry the release")
+      if (!Array.isArray(response)) expect(error).toContain(response.error)
+      expect(queries).toBe(31)
+      expect(delays.reduce((sum, ms) => sum + ms, 0)).toBe(300_000)
+    }
+  })
+})
 
 describe("initialPackageBlocker", () => {
   const ci = { inCi: true, local: false, dryRun: false }

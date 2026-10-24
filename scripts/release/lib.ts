@@ -326,6 +326,31 @@ export async function npmVersions(name: string): Promise<string[] | { error: str
   return Array.isArray(parsed) ? parsed : [parsed]
 }
 
+/** npm can accept a publish before registry readers can resolve the version. */
+export async function waitForNpmVersion(
+  name: string,
+  version: string,
+  options: {
+    versions?: typeof npmVersions
+    sleep?: (ms: number) => Promise<unknown>
+  } = {},
+): Promise<string | null> {
+  const versions = options.versions ?? npmVersions
+  const sleep = options.sleep ?? Bun.sleep
+  let detail = "version is not listed"
+  // Poll for five minutes. Do not tag a pending publish: subsequent plans use tags
+  // to decide which dependency versions are ready for consumers.
+  for (let attempt = 0; attempt <= 30; attempt++) {
+    const published = await versions(name)
+    if (Array.isArray(published) && published.includes(version)) return null
+    detail = Array.isArray(published) ? "version is not listed" : published.error
+    if (attempt === 30) break
+    if (attempt === 0) console.log(`waiting for ${name}@${version} to become visible on npm`)
+    await sleep(10_000)
+  }
+  return `${name}@${version} is not visible on npm after 5 minutes (${detail}). npm may still be processing it; retry the release.`
+}
+
 /**
  * Why a package cannot be published from this run, or null.
  * Trusted Publishing (OIDC) can only publish new versions of a package that exists on npm;

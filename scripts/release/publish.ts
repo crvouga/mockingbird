@@ -51,6 +51,7 @@ import {
   tagName,
   unresolvablePins,
   WORKFLOW_FILE,
+  waitForNpmVersion,
 } from "./lib.ts"
 import { pipelineOptions, readPlan, selectReleases } from "./pipeline.ts"
 import { rejectedReleasePackages } from "./rejected.ts"
@@ -148,6 +149,8 @@ const needsSeed: string[] = []
 const needsTrust: string[] = []
 /** Pins already published or verified on npm; avoid checking shared prerequisites per package. */
 const releasedNow = new Set<string>()
+/** Do not spend another propagation timeout on each package sharing a missing pin. */
+const unavailablePins = new Map<string, string>()
 // OIDC is npm's fallback only when legacy token auth is absent. Locally, use the npm login.
 const npmEnv: Record<string, string | undefined> = { ...process.env }
 if (!local) delete npmEnv.NODE_AUTH_TOKEN
@@ -209,19 +212,28 @@ async function assertInstallable(release: Release, tarball: string): Promise<boo
       manifest.peerDependencies?.[dep] ??
       manifest.optionalDependencies?.[dep]
     if (!pinned || releasedNow.has(`${dep}@${pinned}`)) continue
-    const published = await npmVersions(dep)
-    if (!Array.isArray(published)) {
-      fail(release.pkg.name, [`npm view ${dep}: ${published.error}`])
+    const pin = `${dep}@${pinned}`
+    let pending = unavailablePins.get(pin)
+    if (!pending) {
+      if (dryRun) {
+        const published = await npmVersions(dep)
+        pending = !Array.isArray(published)
+          ? `npm view ${dep}: ${published.error}`
+          : published.includes(pinned)
+            ? undefined
+            : `pins ${pin}, which is not on npm — installing it would fail.`
+      } else {
+        // Another runner can still see stale registry metadata after the
+        // prerequisite's publish check succeeded. Give this reader time too.
+        pending = (await waitForNpmVersion(dep, pinned)) ?? undefined
+      }
+    }
+    if (pending) {
+      unavailablePins.set(pin, pending)
+      fail(release.pkg.name, [pending])
       return false
     }
-    if (!published.includes(pinned)) {
-      fail(release.pkg.name, [
-        `pins ${dep}@${pinned}, which is not on npm — installing it would fail.`,
-        `Releases are ordered dependencies-first; check that ${dep} released in this run.`,
-      ])
-      return false
-    }
-    releasedNow.add(`${dep}@${pinned}`)
+    releasedNow.add(pin)
   }
   return true
 }
@@ -274,6 +286,13 @@ async function publish(release: Release): Promise<boolean> {
         ? "Run bun run release:seed with an interactive maintainer login."
         : `Check its Trusted Publisher (repo ${REPO}, workflow ${WORKFLOW_FILE}): https://www.npmjs.com/package/${pkg.name}/access`,
     ])
+    return false
+  }
+  // A successful publish can still be processing. Keep dependents and the next
+  // release plan blocked until registry readers can resolve this exact version.
+  const pending = await waitForNpmVersion(pkg.name, version)
+  if (pending) {
+    fail(pkg.name, [pending])
     return false
   }
   releasedNow.add(`${pkg.name}@${version}`)
