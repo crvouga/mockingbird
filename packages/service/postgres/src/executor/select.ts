@@ -23,7 +23,15 @@ import { createAggregate, isAggregateName, isOrderedSetAggregate, unifyAggType }
 import { evalPgcryptoFunction } from "../functions/pgcrypto.ts";
 import { evalPgTrgmFunction } from "../functions/pgtrgm.ts";
 import { getSrfFunctions, isSrfName, type SrfColumnDefs } from "../functions/srf.ts";
-import { conjunctions, joinKeyFromRow, rowsMatchEqKeys, tryIndexedFromItem } from "../planner/access.ts";
+import {
+  conjunctions,
+  joinKeyFromRow,
+  recordIndexScan,
+  rowsMatchEqKeys,
+  tryIndexedFromItem,
+  tryPointRowIndices,
+  tryRangeRowIndices,
+} from "../planner/access.ts";
 import { catalogRelation } from "../schema/catalog.ts";
 import type { FunctionData } from "../storage/database-state.ts";
 import { canImplicitCast, castTo, unifyTypes } from "../types/cast.ts";
@@ -507,7 +515,7 @@ function renameWithAliases(rel: Relation, label: string | null, colAliases: stri
   return { columns, rows: rel.rows };
 }
 
-function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null): Source {
+function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, shapeOnly = false): Source {
   switch (item.type) {
     case "from_table": {
       const label = item.alias ?? item.name[item.name.length - 1]!;
@@ -527,7 +535,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null): 
             ...table.columns.map((c) => ({ name: c.name, type: c.type.id, mod: c.type.mod, table: label })),
             { name: "xmin", type: "xid", table: label, hidden: true, system: true },
           ],
-          rows: table.rows.map((row) => [...row, table.rowXmins.get(row) ?? 2]),
+          rows: shapeOnly ? [] : table.serializationRows().map((row) => [...row, table.rowXmins.get(row) ?? 2]),
         };
         return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
       }
@@ -2038,7 +2046,23 @@ export function executeCore(
   const ctx = env.ctx;
 
   // 1. FROM
-  const source = buildFrom(env, core.from, core.where);
+  // The old path built/stamped every tuple before replacing it with an index result.
+  // Resolve safe point probes first, then build only column metadata and matching tuples.
+  const item = core.from.length === 1 ? core.from[0] : null;
+  const pointTable =
+    item?.type === "from_table" && !item.colAliases?.length && !(item.name.length === 1 && env.ctes.has(item.name[0]!))
+      ? env.ctx.state.findTable(item.name)
+      : null;
+  const point =
+    pointTable && core.where && item?.type === "from_table"
+      ? tryPointRowIndices(env, pointTable, item.alias ?? item.name[item.name.length - 1]!, core.where)
+      : null;
+  const range =
+    !point && pointTable && core.where && item?.type === "from_table"
+      ? tryRangeRowIndices(env, pointTable, item.alias ?? item.name[item.name.length - 1]!, core.where)
+      : null;
+  const access = point ?? range;
+  const source = access && item ? materializeItem(env, item, env.outer, true) : buildFrom(env, core.from, core.where);
   const srcCols = source.rel.columns;
   const rangeVars = source.rangeVars;
 
@@ -2048,7 +2072,18 @@ export function executeCore(
   let srcRows = source.rel.rows;
   if (core.where) {
     checkPredicateType(env, srcCols, rangeVars, core.where, "WHERE");
-    if (core.from.length === 1) {
+    if (access && pointTable) {
+      pointTable.materializeSlab();
+      srcRows = access.indices.map((index) => {
+        const row = pointTable.rowAt(index);
+        return [...row, pointTable.rowXmins.get(row) ?? 2];
+      });
+      if (range) {
+        const where = core.where;
+        srcRows = srcRows.filter((row) => evalPredicate(env, rowScope(row), where));
+      }
+      recordIndexScan(env, pointTable, access.indexName);
+    } else if (core.from.length === 1) {
       const indexed = tryIndexedFromItem(env, core.from[0]!, core.where);
       if (indexed !== null) {
         srcRows = indexed;

@@ -49,7 +49,25 @@ export class Statement {
   ) {
     this.statements = statements;
     this.statementSqls = statementSqls;
-    this.schemaVersion = database.state.schemaVersion;
+    this.schemaVersion = database.engineState.schemaVersion;
+    const observer = database.durabilityObserver;
+    if (observer) {
+      // Install once per buffered statement. Ordinary databases keep the original
+      // execution method without per-call durability guards or result inspection.
+      const execute = this.execute;
+      this.execute = (params, options) => {
+        observer.assertWritable();
+        let result: ResultSet;
+        try {
+          result = execute.call(this, params, options);
+        } finally {
+          observer.changed();
+        }
+        if (options?.named && result.values.some((row) => row.some((value) => value instanceof Uint8Array)))
+          observer.exposed();
+        return result;
+      };
+    }
   }
 
   /**
@@ -123,7 +141,7 @@ export class Statement {
     this.reprepareIfSchemaChanged();
     if (this.statements.length === 0) {
       if (options?.named) throw new SqliteError("empty statement", "misuse");
-      return emptyResult(this.database.state.changes, this.database.state.lastInsertRowid);
+      return emptyResult(this.database.engineState.changes, this.database.engineState.lastInsertRowid);
     }
     this.namedPlan ??= planNamedParameters(this.sql);
     const expected = this.namedPlan.expectedCount;
@@ -148,11 +166,11 @@ export class Statement {
     if (this.env) {
       this.env.reset(params);
       this.env.hooks.now = this.database.now;
-      this.env.hooks.random = () => this.database.prng.nextSqliteRandom();
-      this.env.hooks.randomU64 = () => this.database.prng.nextU64();
+      // The existing callbacks read this.database.prng at invocation time, including
+      // after restore. Rebuilding them on every prepared execution only allocates.
       return this.env;
     }
-    this.env = new ExecutionEnv(this.database.state, this.database.transactions, params, undefined, {
+    this.env = new ExecutionEnv(this.database.engineState, this.database.transactions, params, undefined, {
       now: this.database.now,
       random: () => this.database.prng.nextSqliteRandom(),
       randomU64: () => this.database.prng.nextU64(),
@@ -161,13 +179,13 @@ export class Statement {
   }
 
   private reprepareIfSchemaChanged(): void {
-    if (this.schemaVersion === this.database.state.schemaVersion) return;
+    if (this.schemaVersion === this.database.engineState.schemaVersion) return;
     const units = parseUnits(this.sql);
     this.statements = units.map((u) => u.statement);
     this.statementSqls = units.map((u) => u.sql);
     this.env = null;
     this.namedPlan = null;
-    this.schemaVersion = this.database.state.schemaVersion;
+    this.schemaVersion = this.database.engineState.schemaVersion;
   }
 
   private bindNamed(env: ExecutionEnv, params: readonly BindValue[]): void {

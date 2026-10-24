@@ -1,3 +1,4 @@
+import { ForkMap } from "@crvouga/mockingbird-core";
 import type { CreateTriggerStmt, Expr, SelectStmt, Statement } from "../ast/nodes.ts";
 import { pgError } from "../errors/error.ts";
 import type { Clock } from "../runtime/clock.ts";
@@ -93,10 +94,93 @@ export interface TriggerMeta {
 }
 
 export class TableData {
+  /** @internal Optional physical row journal; IDs remain stable across heap splices. */
+  durableChanges: ForkMap<number, { row: Datum[] | null; xmin: number }> | null = null;
+  durableNextId = 0;
+  durableEpoch: object | undefined;
+  durableUnsafe = false;
+  private durableIds: WeakMap<Datum[], number> | undefined;
+
+  enableDurabilityTracking(ids?: readonly number[], nextId?: number): void {
+    if (this.durableChanges && !this.durableUnsafe && !ids) return;
+    this.materializeSlab();
+    this.durableIds = new WeakMap();
+    this.durableChanges = new ForkMap();
+    this.durableNextId = nextId ?? this.#rows.length;
+    for (let i = 0; i < this.#rows.length; i++) this.durableIds!.set(this.#rows[i]!, ids?.[i] ?? i);
+    this.durableEpoch = {};
+    this.durableUnsafe = false;
+  }
+
+  durableRowId(row: Datum[]): number {
+    const id = this.durableIds?.get(row);
+    if (id === undefined) throw new Error("Untracked durable row");
+    return id;
+  }
+
+  disableDurabilityTracking(): void {
+    this.durableChanges = null;
+    this.durableIds = undefined;
+    this.durableEpoch = undefined;
+    this.durableUnsafe = false;
+  }
+
+  recordDurableRow(row: Datum[], previous?: Datum[]): void {
+    if (!this.durableChanges) return;
+    const id = (previous && this.durableIds?.get(previous)) ?? this.durableIds?.get(row) ?? this.durableNextId++;
+    this.durableIds!.set(row, id);
+    this.durableChanges.set(id, { row, xmin: this.rowXmins.get(row) ?? 2 });
+  }
+
+  recordDurableDelete(row: Datum[]): void {
+    if (this.durableChanges) this.durableChanges.set(this.durableRowId(row), { row: null, xmin: 0 });
+  }
+
+  /** @internal Metadata twin with no visits/copies of existing rows or index entries. */
+  emptyForDurability(): TableData {
+    const copy = new TableData(this.schema, this.name, this.columns, this.oid, this.temp);
+    copy.constraints = this.constraints;
+    copy.triggers = this.triggers;
+    copy.unlogged = this.unlogged;
+    return copy;
+  }
+
+  /** @internal Serialization/SQL scans must not count as public native-array exposure. */
+  serializationRows(): Datum[][] {
+    this.materializeSlab();
+    return this.materializedRows();
+  }
+
+  /** @internal Internal mutable array access, with ordinary public mutableRows kept intact. */
+  writeRows(): Datum[][] {
+    return this.serializationRows();
+  }
+
+  /** @internal Ordinary snapshot branches must not inherit a persistence journal. */
+  untrackedFork(): TableData {
+    const copy = this.emptyForDurability();
+    copy.rowXmins = this.rowXmins;
+    copy.slabXmins = this.slabXmins;
+    if (this.slab) copy.slab = this.slab;
+    else {
+      copy.#rows = this.#rows;
+      copy.#rowPatches = this.#rowPatches?.fork() ?? null;
+      copy.#rowsShared = this.#rowsShared = true;
+      copy.tuplesShared = this.tuplesShared = true;
+    }
+    copy.indexStores = this.indexStores
+      ? new Map([...this.indexStores].map(([name, store]) => [name, store.clone()]))
+      : null;
+    return copy;
+  }
   name: string;
   schema: string;
   columns: ColumnMeta[];
-  rows: Datum[][];
+  declare rows: Datum[][];
+  #rows: Datum[][] = [];
+  #rowPatches: ForkMap<number, Datum[]> | null = null;
+  #rowsShared = false;
+  #rowsExposed = false;
   rowXmins = new WeakMap<Datum[], number>();
   slabXmins: number[] | null = null;
   /** Frozen columnar storage after snapshot hydrate; `rows` stays empty until materialized. */
@@ -112,12 +196,19 @@ export class TableData {
   shareCount = 0;
   /** Derived unique/btree index maps; null until built or invalidated. */
   indexStores: Map<string, import("../indexes/index.ts").IndexStore> | null = null;
+  /** DML replaces tuples; DDL must detach them before changing cells in place. */
+  private tuplesShared = false;
 
   constructor(schema: string, name: string, columns: ColumnMeta[], oid: number, temp = false) {
     this.schema = schema;
     this.name = name;
     this.columns = columns;
-    this.rows = [];
+    Object.defineProperty(this, "rows", {
+      enumerable: true,
+      configurable: true,
+      get: this.nativeRows,
+      set: this.setNativeRows,
+    });
     this.constraints = [];
     this.triggers = [];
     this.temp = temp;
@@ -125,12 +216,41 @@ export class TableData {
   }
 
   rowCount(): number {
-    return this.slab ? this.slab.rowCount : this.rows.length;
+    return this.slab ? this.slab.rowCount : this.#rows.length;
   }
 
   rowAt(index: number): Datum[] {
     if (this.slab) return this.slab.rowAt(index);
-    return this.rows[index] ?? [];
+    return this.#rowPatches?.get(index) ?? this.#rows[index] ?? [];
+  }
+
+  /** Replace an existing tuple without copying the array of unchanged row references. */
+  replaceRow(index: number, row: Datum[]): void {
+    if (this.durableChanges) this.recordDurableRow(row, this.rowAt(index));
+    if (this.#rowPatches) this.#rowPatches.set(index, row);
+    else this.#rows[index] = row;
+  }
+
+  private materializedRows(): Datum[][] {
+    if (this.#rowsShared) this.#rows = this.#rows.slice();
+    if (this.#rowPatches) for (const [index, row] of this.#rowPatches) this.#rows[index] = row;
+    this.#rowPatches = null;
+    this.#rowsShared = false;
+    return this.#rows;
+  }
+
+  private nativeRows(): Datum[][] {
+    if (this.durableChanges) this.durableUnsafe = true;
+    this.#rowsExposed = true;
+    return this.materializedRows();
+  }
+
+  private setNativeRows(rows: Datum[][]): void {
+    if (this.durableChanges) this.durableUnsafe = true;
+    this.#rows = rows;
+    this.#rowPatches = null;
+    this.#rowsShared = false;
+    this.#rowsExposed = true;
   }
 
   /** All rows for scans; materializes slab once into `rows` when needed. */
@@ -141,14 +261,16 @@ export class TableData {
 
   attachSlab(slab: ColumnarSlab): void {
     this.slab = slab;
-    this.rows = [];
+    this.#rows = [];
+    this.#rowPatches = null;
+    this.#rowsShared = false;
   }
 
   materializeSlab(): void {
     if (!this.slab) return;
-    this.rows = this.slab.materialize();
+    this.#rows = this.slab.materialize();
     if (this.slabXmins)
-      this.rows.forEach((row, index) => {
+      this.#rows.forEach((row, index) => {
         this.rowXmins.set(row, this.slabXmins![index] ?? 2);
       });
     this.slabXmins = null;
@@ -178,7 +300,7 @@ export class TableData {
     return this.columns.findIndex((c) => c.name === name);
   }
 
-  clone(): TableData {
+  private cloneMetadata(): TableData {
     const t = new TableData(
       this.schema,
       this.name,
@@ -186,20 +308,71 @@ export class TableData {
       this.oid,
       this.temp,
     );
-    if (this.slab) {
-      t.rows = this.slab.materialize().map((r) => r.slice());
-    } else {
-      t.rows = this.rows.map((r) => r.slice());
-    }
-    t.rows.forEach((row, index) => {
-      const xmin = this.slabXmins?.[index] ?? this.rowXmins.get(this.rows[index]!);
-      if (xmin !== undefined) t.rowXmins.set(row, xmin);
-    });
     t.unlogged = this.unlogged;
+    t.durableChanges = this.durableChanges?.fork() ?? null;
+    t.durableIds = this.durableIds;
+    t.durableNextId = this.durableNextId;
+    t.durableEpoch = this.durableEpoch;
+    t.durableUnsafe = this.durableUnsafe;
     t.constraints = this.constraints.map((c) => ({ ...c }));
     t.triggers = this.triggers.map((tr) => ({ ...tr }));
     t.indexStores = this.indexStores ? new Map([...this.indexStores].map(([k, v]) => [k, v.clone()])) : null;
     return t;
+  }
+
+  clone(): TableData {
+    const t = this.cloneMetadata();
+    if (t.durableChanges) t.durableUnsafe = true;
+    if (this.slab) {
+      t.#rows = this.slab.materialize().map((r) => r.slice());
+    } else {
+      t.#rows = this.materializedRows().map((r) => r.slice());
+    }
+    t.#rows.forEach((row, index) => {
+      const xmin = this.slabXmins?.[index] ?? this.rowXmins.get(this.#rows[index]!);
+      if (xmin !== undefined) t.rowXmins.set(row, xmin);
+    });
+    return t;
+  }
+
+  /** DML creates new tuple arrays; retain existing tuples and xmin bindings until DDL. */
+  cloneForDml(): TableData {
+    // A trigger can return OLD and stamp it with a new xmin, so its tuples need isolation.
+    if (this.triggers.length > 0) return this.cloneForWrite();
+    const t = this.cloneMetadata();
+    t.rowXmins = this.rowXmins;
+    if (this.slab) {
+      t.#rows = this.slab.materialize();
+      if (this.slabXmins) {
+        for (let index = 0; index < t.#rows.length; index++)
+          t.rowXmins.set(t.#rows[index]!, this.slabXmins[index] ?? 2);
+      }
+    } else {
+      if (this.#rows.length >= 4096 && !this.#rowsExposed) {
+        this.#rowPatches ??= new ForkMap();
+        t.#rowPatches = this.#rowPatches.fork();
+        t.#rows = this.#rows;
+        t.#rowsShared = this.#rowsShared = true;
+      } else t.#rows = this.materializedRows().slice();
+      this.tuplesShared = true;
+    }
+    t.tuplesShared = true;
+    return t;
+  }
+
+  /** A live DML fork can be unfrozen while its unchanged tuples still belong to history. */
+  ownTuples(): void {
+    if (this.durableChanges) this.durableUnsafe = true;
+    if (!this.tuplesShared) return;
+    const xmins = new WeakMap<Datum[], number>();
+    this.rows = this.rows.map((row) => {
+      const copy = row.slice();
+      const xmin = this.rowXmins.get(row);
+      if (xmin !== undefined) xmins.set(copy, xmin);
+      return copy;
+    });
+    this.rowXmins = xmins;
+    this.tuplesShared = false;
   }
 
   /** Independent writable copy (row tuples copied so ALTER COLUMN is isolated). */
@@ -691,10 +864,20 @@ export class DatabaseState {
   }
 
   ensureWritableTable(table: TableData): TableData {
-    if (!table.frozen) return table;
+    if (!table.frozen) {
+      table.ownTuples();
+      return table;
+    }
     const schema = this.schemas.get(table.schema);
     const copy = table.cloneForWrite();
     schema?.tables.set(table.name, copy);
+    return copy;
+  }
+
+  ensureWritableTableForDml(table: TableData): TableData {
+    if (!table.frozen) return table;
+    const copy = table.cloneForDml();
+    this.schemas.get(table.schema)?.tables.set(table.name, copy);
     return copy;
   }
 

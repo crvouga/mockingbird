@@ -8,7 +8,7 @@ import type { IndexInfo } from "../storage/database-state.ts";
 import type { Row, Rowid } from "../storage/row.ts";
 import type { Table } from "../storage/table.ts";
 import { normalizeForCollation } from "../types/collation.ts";
-import type { SqlValue } from "../types/value.ts";
+import { applyAffinity, type SqlValue } from "../types/value.ts";
 
 export interface ConstEquality {
   table: string | null;
@@ -214,7 +214,37 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
     return { table, alias, rows: hashed, coveredColumns: new Set([col]) };
   }
 
-  const range = rangeAgainstConst(where) ?? rangeFromBetween(where);
+  // A bounded conjunction uses a closed index interval as a candidate superset.
+  // The executor still evaluates every predicate, including exclusive endpoints.
+  const comparisons = parts.map(rangeAgainstConst).filter((item) => item !== null);
+  let bounded: ReturnType<typeof rangeFromBetween> = null;
+  for (const lower of comparisons) {
+    if (table.withoutRowid) break;
+    if (lower.op !== ">" && lower.op !== ">=") continue;
+    if (!matchesTable(lower.table, alias, table.name)) continue;
+    const upper = comparisons.find(
+      (item) =>
+        (item.op === "<" || item.op === "<=") &&
+        matchesTable(item.table, alias, table.name) &&
+        item.column.toLowerCase() === lower.column.toLowerCase(),
+    );
+    const column = table.columns.find((item) => item.name.toLowerCase() === lower.column.toLowerCase());
+    // Numeric columns and numeric constant/parameter bounds have identical index and
+    // predicate ordering. Other affinity/collation shapes retain the general executor.
+    const independent = (expr: Expr) => expr.type === "literal" || expr.type === "parameter";
+    if (
+      !upper ||
+      !column ||
+      !["INTEGER", "REAL", "NUMERIC"].includes(column.affinity) ||
+      !independent(lower.valueExpr) ||
+      !independent(upper.valueExpr)
+    )
+      continue;
+    if (typeof evalConst(lower.valueExpr) !== "number" || typeof evalConst(upper.valueExpr) !== "number") continue;
+    bounded = { ...lower, op: "between", valueExpr2: upper.valueExpr };
+    break;
+  }
+  const range = bounded ?? rangeAgainstConst(where) ?? rangeFromBetween(where);
   if (range && matchesTable(range.table, alias, table.name)) {
     const value = evalConst(range.valueExpr);
     const value2 = range.valueExpr2 ? evalConst(range.valueExpr2) : undefined;
@@ -224,9 +254,18 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
         if (!index || index.where || index.columns.length !== 1) continue;
         if (index.columns[0]!.expr) continue;
         if (index.columns[0]!.name.toLowerCase() !== range.column.toLowerCase()) continue;
-        const bound = normalizeForCollation(value, index.columns[0]!.collate ?? "BINARY");
+        const column = table.columns.find((column) => column.name.toLowerCase() === range.column.toLowerCase());
+        const bound = normalizeForCollation(
+          column ? applyAffinity(value, column.affinity) : value,
+          index.columns[0]!.collate ?? "BINARY",
+        );
         const bound2 =
-          value2 !== undefined ? normalizeForCollation(value2, index.columns[0]!.collate ?? "BINARY") : undefined;
+          value2 !== undefined
+            ? normalizeForCollation(
+                column ? applyAffinity(value2, column.affinity) : value2,
+                index.columns[0]!.collate ?? "BINARY",
+              )
+            : undefined;
         const rowids = index.store.rangeLookup(range.op, bound, bound2);
         const rows: Row[] = [];
         for (const rowid of rowids) {

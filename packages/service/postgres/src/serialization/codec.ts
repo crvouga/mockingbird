@@ -101,8 +101,11 @@ type FunctionMetaBjv = Omit<FunctionData, "jsImpl">;
 export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRuntime): Uint8Array {
   const pool = new InternPool();
   const schemas = [...state.schemas.values()].sort((a, b) => compareNames(a.name, b.name));
+  const internValues = new Map<SchemaData, Datum[]>();
 
   for (const schema of schemas) {
+    const values: Datum[] = [];
+    internValues.set(schema, values);
     pool.count(schema.name);
     for (const table of sortedValues(schema.tables)) {
       pool.count(table.name);
@@ -113,8 +116,13 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
         pool.count(column.domain ?? "");
         if (column.identity) pool.count(column.identity.sequence);
       }
-      for (const row of table.allRows()) {
-        for (const d of row) if (typeof d === "string") pool.count(d);
+      for (const row of table.serializationRows()) {
+        for (const d of row) {
+          if (typeof d === "string") {
+            pool.count(d);
+            values.push(d);
+          } else if (d !== null && typeof d === "object" && !(d instanceof Uint8Array)) values.push(d);
+        }
       }
     }
     for (const view of sortedValues(schema.views)) {
@@ -122,7 +130,12 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
       pool.count(view.schema);
       if (view.matRows) {
         for (const row of view.matRows) {
-          for (const d of row) if (typeof d === "string") pool.count(d);
+          for (const d of row) {
+            if (typeof d === "string") {
+              pool.count(d);
+              values.push(d);
+            } else if (d !== null && typeof d === "object" && !(d instanceof Uint8Array)) values.push(d);
+          }
         }
       }
     }
@@ -156,7 +169,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
   }
 
   pool.finalize();
-  forceAllEncodeIntern(pool, state, schemas);
+  forceAllEncodeIntern(pool, state, schemas, internValues);
 
   const internId = (s: string): number => pool.id(s);
   const forceId = (s: string): number => {
@@ -189,7 +202,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
       writeBjv(
         w,
         {
-          xmins: table.allRows().map((row) => table.rowXmins.get(row) ?? 2),
+          xmins: table.serializationRows().map((row) => table.rowXmins.get(row) ?? 2),
           name: table.name,
           schema: table.schema,
           columns: table.columns,
@@ -202,7 +215,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
         } satisfies TableMetaBjv,
         forceId,
       );
-      const rows = table.allRows();
+      const rows = table.serializationRows();
       writeVarintU32(w, rows.length);
       for (let c = 0; c < table.columns.length; c++) writePackedColumn(w, rows, c, internId, forceId);
     }
@@ -565,44 +578,57 @@ function writePackedColumn(
   }
   if (pack === PACK_FLOAT) {
     w.align4();
+    const block = w.block((n - nulls) * 8);
+    let offset = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
-      w.f64(rows[i]![col] as number);
+      block.setFloat64(offset, rows[i]![col] as number, true);
+      offset += 8;
     }
     return;
   }
   if (pack === PACK_INT) {
     w.align4();
+    const block = w.block((n - nulls) * 8);
+    let offset = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
       const v = rows[i]![col]!;
-      w.i64(typeof v === "bigint" ? v : BigInt(v as number));
+      if (typeof v === "bigint") block.setBigInt64(offset, v, true);
+      else {
+        block.setUint32(offset, (v as number) >>> 0, true);
+        block.setUint32(offset + 4, Math.floor((v as number) / 0x1_0000_0000) >>> 0, true);
+      }
+      offset += 8;
     }
     return;
   }
   if (pack === PACK_TEXT_INTERN) {
     w.align4();
+    const block = w.block((n - nulls) * 4);
+    let offset = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
-      w.u32(internId(rows[i]![col] as string));
+      block.setUint32(offset, internId(rows[i]![col] as string), true);
+      offset += 4;
     }
     return;
   }
   if (pack === PACK_TEXT_INLINE) {
     const offsets: number[] = [];
+    const encoded: Uint8Array[] = [];
     let blobLen = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
       offsets.push(blobLen);
-      blobLen += utf8Encode(rows[i]![col] as string).length;
+      const bytes = utf8Encode(rows[i]![col] as string);
+      encoded.push(bytes);
+      blobLen += bytes.length;
     }
     writeVarintU32(w, offsets.length);
     for (const off of offsets) writeVarintU32(w, off);
     writeVarintU32(w, blobLen);
-    for (let i = 0; i < n; i++) {
-      if (bits[i >> 3]! & (1 << (i & 7))) continue;
-      w.textBytes(rows[i]![col] as string);
-    }
+    for (const bytes of encoded) w.raw(bytes);
     return;
   }
   if (pack === PACK_BLOB) {
@@ -852,7 +878,12 @@ function sortedValues<T extends { name: string }>(map: Map<string, T>): T[] {
   return [...map.values()].sort((a, b) => compareNames(a.name, b.name));
 }
 
-function forceAllEncodeIntern(pool: InternPool, state: DatabaseState, schemas: SchemaData[]): void {
+function forceAllEncodeIntern(
+  pool: InternPool,
+  state: DatabaseState,
+  schemas: SchemaData[],
+  internValues: ReadonlyMap<SchemaData, readonly Datum[]>,
+): void {
   forceSchemaIntern(pool, state, schemas);
   for (const [k, v] of state.settings) {
     pool.forceId(k);
@@ -864,18 +895,9 @@ function forceAllEncodeIntern(pool: InternPool, state: DatabaseState, schemas: S
   }
   for (const schema of schemas) {
     pool.forceId(schema.name);
-    for (const table of sortedValues(schema.tables)) {
-      for (const row of table.allRows()) {
-        for (const d of row) forceDatumIntern(pool, d);
-      }
-    }
-    for (const view of sortedValues(schema.views)) {
-      if (view.matRows) {
-        for (const row of view.matRows) {
-          for (const d of row) forceDatumIntern(pool, d);
-        }
-      }
-    }
+    // Numeric/binary values cannot add interned strings. The count pass retained only
+    // candidates, in the original table/view/row order, so ids and wire bytes stay stable.
+    for (const value of internValues.get(schema) ?? []) forceDatumIntern(pool, value);
   }
 }
 
@@ -922,7 +944,8 @@ function forceSchemaIntern(pool: InternPool, state: DatabaseState, schemas: Sche
       pool.forceId(table.name);
       pool.forceId(table.schema);
       forceBjvStrings(pool, {
-        xmins: table.allRows().map((row) => table.rowXmins.get(row) ?? 2),
+        // Only strings are interned here. Traversing every numeric xmin cannot add an id.
+        xmins: [],
         name: table.name,
         schema: table.schema,
         columns: table.columns,

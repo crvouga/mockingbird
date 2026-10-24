@@ -1,5 +1,5 @@
-import { flushConstraintTriggers } from "../executor/triggers.ts";
 import { pgError } from "../errors/error.ts";
+import { flushConstraintTriggers } from "../executor/triggers.ts";
 import { assert } from "../runtime/assert.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 
@@ -31,7 +31,9 @@ export class TransactionManager {
   }
 
   private restore(snap: Snapshot): void {
-    this.state.restoreFrom(snap.state);
+    // A savepoint may be restored repeatedly. Keep its catalog maps independent
+    // when the live branch replaces a table after the first ROLLBACK TO.
+    this.state.restoreFrom(snap.state.cloneShallow());
     this.state.prng.setState(snap.prngState);
   }
 

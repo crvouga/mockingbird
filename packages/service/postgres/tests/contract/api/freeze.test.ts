@@ -8,10 +8,24 @@ describe("public API exports", () => {
   test("main entry exposes the database API and schema preflight", () => {
     expect(Object.keys(postgresMem).sort()).toEqual([
       "Database",
+      "DurabilityConflictError",
+      "IndexedDBDurabilityBackend",
+      "LocalStorageDurabilityBackend",
+      "MemoryDurabilityBackend",
       "PostgresError",
       "Snapshot",
       "Statement",
       "analyzeSchema",
+      "browserDurabilityLifecycle",
+      "encodeDurableCheckpoint",
+      "openBufferedDurable",
+      "openBufferedDurableDatabase",
+      "openDurable",
+      "openDurableDatabase",
+      "packDurableRecord",
+      "readDurableJournal",
+      "unpackDurableRecord",
+      "withDurability",
     ]);
   });
 

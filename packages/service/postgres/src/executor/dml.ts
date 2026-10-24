@@ -20,7 +20,8 @@ import {
 import { pgError, unsupported } from "../errors/error.ts";
 import { applyDomainChecks } from "../expressions/eval.ts";
 import { sequenceNextval } from "../functions/misc-fns.ts";
-import { indexInsertRow, indexUpdateRow, rebuildTableIndexes } from "../indexes/maintain.ts";
+import { indexInsertRow, indexUpdateRow, prepareDmlIndexStores, rebuildTableIndexes } from "../indexes/maintain.ts";
+import { tryPointRowIndices } from "../planner/access.ts";
 import type { ColumnMeta, TableData } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import { datumKey } from "../types/compare.ts";
@@ -54,7 +55,10 @@ export function withStatementRollback<T>(env: ExecEnv, fn: () => T): T {
 function requireTargetTable(env: ExecEnv, parts: string[], verb: string): TableData {
   const state = env.ctx.state;
   const table = state.findTable(parts);
-  if (table) return state.ensureWritableTable(table);
+  if (table) {
+    prepareDmlIndexStores(env, table);
+    return state.ensureWritableTableForDml(table);
+  }
   const view = state.findView(parts);
   if (view) {
     throw pgError("wrong_object_type", `cannot ${verb} view "${view.name}"`, "42809");
@@ -266,7 +270,7 @@ function applyOnConflictUpdate(
   sets: UpdateSet[],
   where: Expr | null,
 ): boolean {
-  const rows = table.mutableRows();
+  const rows = table.writeRows();
   const existing = rows[existingIdx]!;
   // scope: target table columns visible under its alias/name, plus excluded.*
   const cols = [
@@ -280,7 +284,7 @@ function applyOnConflictUpdate(
   applyUpdateSets(env, table, sets, scope, updated);
   computeGeneratedColumns(env, table, updated);
   table.rowXmins.set(updated, env.ctx.rowVersionXid());
-  rows[existingIdx] = updated;
+  table.replaceRow(existingIdx, updated);
   indexUpdateRow(env, table, existingIdx, existing, updated);
   checkNotNull(env, table, updated);
   checkChecks(env, table, updated);
@@ -293,7 +297,7 @@ function applyOnConflictUpdate(
 export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "insert into");
-  const rows = table.mutableRows();
+  const rows = table.writeRows();
   const label = stmt.alias ?? table.name;
   const colIdxs = insertTargetColumns(env, table, stmt);
   const sourceRows = insertSourceRows(env, stmt, colIdxs);
@@ -393,6 +397,7 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
       checkForeignKeys(env, table, newRow);
       table.rowXmins.set(newRow, env.ctx.rowVersionXid());
       rows.push(newRow);
+      table.recordDurableRow(newRow);
       indexInsertRow(env, table, rows.length - 1, newRow);
       insertedCount++;
       insertedRows.push(newRow);
@@ -497,14 +502,33 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   // FROM items build an auxiliary relation each target row can join against
   const fromSource = stmt.from.length > 0 ? buildFrom(env, stmt.from) : null;
 
-  const rows = table.mutableRows();
   const targetCols = table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label }));
   const updatedRows: Datum[][] = [];
   const replacedRows: Datum[][] = [];
   let updateCount = 0;
 
-  for (let ri = 0; ri < rows.length; ri++) {
-    const oldRow = rows[ri]!;
+  // Volatile SET expressions, triggers and CHECK/domain/generated expressions may mutate
+  // other tuples while scanning. Keep their established full-scan evaluation order.
+  const point =
+    !fromSource &&
+    stmt.where &&
+    table.triggers.length === 0 &&
+    !table.columns.some((column) => column.generated || column.domain) &&
+    !table.constraints.some((constraint) => constraint.kind === "check") &&
+    stmt.sets.every(
+      (set) =>
+        set.columns.every((column) => column.subscripts === null && column.fields.length === 0) &&
+        "type" in set.value &&
+        isPureUpdateValue(set.value),
+    ) &&
+    referencingConstraints(env, table).length === 0
+      ? tryPointRowIndices(env, table, label, stmt.where)
+      : null;
+  const rows = point ? null : table.writeRows();
+
+  for (let candidate = 0; candidate < (point ? point.indices.length : rows!.length); candidate++) {
+    const ri = point ? point.indices[candidate]! : candidate;
+    const oldRow = point ? table.rowAt(ri) : rows![ri]!;
     let matchScope: RowScope | null = null;
 
     if (fromSource) {
@@ -535,14 +559,14 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
 
     computeGeneratedColumns(env, table, finalRow);
     table.rowXmins.set(finalRow, env.ctx.rowVersionXid());
-    rows[ri] = finalRow;
+    table.replaceRow(ri, finalRow);
     try {
       checkNotNull(env, table, finalRow);
       checkChecks(env, table, finalRow);
       checkUnique(env, table, finalRow, ri);
       checkForeignKeys(env, table, finalRow);
     } catch (err) {
-      rows[ri] = oldRow;
+      table.replaceRow(ri, oldRow);
       throw err;
     }
     indexUpdateRow(env, table, ri, oldRow, finalRow);
@@ -562,6 +586,24 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   return commandResult("UPDATE", updateCount);
 }
 
+function isPureUpdateValue(expr: Expr): boolean {
+  switch (expr.type) {
+    case "param":
+    case "number_lit":
+    case "string_lit":
+    case "bool_lit":
+    case "null_lit":
+    case "colref":
+      return true;
+    case "binop":
+      return isPureUpdateValue(expr.left) && isPureUpdateValue(expr.right);
+    case "unop":
+      return isPureUpdateValue(expr.operand);
+    default:
+      return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // DELETE
 // ---------------------------------------------------------------------------
@@ -572,7 +614,7 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   const label = stmt.alias ?? table.name;
   fireStatementTriggers(env, table, "before", "delete");
 
-  const rows = table.mutableRows();
+  const rows = table.writeRows();
   const usingSource = stmt.using.length > 0 ? buildFrom(env, stmt.using) : null;
   const targetCols = table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label }));
 
@@ -605,6 +647,7 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
     if (skipped.has(ri)) continue;
     const row = rows[ri]!;
     handleReferencedDelete(env, table, row, 0);
+    table.recordDurableDelete(row);
     rows.splice(ri, 1);
     deletedRows.unshift(row);
   }
@@ -661,13 +704,14 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
     const idxs = referencingRowIdxs(ref, key);
     if (idxs.length === 0) continue;
     const action = con.onDelete ?? "no_action";
-    const child = env.ctx.state.ensureWritableTable(ref.table);
-    const childRows = child.mutableRows();
+    const child = env.ctx.state.ensureWritableTableForDml(ref.table);
+    const childRows = child.writeRows();
     switch (action) {
       case "cascade": {
         for (let k = idxs.length - 1; k >= 0; k--) {
           const childRow = childRows[idxs[k]!]!;
           handleReferencedDelete(env, child, childRow, depth + 1);
+          child.recordDurableDelete(childRow);
           childRows.splice(idxs[k]!, 1);
         }
         break;
@@ -679,7 +723,7 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
             newRow[child.columnIndex(c)] = null;
           }
           child.rowXmins.set(newRow, env.ctx.rowVersionXid());
-          childRows[i] = newRow;
+          child.replaceRow(i, newRow);
           checkNotNull(env, child, newRow);
           checkChecks(env, child, newRow);
         }
@@ -693,7 +737,7 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
             newRow[ci] = columnDefault(env, child, child.columns[ci]!);
           }
           child.rowXmins.set(newRow, env.ctx.rowVersionXid());
-          childRows[i] = newRow;
+          child.replaceRow(i, newRow);
           checkNotNull(env, child, newRow);
           checkChecks(env, child, newRow);
           checkForeignKeys(env, child, newRow);
@@ -720,8 +764,8 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
       const idxs = referencingRowIdxs(ref, oldKey);
       if (idxs.length === 0) continue;
       const action = con.onUpdate ?? "no_action";
-      const child = env.ctx.state.ensureWritableTable(ref.table);
-      const childRows = child.mutableRows();
+      const child = env.ctx.state.ensureWritableTableForDml(ref.table);
+      const childRows = child.writeRows();
       switch (action) {
         case "cascade": {
           for (const i of idxs) {
@@ -732,7 +776,7 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
               newRow[localIdx] = newRows[r]![refIdx] ?? null;
             }
             child.rowXmins.set(newRow, env.ctx.rowVersionXid());
-            childRows[i] = newRow;
+            child.replaceRow(i, newRow);
             checkChecks(env, child, newRow);
           }
           break;
@@ -742,7 +786,7 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
             const newRow = childRows[i]!.slice();
             for (const c of con.columns) newRow[child.columnIndex(c)] = null;
             child.rowXmins.set(newRow, env.ctx.rowVersionXid());
-            childRows[i] = newRow;
+            child.replaceRow(i, newRow);
             checkNotNull(env, child, newRow);
           }
           break;
@@ -755,7 +799,7 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
               newRow[ci] = columnDefault(env, child, child.columns[ci]!);
             }
             child.rowXmins.set(newRow, env.ctx.rowVersionXid());
-            childRows[i] = newRow;
+            child.replaceRow(i, newRow);
             checkForeignKeys(env, child, newRow);
           }
           break;

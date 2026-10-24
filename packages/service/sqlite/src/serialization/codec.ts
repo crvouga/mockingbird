@@ -281,7 +281,8 @@ function writeTaggedValue(w: Writer, value: SqlValue, internId: (s: string) => n
   }
   if (typeof value === "bigint" || (typeof value === "number" && Number.isInteger(value))) {
     w.u8(1);
-    w.i64(BigInt(value));
+    if (typeof value === "bigint") w.i64(value);
+    else w.i64Number(value);
     return;
   }
   if (typeof value === "number") {
@@ -363,41 +364,58 @@ function writePackedColumn(w: Writer, rows: Row[], col: number, internId: (s: st
   w.raw(bits);
   if (pack === PACK_I32) {
     w.align4();
+    const block = w.block((n - nulls) * 4);
+    let offset = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
-      w.u32(rows[i]!.values[col] as number);
+      block.setUint32(offset, rows[i]!.values[col] as number, true);
+      offset += 4;
     }
     return;
   }
   if (pack === PACK_I64) {
     w.align4();
+    const block = w.block((n - nulls) * 8);
+    let offset = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
       const v = rows[i]!.values[col]!;
-      w.i64(typeof v === "bigint" ? v : BigInt(v as number));
+      if (typeof v === "bigint") block.setBigInt64(offset, v, true);
+      else {
+        block.setUint32(offset, (v as number) >>> 0, true);
+        block.setUint32(offset + 4, Math.floor((v as number) / 0x1_0000_0000) >>> 0, true);
+      }
+      offset += 8;
     }
     return;
   }
   if (pack === PACK_F64) {
     w.align4();
+    const block = w.block((n - nulls) * 8);
+    let offset = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
       const v = rows[i]!.values[col]!;
-      w.f64(v instanceof SqlReal ? v.value : (v as number));
+      block.setFloat64(offset, v instanceof SqlReal ? v.value : (v as number), true);
+      offset += 8;
     }
     return;
   }
   if (pack === PACK_TEXT_INTERN) {
     w.align4();
+    const block = w.block((n - nulls) * 4);
+    let offset = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
       const text = rows[i]!.values[col] as string;
-      w.u32(internId(text));
+      block.setUint32(offset, internId(text), true);
+      offset += 4;
     }
     return;
   }
   if (pack === PACK_TEXT_INLINE) {
     const offsets: number[] = [];
+    const encoded: Uint8Array[] = [];
     let blobLen = 0;
     for (let i = 0; i < n; i++) {
       if (bits[i >> 3]! & (1 << (i & 7))) continue;
@@ -406,19 +424,14 @@ function writePackedColumn(w: Writer, rows: Row[], col: number, internId: (s: st
         rows[i]!.values[col] instanceof SqlJsonText
           ? (rows[i]!.values[col] as SqlJsonText).value
           : (rows[i]!.values[col] as string);
-      blobLen += utf8Encode(text).length;
+      const bytes = utf8Encode(text);
+      encoded.push(bytes);
+      blobLen += bytes.length;
     }
     writeVarintU32(w, offsets.length);
     for (const off of offsets) writeVarintU32(w, off);
     writeVarintU32(w, blobLen);
-    for (let i = 0; i < n; i++) {
-      if (bits[i >> 3]! & (1 << (i & 7))) continue;
-      const text =
-        rows[i]!.values[col] instanceof SqlJsonText
-          ? (rows[i]!.values[col] as SqlJsonText).value
-          : (rows[i]!.values[col] as string);
-      w.textBytes(text);
-    }
+    for (const bytes of encoded) w.raw(bytes);
     return;
   }
   if (pack === PACK_BLOB) {

@@ -57,7 +57,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   if (view) return executeViewInsert(stmt, view, env, totalBefore);
   const fast = env.forceFullInsert ? null : tryFastInsert(stmt, env);
   if (fast) return fast;
-  let table = env.state.getWritableTable(stmt.table);
+  let table = env.state.getWritableTableForDml(stmt.table);
   const columnNames = stmt.columns ?? table.columns.map((column) => column.name);
   const rowidIndexes = columnNames.map((name, index) => (isRowidName(name) ? index : -1)).filter((index) => index >= 0);
   if (rowidIndexes.length > 1) throw new SqliteError("duplicate column name: rowid", "other");
@@ -111,13 +111,13 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   const undoStatement = (): void => {
     if (!abortMode) return;
     for (let i = undoInserted.length - 1; i >= 0; i--) {
-      const row = table.rows.get(undoInserted[i]!);
+      const row = table.rowStore.get(undoInserted[i]!);
       if (row) removeOne(table, row, env);
     }
     for (let i = undoRemoved.length - 1; i >= 0; i--) {
       const row = undoRemoved[i]!;
-      table = env.state.ensureWritableTable(table);
-      table.rows.set(row.rowid, row);
+      table = env.state.ensureWritableTableForDml(table);
+      table.restoreDurableRow(row);
       if (table.indexes.length > 0) addIndexes(table, row, env);
     }
   };
@@ -227,7 +227,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
         const suppliedRowid = rowidIndexes.length ? asExplicitRowid(source[rowidIndexes[0]!] ?? null) : undefined;
         const rowid = table.insert({ values, rowid: suppliedRowid }, { prepared: true });
         insertedRowid = rowid;
-        const row = table.rows.get(rowid)!;
+        const row = table.rowStore.get(rowid)!;
         validateRow(table, row, env);
         if (table.indexes.length > 0) addIndexes(table, row, env);
         if (env.state.foreignKeysEnabled) checkForeignKeys(table, row, env);
@@ -242,7 +242,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
           returningRows.push(projectReturning(stmt.returning, scopeFor(table, row, stmt.table, env), env));
       } catch (error) {
         if (insertedRowid !== undefined) {
-          const inserted = table.rows.get(insertedRowid);
+          const inserted = table.rowStore.get(insertedRowid);
           if (inserted) removeOne(table, inserted, env);
         }
         if (
@@ -284,6 +284,7 @@ interface FastInsertSlot {
 
 interface FastInsertPlan {
   tableName: string;
+  skipValidate: boolean;
   slots: FastInsertSlot[];
 }
 
@@ -301,18 +302,33 @@ function tryFastInsert(stmt: InsertStmt, env: ExecutionEnv): ResultSet | null {
   }
   let table: Table;
   try {
-    table = env.state.getWritableTable(plan.tableName);
+    table = env.state.getWritableTableForDml(plan.tableName);
   } catch (error) {
     if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
   if (env.state.databaseForTable(table).triggers.size > 0) return null;
-  if (!table.isUnconstrained()) return null;
-  const values = new Map<string, SqlValue>();
-  for (const slot of plan.slots) values.set(slot.key, applyAffinity(slot.read(env), slot.affinity));
-  const last = table.insert({ values }, { prepared: true, skipValidate: true });
+  if (!canFastInsert(table)) return null;
+  const values: SqlValue[] = [];
+  for (const slot of plan.slots) values.push(applyAffinity(slot.read(env), slot.affinity));
+  const alias = table.integerPkColumn();
+  if (alias) {
+    const offset = table.columnOffset(normalizeColumnName(alias.name))!;
+    // Use the full path on conflicts to preserve its exact error classification and message.
+    if (table.getByKey(values[offset] ?? null)) return null;
+  }
+  const last = table.insert({ values }, { prepared: true, skipValidate: plan.skipValidate });
   env.state.recordChange(1, last);
   return emptyResult(1, last);
+}
+
+/** Table.insert enforces NOT NULL and rowid uniqueness without index/trigger/check work. */
+function canFastInsert(table: Table): boolean {
+  if (table.withoutRowid || table.strict || table.indexes.length > 0 || table.constraints.length > 0) return false;
+  const alias = table.integerPkColumn();
+  return table.columns.every(
+    (column) => !column.unique && !column.generated && (!column.primaryKey || column === alias),
+  );
 }
 
 function buildFastInsertPlan(stmt: InsertStmt, env: ExecutionEnv): FastInsertPlan | null {
@@ -323,12 +339,13 @@ function buildFastInsertPlan(stmt: InsertStmt, env: ExecutionEnv): FastInsertPla
     if (!isExpectedFastPathMiss(error)) throw error;
     return null;
   }
-  if (!table.isUnconstrained()) return null;
+  if (!canFastInsert(table)) return null;
   const tuple = stmt.values?.[0];
   if (!tuple) return null;
   const columnNames = stmt.columns ?? table.columns.map((column) => column.name);
   if (tuple.length !== columnNames.length) return null;
-  if (columnNames.some((name) => isRowidName(name))) return null;
+  if (columnNames.some((name) => isRowidName(name) || table.columnOffset(normalizeColumnName(name)) === undefined))
+    return null;
   const slots: FastInsertSlot[] = [];
   for (const column of table.columns) {
     const key = column.nameLower ?? column.name.toLowerCase();
@@ -350,7 +367,7 @@ function buildFastInsertPlan(stmt: InsertStmt, env: ExecutionEnv): FastInsertPla
       slots.push({ key, affinity: column.affinity, read: () => null });
     } else return null;
   }
-  return { tableName: stmt.table, slots };
+  return { tableName: stmt.table, slots, skipValidate: table.isUnconstrained() };
 }
 
 export function executeUpdate(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
@@ -405,7 +422,7 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
   }
 
   const applyUpdates = (): ResultSet => {
-    let table = env.state.getWritableTable(stmt.table);
+    let table = env.state.getWritableTableForDml(stmt.table);
     const returningRows: SqlValue[][] = [];
     let changes = 0;
     for (const { row, scope } of candidates) {
@@ -424,12 +441,12 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
           for (const conflict of conflictingRows(table, newValues, env)) {
             if (conflict.rowid === row.rowid) continue;
             removeOne(table, conflict, env);
-            table = env.state.getWritableTable(stmt.table);
+            table = env.state.getWritableTableForDml(stmt.table);
             // SQLite changes() counts the updated row only, not replaced conflict deletions.
           }
         }
         const updated = updateOne(table, row, updates, env);
-        table = env.state.getWritableTable(stmt.table);
+        table = env.state.getWritableTableForDml(stmt.table);
         fireUpdateTriggers("AFTER", table, row, table.namedValues(updated.row), updatedColumns, env);
         changes += 1 + updated.cascaded;
         if (stmt.returning.length)
@@ -492,7 +509,7 @@ function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
   });
 
   const applyDeletes = (): ResultSet => {
-    let table = env.state.getWritableTable(stmt.table);
+    let table = env.state.getWritableTableForDml(stmt.table);
     const returningRows: SqlValue[][] = [];
     let changes = 0;
     for (const row of selected) {
@@ -503,9 +520,9 @@ function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
             projectReturning(stmt.returning, scopeFor(table, row, stmt.alias ?? stmt.table, env), env),
           );
         changes += applyReferentialDelete(table, row, env);
-        table = env.state.getWritableTable(stmt.table);
+        table = env.state.getWritableTableForDml(stmt.table);
         removeOne(table, row, env);
-        table = env.state.getWritableTable(stmt.table);
+        table = env.state.getWritableTableForDml(stmt.table);
         fireDeleteTriggers("AFTER", table, row, env);
         changes++;
       } catch (error) {
@@ -751,11 +768,12 @@ function updateOne(
   updates: Map<string, SqlValue>,
   env: ExecutionEnv,
 ): { row: Row; cascaded: number } {
-  table = env.state.ensureWritableTable(table);
+  table = env.state.ensureWritableTableForDml(table);
   const before = row;
   let after: Row | undefined;
   let indexesAdded = false;
-  removeIndexes(table, before, env);
+  const keepIndexes = canKeepIndexEntries(table, before, updates, env);
+  if (!keepIndexes) removeIndexes(table, before, env);
   try {
     const merged = table.namedValues(row);
     for (const [name, value] of updates) merged.set(name, value);
@@ -780,8 +798,10 @@ function updateOne(
     after = table.update(row.rowid, merged);
     if (!after) throw new SqliteError(`no such row: ${row.rowid}`, "other");
     validateRow(table, after, env);
-    addIndexes(table, after, env);
-    indexesAdded = true;
+    if (!keepIndexes) {
+      addIndexes(table, after, env);
+      indexesAdded = true;
+    }
     checkForeignKeys(table, after, env);
     const cascaded = applyReferentialUpdate(table, before, after, env);
     return { row: after, cascaded };
@@ -791,9 +811,35 @@ function updateOne(
       // Revert row storage (including WITHOUT ROWID clustered keys), not just `rows`.
       table.update(before.rowid, table.namedValues(before));
     }
-    addIndexes(table, before, env);
+    if (!keepIndexes) addIndexes(table, before, env);
     throw error;
   }
+}
+
+/** Leave unchanged singleton buckets shared across transactions (the shared record tables). */
+function canKeepIndexEntries(table: Table, row: Row, updates: Map<string, SqlValue>, env: ExecutionEnv): boolean {
+  if (
+    table.indexes.length === 0 ||
+    table.withoutRowid ||
+    table.columns.some((column) => column.generated) ||
+    table.constraints.some((constraint) => constraint.type === "check")
+  )
+    return false;
+  const db = env.state.databaseForTable(table);
+  if (db.triggers.size > 0) return false;
+  const alias = table.integerPkColumn();
+  if (alias && updates.has(normalizeColumnName(alias.name))) return false;
+  for (const name of updates.keys()) if (isRowidName(name)) return false;
+  for (const name of table.indexes) {
+    const index = db.indexes.get(name.toLowerCase());
+    if (!index) continue;
+    if (index.where || index.columns.some((column) => column.expr || updates.has(normalizeColumnName(column.name))))
+      return false;
+    const values = indexValues(index.columns, row, env, table);
+    // Non-singleton buckets keep their existing remove/append order, including NULL keys.
+    if (values.some((value) => value === null) || index.store.lookup(values).length !== 1) return false;
+  }
+  return true;
 }
 
 function validateRow(table: Table, row: Row, env: ExecutionEnv): void {
@@ -807,7 +853,7 @@ function addIndexes(table: Table, row: Row, env: ExecutionEnv): void {
   for (const name of table.indexes) {
     const found = db.indexes.get(name.toLowerCase());
     if (!found) continue;
-    const index = db.ensureWritableIndex(found);
+    const index = db.ensureWritableIndexForDml(found);
     if (
       index.where &&
       isTruthySql(evalExpr(index.where, env.createEvalContext(scopeFor(table, row, table.name, env)))) !== true
@@ -822,13 +868,13 @@ function removeIndexes(table: Table, row: Row, env: ExecutionEnv): void {
   for (const name of table.indexes) {
     const found = db.indexes.get(name.toLowerCase());
     if (!found) continue;
-    const index = db.ensureWritableIndex(found);
+    const index = db.ensureWritableIndexForDml(found);
     index.store.remove(indexValues(index.columns, row, env, table), row.rowid);
   }
 }
 
 function removeOne(table: Table, row: Row, env: ExecutionEnv): void {
-  table = env.state.ensureWritableTable(table);
+  table = env.state.ensureWritableTableForDml(table);
   removeIndexes(table, row, env);
   table.delete(row.rowid);
 }
@@ -1211,7 +1257,7 @@ function applyReferentialDelete(parent: Table, row: Row, env: ExecutionEnv): num
     for (const constraint of child.constraints) {
       if (constraint.type !== "foreign_key" || constraint.refTable.toLowerCase() !== parent.name.toLowerCase())
         continue;
-      child = env.state.ensureWritableTable(child);
+      child = env.state.ensureWritableTableForDml(child);
       const target = child;
       const referenced = constraint.refColumns ?? parentPk;
       const matches = findChildRowsForFk(target, constraint.columns, referenced, parent, row, env).filter(
@@ -1257,7 +1303,7 @@ function applyReferentialUpdate(parent: Table, before: Row, after: Row, env: Exe
     for (const constraint of child.constraints) {
       if (constraint.type !== "foreign_key" || constraint.refTable.toLowerCase() !== parent.name.toLowerCase())
         continue;
-      child = env.state.ensureWritableTable(child);
+      child = env.state.ensureWritableTableForDml(child);
       const target = child;
       const referenced = constraint.refColumns ?? parentPk;
       const oldValues = referenced.map((name) => parent.cell(before, normalizeColumnName(name)));
@@ -1335,41 +1381,20 @@ function scopeFor(table: Table, row: Row, alias: string, env?: ExecutionEnv): Sc
       affinity: column.affinity,
       collate: column.collate,
     }));
-  const cells = [...baseCells];
-  if (env) {
-    for (const column of table.columns) {
-      if (!column.generated || column.generated.stored) continue;
-      const ctx = env.createEvalContext({ cells: baseCells, sourceTable: table.name });
-      const value = applyAffinity(evalExpr(column.generated.expr, ctx), column.affinity);
-      cells.push({
-        table: alias,
-        name: column.name,
-        value,
-        affinity: column.affinity,
-        collate: column.collate,
-      });
-    }
-    // Preserve column order
-    cells.sort((a, b) => {
-      const ai = table.columns.findIndex((c) => c.name.toLowerCase() === a.name.toLowerCase());
-      const bi = table.columns.findIndex((c) => c.name.toLowerCase() === b.name.toLowerCase());
-      return ai - bi;
-    });
-  } else {
-    for (const column of table.columns) {
-      if (!column.generated || column.generated.stored) continue;
-      cells.push({
-        table: alias,
-        name: column.name,
-        value: null,
-        affinity: column.affinity,
-        collate: column.collate,
-      });
-    }
-    cells.sort((a, b) => {
-      const ai = table.columns.findIndex((c) => c.name.toLowerCase() === a.name.toLowerCase());
-      const bi = table.columns.findIndex((c) => c.name.toLowerCase() === b.name.toLowerCase());
-      return ai - bi;
+  // Stored cells already follow declaration order. Only interleave virtual generated cells
+  // when present; sorting every ordinary row repeatedly searched all column names.
+  let cells = baseCells;
+  if (baseCells.length !== table.columns.length) {
+    let stored = 0;
+    cells = table.columns.map((column) => {
+      if (!column.generated || column.generated.stored) return baseCells[stored++]!;
+      const value = env
+        ? applyAffinity(
+            evalExpr(column.generated.expr, env.createEvalContext({ cells: baseCells, sourceTable: table.name })),
+            column.affinity,
+          )
+        : null;
+      return { table: alias, name: column.name, value, affinity: column.affinity, collate: column.collate };
     });
   }
   return {

@@ -23,7 +23,37 @@
  */
 import "./serialization/codec.ts";
 
+export {
+  type BufferedDurabilityObserver,
+  type BufferedDurabilityOptions,
+  type BufferedDurable,
+  browserDurabilityLifecycle,
+  type DurabilityBackend,
+  type DurabilityCodec,
+  DurabilityConflictError,
+  type DurabilityLifecycle,
+  type DurabilityScheduler,
+  type Durable,
+  type DurableImage,
+  type DurableOptions,
+  type DurablePatch,
+  encodeDurableCheckpoint,
+  type IncrementalCapture,
+  type IncrementalDurabilityCodec,
+  IndexedDBDurabilityBackend,
+  type IndexedDBDurabilityOptions,
+  LocalStorageDurabilityBackend,
+  type LocalStorageDurabilityOptions,
+  MemoryDurabilityBackend,
+  openBufferedDurable,
+  openDurable,
+  packDurableRecord,
+  readDurableJournal,
+  unpackDurableRecord,
+  withDurability,
+} from "@crvouga/mockingbird-core";
 export type { BindValue, JsValue, QueryRow } from "./api/bind.ts";
+export { type BufferedDurableDatabaseOptions, openBufferedDurableDatabase } from "./api/buffered.ts";
 export {
   Database,
   type DatabaseFaults,
@@ -34,12 +64,12 @@ export {
   type RegisterFunctionOptions,
   Snapshot,
 } from "./api/database.ts";
-export { type ResultSet, type RunResult, Statement } from "./api/statement.ts";
-export { type ErrorCategory, PostgresError } from "./errors/error.ts";
-
+export { type DurableDatabaseOptions, openDurableDatabase } from "./api/durable.ts";
 export {
   analyzeSchema,
+  type SchemaDiagnostic,
   type SchemaReport,
   type SchemaReportOptions,
-  type SchemaDiagnostic,
 } from "./api/schema-report.ts";
+export { type ResultSet, type RunResult, Statement } from "./api/statement.ts";
+export { type ErrorCategory, PostgresError } from "./errors/error.ts";

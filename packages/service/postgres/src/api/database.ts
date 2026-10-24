@@ -1,4 +1,4 @@
-import { type Checkpoint, Timeline } from "@crvouga/mockingbird-core";
+import { type BufferedDurabilityObserver, type Checkpoint, Timeline } from "@crvouga/mockingbird-core";
 import { PostgresError, pgError } from "../errors/error.ts";
 import type { ExecEnv } from "../executor/relation.ts";
 import { executeCopyFromData, txManagerFor } from "../executor/session.ts";
@@ -94,6 +94,10 @@ function project(point: Checkpoint<Snapshot>): HistoryCheckpoint {
 export class Database {
   /** @internal Engine catalog, tables, session settings. */
   readonly state: DatabaseState;
+  /** @internal Engine-only access; buffered mode observes public state exposure. */
+  readonly engineState: DatabaseState;
+  /** @internal Installed only by buffered durability. */
+  durabilityObserver?: BufferedDurabilityObserver;
   /** Seed used to construct the PRNG. Ignored when {@link randomMode} is `"os"`. */
   readonly seed: number | bigint;
   /** Entropy mode for `random()` / `gen_random_uuid()`. */
@@ -124,10 +128,10 @@ export class Database {
       this.int8Mode = options.int8Mode;
       this.prng = options.prng;
       this.now = options.now;
-      this.state = options.state;
-      this.state.prng = this.prng;
-      this.state.clock = () => this.now();
-      this.transactions = txManagerFor(this.state);
+      this.engineState = options.state;
+      this.engineState.prng = this.prng;
+      this.engineState.clock = () => this.now();
+      this.transactions = txManagerFor(this.engineState);
     } else {
       this.seed = options.seed ?? DEFAULT_DATABASE_SEED;
       this.randomMode = options.random ?? "deterministic";
@@ -135,9 +139,10 @@ export class Database {
       this.int8Mode = options.int8 ?? "bigint";
       this.prng = this.randomMode === "os" ? new OsEntropy() : new Prng(this.seed);
       this.now = resolveClock(options.now);
-      this.state = new DatabaseState(this.prng, () => this.now());
-      this.transactions = txManagerFor(this.state);
+      this.engineState = new DatabaseState(this.prng, () => this.now());
+      this.transactions = txManagerFor(this.engineState);
     }
+    this.state = this.engineState;
     this.timeline = new Timeline<Snapshot>({
       now: () => this.now().getTime(),
       ...(options.maxCheckpoints !== undefined ? { maxCheckpoints: options.maxCheckpoints } : {}),
@@ -167,19 +172,20 @@ export class Database {
    * a live in-memory snapshot.
    */
   registerFunction(spec: RegisterFunctionOptions): void {
+    this.durabilityObserver?.assertWritable();
     this.assertOpen();
     const parts = spec.name
       .split(".")
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
     if (parts.length === 0) throw pgError("syntax", "function name is required", "42601");
-    const schemaName = (parts.length >= 2 ? parts[0]! : this.state.currentSchema()).toLowerCase();
+    const schemaName = (parts.length >= 2 ? parts[0]! : this.engineState.currentSchema()).toLowerCase();
     const name = parts[parts.length - 1]!.toLowerCase();
     // A `pg_catalog.` name is found ahead of the search path, as PostgreSQL's own functions are.
     const functions =
-      schemaName === "pg_catalog" ? this.state.systemFunctions : this.state.getSchema(schemaName).functions;
-    const argTypes: TypeId[] = spec.args.map((a) => resolveTypeName(this.state, parseTypeName(a)).column.id);
-    const returns = resolveTypeName(this.state, parseTypeName(spec.returns)).column.id;
+      schemaName === "pg_catalog" ? this.engineState.systemFunctions : this.engineState.getSchema(schemaName).functions;
+    const argTypes: TypeId[] = spec.args.map((a) => resolveTypeName(this.engineState, parseTypeName(a)).column.id);
+    const returns = resolveTypeName(this.engineState, parseTypeName(spec.returns)).column.id;
     const fn: FunctionData = {
       name,
       schema: schemaName,
@@ -193,7 +199,7 @@ export class Database {
       body: null,
       rawBody: null,
       strict: spec.strict ?? true,
-      oid: this.state.nextOid(),
+      oid: this.engineState.nextOid(),
       jsImpl: spec.fn,
     };
     const existing = functions.get(name) ?? [];
@@ -203,6 +209,8 @@ export class Database {
     if (sameSig !== -1) existing[sameSig] = fn;
     else existing.push(fn);
     functions.set(name, existing);
+    // Host callbacks can retain and mutate returned buffers outside SQL execution.
+    this.durabilityObserver?.exposed();
   }
 
   /** Execute a single-statement query and return all rows keyed by column name. */
@@ -232,6 +240,7 @@ export class Database {
    */
   transaction<T>(fn: () => T): T {
     this.assertOpen();
+    this.durabilityObserver?.assertWritable();
     this.apiTransactionDepth++;
     try {
       if (!this.transactions.inTransaction) {
@@ -258,6 +267,7 @@ export class Database {
       }
     } finally {
       this.apiTransactionDepth--;
+      this.durabilityObserver?.changed();
     }
   }
 
@@ -361,7 +371,7 @@ export class Database {
    */
   fault(faults: DatabaseFaults): void {
     this.assertOpen();
-    Object.assign(this.state.faults, faults);
+    Object.assign(this.engineState.faults, faults);
   }
 
   /** Close the database. Further SQL throws. Idempotent. */
@@ -372,6 +382,7 @@ export class Database {
     }
     if (this.transactions.inTransaction) this.transactions.rollback();
     this.closed = true;
+    this.durabilityObserver?.closed?.();
   }
 
   /**
@@ -391,14 +402,19 @@ export class Database {
     if (statements.length !== 1 || !stmt || stmt.type !== "copy" || stmt.direction !== "from") {
       throw pgError("misuse", "copyFrom() requires a single COPY ... FROM STDIN statement", "XX000");
     }
-    const env: ExecEnv = { ctx: new EngineCtx(this.state), params: null, ctes: new Map(), outer: null };
-    return executeCopyFromData(env, stmt, data).rowCount;
+    this.durabilityObserver?.assertWritable();
+    try {
+      const env: ExecEnv = { ctx: new EngineCtx(this.engineState), params: null, ctes: new Map(), outer: null };
+      return executeCopyFromData(env, stmt, data).rowCount;
+    } finally {
+      this.durabilityObserver?.changed();
+    }
   }
 
   /** Rows affected by the most recent INSERT / UPDATE / DELETE. */
   get changes(): number {
     this.assertOpen();
-    return this.state.changes;
+    return this.engineState.changes;
   }
 
   /** @internal */
@@ -413,7 +429,7 @@ export class Database {
 
   private captureLive(): Snapshot {
     return captureSnapshot(
-      this.state,
+      this.engineState,
       this.prng,
       this.now,
       this.seed,
@@ -424,7 +440,8 @@ export class Database {
   }
 
   private install(snapshot: Snapshot): void {
-    this.state.restoreFrom(snapshot.state.cloneShallow());
+    this.durabilityObserver?.exposed();
+    this.engineState.restoreFrom(snapshot.state.cloneShallow());
     this.prng.setState(snapshot.prngState);
     if (!this.systemClock) this.now = fixedClock(new Date(snapshot.nowMs));
   }

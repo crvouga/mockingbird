@@ -1,7 +1,9 @@
 import { mkdir, rm } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { $ } from "bun";
 import { rollup } from "rollup";
 import { dts } from "rollup-plugin-dts";
+import { inlineCoreTypes } from "../../../../scripts/inline-core-types.ts";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
@@ -103,6 +105,8 @@ export interface AdminServer {
 export declare function createAdmin(options?: AdminOptions): AdminServer;
 `,
 );
+
+await inlineCoreTypes(fileURLToPath(new URL("..", import.meta.url)));
 
 const mod = await import(new URL("../dist/index.js", import.meta.url).href);
 if (typeof mod.Database !== "function") {

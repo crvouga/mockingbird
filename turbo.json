@@ -175,6 +175,10 @@
         "tsconfig.base.json",
         "package.json",
         "bun.lock"
+      ],
+      "dependsOn": [
+        "@crvouga/mockingbird-service-sqlite#build",
+        "@crvouga/mockingbird-service-postgres#build"
       ]
     },
     "//#check:workflows": {
@@ -272,6 +276,34 @@
         "//#health:repository"
       ],
       "passThroughEnv": ["MOCKINGBIRD_HEALTH_REPORT_DIR"]
+    },
+    "@crvouga/mockingbird-service-sqlite#build": {
+      "dependsOn": ["^build", "generate"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!README.md",
+        "$TURBO_ROOT$/scripts/inline-core-types.ts"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "@crvouga/mockingbird-service-postgres#build": {
+      "dependsOn": ["^build", "generate"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!README.md",
+        "$TURBO_ROOT$/scripts/inline-core-types.ts"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "//#check:performance": {
+      "dependsOn": [
+        "@crvouga/mockingbird-service-sqlite#build",
+        "@crvouga/mockingbird-service-postgres#build"
+      ],
+      "cache": false,
+      "inputs": ["scripts/performance/**", "package.json", "bun.lock"]
     }
   }
 }

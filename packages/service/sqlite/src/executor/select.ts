@@ -650,7 +650,7 @@ function hashJoinRaw(
 ): ScopeRow[] {
   const rightKeys = hashKeys.rightColumns.map((name) => name.toLowerCase());
   const buckets = new Map<string, Row[]>();
-  const source = right.table.withoutRowid ? right.table.clusteredRows.values() : right.table.rows.values();
+  const source = right.table.withoutRowid ? right.table.clusterStore.values() : right.table.rowStore.values();
   for (const row of source) {
     const values = rightKeys.map((key) => normalizeForCollation(right.table.cell(row, key), "BINARY"));
     const mapKey = serializeIndexKey(values);

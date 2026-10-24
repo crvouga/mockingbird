@@ -1,3 +1,4 @@
+import { ForkMap } from "@crvouga/mockingbird-core";
 import { SqliteError } from "../errors/index.ts";
 import type { Rowid } from "../storage/row.ts";
 import { compareSql, isSqlJsonText, isSqlReal, type SqlValue } from "../types/value.ts";
@@ -8,6 +9,7 @@ export class IndexStore {
   private keyValues: Map<string, SqlValue[]>;
   private sortedKeys: string[] | null;
   private mapsShared = false;
+  private ownedBuckets = new WeakSet<Rowid[]>();
   frozen = false;
 
   constructor(
@@ -50,13 +52,15 @@ export class IndexStore {
     if (unique) this.checkUnique(values, rowid);
     const existing = this.entries.get(key);
     if (!existing) {
-      this.entries.set(key, [rowid]);
+      const bucket = [rowid];
+      this.ownedBuckets.add(bucket);
+      this.entries.set(key, bucket);
       this.keyValues.set(key, [...values]);
       this.sortedKeys = null;
       return;
     }
     for (const id of existing) if (sameRowid(id, rowid)) return;
-    existing.push(rowid);
+    this.writableBucket(key, existing).push(rowid);
   }
 
   lookup(values: readonly SqlValue[]): readonly Rowid[] {
@@ -99,7 +103,12 @@ export class IndexStore {
   rangeLookup(op: ">" | ">=" | "<" | "<=" | "between", bound: SqlValue, bound2?: SqlValue): readonly Rowid[] {
     const keys = this.orderedKeys();
     const rowids: Rowid[] = [];
-    const start = lowerBoundKeyValues(keys, this.keyValues, bound, op === ">" ? "gt" : op === ">=" ? "ge" : "any");
+    const start = lowerBoundKeyValues(
+      keys,
+      this.keyValues,
+      bound,
+      op === ">" ? "gt" : op === ">=" || op === "between" ? "ge" : "any",
+    );
     const end =
       op === "<" || op === "<="
         ? upperBoundKeyValues(keys, this.keyValues, bound, op === "<" ? "lt" : "le")
@@ -151,8 +160,10 @@ export class IndexStore {
     }
     const index = existing.findIndex((id) => sameRowid(id, rowid));
     if (index < 0) return false;
-    existing.splice(index, 1);
-    if (existing.length === 0) {
+    const remaining = this.writableBucket(key, existing);
+    remaining.splice(index, 1);
+    this.entries.set(key, remaining);
+    if (remaining.length === 0) {
       this.entries.delete(key);
       this.keyValues.delete(key);
       this.sortedKeys = null;
@@ -169,10 +180,16 @@ export class IndexStore {
 
   clone(): IndexStore {
     const copy = new IndexStore(this.name);
-    copy.entries = this.entries;
-    copy.keyValues = this.keyValues;
+    if (this.entries.size >= 4096 && !(this.entries instanceof ForkMap)) {
+      this.entries = new ForkMap(this.entries);
+      this.keyValues = new ForkMap(this.keyValues);
+    }
+    copy.entries = this.entries instanceof ForkMap ? this.entries.fork() : this.entries;
+    copy.keyValues = this.keyValues instanceof ForkMap ? this.keyValues.fork() : this.keyValues;
     copy.sortedKeys = this.sortedKeys;
     copy.mapsShared = true;
+    this.mapsShared = true;
+    this.ownedBuckets = new WeakSet();
     return copy;
   }
 
@@ -200,6 +217,7 @@ export class IndexStore {
   }
 
   rememberKeyValues(key: string, values: readonly SqlValue[]): void {
+    this.forkMaps();
     this.keyValues.set(key, [...values]);
   }
 
@@ -240,14 +258,20 @@ export class IndexStore {
     this.forkMaps();
   }
 
+  private writableBucket(key: string, bucket: Rowid[]): Rowid[] {
+    if (this.ownedBuckets.has(bucket)) return bucket;
+    const copy = bucket.slice();
+    this.entries.set(key, copy);
+    this.ownedBuckets.add(copy);
+    return copy;
+  }
+
   private forkMaps(): void {
     if (!this.mapsShared) return;
-    const entries = new Map<string, Rowid[]>();
-    for (const [key, rowids] of this.entries) entries.set(key, [...rowids]);
-    const keyValues = new Map<string, SqlValue[]>();
-    for (const [key, values] of this.keyValues) keyValues.set(key, [...values]);
-    this.entries = entries;
-    this.keyValues = keyValues;
+    // Buckets and key tuples are immutable; only the maps need detaching.
+    // Large maps detach only changed hash/order pages; tiny maps retain native speed.
+    if (!(this.entries instanceof ForkMap)) this.entries = new Map(this.entries);
+    if (!(this.keyValues instanceof ForkMap)) this.keyValues = new Map(this.keyValues);
     this.mapsShared = false;
     this.sortedKeys = null;
   }

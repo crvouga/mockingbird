@@ -1,0 +1,44 @@
+{
+  "baseline": "5ef4b657",
+  "runtime": "1.4.2",
+  "samples": 9,
+  "results": [
+    {
+      "name": "insert-1000",
+      "baselineMedianMs": 96.45083299999988,
+      "currentMedianMs": 1.7142919999969308,
+      "speedup": 56.26277961990872
+    },
+    {
+      "name": "insert-10000",
+      "baselineMedianMs": 2356.8014159999984,
+      "currentMedianMs": 16.349709000001894,
+      "speedup": 144.1494411918723
+    },
+    {
+      "name": "collection-10000-reads",
+      "baselineMedianMs": 179.6655000000028,
+      "currentMedianMs": 28.490499999999884,
+      "speedup": 6.306154683140118
+    },
+    {
+      "name": "postgres-100-index-forks-10000-keys",
+      "baselineMedianMs": 41.082541999996465,
+      "currentMedianMs": 0.006874999999126885,
+      "speedup": 5975.642473485656
+    },
+    {
+      "name": "sqlite-100-index-fork-writes-10000-keys",
+      "baselineMedianMs": 106.57658300000185,
+      "currentMedianMs": 11.340415999999095,
+      "speedup": 9.397942985513966
+    }
+  ],
+  "environment": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "date": "2026-10-23",
+    "warmup": 3,
+    "measurement": "baseline first, same process, no concurrent repository gate"
+  }
+}

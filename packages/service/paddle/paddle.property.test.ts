@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { operationMetadata } from "@crvouga/mockingbird-openapi-metadata"
-import { ParityError, parity } from "@crvouga/mockingbird-parity"
+import { ParityError, type ParityOptions, parity, seedParity } from "@crvouga/mockingbird-parity"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
 import { document, PaddleAPI } from "./src/index.js"
@@ -82,7 +82,7 @@ describe("PaddleAPI", () => {
     async () => {
       const reference = seeded()
       const mock = seeded()
-      const report = await parity({
+      const options: ParityOptions = {
         provider: "paddle",
         spec: document,
         real: {
@@ -100,19 +100,74 @@ describe("PaddleAPI", () => {
           await reseed(reference)
         },
         includeUnsafe: true,
-        numRuns: Math.max(params.numRuns ?? 300, 300),
-        maxCommands: 100,
         coverageBias: 3,
         weights: WEIGHTS,
         latencyToleranceMs: 1_000,
-        ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,
         sleep: async () => {},
         log: () => {},
+      }
+      const report = await parity({
+        ...options,
+        numRuns: Math.max(params.numRuns ?? 300, 300),
+        maxCommands: 100,
+        ...(params.seed === undefined ? {} : { seed: params.seed }),
+      })
+      // Random lifecycle commands can cancel subscriptions before an update becomes
+      // eligible. Compare a successful update of an explicitly discovered fixture too;
+      // keep the unrestricted walks and require coverage of all 42 operations.
+      const subscriptions = await seedParity({
+        ...options,
+        only: ["UpdateSubscription"],
+        numRuns: 1,
+        warmupCommands: 0,
+        compareCommands: 1,
+        seed: 0,
+        invalidProbability: 0,
+        missingProbability: 0,
+        reshapeCommand: (command) => ({
+          ...command,
+          parameters: { subscription_id: { $mockingbird: "ref", type: "subscription", pick: 0 } },
+          body: { custom_data: { coverage: "subscription-update" } },
+          invalid: undefined,
+        }),
+        seedMock: async ({ real, mock, table }) => {
+          const url = `https://${MOCK_HOST}/subscriptions`
+          const responses = await Promise.all([
+            real.fetch(new Request(url, { headers: auth })),
+            mock.fetch(new Request(url, { headers: auth })),
+          ])
+          for (const response of responses) expect(response.status).toBe(200)
+          const [referenceRows, mockRows] = await Promise.all(
+            responses.map(
+              async (response) => (await response.json()) as { data: { id: string }[] },
+            ),
+          )
+          const realId = referenceRows?.data[0]?.id
+          const mockId = mockRows?.data[0]?.id
+          if (!realId || !mockId) throw new Error("Missing seeded subscription")
+          table.register("subscription", { real: realId, mock: mockId })
+        },
+        mock: {
+          ...options.mock,
+          create: async () => {
+            await reseed(mock)
+            return {
+              fetch: async (request: Request) => {
+                const response = await mock.fetch(request)
+                if (request.method === "PATCH") expect(response.status).toBe(200)
+                return response
+              },
+            }
+          },
+        },
       })
       expect(report.walks).toBeGreaterThan(0)
+      expect(subscriptions.exercised.UpdateSubscription).toBe(1)
       expect(parityOperations).toHaveLength(42)
-      expect(Object.keys(report.exercised).sort()).toEqual(parityOperations)
+      expect(Object.keys({ ...report.exercised, ...subscriptions.exercised }).sort()).toEqual(
+        parityOperations,
+      )
     },
     { timeout: 180_000 },
   )
