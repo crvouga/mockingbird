@@ -27,6 +27,14 @@ test("CI build and publish consume the frozen group without replanning or reconc
   const path = join(dir, "plan.json")
   writeFileSync(path, serializePlan(plan, "frozen-sha"))
   writeFileSync(calls, "")
+  // Exercise real CLI timeout paths without spending five minutes per failure.
+  const clock = join(dir, "clock.ts")
+  writeFileSync(
+    clock,
+    `import { appendFileSync } from "node:fs"
+Bun.sleep = async (ms) => { appendFileSync(process.env.TEST_RELEASE_CALLS, "sleep " + ms + "\\n") }
+`,
+  )
   const originals = selected.map((p) => readFileSync(p.manifestPath, "utf8"))
   try {
     cpSync(join(root, "scripts"), join(checkout, "scripts"), { recursive: true })
@@ -60,7 +68,17 @@ case '${name}'" $*" in
   'git rev-parse HEAD') echo frozen-sha;;
   'git tag --list '*) exit 0;;
   'npm view '*)
-    if [ -f "$TEST_RELEASE_MISSING" ]; then echo '["7.8.8"]'; else echo '["${version}"]'; fi;;
+    if [ -f "$TEST_RELEASE_MISSING.stuck" ]; then echo '["7.8.8"]';
+    elif [ -f "$TEST_RELEASE_MISSING.dependency" ] && [ "$2" = '@crvouga/mockingbird-service-sqlite' ]; then
+      if [ -f "$TEST_RELEASE_MISSING.dependency-visible" ]; then echo '["${version}"]';
+      else touch "$TEST_RELEASE_MISSING.dependency-visible"; echo '["7.8.8"]'; fi
+    elif [ -f "$TEST_RELEASE_MISSING.processing" ]; then
+      if [ -f "$TEST_RELEASE_MISSING.visible" ]; then echo '["${version}"]';
+      else touch "$TEST_RELEASE_MISSING.visible"; echo '["7.8.8"]'; fi
+    elif [ -f "$TEST_RELEASE_MISSING" ]; then echo '["7.8.8"]'; else echo '["${version}"]'; fi;;
+  'npm publish '*) touch "$TEST_RELEASE_MISSING.processing";;
+  'git rev-parse -q --verify '*) exit 1;;
+  'git tag -a '*|'git push '*|'gh release view '*) exit 0;;
   'bun pm pack '*) echo "$TEST_RELEASE_TARBALL";;
   'bunx turbo run build '*) exit 0;;
   *) exit 99;;
@@ -73,6 +91,8 @@ esac
       const proc = Bun.spawn(
         [
           process.execPath,
+          "--preload",
+          clock,
           `scripts/release/${script}.ts`,
           "--plan",
           path,
@@ -126,6 +146,70 @@ esac
     )
     expect(blocked).toContain("released=0 failed=1")
     expect(readFileSync(calls, "utf8")).not.toContain("npm publish")
+    // A different runner may still see stale metadata for a published prerequisite.
+    writeFileSync(calls, "")
+    writeFileSync(`${missing}.dependency`, "")
+    const dependent = await run("publish", "2/2")
+    expect(dependent).toContain(`waiting for @crvouga/mockingbird-service-sqlite@${version}`)
+    expect(dependent).toContain("released=1 failed=0")
+    const dependentCalls = readFileSync(calls, "utf8").trim().split("\n")
+    const dependencyAt = dependentCalls.findIndex((c) =>
+      c.includes("npm view @crvouga/mockingbird-service-sqlite"),
+    )
+    expect(dependentCalls.slice(dependencyAt, dependencyAt + 3)).toEqual([
+      "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
+      "sleep 10000",
+      "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
+    ])
+    expect(dependentCalls.findIndex((c) => c.startsWith("npm publish "))).toBeGreaterThan(
+      dependencyAt + 2,
+    )
+    for (const suffix of ["dependency", "dependency-visible", "processing", "visible"]) {
+      rmSync(`${missing}.${suffix}`, { force: true })
+    }
+    // npm accepts the prerequisite but serves stale metadata on the next read.
+    // The job must not tag it or finish until a fresh registry read sees the pin.
+    writeFileSync(calls, "")
+    writeFileSync(
+      join(dir, "package/package.json"),
+      JSON.stringify({
+        name: "@crvouga/mockingbird-service-sqlite",
+        version,
+      }),
+    )
+    expect(Bun.spawnSync(["tar", "-czf", tarball, "-C", dir, "package"]).exitCode).toBe(0)
+    const published = await run("publish", "prerequisites")
+    expect(published).toContain(`waiting for @crvouga/mockingbird-service-sqlite@${version}`)
+    expect(published).toContain("released=1 failed=0")
+    const publishedCalls = readFileSync(calls, "utf8").trim().split("\n")
+    const publishAt = publishedCalls.findIndex((c) => c.startsWith("npm publish "))
+    expect(publishAt).toBeGreaterThan(0)
+    expect(publishedCalls.slice(publishAt + 1, publishAt + 5)).toEqual([
+      "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
+      "sleep 10000",
+      "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
+      `git rev-parse -q --verify refs/tags/@crvouga/mockingbird-service-sqlite@${version}`,
+    ])
+    // An accepted version that never becomes visible must not receive a tag.
+    // Retry the same plan once it is visible without publishing that version twice.
+    writeFileSync(calls, "")
+    writeFileSync(`${missing}.stuck`, "")
+    const timedOut = await run("publish", "prerequisites", [], 1)
+    expect(timedOut).toContain("not visible on npm after 5 minutes")
+    expect(timedOut).toContain("released=0 failed=1")
+    const timedOutCalls = readFileSync(calls, "utf8").trim().split("\n")
+    expect(timedOutCalls.filter((c) => c === "sleep 10000")).toHaveLength(30)
+    expect(timedOutCalls.some((c) => c.startsWith("git tag -a "))).toBe(false)
+    expect(timedOutCalls.some((c) => c.startsWith("git push "))).toBe(false)
+    rmSync(`${missing}.stuck`)
+    const resumed = await run("publish", "prerequisites")
+    expect(resumed).toContain(`skip @crvouga/mockingbird-service-sqlite@${version}`)
+    expect(resumed).toContain("released=1 failed=0")
+    expect(
+      readFileSync(calls, "utf8")
+        .split("\n")
+        .filter((c) => c.startsWith("npm publish ")),
+    ).toHaveLength(1)
     expect(
       selected.map((p) => readFileSync(join(checkout, p.relDir, "package.json"), "utf8")),
     ).toEqual(originals)
@@ -133,4 +217,4 @@ esac
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
-}, 15_000)
+}, 30_000)
