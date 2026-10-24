@@ -131,8 +131,15 @@ export function openSnapshot(snapshot: Snapshot, options: DatabaseOptions = {}):
   if (snapshot.runtimePresent && randomMode !== "os") prng.setState(snapshot.prngState);
   let now = resolveClock(systemClock ? "system" : options.now);
   if (snapshot.runtimePresent && !systemClock) now = fixedClock(new Date(snapshot.nowMs));
+  const state = snapshot.state.cloneShallow();
+  for (const [name, table] of state.tables)
+    if (table.durableChanges) {
+      const copy = table.emptyForDurability();
+      copy.adoptDurableRows(table);
+      state.tables.set(name, copy);
+    }
   return createAdoptedDatabase({
-    state: snapshot.state.cloneShallow(),
+    state,
     prng,
     now,
     seed,

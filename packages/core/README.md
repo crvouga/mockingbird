@@ -60,6 +60,9 @@ api.fetch(new Request(input, init))`, or serve it over HTTP with an adapter (see
 | `fromFetchHandler` | `(handler: FetchHandler) => FetchAPI` | Wrap a bare handler as `{ fetch: handler }`. |
 | `Timeline<T>` | `new Timeline({ now?, maxCheckpoints?, id? })` | Deterministic, storage-agnostic checkpoint DAG with `commit`, `fork`, `checkout`, branch heads and bounded GC. Values are retained by reference so COW snapshots stay O(1). |
 | `openDurable<T>` | `({ backend, key, codec, pageSize? }) => Promise<Durable<T>>` | Hydrate any emulator through its binary codec. A handle provides `value`, `flush`, serialized `write`, and save-before-close `close`. |
+| `openBufferedDurable<T, Token>` | `({ backend, key, codec, ...options }) => Promise<BufferedDurable<T>>` | Opt-in incremental write-behind through an engine codec, scheduler and lifecycle ports. Default first-change deadline: 1,000 ms. |
+| `browserDurabilityLifecycle` | `DurabilityLifecycle` | Safe optional page-hide notifications; no-op outside the browser. |
+| `encodeDurableCheckpoint`, `readDurableJournal`, `packDurableRecord`, `unpackDurableRecord` | Versioned binary framing | Checkpoint plus checksummed physical delta records, with tagged engine metadata. |
 | `withDurability` | `(api: FetchAPI, durable) => FetchAPI` | Serialize requests and acknowledge responses only after their storage commit. Inject the handle's value into the service's existing storage port. |
 | `IndexedDBDurabilityBackend` | `new ({ name?, indexedDB?, durability? })` | Atomic binary page writes with revision checks. Default durability hint is `strict`; no browser globals are accessed until construction. |
 | `LocalStorageDurabilityBackend` | `new ({ storage?, prefix?, locks? })` | Small-image fallback. Whole-image base64 writes; Web Locks coordinate tabs when available. Otherwise use one writer per key. |
@@ -73,13 +76,35 @@ replace changed pages, truncate removed pages and advance the revision. Failed c
 the prior image intact. Inputs must not be mutated. `DurabilityCodec<T>` owns emulator creation,
 binary encoding/decoding and optional close. `DurableOptions<T>` injects both ports.
 
-No synchronous mutation becomes durable until an awaited `flush`, `write`, or `close` succeeds.
+With the immediate `openDurable` controller, no synchronous mutation becomes durable until an awaited `flush`, `write`, or `close` succeeds.
 Batch related SQL in the database's existing transaction API for rollback, then flush once.
 Avoid direct mutations during an outstanding save. Saves encode and compare a full image, then
 send only changed pages; encoding remains O(image size). An unchanged image skips the storage
 write. Persisted state remains subject to browser eviction and quotas. Injected adapters stay
 caller-owned; database convenience factories release their own default IndexedDB connection on
 close. The portable database packages re-export these public durability APIs for consumers.
+
+`openBufferedDurable` accepts an `IncrementalDurabilityCodec<T, Token>`. The engine freezes
+committed state in `capture`, acknowledges exactly that token after a successful atomic commit,
+and reports mutations/exposure through `subscribe`. A capture supplies a full checkpoint or
+physical changed-row bytes, never SQL to replay. `baseline` initializes recovered comparison
+state without encoding all rows. The controller owns only the current append tail page;
+unchanged checkpoint pages are not scanned or copied for a delta save. One commit is in flight;
+changes made during it remain pending for the next save.
+
+The opt-in controller schedules from the first unsaved mutation (default 1,000 ms), with
+injected `DurabilityScheduler`/`DurabilityLifecycle` ports for deterministic tests or host
+integration. `pending` and `lastError` expose its state. IO failures retain pending data and
+retry with bounded backoff; revision conflicts stop background saves. Explicit `write`,
+`flush`, and `close` await acknowledgement and reject on failure. Close via the handle; closing
+the engine directly cancels background work and cannot acknowledge pending changes.
+Checkpoint compaction defaults to 256 batches or journal growth of
+`max(4 MiB, checkpoint size)`. Recovery validates the MBDJ v1 envelope/checksums and applies
+physical records without invoking SQL or host functions. Browser suspension can delay saves;
+page-hide notifications are best effort. Use one writer per key and accept loss of recent
+unsaved mutations. The SQL convenience factories choose relaxed IndexedDB transactions for
+this mode only; custom adapters retain their own guarantees. LocalStorage still rewrites the
+whole image. Existing controller defaults and SQL snapshot wire formats remain unchanged.
 
 `Timeline` is the only history and branching primitive prescribed for Mockingbird state. Storage
 engines may expose immutable COW payloads named `Snapshot` for compatibility and serialization,

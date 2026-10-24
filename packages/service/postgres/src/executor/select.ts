@@ -30,6 +30,7 @@ import {
   rowsMatchEqKeys,
   tryIndexedFromItem,
   tryPointRowIndices,
+  tryRangeRowIndices,
 } from "../planner/access.ts";
 import { catalogRelation } from "../schema/catalog.ts";
 import type { FunctionData } from "../storage/database-state.ts";
@@ -534,7 +535,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
             ...table.columns.map((c) => ({ name: c.name, type: c.type.id, mod: c.type.mod, table: label })),
             { name: "xmin", type: "xid", table: label, hidden: true, system: true },
           ],
-          rows: shapeOnly ? [] : table.rows.map((row) => [...row, table.rowXmins.get(row) ?? 2]),
+          rows: shapeOnly ? [] : table.serializationRows().map((row) => [...row, table.rowXmins.get(row) ?? 2]),
         };
         return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
       }
@@ -2056,7 +2057,12 @@ export function executeCore(
     pointTable && core.where && item?.type === "from_table"
       ? tryPointRowIndices(env, pointTable, item.alias ?? item.name[item.name.length - 1]!, core.where)
       : null;
-  const source = point && item ? materializeItem(env, item, env.outer, true) : buildFrom(env, core.from, core.where);
+  const range =
+    !point && pointTable && core.where && item?.type === "from_table"
+      ? tryRangeRowIndices(env, pointTable, item.alias ?? item.name[item.name.length - 1]!, core.where)
+      : null;
+  const access = point ?? range;
+  const source = access && item ? materializeItem(env, item, env.outer, true) : buildFrom(env, core.from, core.where);
   const srcCols = source.rel.columns;
   const rangeVars = source.rangeVars;
 
@@ -2066,13 +2072,17 @@ export function executeCore(
   let srcRows = source.rel.rows;
   if (core.where) {
     checkPredicateType(env, srcCols, rangeVars, core.where, "WHERE");
-    if (point && pointTable) {
+    if (access && pointTable) {
       pointTable.materializeSlab();
-      srcRows = point.indices.map((index) => {
+      srcRows = access.indices.map((index) => {
         const row = pointTable.rowAt(index);
         return [...row, pointTable.rowXmins.get(row) ?? 2];
       });
-      recordIndexScan(env, pointTable, point.indexName);
+      if (range) {
+        const where = core.where;
+        srcRows = srcRows.filter((row) => evalPredicate(env, rowScope(row), where));
+      }
+      recordIndexScan(env, pointTable, access.indexName);
     } else if (core.from.length === 1) {
       const indexed = tryIndexedFromItem(env, core.from[0]!, core.where);
       if (indexed !== null) {

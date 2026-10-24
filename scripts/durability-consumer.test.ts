@@ -9,11 +9,14 @@ test("database durability declarations work without DOM types or private workspa
   try {
     const imports = ["sqlite", "postgres"].map((service, index) => {
       const entry = JSON.stringify(join(root, "packages", "service", service, "dist", "index.js"))
-      return `import { Database as Database${index}, openDurableDatabase as open${index},
+      return `import { Database as Database${index}, openDurableDatabase as open${index}, openBufferedDurableDatabase as buffered${index},
         MemoryDurabilityBackend as Memory${index}, withDurability as wrap${index} } from ${entry};
       const db${index} = new Database${index}();
       db${index}.exec("SELECT 1");
       const saved${index} = open${index}({ key: "test", backend: new Memory${index}() });
+      const background${index} = buffered${index}({ key: "buffered", backend: new Memory${index}(), flushIntervalMs: 1000,
+        scheduler: { schedule: () => 0, cancel: () => {} } });
+      void background${index}.then(handle => { const pending: boolean = handle.pending; void pending; return handle.flush(); });
       const api${index} = wrap${index}({ fetch: async (request: number) => String(request) }, { flush: async () => {} });
       const reply${index}: Promise<string> = api${index}.fetch(1);
       void saved${index}; void reply${index};`

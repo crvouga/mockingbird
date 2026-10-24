@@ -16,8 +16,15 @@ describe("public API exports", () => {
       "Snapshot",
       "SqliteError",
       "Statement",
+      "browserDurabilityLifecycle",
+      "encodeDurableCheckpoint",
+      "openBufferedDurable",
+      "openBufferedDurableDatabase",
       "openDurable",
       "openDurableDatabase",
+      "packDurableRecord",
+      "readDurableJournal",
+      "unpackDurableRecord",
       "withDurability",
     ]);
   });

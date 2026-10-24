@@ -591,10 +591,52 @@ response. For other Mockingbird services, inject `durable.value` through their e
 `sqlite` option, then send requests through this wrapper. Route all writes through the same
 handle/wrapper to preserve serialization; do not mutate the database during an outstanding save.
 
-Durability encodes one full SQLM/PGMM snapshot per batch and compares fixed-size pages (default
+The immediate durability opener encodes one full SQLM/PGMM snapshot per batch and compares fixed-size pages (default
 16 KiB). This targets small to moderate databases, not unbounded datasets. It avoids per-row
 storage IO, but encoding is still O(database size). It is not an SQLite file or OPFS VFS.
 See [the browser benchmark](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/benchmarks/DURABILITY.md) for measurements and limits.
+
+For higher write throughput, use `openBufferedDurableDatabase({ key, backend?, ... })`.
+The returned `BufferedDurable<Database>` keeps the synchronous SQL API and schedules a save
+1,000 ms after the first unsaved change. This is a background deadline, not a debounce;
+suspended tabs and storage failures can delay it. The default owned IndexedDB adapter uses
+`durability: "relaxed"`. Use one writer per database key. Recent unsaved changes can be lost.
+
+```ts
+import { openBufferedDurableDatabase } from "@crvouga/mockingbird-service-postgres";
+
+const durable = await openBufferedDurableDatabase({
+  key: "main",
+  flushIntervalMs: 1000,
+  onError: (error) => console.error("Background save failed", error),
+});
+durable.value.exec("UPDATE items SET value = value + 1 WHERE id = 1");
+// SQL returns immediately; persistence runs in the background.
+await durable.flush(); // use when an acknowledgement is required
+await durable.close(); // flush and release the handle before leaving
+```
+
+Ordinary saves coalesce changed rows and append physical values plus runtime metadata;
+they do not encode or scan every stored row, and recovery does not replay SQL/functions.
+`pending` reports unacknowledged changes/queued work; `lastError` records background failures.
+IO/quota failures retain pending work and retry with bounded backoff; a revision conflict
+stops background persistence. Explicit `write`, `flush`, and `close` reject on failure and
+await storage acknowledgement. Close through the handle, not `durable.value.close()`.
+Do not leave SQL transactions open across a flush. Page-hide persistence is best effort.
+
+Checkpoints compact after 256 delta batches or journal growth of at least
+`max(4 MiB, checkpoint size)` by default (`compactAfterBatches`, `compactAfterBytes`).
+Schema changes, unsupported incremental shapes, public raw state/native container access
+and borrowed binary results/parameters conservatively select full checkpoints. Both openers read old
+SQLM/PGMM images and the versioned checkpoint/journal envelope; opting in upgrades the image
+on save. `Snapshot.encode/decode` formats and the existing immediate opener's defaults stay
+unchanged. LocalStorage uses the same port but still rewrites the whole image.
+
+`openBufferedDurable` is the reusable controller for other emulators, via an injected
+`IncrementalDurabilityCodec`, `DurabilityScheduler`, `DurabilityLifecycle` and the same
+`DurabilityBackend`. `browserDurabilityLifecycle` supplies optional page-hide notifications.
+`encodeDurableCheckpoint`, `readDurableJournal`, `packDurableRecord`, and
+`unpackDurableRecord` provide the shared versioned envelope/record framing.
 
 Stable runtime exports of the main entry include `openDurableDatabase`, `openDurable`,
 `withDurability`, `IndexedDBDurabilityBackend`, `LocalStorageDurabilityBackend`,

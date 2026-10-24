@@ -8,6 +8,15 @@ export function invalidateTableIndexes(table: TableData): void {
   table.indexStores = null;
 }
 
+/** Retain pure derived indexes in the frozen source so rollback need not rebuild them. */
+export function prepareDmlIndexStores(env: ExecEnv, table: TableData): void {
+  if (table.indexStores || !table.frozen || table.triggers.length > 0) return;
+  const specs = uniqueSpecsFor(env, table);
+  // Expression/partial keys can invoke user code; preserve their existing evaluation order.
+  if (specs.some((spec) => spec.where || spec.keys.some((key) => key.expr))) return;
+  ensureIndexStores(env, table);
+}
+
 function ensureIndexStores(env: ExecEnv, table: TableData): Map<string, IndexStore> {
   if (table.indexStores) return table.indexStores;
   const stores = new Map<string, IndexStore>();

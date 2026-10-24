@@ -15,7 +15,7 @@ export async function inlineCoreTypes(packageDir: string): Promise<void> {
   // Database consumers must not acquire Fetch/DOM type requirements from unused core APIs.
   await writeFile(
     join(destination, "index.d.ts"),
-    'export * from "./durability.js"\nexport * from "./durability-browser.js"\n',
+    'export * from "./durability.js"\nexport * from "./durability-browser.js"\nexport * from "./durability-buffered.js"\nexport { ForkMap } from "./fork-map.js"\n',
   )
   const files = new Bun.Glob("**/*.d.ts")
   for await (const file of files.scan({ cwd: dist, absolute: true })) {

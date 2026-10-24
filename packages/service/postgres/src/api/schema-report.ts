@@ -1,5 +1,5 @@
 import { isPostgresError } from "../errors/error.ts";
-import { tokenize, type Token } from "../lexer/tokenize.ts";
+import { type Token, tokenize } from "../lexer/tokenize.ts";
 import { parse } from "../parser/index.ts";
 import { Database } from "./database.ts";
 

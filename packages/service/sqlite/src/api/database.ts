@@ -1,4 +1,4 @@
-import { type Checkpoint, Timeline } from "@crvouga/mockingbird-core";
+import { type BufferedDurabilityObserver, type Checkpoint, Timeline } from "@crvouga/mockingbird-core";
 import { SqliteError } from "../errors/index.ts";
 import { parseUnits } from "../parser/index.ts";
 import {
@@ -75,6 +75,10 @@ export interface QueryOptions {
 export class Database {
   /** @internal Engine catalog, tables, and mutation counters. */
   readonly state: DatabaseState;
+  /** @internal Engine-only access; buffered mode observes public state exposure. */
+  readonly engineState: DatabaseState;
+  /** @internal Installed only by buffered durability. */
+  durabilityObserver?: BufferedDurabilityObserver;
   /** Seed used to construct the PRNG. Ignored when {@link randomMode} is `"os"`. */
   readonly seed: number | bigint;
   /** Entropy mode for `random()` / `randomblob()`. */
@@ -119,17 +123,18 @@ export class Database {
       this.systemClock = options.systemClock;
       this.prng = options.prng;
       this.now = options.now;
-      this.state = options.state;
-      this.transactions = new TransactionManager(this.state, this.prng);
+      this.engineState = options.state;
+      this.transactions = new TransactionManager(this.engineState, this.prng);
     } else {
       this.seed = options.seed ?? DEFAULT_DATABASE_SEED;
       this.randomMode = options.random ?? "deterministic";
       this.systemClock = options.now === "system";
       this.prng = this.randomMode === "os" ? new OsEntropy() : new Prng(this.seed);
       this.now = resolveClock(options.now);
-      this.state = new DatabaseState();
-      this.transactions = new TransactionManager(this.state, this.prng);
+      this.engineState = new DatabaseState();
+      this.transactions = new TransactionManager(this.engineState, this.prng);
     }
+    this.state = this.engineState;
     this.timeline = new Timeline<Snapshot>({
       now: () => this.now().getTime(),
       ...(options.maxCheckpoints !== undefined ? { maxCheckpoints: options.maxCheckpoints } : {}),
@@ -203,6 +208,7 @@ export class Database {
    */
   transaction<T>(fn: () => T): T {
     this.assertOpen();
+    this.durabilityObserver?.assertWritable();
     this.apiTransactionDepth++;
     try {
       if (!this.transactions.inTransaction) {
@@ -229,6 +235,7 @@ export class Database {
       }
     } finally {
       this.apiTransactionDepth--;
+      this.durabilityObserver?.changed();
     }
   }
 
@@ -339,6 +346,7 @@ export class Database {
     }
     if (this.transactions.inTransaction) this.transactions.rollback();
     this.closed = true;
+    this.durabilityObserver?.closed?.();
   }
 
   /**
@@ -348,7 +356,7 @@ export class Database {
    */
   get changes(): number {
     this.assertOpen();
-    return this.state.changes;
+    return this.engineState.changes;
   }
 
   /**
@@ -358,7 +366,7 @@ export class Database {
    */
   get lastInsertRowid(): number | bigint {
     this.assertOpen();
-    return this.state.lastInsertRowid;
+    return this.engineState.lastInsertRowid;
   }
 
   /**
@@ -368,7 +376,7 @@ export class Database {
    */
   get totalChanges(): number {
     this.assertOpen();
-    return this.state.totalChanges;
+    return this.engineState.totalChanges;
   }
 
   /**
@@ -386,11 +394,12 @@ export class Database {
   }
 
   private captureLive(): Snapshot {
-    return captureSnapshot(this.state, this.prng, this.now, this.seed, this.randomMode, this.systemClock);
+    return captureSnapshot(this.engineState, this.prng, this.now, this.seed, this.randomMode, this.systemClock);
   }
 
   private install(snapshot: Snapshot): void {
-    this.state.replaceWith(snapshot.state.cloneShallow(), { adopt: true });
+    this.durabilityObserver?.exposed();
+    this.engineState.replaceWith(snapshot.state.cloneShallow(), { adopt: true });
     this.prng.setState(snapshot.prngState);
     if (!this.systemClock) this.now = fixedClock(new Date(snapshot.nowMs));
   }

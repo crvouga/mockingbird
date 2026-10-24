@@ -12,6 +12,26 @@ const rowArb = fc.record({
 });
 
 describe("fast vs full executor path", () => {
+  test("bounded numeric index candidates preserve residual filtering in both SELECT paths", () => {
+    const db = new Database();
+    db.exec("CREATE TABLE t(id INTEGER PRIMARY KEY, a INT, b TEXT); CREATE INDEX t_a ON t(a)");
+    for (let i = 0; i < 100; i++) db.prepare("INSERT INTO t VALUES (?, ?, ?)").run(i, i % 20, String(i));
+    try {
+      for (const [lower, upper] of [
+        [-1, 10],
+        [5, 5],
+        [10, 5],
+        [0, 20],
+      ])
+        for (const op of [">", ">="])
+          expectFastFullSelectParity(
+            db,
+            `SELECT id,a,b FROM t WHERE a ${op} ${lower} AND a < ${upper} AND id <> 3 ORDER BY id DESC LIMIT 7 OFFSET 1`,
+          );
+    } finally {
+      db.close();
+    }
+  });
   test("simple SELECT with multi-column WHERE matches full path", () => {
     fc.assert(
       fc.property(

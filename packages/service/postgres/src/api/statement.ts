@@ -56,6 +56,28 @@ export class Statement {
   ) {
     this.sql = sql;
     this.statements = statements;
+    const observer = database.durabilityObserver;
+    if (observer) {
+      const execute = this.execute;
+      this.execute = (params) => {
+        observer.assertWritable();
+        // bytea parameters/results retain borrowed buffers under the existing API.
+        if (params.some((value) => value instanceof Uint8Array)) observer.exposed();
+        try {
+          const result = execute.call(this, params);
+          if (
+            result.columns.some(
+              (column, index) =>
+                column.type === "bytea" && result.rows.some((row) => row[index] !== null && row[index] !== undefined),
+            )
+          )
+            observer.exposed();
+          return result;
+        } finally {
+          observer.changed();
+        }
+      };
+    }
   }
 
   /** @internal */
@@ -90,7 +112,7 @@ export class Statement {
    */
   textResult(...params: BindValue[]): TextResultSet {
     const res = this.execute(params);
-    const ctx = new EngineCtx(this.database.state);
+    const ctx = new EngineCtx(this.database.engineState);
     return {
       columns: res.columns.map((c) => c.name),
       columnTypes: res.columns.map((c) => (c.type === UNKNOWN ? "text" : c.type)),
@@ -129,7 +151,7 @@ export class Statement {
       const refused = this.database.transactions.inTransaction ? refusedInTransactionBlock(stmt) : null;
       if (refused) throw pgError("misuse", `${refused} cannot run inside a transaction block`, "25001");
       const env: ExecEnv = {
-        ctx: new EngineCtx(this.database.state),
+        ctx: new EngineCtx(this.database.engineState),
         params: typed,
         ctes: new Map(),
         outer: null,
@@ -140,12 +162,13 @@ export class Statement {
   }
 
   private toRows(res: ExecResult): QueryRow[] {
-    const ctx = new EngineCtx(this.database.state);
+    const ctx = new EngineCtx(this.database.engineState);
     return res.rows.map((row) => {
       const obj: QueryRow = {};
       for (let i = 0; i < res.columns.length; i++) {
         const c = res.columns[i]!;
-        obj[c.name] = datumToJs(c.type, row[i] ?? null, ctx, this.database.int8Mode);
+        const value = datumToJs(c.type, row[i] ?? null, ctx, this.database.int8Mode);
+        obj[c.name] = value;
       }
       return obj;
     });

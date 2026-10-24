@@ -104,10 +104,10 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
     const defaultValue = defaultExpr ? evalExpr(defaultExpr, env.createEvalContext()) : null;
     if (column.notNull && defaultValue === null && table.rowCount() > 0)
       throw new SqliteError("Cannot add a NOT NULL column with default value NULL", "other");
-    table.materializeSlab();
+    table.ownRowValues();
     table.columns.push(column);
     table.rebuildColIndex();
-    for (const row of table.rows.values()) row.values.push(defaultValue);
+    for (const row of table.rowStore.values()) row.values.push(defaultValue);
     table.originalSql = appendAddColumnToMasterSql(table.originalSql, env.statementSql);
     table.clearEqualityHashes();
     env.state.schemaVersion++;
@@ -144,9 +144,10 @@ export function executeAlterTable(stmt: AlterTableStmt, env: ExecutionEnv): Resu
         );
       }
     }
+    table.ownRowValues();
     table.columns.splice(index, 1);
     table.rebuildColIndex();
-    for (const row of table.rows.values()) row.values.splice(index, 1);
+    for (const row of table.rowStore.values()) row.values.splice(index, 1);
     table.clearEqualityHashes();
     env.state.schemaVersion++;
   }

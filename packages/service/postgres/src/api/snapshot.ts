@@ -143,6 +143,8 @@ export function openSnapshot(snapshot: Snapshot, options: DatabaseOptions = {}):
     now = () => new Date(ms);
   }
   const state = snapshot.state.cloneShallow();
+  for (const schema of state.schemas.values())
+    for (const [name, table] of schema.tables) if (table.durableChanges) schema.tables.set(name, table.untrackedFork());
   state.prng = prng;
   state.clock = now;
   return createAdoptedDatabase({

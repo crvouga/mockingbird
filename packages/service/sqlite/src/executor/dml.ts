@@ -111,13 +111,13 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   const undoStatement = (): void => {
     if (!abortMode) return;
     for (let i = undoInserted.length - 1; i >= 0; i--) {
-      const row = table.rows.get(undoInserted[i]!);
+      const row = table.rowStore.get(undoInserted[i]!);
       if (row) removeOne(table, row, env);
     }
     for (let i = undoRemoved.length - 1; i >= 0; i--) {
       const row = undoRemoved[i]!;
       table = env.state.ensureWritableTableForDml(table);
-      table.rows.set(row.rowid, row);
+      table.restoreDurableRow(row);
       if (table.indexes.length > 0) addIndexes(table, row, env);
     }
   };
@@ -227,7 +227,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
         const suppliedRowid = rowidIndexes.length ? asExplicitRowid(source[rowidIndexes[0]!] ?? null) : undefined;
         const rowid = table.insert({ values, rowid: suppliedRowid }, { prepared: true });
         insertedRowid = rowid;
-        const row = table.rows.get(rowid)!;
+        const row = table.rowStore.get(rowid)!;
         validateRow(table, row, env);
         if (table.indexes.length > 0) addIndexes(table, row, env);
         if (env.state.foreignKeysEnabled) checkForeignKeys(table, row, env);
@@ -242,7 +242,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
           returningRows.push(projectReturning(stmt.returning, scopeFor(table, row, stmt.table, env), env));
       } catch (error) {
         if (insertedRowid !== undefined) {
-          const inserted = table.rows.get(insertedRowid);
+          const inserted = table.rowStore.get(insertedRowid);
           if (inserted) removeOne(table, inserted, env);
         }
         if (

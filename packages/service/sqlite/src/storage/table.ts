@@ -1,3 +1,4 @@
+import { ForkMap } from "@crvouga/mockingbird-core";
 import type { Expr, TableConstraint } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import { serializeIndexKey } from "../indexes/index.ts";
@@ -53,7 +54,9 @@ export interface TableOptions {
 export class Table {
   name: string;
   columns: ColumnInfo[];
-  rows: Map<Rowid, Row>;
+  declare rows: Map<Rowid, Row>;
+  #rowStore: Map<Rowid, Row> = new Map();
+  #rowsExposed = false;
   nextRowid: Rowid;
   constraints: TableConstraint[];
   indexes: string[];
@@ -61,7 +64,9 @@ export class Table {
   withoutRowid: boolean;
   strict: boolean;
   /** Clustered PK key string → row for WITHOUT ROWID tables. */
-  clusteredRows: Map<string, Row>;
+  declare clusteredRows: Map<string, Row>;
+  #clusterStore: Map<string, Row> = new Map();
+  #clusterExposed = false;
   /** Frozen columnar storage after snapshot hydrate; `rows` stays empty until materialized. */
   slab: ColumnarSlab | null = null;
   private scanCache: Row[] | null = null;
@@ -74,20 +79,113 @@ export class Table {
   private colIndex = new Map<string, number>();
   /** DML never mutates schema metadata; detach it before a schema edit. */
   private schemaShared = false;
+  private rowValuesShared = false;
+  /** @internal Present only for incremental durability; tombstones are explicit nulls. */
+  durableChanges: ForkMap<Rowid, Row | null> | null = null;
+  /** @internal Native container exposure/structural edits require a checkpoint. */
+  durableUnsafe = false;
+
+  enableDurabilityTracking(): void {
+    this.durableChanges ??= new ForkMap();
+  }
+
+  /** @internal Empty metadata twin, without copying or visiting existing rows. */
+  emptyForDurability(): Table {
+    const copy = new Table(this.name, []);
+    copy.columns = this.columns;
+    copy.constraints = this.constraints;
+    copy.indexes = this.indexes;
+    copy.originalSql = this.originalSql;
+    copy.withoutRowid = this.withoutRowid;
+    copy.strict = this.strict;
+    copy.colIndex = this.colIndex;
+    copy.nextRowid = this.nextRowid;
+    copy.schemaShared = this.schemaShared = true;
+    return copy;
+  }
+
+  /** @internal Recovery/statement undo bypasses SQL, constraints and user functions. */
+  restoreDurableRow(row: Row): void {
+    this.materializeSlab();
+    const old = this.#rowStore.get(row.rowid);
+    if (this.withoutRowid && old) this.#clusterStore.delete(this.makeClusterKey(old.values));
+    this.#rowStore.set(row.rowid, row);
+    if (this.withoutRowid) this.#clusterStore.set(this.makeClusterKey(row.values), row);
+    this.durableChanges?.set(row.rowid, row);
+    this.maximumRowid = undefined;
+    this.clearEqualityHashes();
+    this.invalidateScan();
+  }
+
+  /** @internal Adopt row containers while retaining newly decoded metadata. */
+  adoptDurableRows(source: Table): void {
+    const next = this.nextRowid;
+    source.copyRowsTo(this);
+    this.nextRowid = next;
+    this.frozen = false;
+    this.durableChanges = null;
+  }
 
   constructor(name: string, columns: ColumnInfo[], options: TableOptions = {}) {
     this.name = name;
     this.columns = columns.map(cloneColumn);
-    this.rows = new Map();
+    Object.defineProperty(this, "rows", {
+      enumerable: true,
+      configurable: true,
+      get: this.nativeRows,
+      set: this.setNativeRows,
+    });
+    Object.defineProperty(this, "clusteredRows", {
+      enumerable: true,
+      configurable: true,
+      get: this.nativeClusteredRows,
+      set: this.setNativeClusteredRows,
+    });
     this.nextRowid = 1;
     this.constraints = options.constraints?.length ? cloneAst(options.constraints) : [];
     this.indexes = [...(options.indexes ?? [])];
     this.originalSql = options.originalSql ?? null;
     this.withoutRowid = options.withoutRowid ?? false;
     this.strict = options.strict ?? false;
-    this.clusteredRows = new Map();
+
     this.scanCache = null;
     this.rebuildColIndex();
+  }
+
+  /** @internal Engine access avoids exposing a native Map and disabling structural sharing. */
+  get rowStore(): Map<Rowid, Row> {
+    return this.#rowStore;
+  }
+
+  /** @internal Ordered WITHOUT ROWID storage. */
+  get clusterStore(): Map<string, Row> {
+    return this.#clusterStore;
+  }
+
+  private nativeRows(): Map<Rowid, Row> {
+    if (this.durableChanges) this.durableUnsafe = true;
+    this.#rowsExposed = true;
+    if (this.#rowStore instanceof ForkMap) this.#rowStore = new Map(this.#rowStore);
+    return this.#rowStore;
+  }
+
+  private setNativeRows(rows: Map<Rowid, Row>): void {
+    if (this.durableChanges) this.durableUnsafe = true;
+    this.#rowStore = rows;
+    this.#rowsExposed = true;
+  }
+
+  private nativeClusteredRows(): Map<string, Row> {
+    if (this.durableChanges) this.durableUnsafe = true;
+    this.#clusterExposed = true;
+    if (this.#clusterStore instanceof ForkMap) this.#clusterStore = new Map(this.#clusterStore);
+    return this.#clusterStore;
+  }
+
+  private setNativeClusteredRows(rows: Map<string, Row>): void {
+    if (this.durableChanges) this.durableUnsafe = true;
+    this.#clusterStore = rows;
+    this.#clusterExposed = true;
   }
 
   rebuildColIndex(): void {
@@ -144,7 +242,7 @@ export class Table {
       return hit ?? undefined;
     }
     try {
-      return this.rows.get(canonicalRowid(rowid));
+      return this.#rowStore.get(canonicalRowid(rowid));
     } catch {
       return undefined;
     }
@@ -152,13 +250,13 @@ export class Table {
 
   /** Row count (slab-backed or map-backed). */
   rowCount(): number {
-    return this.slab ? this.slab.rowCount : this.rows.size;
+    return this.slab ? this.slab.rowCount : this.#rowStore.size;
   }
 
   /** Rows sorted by rowid for snapshot encode. */
   sortedRows(): Row[] {
     if (this.slab) return [...this.slab.scan()].map((r) => ({ rowid: r.rowid, values: [...r.values] }));
-    return [...this.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
+    return [...this.#rowStore.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
   }
 
   /** Attach decoded columnar slab (hydrate path). */
@@ -170,8 +268,9 @@ export class Table {
   /** Materialize slab into `rows` Map for mutation. */
   materializeSlab(): void {
     if (!this.slab) return;
-    for (const row of this.slab.scan()) this.rows.set(row.rowid, { rowid: row.rowid, values: [...row.values] });
+    for (const row of this.slab.scan()) this.#rowStore.set(row.rowid, { rowid: row.rowid, values: [...row.values] });
     this.slab = null;
+    this.rowValuesShared = false;
     if (this.withoutRowid) this.rebuildClusteredRows();
     else this.invalidateScan();
   }
@@ -179,7 +278,7 @@ export class Table {
   private hasRow(rowid: Rowid): boolean {
     if (this.slab) return this.slab.get(rowid) !== undefined;
     try {
-      return this.rows.has(canonicalRowid(rowid));
+      return this.#rowStore.has(canonicalRowid(rowid));
     } catch {
       return false;
     }
@@ -187,7 +286,7 @@ export class Table {
 
   private allRowids(): Iterable<Rowid> {
     if (this.slab) return this.slab.rowids;
-    return this.rows.keys();
+    return this.#rowStore.keys();
   }
 
   getByKey(value: SqlValue): Row | undefined {
@@ -204,12 +303,15 @@ export class Table {
   }
 
   private commitRow(row: Row): void {
+    this.durableChanges?.set(row.rowid, row);
     assertRowShape(this, row);
     this.indexEquality(row);
     this.invalidateScan();
   }
 
   private reindexEquality(before: Row, after: Row): void {
+    if (before.rowid !== after.rowid) this.durableChanges?.set(before.rowid, null);
+    this.durableChanges?.set(after.rowid, after);
     this.unindexEquality(before);
     this.indexEquality(after);
     this.invalidateScan();
@@ -253,7 +355,7 @@ export class Table {
     if (this.equalityHashes.has(columnLower)) return true;
     const map = new Map<string, Rowid[]>();
     const collate = column.collate ?? "BINARY";
-    const iter = this.slab ? this.slab.scan() : this.rows.values();
+    const iter = this.slab ? this.slab.scan() : this.#rowStore.values();
     for (const row of iter) {
       const key = serializeIndexKey([normalizeForCollation(this.cell(row, columnLower), collate)]);
       if (key === null) continue;
@@ -309,11 +411,11 @@ export class Table {
       const candidate: Row = { rowid, values };
       if (!options?.skipValidate) this.validate(candidate);
       const clusterKey = this.makeClusterKey(values);
-      if (this.clusteredRows.has(clusterKey)) {
+      if (this.#clusterStore.has(clusterKey)) {
         throw primaryKeyConflict(this.name, this.primaryKeyColumns());
       }
-      this.clusteredRows.set(clusterKey, candidate);
-      this.rows.set(rowid, candidate);
+      this.#clusterStore.set(clusterKey, candidate);
+      this.#rowStore.set(rowid, candidate);
       this.advanceNextRowid(rowid);
       this.commitRow(candidate);
       return rowid;
@@ -339,7 +441,7 @@ export class Table {
 
     const candidate: Row = { rowid, values };
     if (!options?.skipValidate) this.validate(candidate);
-    this.rows.set(rowid, candidate);
+    this.#rowStore.set(rowid, candidate);
     this.advanceNextRowid(rowid);
     this.commitRow(candidate);
     return rowid;
@@ -348,7 +450,7 @@ export class Table {
   update(rowid: Rowid, updates: RowValues): Row | undefined {
     this.assertMutable();
     const key = canonicalRowid(rowid);
-    const existing = this.rows.get(key);
+    const existing = this.#rowStore.get(key);
     if (!existing) return undefined;
 
     const values = existing.values.slice();
@@ -370,14 +472,14 @@ export class Table {
     if (this.withoutRowid) {
       const oldClusterKey = this.makeClusterKey(existing.values);
       const newClusterKey = this.makeClusterKey(values);
-      if (newClusterKey !== oldClusterKey && this.clusteredRows.has(newClusterKey)) {
+      if (newClusterKey !== oldClusterKey && this.#clusterStore.has(newClusterKey)) {
         throw primaryKeyConflict(this.name, this.primaryKeyColumns());
       }
       const candidate: Row = { rowid: key, values };
       this.validate(candidate, key);
-      if (newClusterKey !== oldClusterKey) this.clusteredRows.delete(oldClusterKey);
-      this.clusteredRows.set(newClusterKey, candidate);
-      this.rows.set(key, candidate);
+      if (newClusterKey !== oldClusterKey) this.#clusterStore.delete(oldClusterKey);
+      this.#clusterStore.set(newClusterKey, candidate);
+      this.#rowStore.set(key, candidate);
       this.reindexEquality(existing, candidate);
       return candidate;
     }
@@ -396,12 +498,12 @@ export class Table {
     const candidate: Row = { rowid: targetKey, values };
     this.validate(candidate, key);
     if (targetKey !== key) {
-      this.rows.delete(key);
+      this.#rowStore.delete(key);
       if (this.maximumRowid !== null && this.maximumRowid !== undefined && sameRowid(key, this.maximumRowid)) {
         this.maximumRowid = undefined;
       }
     }
-    this.rows.set(targetKey, candidate);
+    this.#rowStore.set(targetKey, candidate);
     this.advanceNextRowid(targetKey);
     this.reindexEquality(existing, candidate);
     return candidate;
@@ -410,15 +512,16 @@ export class Table {
   delete(rowid: Rowid): boolean {
     this.assertMutable();
     const key = canonicalRowid(rowid);
-    const existing = this.rows.get(key);
+    const existing = this.#rowStore.get(key);
     if (!existing) return false;
-    if (this.withoutRowid) this.clusteredRows.delete(this.makeClusterKey(existing.values));
+    this.durableChanges?.set(key, null);
+    if (this.withoutRowid) this.#clusterStore.delete(this.makeClusterKey(existing.values));
     this.unindexEquality(existing);
     this.invalidateScan();
     if (this.maximumRowid !== null && this.maximumRowid !== undefined && sameRowid(key, this.maximumRowid)) {
       this.maximumRowid = undefined;
     }
-    return this.rows.delete(key);
+    return this.#rowStore.delete(key);
   }
 
   *scan(): Iterable<Row> {
@@ -428,9 +531,9 @@ export class Table {
     }
     if (!this.scanCache) {
       if (this.withoutRowid) {
-        this.scanCache = [...this.clusteredRows.values()].sort((a, b) => this.comparePrimaryKeys(a, b));
+        this.scanCache = [...this.#clusterStore.values()].sort((a, b) => this.comparePrimaryKeys(a, b));
       } else {
-        this.scanCache = [...this.rows.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
+        this.scanCache = [...this.#rowStore.values()].sort((a, b) => compareRowids(a.rowid, b.rowid));
       }
     }
     yield* this.scanCache;
@@ -470,15 +573,39 @@ export class Table {
     this.schemaShared = false;
   }
 
+  /** ALTER changes cell arrays in place; detach tuples retained by transaction/history forks. */
+  ownRowValues(): void {
+    this.materializeSlab();
+    if (!this.rowValuesShared) return;
+    const source = this.#rowStore;
+    const rows = this.#rowsExposed ? source : new Map<Rowid, Row>();
+    for (const [rowid, row] of source) rows.set(rowid, { rowid, values: [...row.values] });
+    this.#rowStore = rows;
+    this.rowValuesShared = false;
+    if (this.withoutRowid) this.rebuildClusteredRows();
+    this.invalidateScan();
+  }
+
   private copyRowsTo(copy: Table): Table {
+    copy.durableChanges = this.durableChanges?.fork() ?? null;
+    copy.durableUnsafe = this.durableUnsafe;
+    copy.rowValuesShared = this.rowValuesShared = true;
     copy.nextRowid = this.nextRowid;
     copy.maximumRowid = this.maximumRowid;
+    // Recovery may adopt into a decoded metadata twin that still has an empty slab.
+    // Its storage kind must follow the source even when the source is map-backed.
+    copy.slab = this.slab;
     if (this.slab) {
-      copy.slab = this.slab;
+      copy.#rowStore = new Map();
     } else {
-      copy.rows = new Map(this.rows);
+      if (!(this.#rowStore instanceof ForkMap) && !this.#rowsExposed && this.#rowStore.size >= 4096)
+        this.#rowStore = new ForkMap(this.#rowStore);
+      copy.#rowStore = this.#rowStore instanceof ForkMap ? this.#rowStore.fork() : new Map(this.#rowStore);
     }
-    copy.clusteredRows = new Map(this.clusteredRows);
+    if (!(this.#clusterStore instanceof ForkMap) && !this.#clusterExposed && this.#clusterStore.size >= 4096)
+      this.#clusterStore = new ForkMap(this.#clusterStore);
+    copy.#clusterStore =
+      this.#clusterStore instanceof ForkMap ? this.#clusterStore.fork() : new Map(this.#clusterStore);
     copy.scanCache = this.scanCache;
     return copy;
   }
@@ -496,10 +623,10 @@ export class Table {
   rebuildClusteredRows(): void {
     this.maximumRowid = undefined;
     if (!this.withoutRowid) return;
-    this.clusteredRows.clear();
-    const iter = this.slab ? this.slab.scan() : this.rows.values();
+    this.#clusterStore.clear();
+    const iter = this.slab ? this.slab.scan() : this.#rowStore.values();
     for (const row of iter) {
-      this.clusteredRows.set(this.makeClusterKey(row.values), row);
+      this.#clusterStore.set(this.makeClusterKey(row.values), row);
     }
     this.invalidateScan();
     this.clearEqualityHashes();
@@ -570,7 +697,7 @@ export class Table {
         }
         const values = names.map((name) => this.cell(row, normalizeColumnName(name)));
         if (values.some((value) => value === null)) continue;
-        for (const other of this.rows.values()) {
+        for (const other of this.#rowStore.values()) {
           if (excludedRowid !== undefined && other.rowid === excludedRowid) continue;
           if (
             values.every((value, index) => {

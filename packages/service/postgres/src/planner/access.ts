@@ -106,6 +106,54 @@ export function recordIndexScan(env: ExecEnv, table: TableData, name: string): v
   }
 }
 
+/** Bounded integer ranges; all other expressions retain their existing execution order. */
+export function tryRangeRowIndices(
+  env: ExecEnv,
+  table: TableData,
+  alias: string,
+  where: Expr,
+): { indices: readonly number[]; indexName: string } | null {
+  const parts = conjunctions(where);
+  if (parts.length !== 2) return null;
+  const bounds: { column: string; op: string; value: Expr }[] = [];
+  for (const part of parts) {
+    if (part.type !== "binop" || ![">", ">=", "<", "<="].includes(part.op)) return null;
+    const column = part.left.type === "colref" ? part.left : part.right;
+    const value = part.left.type === "colref" ? part.right : part.left;
+    if (
+      column.type !== "colref" ||
+      column.parts.length > 2 ||
+      (column.parts.length === 2 && column.parts[0] !== alias) ||
+      !["param", "number_lit"].includes(value.type)
+    )
+      return null;
+    const op = part.left === column ? part.op : { ">": "<", ">=": "<=", "<": ">", "<=": ">=" }[part.op]!;
+    bounds.push({ column: column.parts.at(-1)!, op, value });
+  }
+  const lower = bounds.find((bound) => bound.op === ">" || bound.op === ">=");
+  const upper = bounds.find((bound) => bound.op === "<" || bound.op === "<=");
+  if (!lower || !upper || lower.column !== upper.column) return null;
+  const column = table.columns.find((column) => column.name === lower.column);
+  if (!column || column.domain || !["int2", "int4"].includes(column.type.id)) return null;
+  for (const spec of uniqueSpecsFor(env, table)) {
+    if (spec.where || spec.keys.length !== 1 || spec.keys[0]!.expr || spec.columnNames[0] !== lower.column) continue;
+    const low = evalExpr(env.ctx, makeEvalScope(env, null), lower.value);
+    const high = evalExpr(env.ctx, makeEvalScope(env, null), upper.value);
+    if (
+      low.t !== column.type.id ||
+      high.t !== column.type.id ||
+      typeof low.v !== "number" ||
+      typeof high.v !== "number"
+    )
+      return null;
+    return {
+      indices: indexStoreFor(env, table, spec).integerRange(low.v, high.v, lower.op === ">=", upper.op === "<="),
+      indexName: spec.name,
+    };
+  }
+  return null;
+}
+
 /** Single-table PK / unique equality lookup: returns matching rows or null to scan. */
 export function tryIndexedTableRows(env: ExecEnv, table: TableData, alias: string, where: Expr): Datum[][] | null {
   const parts = conjunctions(where);

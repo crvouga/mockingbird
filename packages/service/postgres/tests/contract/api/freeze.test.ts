@@ -16,8 +16,15 @@ describe("public API exports", () => {
       "Snapshot",
       "Statement",
       "analyzeSchema",
+      "browserDurabilityLifecycle",
+      "encodeDurableCheckpoint",
+      "openBufferedDurable",
+      "openBufferedDurableDatabase",
       "openDurable",
       "openDurableDatabase",
+      "packDurableRecord",
+      "readDurableJournal",
+      "unpackDurableRecord",
       "withDurability",
     ]);
   });

@@ -2,10 +2,12 @@ import {
   type DurabilityBackend,
   type Durable,
   IndexedDBDurabilityBackend,
+  isDurableJournal,
   openDurable,
 } from "@crvouga/mockingbird-core";
 import { pgError } from "../errors/error.ts";
-import { Database, type DatabaseOptions, Snapshot } from "./database.ts";
+import { decodeBufferedDatabase, encodeBufferedCheckpoint } from "./buffered.ts";
+import { Database, type DatabaseOptions } from "./database.ts";
 import { captureSnapshot } from "./snapshot.ts";
 
 export interface DurableDatabaseOptions {
@@ -20,19 +22,32 @@ export interface DurableDatabaseOptions {
 /** Open a browser-persisted database without changing the synchronous Database API. */
 export function openDurableDatabase(options: DurableDatabaseOptions): Promise<Durable<Database>> {
   const backend = options.backend ?? new IndexedDBDurabilityBackend();
+  let journal = false;
   return openDurable({
     key: options.key,
     backend,
     pageSize: options.pageSize,
     codec: {
       create: () => new Database(options.databaseOptions),
-      decode: (bytes) => Snapshot.decode(bytes).open(options.databaseOptions),
+      decode: (bytes) => {
+        journal = isDurableJournal(bytes);
+        return decodeBufferedDatabase(bytes, options.databaseOptions);
+      },
       encode: (db) => {
         db.assertOpen();
         if (db.transactions.inTransaction)
           throw pgError("transaction_state", "cannot persist during a transaction", "25P01");
+        if (journal) return encodeBufferedCheckpoint(db);
         // Persistence must not retain a new timeline checkpoint for every save.
-        return captureSnapshot(db.state, db.prng, db.now, db.seed, db.randomMode, db.systemClock, db.int8Mode).encode();
+        return captureSnapshot(
+          db.engineState,
+          db.prng,
+          db.now,
+          db.seed,
+          db.randomMode,
+          db.systemClock,
+          db.int8Mode,
+        ).encode();
       },
       close: async (db) => {
         db.close();

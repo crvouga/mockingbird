@@ -7,6 +7,16 @@ import {
   validateDurableCommit,
   validateDurablePatch,
 } from "./durability.js"
+import type { DurabilityLifecycle } from "./durability-buffered.js"
+
+/** Best effort only; browsers do not wait for asynchronous pagehide work. */
+export const browserDurabilityLifecycle: DurabilityLifecycle = {
+  subscribe(onSuspend) {
+    if (typeof globalThis.addEventListener !== "function") return () => {}
+    globalThis.addEventListener("pagehide", onSuspend)
+    return () => globalThis.removeEventListener("pagehide", onSuspend)
+  },
+}
 
 type ImageMeta = { revision: number; byteLength: number; pageSize: number }
 type Page = { key: string; index: number; bytes: Uint8Array }

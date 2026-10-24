@@ -116,7 +116,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
         pool.count(column.domain ?? "");
         if (column.identity) pool.count(column.identity.sequence);
       }
-      for (const row of table.allRows()) {
+      for (const row of table.serializationRows()) {
         for (const d of row) {
           if (typeof d === "string") {
             pool.count(d);
@@ -202,7 +202,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
       writeBjv(
         w,
         {
-          xmins: table.allRows().map((row) => table.rowXmins.get(row) ?? 2),
+          xmins: table.serializationRows().map((row) => table.rowXmins.get(row) ?? 2),
           name: table.name,
           schema: table.schema,
           columns: table.columns,
@@ -215,7 +215,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
         } satisfies TableMetaBjv,
         forceId,
       );
-      const rows = table.allRows();
+      const rows = table.serializationRows();
       writeVarintU32(w, rows.length);
       for (let c = 0; c < table.columns.length; c++) writePackedColumn(w, rows, c, internId, forceId);
     }
