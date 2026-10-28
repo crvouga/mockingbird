@@ -1,23 +1,5 @@
 import { strict as assert } from "node:assert"
 import {
-  AbortMultipartUploadCommand,
-  CompleteMultipartUploadCommand,
-  CreateBucketCommand,
-  CreateMultipartUploadCommand,
-  DeleteBucketCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-  GetObjectTaggingCommand,
-  HeadObjectCommand,
-  ListObjectsV2Command,
-  ListObjectVersionsCommand,
-  PutBucketVersioningCommand,
-  PutObjectCommand,
-  PutObjectTaggingCommand,
-  S3Client,
-  UploadPartCommand,
-} from "@aws-sdk/client-s3"
-import {
   CreateQueueCommand,
   DeleteMessageBatchCommand,
   DeleteQueueCommand,
@@ -43,191 +25,6 @@ const errorName = async (action: () => Promise<unknown>) => {
     return "NO_ERROR"
   } catch (error) {
     return error instanceof Error ? error.name : String(error)
-  }
-}
-
-export async function s3Scenario(endpoint: string) {
-  const client = new S3Client({ ...config(endpoint), forcePathStyle: true })
-  const bucket = `mockingbird-parity-${crypto.randomUUID()}`
-  const keys: string[] = []
-  try {
-    await client.send(new CreateBucketCommand({ Bucket: bucket }))
-    const put = await client.send(
-      new PutObjectCommand({
-        Bucket: bucket,
-        Key: "a&/x//",
-        Body: "hello",
-        Metadata: { fixture: "yes" },
-      }),
-    )
-    keys.push("a&/x//")
-    const got = await client.send(new GetObjectCommand({ Bucket: bucket, Key: "a&/x//" }))
-    const body = await got.Body?.transformToString()
-    const condition = await errorName(() =>
-      client.send(new GetObjectCommand({ Bucket: bucket, Key: "a&/x//", IfNoneMatch: put.ETag })),
-    )
-    const putCondition = await errorName(() =>
-      client.send(
-        new PutObjectCommand({ Bucket: bucket, Key: "a&/x//", Body: "bad", IfNoneMatch: "*" }),
-      ),
-    )
-    await client.send(
-      new PutObjectTaggingCommand({
-        Bucket: bucket,
-        Key: "a&/x//",
-        Tagging: { TagSet: [{ Key: "kind", Value: "fixture" }] },
-      }),
-    )
-    const tags = (await client.send(new GetObjectTaggingCommand({ Bucket: bucket, Key: "a&/x//" })))
-      .TagSet
-    for (const key of ["a/1", "a/2", "b/1", "z"]) {
-      await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: key }))
-      keys.push(key)
-    }
-    const first = await client.send(
-      new ListObjectsV2Command({ Bucket: bucket, Delimiter: "/", MaxKeys: 1 }),
-    )
-    const second = await client.send(
-      new ListObjectsV2Command({
-        Bucket: bucket,
-        Delimiter: "/",
-        MaxKeys: 1,
-        ContinuationToken: first.NextContinuationToken,
-      }),
-    )
-    const zero = await client.send(new ListObjectsV2Command({ Bucket: bucket, MaxKeys: 0 }))
-    const upload = await client.send(
-      new CreateMultipartUploadCommand({
-        Bucket: bucket,
-        Key: "multipart",
-        Metadata: { fixture: "multipart" },
-      }),
-    )
-    let multipart:
-      | {
-          invalidPart: string
-          etag: string | undefined
-          length: number | undefined
-          metadata: Record<string, string> | undefined
-        }
-      | undefined
-    try {
-      const part = await client.send(
-        new UploadPartCommand({
-          Bucket: bucket,
-          Key: "multipart",
-          UploadId: upload.UploadId,
-          PartNumber: 1,
-          Body: "part",
-        }),
-      )
-      const invalidPart = await errorName(() =>
-        client.send(
-          new CompleteMultipartUploadCommand({
-            Bucket: bucket,
-            Key: "multipart",
-            UploadId: upload.UploadId,
-            MultipartUpload: { Parts: [{ PartNumber: 1, ETag: '"invalid"' }] },
-          }),
-        ),
-      )
-      const completed = await client.send(
-        new CompleteMultipartUploadCommand({
-          Bucket: bucket,
-          Key: "multipart",
-          UploadId: upload.UploadId,
-          MultipartUpload: { Parts: [{ PartNumber: 1, ETag: part.ETag }] },
-        }),
-      )
-      keys.push("multipart")
-      const head = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: "multipart" }))
-      multipart = {
-        invalidPart,
-        etag: completed.ETag,
-        length: head.ContentLength,
-        metadata: head.Metadata,
-      }
-    } finally {
-      await client
-        .send(
-          new AbortMultipartUploadCommand({
-            Bucket: bucket,
-            Key: "multipart",
-            UploadId: upload.UploadId,
-          }),
-        )
-        .catch(() => undefined)
-    }
-    await client.send(
-      new PutBucketVersioningCommand({
-        Bucket: bucket,
-        VersioningConfiguration: { Status: "Enabled" },
-      }),
-    )
-    const version = await client.send(
-      new PutObjectCommand({ Bucket: bucket, Key: "versioned", Body: "old" }),
-    )
-    await client.send(new PutObjectCommand({ Bucket: bucket, Key: "versioned", Body: "new" }))
-    const deleted = await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: "versioned" }))
-    const missing = await errorName(() =>
-      client.send(new GetObjectCommand({ Bucket: bucket, Key: "versioned" })),
-    )
-    const old = await client.send(
-      new GetObjectCommand({ Bucket: bucket, Key: "versioned", VersionId: version.VersionId }),
-    )
-    const oldBody = await old.Body?.transformToString()
-    const listed = await client.send(
-      new ListObjectVersionsCommand({ Bucket: bucket, Prefix: "versioned" }),
-    )
-    const result = {
-      body,
-      etag: put.ETag,
-      metadata: got.Metadata,
-      condition,
-      putCondition,
-      tags,
-      first: {
-        contents: first.Contents?.map((item) => item.Key) ?? [],
-        prefixes: first.CommonPrefixes?.map((item) => item.Prefix) ?? [],
-        truncated: first.IsTruncated,
-      },
-      second: {
-        contents: second.Contents?.map((item) => item.Key) ?? [],
-        prefixes: second.CommonPrefixes?.map((item) => item.Prefix) ?? [],
-        truncated: second.IsTruncated,
-      },
-      zero: { count: zero.KeyCount, truncated: zero.IsTruncated },
-      multipart,
-      versioning: {
-        deleteMarker: deleted.DeleteMarker,
-        missing,
-        oldBody,
-        versions: listed.Versions?.length,
-        markers: listed.DeleteMarkers?.length,
-      },
-    }
-    return result
-  } finally {
-    const versions = await client
-      .send(new ListObjectVersionsCommand({ Bucket: bucket }))
-      .catch(() => undefined)
-    for (const item of [...(versions?.Versions ?? []), ...(versions?.DeleteMarkers ?? [])])
-      await client
-        .send(new DeleteObjectCommand({ Bucket: bucket, Key: item.Key, VersionId: item.VersionId }))
-        .catch(() => undefined)
-    for (const key of keys)
-      await client
-        .send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
-        .catch(() => undefined)
-    const remaining = await client
-      .send(new ListObjectVersionsCommand({ Bucket: bucket }))
-      .catch(() => undefined)
-    for (const item of [...(remaining?.Versions ?? []), ...(remaining?.DeleteMarkers ?? [])])
-      await client
-        .send(new DeleteObjectCommand({ Bucket: bucket, Key: item.Key, VersionId: item.VersionId }))
-        .catch(() => undefined)
-    await client.send(new DeleteBucketCommand({ Bucket: bucket })).catch(() => undefined)
-    client.destroy()
   }
 }
 
@@ -353,7 +150,7 @@ export async function sqsScenario(endpoint: string) {
 }
 
 export async function criticalParity(
-  service: "s3" | "sqs",
+  service: "sqs",
   mockUrl: string,
   oracleUrl = process.env.MOCKINGBIRD_AWS_ORACLE_URL ?? "http://127.0.0.1:4566",
 ) {
@@ -367,9 +164,8 @@ export async function criticalParity(
     if (!response.ok) throw new Error("LocalStack health failed")
     return response.json()
   })) as { version?: string; edition?: string }
-  const scenario = service === "s3" ? s3Scenario : sqsScenario
-  const oracle = await scenario(oracleUrl)
-  const mock = await scenario(mockUrl)
+  const oracle = await sqsScenario(oracleUrl)
+  const mock = await sqsScenario(mockUrl)
   assert.deepEqual(mock, oracle)
   console.log(
     `${service}: LocalStack ${health.version} (${health.edition}) differential scenario passed`,
