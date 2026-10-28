@@ -1,0 +1,54 @@
+[
+  {
+    "step": "head-src",
+    "request": "HEAD /copy-mpucks-<run>/big",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"dd41fd1b167bee49c58293061921527b-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "lV9ddg==-1",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "copy",
+    "request": "PUT /copy-mpucks-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"405a723bad152dba02071b4690c3bafe\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "bDy2/g==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;405a723bad152dba02071b4690c3bafe&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "head-dst",
+    "request": "HEAD /copy-mpucks-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"405a723bad152dba02071b4690c3bafe\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "bDy2/g==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

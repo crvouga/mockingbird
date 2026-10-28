@@ -1,0 +1,93 @@
+[
+  {
+    "step": "limit string",
+    "request": "POST /sel-parse-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidQuery</Code><Message>Limit value must be a positive integer</Message><Key>k.csv</Key><BucketName>sel-parse-<run></BucketName><Resource>/sel-parse-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "limit float",
+    "request": "POST /sel-parse-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidQuery</Code><Message>Limit value must be a positive integer</Message><Key>k.csv</Key><BucketName>sel-parse-<run></BucketName><Resource>/sel-parse-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "aggregate in where",
+    "request": "POST /sel-parse-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidQuery</Code><Message>WHERE clause cannot have an aggregation</Message><Key>k.csv</Key><BucketName>sel-parse-<run></BucketName><Resource>/sel-parse-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "keypath table",
+    "request": "POST /sel-parse-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadTableName</Code><Message>The table name is not supported: keypath table name is invalid - please check the service documentation</Message><Key>k.csv</Key><BucketName>sel-parse-<run></BucketName><Resource>/sel-parse-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty expression",
+    "request": "POST /sel-parse-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>ParseSelectFailure</Code><Message>1:1: unexpected token &#34;&lt;EOF&gt;&#34;</Message><Key>k.csv</Key><BucketName>sel-parse-<run></BucketName><Resource>/sel-parse-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "trailing garbage",
+    "request": "POST /sel-parse-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>ParseSelectFailure</Code><Message>1:26: unexpected token &#34;s&#34;</Message><Key>k.csv</Key><BucketName>sel-parse-<run></BucketName><Resource>/sel-parse-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing from",
+    "request": "POST /sel-parse-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>ParseSelectFailure</Code><Message>1:9: unexpected token &#34;&lt;EOF&gt;&#34; (expected &#34;FROM&#34;)</Message><Key>k.csv</Key><BucketName>sel-parse-<run></BucketName><Resource>/sel-parse-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

@@ -1,5 +1,5 @@
 {
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": { "noEmit": true, "types": ["bun"] },
-  "include": ["src", "test", "*.test.ts"]
+  "include": ["src", "test", "oracle", "scripts", "*.test.ts"]
 }

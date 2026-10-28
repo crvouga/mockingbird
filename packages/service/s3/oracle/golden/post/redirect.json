@@ -1,0 +1,60 @@
+[
+  {
+    "step": "redirect",
+    "request": "POST /post-redirect-<run> [anonymous]",
+    "status": 303,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://example.com/done?bucket=post-redirect-<run>&etag=%22312868ea31829c8a6f7a7684b3f1228a%22&key=upload.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "redirect with query",
+    "request": "POST /post-redirect-<run> [anonymous]",
+    "status": 303,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "https://example.com/cb?bucket=post-redirect-<run>&etag=%22312868ea31829c8a6f7a7684b3f1228a%22&key=a+b.txt&x=1&y=two",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "redirect and status",
+    "request": "POST /post-redirect-<run> [anonymous]",
+    "status": 303,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://example.com/?bucket=post-redirect-<run>&etag=%22312868ea31829c8a6f7a7684b3f1228a%22&key=upload.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "redirect field not in policy",
+    "request": "POST /post-redirect-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Each form field that you specify in a form must appear in the list of policy conditions. &#34;Success_action_redirect&#34; not specified in the policy.)</Message><BucketName>post-redirect-<run></BucketName><Resource>/post-redirect-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

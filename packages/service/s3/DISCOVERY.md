@@ -21,11 +21,11 @@ consumer-side workaround.
 
 ## Parity and oracle
 
-- Declared parity surface: **Objects, multipart, and presigned URLs**.
+- Declared parity surface: **Every MinIO S3 API, byte-exact against recorded MinIO transcripts**.
 - Parity tier: **cold** (the repository controls when live checks run).
-- Oracle: **Live vendor API or sandbox**.
+- Oracle: **Pinned self-hosted MinIO (RELEASE.2025-10-15T17-29-55Z) and its recorded transcripts**.
 - Repository command: `bun run parity:service -- s3`.
-- Evidence model: Run from a Mockingbird checkout; credentials come only from .env.local or GitHub Actions secrets. Missing credentials exit 2.
+- Evidence model: bun test replays every recorded MinIO transcript against the emulator offline; the live run needs a MinIO you start (packages/service/s3/oracle/README.md) and exits 2 when it is unreachable.
 
 The npm package contains evidence summaries and the exact contract, not credentials or the
 repository-only parity harness. Self-parity/property and acceptance tests run in the Mockingbird

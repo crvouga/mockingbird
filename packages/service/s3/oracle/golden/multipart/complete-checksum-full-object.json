@@ -1,0 +1,92 @@
+[
+  {
+    "step": "part 1",
+    "request": "PUT /mp-ckf-<run>/k?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"ceda1798cbb46989e69d0880965d36a2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "8F5txA==",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "part 2",
+    "request": "PUT /mp-ckf-<run>/k?partNumber=2&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"11fd82cb2082c1b556d31472c88d622e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "aMcj9A==",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "wrong full checksum",
+    "request": "POST /mp-ckf-<run>/k?uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>k</Key><BucketName>mp-ckf-<run></BucketName><Resource>/mp-ckf-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "complete",
+    "request": "POST /mp-ckf-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"069075f3c5a11a33ce11c5c21ce510dc-2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "hkuEHA==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-ckf-<run>/k</Location><Bucket>mp-ckf-<run></Bucket><Key>k</Key><ETag>&#34;069075f3c5a11a33ce11c5c21ce510dc-2&#34;</ETag><ChecksumCRC32>hkuEHA==</ChecksumCRC32></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head checksum mode",
+    "request": "HEAD /mp-ckf-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5242896",
+      "content-type": "binary/octet-stream",
+      "etag": "\"069075f3c5a11a33ce11c5c21ce510dc-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "hkuEHA==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "crc64 part without checksum",
+    "request": "PUT /mp-ckf-<run>/nv?partNumber=1&uploadId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid arguments provided for mp-ckf-<run>/<upload-path>: (checksum missing, want &#34;CRC64NVME&#34;, got &#34;&#34;)</Message><Key>nv</Key><BucketName>mp-ckf-<run></BucketName><Resource>/mp-ckf-<run>/nv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

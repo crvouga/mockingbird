@@ -1,0 +1,102 @@
+[
+  {
+    "step": "range + if-match hit",
+    "request": "GET /cond-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "2",
+      "content-range": "bytes 0-1/5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "he"
+  },
+  {
+    "step": "range + if-match miss",
+    "request": "GET /cond-<run>/k",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-type": "application/xml",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>k</Key><BucketName>cond-<run></BucketName><Resource>/cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range + none-match hit",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "bad range + if-match miss",
+    "request": "GET /cond-<run>/k",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-type": "application/xml",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>k</Key><BucketName>cond-<run></BucketName><Resource>/cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "partNumber + none-match hit",
+    "request": "GET /cond-<run>/k?partNumber=1",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "partNumber 2 + none-match hit",
+    "request": "GET /cond-<run>/k?partNumber=2",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPartNumber</Code><Message>The requested partnumber is not satisfiable</Message><Key>k</Key><BucketName>cond-<run></BucketName><Resource>/cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

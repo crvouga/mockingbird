@@ -1,0 +1,76 @@
+[
+  {
+    "step": "complete v1",
+    "request": "POST /mp-ver-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"90bbe0959052ebcaef0b08273fb510c7-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-ver-<run>/k</Location><Bucket>mp-ver-<run></Bucket><Key>k</Key><ETag>&#34;90bbe0959052ebcaef0b08273fb510c7-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "complete v2",
+    "request": "POST /mp-ver-<run>/k?uploadId=<id:3>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"020e4c3ae92be2cae0976575575c4205-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:4>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-ver-<run>/k</Location><Bucket>mp-ver-<run></Bucket><Key>k</Key><ETag>&#34;020e4c3ae92be2cae0976575575c4205-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "versions",
+    "request": "GET /mp-ver-<run>?versions=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>mp-ver-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;020e4c3ae92be2cae0976575575c4205-1&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId><id:4></VersionId></Version><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;90bbe0959052ebcaef0b08273fb510c7-1&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:2></VersionId></Version></ListVersionsResult>"
+  },
+  {
+    "step": "get",
+    "request": "GET /mp-ver-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "2",
+      "content-type": "binary/octet-stream",
+      "etag": "\"020e4c3ae92be2cae0976575575c4205-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:4>"
+    },
+    "body": "v2"
+  },
+  {
+    "step": "complete suspended",
+    "request": "POST /mp-susp-<run>/k?uploadId=<id:5>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"4b9a1ad6e13d59345c016f4dd3e46c44-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-susp-<run>/k</Location><Bucket>mp-susp-<run></Bucket><Key>k</Key><ETag>&#34;4b9a1ad6e13d59345c016f4dd3e46c44-1&#34;</ETag></CompleteMultipartUploadResult>"
+  }
+]

@@ -1,0 +1,37 @@
+[
+  {
+    "step": "upload result",
+    "value": {
+      "Bucket": "mp-sdk-<run>",
+      "ChecksumCRC32": "xEiB7Q==-3",
+      "ETag": "\"983e88bdee9c7083dcdc1d2cf64ec1ff-3\"",
+      "Key": "sdk/large.bin",
+      "Location": "http://<host>/mp-sdk-<run>/sdk/large.bin"
+    }
+  },
+  {
+    "step": "head",
+    "value": {
+      "AcceptRanges": "bytes",
+      "ContentLength": 11534336,
+      "ContentType": "application/x-big",
+      "ETag": "\"983e88bdee9c7083dcdc1d2cf64ec1ff-3\"",
+      "Metadata": {
+        "origin": "lib-storage"
+      }
+    }
+  },
+  {
+    "step": "get part 3",
+    "value": {
+      "ContentLength": 1048576,
+      "ContentRange": "bytes 10485760-11534335/11534336",
+      "ETag": "\"983e88bdee9c7083dcdc1d2cf64ec1ff-3\"",
+      "PartsCount": 3
+    }
+  },
+  {
+    "step": "abort missing",
+    "value": "NO_ERROR"
+  }
+]

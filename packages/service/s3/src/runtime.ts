@@ -12,10 +12,10 @@ import {
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+import { S3_NAMESPACE, S3API, type S3SeedObject } from "./api.js"
 import { document } from "./generated/openapi.js"
 import { DEFAULT_VIRTUAL_HOSTS, toPathStyle } from "./hosting.js"
-import { accessKeyCredential, S3_NAMESPACE, S3API } from "./index.js"
-import type { S3SeedObject } from "./state.js"
+import { accessKeyCredential } from "./index.js"
 
 export const S3_PRESETS: Record<string, FaultPreset> = {
   slow_down: {
@@ -65,6 +65,10 @@ export type S3RuntimeOptions = {
   buckets?: readonly string[]
   objects?: readonly S3SeedObject[]
   credentials?: Readonly<Record<string, string>>
+  /** `lenient` (default) or `strict` (MinIO's SigV4 checks on every request). */
+  authentication?: "lenient" | "strict"
+  /** Server region. Default `us-east-1`. */
+  region?: string
   /**
    * Base hosts for virtual-hosted-style addressing: `Host: <bucket>.<base>` names the bucket and
    * the path is the key. Default `["localhost"]`; `[]` leaves every request path-style.
@@ -80,38 +84,39 @@ export type S3Runtime = ServiceRuntime<S3API> & { readonly webhooks: WebhookHub 
 const admin = (runtime: ServiceRuntime<S3API>): AdminRoutes => ({
   "GET /objects": ({ namespace, url }) => {
     const bucket = url.searchParams.get("bucket")
+    const core = runtime.instance(namespace).core
     return Response.json({
-      objects: runtime
-        .instance(namespace)
-        .state.objects.list({ where: (object) => !bucket || object.bucket === bucket })
-        .map(({ value }) => ({
+      objects: core.state.buckets
+        .list()
+        .filter(({ id }) => !bucket || id === bucket)
+        .flatMap(({ id }) => core.currentObjects(id))
+        .map((value) => ({
           bucket: value.bucket,
           key: value.key,
-          contentLength: value.bytes.length,
+          contentLength: value.size,
           contentType: value.contentType,
-          etag: value.etag,
+          etag: `"${value.etag}"`,
           lastModified: value.lastModified,
           metadata: value.metadata,
+          ...(value.versionId !== "null" ? { versionId: value.versionId } : {}),
         })),
     })
   },
-  "GET /uploads": ({ namespace }) =>
-    Response.json({
-      uploads: runtime
-        .instance(namespace)
-        .state.uploads.list()
-        .map(({ value }) => ({
-          ...value,
-          parts: runtime
-            .instance(namespace)
-            .state.parts.list({ where: (part) => part.uploadId === value.id })
-            .map(({ value: part }) => ({
-              partNumber: part.partNumber,
-              etag: part.etag,
-              contentLength: part.bytes.length,
-            })),
-        })),
-    }),
+  "GET /uploads": ({ namespace }) => {
+    const state = runtime.instance(namespace).core.state
+    return Response.json({
+      uploads: state.uploads.list().map(({ value }) => ({
+        ...value,
+        parts: state.parts
+          .list({ where: (part) => part.uploadId === value.id, order: "oldest" })
+          .map(({ value: part }) => ({
+            partNumber: part.partNumber,
+            etag: `"${part.etag}"`,
+            contentLength: part.size,
+          })),
+      })),
+    })
+  },
   "POST /objects": async ({ namespace, body }) => {
     const input = body as {
       bucket?: unknown
@@ -135,20 +140,18 @@ const admin = (runtime: ServiceRuntime<S3API>): AdminRoutes => ({
       bucket: input.bucket,
       key: input.key,
       body: input.body,
-      metadata: {},
       ...(typeof input.contentType === "string" ? { contentType: input.contentType } : {}),
     })
     return Response.json(
-      { bucket: object.bucket, key: object.key, etag: object.etag },
+      { bucket: object.bucket, key: object.key, etag: `"${object.etag}"` },
       { status: 201 },
     )
   },
   "GET /objects/:bucket/:key": ({ namespace, params }) => {
-    const object = runtime
-      .instance(namespace)
-      .state.object(params.bucket as string, params.key as string)
-    return object
-      ? new Response(new Uint8Array(object.bytes), {
+    const core = runtime.instance(namespace).core
+    const object = core.head(params.bucket as string, params.key as string)
+    return object && !object.deleteMarker
+      ? new Response(core.bytes(object), {
           headers: { "content-type": object.contentType ?? "application/octet-stream" },
         })
       : Response.json(
@@ -185,6 +188,8 @@ export const createRuntime = (options: S3RuntimeOptions = {}): S3Runtime => {
         ...(options.buckets ? { buckets: options.buckets } : {}),
         ...(options.objects ? { objects: options.objects } : {}),
         ...(options.credentials ? { credentials: options.credentials } : {}),
+        ...(options.authentication ? { authentication: options.authentication } : {}),
+        ...(options.region ? { region: options.region } : {}),
         ...(options.virtualHosts ? { virtualHosts: options.virtualHosts } : {}),
         onNotification: (event) =>
           hub.publish({

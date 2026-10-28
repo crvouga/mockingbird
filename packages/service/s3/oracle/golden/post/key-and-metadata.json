@@ -1,0 +1,252 @@
+[
+  {
+    "step": "filename substitution",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"847bee05ce221ee20516f48581e44313\"",
+      "location": "http://<host>/post-meta-<run>/uploads/photo.png",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get substituted",
+    "request": "GET /post-meta-<run>/uploads/photo.png",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "9",
+      "content-type": "image/png",
+      "etag": "\"847bee05ce221ee20516f48581e44313\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "png bytes"
+  },
+  {
+    "step": "filename without file name",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"c5b61a7732a63a64c9053c89119019cb\"",
+      "location": "http://<host>/post-meta-<run>/raw/raw/$%7Bfilename%7D",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "list raw",
+    "request": "GET /post-meta-<run>?list-type=2&prefix=raw/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>post-meta-<run></Name><Prefix>raw/</Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>raw/raw/${filename}</Key><LastModified><date></LastModified><ETag>&#34;c5b61a7732a63a64c9053c89119019cb&#34;</ETag><Size>7</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "leading slash",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-meta-<run>/lead.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get lead",
+    "request": "GET /post-meta-<run>/lead.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "text/plain",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "posted content"
+  },
+  {
+    "step": "metadata and headers",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-meta-<run>/meta.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get meta",
+    "request": "GET /post-meta-<run>/meta.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-disposition": "attachment; filename=meta.txt",
+      "content-length": "14",
+      "content-type": "text/markdown",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "blue",
+      "x-amz-meta-owner": "=?UTF-8?q?=C3=9Cn=C3=AFcode?=",
+      "x-amz-request-id": "*"
+    },
+    "body": "posted content"
+  },
+  {
+    "step": "file part content type ignored",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "location": "http://<host>/post-meta-<run>/typed.bin",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head typed",
+    "request": "HEAD /post-meta-<run>/typed.bin",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "application/octet-stream",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "ignored x-ignore field",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-meta-<run>/ignored.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "fields after the file are not read",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-meta-<run>/after.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head after",
+    "request": "HEAD /post-meta-<run>/after.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "text/plain",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "content-md5 field",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-meta-<run>/md5.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "content-md5 mismatch",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadDigest</Code><Message>The Content-Md5 you specified did not match what we received.</Message><BucketName>post-meta-<run></BucketName><Resource>/post-meta-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "content-md5 invalid",
+    "request": "POST /post-meta-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidDigest</Code><Message>The Content-Md5 you specified is not valid.</Message><BucketName>post-meta-<run></BucketName><Resource>/post-meta-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head md5bad",
+    "request": "HEAD /post-meta-<run>/md5bad.txt",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  }
+]

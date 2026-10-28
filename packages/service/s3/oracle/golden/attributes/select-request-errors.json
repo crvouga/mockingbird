@@ -1,0 +1,321 @@
+[
+  {
+    "step": "expression type",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidExpressionType</Code><Message>The ExpressionType is invalid. Only SQL expressions are supported.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "lower expression type",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<397 bytes sha256:233ffc77e05c572f>"
+  },
+  {
+    "step": "lower expression type (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "a,b\n1,2\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>8</BytesScanned><BytesProcessed>8</BytesProcessed><BytesReturned>8</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "no input",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MissingRequiredParameter</Code><Message>The SelectRequest entity is missing a required parameter. Check the service documentation and try again.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "no output",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MissingRequiredParameter</Code><Message>The SelectRequest entity is missing a required parameter. Check the service documentation and try again.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "two inputs",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidDataSource</Code><Message>Invalid data source type. Only CSV, JSON, and Parquet are supported.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "no input format",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidDataSource</Code><Message>Invalid data source type. Only CSV, JSON, and Parquet are supported.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "two outputs",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>ObjectSerializationConflict</Code><Message>InputSerialization specifies more than one format (CSV, JSON, or Parquet), or OutputSerialization specifies more than one format (CSV or JSON). InputSerialization and OutputSerialization can only specify one format each.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty output",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>ObjectSerializationConflict</Code><Message>InputSerialization specifies more than one format (CSV, JSON, or Parquet), or OutputSerialization specifies more than one format (CSV or JSON). InputSerialization and OutputSerialization can only specify one format each.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad compression",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: The file is not in a supported compression format. GZIP, BZIP2, ZSTD, LZ4, S2 and SNAPPY are supported.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "gzip on plain",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>TruncatedInput</Code><Message>Object decompression failed. Check that the object is properly compressed using the format specified in the request.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad json type",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: The JsonType is invalid. Only DOCUMENT and LINES are supported.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "json no type",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: The JsonType is invalid. Only DOCUMENT and LINES are supported.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad header info",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: unsupported FileHeaderInfo</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown csv option",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: unrecognized option</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "long quote char",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: unsupported QuoteCharacter &#39;ab&#39;</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "parquet",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error, please try again.: cause(parquet format parsing not enabled on server)</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "parquet gzip",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequestParameter</Code><Message>The value of a parameter in SelectRequest element is invalid. Check the service API documentation and try again.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "scan range reversed",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequestParameter</Code><Message>The value of a parameter in ScanRange element is invalid. Check the service API documentation and try again.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "scan range empty",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequestParameter</Code><Message>The value of a parameter in ScanRange element is invalid. Check the service API documentation and try again.</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "malformed xml",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: XML syntax error on line 1: unexpected EOF</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "wrong root",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: expected element type &lt;SelectRequest&gt; but have &lt;Foo&gt;</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad table",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadTableName</Code><Message>The table name is not supported: table name must be `s3object`</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "negative limit",
+    "request": "POST /sel-err-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>ParseSelectFailure</Code><Message>1:30: unexpected token &#34;-&#34; (expected &lt;float&gt; | &lt;int&gt; | &lt;litstring&gt; | &#34;TRUE&#34; | &#34;FALSE&#34; | &#34;NULL&#34; | &#34;MISSING&#34;)</Message><Key>k.csv</Key><BucketName>sel-err-<run></BucketName><Resource>/sel-err-<run>/k.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

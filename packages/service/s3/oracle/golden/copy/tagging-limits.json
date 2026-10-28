@@ -1,0 +1,106 @@
+[
+  {
+    "step": "eleven",
+    "request": "PUT /copy-taglim-<run>/d1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>Tags cannot be more than 10</Message><Key>src</Key><BucketName>copy-taglim-<run></BucketName><Resource>/copy-taglim-<run>/d1</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "ten",
+    "request": "PUT /copy-taglim-<run>/d2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "FKdwbo+0/j0=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f5acec107e7e752ca013866c211dc1a3&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "bad-value",
+    "request": "PUT /copy-taglim-<run>/d3",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidTag</Code><Message>The TagValue you have provided is invalid</Message><Key>src</Key><BucketName>copy-taglim-<run></BucketName><Resource>/copy-taglim-<run>/d3</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty-key",
+    "request": "PUT /copy-taglim-<run>/d4",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidTag</Code><Message>The TagKey you have provided is invalid</Message><Key>src</Key><BucketName>copy-taglim-<run></BucketName><Resource>/copy-taglim-<run>/d4</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "no-value",
+    "request": "PUT /copy-taglim-<run>/d5",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "FKdwbo+0/j0=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f5acec107e7e752ca013866c211dc1a3&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "head-d5",
+    "request": "HEAD /copy-taglim-<run>/d5",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-type": "text/plain",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "2"
+    },
+    "body": ""
+  },
+  {
+    "step": "metadata-replace-unvalidated",
+    "request": "PUT /copy-taglim-<run>/d6",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "FKdwbo+0/j0=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f5acec107e7e752ca013866c211dc1a3&#34;</ETag></CopyObjectResult>"
+  }
+]

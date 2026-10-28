@@ -1,0 +1,172 @@
+[
+  {
+    "step": "get bytes=-1",
+    "request": "GET /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-range": "bytes 9-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "9"
+  },
+  {
+    "step": "head bytes=-1",
+    "request": "HEAD /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-range": "bytes 9-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=-3",
+    "request": "GET /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-range": "bytes 7-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "789"
+  },
+  {
+    "step": "head bytes=-3",
+    "request": "HEAD /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-range": "bytes 7-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=-10",
+    "request": "GET /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "0123456789"
+  },
+  {
+    "step": "head bytes=-10",
+    "request": "HEAD /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=-11",
+    "request": "GET /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "0123456789"
+  },
+  {
+    "step": "head bytes=-11",
+    "request": "HEAD /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=-1000",
+    "request": "GET /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "0123456789"
+  },
+  {
+    "step": "head bytes=-1000",
+    "request": "HEAD /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "text/plain",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

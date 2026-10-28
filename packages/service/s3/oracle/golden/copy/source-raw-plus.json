@@ -1,0 +1,66 @@
+[
+  {
+    "step": "copy-plus",
+    "request": "PUT /copy-plus-<run>/dst-plus",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"d7d18cfb3a0d8293e2f5d94ea30e04d2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "FNMHFhv8RR0=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;d7d18cfb3a0d8293e2f5d94ea30e04d2&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "get-plus",
+    "request": "GET /copy-plus-<run>/dst-plus",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "text/plain",
+      "etag": "\"d7d18cfb3a0d8293e2f5d94ea30e04d2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "plus"
+  },
+  {
+    "step": "copy-space",
+    "request": "PUT /copy-plus-<run>/dst-space",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"ff2364a0be3d20e46cc69efb36afe9a5\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "yqYp8Ked6vM=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;ff2364a0be3d20e46cc69efb36afe9a5&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "get-space",
+    "request": "GET /copy-plus-<run>/dst-space",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"ff2364a0be3d20e46cc69efb36afe9a5\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "space"
+  }
+]

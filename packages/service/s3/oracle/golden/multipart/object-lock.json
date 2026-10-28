@@ -1,0 +1,115 @@
+[
+  {
+    "step": "complete",
+    "request": "POST /mp-lock-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"478dd91ff2aa7a954c42e39db81eb740-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-lock-<run>/k</Location><Bucket>mp-lock-<run></Bucket><Key>k</Key><ETag>&#34;478dd91ff2aa7a954c42e39db81eb740-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /mp-lock-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "6",
+      "content-type": "binary/octet-stream",
+      "etag": "\"478dd91ff2aa7a954c42e39db81eb740-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-object-lock-legal-hold": "ON",
+      "x-amz-object-lock-mode": "GOVERNANCE",
+      "x-amz-object-lock-retain-until-date": "2099-01-01T00:00:00.000Z",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "retention",
+    "request": "GET /mp-lock-<run>/k?retention=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Retention xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Mode>GOVERNANCE</Mode><RetainUntilDate>2099-01-01T00:00:00.000Z</RetainUntilDate></Retention>"
+  },
+  {
+    "step": "legal hold",
+    "request": "GET /mp-lock-<run>/k?legal-hold=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<LegalHold xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>ON</Status></LegalHold>"
+  },
+  {
+    "step": "bad mode",
+    "request": "POST /mp-lock-<run>/x?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>unknown wormMode directive</Message><Key>x</Key><BucketName>mp-lock-<run></BucketName><Resource>/mp-lock-<run>/x</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "past date",
+    "request": "POST /mp-lock-<run>/x?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>the retain until date must be in the future</Message><Key>x</Key><BucketName>mp-lock-<run></BucketName><Resource>/mp-lock-<run>/x</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "mode without date",
+    "request": "POST /mp-lock-<run>/x?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>x-amz-object-lock-retain-until-date and x-amz-object-lock-mode must both be supplied</Message><Key>x</Key><BucketName>mp-lock-<run></BucketName><Resource>/mp-lock-<run>/x</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "lock headers on plain bucket",
+    "request": "POST /mp-nolock-<run>/x?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>Bucket is missing ObjectLockConfiguration</Message><Key>x</Key><BucketName>mp-nolock-<run></BucketName><Resource>/mp-nolock-<run>/x</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

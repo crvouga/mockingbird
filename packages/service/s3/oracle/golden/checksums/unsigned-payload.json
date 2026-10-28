@@ -1,0 +1,49 @@
+[
+  {
+    "step": "unsigned with checksum",
+    "request": "PUT /cks-<run>/k [unsigned-payload]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32c": "CRPpGg==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unsigned wrong checksum",
+    "request": "PUT /cks-<run>/k2 [unsigned-payload]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>k2</Key><BucketName>cks-<run></BucketName><Resource>/cks-<run>/k2</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /cks-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32c": "CRPpGg==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

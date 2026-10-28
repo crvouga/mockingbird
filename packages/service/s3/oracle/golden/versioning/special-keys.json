@@ -1,0 +1,246 @@
+[
+  {
+    "step": "put ünï cødé/ключ.txt",
+    "request": "PUT /ver-keys-<run>/%C3%BCn%C3%AF%20c%C3%B8d%C3%A9/%D0%BA%D0%BB%D1%8E%D1%87.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"507763ee040e2e05775ddc806ecc0b3d\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete ünï cødé/ключ.txt",
+    "request": "DELETE /ver-keys-<run>/%C3%BCn%C3%AF%20c%C3%B8d%C3%A9/%D0%BA%D0%BB%D1%8E%D1%87.txt",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get marker ünï cødé/ключ.txt",
+    "request": "GET /ver-keys-<run>/%C3%BCn%C3%AF%20c%C3%B8d%C3%A9/%D0%BA%D0%BB%D1%8E%D1%87.txt",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>ünï cødé/ключ.txt</Key><BucketName>ver-keys-<run></BucketName><Resource>/ver-keys-<run>/ünï cødé/ключ.txt</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get version ünï cødé/ключ.txt",
+    "request": "GET /ver-keys-<run>/%C3%BCn%C3%AF%20c%C3%B8d%C3%A9/%D0%BA%D0%BB%D1%8E%D1%87.txt?versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "25",
+      "content-type": "binary/octet-stream",
+      "etag": "\"507763ee040e2e05775ddc806ecc0b3d\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "<25 bytes sha256:7c6d6b1e354c4bc2>"
+  },
+  {
+    "step": "put a&b<c>'\"d",
+    "request": "PUT /ver-keys-<run>/a%26b%3Cc%3E%27%22d",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"93612a153c18c9330ec4ba223e58f030\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:3>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete a&b<c>'\"d",
+    "request": "DELETE /ver-keys-<run>/a%26b%3Cc%3E%27%22d",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:4>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get marker a&b<c>'\"d",
+    "request": "GET /ver-keys-<run>/a%26b%3Cc%3E%27%22d",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:4>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>a&amp;b&lt;c&gt;&#39;&#34;d</Key><BucketName>ver-keys-<run></BucketName><Resource>/ver-keys-<run>/a&amp;b&lt;c&gt;&#39;&#34;d</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get version a&b<c>'\"d",
+    "request": "GET /ver-keys-<run>/a%26b%3Cc%3E%27%22d?versionId=<id:3>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "9",
+      "content-type": "binary/octet-stream",
+      "etag": "\"93612a153c18c9330ec4ba223e58f030\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:3>"
+    },
+    "body": "a&b<c>'\"d"
+  },
+  {
+    "step": "put deep/nested/path/x",
+    "request": "PUT /ver-keys-<run>/deep/nested/path/x",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"50ad3d2aa47d8cee8d2b5cd2a85bf37f\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:5>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete deep/nested/path/x",
+    "request": "DELETE /ver-keys-<run>/deep/nested/path/x",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:6>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get marker deep/nested/path/x",
+    "request": "GET /ver-keys-<run>/deep/nested/path/x",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:6>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>deep/nested/path/x</Key><BucketName>ver-keys-<run></BucketName><Resource>/ver-keys-<run>/deep/nested/path/x</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get version deep/nested/path/x",
+    "request": "GET /ver-keys-<run>/deep/nested/path/x?versionId=<id:5>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "18",
+      "content-type": "binary/octet-stream",
+      "etag": "\"50ad3d2aa47d8cee8d2b5cd2a85bf37f\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:5>"
+    },
+    "body": "deep/nested/path/x"
+  },
+  {
+    "step": "put with space+plus",
+    "request": "PUT /ver-keys-<run>/with%20space%2Bplus",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"84742a93da781073f97bd95c89df7bc2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:7>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete with space+plus",
+    "request": "DELETE /ver-keys-<run>/with%20space%2Bplus",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:8>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get marker with space+plus",
+    "request": "GET /ver-keys-<run>/with%20space%2Bplus",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:8>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>with space+plus</Key><BucketName>ver-keys-<run></BucketName><Resource>/ver-keys-<run>/with space+plus</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get version with space+plus",
+    "request": "GET /ver-keys-<run>/with%20space%2Bplus?versionId=<id:7>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "15",
+      "content-type": "binary/octet-stream",
+      "etag": "\"84742a93da781073f97bd95c89df7bc2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:7>"
+    },
+    "body": "with space+plus"
+  }
+]

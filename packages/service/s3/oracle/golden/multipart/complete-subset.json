@@ -1,0 +1,45 @@
+[
+  {
+    "step": "complete 1 and 5",
+    "request": "POST /mp-subset-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"004179c52e47a96fb783765d6cac1746-2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-subset-<run>/k</Location><Bucket>mp-subset-<run></Bucket><Key>k</Key><ETag>&#34;004179c52e47a96fb783765d6cac1746-2&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /mp-subset-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5242884",
+      "content-type": "binary/octet-stream",
+      "etag": "\"004179c52e47a96fb783765d6cac1746-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head part 2",
+    "request": "HEAD /mp-subset-<run>/k?partNumber=2",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

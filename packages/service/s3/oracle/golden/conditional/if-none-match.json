@@ -1,0 +1,178 @@
+[
+  {
+    "step": "get matching",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head matching",
+    "request": "HEAD /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get unquoted",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head unquoted",
+    "request": "HEAD /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get star",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head star",
+    "request": "HEAD /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get mismatch",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head mismatch",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get list",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head list",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

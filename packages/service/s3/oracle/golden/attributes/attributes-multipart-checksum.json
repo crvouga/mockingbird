@@ -1,0 +1,16 @@
+[
+  {
+    "step": "checksum and parts",
+    "request": "GET /attrs-mpc-<run>/big?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><Checksum><ChecksumCRC32>4fn9rQ==</ChecksumCRC32><ChecksumType>COMPOSITE</ChecksumType></Checksum><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>10000</MaxParts><NextPartNumberMarker>2</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>2</PartsCount><Part><PartNumber>1</PartNumber><Size>5242880</Size><ChecksumCRC32>r/zBbw==</ChecksumCRC32></Part><Part><PartNumber>2</PartNumber><Size>4</Size><ChecksumCRC32>fDe0XQ==</ChecksumCRC32></Part></ObjectParts></getObjectAttributesResponse>"
+  }
+]

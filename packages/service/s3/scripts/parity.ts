@@ -1,9 +1,9 @@
-import { criticalParity } from "../../../../scripts/aws/critical-parity.js"
-import { createServer } from "../src/server.js"
-
-const server = await createServer()
-try {
-  await criticalParity("s3", server.url)
-} finally {
-  await server.close()
-}
+/**
+ * Live parity against MinIO, the S3 oracle (oracle/README.md): every scenario played against a
+ * running MinIO and a fresh emulator, transcripts diffed. Exit 2 when MinIO is unreachable.
+ */
+const child = Bun.spawn(["bun", "oracle/run.ts", ...process.argv.slice(2)], {
+  cwd: `${import.meta.dir}/..`,
+  stdio: ["inherit", "inherit", "inherit"],
+})
+process.exit(await child.exited)

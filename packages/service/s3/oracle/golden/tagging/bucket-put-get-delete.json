@@ -1,0 +1,293 @@
+[
+  {
+    "step": "get none",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchTagSet</Code><Message>The TagSet does not exist</Message><BucketName>btag-<run></BucketName><Resource>/btag-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "delete none",
+    "request": "DELETE /btag-<run>?tagging=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put one",
+    "request": "PUT /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get one",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<Tagging><TagSet><Tag><Key>env</Key><Value>prod</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "put special",
+    "request": "PUT /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get special",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<Tagging><TagSet><Tag><Key>a+b-c_d.e:f/g@h i=j</Key><Value>x+y-z_w.v:u/t@s r=q</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "put empty value",
+    "request": "PUT /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get empty value",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<Tagging><TagSet><Tag><Key>k</Key><Value></Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "put no value element",
+    "request": "PUT /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get no value element",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<Tagging><TagSet><Tag><Key>solo</Key><Value></Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "put fifty",
+    "request": "PUT /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get fifty",
+    "value": {
+      "code": null,
+      "status": 200,
+      "tags": [
+        "k0=v0",
+        "k10=v10",
+        "k11=v11",
+        "k12=v12",
+        "k13=v13",
+        "k14=v14",
+        "k15=v15",
+        "k16=v16",
+        "k17=v17",
+        "k18=v18",
+        "k19=v19",
+        "k1=v1",
+        "k20=v20",
+        "k21=v21",
+        "k22=v22",
+        "k23=v23",
+        "k24=v24",
+        "k25=v25",
+        "k26=v26",
+        "k27=v27",
+        "k28=v28",
+        "k29=v29",
+        "k2=v2",
+        "k30=v30",
+        "k31=v31",
+        "k32=v32",
+        "k33=v33",
+        "k34=v34",
+        "k35=v35",
+        "k36=v36",
+        "k37=v37",
+        "k38=v38",
+        "k39=v39",
+        "k3=v3",
+        "k40=v40",
+        "k41=v41",
+        "k42=v42",
+        "k43=v43",
+        "k44=v44",
+        "k45=v45",
+        "k46=v46",
+        "k47=v47",
+        "k48=v48",
+        "k49=v49",
+        "k4=v4",
+        "k5=v5",
+        "k6=v6",
+        "k7=v7",
+        "k8=v8",
+        "k9=v9"
+      ]
+    }
+  },
+  {
+    "step": "put with namespace",
+    "request": "PUT /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get with namespace",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<Tagging><TagSet><Tag><Key>ns</Key><Value>1</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "put empty tagset",
+    "request": "PUT /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get empty tagset",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<Tagging><TagSet></TagSet></Tagging>"
+  },
+  {
+    "step": "delete",
+    "request": "DELETE /btag-<run>?tagging=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get deleted",
+    "request": "GET /btag-<run>?tagging=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchTagSet</Code><Message>The TagSet does not exist</Message><BucketName>btag-<run></BucketName><Resource>/btag-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /btag-<run>?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

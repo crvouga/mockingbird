@@ -1,0 +1,54 @@
+[
+  {
+    "step": "all versions on locked",
+    "request": "PUT /lclock-<run>?lifecycle=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>ExpiredObjectAllVersions element and DelMarkerExpiration action cannot be used on an object locked bucket</Message><BucketName>lclock-<run></BucketName><Resource>/lclock-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "del marker expiration on locked",
+    "request": "PUT /lclock-<run>?lifecycle=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>ExpiredObjectAllVersions element and DelMarkerExpiration action cannot be used on an object locked bucket</Message><BucketName>lclock-<run></BucketName><Resource>/lclock-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "put plain expiration on locked",
+    "request": "PUT /lclock-<run>?lifecycle=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get plain expiration on locked",
+    "request": "GET /lclock-<run>?lifecycle=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<LifecycleConfiguration><Rule><ID>r1</ID><Status>Enabled</Status><Expiration><Days>5</Days></Expiration></Rule></LifecycleConfiguration>"
+  }
+]

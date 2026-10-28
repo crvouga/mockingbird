@@ -1,0 +1,89 @@
+[
+  {
+    "step": "missing key",
+    "request": "POST /sel-http-<run>/nope.csv?select=&select-type=2",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope.csv</Key><BucketName>sel-http-<run></BucketName><Resource>/sel-http-<run>/nope.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket",
+    "request": "POST /sel-none-<run>/k.csv?select=&select-type=2",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><Key>k.csv</Key><BucketName>sel-none-<run></BucketName><Resource>/sel-none-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range header",
+    "request": "POST /sel-http-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>UnsupportedRangeHeader</Code><Message>Range header is not supported for this operation.</Message><Key>k.csv</Key><BucketName>sel-http-<run></BucketName><Resource>/sel-http-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty body",
+    "request": "POST /sel-http-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>EmptyRequestBody</Code><Message>Request body cannot be empty.</Message><Key>k.csv</Key><BucketName>sel-http-<run></BucketName><Resource>/sel-http-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing select-type",
+    "request": "POST /sel-http-<run>/k.csv?select=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>An unsupported API call for method: POST at &#39;/sel-http-<run>/k.csv&#39;</Message><Resource>/sel-http-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "select-type 1",
+    "request": "POST /sel-http-<run>/k.csv?select=&select-type=1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>An unsupported API call for method: POST at &#39;/sel-http-<run>/k.csv&#39;</Message><Resource>/sel-http-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "sse header",
+    "request": "POST /sel-http-<run>/k.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>400 BadRequest</Message><Key>k.csv</Key><BucketName>sel-http-<run></BucketName><Resource>/sel-http-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

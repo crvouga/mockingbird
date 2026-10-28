@@ -1,0 +1,365 @@
+[
+  {
+    "step": "lines all json",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<535 bytes sha256:c8cf94c88653950f>"
+  },
+  {
+    "step": "lines all json (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"name\":\"alice\",\"age\":30,\"city\":\"paris\"}\n{\"name\":\"bob\",\"age\":25,\"city\":\"berlin\"}\n{\"name\":\"carol\",\"age\":35.5,\"city\":\"rome\",\"tags\":[\"a\",\"b\"]}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>140</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "lines all csv",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<455 bytes sha256:640c2ca5a6f62daf>"
+  },
+  {
+    "step": "lines all csv (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice,30,paris\nbob,25,berlin\ncarol,35.5,rome,\"[\"\"a\"\",\"\"b\"\"]\"\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>61</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "projection json",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<472 bytes sha256:6a07497b049b968d>"
+  },
+  {
+    "step": "projection json (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"name\":\"alice\",\"age\":30}\n{\"name\":\"bob\",\"age\":25}\n{\"name\":\"carol\",\"age\":35.5}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>78</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "projection csv",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<421 bytes sha256:d43721115e59406c>"
+  },
+  {
+    "step": "projection csv (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice,30\nbob,25\ncarol,35.5\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>27</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<428 bytes sha256:831b862418e52991>"
+  },
+  {
+    "step": "where (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"name\":\"alice\"}\n{\"name\":\"carol\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>34</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where string",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<434 bytes sha256:93a3b9e2550c9611>"
+  },
+  {
+    "step": "where string (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"name\":\"bob\",\"age\":25,\"city\":\"berlin\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>40</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "missing field",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<419 bytes sha256:d2aba07690ae3603>"
+  },
+  {
+    "step": "missing field (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{}\n{}\n{\"tags\":[\"a\",\"b\"]}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>25</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "count",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<402 bytes sha256:8267c2a328faddba>"
+  },
+  {
+    "step": "count (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"_1\":3}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>9</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "limit",
+    "request": "POST /sel-json-<run>/p.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<411 bytes sha256:ae205122871ee853>"
+  },
+  {
+    "step": "limit (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"name\":\"alice\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>140</BytesScanned><BytesProcessed>140</BytesProcessed><BytesReturned>17</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "document",
+    "request": "POST /sel-json-<run>/doc.json?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<433 bytes sha256:6cbc51ec714fbb84>"
+  },
+  {
+    "step": "document (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"name\":\"x\",\"n\":1}\n{\"name\":\"y\",\"n\":2.25}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>40</BytesScanned><BytesProcessed>40</BytesProcessed><BytesReturned>41</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "document csv",
+    "request": "POST /sel-json-<run>/doc.json?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<398 bytes sha256:f793f2f6f5254c9c>"
+  },
+  {
+    "step": "document csv (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "1\n2.25\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>40</BytesScanned><BytesProcessed>40</BytesProcessed><BytesReturned>7</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  }
+]

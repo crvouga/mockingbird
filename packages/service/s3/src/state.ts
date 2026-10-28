@@ -1,43 +1,95 @@
 import { Collection, IdSequence } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 
-export type S3Object = {
+export type VersioningStatus = "Enabled" | "Suspended"
+
+export type BucketRecord = {
+  createdAt: number
+  versioning?: VersioningStatus
+  /** Created with `x-amz-bucket-object-lock-enabled: true`. */
+  objectLock?: boolean
+  /** MinIO's versioning extension: prefixes (wildcard patterns) that stay unversioned. */
+  versioningExcludedPrefixes?: string[]
+  /** MinIO's versioning extension: keys ending in `/` stay unversioned. */
+  versioningExcludeFolders?: boolean
+  /** The object-lock configuration's default retention, applied to new versions. */
+  defaultRetention?: { mode: "GOVERNANCE" | "COMPLIANCE"; days?: number; years?: number }
+}
+
+export type ChecksumAlgorithmName = "CRC32" | "CRC32C" | "CRC64NVME" | "SHA1" | "SHA256"
+export type StoredChecksum = {
+  algorithm: ChecksumAlgorithmName
+  /** base64 digest, with `-<parts>` for a composite multipart checksum. */
+  value: string
+  type: "FULL_OBJECT" | "COMPOSITE"
+}
+
+export type PartInfo = {
+  number: number
+  size: number
+  /** Unquoted. */
+  etag: string
+  checksum?: string
+}
+
+/** One version of an object (or a delete marker). The unversioned object is version `"null"`. */
+export type ObjectVersion = {
   bucket: string
   key: string
-  bytes: Uint8Array
+  versionId: string
+  deleteMarker?: boolean
+  /** Blob id of the bytes; absent for delete markers. */
+  blob?: string
+  size: number
+  /** Unquoted ETag (`<md5 hex>` or `<md5 hex>-<parts>`); "" for delete markers. */
   etag: string
   lastModified: number
   contentType?: string
-  cacheControl?: string
+  contentEncoding?: string
   contentDisposition?: string
-  versionId?: string
-  deleteMarker?: boolean
-  storageClass?: string
-  tags?: Record<string, string>
-  checksums?: Record<string, string>
+  contentLanguage?: string
+  cacheControl?: string
+  /** The `Expires` header as sent. */
+  expires?: string
+  websiteRedirect?: string
+  /** User metadata, names lowercased without the `x-amz-meta-` prefix. */
   metadata: Record<string, string>
+  /** URL-encoded tag set (`a=1&b=2`), as S3 stores `x-amz-tagging`. */
+  tagging?: string
+  storageClass?: string
+  checksum?: StoredChecksum
+  /** Present when the object was assembled by CompleteMultipartUpload. */
+  parts?: PartInfo[]
+  retention?: { mode: "GOVERNANCE" | "COMPLIANCE"; until: string }
+  legalHold?: "ON" | "OFF"
+  /** Server-side encryption the object was written with. */
+  sse?: { algorithm: "AES256" | "aws:kms"; kmsKeyId?: string; bucketKey?: boolean }
+  /** Any other stored headers to replay verbatim (lowercased name → value). */
+  extra?: Record<string, string>
 }
-export type MultipartUpload = {
+
+/** The object fields a multipart upload carries until completion. */
+export type MultipartUpload = Omit<
+  ObjectVersion,
+  "versionId" | "blob" | "size" | "etag" | "lastModified" | "deleteMarker" | "parts" | "checksum"
+> & {
   id: string
-  bucket: string
-  key: string
   initiated: number
-  metadata?: Record<string, string>
-  contentType?: string
-  cacheControl?: string
-  contentDisposition?: string
+  checksumAlgorithm?: ChecksumAlgorithmName
+  checksumType?: "FULL_OBJECT" | "COMPOSITE"
 }
+
 export type MultipartPart = {
   uploadId: string
   partNumber: number
-  bytes: Uint8Array
+  blob: string
+  size: number
+  /** Unquoted. */
   etag: string
+  lastModified: number
+  checksums?: Partial<Record<ChecksumAlgorithmName, string>>
 }
-export type S3SeedObject = Omit<S3Object, "etag" | "lastModified" | "bytes"> & {
-  body: Uint8Array | string
-  etag?: string
-  lastModified?: number
-}
+
 const CHUNK = 0x8000
 const encodeBytes = (bytes: Uint8Array) => {
   const pieces: string[] = []
@@ -45,73 +97,79 @@ const encodeBytes = (bytes: Uint8Array) => {
     pieces.push(String.fromCharCode(...bytes.subarray(offset, offset + CHUNK)))
   return btoa(pieces.join(""))
 }
-const decodeBytes = (stored: string | number[]) => {
-  // Rows written before bytes were base64 held a JSON array of numbers.
-  if (typeof stored !== "string") return Uint8Array.from(stored)
+const decodeBytes = (stored: string) => {
   const binary = atob(stored)
   const bytes = new Uint8Array(binary.length)
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
   return bytes
 }
-type Encoded<T extends { bytes: Uint8Array }> = Omit<T, "bytes"> & { bytes: string | number[] }
-/**
- * Records with a `bytes` body, kept as base64 so a large object is a string in the row instead of
- * one JSON number per byte. Filters see the record without its body, which is only decoded for
- * the records that pass.
- */
-class BlobCollection<T extends { bytes: Uint8Array }> {
-  private readonly inner: Collection<Encoded<T>>
-  constructor(sqlite: SqliteClient, namespace: string, name: string) {
-    this.inner = new Collection(sqlite, namespace, name)
-  }
-  private decode(value: Encoded<T>) {
-    return { ...value, bytes: decodeBytes(value.bytes) } as unknown as T
-  }
-  get(id: string): T | undefined {
-    const value = this.inner.get(id)
-    return value && this.decode(value)
-  }
-  has(id: string) {
-    return this.inner.has(id)
-  }
-  insert(id: string, value: T) {
-    this.inner.insert(id, { ...value, bytes: encodeBytes(value.bytes) } as Encoded<T>)
-  }
-  delete(id: string) {
-    return this.inner.delete(id)
-  }
-  list(
-    options: { where?: (value: Omit<T, "bytes">) => boolean; order?: "newest" | "oldest" } = {},
+
+/** Object bytes, base64 in a row, written once and shared by every version that points at them. */
+export class BlobStore {
+  private readonly inner: Collection<{ data: string; refs: number }>
+  constructor(
+    sqlite: SqliteClient,
+    namespace: string,
+    private readonly ids: IdSequence,
   ) {
-    return this.inner
-      .list({
-        ...(options.order ? { order: options.order } : {}),
-        ...(options.where ? { where: options.where } : {}),
-      })
-      .map((row) => ({ ...row, value: this.decode(row.value) }))
+    this.inner = new Collection(sqlite, namespace, "s3_blobs")
+  }
+  put(bytes: Uint8Array): string {
+    const id = this.ids.next("blob-", 16)
+    this.inner.insert(id, { data: encodeBytes(bytes), refs: 1 })
+    return id
+  }
+  get(id: string | undefined): Uint8Array<ArrayBuffer> {
+    if (!id) return new Uint8Array()
+    const row = this.inner.get(id)
+    return row ? decodeBytes(row.data) : new Uint8Array()
+  }
+  retain(id: string | undefined) {
+    if (!id) return
+    const row = this.inner.get(id)
+    if (row) this.inner.update(id, { ...row, refs: row.refs + 1 })
+  }
+  release(id: string | undefined) {
+    if (!id) return
+    const row = this.inner.get(id)
+    if (!row) return
+    if (row.refs <= 1) this.inner.delete(id)
+    else this.inner.update(id, { ...row, refs: row.refs - 1 })
   }
 }
+
 export class S3State {
-  readonly buckets: Collection<{ createdAt: number }>
-  readonly objects: BlobCollection<S3Object>
-  readonly versions: BlobCollection<S3Object>
-  readonly configurations: Collection<{ body: string }>
+  readonly buckets: Collection<BucketRecord>
+  /** Every version, keyed `[bucket, key, versionId]`. Sequence order is write order. */
+  readonly versions: Collection<ObjectVersion>
+  /** The latest version of each key, keyed `[bucket, key]`. */
+  readonly heads: Collection<{ bucket: string; key: string; versionId: string }>
+  /** Bucket sub-resources (policy, lifecycle, tagging, ...), keyed `[bucket, kind]`. */
+  readonly configurations: Collection<{ bucket: string; kind: string; body: string }>
   readonly uploads: Collection<MultipartUpload>
-  readonly parts: BlobCollection<MultipartPart>
+  readonly parts: Collection<MultipartPart>
+  readonly blobs: BlobStore
   readonly ids: IdSequence
   constructor(sqlite: SqliteClient, namespace: string) {
+    this.ids = new IdSequence(sqlite, namespace, "s3")
     this.buckets = new Collection(sqlite, namespace, "s3_buckets")
-    this.objects = new BlobCollection(sqlite, namespace, "s3_objects")
-    this.versions = new BlobCollection(sqlite, namespace, "s3_versions")
+    this.versions = new Collection(sqlite, namespace, "s3_versions")
+    this.heads = new Collection(sqlite, namespace, "s3_heads")
     this.configurations = new Collection(sqlite, namespace, "s3_configurations")
     this.uploads = new Collection(sqlite, namespace, "s3_uploads")
-    this.parts = new BlobCollection(sqlite, namespace, "s3_parts")
-    this.ids = new IdSequence(sqlite, namespace, "s3")
+    this.parts = new Collection(sqlite, namespace, "s3_parts")
+    this.blobs = new BlobStore(sqlite, namespace, this.ids)
   }
-  objectId(bucket: string, key: string) {
+  versionId(bucket: string, key: string, versionId: string) {
+    return JSON.stringify([bucket, key, versionId])
+  }
+  headId(bucket: string, key: string) {
     return JSON.stringify([bucket, key])
   }
-  object(bucket: string, key: string) {
-    return this.objects.get(this.objectId(bucket, key))
+  configId(bucket: string, kind: string) {
+    return JSON.stringify([bucket, kind])
+  }
+  partId(uploadId: string, partNumber: number) {
+    return `${uploadId}:${partNumber}`
   }
 }

@@ -1,0 +1,75 @@
+[
+  {
+    "step": "copy",
+    "request": "PUT /copy-basic-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "FKdwbo+0/j0=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f5acec107e7e752ca013866c211dc1a3&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "head-dst",
+    "request": "HEAD /copy-basic-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-disposition": "attachment",
+      "content-length": "10",
+      "content-type": "text/plain",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "blue",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get-dst",
+    "request": "GET /copy-basic-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-disposition": "attachment",
+      "content-length": "10",
+      "content-type": "text/plain",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "blue",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello copy"
+  },
+  {
+    "step": "head-src",
+    "request": "HEAD /copy-basic-<run>/src",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-disposition": "attachment",
+      "content-length": "10",
+      "content-type": "text/plain",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "blue",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

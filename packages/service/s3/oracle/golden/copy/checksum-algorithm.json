@@ -1,0 +1,132 @@
+[
+  {
+    "step": "copy-CRC32",
+    "request": "PUT /copy-cks-<run>/dst-CRC32",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "Aa6HLg==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f11c72a98bf0b6e31f0b0af786a43ba7&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "copy-CRC32C",
+    "request": "PUT /copy-cks-<run>/dst-CRC32C",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32c": "CmqD1A==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f11c72a98bf0b6e31f0b0af786a43ba7&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "copy-CRC64NVME",
+    "request": "PUT /copy-cks-<run>/dst-CRC64NVME",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "+2CTYAH1aF8=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f11c72a98bf0b6e31f0b0af786a43ba7&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "copy-SHA1",
+    "request": "PUT /copy-cks-<run>/dst-SHA1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha1": "ADN8+yBInHK3NrJo/boywCe91is=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f11c72a98bf0b6e31f0b0af786a43ba7&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "copy-SHA256",
+    "request": "PUT /copy-cks-<run>/dst-SHA256",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "gg62K3Zgohb3Eb0N83rIoXa2YqFZlZhw7cIAuFcmLa8=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f11c72a98bf0b6e31f0b0af786a43ba7&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "copy-lowercase",
+    "request": "PUT /copy-cks-<run>/dst-lower",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "gg62K3Zgohb3Eb0N83rIoXa2YqFZlZhw7cIAuFcmLa8=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f11c72a98bf0b6e31f0b0af786a43ba7&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "copy-invalid",
+    "request": "PUT /copy-cks-<run>/dst-bad",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "+2CTYAH1aF8=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f11c72a98bf0b6e31f0b0af786a43ba7&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "head-sha256",
+    "request": "HEAD /copy-cks-<run>/dst-SHA256",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "11",
+      "content-type": "text/plain",
+      "etag": "\"f11c72a98bf0b6e31f0b0af786a43ba7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "gg62K3Zgohb3Eb0N83rIoXa2YqFZlZhw7cIAuFcmLa8=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

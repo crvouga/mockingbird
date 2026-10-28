@@ -1,0 +1,157 @@
+[
+  {
+    "step": "get bytes=0-0",
+    "request": "GET /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRange</Code><Message>The requested range &#39;bytes=0-0&#39; is not satisfiable</Message><Key>k</Key><BucketName>range-<run></BucketName><Resource>/range-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId><ActualObjectSize>0</ActualObjectSize><RangeRequested>0-0</RangeRequested></Error>"
+  },
+  {
+    "step": "head bytes=0-0",
+    "request": "HEAD /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-type": "text/plain",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "InvalidRange",
+      "x-minio-error-desc": "\"The requested range 'bytes=0-0' is not satisfiable\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=0-",
+    "request": "GET /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRange</Code><Message>The requested range &#39;bytes=0--1&#39; is not satisfiable</Message><Key>k</Key><BucketName>range-<run></BucketName><Resource>/range-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId><ActualObjectSize>0</ActualObjectSize><RangeRequested>0--1</RangeRequested></Error>"
+  },
+  {
+    "step": "head bytes=0-",
+    "request": "HEAD /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-type": "text/plain",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "InvalidRange",
+      "x-minio-error-desc": "\"The requested range 'bytes=0--1' is not satisfiable\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=-1",
+    "request": "GET /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-range": "bytes 0--1/0",
+      "content-type": "text/plain",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head bytes=-1",
+    "request": "HEAD /range-<run>/k",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-range": "bytes 0--1/0",
+      "content-type": "text/plain",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=-0",
+    "request": "GET /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRange</Code><Message>The requested range is not satisfiable</Message><Key>k</Key><BucketName>range-<run></BucketName><Resource>/range-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head bytes=-0",
+    "request": "HEAD /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "InvalidRange",
+      "x-minio-error-desc": "\"The requested range is not satisfiable\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get bytes=0-10",
+    "request": "GET /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRange</Code><Message>The requested range &#39;bytes=0-10&#39; is not satisfiable</Message><Key>k</Key><BucketName>range-<run></BucketName><Resource>/range-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId><ActualObjectSize>0</ActualObjectSize><RangeRequested>0-10</RangeRequested></Error>"
+  },
+  {
+    "step": "head bytes=0-10",
+    "request": "HEAD /range-<run>/k",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-type": "text/plain",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "InvalidRange",
+      "x-minio-error-desc": "\"The requested range 'bytes=0-10' is not satisfiable\""
+    },
+    "body": ""
+  }
+]

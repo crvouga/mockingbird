@@ -1,0 +1,44 @@
+[
+  {
+    "step": "attrs",
+    "request": "GET /attrs-ct-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>8d777f385d3dfec8815d20f7496026dc</ETag><StorageClass>STANDARD</StorageClass><ObjectSize>4</ObjectSize></getObjectAttributesResponse>"
+  },
+  {
+    "step": "reduced redundancy",
+    "request": "GET /attrs-ct-<run>/rr?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><StorageClass>REDUCED_REDUNDANCY</StorageClass></getObjectAttributesResponse>"
+  },
+  {
+    "step": "empty object",
+    "request": "GET /attrs-ct-<run>/empty?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>d41d8cd98f00b204e9800998ecf8427e</ETag></getObjectAttributesResponse>"
+  }
+]

@@ -1,0 +1,49 @@
+[
+  {
+    "step": "put",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "ChecksumCRC32": "QwtIjg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ETag": "\"8105e3558947219dca1a5aa4ba32ee2b\""
+    }
+  },
+  {
+    "step": "get",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumCRC32": "QwtIjg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 70000,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8105e3558947219dca1a5aa4ba32ee2b\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "bytes",
+    "value": 70000
+  },
+  {
+    "step": "raw get",
+    "request": "GET /obj-<run>/bin",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "70000",
+      "content-type": "application/octet-stream",
+      "etag": "\"8105e3558947219dca1a5aa4ba32ee2b\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<70000 bytes sha256:7a836ea47392ee54>"
+  }
+]

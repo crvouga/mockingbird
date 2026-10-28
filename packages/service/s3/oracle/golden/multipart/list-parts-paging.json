@@ -1,0 +1,262 @@
+[
+  {
+    "step": "all",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;78429f7462d636a84d9c922f495599c5&#34;</ETag><Size>6</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;bca7c72402361f2a3af235b051ce87f4&#34;</ETag><Size>6</Size></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;6d063ffc152b9b78c048d4f25a3ff703&#34;</ETag><Size>6</Size></Part><Part><PartNumber>5</PartNumber><LastModified><date></LastModified><ETag>&#34;a47a08715270920245b0c18a72804e76&#34;</ETag><Size>6</Size></Part><Part><PartNumber>8</PartNumber><LastModified><date></LastModified><ETag>&#34;c6250ca53178e8abece9772b617d91e5&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "max 2",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>2</NextPartNumberMarker><MaxParts>2</MaxParts><IsTruncated>true</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;78429f7462d636a84d9c922f495599c5&#34;</ETag><Size>6</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;bca7c72402361f2a3af235b051ce87f4&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "marker 2",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&part-number-marker=2&max-parts=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>2</PartNumberMarker><NextPartNumberMarker>5</NextPartNumberMarker><MaxParts>2</MaxParts><IsTruncated>true</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;6d063ffc152b9b78c048d4f25a3ff703&#34;</ETag><Size>6</Size></Part><Part><PartNumber>5</PartNumber><LastModified><date></LastModified><ETag>&#34;a47a08715270920245b0c18a72804e76&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "marker 5 max 2",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&part-number-marker=5&max-parts=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>5</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>2</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>8</PartNumber><LastModified><date></LastModified><ETag>&#34;c6250ca53178e8abece9772b617d91e5&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "marker 4 absent",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&part-number-marker=4",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>4</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "marker 8 last",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&part-number-marker=8",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>8</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "marker 100",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&part-number-marker=100",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>100</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "max 0",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=0",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>0</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "max 5 exact",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=5",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>5</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;78429f7462d636a84d9c922f495599c5&#34;</ETag><Size>6</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;bca7c72402361f2a3af235b051ce87f4&#34;</ETag><Size>6</Size></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;6d063ffc152b9b78c048d4f25a3ff703&#34;</ETag><Size>6</Size></Part><Part><PartNumber>5</PartNumber><LastModified><date></LastModified><ETag>&#34;a47a08715270920245b0c18a72804e76&#34;</ETag><Size>6</Size></Part><Part><PartNumber>8</PartNumber><LastModified><date></LastModified><ETag>&#34;c6250ca53178e8abece9772b617d91e5&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "max 4",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=4",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>5</NextPartNumberMarker><MaxParts>4</MaxParts><IsTruncated>true</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;78429f7462d636a84d9c922f495599c5&#34;</ETag><Size>6</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;bca7c72402361f2a3af235b051ce87f4&#34;</ETag><Size>6</Size></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;6d063ffc152b9b78c048d4f25a3ff703&#34;</ETag><Size>6</Size></Part><Part><PartNumber>5</PartNumber><LastModified><date></LastModified><ETag>&#34;a47a08715270920245b0c18a72804e76&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "max 20000",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=20000",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;78429f7462d636a84d9c922f495599c5&#34;</ETag><Size>6</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;bca7c72402361f2a3af235b051ce87f4&#34;</ETag><Size>6</Size></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;6d063ffc152b9b78c048d4f25a3ff703&#34;</ETag><Size>6</Size></Part><Part><PartNumber>5</PartNumber><LastModified><date></LastModified><ETag>&#34;a47a08715270920245b0c18a72804e76&#34;</ETag><Size>6</Size></Part><Part><PartNumber>8</PartNumber><LastModified><date></LastModified><ETag>&#34;c6250ca53178e8abece9772b617d91e5&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "max -1",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=-1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Part number must be an integer between 1 and 10000, inclusive</Message><Key>k</Key><BucketName>mp-lp-<run></BucketName><Resource>/mp-lp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "max abc",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=abc",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Part number must be an integer between 1 and 10000, inclusive</Message><Key>k</Key><BucketName>mp-lp-<run></BucketName><Resource>/mp-lp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "marker -1",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&part-number-marker=-1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Argument partNumberMarker must be an integer.</Message><Key>k</Key><BucketName>mp-lp-<run></BucketName><Resource>/mp-lp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "marker abc",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&part-number-marker=abc",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Argument partNumberMarker must be an integer.</Message><Key>k</Key><BucketName>mp-lp-<run></BucketName><Resource>/mp-lp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty values",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&max-parts=&part-number-marker=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;78429f7462d636a84d9c922f495599c5&#34;</ETag><Size>6</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;bca7c72402361f2a3af235b051ce87f4&#34;</ETag><Size>6</Size></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;6d063ffc152b9b78c048d4f25a3ff703&#34;</ETag><Size>6</Size></Part><Part><PartNumber>5</PartNumber><LastModified><date></LastModified><ETag>&#34;a47a08715270920245b0c18a72804e76&#34;</ETag><Size>6</Size></Part><Part><PartNumber>8</PartNumber><LastModified><date></LastModified><ETag>&#34;c6250ca53178e8abece9772b617d91e5&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "encoding url",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:1>&encoding-type=url",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lp-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;78429f7462d636a84d9c922f495599c5&#34;</ETag><Size>6</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;bca7c72402361f2a3af235b051ce87f4&#34;</ETag><Size>6</Size></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;6d063ffc152b9b78c048d4f25a3ff703&#34;</ETag><Size>6</Size></Part><Part><PartNumber>5</PartNumber><LastModified><date></LastModified><ETag>&#34;a47a08715270920245b0c18a72804e76&#34;</ETag><Size>6</Size></Part><Part><PartNumber>8</PartNumber><LastModified><date></LastModified><ETag>&#34;c6250ca53178e8abece9772b617d91e5&#34;</ETag><Size>6</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "fake id",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:2>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>k</Key><BucketName>mp-lp-<run></BucketName><Resource>/mp-lp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "malformed id",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:3>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>k</Key><BucketName>mp-lp-<run></BucketName><Resource>/mp-lp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad max and fake id",
+    "request": "GET /mp-lp-<run>/k?uploadId=<id:2>&max-parts=x",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Part number must be an integer between 1 and 10000, inclusive</Message><Key>k</Key><BucketName>mp-lp-<run></BucketName><Resource>/mp-lp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

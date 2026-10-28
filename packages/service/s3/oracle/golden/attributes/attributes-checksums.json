@@ -1,0 +1,30 @@
+[
+  {
+    "step": "sha256",
+    "request": "GET /attrs-ck-<run>/sha?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>5d41402abc4b2a76b9719d911017c592</ETag><Checksum><ChecksumSHA256>LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=</ChecksumSHA256><ChecksumType>FULL_OBJECT</ChecksumType></Checksum></getObjectAttributesResponse>"
+  },
+  {
+    "step": "crc32",
+    "request": "GET /attrs-ck-<run>/crc?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><Checksum><ChecksumCRC32>NhCmhg==</ChecksumCRC32><ChecksumType>FULL_OBJECT</ChecksumType></Checksum></getObjectAttributesResponse>"
+  }
+]

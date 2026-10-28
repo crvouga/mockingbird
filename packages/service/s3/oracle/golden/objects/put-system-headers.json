@@ -1,0 +1,58 @@
+[
+  {
+    "step": "put",
+    "request": "PUT /obj-<run>/doc.html",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"932bcc04fdf5aadf7b7bc44ce523ea26\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /obj-<run>/doc.html",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=3600, public",
+      "content-disposition": "attachment; filename=\"doc.html\"",
+      "content-encoding": "gzip",
+      "content-language": "en-US",
+      "content-length": "29",
+      "content-type": "text/html; charset=utf-8",
+      "etag": "\"932bcc04fdf5aadf7b7bc44ce523ea26\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<p>hi</p>"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /obj-<run>/doc.html",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=3600, public",
+      "content-disposition": "attachment; filename=\"doc.html\"",
+      "content-encoding": "gzip",
+      "content-language": "en-US",
+      "content-length": "29",
+      "content-type": "text/html; charset=utf-8",
+      "etag": "\"932bcc04fdf5aadf7b7bc44ce523ea26\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

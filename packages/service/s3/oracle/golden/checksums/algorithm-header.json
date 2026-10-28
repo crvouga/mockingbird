@@ -1,0 +1,154 @@
+[
+  {
+    "step": "algorithm with value",
+    "request": "PUT /cks-<run>/a",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "IYd2bruT9X+8tTtVmmErwvlcS8MGq/Nd+hPn5+rVjOA=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head a",
+    "request": "HEAD /cks-<run>/a",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "IYd2bruT9X+8tTtVmmErwvlcS8MGq/Nd+hPn5+rVjOA=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "algorithm lowercase",
+    "request": "PUT /cks-<run>/b",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32c": "CRPpGg==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "algorithm without value",
+    "request": "PUT /cks-<run>/c",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head c",
+    "request": "HEAD /cks-<run>/c",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "algorithm with other value",
+    "request": "PUT /cks-<run>/d",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head d",
+    "request": "HEAD /cks-<run>/d",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unknown algorithm",
+    "request": "PUT /cks-<run>/e",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid checksum provided.</Message><Key>e</Key><BucketName>cks-<run></BucketName><Resource>/cks-<run>/e</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "algorithm mismatch",
+    "request": "PUT /cks-<run>/f",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>f</Key><BucketName>cks-<run></BucketName><Resource>/cks-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "sdk algorithm header only",
+    "request": "PUT /cks-<run>/g",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "EyV5Tg==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

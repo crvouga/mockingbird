@@ -1,0 +1,176 @@
+[
+  {
+    "step": "expired",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy expired)</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "expiration without millis",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-doc-<run>/nomillis.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "malformed expiration",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(parsing time &#34;tomorrow&#34; as &#34;2006-01-02T15:04:05.999999999Z07:00&#34;: cannot parse &#34;tomorrow&#34; as &#34;2006&#34;)&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "not base64",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data.</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown top-level field",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(json: unknown field &#34;extra&#34;)&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "two-element condition",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(Malformed conditional fields [eq $key] of type []interface {} found in POST policy form)&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown operator",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(Unknown type []interface {} of conditional field value [lt $key a] found in POST policy form)&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "match type without dollar",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(Invalid according to Policy: Policy Condition failed: [eq, key, a])&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "non-string map value",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(Unknown type map[string]interface {} of conditional field value map[bucket:%!s(float64=1)] found in POST policy form)&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "condition of wrong type",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(Unknown field bucket of type string found in POST policy form)&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "duplicate json key",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(input policy has multiple expiration, please fix your client code)&#39;</Message><BucketName>post-doc-<run></BucketName><Resource>/post-doc-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "no policy field at all",
+    "request": "POST /post-doc-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-doc-<run>/nopolicy.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head nopolicy",
+    "request": "HEAD /post-doc-<run>/nopolicy.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "text/plain",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

@@ -186,14 +186,17 @@ describe("CopyObject copy-source conditionals (#511)", () => {
     for (const name of ["m", "n", "u", "s"]) expect(await exists(name)).toBe(true)
   })
 
-  test("a true if-match overrides a false if-unmodified-since, as documented", async () => {
+  test("every condition must hold, as MinIO checks them (no AWS if-match override)", async () => {
+    // AWS documents that a true if-match overrides a false if-unmodified-since; MinIO (the
+    // oracle, see oracle/golden/copy/precondition-if-match-ok-unmodified-since-fail.json)
+    // evaluates each condition on its own and answers 412.
     const { etag, copy, exists } = await setup()
     const response = await copy("both", {
       "x-amz-copy-source-if-match": etag,
       "x-amz-copy-source-if-unmodified-since": new Date(0).toUTCString(),
     })
-    expect(response.status).toBe(200)
-    expect(await exists("both")).toBe(true)
+    expect(response.status).toBe(412)
+    expect(await exists("both")).toBe(false)
     const combined = await copy("neither", {
       "x-amz-copy-source-if-none-match": etag,
       "x-amz-copy-source-if-modified-since": new Date(0).toUTCString(),
@@ -324,7 +327,12 @@ describe("aws-chunked streaming PutObject (#512)", () => {
       "x-amz-trailer": "x-amz-checksum-crc32",
     })
     expect(ok.status).toBe(200)
-    const stored = await runtime.fetch(new Request("http://mock/docs/chunked.bin"))
+    // MinIO returns the stored checksum only when asked (x-amz-checksum-mode: ENABLED).
+    const stored = await runtime.fetch(
+      new Request("http://mock/docs/chunked.bin", {
+        headers: { "x-amz-checksum-mode": "ENABLED" },
+      }),
+    )
     expect(await stored.text()).toBe(payload)
     expect(stored.headers.get("x-amz-checksum-crc32")).toBe(crc)
     const plain = await raw(runtime, chunked(payload, ""), {
@@ -343,7 +351,8 @@ describe("aws-chunked streaming PutObject (#512)", () => {
       "x-amz-trailer": "x-amz-checksum-crc32",
     })
     expect(bad.status).toBe(400)
-    expect(await xmlCode(bad)).toBe("BadDigest")
+    // MinIO answers a wrong x-amz-checksum-* with XAmzContentChecksumMismatch, not BadDigest.
+    expect(await xmlCode(bad)).toBe("XAmzContentChecksumMismatch")
     const short = await raw(runtime, chunked("012345678", ""), {
       "x-amz-content-sha256": "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
     })
@@ -363,7 +372,7 @@ describe("aws-chunked streaming PutObject (#512)", () => {
       headers: { "x-amz-checksum-crc32": "AAAAAA==" },
     })
     expect(bad.status).toBe(400)
-    expect(await xmlCode(bad)).toBe("BadDigest")
+    expect(await xmlCode(bad)).toBe("XAmzContentChecksumMismatch")
     const good = await put(runtime, "/docs/plain.bin", {
       body: "0123456789",
       headers: { "x-amz-checksum-crc32": Buffer.from([0xa6, 0x84, 0xc7, 0xc6]).toString("base64") },

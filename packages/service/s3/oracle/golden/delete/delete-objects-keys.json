@@ -1,0 +1,132 @@
+[
+  {
+    "step": "special keys",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><Key>a&amp;b</Key></Deleted><Deleted><Key>&lt;tag&gt;</Key></Deleted><Deleted><Key>q&#34;uote&#39;</Key></Deleted><Deleted><Key>ünï/cødé</Key></Deleted><Deleted><Key>sp ace</Key></Deleted><Deleted><Key>tab&#x9;key</Key></Deleted><Deleted><Key>dir/</Key></Deleted><Deleted><Key>lead</Key></Deleted></DeleteResult>"
+  },
+  {
+    "step": "list after",
+    "request": "GET /del-keys-<run>?list-type=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>del-keys-<run></Name><Prefix></Prefix><KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>"
+  },
+  {
+    "step": "duplicates",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><Key>dup</Key></Deleted><Deleted></Deleted><Deleted><Key>x</Key></Deleted><Deleted></Deleted></DeleteResult>"
+  },
+  {
+    "step": "empty key",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key></Key><VersionId></VersionId></Error></DeleteResult>"
+  },
+  {
+    "step": "dot dot segment",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted></Deleted><Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key>../etc</Key><VersionId></VersionId></Error></DeleteResult>"
+  },
+  {
+    "step": "dot segment",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key>a/./b</Key><VersionId></VersionId></Error></DeleteResult>"
+  },
+  {
+    "step": "double slash",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted></Deleted><Deleted><Key>y</Key></Deleted><Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key>a//b</Key><VersionId></VersionId></Error></DeleteResult>"
+  },
+  {
+    "step": "leading slash dir",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><Key>p/r/</Key></Deleted></DeleteResult>"
+  },
+  {
+    "step": "odd objects",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted></Deleted><Deleted><Key> pad </Key></Deleted><Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key></Key><VersionId>null</VersionId></Error></DeleteResult>"
+  },
+  {
+    "step": "cdata and comments",
+    "request": "POST /del-keys-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><Key>c&amp;d</Key></Deleted><Deleted><Key>e&amp;f</Key></Deleted></DeleteResult>"
+  }
+]

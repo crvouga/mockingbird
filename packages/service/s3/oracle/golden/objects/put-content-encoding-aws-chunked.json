@@ -1,0 +1,80 @@
+[
+  {
+    "step": "streaming plain",
+    "request": "PUT /obj-<run>/c1 [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"5eb63bbbe01eeed093cb22bb8f5acdc3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head plain",
+    "request": "HEAD /obj-<run>/c1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "11",
+      "content-type": "binary/octet-stream",
+      "etag": "\"5eb63bbbe01eeed093cb22bb8f5acdc3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "streaming gzip",
+    "request": "PUT /obj-<run>/c2 [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"809d6cb147c717ba235e89fe92b2bf60\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head gzip",
+    "request": "HEAD /obj-<run>/c2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-encoding": "gzip",
+      "content-length": "31",
+      "content-type": "binary/octet-stream",
+      "etag": "\"809d6cb147c717ba235e89fe92b2bf60\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get gzip",
+    "request": "GET /obj-<run>/c2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-encoding": "gzip",
+      "content-length": "31",
+      "content-type": "binary/octet-stream",
+      "etag": "\"809d6cb147c717ba235e89fe92b2bf60\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello world"
+  }
+]

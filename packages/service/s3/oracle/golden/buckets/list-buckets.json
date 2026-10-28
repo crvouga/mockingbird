@@ -1,0 +1,106 @@
+[
+  {
+    "step": "none",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "sorted",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>1numeric-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha.beta-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha0-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>zeta-<run></Name><CreationDate><date></CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "max-buckets ignored",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>1numeric-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha.beta-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha0-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>zeta-<run></Name><CreationDate><date></CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "prefix ignored",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>1numeric-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha.beta-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha0-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>zeta-<run></Name><CreationDate><date></CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "bucket-region ignored",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>1numeric-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha.beta-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha0-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>zeta-<run></Name><CreationDate><date></CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "unrelated query",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>1numeric-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha.beta-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha0-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>zeta-<run></Name><CreationDate><date></CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "presigned",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>1numeric-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha.beta-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>alpha0-<run></Name><CreationDate><date></CreationDate></Bucket><Bucket><Name>zeta-<run></Name><CreationDate><date></CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "anonymous",
+    "request": "GET / [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Resource>/</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

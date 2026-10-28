@@ -1,0 +1,62 @@
+[
+  {
+    "step": "complete",
+    "request": "POST /mp-single-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"ea62d57755f34c46eea7035b29d5fc46-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-single-<run>/k</Location><Bucket>mp-single-<run></Bucket><Key>k</Key><ETag>&#34;ea62d57755f34c46eea7035b29d5fc46-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "get",
+    "request": "GET /mp-single-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"ea62d57755f34c46eea7035b29d5fc46-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "only"
+  },
+  {
+    "step": "complete empty part",
+    "request": "POST /mp-single-<run>/empty?uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"59adb24ef3cdbe0297f05b395827453f-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-single-<run>/empty</Location><Bucket>mp-single-<run></Bucket><Key>empty</Key><ETag>&#34;59adb24ef3cdbe0297f05b395827453f-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head empty",
+    "request": "HEAD /mp-single-<run>/empty",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-type": "binary/octet-stream",
+      "etag": "\"59adb24ef3cdbe0297f05b395827453f-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

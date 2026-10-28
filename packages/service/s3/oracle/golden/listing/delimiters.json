@@ -1,0 +1,275 @@
+[
+  {
+    "step": "dash",
+    "request": "GET /list-delim-<run>?delimiter=-",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>-</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes><CommonPrefixes><Prefix>abc-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dash v2",
+    "request": "GET /list-delim-<run>?list-type=2&delimiter=-",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><KeyCount>10</KeyCount><MaxKeys>1000</MaxKeys><Delimiter>-</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes><CommonPrefixes><Prefix>abc-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dash prefix",
+    "request": "GET /list-delim-<run>?delimiter=-&prefix=a",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix>a</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>-</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes><CommonPrefixes><Prefix>abc-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "multi-char",
+    "request": "GET /list-delim-<run>?delimiter=::",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>::</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>b::</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "multi-char prefix",
+    "request": "GET /list-delim-<run>?delimiter=::&prefix=b::",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix>b::</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>::</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>b::d::</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "absent",
+    "request": "GET /list-delim-<run>?delimiter=#",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>#</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "whole key",
+    "request": "GET /list-delim-<run>?delimiter=ab",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>ab</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>ab</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "percent",
+    "request": "GET /list-delim-<run>?delimiter=%",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>%</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>c%</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "plus",
+    "request": "GET /list-delim-<run>?delimiter=+",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>+</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>c+</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dot",
+    "request": "GET /list-delim-<run>?delimiter=.",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>.</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>x.</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dot encoded",
+    "request": "GET /list-delim-<run>?delimiter=.&encoding-type=url",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>.</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b%3A%3Ac</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b%3A%3Ad%3A%3Ae</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%25d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%2Bd</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>x.</Prefix></CommonPrefixes><EncodingType>url</EncodingType></ListBucketResult>"
+  },
+  {
+    "step": "dot dot",
+    "request": "GET /list-delim-<run>?delimiter=..",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>..</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "dash max-keys 1",
+    "request": "GET /list-delim-<run>?delimiter=-&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><NextMarker>a-[minio_cache:v2,return:]</NextMarker><MaxKeys>1</MaxKeys><Delimiter>-</Delimiter><IsTruncated>true</IsTruncated><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dash max-keys 2",
+    "request": "GET /list-delim-<run>?delimiter=-&max-keys=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><NextMarker>a-[minio_cache:v2,return:]</NextMarker><MaxKeys>2</MaxKeys><Delimiter>-</Delimiter><IsTruncated>true</IsTruncated><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dash max-keys 3",
+    "request": "GET /list-delim-<run>?delimiter=-&max-keys=3",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker></Marker><NextMarker>a-[minio_cache:v2,return:]</NextMarker><MaxKeys>3</MaxKeys><Delimiter>-</Delimiter><IsTruncated>true</IsTruncated><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dash marker a-",
+    "request": "GET /list-delim-<run>?delimiter=-&max-keys=1&marker=a-",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker>a-</Marker><NextMarker>a-[minio_cache:v2,return:]</NextMarker><MaxKeys>1</MaxKeys><Delimiter>-</Delimiter><IsTruncated>true</IsTruncated><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dash marker a-3",
+    "request": "GET /list-delim-<run>?delimiter=-&max-keys=1&marker=a-3",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><Marker>a-3</Marker><NextMarker>a/b[minio_cache:v2,return:]</NextMarker><MaxKeys>1</MaxKeys><Delimiter>-</Delimiter><IsTruncated>true</IsTruncated><Contents><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "dash v2 max-keys 2",
+    "request": "GET /list-delim-<run>?list-type=2&delimiter=-&max-keys=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><NextContinuationToken><id:1></NextContinuationToken><KeyCount>1</KeyCount><MaxKeys>2</MaxKeys><Delimiter>-</Delimiter><IsTruncated>true</IsTruncated><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dash versions",
+    "request": "GET /list-delim-<run>?versions=&delimiter=-",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><Delimiter>-</Delimiter><IsTruncated>false</IsTruncated><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes><CommonPrefixes><Prefix>abc-</Prefix></CommonPrefixes><Version><Key>a/b</Key><LastModified><date></LastModified><ETag>&#34;a7e86136543b019d72468ceebf71fb8e&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version></ListVersionsResult>"
+  },
+  {
+    "step": "dash versions max-keys 2",
+    "request": "GET /list-delim-<run>?versions=&delimiter=-&max-keys=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextKeyMarker>a-[minio_cache:v2,return:]</NextKeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>2</MaxKeys><Delimiter>-</Delimiter><IsTruncated>true</IsTruncated><CommonPrefixes><Prefix>a-</Prefix></CommonPrefixes></ListVersionsResult>"
+  },
+  {
+    "step": "slash versions",
+    "request": "GET /list-delim-<run>?versions=&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-delim-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><CommonPrefixes><Prefix>a/</Prefix></CommonPrefixes><Version><Key>a-1</Key><LastModified><date></LastModified><ETag>&#34;737c191aed52450b9c655083c9971bdd&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>a-2</Key><LastModified><date></LastModified><ETag>&#34;b39baf03412f39006635c8da36237ff0&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>a-3</Key><LastModified><date></LastModified><ETag>&#34;708caaced298fed1d34d3a20c7d30606&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>ab</Key><LastModified><date></LastModified><ETag>&#34;187ef4436122d1cc2f40dc2b92f0eba0&#34;</ETag><Size>2</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>abc-x</Key><LastModified><date></LastModified><ETag>&#34;a2cb62841ea55ebdb453e8751d9b8842&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>b</Key><LastModified><date></LastModified><ETag>&#34;92eb5ffee6ae2fec3ad71c777531578f&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>b::c</Key><LastModified><date></LastModified><ETag>&#34;f82e7d8873cfc4d6338628dd88cb88bb&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>b::d::e</Key><LastModified><date></LastModified><ETag>&#34;4def3832466e803bf9c6d6c08ff26592&#34;</ETag><Size>7</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>c%d</Key><LastModified><date></LastModified><ETag>&#34;7d61525e2b8368936e84838a24fd4f3d&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>c+d</Key><LastModified><date></LastModified><ETag>&#34;aab245deac295826ff48e56727e9cd57&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>x.y.z</Key><LastModified><date></LastModified><ETag>&#34;4feb9e6015a2ccab7a97eb87be5e8644&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version></ListVersionsResult>"
+  }
+]

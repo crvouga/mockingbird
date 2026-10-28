@@ -1,0 +1,255 @@
+[
+  {
+    "step": "eq key ok",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-cond-<run>/exact.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "eq key mismatch",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy Condition failed)</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "starts-with key ok",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-cond-<run>/user/1/a.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "starts-with key mismatch",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy Condition failed)</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "starts-with bucket refused",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy Condition failed)</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bucket mismatch",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy Condition failed)</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "eq meta mismatch",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy Condition failed: [eq, $x-amz-meta-a, 2])</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "eq meta case-insensitive name",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-cond-<run>/ci.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unlisted field",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Each form field that you specify in a form must appear in the list of policy conditions. &#34;X-Amz-Meta-Extra&#34; not specified in the policy.)</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unlisted content-type",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Each form field that you specify in a form must appear in the list of policy conditions. &#34;Content-Type&#34; not specified in the policy.)</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket condition",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy Condition failed)</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown condition key ignored",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-cond-<run>/unknown.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "duplicate form field",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied. (Invalid according to Policy: Policy Condition failed: [starts-with, $x-amz-meta-a, ]. FormValues have multiple values: [1, 2])</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "length in range",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-cond-<run>/range.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "length too large",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>EntityTooLarge</Code><Message>Your proposed upload exceeds the maximum allowed object size.</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "length too small",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>EntityTooSmall</Code><Message>Your proposed upload is smaller than the minimum allowed object size.</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "length as strings",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-cond-<run>/str.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "length bad number",
+    "request": "POST /post-cond-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PostPolicyInvalidKeyName</Code><Message>Invalid according to Policy: Policy Condition failed &#39;(strconv.Atoi: parsing &#34;one&#34;: invalid syntax)&#39;</Message><BucketName>post-cond-<run></BucketName><Resource>/post-cond-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "list",
+    "request": "GET /post-cond-<run>?list-type=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>post-cond-<run></Name><Prefix></Prefix><KeyCount>6</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>ci.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>exact.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>range.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>str.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>unknown.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>user/1/a.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  }
+]

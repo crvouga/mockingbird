@@ -1,0 +1,93 @@
+[
+  {
+    "step": "v2 metadata",
+    "request": "GET /list-meta-<run>?list-type=2&metadata=true",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-<run></Name><Prefix></Prefix><KeyCount>7</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>headers</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><cache-control>no-cache</cache-control><content-disposition>inline</content-disposition><content-encoding>identity</content-encoding><content-language>en</content-language><content-type>text/html</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents><Contents><Key>meta</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><X-Amz-Meta-Color>Blue</X-Amz-Meta-Color><X-Amz-Meta-Two-Words>a b</X-Amz-Meta-Two-Words><content-type>image/png</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents><Contents><Key>plain</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>text/plain</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents><Contents><Key>rrs</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>REDUCED_REDUNDANCY</StorageClass><UserMetadata><content-type>a/b</content-type><x-amz-storage-class>REDUCED_REDUNDANCY</x-amz-storage-class></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents><Contents><Key>std</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>a/b</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents><Contents><Key>tagged</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>a/b</content-type></UserMetadata><UserTags>k=v&amp;a=b%20c</UserTags><Internal><K>1</K><M>0</M></Internal></Contents><Contents><Key>xml</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><X-Amz-Meta-X>&lt;&amp;&gt;&#34;&#39;</X-Amz-Meta-X><content-type>a/b</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents></ListBucketResult>"
+  },
+  {
+    "step": "v2 metadata fetch-owner",
+    "request": "GET /list-meta-<run>?list-type=2&metadata=true&fetch-owner=true&prefix=t",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-<run></Name><Prefix>t</Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>tagged</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>a/b</content-type></UserMetadata><UserTags>k=v&amp;a=b%20c</UserTags><Internal><K>1</K><M>0</M></Internal></Contents></ListBucketResult>"
+  },
+  {
+    "step": "v2 metadata delimiter",
+    "request": "GET /list-meta-<run>?list-type=2&metadata=true&delimiter=e&max-keys=3",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-<run></Name><Prefix></Prefix><NextContinuationToken><id:1></NextContinuationToken><KeyCount>3</KeyCount><MaxKeys>3</MaxKeys><Delimiter>e</Delimiter><IsTruncated>true</IsTruncated><Contents><Key>plain</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>text/plain</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents><CommonPrefixes><Prefix>he</Prefix></CommonPrefixes><CommonPrefixes><Prefix>me</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "v2 metadata TRUE is plain",
+    "request": "GET /list-meta-<run>?list-type=2&metadata=TRUE",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-<run></Name><Prefix></Prefix><KeyCount>7</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>headers</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>meta</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>plain</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>rrs</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>REDUCED_REDUNDANCY</StorageClass></Contents><Contents><Key>std</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>tagged</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>xml</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "v2 metadata url",
+    "request": "GET /list-meta-<run>?list-type=2&metadata=true&encoding-type=url&prefix=m",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-<run></Name><Prefix>m</Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>meta</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><X-Amz-Meta-Color>Blue</X-Amz-Meta-Color><X-Amz-Meta-Two-Words>a b</X-Amz-Meta-Two-Words><content-type>image/png</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents><EncodingType>url</EncodingType></ListBucketResult>"
+  },
+  {
+    "step": "versions metadata",
+    "request": "GET /list-meta-<run>?versions=&metadata=true",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Version><Key>headers</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><cache-control>no-cache</cache-control><content-disposition>inline</content-disposition><content-encoding>identity</content-encoding><content-language>en</content-language><content-type>text/html</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>meta</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><X-Amz-Meta-Color>Blue</X-Amz-Meta-Color><X-Amz-Meta-Two-Words>a b</X-Amz-Meta-Two-Words><content-type>image/png</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>plain</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>text/plain</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>rrs</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>REDUCED_REDUNDANCY</StorageClass><UserMetadata><content-type>a/b</content-type><x-amz-storage-class>REDUCED_REDUNDANCY</x-amz-storage-class></UserMetadata><Internal><K>1</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>std</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>a/b</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>tagged</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>a/b</content-type></UserMetadata><UserTags>k=v&amp;a=b%20c</UserTags><Internal><K>1</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId>null</VersionId></Version><Version><Key>xml</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><X-Amz-Meta-X>&lt;&amp;&gt;&#34;&#39;</X-Amz-Meta-X><content-type>a/b</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId>null</VersionId></Version></ListVersionsResult>"
+  },
+  {
+    "step": "v1 ignores metadata",
+    "request": "GET /list-meta-<run>?metadata=true&prefix=m",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-<run></Name><Prefix>m</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>meta</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  }
+]
