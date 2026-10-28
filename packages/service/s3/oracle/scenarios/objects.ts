@@ -5,6 +5,15 @@ import { keyPath, type Scenario } from "../harness.js"
 
 const bytes = (text: string) => new TextEncoder().encode(text)
 
+// Fixed bytes: gzip output differs between platforms, and the goldens record these exact bytes.
+const GZIP_P_HI = Uint8Array.from(atob("H4sIAAAAAAAAE7MpsMvItNEvsAMAZdI3bQkAAAA="), (c) =>
+  c.charCodeAt(0),
+)
+const GZIP_HELLO_WORLD = Uint8Array.from(
+  atob("H4sIAAAAAAAAE8tIzcnJVyjPL8pJAQCFEUoNCwAAAA=="),
+  (c) => c.charCodeAt(0),
+)
+
 export const scenarios: Scenario[] = [
   {
     name: "put-default-content-type",
@@ -26,7 +35,7 @@ export const scenarios: Scenario[] = [
       await s.req("put", {
         method: "PUT",
         path: keyPath(b, "doc.html"),
-        body: Bun.gzipSync(bytes("<p>hi</p>")),
+        body: GZIP_P_HI,
         headers: {
           "content-type": "text/html; charset=utf-8",
           "content-encoding": "gzip",
@@ -459,7 +468,7 @@ export const scenarios: Scenario[] = [
         method: "PUT",
         path: keyPath(b, "c2"),
         auth: "streaming",
-        body: Bun.gzipSync(bytes("hello world")),
+        body: GZIP_HELLO_WORLD,
         headers: { "content-encoding": "gzip" },
       })
       await s.req("head gzip", { method: "HEAD", path: keyPath(b, "c2") })

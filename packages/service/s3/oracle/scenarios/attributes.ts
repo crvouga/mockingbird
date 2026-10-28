@@ -105,6 +105,11 @@ const PEOPLE = "name,age,city\nalice,30,paris\nbob,25,berlin\ncarol,35,rome\ndav
 const PEOPLE_JSON_LINES =
   '{"name":"alice","age":30,"city":"paris"}\n{"name":"bob","age":25,"city":"berlin"}\n{"name":"carol","age":35.5,"city":"rome","tags":["a","b"]}\n'
 
+// Fixed bytes: gzip output differs between platforms, and the goldens record these exact bytes.
+const GZIP_CSV = Uint8Array.from(atob("H4sIAAAAAAAAE0vUSeIy1DHiMtYx4QIA5enWzgwAAAA="), (c) =>
+  c.charCodeAt(0),
+)
+
 export const scenarios: Scenario[] = [
   // ── GetObjectAttributes ────────────────────────────────────────────────────
   {
@@ -1073,7 +1078,7 @@ export const scenarios: Scenario[] = [
       await s.raw({
         method: "PUT",
         path: keyPath(b, "k.csv.gz"),
-        body: Bun.gzipSync(new TextEncoder().encode("a,b\n1,2\n3,4\n"), { level: 6 }),
+        body: GZIP_CSV,
       })
       await select(
         s,
