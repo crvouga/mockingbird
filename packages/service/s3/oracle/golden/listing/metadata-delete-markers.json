@@ -1,0 +1,28 @@
+[
+  {
+    "step": "versions metadata",
+    "request": "GET /list-meta-dm-<run>?versions=&metadata=true",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-dm-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><DeleteMarker><Key>k</Key><LastModified><date></LastModified><ETag></ETag><Size>0</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><Internal><K>0</K><M>0</M></Internal><IsLatest>true</IsLatest><VersionId><id:2></VersionId></DeleteMarker><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>a/b</content-type></UserMetadata><UserTags>t=1</UserTags><Internal><K>1</K><M>0</M></Internal><IsLatest>false</IsLatest><VersionId><id:1></VersionId></Version></ListVersionsResult>"
+  },
+  {
+    "step": "v2 metadata",
+    "request": "GET /list-meta-dm-<run>?list-type=2&metadata=true",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-dm-<run></Name><Prefix></Prefix><KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>"
+  }
+]

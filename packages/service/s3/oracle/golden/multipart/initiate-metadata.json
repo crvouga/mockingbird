@@ -1,0 +1,89 @@
+[
+  {
+    "step": "initiate",
+    "request": "POST /mp-meta-<run>/m.csv?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-meta-<run></Bucket><Key>m.csv</Key><UploadId><id:1></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "part",
+    "request": "PUT /mp-meta-<run>/m.csv?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"e5ebd4c02cefbe7955977c67ada242b7\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "complete",
+    "request": "POST /mp-meta-<run>/m.csv?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"28e6bae9d4046937738d65e5b925bb7f-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-meta-<run>/m.csv</Location><Bucket>mp-meta-<run></Bucket><Key>m.csv</Key><ETag>&#34;28e6bae9d4046937738d65e5b925bb7f-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /mp-meta-<run>/m.csv",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-disposition": "attachment; filename=\"x.csv\"",
+      "content-encoding": "identity",
+      "content-language": "fr-CA",
+      "content-length": "8",
+      "content-type": "text/csv; charset=utf-8",
+      "etag": "\"28e6bae9d4046937738d65e5b925bb7f-1\"",
+      "expires": "Wed, 21 Oct 2037 07:28:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "Blue",
+      "x-amz-meta-mixed-case": "Value With Spaces",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /mp-meta-<run>/m.csv",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-disposition": "attachment; filename=\"x.csv\"",
+      "content-encoding": "identity",
+      "content-language": "fr-CA",
+      "content-length": "8",
+      "content-type": "text/csv; charset=utf-8",
+      "etag": "\"28e6bae9d4046937738d65e5b925bb7f-1\"",
+      "expires": "Wed, 21 Oct 2037 07:28:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "Blue",
+      "x-amz-meta-mixed-case": "Value With Spaces",
+      "x-amz-request-id": "*"
+    },
+    "body": "a,b\n1,2\n"
+  }
+]

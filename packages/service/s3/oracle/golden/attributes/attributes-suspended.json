@@ -1,0 +1,30 @@
+[
+  {
+    "step": "latest",
+    "request": "GET /attrs-sus-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>f97c5d29941bfb1b2fdab0874906ab82</ETag></getObjectAttributesResponse>"
+  },
+  {
+    "step": "null",
+    "request": "GET /attrs-sus-<run>/k?attributes=&versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>f97c5d29941bfb1b2fdab0874906ab82</ETag></getObjectAttributesResponse>"
+  }
+]

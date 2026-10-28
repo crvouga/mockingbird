@@ -1,0 +1,58 @@
+[
+  {
+    "step": "streaming signed",
+    "request": "PUT /mp-stream-<run>/k?partNumber=1&uploadId=<id:1> [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"899df46da3fb26d3041680f11407ac3f\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unsigned trailer",
+    "request": "PUT /mp-stream-<run>/k?partNumber=2&uploadId=<id:1> [streaming-unsigned-trailer]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"7aea2552dfe7eb84b9443b6fc9ba6e01\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "fDe0XQ==",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unsigned payload",
+    "request": "PUT /mp-stream-<run>/k?partNumber=3&uploadId=<id:1> [unsigned-payload]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"343fee95d31373c80d5bdb2b8c57f8c5\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "list parts",
+    "request": "GET /mp-stream-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-stream-<run></Bucket><Key>k</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;899df46da3fb26d3041680f11407ac3f&#34;</ETag><Size>204800</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;7aea2552dfe7eb84b9443b6fc9ba6e01&#34;</ETag><Size>4</Size><ChecksumCRC32>fDe0XQ==</ChecksumCRC32></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;343fee95d31373c80d5bdb2b8c57f8c5&#34;</ETag><Size>8</Size></Part></ListPartsResult>"
+  }
+]

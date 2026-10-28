@@ -1,0 +1,67 @@
+[
+  {
+    "step": "copy",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "CopyObjectResult": {
+        "ETag": "\"c2aea571698026a2ae34b23c3251bdd5\"",
+        "LastModified": "<date>"
+      }
+    }
+  },
+  {
+    "step": "head",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ContentLength": 7,
+      "ContentType": "text/plain",
+      "ETag": "\"c2aea571698026a2ae34b23c3251bdd5\"",
+      "LastModified": "<date>",
+      "Metadata": {
+        "who": "sdk"
+      }
+    }
+  },
+  {
+    "step": "replace",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "CopyObjectResult": {
+        "ETag": "\"c2aea571698026a2ae34b23c3251bdd5\"",
+        "LastModified": "<date>"
+      }
+    }
+  },
+  {
+    "step": "head2",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ContentLength": 7,
+      "ContentType": "text/csv",
+      "ETag": "\"c2aea571698026a2ae34b23c3251bdd5\"",
+      "LastModified": "<date>",
+      "Metadata": {
+        "fresh": "yes"
+      },
+      "TagCount": 1
+    }
+  },
+  {
+    "step": "precondition-error",
+    "value": "PreconditionFailed"
+  },
+  {
+    "step": "self-copy-error",
+    "value": "InvalidRequest"
+  }
+]

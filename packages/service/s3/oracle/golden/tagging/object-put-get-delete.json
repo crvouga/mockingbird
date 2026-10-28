@@ -1,0 +1,245 @@
+[
+  {
+    "step": "get none",
+    "request": "GET /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet></TagSet></Tagging>"
+  },
+  {
+    "step": "put",
+    "request": "PUT /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get sorted",
+    "request": "GET /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>a</Key><Value>first</Value></Tag><Tag><Key>m</Key><Value>mid</Value></Tag><Tag><Key>z</Key><Value>last</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "head count",
+    "request": "HEAD /otag-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8d777f385d3dfec8815d20f7496026dc\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "3"
+    },
+    "body": ""
+  },
+  {
+    "step": "get object count",
+    "request": "GET /otag-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8d777f385d3dfec8815d20f7496026dc\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "3"
+    },
+    "body": "data"
+  },
+  {
+    "step": "put ten",
+    "request": "PUT /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get ten",
+    "request": "GET /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>k0</Key><Value>v0</Value></Tag><Tag><Key>k1</Key><Value>v1</Value></Tag><Tag><Key>k2</Key><Value>v2</Value></Tag><Tag><Key>k3</Key><Value>v3</Value></Tag><Tag><Key>k4</Key><Value>v4</Value></Tag><Tag><Key>k5</Key><Value>v5</Value></Tag><Tag><Key>k6</Key><Value>v6</Value></Tag><Tag><Key>k7</Key><Value>v7</Value></Tag><Tag><Key>k8</Key><Value>v8</Value></Tag><Tag><Key>k9</Key><Value>v9</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "put special",
+    "request": "PUT /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get special",
+    "request": "GET /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>a b</Key><Value>c+d</Value></Tag><Tag><Key>e=f</Key><Value>g/h</Value></Tag><Tag><Key>empty</Key><Value></Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "put empty",
+    "request": "PUT /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get after empty",
+    "request": "GET /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet></TagSet></Tagging>"
+  },
+  {
+    "step": "head after empty",
+    "request": "HEAD /otag-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8d777f385d3dfec8815d20f7496026dc\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put again",
+    "request": "PUT /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete",
+    "request": "DELETE /otag-<run>/k?tagging=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get deleted",
+    "request": "GET /otag-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet></TagSet></Tagging>"
+  },
+  {
+    "step": "delete again",
+    "request": "DELETE /otag-<run>/k?tagging=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put unicode key",
+    "request": "PUT /otag-<run>/dir/%C3%BC%20%C3%B1%2B.txt?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get unicode key",
+    "request": "GET /otag-<run>/dir/%C3%BC%20%C3%B1%2B.txt?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>t</Key><Value>1</Value></Tag></TagSet></Tagging>"
+  }
+]

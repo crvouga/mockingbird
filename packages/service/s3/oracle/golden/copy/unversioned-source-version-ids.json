@@ -1,0 +1,65 @@
+[
+  {
+    "step": "copy-null",
+    "request": "PUT /copy-unvsrc-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"ac7938d40cfc2307e2bf325d28e7884e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "d7A49Y7ZNHM=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-copy-source-version-id": "null",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;ac7938d40cfc2307e2bf325d28e7884e&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "get-dst",
+    "request": "GET /copy-unvsrc-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"ac7938d40cfc2307e2bf325d28e7884e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "plain"
+  },
+  {
+    "step": "copy-uuid",
+    "request": "PUT /copy-unvsrc-<run>/dst2",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>src</Key><BucketName>copy-unvsrc-<run></BucketName><Resource>/copy-unvsrc-<run>/dst2</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "copy-self-null",
+    "request": "PUT /copy-unvsrc-<run>/src",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"ac7938d40cfc2307e2bf325d28e7884e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "d7A49Y7ZNHM=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-copy-source-version-id": "null",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;ac7938d40cfc2307e2bf325d28e7884e&#34;</ETag></CopyObjectResult>"
+  }
+]

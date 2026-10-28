@@ -1,0 +1,388 @@
+[
+  {
+    "step": "initiate CRC32/-",
+    "request": "POST /mp-ckalg-<run>/k-CRC32-undefined?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC32",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32-undefined</Key><UploadId><id:1></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts CRC32/-",
+    "request": "GET /mp-ckalg-<run>/k-CRC32-undefined?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32-undefined</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC32</ChecksumAlgorithm><ChecksumType>COMPOSITE</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate crc32c/-",
+    "request": "POST /mp-ckalg-<run>/k-crc32c-undefined?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC32C",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-crc32c-undefined</Key><UploadId><id:2></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts crc32c/-",
+    "request": "GET /mp-ckalg-<run>/k-crc32c-undefined?uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-crc32c-undefined</Key><UploadId><id:2></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC32C</ChecksumAlgorithm><ChecksumType>COMPOSITE</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate SHA1/-",
+    "request": "POST /mp-ckalg-<run>/k-SHA1-undefined?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "SHA1",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-SHA1-undefined</Key><UploadId><id:3></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts SHA1/-",
+    "request": "GET /mp-ckalg-<run>/k-SHA1-undefined?uploadId=<id:3>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-SHA1-undefined</Key><UploadId><id:3></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>SHA1</ChecksumAlgorithm><ChecksumType>COMPOSITE</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate SHA256/-",
+    "request": "POST /mp-ckalg-<run>/k-SHA256-undefined?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "SHA256",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-SHA256-undefined</Key><UploadId><id:4></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts SHA256/-",
+    "request": "GET /mp-ckalg-<run>/k-SHA256-undefined?uploadId=<id:4>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-SHA256-undefined</Key><UploadId><id:4></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>SHA256</ChecksumAlgorithm><ChecksumType>COMPOSITE</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate CRC64NVME/-",
+    "request": "POST /mp-ckalg-<run>/k-CRC64NVME-undefined?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC64NVME",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC64NVME-undefined</Key><UploadId><id:5></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts CRC64NVME/-",
+    "request": "GET /mp-ckalg-<run>/k-CRC64NVME-undefined?uploadId=<id:5>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC64NVME-undefined</Key><UploadId><id:5></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC64NVME</ChecksumAlgorithm><ChecksumType>FULL_OBJECT</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate CRC32/COMPOSITE",
+    "request": "POST /mp-ckalg-<run>/k-CRC32-COMPOSITE?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC32",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32-COMPOSITE</Key><UploadId><id:6></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts CRC32/COMPOSITE",
+    "request": "GET /mp-ckalg-<run>/k-CRC32-COMPOSITE?uploadId=<id:6>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32-COMPOSITE</Key><UploadId><id:6></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC32</ChecksumAlgorithm><ChecksumType>COMPOSITE</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate CRC32/FULL_OBJECT",
+    "request": "POST /mp-ckalg-<run>/k-CRC32-FULL_OBJECT?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC32",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32-FULL_OBJECT</Key><UploadId><id:7></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts CRC32/FULL_OBJECT",
+    "request": "GET /mp-ckalg-<run>/k-CRC32-FULL_OBJECT?uploadId=<id:7>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32-FULL_OBJECT</Key><UploadId><id:7></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC32</ChecksumAlgorithm><ChecksumType>FULL_OBJECT</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate CRC32C/FULL_OBJECT",
+    "request": "POST /mp-ckalg-<run>/k-CRC32C-FULL_OBJECT?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC32C",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32C-FULL_OBJECT</Key><UploadId><id:8></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts CRC32C/FULL_OBJECT",
+    "request": "GET /mp-ckalg-<run>/k-CRC32C-FULL_OBJECT?uploadId=<id:8>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC32C-FULL_OBJECT</Key><UploadId><id:8></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC32C</ChecksumAlgorithm><ChecksumType>FULL_OBJECT</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate SHA256/FULL_OBJECT",
+    "request": "POST /mp-ckalg-<run>/k-SHA256-FULL_OBJECT?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid checksum provided.</Message><Key>k-SHA256-FULL_OBJECT</Key><BucketName>mp-ckalg-<run></BucketName><Resource>/mp-ckalg-<run>/k-SHA256-FULL_OBJECT</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "initiate SHA1/COMPOSITE",
+    "request": "POST /mp-ckalg-<run>/k-SHA1-COMPOSITE?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "SHA1",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-SHA1-COMPOSITE</Key><UploadId><id:9></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts SHA1/COMPOSITE",
+    "request": "GET /mp-ckalg-<run>/k-SHA1-COMPOSITE?uploadId=<id:9>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-SHA1-COMPOSITE</Key><UploadId><id:9></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>SHA1</ChecksumAlgorithm><ChecksumType>COMPOSITE</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate CRC64NVME/COMPOSITE",
+    "request": "POST /mp-ckalg-<run>/k-CRC64NVME-COMPOSITE?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC64NVME",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC64NVME-COMPOSITE</Key><UploadId><id:10></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts CRC64NVME/COMPOSITE",
+    "request": "GET /mp-ckalg-<run>/k-CRC64NVME-COMPOSITE?uploadId=<id:10>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC64NVME-COMPOSITE</Key><UploadId><id:10></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC64NVME</ChecksumAlgorithm><ChecksumType>FULL_OBJECT</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate CRC64NVME/FULL_OBJECT",
+    "request": "POST /mp-ckalg-<run>/k-CRC64NVME-FULL_OBJECT?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-algorithm": "CRC64NVME",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC64NVME-FULL_OBJECT</Key><UploadId><id:11></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts CRC64NVME/FULL_OBJECT",
+    "request": "GET /mp-ckalg-<run>/k-CRC64NVME-FULL_OBJECT?uploadId=<id:11>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k-CRC64NVME-FULL_OBJECT</Key><UploadId><id:11></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC64NVME</ChecksumAlgorithm><ChecksumType>FULL_OBJECT</ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate MD5/-",
+    "request": "POST /mp-ckalg-<run>/k-MD5-undefined?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid checksum provided.</Message><Key>k-MD5-undefined</Key><BucketName>mp-ckalg-<run></BucketName><Resource>/mp-ckalg-<run>/k-MD5-undefined</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "initiate none/FULL_OBJECT",
+    "request": "POST /mp-ckalg-<run>/k--FULL_OBJECT?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid checksum provided.</Message><Key>k--FULL_OBJECT</Key><BucketName>mp-ckalg-<run></BucketName><Resource>/mp-ckalg-<run>/k--FULL_OBJECT</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "initiate none/COMPOSITE",
+    "request": "POST /mp-ckalg-<run>/k--COMPOSITE?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<InitiateMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k--COMPOSITE</Key><UploadId><id:12></UploadId></InitiateMultipartUploadResult>"
+  },
+  {
+    "step": "list parts /COMPOSITE",
+    "request": "GET /mp-ckalg-<run>/k--COMPOSITE?uploadId=<id:12>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-ckalg-<run></Bucket><Key>k--COMPOSITE</Key><UploadId><id:12></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType></ListPartsResult>"
+  },
+  {
+    "step": "initiate CRC32/full_object",
+    "request": "POST /mp-ckalg-<run>/k-CRC32-full_object?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid checksum provided.</Message><Key>k-CRC32-full_object</Key><BucketName>mp-ckalg-<run></BucketName><Resource>/mp-ckalg-<run>/k-CRC32-full_object</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

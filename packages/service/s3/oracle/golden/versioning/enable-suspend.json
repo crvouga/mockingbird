@@ -1,0 +1,132 @@
+[
+  {
+    "step": "enable",
+    "request": "PUT /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get enabled",
+    "request": "GET /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Enabled</Status></VersioningConfiguration>"
+  },
+  {
+    "step": "suspend",
+    "request": "PUT /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get suspended",
+    "request": "GET /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Suspended</Status></VersioningConfiguration>"
+  },
+  {
+    "step": "enable without xmlns",
+    "request": "PUT /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get after no-xmlns put",
+    "request": "GET /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration><Status>Enabled</Status></VersioningConfiguration>"
+  },
+  {
+    "step": "enable with MFADelete",
+    "request": "PUT /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get after mfa",
+    "request": "GET /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Enabled</Status></VersioningConfiguration>"
+  },
+  {
+    "step": "enable with MFADelete enabled",
+    "request": "PUT /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get after mfa enabled",
+    "request": "GET /ver-states-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Suspended</Status></VersioningConfiguration>"
+  }
+]

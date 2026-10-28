@@ -1,0 +1,345 @@
+[
+  {
+    "step": "whole",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;fa651d5548ce5dcc544d36809ba806c6&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "range",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=2&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;81b073de9370ea873f548e31b8adc081&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "range single byte",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=3&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;45c48cce2e2d7fbdea1afc51c7c6ad26&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "range open end",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The x-amz-copy-source-range value must be of the form bytes=first-last where first and last are the zero-based offsets of the first and last bytes to copy</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range suffix",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The x-amz-copy-source-range value must be of the form bytes=first-last where first and last are the zero-based offsets of the first and last bytes to copy</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range beyond end",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Range specified is not valid for source object</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range start beyond",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRange</Code><Message>The requested range &#39;bytes=10-12&#39; is not satisfiable</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId><ActualObjectSize>10</ActualObjectSize><RangeRequested>10-12</RangeRequested></Error>"
+  },
+  {
+    "step": "range reversed",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The x-amz-copy-source-range value must be of the form bytes=first-last where first and last are the zero-based offsets of the first and last bytes to copy</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range garbage",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>&#39;pages=1-2&#39; does not start with &#39;bytes=&#39;</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range empty",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The x-amz-copy-source-range value must be of the form bytes=first-last where first and last are the zero-based offsets of the first and last bytes to copy</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "range multi",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>&#39;bytes=0-1,3-4&#39; does not have a valid last byte position value</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing source key",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing source bucket",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><Key>src</Key><BucketName>mp-copy-none-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "source bucket only",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>dst</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad version id",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>dst</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "null version id",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;781e5e245d69b566979b86e28d23f2c7&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "uuid version id",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>small src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "part 0",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=0&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPart</Code><Message>One or more of the specified parts could not be found.  The part may not have been uploaded, or the specified entity tag may not match the part&#39;s entity tag.</Message><Key>src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "part 10001",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=10001&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Part number must be an integer between 1 and 10000, inclusive</Message><Key>src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "fake upload",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:2>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "malformed upload",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:3>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "wrong key",
+    "request": "PUT /mp-copy-<run>/other?partNumber=4&uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>src</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/other</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing source and fake upload",
+    "request": "PUT /mp-copy-<run>/dst?partNumber=4&uploadId=<id:2>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope</Key><BucketName>mp-copy-<run></BucketName><Resource>/mp-copy-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "list parts",
+    "request": "GET /mp-copy-<run>/dst?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-copy-<run></Bucket><Key>dst</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;fa651d5548ce5dcc544d36809ba806c6&#34;</ETag><Size>6291456</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;81b073de9370ea873f548e31b8adc081&#34;</ETag><Size>4</Size></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;45c48cce2e2d7fbdea1afc51c7c6ad26&#34;</ETag><Size>1</Size></Part><Part><PartNumber>4</PartNumber><LastModified><date></LastModified><ETag>&#34;781e5e245d69b566979b86e28d23f2c7&#34;</ETag><Size>10</Size></Part></ListPartsResult>"
+  },
+  {
+    "step": "complete",
+    "request": "POST /mp-copy-<run>/dst?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"c427b49fb61524ab41b157ced7d59b27-2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-copy-<run>/dst</Location><Bucket>mp-copy-<run></Bucket><Key>dst</Key><ETag>&#34;c427b49fb61524ab41b157ced7d59b27-2&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "get",
+    "request": "GET /mp-copy-<run>/dst",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-range": "bytes 6291454-6291456/6291457",
+      "content-type": "binary/octet-stream",
+      "etag": "\"c427b49fb61524ab41b157ced7d59b27-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<3 bytes sha256:7bc91a1600acebfa>"
+  }
+]

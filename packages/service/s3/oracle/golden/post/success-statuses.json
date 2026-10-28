@@ -1,0 +1,163 @@
+[
+  {
+    "step": "default 204",
+    "request": "POST /post-ok-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-ok-<run>/upload.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /post-ok-<run>/upload.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "text/plain",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "posted content"
+  },
+  {
+    "step": "status 200",
+    "request": "POST /post-ok-<run> [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-ok-<run>/two.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "status 201",
+    "request": "POST /post-ok-<run> [anonymous]",
+    "status": 201,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-ok-<run>/dir/three%20%C3%BC.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<PostResponse><Bucket>post-ok-<run></Bucket><Key>dir/three ü.txt</Key><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Location>http://<host>/post-ok-<run>/dir/three%20%C3%BC.txt</Location></PostResponse>"
+  },
+  {
+    "step": "status 204",
+    "request": "POST /post-ok-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-ok-<run>/four.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "status 999",
+    "request": "POST /post-ok-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-ok-<run>/five.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "list",
+    "request": "GET /post-ok-<run>?list-type=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>post-ok-<run></Name><Prefix></Prefix><KeyCount>5</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>dir/three ü.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>five.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>four.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>two.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>upload.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "empty file",
+    "request": "POST /post-ok-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "location": "http://<host>/post-ok-<run>/empty.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head empty",
+    "request": "HEAD /post-ok-<run>/empty.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-type": "text/plain",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "overwrite",
+    "request": "POST /post-ok-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"f084be37ed84e9d0d2a02d4d4be59745\"",
+      "location": "http://<host>/post-ok-<run>/upload.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get overwrite",
+    "request": "GET /post-ok-<run>/upload.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "text/plain",
+      "etag": "\"f084be37ed84e9d0d2a02d4d4be59745\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "second version"
+  }
+]

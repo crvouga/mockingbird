@@ -1,0 +1,62 @@
+[
+  {
+    "step": "put",
+    "request": "PUT /obj-<run>/m",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /obj-<run>/m",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "Blue",
+      "x-amz-meta-empty": "",
+      "x-amz-meta-punct": "a,b;c=d\"e'f",
+      "x-amz-meta-spaces": "padded",
+      "x-amz-meta-tab": "a\tb",
+      "x-amz-meta-upper-case": "MiXeD Value",
+      "x-amz-request-id": "*",
+      "x-minio-meta-extra": "minio"
+    },
+    "body": "x"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /obj-<run>/m",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-color": "Blue",
+      "x-amz-meta-empty": "",
+      "x-amz-meta-punct": "a,b;c=d\"e'f",
+      "x-amz-meta-spaces": "padded",
+      "x-amz-meta-tab": "a\tb",
+      "x-amz-meta-upper-case": "MiXeD Value",
+      "x-amz-request-id": "*",
+      "x-minio-meta-extra": "minio"
+    },
+    "body": ""
+  }
+]

@@ -1,0 +1,103 @@
+[
+  {
+    "step": "missing bucket",
+    "request": "DELETE /del-nobucket-<run>/k",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><Key>k</Key><BucketName>del-nobucket-<run></BucketName><Resource>/del-nobucket-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket with version",
+    "request": "DELETE /del-nobucket-<run>/k?versionId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><Key>k</Key><BucketName>del-nobucket-<run></BucketName><Resource>/del-nobucket-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket bad version",
+    "request": "DELETE /del-nobucket-<run>/k?versionId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid version id specified</Message><Key>k</Key><BucketName>del-nobucket-<run></BucketName><Resource>/del-nobucket-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing key",
+    "request": "DELETE /del-basic-<run>/nothing/here",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "bad version id",
+    "request": "DELETE /del-basic-<run>/k?versionId=<id:3>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid version id specified</Message><Key>k</Key><BucketName>del-basic-<run></BucketName><Resource>/del-basic-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "version id with spaces",
+    "request": "DELETE /del-basic-<run>/k?versionId=<id:4>",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "version id braces",
+    "request": "DELETE /del-basic-<run>/k?versionId=<id:5>",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "bad force-delete",
+    "request": "DELETE /del-basic-<run>/k",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error, please try again.: cause(strconv.ParseBool: parsing &#34;maybe&#34;: invalid syntax)</Message><Key>k</Key><BucketName>del-basic-<run></BucketName><Resource>/del-basic-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

@@ -1,0 +1,42 @@
+[
+  {
+    "step": "backslash",
+    "request": "PUT /obj-<run>/a%5Cb",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "nul byte",
+    "request": "PUT /obj-<run>/a%00b",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key>a�b</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/a�b</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get nul byte",
+    "request": "GET /obj-<run>/a%00b",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key>a�b</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/a�b</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

@@ -1,0 +1,40 @@
+[
+  {
+    "step": "put without id",
+    "request": "PUT /lcid-<run>?lifecycle=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "generated id is a uuid",
+    "value": true
+  },
+  {
+    "step": "body with id masked",
+    "value": "<LifecycleConfiguration><Rule><ID><uuid></ID><Status>Enabled</Status><Expiration><Days>1</Days></Expiration></Rule></LifecycleConfiguration>"
+  },
+  {
+    "step": "put with empty id",
+    "request": "PUT /lcid-<run>?lifecycle=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "empty id replaced",
+    "value": 36
+  }
+]

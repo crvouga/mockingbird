@@ -1,0 +1,24 @@
+[
+  {
+    "step": "number compare on text",
+    "request": "POST /sel-rt-<run>/k.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<126 bytes sha256:9c517cbeb43883a0>"
+  },
+  {
+    "step": "number compare on text (events)",
+    "value": [
+      {
+        ":error-code": "InternalError",
+        ":error-message": "Could not convert []byte{0x61} to a number",
+        ":message-type": "error",
+        "payload": ""
+      }
+    ]
+  }
+]

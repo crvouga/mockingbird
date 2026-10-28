@@ -1,0 +1,228 @@
+[
+  {
+    "step": "put",
+    "request": "PUT /ver-dm-<run>/doc.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete creates marker",
+    "request": "DELETE /ver-dm-<run>/doc.txt",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get latest is marker",
+    "request": "GET /ver-dm-<run>/doc.txt",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>doc.txt</Key><BucketName>ver-dm-<run></BucketName><Resource>/ver-dm-<run>/doc.txt</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head latest is marker",
+    "request": "HEAD /ver-dm-<run>/doc.txt",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get marker by id",
+    "request": "GET /ver-dm-<run>/doc.txt?versionId=<id:2>",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Key>doc.txt</Key><BucketName>ver-dm-<run></BucketName><Resource>/ver-dm-<run>/doc.txt</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head marker by id",
+    "request": "HEAD /ver-dm-<run>/doc.txt?versionId=<id:2>",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>",
+      "x-minio-error-code": "MethodNotAllowed",
+      "x-minio-error-desc": "\"The specified method is not allowed against this resource.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get v1 still there",
+    "request": "GET /ver-dm-<run>/doc.txt?versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "delete again stacks marker",
+    "request": "DELETE /ver-dm-<run>/doc.txt",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete newest marker",
+    "request": "DELETE /ver-dm-<run>/doc.txt?versionId=<id:2>",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get still marker",
+    "request": "GET /ver-dm-<run>/doc.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "delete marker restores",
+    "request": "DELETE /ver-dm-<run>/doc.txt?versionId=<id:2>",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get restored",
+    "request": "GET /ver-dm-<run>/doc.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head restored",
+    "request": "HEAD /ver-dm-<run>/doc.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete missing key makes marker",
+    "request": "DELETE /ver-dm-<run>/never",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get missing key marker",
+    "request": "GET /ver-dm-<run>/never",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>never</Key><BucketName>ver-dm-<run></BucketName><Resource>/ver-dm-<run>/never</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

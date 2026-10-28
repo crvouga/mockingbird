@@ -1,0 +1,132 @@
+[
+  {
+    "step": "put",
+    "request": "PUT /auth-stream-<run>/s [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"fa0e1d09aa18e9e0b147e70545aebe47\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /auth-stream-<run>/s",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "37",
+      "content-type": "text/plain",
+      "etag": "\"fa0e1d09aa18e9e0b147e70545aebe47\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "streaming payload with several chunks"
+  },
+  {
+    "step": "single chunk",
+    "request": "PUT /auth-stream-<run>/one [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"fa0e1d09aa18e9e0b147e70545aebe47\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get one",
+    "request": "GET /auth-stream-<run>/one",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "37",
+      "content-type": "text/plain",
+      "etag": "\"fa0e1d09aa18e9e0b147e70545aebe47\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "streaming payload with several chunks"
+  },
+  {
+    "step": "empty",
+    "request": "PUT /auth-stream-<run>/empty [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head empty",
+    "request": "HEAD /auth-stream-<run>/empty",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-type": "text/plain",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "with content-md5",
+    "request": "PUT /auth-stream-<run>/md5 [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"fa0e1d09aa18e9e0b147e70545aebe47\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "with wrong content-md5",
+    "request": "PUT /auth-stream-<run>/md5bad [streaming]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadDigest</Code><Message>The Content-Md5 you specified did not match what we received.</Message><Key>md5bad</Key><BucketName>auth-stream-<run></BucketName><Resource>/auth-stream-<run>/md5bad</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket",
+    "request": "PUT /auth-missing-bucket-zz/s [streaming]",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><Key>s</Key><BucketName>auth-missing-bucket-zz</BucketName><Resource>/auth-missing-bucket-zz/s</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

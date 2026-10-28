@@ -1,0 +1,93 @@
+[
+  {
+    "step": "tag without id",
+    "request": "GET /list-forged-<run>?marker=b[minio_cache:v2]&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-forged-<run></Name><Prefix></Prefix><Marker>b[minio_cache:v2]</Marker><NextMarker>c[minio_cache:v2,return:]</NextMarker><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>c</Key><LastModified><date></LastModified><ETag>&#34;4a8a08f09d37b73795649038408b5f33&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "old tag version",
+    "request": "GET /list-forged-<run>?marker=b[minio_cache:v1,return:]&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-forged-<run></Name><Prefix></Prefix><Marker>b[minio_cache:v1,return:]</Marker><NextMarker>c[minio_cache:v2,return:]</NextMarker><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>c</Key><LastModified><date></LastModified><ETag>&#34;4a8a08f09d37b73795649038408b5f33&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "bad pool",
+    "request": "GET /list-forged-<run>?marker=b[minio_cache:v2,p:x]&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-forged-<run></Name><Prefix></Prefix><Marker>b[minio_cache:v2,p:x]</Marker><NextMarker>c[minio_cache:v2,id:<id:1>,p:0,s:0]</NextMarker><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>c</Key><LastModified><date></LastModified><ETag>&#34;4a8a08f09d37b73795649038408b5f33&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "unknown id",
+    "request": "GET /list-forged-<run>?marker=b[minio_cache:v2,id:<id:2>,p:0,s:0]&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-forged-<run></Name><Prefix></Prefix><Marker>b[minio_cache:v2,id:<id:2>,p:0,s:0]</Marker><NextMarker>c[minio_cache:v2,return:]</NextMarker><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>c</Key><LastModified><date></LastModified><ETag>&#34;4a8a08f09d37b73795649038408b5f33&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "brackets in key",
+    "request": "GET /list-forged-<run>?marker=b[x]&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-forged-<run></Name><Prefix></Prefix><Marker>b[x]</Marker><NextMarker>c[minio_cache:v2,return:]</NextMarker><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>c</Key><LastModified><date></LastModified><ETag>&#34;4a8a08f09d37b73795649038408b5f33&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "v2 token tag without id",
+    "request": "GET /list-forged-<run>?list-type=2&continuation-token=<id:3>&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-forged-<run></Name><Prefix></Prefix><ContinuationToken><id:3></ContinuationToken><NextContinuationToken><id:4></NextContinuationToken><KeyCount>1</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>c</Key><LastModified><date></LastModified><ETag>&#34;4a8a08f09d37b73795649038408b5f33&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "versions return tag",
+    "request": "GET /list-forged-<run>?versions=&key-marker=b[minio_cache:v2,return:]&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-forged-<run></Name><Prefix></Prefix><KeyMarker>b[minio_cache:v2,return:]</KeyMarker><NextKeyMarker>c[minio_cache:v2,id:<id:5>,p:0,s:0]</NextKeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Version><Key>c</Key><LastModified><date></LastModified><ETag>&#34;4a8a08f09d37b73795649038408b5f33&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId>null</VersionId></Version></ListVersionsResult>"
+  }
+]

@@ -1,0 +1,275 @@
+[
+  {
+    "step": "all",
+    "request": "GET /list-prefix-<run>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>dir/</Key><LastModified><date></LastModified><ETag>&#34;a31e441cb3888c8dce1048fb6270e086&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/a</Key><LastModified><date></LastModified><ETag>&#34;0536356f8a86ce0ce3ece7f42331e537&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/sub/</Key><LastModified><date></LastModified><ETag>&#34;2a8506dd1580db73c279923761d8c21b&#34;</ETag><Size>8</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/sub/b</Key><LastModified><date></LastModified><ETag>&#34;07dca7e90b7822df2eb5d6aede58c138&#34;</ETag><Size>9</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dirx</Key><LastModified><date></LastModified><ETag>&#34;b55f23652a908ff2a663388123ff6e15&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>photos/2024/feb.jpg</Key><LastModified><date></LastModified><ETag>&#34;05c358a84fd27f660010f33e256ab692&#34;</ETag><Size>19</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>photos/2024/jan.jpg</Key><LastModified><date></LastModified><ETag>&#34;22cbd8480f481f57aec2e635c552619d&#34;</ETag><Size>19</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>photos/2025/mar.jpg</Key><LastModified><date></LastModified><ETag>&#34;5af8b7dc4d4851e4608c249656b360e3&#34;</ETag><Size>19</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "delimiter",
+    "request": "GET /list-prefix-<run>?delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>dirx</Key><LastModified><date></LastModified><ETag>&#34;b55f23652a908ff2a663388123ff6e15&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>dir/</Prefix></CommonPrefixes><CommonPrefixes><Prefix>photos/</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dir/ delimiter",
+    "request": "GET /list-prefix-<run>?prefix=dir/&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dir/</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>dir/</Key><LastModified><date></LastModified><ETag>&#34;a31e441cb3888c8dce1048fb6270e086&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/a</Key><LastModified><date></LastModified><ETag>&#34;0536356f8a86ce0ce3ece7f42331e537&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>dir/sub/</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "dir/sub/ delimiter",
+    "request": "GET /list-prefix-<run>?prefix=dir/sub/&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dir/sub/</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>dir/sub/</Key><LastModified><date></LastModified><ETag>&#34;2a8506dd1580db73c279923761d8c21b&#34;</ETag><Size>8</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/sub/b</Key><LastModified><date></LastModified><ETag>&#34;07dca7e90b7822df2eb5d6aede58c138&#34;</ETag><Size>9</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "dir delimiter",
+    "request": "GET /list-prefix-<run>?prefix=dir&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dir</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>dirx</Key><LastModified><date></LastModified><ETag>&#34;b55f23652a908ff2a663388123ff6e15&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>dir/</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "photos/ delimiter",
+    "request": "GET /list-prefix-<run>?list-type=2&prefix=photos/&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>photos/</Prefix><KeyCount>2</KeyCount><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><CommonPrefixes><Prefix>photos/2024/</Prefix></CommonPrefixes><CommonPrefixes><Prefix>photos/2025/</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "photos/2024/ delimiter",
+    "request": "GET /list-prefix-<run>?list-type=2&prefix=photos/2024/&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>photos/2024/</Prefix><KeyCount>2</KeyCount><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>photos/2024/feb.jpg</Key><LastModified><date></LastModified><ETag>&#34;05c358a84fd27f660010f33e256ab692&#34;</ETag><Size>19</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>photos/2024/jan.jpg</Key><LastModified><date></LastModified><ETag>&#34;22cbd8480f481f57aec2e635c552619d&#34;</ETag><Size>19</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "exact object max-keys 1",
+    "request": "GET /list-prefix-<run>?prefix=dirx&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dirx</Prefix><Marker></Marker><MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>dirx</Key><LastModified><date></LastModified><ETag>&#34;b55f23652a908ff2a663388123ff6e15&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "exact object max-keys 1 v2",
+    "request": "GET /list-prefix-<run>?list-type=2&prefix=dir/a&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dir/a</Prefix><KeyCount>1</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>dir/a</Key><LastModified><date></LastModified><ETag>&#34;0536356f8a86ce0ce3ece7f42331e537&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "exact dir object max-keys 1",
+    "request": "GET /list-prefix-<run>?list-type=2&prefix=dir/&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dir/</Prefix><KeyCount>1</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>dir/</Key><LastModified><date></LastModified><ETag>&#34;a31e441cb3888c8dce1048fb6270e086&#34;</ETag><Size>4</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "not an object max-keys 1",
+    "request": "GET /list-prefix-<run>?list-type=2&prefix=dir&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dir</Prefix><NextContinuationToken><id:1></NextContinuationToken><KeyCount>1</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>dir/</Key><LastModified><date></LastModified><ETag>&#34;a31e441cb3888c8dce1048fb6270e086&#34;</ETag><Size>4</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "exact object max-keys 2",
+    "request": "GET /list-prefix-<run>?prefix=dirx&max-keys=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dirx</Prefix><Marker></Marker><MaxKeys>2</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>dirx</Key><LastModified><date></LastModified><ETag>&#34;b55f23652a908ff2a663388123ff6e15&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "leading slash",
+    "request": "GET /list-prefix-<run>?prefix=/dir",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>/dir</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>"
+  },
+  {
+    "step": "double slash",
+    "request": "GET /list-prefix-<run>?prefix=dir//a",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><BucketName>list-prefix-<run></BucketName><Resource>/list-prefix-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "double slash v2",
+    "request": "GET /list-prefix-<run>?list-type=2&prefix=a//",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><BucketName>list-prefix-<run></BucketName><Resource>/list-prefix-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "double slash versions",
+    "request": "GET /list-prefix-<run>?versions=&prefix=//",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><BucketName>list-prefix-<run></BucketName><Resource>/list-prefix-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "dot-dot segment",
+    "request": "GET /list-prefix-<run>?prefix=dir/../x",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidResourceName</Code><Message>Resource name contains bad components such as &#34;..&#34; or &#34;.&#34;.</Message><Resource>/list-prefix-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "dot segment",
+    "request": "GET /list-prefix-<run>?list-type=2&prefix=./dir",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidResourceName</Code><Message>Resource name contains bad components such as &#34;..&#34; or &#34;.&#34;.</Message><Resource>/list-prefix-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "trailing dot-dot",
+    "request": "GET /list-prefix-<run>?prefix=dir/..",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidResourceName</Code><Message>Resource name contains bad components such as &#34;..&#34; or &#34;.&#34;.</Message><Resource>/list-prefix-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "dots in name",
+    "request": "GET /list-prefix-<run>?prefix=dir/...&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix>dir/...</Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated></ListBucketResult>"
+  },
+  {
+    "step": "delimiter with dot-dot",
+    "request": "GET /list-prefix-<run>?delimiter=..",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-prefix-<run></Name><Prefix></Prefix><Marker></Marker><MaxKeys>1000</MaxKeys><Delimiter>..</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>dir/</Key><LastModified><date></LastModified><ETag>&#34;a31e441cb3888c8dce1048fb6270e086&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/a</Key><LastModified><date></LastModified><ETag>&#34;0536356f8a86ce0ce3ece7f42331e537&#34;</ETag><Size>5</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/sub/</Key><LastModified><date></LastModified><ETag>&#34;2a8506dd1580db73c279923761d8c21b&#34;</ETag><Size>8</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/sub/b</Key><LastModified><date></LastModified><ETag>&#34;07dca7e90b7822df2eb5d6aede58c138&#34;</ETag><Size>9</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dirx</Key><LastModified><date></LastModified><ETag>&#34;b55f23652a908ff2a663388123ff6e15&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>photos/2024/feb.jpg</Key><LastModified><date></LastModified><ETag>&#34;05c358a84fd27f660010f33e256ab692&#34;</ETag><Size>19</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>photos/2024/jan.jpg</Key><LastModified><date></LastModified><ETag>&#34;22cbd8480f481f57aec2e635c552619d&#34;</ETag><Size>19</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>photos/2025/mar.jpg</Key><LastModified><date></LastModified><ETag>&#34;5af8b7dc4d4851e4608c249656b360e3&#34;</ETag><Size>19</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  }
+]

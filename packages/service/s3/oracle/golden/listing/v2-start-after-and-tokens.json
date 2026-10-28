@@ -1,0 +1,301 @@
+[
+  {
+    "step": "start-after key",
+    "request": "GET /list-start-<run>?list-type=2&start-after=b/2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><StartAfter><id:1></StartAfter><KeyCount>9</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>c/d/e</Key><LastModified><date></LastModified><ETag>&#34;a3bb263d38590bc965e8cff45c1b1329&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/d/f</Key><LastModified><date></LastModified><ETag>&#34;d62602c691b3116bcbfe5f213b3a4788&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/g</Key><LastModified><date></LastModified><ETag>&#34;f4ed139016664a107034cd071e6c153e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>d</Key><LastModified><date></LastModified><ETag>&#34;8277e0910d750195b448797616e091ad&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/</Key><LastModified><date></LastModified><ETag>&#34;a8e280f07ddb26c73bb0124568f02650&#34;</ETag><Size>2</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/x</Key><LastModified><date></LastModified><ETag>&#34;9cb1ec1d5c906e341c8b47d984a31ae7&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-1</Key><LastModified><date></LastModified><ETag>&#34;276d37b60e8485ce01b92ab6f575c0b4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-2</Key><LastModified><date></LastModified><ETag>&#34;dd1fea504d8f645efe24c4e03f642650&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-3</Key><LastModified><date></LastModified><ETag>&#34;c84fbfa0049845567008042df8d70be9&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "start-after between",
+    "request": "GET /list-start-<run>?list-type=2&start-after=c/e",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><StartAfter><id:2></StartAfter><KeyCount>7</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>c/g</Key><LastModified><date></LastModified><ETag>&#34;f4ed139016664a107034cd071e6c153e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>d</Key><LastModified><date></LastModified><ETag>&#34;8277e0910d750195b448797616e091ad&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/</Key><LastModified><date></LastModified><ETag>&#34;a8e280f07ddb26c73bb0124568f02650&#34;</ETag><Size>2</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/x</Key><LastModified><date></LastModified><ETag>&#34;9cb1ec1d5c906e341c8b47d984a31ae7&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-1</Key><LastModified><date></LastModified><ETag>&#34;276d37b60e8485ce01b92ab6f575c0b4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-2</Key><LastModified><date></LastModified><ETag>&#34;dd1fea504d8f645efe24c4e03f642650&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-3</Key><LastModified><date></LastModified><ETag>&#34;c84fbfa0049845567008042df8d70be9&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "start-after past end",
+    "request": "GET /list-start-<run>?list-type=2&start-after=z",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><StartAfter><id:3></StartAfter><KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>"
+  },
+  {
+    "step": "start-after before prefix",
+    "request": "GET /list-start-<run>?list-type=2&prefix=c/&start-after=a",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix>c/</Prefix><StartAfter><id:4></StartAfter><KeyCount>3</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>c/d/e</Key><LastModified><date></LastModified><ETag>&#34;a3bb263d38590bc965e8cff45c1b1329&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/d/f</Key><LastModified><date></LastModified><ETag>&#34;d62602c691b3116bcbfe5f213b3a4788&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/g</Key><LastModified><date></LastModified><ETag>&#34;f4ed139016664a107034cd071e6c153e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "start-after before prefix max-keys 1",
+    "request": "GET /list-start-<run>?list-type=2&prefix=c/&start-after=a&max-keys=1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix>c/</Prefix><StartAfter><id:4></StartAfter><NextContinuationToken><id:5></NextContinuationToken><KeyCount>1</KeyCount><MaxKeys>1</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>c/d/e</Key><LastModified><date></LastModified><ETag>&#34;a3bb263d38590bc965e8cff45c1b1329&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "start-after after prefix",
+    "request": "GET /list-start-<run>?list-type=2&prefix=c/&start-after=d",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix>c/</Prefix><StartAfter><id:6></StartAfter><KeyCount>0</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated></ListBucketResult>"
+  },
+  {
+    "step": "start-after inside prefix",
+    "request": "GET /list-start-<run>?list-type=2&prefix=c/&start-after=<id:7>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix>c/</Prefix><StartAfter><id:7></StartAfter><KeyCount>2</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>c/d/f</Key><LastModified><date></LastModified><ETag>&#34;d62602c691b3116bcbfe5f213b3a4788&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/g</Key><LastModified><date></LastModified><ETag>&#34;f4ed139016664a107034cd071e6c153e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "start-after delimiter",
+    "request": "GET /list-start-<run>?list-type=2&start-after=<id:7>&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><StartAfter><id:7></StartAfter><KeyCount>5</KeyCount><MaxKeys>1000</MaxKeys><Delimiter>/</Delimiter><IsTruncated>false</IsTruncated><Contents><Key>d</Key><LastModified><date></LastModified><ETag>&#34;8277e0910d750195b448797616e091ad&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-1</Key><LastModified><date></LastModified><ETag>&#34;276d37b60e8485ce01b92ab6f575c0b4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-2</Key><LastModified><date></LastModified><ETag>&#34;dd1fea504d8f645efe24c4e03f642650&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-3</Key><LastModified><date></LastModified><ETag>&#34;c84fbfa0049845567008042df8d70be9&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><CommonPrefixes><Prefix>e/</Prefix></CommonPrefixes></ListBucketResult>"
+  },
+  {
+    "step": "start-after empty",
+    "request": "GET /list-start-<run>?list-type=2&start-after=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><KeyCount>12</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>a</Key><LastModified><date></LastModified><ETag>&#34;0cc175b9c0f1b6a831c399e269772661&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b/1</Key><LastModified><date></LastModified><ETag>&#34;46bc882b88120fd4dc12076ba56c7dd4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>b/2</Key><LastModified><date></LastModified><ETag>&#34;83725edea4c6f6a7dae4d7f884b59894&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key><id:7></Key><LastModified><date></LastModified><ETag>&#34;a3bb263d38590bc965e8cff45c1b1329&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/d/f</Key><LastModified><date></LastModified><ETag>&#34;d62602c691b3116bcbfe5f213b3a4788&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/g</Key><LastModified><date></LastModified><ETag>&#34;f4ed139016664a107034cd071e6c153e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>d</Key><LastModified><date></LastModified><ETag>&#34;8277e0910d750195b448797616e091ad&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/</Key><LastModified><date></LastModified><ETag>&#34;a8e280f07ddb26c73bb0124568f02650&#34;</ETag><Size>2</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/x</Key><LastModified><date></LastModified><ETag>&#34;9cb1ec1d5c906e341c8b47d984a31ae7&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-1</Key><LastModified><date></LastModified><ETag>&#34;276d37b60e8485ce01b92ab6f575c0b4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-2</Key><LastModified><date></LastModified><ETag>&#34;dd1fea504d8f645efe24c4e03f642650&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-3</Key><LastModified><date></LastModified><ETag>&#34;c84fbfa0049845567008042df8d70be9&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "start-after encoded",
+    "request": "GET /list-start-<run>?list-type=2&start-after=b/1 x&encoding-type=url",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><StartAfter><id:8></StartAfter><KeyCount>10</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>b/2</Key><LastModified><date></LastModified><ETag>&#34;83725edea4c6f6a7dae4d7f884b59894&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key><id:7></Key><LastModified><date></LastModified><ETag>&#34;a3bb263d38590bc965e8cff45c1b1329&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/d/f</Key><LastModified><date></LastModified><ETag>&#34;d62602c691b3116bcbfe5f213b3a4788&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/g</Key><LastModified><date></LastModified><ETag>&#34;f4ed139016664a107034cd071e6c153e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>d</Key><LastModified><date></LastModified><ETag>&#34;8277e0910d750195b448797616e091ad&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/</Key><LastModified><date></LastModified><ETag>&#34;a8e280f07ddb26c73bb0124568f02650&#34;</ETag><Size>2</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/x</Key><LastModified><date></LastModified><ETag>&#34;9cb1ec1d5c906e341c8b47d984a31ae7&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-1</Key><LastModified><date></LastModified><ETag>&#34;276d37b60e8485ce01b92ab6f575c0b4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-2</Key><LastModified><date></LastModified><ETag>&#34;dd1fea504d8f645efe24c4e03f642650&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-3</Key><LastModified><date></LastModified><ETag>&#34;c84fbfa0049845567008042df8d70be9&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><EncodingType>url</EncodingType></ListBucketResult>"
+  },
+  {
+    "step": "token plain key",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:9>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><ContinuationToken><id:9></ContinuationToken><KeyCount>6</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>d</Key><LastModified><date></LastModified><ETag>&#34;8277e0910d750195b448797616e091ad&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/</Key><LastModified><date></LastModified><ETag>&#34;a8e280f07ddb26c73bb0124568f02650&#34;</ETag><Size>2</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>e/x</Key><LastModified><date></LastModified><ETag>&#34;9cb1ec1d5c906e341c8b47d984a31ae7&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-1</Key><LastModified><date></LastModified><ETag>&#34;276d37b60e8485ce01b92ab6f575c0b4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-2</Key><LastModified><date></LastModified><ETag>&#34;dd1fea504d8f645efe24c4e03f642650&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-3</Key><LastModified><date></LastModified><ETag>&#34;c84fbfa0049845567008042df8d70be9&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "token wins over start-after",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:10>&start-after=a",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><StartAfter><id:4></StartAfter><ContinuationToken><id:10></ContinuationToken><KeyCount>4</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>e/x</Key><LastModified><date></LastModified><ETag>&#34;9cb1ec1d5c906e341c8b47d984a31ae7&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-1</Key><LastModified><date></LastModified><ETag>&#34;276d37b60e8485ce01b92ab6f575c0b4&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-2</Key><LastModified><date></LastModified><ETag>&#34;dd1fea504d8f645efe24c4e03f642650&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>f-3</Key><LastModified><date></LastModified><ETag>&#34;c84fbfa0049845567008042df8d70be9&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "token outside prefix",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:11>&prefix=c/",
+    "status": 501,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NotImplemented</Code><Message>A header you provided implies functionality that is not implemented</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token under prefix",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:12>&prefix=c/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix>c/</Prefix><ContinuationToken><id:12></ContinuationToken><KeyCount>2</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>c/d/f</Key><LastModified><date></LastModified><ETag>&#34;d62602c691b3116bcbfe5f213b3a4788&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>c/g</Key><LastModified><date></LastModified><ETag>&#34;f4ed139016664a107034cd071e6c153e&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "token tagged",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:13>&max-keys=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-start-<run></Name><Prefix></Prefix><ContinuationToken><id:13></ContinuationToken><NextContinuationToken><id:14></NextContinuationToken><KeyCount>2</KeyCount><MaxKeys>2</MaxKeys><IsTruncated>true</IsTruncated><Contents><Key>b/2</Key><LastModified><date></LastModified><ETag>&#34;83725edea4c6f6a7dae4d7f884b59894&#34;</ETag><Size>3</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key><id:7></Key><LastModified><date></LastModified><ETag>&#34;a3bb263d38590bc965e8cff45c1b1329&#34;</ETag><Size>5</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "token empty",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The continuation token provided is incorrect</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token not base64",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:15>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The continuation token provided is incorrect</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token missing padding",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:16>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The continuation token provided is incorrect</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token bad padding",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:17>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The continuation token provided is incorrect</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token url-safe alphabet",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:18>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The continuation token provided is incorrect</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token empty and max-keys bad",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=&max-keys=x",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The continuation token provided is incorrect</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token bad and max-keys bad",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:19>&max-keys=x",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Argument maxKeys must be an integer between 0 and 2147483647</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "token bad and encoding bad",
+    "request": "GET /list-start-<run>?list-type=2&continuation-token=<id:19>&encoding-type=x",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>The continuation token provided is incorrect</Message><BucketName>list-start-<run></BucketName><Resource>/list-start-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

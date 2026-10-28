@@ -1,0 +1,28 @@
+[
+  {
+    "step": "compliance past date header",
+    "request": "PUT /lock-comp-<run>/c",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>the retain until date must be in the future</Message><Key>c</Key><BucketName>lock-comp-<run></BucketName><Resource>/lock-comp-<run>/c</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "compliance past date api",
+    "request": "PUT /lock-comp-<run>/k?retention=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>the retain until date must be in the future</Message><Key>k</Key><BucketName>lock-comp-<run></BucketName><Resource>/lock-comp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

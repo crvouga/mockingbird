@@ -1,0 +1,28 @@
+[
+  {
+    "step": "one left",
+    "value": {
+      "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListAllMyBucketsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><Buckets><Bucket><Name>lb-b-<run></Name><CreationDate><date></CreationDate></Bucket></Buckets></ListAllMyBucketsResult>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-type": "application/xml",
+        "x-amz-bucket-region": "us-east-1",
+        "x-amz-request-id": true
+      },
+      "status": 200
+    }
+  },
+  {
+    "step": "double slash root (the client collapses it)",
+    "request": "GET //",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message><Resource>/</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

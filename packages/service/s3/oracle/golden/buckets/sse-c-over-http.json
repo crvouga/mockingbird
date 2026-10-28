@@ -1,0 +1,149 @@
+[
+  {
+    "step": "customer algorithm on bucket GET",
+    "request": "GET /ssec-<run>?location=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.</Message><Resource>/ssec-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "customer key on PUT object",
+    "request": "PUT /ssec-<run>/k",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.</Message><Resource>/ssec-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "customer key md5 on HEAD (headers only)",
+    "request": "HEAD /ssec-<run>/k",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "InvalidRequest",
+      "x-minio-error-desc": "\"Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "copy-source customer key",
+    "request": "PUT /ssec-<run>/k2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.</Message><Resource>/ssec-<run>/k2</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty header value still counts",
+    "request": "DELETE /ssec-<run>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.</Message><Resource>/ssec-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "anonymous",
+    "request": "GET /ssec-<run>/k [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>Requests specifying Server Side Encryption with Customer provided keys must be made over a secure connection.</Message><Resource>/ssec-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "invalid name beats sse-c",
+    "request": "GET /ab",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidBucketName</Code><Message>The specified bucket is not valid.</Message><Resource>/ab</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "reserved bucket beats sse-c on HEAD",
+    "request": "HEAD /minio",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "sse-s3 header is fine",
+    "request": "GET /ssec-<run>?location=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<LocationConstraint xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\">us-east-1</LocationConstraint>"
+  },
+  {
+    "step": "object not written",
+    "request": "HEAD /ssec-<run>/k",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "bucket not deleted",
+    "request": "HEAD /ssec-<run>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

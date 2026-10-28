@@ -1,0 +1,15 @@
+[
+  {
+    "step": "v2 metadata",
+    "request": "GET /list-meta-ct-<run>?list-type=2&metadata=true",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>list-meta-ct-<run></Name><Prefix></Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>none</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass><UserMetadata><content-type>binary/octet-stream</content-type></UserMetadata><Internal><K>1</K><M>0</M></Internal></Contents></ListBucketResult>"
+  }
+]

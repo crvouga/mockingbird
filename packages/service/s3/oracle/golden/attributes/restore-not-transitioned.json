@@ -1,0 +1,132 @@
+[
+  {
+    "step": "days",
+    "request": "POST /restore-<run>/k?restore=",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidObjectState</Code><Message>The operation is not valid for the current state of the object.</Message><Key>k</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty body",
+    "request": "POST /restore-<run>/k?restore=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>EmptyRequestBody</Code><Message>Request body cannot be empty.</Message><Key>k</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "malformed body",
+    "request": "POST /restore-<run>/k?restore=",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidObjectState</Code><Message>The operation is not valid for the current state of the object.</Message><Key>k</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "select type",
+    "request": "POST /restore-<run>/k?restore=",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidObjectState</Code><Message>The operation is not valid for the current state of the object.</Message><Key>k</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing key",
+    "request": "POST /restore-<run>/nope?restore=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/nope</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing key empty body",
+    "request": "POST /restore-<run>/nope?restore=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>EmptyRequestBody</Code><Message>Request body cannot be empty.</Message><Key>nope</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/nope</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket",
+    "request": "POST /restore-none-<run>/k?restore=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><Key>k</Key><BucketName>restore-none-<run></BucketName><Resource>/restore-none-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad version",
+    "request": "POST /restore-<run>/k?restore=&versionId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid version id specified</Message><Key>k</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "uuid version unversioned",
+    "request": "POST /restore-<run>/k?restore=&versionId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid arguments provided for restore-<run>/k: (version-id specified  but versioning is not enabled on restore-<run>)</Message><Key>k</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "null version",
+    "request": "POST /restore-<run>/k?restore=&versionId=null",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidObjectState</Code><Message>The operation is not valid for the current state of the object.</Message><Key>k</Key><BucketName>restore-<run></BucketName><Resource>/restore-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

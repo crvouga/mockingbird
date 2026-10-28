@@ -1,0 +1,33 @@
+[
+  {
+    "step": "range of v1",
+    "request": "GET /range-<run>/k?versionId=<id:1>",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "7",
+      "content-range": "bytes 6-12/13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"e9e2371570daec2e7b70faa4f0f1eab8\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "version"
+  },
+  {
+    "step": "invalid range of v1",
+    "request": "GET /range-<run>/k?versionId=<id:1>",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRange</Code><Message>The requested range &#39;bytes=50--1&#39; is not satisfiable</Message><Key>k</Key><BucketName>range-<run></BucketName><Resource>/range-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId><ActualObjectSize>13</ActualObjectSize><RangeRequested>50--1</RangeRequested></Error>"
+  }
+]

@@ -1,0 +1,68 @@
+[
+  {
+    "step": "gzip",
+    "request": "POST /sel-gz-<run>/k.csv.gz?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<397 bytes sha256:16f5f7c85c33904c>"
+  },
+  {
+    "step": "gzip (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "b\n2\n4\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>32</BytesScanned><BytesProcessed>12</BytesProcessed><BytesReturned>6</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "gzip lower",
+    "request": "POST /sel-gz-<run>/k.csv.gz?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<393 bytes sha256:1de06a478e23cf9a>"
+  },
+  {
+    "step": "gzip lower (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "3\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>32</BytesScanned><BytesProcessed>12</BytesProcessed><BytesReturned>2</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  }
+]

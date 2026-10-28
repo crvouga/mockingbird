@@ -1,0 +1,244 @@
+[
+  {
+    "step": "get part 1",
+    "request": "GET /obj-<run>/k?partNumber=1",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "binary/octet-stream",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "0123456789"
+  },
+  {
+    "step": "head part 1",
+    "request": "HEAD /obj-<run>/k?partNumber=1",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "binary/octet-stream",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get part 2",
+    "request": "GET /obj-<run>/k?partNumber=2",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPartNumber</Code><Message>The requested partnumber is not satisfiable</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head part 2",
+    "request": "HEAD /obj-<run>/k?partNumber=2",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get part 0",
+    "request": "GET /obj-<run>/k?partNumber=0",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioAdminInvalidArgument</Code><Message>Invalid arguments specified.</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head part 0",
+    "request": "HEAD /obj-<run>/k?partNumber=0",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "XMinioAdminInvalidArgument",
+      "x-minio-error-desc": "\"Invalid arguments specified.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get part -1",
+    "request": "GET /obj-<run>/k?partNumber=-1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioAdminInvalidArgument</Code><Message>Invalid arguments specified.</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get part abc",
+    "request": "GET /obj-<run>/k?partNumber=abc",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error, please try again.: cause(strconv.Atoi: parsing &#34;abc&#34;: invalid syntax)</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head part abc",
+    "request": "HEAD /obj-<run>/k?partNumber=abc",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "InternalError",
+      "x-minio-error-desc": "\"We encountered an internal error, please try again.: cause(strconv.Atoi: parsing \"abc\": invalid syntax)\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get part 10000",
+    "request": "GET /obj-<run>/k?partNumber=10000",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPartNumber</Code><Message>The requested partnumber is not satisfiable</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get part 10001",
+    "request": "GET /obj-<run>/k?partNumber=10001",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Part number must be an integer between 1 and 10000, inclusive</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get part empty",
+    "request": "GET /obj-<run>/k?partNumber=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-type": "binary/octet-stream",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "0123456789"
+  },
+  {
+    "step": "get part with range",
+    "request": "GET /obj-<run>/k?partNumber=1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>Cannot specify both Range header and partNumber query parameter</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head part with range",
+    "request": "HEAD /obj-<run>/k?partNumber=1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "InvalidRequest",
+      "x-minio-error-desc": "\"Cannot specify both Range header and partNumber query parameter\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get part 1 checksum mode",
+    "request": "GET /obj-<run>/k?partNumber=1",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-range": "bytes 0-9/10",
+      "content-type": "binary/octet-stream",
+      "etag": "\"781e5e245d69b566979b86e28d23f2c7\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "0123456789"
+  },
+  {
+    "step": "get part missing key",
+    "request": "GET /obj-<run>/nope?partNumber=1",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/nope</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get part 2 missing key",
+    "request": "GET /obj-<run>/nope?partNumber=2",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/nope</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

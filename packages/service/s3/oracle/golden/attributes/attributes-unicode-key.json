@@ -1,0 +1,29 @@
+[
+  {
+    "step": "attrs",
+    "request": "GET /attrs-uni-<run>/dir/%C3%BCn%C3%AF%20c%C3%B8d%C3%A9%20%26%20%3Cx%3E.txt?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectSize>1</ObjectSize></getObjectAttributesResponse>"
+  },
+  {
+    "step": "missing",
+    "request": "GET /attrs-uni-<run>/dir/%C3%BCn%C3%AF%20c%C3%B8d%C3%A9%20%26%20%3Cy%3E.txt?attributes=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>dir/ünï cødé &amp; &lt;y&gt;.txt</Key><BucketName>attrs-uni-<run></BucketName><Resource>/attrs-uni-<run>/dir/ünï cødé &amp; &lt;y&gt;.txt</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

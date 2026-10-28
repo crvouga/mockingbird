@@ -1,0 +1,133 @@
+[
+  {
+    "step": "fake id",
+    "request": "PUT /mp-badup-<run>/k?partNumber=1&uploadId=<id:2>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>k</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "malformed id",
+    "request": "PUT /mp-badup-<run>/k?partNumber=1&uploadId=<id:3>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>k</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "odd length id",
+    "request": "PUT /mp-badup-<run>/k?partNumber=1&uploadId=<id:4>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>k</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty id",
+    "request": "PUT /mp-badup-<run>/k?partNumber=1&uploadId=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>k</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "wrong key",
+    "request": "PUT /mp-badup-<run>/other?partNumber=1&uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>other</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/other</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad part and bad id",
+    "request": "PUT /mp-badup-<run>/k?partNumber=0&uploadId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPart</Code><Message>One or more of the specified parts could not be found.  The part may not have been uploaded, or the specified entity tag may not match the part&#39;s entity tag.</Message><Key>k</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "too many and bad id",
+    "request": "PUT /mp-badup-<run>/k?partNumber=10001&uploadId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Part number must be an integer between 1 and 10000, inclusive</Message><Key>k</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "copy source header",
+    "request": "PUT /mp-badup-<run>/k?partNumber=1&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>k</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "wrong key list",
+    "request": "GET /mp-badup-<run>/other?uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>other</Key><BucketName>mp-badup-<run></BucketName><Resource>/mp-badup-<run>/other</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "ok",
+    "request": "PUT /mp-badup-<run>/k?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

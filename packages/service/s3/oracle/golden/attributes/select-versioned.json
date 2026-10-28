@@ -1,0 +1,28 @@
+[
+  {
+    "step": "by version",
+    "request": "POST /sel-ver-<run>/k.csv?select=&select-type=2&versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<393 bytes sha256:c176fda26c0527df>"
+  },
+  {
+    "step": "delete marker",
+    "request": "POST /sel-ver-<run>/k.csv?select=&select-type=2",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:3>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>k.csv</Key><BucketName>sel-ver-<run></BucketName><Resource>/sel-ver-<run>/k.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

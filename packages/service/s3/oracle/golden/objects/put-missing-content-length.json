@@ -1,0 +1,24 @@
+[
+  {
+    "step": "chunked put without content-length",
+    "value": {
+      "code": "MissingContentLength",
+      "status": 411
+    }
+  },
+  {
+    "step": "nothing stored",
+    "request": "HEAD /obj-<run>/k",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  }
+]

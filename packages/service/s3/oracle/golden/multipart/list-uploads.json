@@ -1,0 +1,301 @@
+[
+  {
+    "step": "all",
+    "request": "GET /mp-lu-<run>?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>b/2</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>c</Key><UploadId><id:6></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "prefix exact key",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>same</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "prefix partial",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=sa",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>sa</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "prefix dir",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=a/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>a/</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "prefix a/1",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=a/1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>a/1</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "delimiter",
+    "request": "GET /mp-lu-<run>?uploads=&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Delimiter>/</Delimiter><Prefix></Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>b/2</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>c</Key><UploadId><id:6></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "prefix and delimiter",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=a/1&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Delimiter>/</Delimiter><Prefix>a/1</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "max-uploads 2",
+    "request": "GET /mp-lu-<run>?uploads=&max-uploads=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><MaxUploads>2</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>b/2</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>c</Key><UploadId><id:6></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "max-uploads 2 prefix",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same&max-uploads=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker><id:4></NextUploadIdMarker><Prefix>same</Prefix><MaxUploads>2</MaxUploads><IsTruncated>true</IsTruncated><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "max-uploads 0",
+    "request": "GET /mp-lu-<run>?uploads=&max-uploads=0",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><MaxUploads>0</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>b/2</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>c</Key><UploadId><id:6></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "max-uploads -1",
+    "request": "GET /mp-lu-<run>?uploads=&max-uploads=-1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Argument max-uploads must be an integer between 0 and 2147483647</Message><BucketName>mp-lu-<run></BucketName><Resource>/mp-lu-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "max-uploads abc",
+    "request": "GET /mp-lu-<run>?uploads=&max-uploads=abc",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Argument max-uploads must be an integer between 0 and 2147483647</Message><BucketName>mp-lu-<run></BucketName><Resource>/mp-lu-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "max-uploads empty",
+    "request": "GET /mp-lu-<run>?uploads=&max-uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>b/2</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>c</Key><UploadId><id:6></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "key-marker",
+    "request": "GET /mp-lu-<run>?uploads=&key-marker=b",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker>b</KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>b/2</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>c</Key><UploadId><id:6></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "key-marker with prefix",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same&key-marker=same",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker>same</KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>same</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "key-marker not under prefix",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same&key-marker=a",
+    "status": 501,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NotImplemented</Code><Message>A header you provided implies functionality that is not implemented</Message><BucketName>mp-lu-<run></BucketName><Resource>/mp-lu-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "upload-id-marker",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same&key-marker=same&upload-id-marker=<id:3>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker>same</KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>same</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "upload-id-marker no key",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same&upload-id-marker=<id:3>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>same</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "upload-id-marker malformed",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same&upload-id-marker=<id:7>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><BucketName>mp-lu-<run></BucketName><Resource>/mp-lu-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "upload-id-marker slash key",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=a/&key-marker=a/&upload-id-marker=<id:3>",
+    "status": 501,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NotImplemented</Code><Message>A header you provided implies functionality that is not implemented (Invalid combination of uploadID marker &#39;<id:3>&#39; and marker &#39;a/&#39;)</Message><BucketName>mp-lu-<run></BucketName><Resource>/mp-lu-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "upload-id-marker fake",
+    "request": "GET /mp-lu-<run>?uploads=&prefix=same&upload-id-marker=<id:8>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix>same</Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "encoding url",
+    "request": "GET /mp-lu-<run>?uploads=&encoding-type=url&prefix=a/&delimiter=/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Delimiter>/</Delimiter><Prefix>a/</Prefix><EncodingType>url</EncodingType><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "encoding bogus",
+    "request": "GET /mp-lu-<run>?uploads=&encoding-type=nope",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-lu-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><EncodingType>nope</EncodingType><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>b/2</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>a/1</Key><UploadId><id:2></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:3></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:4></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>same</Key><UploadId><id:5></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload><Upload><Key>c</Key><UploadId><id:6></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  }
+]

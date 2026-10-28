@@ -1,0 +1,639 @@
+[
+  {
+    "step": "select all none",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<462 bytes sha256:80647c928c630896>"
+  },
+  {
+    "step": "select all none (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "name,age,city\nalice,30,paris\nbob,25,berlin\ncarol,35,rome\ndave,40,oslo\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>70</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "select all use",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<448 bytes sha256:4a41330addf161a2>"
+  },
+  {
+    "step": "select all use (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice,30,paris\nbob,25,berlin\ncarol,35,rome\ndave,40,oslo\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>56</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "select all ignore",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<448 bytes sha256:4a41330addf161a2>"
+  },
+  {
+    "step": "select all ignore (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice,30,paris\nbob,25,berlin\ncarol,35,rome\ndave,40,oslo\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>56</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "positional",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<446 bytes sha256:dc32f005c4b2dc51>"
+  },
+  {
+    "step": "positional (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "name,city\nalice,paris\nbob,berlin\ncarol,rome\ndave,oslo\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>54</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "named",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<436 bytes sha256:d5c9f67f65c45ff1>"
+  },
+  {
+    "step": "named (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice,paris\nbob,berlin\ncarol,rome\ndave,oslo\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>44</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "bare names",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<413 bytes sha256:2b6c279c4a84daf3>"
+  },
+  {
+    "step": "bare names (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice\nbob\ncarol\ndave\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>21</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where number",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<409 bytes sha256:487bd6ab7fcc3ade>"
+  },
+  {
+    "step": "where number (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice\ncarol\ndave\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>17</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where string",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<406 bytes sha256:9e3875fb529b7f84>"
+  },
+  {
+    "step": "where string (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "carol,35,rome\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>14</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where and or",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<409 bytes sha256:487bd6ab7fcc3ade>"
+  },
+  {
+    "step": "where and or (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice\ncarol\ndave\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>17</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where not equal",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<111 bytes sha256:b1258a9d3f246d4b>"
+  },
+  {
+    "step": "where not equal (events)",
+    "value": [
+      {
+        ":error-code": "InternalError",
+        ":error-message": "invalid arithmetic operator",
+        ":message-type": "error",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where less",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<408 bytes sha256:952372b771d6cddc>"
+  },
+  {
+    "step": "where less (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice,30\nbob,25\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>16</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "limit",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<421 bytes sha256:a9ae5b1043f7de31>"
+  },
+  {
+    "step": "limit (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice,30,paris\nbob,25,berlin\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>29</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "limit 0",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<290 bytes sha256:d5b4945c8a877958>"
+  },
+  {
+    "step": "limit 0 (events)",
+    "value": [
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>0</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "where limit",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<397 bytes sha256:c0027256b14f3a15>"
+  },
+  {
+    "step": "where limit (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "alice\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>6</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "count",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<393 bytes sha256:bad3a5869359053a>"
+  },
+  {
+    "step": "count (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "4\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>2</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "count where",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<393 bytes sha256:a1aaf876f6bbdf93>"
+  },
+  {
+    "step": "count where (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "2\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>2</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "count none header",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<393 bytes sha256:b9b03c38034ae434>"
+  },
+  {
+    "step": "count none header (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "5\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>2</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "alias",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<453 bytes sha256:ba50ab26c4c14980>"
+  },
+  {
+    "step": "alias (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"who\":\"alice\"}\n{\"who\":\"bob\"}\n{\"who\":\"carol\"}\n{\"who\":\"dave\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>61</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "missing column",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<396 bytes sha256:baf4519b62fa1123>"
+  },
+  {
+    "step": "missing column (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "\n\n\n\n\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>5</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "no match",
+    "request": "POST /sel-csv-<run>/people.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<290 bytes sha256:d5b4945c8a877958>"
+  },
+  {
+    "step": "no match (events)",
+    "value": [
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>70</BytesScanned><BytesProcessed>70</BytesProcessed><BytesReturned>0</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  }
+]

@@ -1,0 +1,138 @@
+[
+  {
+    "step": "copy-old",
+    "request": "PUT /copy-vplain-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"8b04d5e3775d298e78455efc5ca404d5\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "wE1dmMvEEDE=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-copy-source-version-id": "<id:1>",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;8b04d5e3775d298e78455efc5ca404d5&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "get-dst",
+    "request": "GET /copy-vplain-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"8b04d5e3775d298e78455efc5ca404d5\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "first"
+  },
+  {
+    "step": "copy-latest",
+    "request": "PUT /copy-vplain-<run>/dst2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"a9f0e61a137d86aa9db53465e0801612\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "CvnJ4fIWpz4=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;a9f0e61a137d86aa9db53465e0801612&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "get-dst2",
+    "request": "GET /copy-vplain-<run>/dst2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "6",
+      "content-type": "text/plain",
+      "etag": "\"a9f0e61a137d86aa9db53465e0801612\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "second"
+  },
+  {
+    "step": "copy-missing-version",
+    "request": "PUT /copy-vplain-<run>/dst3",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>src</Key><BucketName>copy-vsrc-<run></BucketName><Resource>/copy-vplain-<run>/dst3</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "copy-invalid-version",
+    "request": "PUT /copy-vplain-<run>/dst3",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>dst3</Key><BucketName>copy-vplain-<run></BucketName><Resource>/copy-vplain-<run>/dst3</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "copy-empty-version",
+    "request": "PUT /copy-vplain-<run>/dst4",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"a9f0e61a137d86aa9db53465e0801612\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "CvnJ4fIWpz4=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;a9f0e61a137d86aa9db53465e0801612&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "copy-null-version",
+    "request": "PUT /copy-vplain-<run>/dst5",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>src</Key><BucketName>copy-vsrc-<run></BucketName><Resource>/copy-vplain-<run>/dst5</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "copy-space-version",
+    "request": "PUT /copy-vplain-<run>/dst6",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"a9f0e61a137d86aa9db53465e0801612\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "CvnJ4fIWpz4=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;a9f0e61a137d86aa9db53465e0801612&#34;</ETag></CopyObjectResult>"
+  }
+]

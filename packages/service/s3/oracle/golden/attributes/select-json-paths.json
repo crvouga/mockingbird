@@ -1,0 +1,387 @@
+[
+  {
+    "step": "nested key",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<424 bytes sha256:47ebbc0f3731de39>"
+  },
+  {
+    "step": "nested key (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"name\":\"ann\"}\n{\"name\":\"ben\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>30</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "nested object",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<473 bytes sha256:cadfbe6bf15c8916>"
+  },
+  {
+    "step": "nested object (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"user\":{\"name\":\"ann\",\"langs\":[\"go\",\"ts\"]}}\n{\"user\":{\"name\":\"ben\",\"langs\":[]}}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>79</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "nested object csv",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<475 bytes sha256:3dd11066e92d1811>"
+  },
+  {
+    "step": "nested object csv (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "\"{\"\"name\"\":\"\"ann\"\",\"\"langs\"\":[\"\"go\"\",\"\"ts\"\"]}\"\n\"{\"\"name\"\":\"\"ben\"\",\"\"langs\"\":[]}\"\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>81</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "array index",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<418 bytes sha256:5c5cfa3ead035b5c>"
+  },
+  {
+    "step": "array index (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"_1\":\"go\"}\n{\"_1\":null}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>24</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "bool where",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<402 bytes sha256:ce3e27bc0132f38c>"
+  },
+  {
+    "step": "bool where (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"id\":1}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>9</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "null field",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<412 bytes sha256:d87af7e314c9425d>"
+  },
+  {
+    "step": "null field (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{}\n{\"extra\":null}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>18</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "is missing",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<402 bytes sha256:ce3e27bc0132f38c>"
+  },
+  {
+    "step": "is missing (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"id\":1}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>9</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "select all nested csv",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<126 bytes sha256:2a90602a82d8943e>"
+  },
+  {
+    "step": "select all nested csv (events)",
+    "value": [
+      {
+        ":error-code": "InternalError",
+        ":error-message": "Cannot marshal unhandled type: jstream.KVS",
+        ":message-type": "error",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "from array wildcard",
+    "request": "POST /sel-jp-<run>/arr.json?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<416 bytes sha256:ba77066a2a97e5c4>"
+  },
+  {
+    "step": "from array wildcard (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"v\":1}\n{\"v\":2}\n{\"v\":3}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>35</BytesScanned><BytesProcessed>35</BytesProcessed><BytesReturned>24</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "scalars",
+    "request": "POST /sel-jp-<run>/scalars.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<425 bytes sha256:f8cb059b647ac4c9>"
+  },
+  {
+    "step": "scalars (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"_1\":1}\n{\"_1\":\"two\"}\n{\"_1\":[3]}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>12</BytesScanned><BytesProcessed>12</BytesProcessed><BytesReturned>33</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "scalars _1",
+    "request": "POST /sel-jp-<run>/scalars.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<402 bytes sha256:fcfd735eb67f0601>"
+  },
+  {
+    "step": "scalars _1 (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "1\ntwo\n[3]\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>12</BytesScanned><BytesProcessed>12</BytesProcessed><BytesReturned>10</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "count json",
+    "request": "POST /sel-jp-<run>/n.jsonl?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<395 bytes sha256:cdb15f8562f4e377>"
+  },
+  {
+    "step": "count json (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "2\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>127</BytesScanned><BytesProcessed>127</BytesProcessed><BytesReturned>2</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  }
+]

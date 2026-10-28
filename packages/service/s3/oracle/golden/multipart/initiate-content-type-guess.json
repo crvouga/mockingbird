@@ -1,0 +1,122 @@
+[
+  {
+    "step": "complete page.html",
+    "request": "POST /mp-ctype-<run>/page.html?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-ctype-<run>/page.html</Location><Bucket>mp-ctype-<run></Bucket><Key>page.html</Key><ETag>&#34;980d35430001d8835cd38d70e5845a9f-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head page.html",
+    "request": "HEAD /mp-ctype-<run>/page.html",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "complete data.json",
+    "request": "POST /mp-ctype-<run>/data.json?uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-ctype-<run>/data.json</Location><Bucket>mp-ctype-<run></Bucket><Key>data.json</Key><ETag>&#34;980d35430001d8835cd38d70e5845a9f-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head data.json",
+    "request": "HEAD /mp-ctype-<run>/data.json",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "complete noext",
+    "request": "POST /mp-ctype-<run>/noext?uploadId=<id:3>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-ctype-<run>/noext</Location><Bucket>mp-ctype-<run></Bucket><Key>noext</Key><ETag>&#34;980d35430001d8835cd38d70e5845a9f-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head noext",
+    "request": "HEAD /mp-ctype-<run>/noext",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "complete image.PNG",
+    "request": "POST /mp-ctype-<run>/image.PNG?uploadId=<id:4>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-ctype-<run>/image.PNG</Location><Bucket>mp-ctype-<run></Bucket><Key>image.PNG</Key><ETag>&#34;980d35430001d8835cd38d70e5845a9f-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head image.PNG",
+    "request": "HEAD /mp-ctype-<run>/image.PNG",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"980d35430001d8835cd38d70e5845a9f-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

@@ -1,0 +1,47 @@
+[
+  {
+    "step": "first",
+    "request": "PUT /obj-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "second",
+    "request": "PUT /obj-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"a9f0e61a137d86aa9db53465e0801612\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /obj-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "6",
+      "content-type": "binary/octet-stream",
+      "etag": "\"a9f0e61a137d86aa9db53465e0801612\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-b": "2",
+      "x-amz-request-id": "*"
+    },
+    "body": "second"
+  }
+]

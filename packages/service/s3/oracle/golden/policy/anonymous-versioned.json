@@ -1,0 +1,109 @@
+[
+  {
+    "step": "get latest",
+    "request": "GET /pol-ver-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"b8a9f715dbb64fd5c56e7783c6820a61\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "two"
+  },
+  {
+    "step": "get version",
+    "request": "GET /pol-ver-<run>/k?versionId=<id:1> [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "one"
+  },
+  {
+    "step": "get via GetObjectVersion",
+    "request": "GET /pol-ver-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"b8a9f715dbb64fd5c56e7783c6820a61\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "two"
+  },
+  {
+    "step": "get version via GetObjectVersion",
+    "request": "GET /pol-ver-<run>/k?versionId=<id:1> [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "one"
+  },
+  {
+    "step": "versions via ListBucket",
+    "request": "GET /pol-ver-<run>?versions= [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>pol-ver-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;b8a9f715dbb64fd5c56e7783c6820a61&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId><id:2></VersionId></Version><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;f97c5d29941bfb1b2fdab0874906ab82&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:1></VersionId></Version></ListVersionsResult>"
+  },
+  {
+    "step": "versions via ListBucketVersions",
+    "request": "GET /pol-ver-<run>?versions= [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>pol-ver-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;b8a9f715dbb64fd5c56e7783c6820a61&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId><id:2></VersionId></Version><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;f97c5d29941bfb1b2fdab0874906ab82&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:1></VersionId></Version></ListVersionsResult>"
+  },
+  {
+    "step": "list via ListBucketVersions",
+    "request": "GET /pol-ver-<run> [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><BucketName>pol-ver-<run></BucketName><Resource>/pol-ver-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

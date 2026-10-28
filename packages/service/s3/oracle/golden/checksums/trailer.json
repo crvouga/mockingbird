@@ -1,0 +1,83 @@
+[
+  {
+    "step": "trailing crc32",
+    "request": "PUT /cks-<run>/t [streaming-unsigned-trailer]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "EyV5Tg==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head",
+    "request": "HEAD /cks-<run>/t",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "EyV5Tg==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "trailing wrong",
+    "request": "PUT /cks-<run>/t2 [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>t2</Key><BucketName>cks-<run></BucketName><Resource>/cks-<run>/t2</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "trailing sha256",
+    "request": "PUT /cks-<run>/t3 [streaming-unsigned-trailer]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "IYd2bruT9X+8tTtVmmErwvlcS8MGq/Nd+hPn5+rVjOA=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get t3",
+    "request": "GET /cks-<run>/t3",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "IYd2bruT9X+8tTtVmmErwvlcS8MGq/Nd+hPn5+rVjOA=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello checksum"
+  }
+]

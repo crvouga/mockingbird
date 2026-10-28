@@ -1,0 +1,227 @@
+[
+  {
+    "step": "unsigned trailer ok",
+    "request": "PUT /auth-trailer-<run>/u [streaming-unsigned-trailer]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d76c0b343c7dea62026a87c4433bb0ed\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "mPTtMA==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get u",
+    "request": "GET /auth-trailer-<run>/u",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "25",
+      "content-type": "text/plain",
+      "etag": "\"d76c0b343c7dea62026a87c4433bb0ed\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "trailing checksum payload"
+  },
+  {
+    "step": "unsigned trailer wrong",
+    "request": "PUT /auth-trailer-<run>/w [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>w</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/w</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned trailer sha256 ok",
+    "request": "PUT /auth-trailer-<run>/sha [streaming-unsigned-trailer]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d76c0b343c7dea62026a87c4433bb0ed\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "Vx12d1O/gezeBM+Q0a8emgy7snnLsUz2hz6ab+cGNow=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unsigned no trailer",
+    "request": "PUT /auth-trailer-<run>/none [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>malformed chunked encoding</Message><Key>none</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/none</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get none",
+    "request": "GET /auth-trailer-<run>/none",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>none</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/none</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned trailer declared, absent",
+    "request": "PUT /auth-trailer-<run>/absent [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>malformed chunked encoding</Message><Key>absent</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/absent</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned trailer undeclared",
+    "request": "PUT /auth-trailer-<run>/undeclared [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>malformed chunked encoding</Message><Key>undeclared</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/undeclared</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned trailer wrong seed",
+    "request": "PUT /auth-trailer-<run>/t [streaming-unsigned-trailer]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message><Key>t</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/t</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned trailer anonymous",
+    "request": "PUT /auth-trailer-<run>/anon [streaming-unsigned-trailer]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>anon</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/anon</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "signed trailer ok",
+    "request": "PUT /auth-trailer-<run>/st [streaming-signed-trailer]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d76c0b343c7dea62026a87c4433bb0ed\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "mPTtMA==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get st",
+    "request": "GET /auth-trailer-<run>/st",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "25",
+      "content-type": "text/plain",
+      "etag": "\"d76c0b343c7dea62026a87c4433bb0ed\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "trailing checksum payload"
+  },
+  {
+    "step": "signed trailer wrong checksum",
+    "request": "PUT /auth-trailer-<run>/st2 [streaming-signed-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>st2</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/st2</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "signed trailer bad signature",
+    "request": "PUT /auth-trailer-<run>/st3 [streaming-signed-trailer]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message><Key>st3</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/st3</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "signed trailer bad chunk signature",
+    "request": "PUT /auth-trailer-<run>/st4 [streaming-signed-trailer]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message><Key>st4</Key><BucketName>auth-trailer-<run></BucketName><Resource>/auth-trailer-<run>/st4</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head st2",
+    "request": "HEAD /auth-trailer-<run>/st2",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  }
+]

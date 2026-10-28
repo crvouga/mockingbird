@@ -1,0 +1,765 @@
+[
+  {
+    "step": "not json",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid character &#39;o&#39; in literal null (expecting &#39;u&#39;)</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "truncated",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unexpected EOF</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "array",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>json: cannot unmarshal array into Go value of type policy.subPolicy</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "string",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>json: cannot unmarshal string into Go value of type policy.subPolicy</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "trailing garbage",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "version number",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>json: cannot unmarshal number into Go struct field subPolicy.Version of type string</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad version",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid version &#39;2008-10-17&#39;</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty statements",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get empty statements",
+    "request": "GET /pol-bad-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "39",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[]}"
+  },
+  {
+    "step": "no statement",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get no statement",
+    "request": "GET /pol-bad-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "41",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":null}"
+  },
+  {
+    "step": "null statement",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get null statement",
+    "request": "GET /pol-bad-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "41",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":null}"
+  },
+  {
+    "step": "statement object",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>json: cannot unmarshal object into Go struct field subPolicy.Statement of type []policy.BPStatement</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "statement string",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>json: cannot unmarshal string into Go struct field subPolicy.Statement of type policy.BPStatement</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "effect number",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>json: cannot unmarshal number into Go struct field BPStatement.Statement.Effect of type policy.Effect</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "principal number",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>json: cannot unmarshal number into Go struct field BPStatement.Statement.Principal of type string</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "action number",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unsupported Resource found [arn:aws:s3:::pol-bad-<run>/*] for action 7</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "leading whitespace",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "whitespace only",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>EOF</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad escape",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid character &#39;q&#39; in string escape code</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unquoted key",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid character &#39;V&#39; looking for beginning of object key string</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing colon",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid character &#39;&#34;&#39; after object key</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing comma",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid character &#39;&#34;&#39; after object key:value pair</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "array missing comma",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid character &#39;{&#39; after array element</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad literal",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid character &#39;}&#39; in literal true (expecting &#39;e&#39;)</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "sid differs only",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get sid differs only",
+    "request": "GET /pol-bad-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "168",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"one\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::pol-bad-<run>/*\"]}]}"
+  },
+  {
+    "step": "empty object",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>The policy must contain a valid version string</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown field",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "bad effect",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid Effect Maybe</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "lowercase effect",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid Effect allow</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "principal string",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid principal &#39;someone&#39;</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "principal empty aws",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid Principal {[]}</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "principal missing",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid Principal {[]}</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "principal user",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "action missing",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>Action must not be empty</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "action empty",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>empty actions not allowed</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "action unknown",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unsupported Resource found [arn:aws:s3:::pol-bad-<run>/*] for action s3:Frobnicate</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "action non s3",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unsupported Resource found [arn:aws:s3:::pol-bad-<run>/*] for action iam:CreateUser</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "resource missing",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>Resource must not be empty</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "resource empty",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>Resource must not be empty</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "resource other bucket",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>bucket name does not match</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "resource bad prefix",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid resource &#39;bucket/pol-bad-<run>/*&#39;</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "resource leading slash",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid resource &#39;arn:aws:s3:::/pol-bad-<run>/*&#39; - starts with &#39;/&#39; will not match a bucket</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "resource kms",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unsupported Resource found [arn:minio:kms:::key] for action s3:GetObject</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "resource duplicate",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "object action on bucket",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unsupported Resource found [arn:aws:s3:::pol-bad-<run>] for action s3:GetObject</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bucket action on object",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unsupported Resource found [arn:aws:s3:::pol-bad-<run>/*] for action s3:ListBucket</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "condition bad key",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid condition key &#39;s3:nope&#39;</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "condition unsupported key",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>unsupported condition keys &#39;[s3:prefix]&#39; used for action &#39;s3:GetObject&#39;</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "condition bad operator",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>invalid condition name &#39;StringSorta&#39;</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "condition empty",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>condition must not be empty</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "condition bad ip",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>value nope/32 must be CIDR string for IpAddress condition</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "not action and action",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>Action and NotAction cannot be specified in the same statement</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "not resource and resource",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>Resource and NotResource cannot be specified in the same statement</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "too large",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PolicyTooLarge</Code><Message>Policy exceeds the maximum allowed document size.</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty body",
+    "request": "PUT /pol-bad-<run>?policy=",
+    "status": 411,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MissingContentLength</Code><Message>You must provide the Content-Length HTTP header.</Message><BucketName>pol-bad-<run></BucketName><Resource>/pol-bad-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get after failures",
+    "request": "GET /pol-bad-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "156",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::pol-bad-<run>/*\"]}]}"
+  }
+]

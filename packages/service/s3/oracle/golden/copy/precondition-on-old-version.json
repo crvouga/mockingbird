@@ -1,0 +1,35 @@
+[
+  {
+    "step": "match-old",
+    "request": "PUT /copy-prever-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"8b04d5e3775d298e78455efc5ca404d5\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "wE1dmMvEEDE=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-copy-source-version-id": "<id:1>",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:3>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;8b04d5e3775d298e78455efc5ca404d5&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "match-latest-fails",
+    "request": "PUT /copy-prever-<run>/dst",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"a9f0e61a137d86aa9db53465e0801612\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>copy-prever-<run></BucketName><Resource>/copy-prever-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

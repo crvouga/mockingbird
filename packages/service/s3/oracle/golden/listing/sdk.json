@@ -1,0 +1,85 @@
+[
+  {
+    "step": "v2",
+    "value": {
+      "count": 5,
+      "keys": [
+        ["a", 1, "\"0cc175b9c0f1b6a831c399e269772661\""],
+        ["b/1", 3, "\"46bc882b88120fd4dc12076ba56c7dd4\""],
+        ["b/2", 3, "\"83725edea4c6f6a7dae4d7f884b59894\""],
+        ["c d", 3, "\"a761a01e4e85131529c1b1948648cd9a\""],
+        ["e&f", 3, "\"7f18da5c309bf8c0c5a53f03688f3c74\""]
+      ],
+      "truncated": false
+    }
+  },
+  {
+    "step": "v2 delimiter",
+    "value": {
+      "count": 4,
+      "keys": [
+        ["a", 1, "\"0cc175b9c0f1b6a831c399e269772661\""],
+        ["c d", 3, "\"a761a01e4e85131529c1b1948648cd9a\""],
+        ["e&f", 3, "\"7f18da5c309bf8c0c5a53f03688f3c74\""]
+      ],
+      "prefixes": ["b/"],
+      "truncated": false
+    }
+  },
+  {
+    "step": "v2 pages",
+    "value": [
+      {
+        "count": 2,
+        "keys": [
+          ["a", 1, "\"0cc175b9c0f1b6a831c399e269772661\""],
+          ["b/1", 3, "\"46bc882b88120fd4dc12076ba56c7dd4\""]
+        ],
+        "truncated": true
+      },
+      {
+        "count": 2,
+        "keys": [
+          ["b/2", 3, "\"83725edea4c6f6a7dae4d7f884b59894\""],
+          ["c d", 3, "\"a761a01e4e85131529c1b1948648cd9a\""]
+        ],
+        "truncated": true
+      },
+      {
+        "count": 1,
+        "keys": [["e&f", 3, "\"7f18da5c309bf8c0c5a53f03688f3c74\""]],
+        "truncated": false
+      }
+    ]
+  },
+  {
+    "step": "v1",
+    "value": {
+      "keys": [
+        ["a", 1, "\"0cc175b9c0f1b6a831c399e269772661\""],
+        ["c d", 3, "\"a761a01e4e85131529c1b1948648cd9a\""],
+        ["e&f", 3, "\"7f18da5c309bf8c0c5a53f03688f3c74\""]
+      ],
+      "prefixes": ["b/"],
+      "truncated": false
+    }
+  },
+  {
+    "step": "versions",
+    "value": [
+      ["a", "null", true],
+      ["b/1", "null", true],
+      ["b/2", "null", true],
+      ["c d", "null", true],
+      ["e&f", "null", true]
+    ]
+  },
+  {
+    "step": "missing",
+    "value": "NoSuchBucket"
+  },
+  {
+    "step": "bad token",
+    "value": "InvalidArgument"
+  }
+]

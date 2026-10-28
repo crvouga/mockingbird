@@ -1,0 +1,84 @@
+[
+  {
+    "step": "good md5",
+    "request": "PUT /obj-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "wrong md5",
+    "request": "PUT /obj-<run>/k",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadDigest</Code><Message>The Content-Md5 you specified did not match what we received.</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "malformed md5",
+    "request": "PUT /obj-<run>/k",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidDigest</Code><Message>The Content-Md5 you specified is not valid.</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "short md5",
+    "request": "PUT /obj-<run>/k",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidDigest</Code><Message>The Content-Md5 you specified is not valid.</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty md5",
+    "request": "PUT /obj-<run>/k",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidDigest</Code><Message>The Content-Md5 you specified is not valid.</Message><Key>k</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get",
+    "request": "GET /obj-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  }
+]

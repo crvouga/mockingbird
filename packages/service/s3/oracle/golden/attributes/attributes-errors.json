@@ -1,0 +1,185 @@
+[
+  {
+    "step": "no header",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue></ArgumentValue><ArgumentName>x-amz-object-attributes</ArgumentName><Code>InvalidArgument</Code><Message>Invalid attribute name specified.</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty header",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue></ArgumentValue><ArgumentName>x-amz-object-attributes</ArgumentName><Code>InvalidArgument</Code><Message>Invalid attribute name specified.</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "only commas",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue></ArgumentValue><ArgumentName>x-amz-object-attributes</ArgumentName><Code>InvalidArgument</Code><Message>Invalid attribute name specified.</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue>Foo</ArgumentValue><ArgumentName>x-amz-object-attributes</ArgumentName><Code>InvalidArgument</Code><Message>Invalid attribute name specified.</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "lowercase",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue>etag</ArgumentValue><ArgumentName>x-amz-object-attributes</ArgumentName><Code>InvalidArgument</Code><Message>Invalid attribute name specified.</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "space inside",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue> ObjectSize</ArgumentValue><ArgumentName>x-amz-object-attributes</ArgumentName><Code>InvalidArgument</Code><Message>Invalid attribute name specified.</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad max-parts",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue></ArgumentValue><ArgumentName>x-amz-max-parts</ArgumentName><Code>InvalidArgument</Code><Message>Invalid arguments provided for attrs-err-<run>/k: (Unable to parse X-Amz-Max-Parts, value should be an integer)</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad marker",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue></ArgumentValue><ArgumentName>x-amz-part-number-marker</ArgumentName><Code>InvalidArgument</Code><Message>Invalid arguments provided for attrs-err-<run>/k: (Unable to parse X-Amz-Part-Number-Marker, value should be an integer)</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad attr and bad max-parts",
+    "request": "GET /attrs-err-<run>/k?attributes=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue></ArgumentValue><ArgumentName>x-amz-max-parts</ArgumentName><Code>InvalidArgument</Code><Message>Invalid arguments provided for attrs-err-<run>/k: (Unable to parse X-Amz-Max-Parts, value should be an integer)</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing key",
+    "request": "GET /attrs-err-<run>/nope?attributes=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/nope</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket",
+    "request": "GET /attrs-none-<run>/k?attributes=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><Key>k</Key><BucketName>attrs-none-<run></BucketName><Resource>/attrs-none-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad version id",
+    "request": "GET /attrs-err-<run>/k?attributes=&versionId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><ArgumentValue>abc</ArgumentValue><ArgumentName>versionid</ArgumentName><Code>InvalidArgument</Code><Message>Invalid version id specified</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "null version id",
+    "request": "GET /attrs-err-<run>/k?attributes=&versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>900150983cd24fb0d6963f7d28e17f72</ETag></getObjectAttributesResponse>"
+  },
+  {
+    "step": "uuid version id",
+    "request": "GET /attrs-err-<run>/k?attributes=&versionId=<id:2>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>k</Key><BucketName>attrs-err-<run></BucketName><Resource>/attrs-err-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

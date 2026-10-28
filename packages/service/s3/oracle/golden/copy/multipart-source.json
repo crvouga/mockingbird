@@ -1,0 +1,99 @@
+[
+  {
+    "step": "head-src",
+    "request": "HEAD /copy-mpu-<run>/big",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"dd41fd1b167bee49c58293061921527b-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "copy",
+    "request": "PUT /copy-mpu-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"405a723bad152dba02071b4690c3bafe\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "HZElH4Li694=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;405a723bad152dba02071b4690c3bafe&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "head-dst",
+    "request": "HEAD /copy-mpu-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"405a723bad152dba02071b4690c3bafe\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head-dst-part",
+    "request": "HEAD /copy-mpu-<run>/dst?partNumber=1",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-range": "bytes 0-12/13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"405a723bad152dba02071b4690c3bafe\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "self-replace",
+    "request": "PUT /copy-mpu-<run>/big",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"405a723bad152dba02071b4690c3bafe\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "HZElH4Li694=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;405a723bad152dba02071b4690c3bafe&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "head-self",
+    "request": "HEAD /copy-mpu-<run>/big",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"405a723bad152dba02071b4690c3bafe\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

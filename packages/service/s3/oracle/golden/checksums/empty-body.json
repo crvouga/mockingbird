@@ -1,0 +1,100 @@
+[
+  {
+    "step": "empty crc32",
+    "request": "PUT /cks-<run>/e-crc32",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "AAAAAA==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "empty crc32c",
+    "request": "PUT /cks-<run>/e-crc32c",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32c": "AAAAAA==",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "empty crc64nvme",
+    "request": "PUT /cks-<run>/e-crc64nvme",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "AAAAAAAAAAA=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "empty sha1",
+    "request": "PUT /cks-<run>/e-sha1",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha1": "2jmj7l5rSw0yVb/vlWAYkK/YBwk=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "empty sha256",
+    "request": "PUT /cks-<run>/e-sha256",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head crc64",
+    "request": "HEAD /cks-<run>/e-crc64nvme",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "content-type": "binary/octet-stream",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "AAAAAAAAAAA=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

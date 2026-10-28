@@ -1,0 +1,219 @@
+[
+  {
+    "step": "enable with prefixes",
+    "request": "PUT /ver-excl-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get with prefixes",
+    "request": "GET /ver-excl-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Enabled</Status><ExcludedPrefixes><Prefix>p0/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p1/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p2/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p3/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p4/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p5/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p6/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p7/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p8/</Prefix></ExcludedPrefixes><ExcludedPrefixes><Prefix>p9/</Prefix></ExcludedPrefixes><ExcludeFolders>true</ExcludeFolders></VersioningConfiguration>"
+  },
+  {
+    "step": "put excluded",
+    "request": "PUT /ver-excl-<run>/p3/a.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put excluded again",
+    "request": "PUT /ver-excl-<run>/p3/a.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"b8a9f715dbb64fd5c56e7783c6820a61\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get excluded null",
+    "request": "GET /ver-excl-<run>/p3/a.txt?versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"b8a9f715dbb64fd5c56e7783c6820a61\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "two"
+  },
+  {
+    "step": "put folder",
+    "request": "PUT /ver-excl-<run>/dir/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put versioned",
+    "request": "PUT /ver-excl-<run>/q/a.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete excluded",
+    "request": "DELETE /ver-excl-<run>/p3/a.txt",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get excluded after delete",
+    "request": "GET /ver-excl-<run>/p3/a.txt",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>p3/a.txt</Key><BucketName>ver-excl-<run></BucketName><Resource>/ver-excl-<run>/p3/a.txt</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "delete folder",
+    "request": "DELETE /ver-excl-<run>/dir/",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head folder after delete",
+    "request": "HEAD /ver-excl-<run>/dir/",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "delete versioned",
+    "request": "DELETE /ver-excl-<run>/q/a.txt",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "prefix not ending in slash",
+    "request": "PUT /ver-excl-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get prefix not ending in slash",
+    "request": "GET /ver-excl-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Enabled</Status><ExcludedPrefixes><Prefix>logs</Prefix></ExcludedPrefixes></VersioningConfiguration>"
+  },
+  {
+    "step": "exclude folders false",
+    "request": "PUT /ver-excl-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get exclude folders false",
+    "request": "GET /ver-excl-<run>?versioning=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<VersioningConfiguration xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Status>Enabled</Status></VersioningConfiguration>"
+  }
+]

@@ -1,0 +1,44 @@
+[
+  {
+    "step": "not-uuid",
+    "request": "PUT /copy-dstvid-<run>/dst?versionId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid version id specified</Message><Key>src</Key><BucketName>copy-dstvid-<run></BucketName><Resource>/copy-dstvid-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unversioned",
+    "request": "PUT /copy-dstvid-<run>/dst?versionId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid arguments provided for copy-dstvid-<run>/dst: (VersionID specified , but versioning not enabled on bucket=copy-dstvid-<run>)</Message><Key>src</Key><BucketName>copy-dstvid-<run></BucketName><Resource>/copy-dstvid-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "null",
+    "request": "PUT /copy-dstvid-<run>/dst?versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"f5acec107e7e752ca013866c211dc1a3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "FKdwbo+0/j0=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;f5acec107e7e752ca013866c211dc1a3&#34;</ETag></CopyObjectResult>"
+  }
+]

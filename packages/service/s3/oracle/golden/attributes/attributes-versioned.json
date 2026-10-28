@@ -1,0 +1,71 @@
+[
+  {
+    "step": "latest",
+    "request": "GET /attrs-ver-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>a9f0e61a137d86aa9db53465e0801612</ETag><ObjectSize>6</ObjectSize></getObjectAttributesResponse>"
+  },
+  {
+    "step": "by version",
+    "request": "GET /attrs-ver-<run>/k?attributes=&versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>f97c5d29941bfb1b2fdab0874906ab82</ETag><ObjectSize>3</ObjectSize></getObjectAttributesResponse>"
+  },
+  {
+    "step": "unknown uuid",
+    "request": "GET /attrs-ver-<run>/k?attributes=&versionId=<id:3>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchVersion</Code><Message>The specified version does not exist.</Message><Key>k</Key><BucketName>attrs-ver-<run></BucketName><Resource>/attrs-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "latest is delete marker",
+    "request": "GET /attrs-ver-<run>/k?attributes=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>k</Key><BucketName>attrs-ver-<run></BucketName><Resource>/attrs-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "delete marker by version",
+    "request": "GET /attrs-ver-<run>/k?attributes=&versionId=<id:4>",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Key>k</Key><BucketName>attrs-ver-<run></BucketName><Resource>/attrs-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "step": "bad content-md5 base64",
+    "request": "POST /del-badmd5-<run>?delete=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MissingContentMD5</Code><Message>Missing or invalid required header for this request: Content-Md5 or Amz-Content-Checksum</Message><BucketName>del-badmd5-<run></BucketName><Resource>/del-badmd5-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

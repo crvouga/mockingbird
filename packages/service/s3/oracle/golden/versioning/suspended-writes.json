@@ -1,0 +1,344 @@
+[
+  {
+    "step": "put enabled",
+    "request": "PUT /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "put suspended",
+    "request": "PUT /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"b8a9f715dbb64fd5c56e7783c6820a61\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put suspended overwrite",
+    "request": "PUT /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"35d6d33467aae9a2e3dccb4b6b027878\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get latest",
+    "request": "GET /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"35d6d33467aae9a2e3dccb4b6b027878\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "three"
+  },
+  {
+    "step": "get null",
+    "request": "GET /ver-susp-<run>/k?versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"35d6d33467aae9a2e3dccb4b6b027878\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "three"
+  },
+  {
+    "step": "head null",
+    "request": "HEAD /ver-susp-<run>/k?versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"35d6d33467aae9a2e3dccb4b6b027878\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get v1",
+    "request": "GET /ver-susp-<run>/k?versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "one"
+  },
+  {
+    "step": "delete suspended makes null marker",
+    "request": "DELETE /ver-susp-<run>/k",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get after null marker",
+    "request": "GET /ver-susp-<run>/k",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "null"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>k</Key><BucketName>ver-susp-<run></BucketName><Resource>/ver-susp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head after null marker",
+    "request": "HEAD /ver-susp-<run>/k",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "null",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get null marker by id",
+    "request": "GET /ver-susp-<run>/k?versionId=null",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "null"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Key>k</Key><BucketName>ver-susp-<run></BucketName><Resource>/ver-susp-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head null marker by id",
+    "request": "HEAD /ver-susp-<run>/k?versionId=null",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "null",
+      "x-minio-error-code": "MethodNotAllowed",
+      "x-minio-error-desc": "\"The specified method is not allowed against this resource.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "get v1 after marker",
+    "request": "GET /ver-susp-<run>/k?versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "one"
+  },
+  {
+    "step": "delete null marker",
+    "request": "DELETE /ver-susp-<run>/k?versionId=null",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get after removing marker",
+    "request": "GET /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "one"
+  },
+  {
+    "step": "delete suspended twice",
+    "request": "DELETE /ver-susp-<run>/k",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete suspended thrice",
+    "request": "DELETE /ver-susp-<run>/k",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put after marker",
+    "request": "PUT /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8cbad96aced40b3838dd9f07f6ef5772\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get after put",
+    "request": "GET /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8cbad96aced40b3838dd9f07f6ef5772\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "four"
+  },
+  {
+    "step": "put re-enabled",
+    "request": "PUT /ver-susp-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"30056e1cab7a61d256fc8edd970d14f5\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get null after re-enable",
+    "request": "GET /ver-susp-<run>/k?versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8cbad96aced40b3838dd9f07f6ef5772\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "four"
+  },
+  {
+    "step": "delete re-enabled",
+    "request": "DELETE /ver-susp-<run>/k",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-delete-marker": "true",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:3>"
+    },
+    "body": ""
+  },
+  {
+    "step": "list versions",
+    "request": "GET /ver-susp-<run>?versions=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>ver-susp-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><DeleteMarker><Key>k</Key><LastModified><date></LastModified><ETag></ETag><Size>0</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId><id:3></VersionId></DeleteMarker><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;30056e1cab7a61d256fc8edd970d14f5&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:2></VersionId></Version><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;8cbad96aced40b3838dd9f07f6ef5772&#34;</ETag><Size>4</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId>null</VersionId></Version><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;f97c5d29941bfb1b2fdab0874906ab82&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:1></VersionId></Version></ListVersionsResult>"
+  }
+]

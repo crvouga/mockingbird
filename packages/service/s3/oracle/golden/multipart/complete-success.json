@@ -1,0 +1,201 @@
+[
+  {
+    "step": "part 1",
+    "request": "PUT /mp-done-<run>/big/ob%20ject%2B1.bin?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"6f09f74398438e23d1b3a229a955facb\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "part 2",
+    "request": "PUT /mp-done-<run>/big/ob%20ject%2B1.bin?partNumber=2&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"626550a1971360e04225a721c4ab2e87\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "part 3",
+    "request": "PUT /mp-done-<run>/big/ob%20ject%2B1.bin?partNumber=3&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"7aea2552dfe7eb84b9443b6fc9ba6e01\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "list uploads before",
+    "request": "GET /mp-done-<run>?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-done-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated><Upload><Key>big/ob ject+1.bin</Key><UploadId><id:1></UploadId><Initiator><ID></ID><DisplayName></DisplayName></Initiator><Owner><ID></ID><DisplayName></DisplayName></Owner><StorageClass></StorageClass><Initiated><date></Initiated></Upload></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "complete",
+    "request": "POST /mp-done-<run>/big/ob%20ject%2B1.bin?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"852e744475870ee69a5ee563ca47b9a6-3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-done-<run>/big/ob%20ject+1.bin</Location><Bucket>mp-done-<run></Bucket><Key>big/ob ject+1.bin</Key><ETag>&#34;852e744475870ee69a5ee563ca47b9a6-3&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "list uploads after",
+    "request": "GET /mp-done-<run>?uploads=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListMultipartUploadsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-done-<run></Bucket><KeyMarker></KeyMarker><UploadIdMarker></UploadIdMarker><NextKeyMarker></NextKeyMarker><NextUploadIdMarker></NextUploadIdMarker><Prefix></Prefix><MaxUploads>10000</MaxUploads><IsTruncated>false</IsTruncated></ListMultipartUploadsResult>"
+  },
+  {
+    "step": "complete twice",
+    "request": "POST /mp-done-<run>/big/ob%20ject%2B1.bin?uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>big/ob ject+1.bin</Key><BucketName>mp-done-<run></BucketName><Resource>/mp-done-<run>/big/ob ject+1.bin</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "list parts after",
+    "request": "GET /mp-done-<run>/big/ob%20ject%2B1.bin?uploadId=<id:1>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchUpload</Code><Message>The specified multipart upload does not exist. The upload ID may be invalid, or the upload may have been aborted or completed.</Message><Key>big/ob ject+1.bin</Key><BucketName>mp-done-<run></BucketName><Resource>/mp-done-<run>/big/ob ject+1.bin</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "abort after",
+    "request": "DELETE /mp-done-<run>/big/ob%20ject%2B1.bin?uploadId=<id:1>",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head",
+    "request": "HEAD /mp-done-<run>/big/ob%20ject%2B1.bin",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10485764",
+      "content-type": "application/x-test",
+      "etag": "\"852e744475870ee69a5ee563ca47b9a6-3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-k": "v",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /mp-done-<run>/big/ob%20ject%2B1.bin",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10485764",
+      "content-type": "application/x-test",
+      "etag": "\"852e744475870ee69a5ee563ca47b9a6-3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-k": "v",
+      "x-amz-request-id": "*"
+    },
+    "body": "<10485764 bytes sha256:c390fdb815b8e4cf>"
+  },
+  {
+    "step": "get range across parts",
+    "request": "GET /mp-done-<run>/big/ob%20ject%2B1.bin",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "6",
+      "content-range": "bytes 5242877-5242882/10485764",
+      "content-type": "application/x-test",
+      "etag": "\"852e744475870ee69a5ee563ca47b9a6-3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-k": "v",
+      "x-amz-request-id": "*"
+    },
+    "body": "<6 bytes sha256:531adeebdbc7f24a>"
+  },
+  {
+    "step": "list objects",
+    "request": "GET /mp-done-<run>?list-type=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>mp-done-<run></Name><Prefix></Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>big/ob ject+1.bin</Key><LastModified><date></LastModified><ETag>&#34;852e744475870ee69a5ee563ca47b9a6-3&#34;</ETag><Size>10485764</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  },
+  {
+    "step": "attributes",
+    "request": "GET /mp-done-<run>/big/ob%20ject%2B1.bin?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>852e744475870ee69a5ee563ca47b9a6-3</ETag><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>10000</MaxParts><NextPartNumberMarker>3</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>3</PartsCount><Part><PartNumber>1</PartNumber><Size>5242880</Size></Part><Part><PartNumber>2</PartNumber><Size>5242880</Size></Part><Part><PartNumber>3</PartNumber><Size>4</Size></Part></ObjectParts><ObjectSize>10485764</ObjectSize></getObjectAttributesResponse>"
+  }
+]

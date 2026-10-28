@@ -1,0 +1,410 @@
+[
+  {
+    "step": "get past",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head past",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get future",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head future",
+    "request": "HEAD /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get single digit day",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head single digit day",
+    "request": "HEAD /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get malformed",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head malformed",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get iso format",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head iso format",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get rfc850",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head rfc850",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get ansi c",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head ansi c",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get numeric zone",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head numeric zone",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get lowercase names",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head lowercase names",
+    "request": "HEAD /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get wrong weekday",
+    "request": "GET /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head wrong weekday",
+    "request": "HEAD /cond-<run>/k",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get day out of range",
+    "request": "GET /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": "hello"
+  },
+  {
+    "step": "head day out of range",
+    "request": "HEAD /cond-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=10",
+      "content-disposition": "inline",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-a": "1",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

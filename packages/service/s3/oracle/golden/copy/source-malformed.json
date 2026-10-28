@@ -1,0 +1,82 @@
+[
+  {
+    "step": "bucket-slash",
+    "request": "PUT /copy-malformed-<run>/dst",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>dst</Key><BucketName>copy-malformed-<run></BucketName><Resource>/copy-malformed-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "slash-bucket",
+    "request": "PUT /copy-malformed-<run>/dst",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>dst</Key><BucketName>copy-malformed-<run></BucketName><Resource>/copy-malformed-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "slash-only",
+    "request": "PUT /copy-malformed-<run>/dst",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>dst</Key><BucketName>copy-malformed-<run></BucketName><Resource>/copy-malformed-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "double-slash",
+    "request": "PUT /copy-malformed-<run>/dst",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>dst</Key><BucketName>copy-malformed-<run></BucketName><Resource>/copy-malformed-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "slash-bucket-slash",
+    "request": "PUT /copy-malformed-<run>/dst",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>dst</Key><BucketName>copy-malformed-<run></BucketName><Resource>/copy-malformed-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head-dst",
+    "request": "HEAD /copy-malformed-<run>/dst",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "NoSuchKey",
+      "x-minio-error-desc": "\"The specified key does not exist.\""
+    },
+    "body": ""
+  }
+]

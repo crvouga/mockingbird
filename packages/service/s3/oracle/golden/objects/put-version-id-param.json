@@ -1,0 +1,42 @@
+[
+  {
+    "step": "put with null versionId",
+    "request": "PUT /obj-<run>/a?versionId=null",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put with uuid versionId",
+    "request": "PUT /obj-<run>/a?versionId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid arguments provided for obj-<run>/a: (VersionID specified , but versioning not enabled on bucket=obj-<run>)</Message><Key>a</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/a</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "put with bad versionId",
+    "request": "PUT /obj-<run>/a?versionId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid version id specified</Message><Key>a</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/a</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

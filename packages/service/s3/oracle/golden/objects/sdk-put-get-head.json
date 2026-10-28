@@ -1,0 +1,110 @@
+[
+  {
+    "step": "put",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "ChecksumCRC32": "YRol3w==",
+      "ChecksumType": "FULL_OBJECT",
+      "ETag": "\"031ff8934723877b966f71e2d3f9127b\""
+    }
+  },
+  {
+    "step": "get",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "CacheControl": "no-cache",
+      "ChecksumCRC32": "YRol3w==",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 8,
+      "ContentType": "text/plain",
+      "ETag": "\"031ff8934723877b966f71e2d3f9127b\"",
+      "LastModified": "<date>",
+      "Metadata": {
+        "owner": "me"
+      },
+      "TagCount": 1
+    }
+  },
+  {
+    "step": "get body",
+    "value": "sdk body"
+  },
+  {
+    "step": "head",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "CacheControl": "no-cache",
+      "ContentLength": 8,
+      "ContentType": "text/plain",
+      "ETag": "\"031ff8934723877b966f71e2d3f9127b\"",
+      "LastModified": "<date>",
+      "Metadata": {
+        "owner": "me"
+      },
+      "TagCount": 1
+    }
+  },
+  {
+    "step": "head checksum mode",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "CacheControl": "no-cache",
+      "ChecksumCRC32": "YRol3w==",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 8,
+      "ContentType": "text/plain",
+      "ETag": "\"031ff8934723877b966f71e2d3f9127b\"",
+      "LastModified": "<date>",
+      "Metadata": {
+        "owner": "me"
+      },
+      "TagCount": 1
+    }
+  },
+  {
+    "step": "ranged",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 206
+      },
+      "AcceptRanges": "bytes",
+      "CacheControl": "no-cache",
+      "ContentLength": 3,
+      "ContentRange": "bytes 0-2/8",
+      "ContentType": "text/plain",
+      "ETag": "\"031ff8934723877b966f71e2d3f9127b\"",
+      "LastModified": "<date>",
+      "Metadata": {
+        "owner": "me"
+      },
+      "TagCount": 1
+    }
+  },
+  {
+    "step": "ranged body",
+    "value": "sdk"
+  },
+  {
+    "step": "missing",
+    "value": "NoSuchKey"
+  },
+  {
+    "step": "head missing",
+    "value": "NotFound"
+  },
+  {
+    "step": "if-none-match 304",
+    "value": "Unknown"
+  }
+]

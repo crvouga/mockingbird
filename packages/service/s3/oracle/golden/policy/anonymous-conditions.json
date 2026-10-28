@@ -1,0 +1,359 @@
+[
+  {
+    "step": "ip loopback",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "ip forwarded outside",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>k</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "ip forwarded inside",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "ip real-ip outside",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>k</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "not ip loopback",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "not ip forwarded 10",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>k</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "tag public",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "tag private",
+    "request": "GET /pol-cond-<run>/hidden [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>hidden</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/hidden</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "tag none",
+    "request": "GET /pol-cond-<run>/untagged [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>untagged</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/untagged</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "tag head public",
+    "request": "HEAD /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": ""
+  },
+  {
+    "step": "tag missing key",
+    "request": "GET /pol-cond-<run>/nope [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>nope</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/nope</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "put with tag",
+    "request": "PUT /pol-cond-<run>/new1 [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"7b8b965ad4bca0e41ab51de7b31363a1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put wrong tag",
+    "request": "PUT /pol-cond-<run>/new2 [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>new2</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/new2</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "put no tag",
+    "request": "PUT /pol-cond-<run>/new3 [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>new3</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/new3</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "null referer present",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "null referer absent",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "ignore case match",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "ignore case miss",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>k</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "any value match",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "any value miss",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>k</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "secure transport required",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>k</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "date after 2001",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  },
+  {
+    "step": "date before 2001",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>k</Key><BucketName>pol-cond-<run></BucketName><Resource>/pol-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "principal type anonymous",
+    "request": "GET /pol-cond-<run>/k [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8ce4b16b22b58894aa86c421e8759df3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": "k"
+  }
+]

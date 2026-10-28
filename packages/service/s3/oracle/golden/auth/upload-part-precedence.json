@@ -1,0 +1,145 @@
+[
+  {
+    "step": "wrong secret",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=1",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "anonymous",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=1 [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown key",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=1",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidAccessKeyId</Code><Message>The Access Key Id you provided does not exist in our records.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad part number + wrong secret",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=zero",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPart</Code><Message>One or more of the specified parts could not be found.  The part may not have been uploaded, or the specified entity tag may not match the part&#39;s entity tag.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "part 0 + anonymous",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=0 [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPart</Code><Message>One or more of the specified parts could not be found.  The part may not have been uploaded, or the specified entity tag may not match the part&#39;s entity tag.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "part 10001 + wrong secret",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=10001",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Part number must be an integer between 1 and 10000, inclusive</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad md5 + bad part number",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=x",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidDigest</Code><Message>The Content-Md5 you specified is not valid.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "copy source + bad md5",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Copy Source must mention the source bucket and key: sourcebucket/sourcekey.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "streaming bad chunk signature",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=1 [streaming]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>SignatureDoesNotMatch</Code><Message>The request signature we calculated does not match the signature you provided. Check your key and signing method.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "sha mismatch",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentSHA256Mismatch</Code><Message>The provided &#39;x-amz-content-sha256&#39; header does not match what was computed.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "md5 mismatch",
+    "request": "PUT /auth-part-<run>/mp?uploadId=<id:1>&partNumber=1",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadDigest</Code><Message>The Content-Md5 you specified did not match what we received.</Message><Key>mp</Key><BucketName>auth-part-<run></BucketName><Resource>/auth-part-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

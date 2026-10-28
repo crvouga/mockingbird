@@ -1,0 +1,71 @@
+[
+  {
+    "step": "get with access",
+    "request": "GET /obj-<run>/t",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging": "b=2&a=1",
+      "x-amz-tagging-count": "2"
+    },
+    "body": "x"
+  },
+  {
+    "step": "head with access",
+    "request": "HEAD /obj-<run>/t",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging": "b=2&a=1",
+      "x-amz-tagging-count": "2"
+    },
+    "body": ""
+  },
+  {
+    "step": "head with other directive",
+    "request": "HEAD /obj-<run>/t",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "2"
+    },
+    "body": ""
+  },
+  {
+    "step": "untagged with access",
+    "request": "HEAD /obj-<run>/u",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

@@ -1,0 +1,139 @@
+[
+  {
+    "step": "complete",
+    "request": "POST /mp-pnget-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"153a814045399cfca11d10e47cbdb8d0-2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-pnget-<run>/k</Location><Bucket>mp-pnget-<run></Bucket><Key>k</Key><ETag>&#34;153a814045399cfca11d10e47cbdb8d0-2&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head part 1",
+    "request": "HEAD /mp-pnget-<run>/k?partNumber=1",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5242880",
+      "content-range": "bytes 0-5242879/5242886",
+      "content-type": "binary/octet-stream",
+      "etag": "\"153a814045399cfca11d10e47cbdb8d0-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-mp-parts-count": "2",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head part 2",
+    "request": "HEAD /mp-pnget-<run>/k?partNumber=2",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "6",
+      "content-range": "bytes 5242880-5242885/5242886",
+      "content-type": "binary/octet-stream",
+      "etag": "\"153a814045399cfca11d10e47cbdb8d0-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-mp-parts-count": "2",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head part 3",
+    "request": "HEAD /mp-pnget-<run>/k?partNumber=3",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get part 2",
+    "request": "GET /mp-pnget-<run>/k?partNumber=2",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "6",
+      "content-range": "bytes 5242880-5242885/5242886",
+      "content-type": "binary/octet-stream",
+      "etag": "\"153a814045399cfca11d10e47cbdb8d0-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-mp-parts-count": "2",
+      "x-amz-request-id": "*"
+    },
+    "body": "second"
+  },
+  {
+    "step": "get part 0",
+    "request": "GET /mp-pnget-<run>/k?partNumber=0",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioAdminInvalidArgument</Code><Message>Invalid arguments specified.</Message><Key>k</Key><BucketName>mp-pnget-<run></BucketName><Resource>/mp-pnget-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get part x",
+    "request": "GET /mp-pnget-<run>/k?partNumber=x",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error, please try again.: cause(strconv.Atoi: parsing &#34;x&#34;: invalid syntax)</Message><Key>k</Key><BucketName>mp-pnget-<run></BucketName><Resource>/mp-pnget-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "plain part 1",
+    "request": "HEAD /mp-pnget-<run>/plain?partNumber=1",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-range": "bytes 0-4/5",
+      "content-type": "binary/octet-stream",
+      "etag": "\"ac7938d40cfc2307e2bf325d28e7884e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "plain part 2",
+    "request": "GET /mp-pnget-<run>/plain?partNumber=2",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPartNumber</Code><Message>The requested partnumber is not satisfiable</Message><Key>plain</Key><BucketName>mp-pnget-<run></BucketName><Resource>/mp-pnget-<run>/plain</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

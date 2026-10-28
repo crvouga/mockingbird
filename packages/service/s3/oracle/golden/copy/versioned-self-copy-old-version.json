@@ -1,0 +1,50 @@
+[
+  {
+    "step": "restore",
+    "request": "PUT /copy-vself-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"8b04d5e3775d298e78455efc5ca404d5\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "wE1dmMvEEDE=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-copy-source-version-id": "<id:1>",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:3>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;8b04d5e3775d298e78455efc5ca404d5&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "get",
+    "request": "GET /copy-vself-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"8b04d5e3775d298e78455efc5ca404d5\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:3>"
+    },
+    "body": "first"
+  },
+  {
+    "step": "self-latest",
+    "request": "PUT /copy-vself-<run>/k",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRequest</Code><Message>This copy request is illegal because it is trying to copy an object to itself without changing the object&#39;s metadata, storage class, website redirect location or encryption attributes.</Message><Key>k</Key><BucketName>copy-vself-<run></BucketName><Resource>/copy-vself-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

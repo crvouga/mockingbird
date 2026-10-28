@@ -1,0 +1,100 @@
+[
+  {
+    "step": "max-parts 1",
+    "request": "GET /attrs-sp-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>1</MaxParts><NextPartNumberMarker>1</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>1</PartsCount><Part><PartNumber>1</PartNumber><Size>3</Size></Part></ObjectParts></getObjectAttributesResponse>"
+  },
+  {
+    "step": "max-parts 0",
+    "request": "GET /attrs-sp-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>10000</MaxParts><NextPartNumberMarker>1</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>1</PartsCount><Part><PartNumber>1</PartNumber><Size>3</Size></Part></ObjectParts></getObjectAttributesResponse>"
+  },
+  {
+    "step": "max-parts -1",
+    "request": "GET /attrs-sp-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>true</IsTruncated><MaxParts>-1</MaxParts><NextPartNumberMarker>0</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>1</PartsCount></ObjectParts></getObjectAttributesResponse>"
+  },
+  {
+    "step": "max-parts -5",
+    "request": "GET /attrs-sp-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>true</IsTruncated><MaxParts>-5</MaxParts><NextPartNumberMarker>0</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>1</PartsCount></ObjectParts></getObjectAttributesResponse>"
+  },
+  {
+    "step": "marker 3",
+    "request": "GET /attrs-sp-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>true</IsTruncated><MaxParts>10000</MaxParts><NextPartNumberMarker>0</NextPartNumberMarker><PartNumberMarker>3</PartNumberMarker><PartsCount>1</PartsCount></ObjectParts></getObjectAttributesResponse>"
+  },
+  {
+    "step": "marker -1",
+    "request": "GET /attrs-sp-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>10000</MaxParts><NextPartNumberMarker>1</NextPartNumberMarker><PartNumberMarker>-1</PartNumberMarker><PartsCount>1</PartsCount><Part><PartNumber>1</PartNumber><Size>3</Size></Part></ObjectParts></getObjectAttributesResponse>"
+  },
+  {
+    "step": "padded",
+    "request": "GET /attrs-sp-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>7</MaxParts><NextPartNumberMarker>1</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>1</PartsCount><Part><PartNumber>1</PartNumber><Size>3</Size></Part></ObjectParts></getObjectAttributesResponse>"
+  }
+]

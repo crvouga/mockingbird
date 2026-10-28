@@ -1,0 +1,99 @@
+[
+  {
+    "step": "put not action",
+    "request": "PUT /pol-not-<run>?policy=",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error, please try again.: cause(json: error calling MarshalJSON for type *policy.BucketPolicy: json: error calling MarshalJSON for type policy.ActionSet: empty actions not allowed)</Message><BucketName>pol-not-<run></BucketName><Resource>/pol-not-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "put not resource",
+    "request": "PUT /pol-not-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get policy",
+    "request": "GET /pol-not-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "178",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[],\"NotResource\":[\"arn:aws:s3:::pol-not-<run>/keep/*\"]}]}"
+  },
+  {
+    "step": "get a",
+    "request": "GET /pol-not-<run>/a [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"0cc175b9c0f1b6a831c399e269772661\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "a"
+  },
+  {
+    "step": "get keep",
+    "request": "GET /pol-not-<run>/keep/b [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>keep/b</Key><BucketName>pol-not-<run></BucketName><Resource>/pol-not-<run>/keep/b</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "deny not resource a",
+    "request": "GET /pol-not-<run>/a [anonymous]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "binary/octet-stream",
+      "etag": "\"0cc175b9c0f1b6a831c399e269772661\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "a"
+  },
+  {
+    "step": "deny not resource keep",
+    "request": "GET /pol-not-<run>/keep/b [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>keep/b</Key><BucketName>pol-not-<run></BucketName><Resource>/pol-not-<run>/keep/b</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

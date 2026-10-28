@@ -1,0 +1,175 @@
+[
+  {
+    "step": "get signed",
+    "request": "GET /obj-<run>/a.txt?response-content-type=application/json&response-content-disposition=attachment; filename=\"a.json\"&response-cache-control=no-store&response-content-encoding=identity&response-content-language=fr&response-expires=Thu, 01 Jan 2099 00:00:00 GMT",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-store",
+      "content-disposition": "attachment; filename=\"a.json\"",
+      "content-encoding": "identity",
+      "content-language": "fr",
+      "content-length": "6",
+      "content-type": "application/json",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "abcdef"
+  },
+  {
+    "step": "head signed",
+    "request": "HEAD /obj-<run>/a.txt?response-content-type=application/json&response-content-disposition=attachment; filename=\"a.json\"&response-cache-control=no-store&response-content-encoding=identity&response-content-language=fr&response-expires=Thu, 01 Jan 2099 00:00:00 GMT",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-store",
+      "content-disposition": "attachment; filename=\"a.json\"",
+      "content-encoding": "identity",
+      "content-language": "fr",
+      "content-length": "6",
+      "content-type": "application/json",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get presigned",
+    "request": "GET /obj-<run>/a.txt?response-content-type=application/json&response-content-disposition=attachment; filename=\"a.json\"&response-cache-control=no-store&response-content-encoding=identity&response-content-language=fr&response-expires=Thu, 01 Jan 2099 00:00:00 GMT [presign]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "no-store",
+      "content-disposition": "attachment; filename=\"a.json\"",
+      "content-encoding": "identity",
+      "content-language": "fr",
+      "content-length": "6",
+      "content-type": "application/json",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "expires": "Thu, 01 Jan 2099 00:00:00 GMT",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "abcdef"
+  },
+  {
+    "step": "ranged with override",
+    "request": "GET /obj-<run>/a.txt?response-content-type=text/csv",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-length": "2",
+      "content-range": "bytes 1-2/6",
+      "content-type": "text/csv",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "bc"
+  },
+  {
+    "step": "anonymous override",
+    "request": "GET /obj-<run>/a.txt?response-content-type=text/csv [anonymous]",
+    "status": 403,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>AccessDenied</Code><Message>Access Denied.</Message><Key>a.txt</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/a.txt</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unknown response param",
+    "request": "GET /obj-<run>/a.txt?response-x-foo=bar",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-length": "6",
+      "content-type": "text/plain",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "abcdef"
+  },
+  {
+    "step": "empty override",
+    "request": "GET /obj-<run>/a.txt?response-content-type=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-length": "6",
+      "content-type": "",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "abcdef"
+  },
+  {
+    "step": "uppercase param",
+    "request": "GET /obj-<run>/a.txt?Response-Content-Type=text/csv",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "content-length": "6",
+      "content-type": "text/csv",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "abcdef"
+  },
+  {
+    "step": "override on missing",
+    "request": "GET /obj-<run>/nope?response-content-type=text/csv",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>nope</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/nope</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "override with 304",
+    "request": "GET /obj-<run>/a.txt?response-content-type=text/csv",
+    "status": 304,
+    "headers": {
+      "accept-ranges": "bytes",
+      "cache-control": "max-age=60",
+      "etag": "\"e80b5017098950fc58aad83c8c14978e\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

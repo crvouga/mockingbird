@@ -1,0 +1,136 @@
+[
+  {
+    "step": "put",
+    "request": "PUT /auth-ok-<run>/a%20b/%C3%BC%2B%26%3D.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get",
+    "request": "GET /auth-ok-<run>/a%20b/%C3%BC%2B%26%3D.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "text/plain",
+      "etag": "\"9dd4e461268c8034f5c8564e155c67a6\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "x"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /auth-ok-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-type": "text/plain",
+      "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unsigned payload put",
+    "request": "PUT /auth-ok-<run>/u [unsigned-payload]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"343fee95d31373c80d5bdb2b8c57f8c5\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unsigned payload get",
+    "request": "GET /auth-ok-<run>/u [unsigned-payload]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "8",
+      "content-type": "text/plain",
+      "etag": "\"343fee95d31373c80d5bdb2b8c57f8c5\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "unsigned"
+  },
+  {
+    "step": "list with query",
+    "request": "GET /auth-ok-<run>?list-type=2&prefix=a b/&encoding-type=url",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>auth-ok-<run></Name><Prefix>a+b/</Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>a+b/%C3%BC%2B%26%3D.txt</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><StorageClass>STANDARD</StorageClass></Contents><EncodingType>url</EncodingType></ListBucketResult>"
+  },
+  {
+    "step": "signed content-length",
+    "request": "PUT /auth-ok-<run>/cl",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"8cbad96aced40b3838dd9f07f6ef5772\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "whitespace in signed header",
+    "request": "PUT /auth-ok-<run>/ws",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"f1290186a5d0b1ceab27f4e77c0c5d68\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get ws",
+    "request": "GET /auth-ok-<run>/ws",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "1",
+      "content-type": "text/plain",
+      "etag": "\"f1290186a5d0b1ceab27f4e77c0c5d68\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-spaced": "a   b",
+      "x-amz-request-id": "*"
+    },
+    "body": "w"
+  }
+]

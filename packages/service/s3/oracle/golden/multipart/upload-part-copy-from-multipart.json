@@ -1,0 +1,55 @@
+[
+  {
+    "step": "complete src",
+    "request": "POST /mp-copymp-<run>/src?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"2b9058c2dd9e925e63f10dff2972688e-2\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-copymp-<run>/src</Location><Bucket>mp-copymp-<run></Bucket><Key>src</Key><ETag>&#34;2b9058c2dd9e925e63f10dff2972688e-2&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "copy whole multipart",
+    "request": "PUT /mp-copymp-<run>/dst?partNumber=1&uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;de0705cec3a337a1deddc8e64bc87e24&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "copy tail range",
+    "request": "PUT /mp-copymp-<run>/dst?partNumber=2&uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;ca9860ce6aaeec7630fd02b768634ef3&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "list parts",
+    "request": "GET /mp-copymp-<run>/dst?uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-copymp-<run></Bucket><Key>dst</Key><UploadId><id:2></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;de0705cec3a337a1deddc8e64bc87e24&#34;</ETag><Size>5242888</Size></Part><Part><PartNumber>2</PartNumber><LastModified><date></LastModified><ETag>&#34;ca9860ce6aaeec7630fd02b768634ef3&#34;</ETag><Size>8</Size></Part></ListPartsResult>"
+  }
+]

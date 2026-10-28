@@ -1,0 +1,198 @@
+[
+  {
+    "step": "if-match right",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;62ed2a011989d52a9b76da48e0041233&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "if-match unquoted",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;62ed2a011989d52a9b76da48e0041233&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "if-match wrong",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"62ed2a011989d52a9b76da48e0041233\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-none-match right",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"62ed2a011989d52a9b76da48e0041233\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-none-match other",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;62ed2a011989d52a9b76da48e0041233&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "if-modified-since future",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"62ed2a011989d52a9b76da48e0041233\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-modified-since past",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;62ed2a011989d52a9b76da48e0041233&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "if-unmodified-since past",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"62ed2a011989d52a9b76da48e0041233\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-unmodified-since future",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;62ed2a011989d52a9b76da48e0041233&#34;</ETag></CopyPartResult>"
+  },
+  {
+    "step": "if-match and unmodified past",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"62ed2a011989d52a9b76da48e0041233\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-none-match and modified future",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"62ed2a011989d52a9b76da48e0041233\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-match wrong with bad range",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"62ed2a011989d52a9b76da48e0041233\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad range only",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidRange</Code><Message>The requested range &#39;bytes=100-200&#39; is not satisfiable</Message><Key>src</Key><BucketName>mp-copyc-<run></BucketName><Resource>/mp-copyc-<run>/dst</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId><ActualObjectSize>18</ActualObjectSize><RangeRequested>100-200</RangeRequested></Error>"
+  },
+  {
+    "step": "bad date ignored",
+    "request": "PUT /mp-copyc-<run>/dst?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyPartResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;62ed2a011989d52a9b76da48e0041233&#34;</ETag></CopyPartResult>"
+  }
+]

@@ -1,0 +1,130 @@
+[
+  {
+    "step": "if-none-match on missing",
+    "request": "POST /mp-cond-<run>/k?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"e2c3da976e66ec9e7dc128fbc782fc91-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-cond-<run>/k</Location><Bucket>mp-cond-<run></Bucket><Key>k</Key><ETag>&#34;e2c3da976e66ec9e7dc128fbc782fc91-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "if-none-match on existing",
+    "request": "POST /mp-cond-<run>/k?uploadId=<id:2>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"e2c3da976e66ec9e7dc128fbc782fc91-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>k</Key><BucketName>mp-cond-<run></BucketName><Resource>/mp-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-match wrong",
+    "request": "POST /mp-cond-<run>/k?uploadId=<id:2>",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"e2c3da976e66ec9e7dc128fbc782fc91-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>k</Key><BucketName>mp-cond-<run></BucketName><Resource>/mp-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-match right",
+    "request": "POST /mp-cond-<run>/k?uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"11f2cc52896044574b1e9fdfbbfa0e04-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-cond-<run>/k</Location><Bucket>mp-cond-<run></Bucket><Key>k</Key><ETag>&#34;11f2cc52896044574b1e9fdfbbfa0e04-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "if-match on missing",
+    "request": "POST /mp-cond-<run>/missing?uploadId=<id:3>",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>missing</Key><BucketName>mp-cond-<run></BucketName><Resource>/mp-cond-<run>/missing</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "if-none-match etag on missing",
+    "request": "POST /mp-cond-<run>/missing?uploadId=<id:3>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"cea0b6a183a33ebd5960b0210fc4c480-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-cond-<run>/missing</Location><Bucket>mp-cond-<run></Bucket><Key>missing</Key><ETag>&#34;cea0b6a183a33ebd5960b0210fc4c480-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "initiate if-none-match existing",
+    "request": "POST /mp-cond-<run>/k?uploads=",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"11f2cc52896044574b1e9fdfbbfa0e04-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>k</Key><BucketName>mp-cond-<run></BucketName><Resource>/mp-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "initiate if-match wrong",
+    "request": "POST /mp-cond-<run>/k?uploads=",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"11f2cc52896044574b1e9fdfbbfa0e04-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>PreconditionFailed</Code><Message>At least one of the pre-conditions you specified did not hold</Message><Key>k</Key><BucketName>mp-cond-<run></BucketName><Resource>/mp-cond-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "initiate if-match missing",
+    "request": "POST /mp-cond-<run>/zzz?uploads=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>zzz</Key><BucketName>mp-cond-<run></BucketName><Resource>/mp-cond-<run>/zzz</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

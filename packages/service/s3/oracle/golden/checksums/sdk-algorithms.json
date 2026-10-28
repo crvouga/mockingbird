@@ -1,0 +1,241 @@
+[
+  {
+    "step": "put CRC32",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "ChecksumCRC32": "EyV5Tg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\""
+    }
+  },
+  {
+    "step": "head CRC32",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumCRC32": "EyV5Tg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "get CRC32",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumCRC32": "EyV5Tg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "body CRC32",
+    "value": "hello checksum"
+  },
+  {
+    "step": "put CRC32C",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "ChecksumCRC32C": "CRPpGg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\""
+    }
+  },
+  {
+    "step": "head CRC32C",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumCRC32C": "CRPpGg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "get CRC32C",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumCRC32C": "CRPpGg==",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "body CRC32C",
+    "value": "hello checksum"
+  },
+  {
+    "step": "put SHA1",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "ChecksumSHA1": "5iLFpE+OMrUW77zJhQ0FOduwmJ8=",
+      "ChecksumType": "FULL_OBJECT",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\""
+    }
+  },
+  {
+    "step": "head SHA1",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumSHA1": "5iLFpE+OMrUW77zJhQ0FOduwmJ8=",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "get SHA1",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumSHA1": "5iLFpE+OMrUW77zJhQ0FOduwmJ8=",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "body SHA1",
+    "value": "hello checksum"
+  },
+  {
+    "step": "put SHA256",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "ChecksumSHA256": "IYd2bruT9X+8tTtVmmErwvlcS8MGq/Nd+hPn5+rVjOA=",
+      "ChecksumType": "FULL_OBJECT",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\""
+    }
+  },
+  {
+    "step": "head SHA256",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumSHA256": "IYd2bruT9X+8tTtVmmErwvlcS8MGq/Nd+hPn5+rVjOA=",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "get SHA256",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumSHA256": "IYd2bruT9X+8tTtVmmErwvlcS8MGq/Nd+hPn5+rVjOA=",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "body SHA256",
+    "value": "hello checksum"
+  },
+  {
+    "step": "put CRC64NVME",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "ChecksumCRC64NVME": "jojYBLYRdAE=",
+      "ChecksumType": "FULL_OBJECT",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\""
+    }
+  },
+  {
+    "step": "head CRC64NVME",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumCRC64NVME": "jojYBLYRdAE=",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "get CRC64NVME",
+    "value": {
+      "$metadata": {
+        "httpStatusCode": 200
+      },
+      "AcceptRanges": "bytes",
+      "ChecksumCRC64NVME": "jojYBLYRdAE=",
+      "ChecksumType": "FULL_OBJECT",
+      "ContentLength": 14,
+      "ContentType": "application/octet-stream",
+      "ETag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "LastModified": "<date>",
+      "Metadata": {}
+    }
+  },
+  {
+    "step": "body CRC64NVME",
+    "value": "hello checksum"
+  },
+  {
+    "step": "explicit wrong checksum",
+    "value": "XAmzContentChecksumMismatch"
+  }
+]

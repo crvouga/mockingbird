@@ -1,0 +1,85 @@
+[
+  {
+    "step": "complete",
+    "request": "POST /mp-tags-<run>/t?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"1a59e1e16b1fd5ea0b9bb1d958895d3f-1\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CompleteMultipartUploadResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Location>http://<host>/mp-tags-<run>/t</Location><Bucket>mp-tags-<run></Bucket><Key>t</Key><ETag>&#34;1a59e1e16b1fd5ea0b9bb1d958895d3f-1&#34;</ETag></CompleteMultipartUploadResult>"
+  },
+  {
+    "step": "head",
+    "request": "HEAD /mp-tags-<run>/t",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "6",
+      "content-type": "binary/octet-stream",
+      "etag": "\"1a59e1e16b1fd5ea0b9bb1d958895d3f-1\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "2"
+    },
+    "body": ""
+  },
+  {
+    "step": "get tagging",
+    "request": "GET /mp-tags-<run>/t?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>a</Key><Value>1</Value></Tag><Tag><Key>b</Key><Value>two words</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "bad tagging",
+    "request": "POST /mp-tags-<run>/u?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidTag</Code><Message>Cannot provide multiple Tags with the same key</Message><Key>u</Key><BucketName>mp-tags-<run></BucketName><Resource>/mp-tags-<run>/u</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad tag key",
+    "request": "POST /mp-tags-<run>/u?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidTag</Code><Message>The TagKey you have provided is invalid</Message><Key>u</Key><BucketName>mp-tags-<run></BucketName><Resource>/mp-tags-<run>/u</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad tag encoding",
+    "request": "POST /mp-tags-<run>/u?uploads=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters. (invalid URL escape &#34;%zz&#34;)</Message><Key>u</Key><BucketName>mp-tags-<run></BucketName><Resource>/mp-tags-<run>/u</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

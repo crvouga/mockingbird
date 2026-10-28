@@ -1,0 +1,384 @@
+[
+  {
+    "step": "header without newline use",
+    "request": "POST /sel-edge-<run>/noeol.csv?select=&select-type=2",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error, please try again.: cause(EOF)</Message><Key>noeol.csv</Key><BucketName>sel-edge-<run></BucketName><Resource>/sel-edge-<run>/noeol.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "no newline none",
+    "request": "POST /sel-edge-<run>/noeol.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<393 bytes sha256:c61cab152f52dd2e>"
+  },
+  {
+    "step": "no newline none (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "a,b\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>3</BytesScanned><BytesProcessed>3</BytesProcessed><BytesReturned>4</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "ragged json",
+    "request": "POST /sel-edge-<run>/ragged.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<461 bytes sha256:a8d0e7420a53afb2>"
+  },
+  {
+    "step": "ragged json (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"_1\":\"a\",\"_2\":\"b\",\"_3\":\"c\"}\n{\"_1\":\"1\"}\n{\"_1\":\"1\",\"_2\":\"2\",\"_3\":\"3\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>16</BytesScanned><BytesProcessed>16</BytesProcessed><BytesReturned>69</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "ragged csv",
+    "request": "POST /sel-edge-<run>/ragged.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<408 bytes sha256:ab3460a0841c9027>"
+  },
+  {
+    "step": "ragged csv (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "a,b,c\n1\n1,2,3,4\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>16</BytesScanned><BytesProcessed>16</BytesProcessed><BytesReturned>16</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "ragged positional",
+    "request": "POST /sel-edge-<run>/ragged.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<427 bytes sha256:1e79f43a12091f6f>"
+  },
+  {
+    "step": "ragged positional (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"_4\":null}\n{\"_4\":null}\n{\"_4\":\"4\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>16</BytesScanned><BytesProcessed>16</BytesProcessed><BytesReturned>35</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "spaces and multiline",
+    "request": "POST /sel-edge-<run>/spaces.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<422 bytes sha256:bd65e3e7a792cbcd>"
+  },
+  {
+    "step": "spaces and multiline (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "\" lead\",trail \nx,\"multi\nline\"\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>30</BytesScanned><BytesProcessed>30</BytesProcessed><BytesReturned>30</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "spaces json",
+    "request": "POST /sel-edge-<run>/spaces.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<451 bytes sha256:237c539c48854413>"
+  },
+  {
+    "step": "spaces json (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "{\"_1\":\" lead\",\"_2\":\"trail \"}\n{\"_1\":\"x\",\"_2\":\"multi\\nline\"}\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>30</BytesScanned><BytesProcessed>30</BytesProcessed><BytesReturned>59</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "many rows",
+    "request": "POST /sel-edge-<run>/many.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<1988 bytes sha256:3ad1a1d95b4be687>"
+  },
+  {
+    "step": "many rows (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "row10\nrow11\nrow12\nrow13\nrow14\nrow15\nrow16\nrow17\nrow18\nrow19\nrow20\nrow21\nrow22\nrow23\nrow24\nrow25\nrow26\nrow27\nrow28\nrow29\nrow30\nrow31\nrow32\nrow33\nrow34\nrow35\nrow36\nrow37\nrow38\nrow39\nrow40\nrow41\nrow42\nrow43\nrow44\nrow45\nrow46\nrow47\nrow48\nrow49\nrow50\nrow51\nrow52\nrow53\nrow54\nrow55\nrow56\nrow57\nrow58\nrow59\nrow60\nrow61\nrow62\nrow63\nrow64\nrow65\nrow66\nrow67\nrow68\nrow69\nrow70\nrow71\nrow72\nrow73\nrow74\nrow75\nrow76\nrow77\nrow78\nrow79\nrow80\nrow81\nrow82\nrow83\nrow84\nrow85\nrow86\nrow87\nrow88\nrow89\nrow90\nrow91\nrow92\nrow93\nrow94\nrow95\nrow96\nrow97\nrow98\nrow99\nrow100\nrow101\nrow102\nrow103\nrow104\nrow105\nrow106\nrow107\nrow108\nrow109\nrow110\nrow111\nrow112\nrow113\nrow114\nrow115\nrow116\nrow117\nrow118\nrow119\nrow120\nrow121\nrow122\nrow123\nrow124\nrow125\nrow126\nrow127\nrow128\nrow129\nrow130\nrow131\nrow132\nrow133\nrow134\nrow135\nrow136\nrow137\nrow138\nrow139\nrow140\nrow141\nrow142\nrow143\nrow144\nrow145\nrow146\nrow147\nrow148\nrow149\nrow150\nrow151\nrow152\nrow153\nrow154\nrow155\nrow156\nrow157\nrow158\nrow159\nrow160\nrow161\nrow162\nrow163\nrow164\nrow165\nrow166\nrow167\nrow168\nrow169\nrow170\nrow171\nrow172\nrow173\nrow174\nrow175\nrow176\nrow177\nrow178\nrow179\nrow180\nrow181\nrow182\nrow183\nrow184\nrow185\nrow186\nrow187\nrow188\nrow189\nrow190\nrow191\nrow192\nrow193\nrow194\nrow195\nrow196\nrow197\nrow198\nrow199\nrow200\nrow201\nrow202\nrow203\nrow204\nrow205\nrow206\nrow207\nrow208\nrow209\nrow210\nrow211\nrow212\nrow213\nrow214\nrow215\nrow216\nrow217\nrow218\nrow219\nrow220\nrow221\nrow222\nrow223\nrow224\nrow225\nrow226\nrow227\nrow228\nrow229\nrow230\nrow231\nrow232\nrow233\nrow234\nrow235\nrow236\nrow237\nrow238\nrow239\nrow240\nrow241\nrow242\nrow243\nrow244\nrow245\nrow246\nrow247\nrow248\nrow249\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>2529</BytesScanned><BytesProcessed>2529</BytesProcessed><BytesReturned>1590</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "many rows limit",
+    "request": "POST /sel-edge-<run>/many.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<1828 bytes sha256:95408948b5a8bcd4>"
+  },
+  {
+    "step": "many rows limit (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "0,row0\n1,row1\n2,row2\n3,row3\n4,row4\n5,row5\n6,row6\n7,row7\n8,row8\n9,row9\n10,row10\n11,row11\n12,row12\n13,row13\n14,row14\n15,row15\n16,row16\n17,row17\n18,row18\n19,row19\n20,row20\n21,row21\n22,row22\n23,row23\n24,row24\n25,row25\n26,row26\n27,row27\n28,row28\n29,row29\n30,row30\n31,row31\n32,row32\n33,row33\n34,row34\n35,row35\n36,row36\n37,row37\n38,row38\n39,row39\n40,row40\n41,row41\n42,row42\n43,row43\n44,row44\n45,row45\n46,row46\n47,row47\n48,row48\n49,row49\n50,row50\n51,row51\n52,row52\n53,row53\n54,row54\n55,row55\n56,row56\n57,row57\n58,row58\n59,row59\n60,row60\n61,row61\n62,row62\n63,row63\n64,row64\n65,row65\n66,row66\n67,row67\n68,row68\n69,row69\n70,row70\n71,row71\n72,row72\n73,row73\n74,row74\n75,row75\n76,row76\n77,row77\n78,row78\n79,row79\n80,row80\n81,row81\n82,row82\n83,row83\n84,row84\n85,row85\n86,row86\n87,row87\n88,row88\n89,row89\n90,row90\n91,row91\n92,row92\n93,row93\n94,row94\n95,row95\n96,row96\n97,row97\n98,row98\n99,row99\n100,row100\n101,row101\n102,row102\n103,row103\n104,row104\n105,row105\n106,row106\n107,row107\n108,row108\n109,row109\n110,row110\n111,row111\n112,row112\n113,row113\n114,row114\n115,row115\n116,row116\n117,row117\n118,row118\n119,row119\n120,row120\n121,row121\n122,row122\n123,row123\n124,row124\n125,row125\n126,row126\n127,row127\n128,row128\n129,row129\n130,row130\n131,row131\n132,row132\n133,row133\n134,row134\n135,row135\n136,row136\n137,row137\n138,row138\n139,row139\n140,row140\n141,row141\n142,row142\n143,row143\n144,row144\n145,row145\n146,row146\n147,row147\n148,row148\n149,row149\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>2529</BytesScanned><BytesProcessed>2529</BytesProcessed><BytesReturned>1430</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "invalid utf8",
+    "request": "POST /sel-edge-<run>/latin1.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidTextEncoding</Code><Message>UTF-8 encoding is required.</Message><Key>latin1.csv</Key><BucketName>sel-edge-<run></BucketName><Resource>/sel-edge-<run>/latin1.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "scan range",
+    "request": "POST /sel-edge-<run>/many.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<413 bytes sha256:c9b61e70431025d4>"
+  },
+  {
+    "step": "scan range (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "0,row0\n1,row1\n2,row2\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>21</BytesScanned><BytesProcessed>21</BytesProcessed><BytesReturned>21</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "scan range end only",
+    "request": "POST /sel-edge-<run>/many.csv?select=&select-type=2",
+    "status": 200,
+    "headers": {
+      "content-type": "application/octet-stream",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<405 bytes sha256:638407d4451acdcc>"
+  },
+  {
+    "step": "scan range end only (events)",
+    "value": [
+      {
+        ":content-type": "application/octet-stream",
+        ":event-type": "Records",
+        ":message-type": "event",
+        "payload": "8\n249,row249\n"
+      },
+      {
+        ":content-type": "text/xml",
+        ":event-type": "Stats",
+        ":message-type": "event",
+        "payload": "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Stats><BytesScanned>12</BytesScanned><BytesProcessed>12</BytesProcessed><BytesReturned>13</BytesReturned></Stats>"
+      },
+      {
+        ":event-type": "End",
+        ":message-type": "event",
+        "payload": ""
+      }
+    ]
+  },
+  {
+    "step": "scan range past end",
+    "request": "POST /sel-edge-<run>/noeol.csv?select=&select-type=2",
+    "status": 500,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InternalError</Code><Message>We encountered an internal error, please try again.: cause(seek past end of object)</Message><Key>noeol.csv</Key><BucketName>sel-edge-<run></BucketName><Resource>/sel-edge-<run>/noeol.csv</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "bad scan value",
+    "request": "POST /sel-edge-<run>/noeol.csv?select=&select-type=2",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedXML</Code><Message>The XML provided was not well-formed or did not validate against our published schema. Check the service documentation and try again: strconv.ParseUint: parsing &#34;x&#34;: invalid syntax</Message><Key>noeol.csv</Key><BucketName>sel-edge-<run></BucketName><Resource>/sel-edge-<run>/noeol.csv</Resource><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

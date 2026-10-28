@@ -1,0 +1,223 @@
+[
+  {
+    "step": "get v1",
+    "request": "GET /otag-ver-<run>/k?tagging=&versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>gen</Key><Value>1</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "get latest",
+    "request": "GET /otag-ver-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet></TagSet></Tagging>"
+  },
+  {
+    "step": "put v1",
+    "request": "PUT /otag-ver-<run>/k?tagging=&versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "put latest",
+    "request": "PUT /otag-ver-<run>/k?tagging=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get v1 after",
+    "request": "GET /otag-ver-<run>/k?tagging=&versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>gen</Key><Value>one</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "get v2 after",
+    "request": "GET /otag-ver-<run>/k?tagging=&versionId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>gen</Key><Value>two</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "head v1 count",
+    "request": "HEAD /otag-ver-<run>/k?versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "3",
+      "content-type": "binary/octet-stream",
+      "etag": "\"f97c5d29941bfb1b2fdab0874906ab82\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "delete v1",
+    "request": "DELETE /otag-ver-<run>/k?tagging=&versionId=<id:1>",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": ""
+  },
+  {
+    "step": "get v1 deleted",
+    "request": "GET /otag-ver-<run>/k?tagging=&versionId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:1>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet></TagSet></Tagging>"
+  },
+  {
+    "step": "get v2 kept",
+    "request": "GET /otag-ver-<run>/k?tagging=&versionId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>gen</Key><Value>two</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "get delete marker",
+    "request": "GET /otag-ver-<run>/k?tagging=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>k</Key><BucketName>otag-ver-<run></BucketName><Resource>/otag-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "put delete marker",
+    "request": "PUT /otag-ver-<run>/k?tagging=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>k</Key><BucketName>otag-ver-<run></BucketName><Resource>/otag-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "delete delete marker",
+    "request": "DELETE /otag-ver-<run>/k?tagging=",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message><Key>k</Key><BucketName>otag-ver-<run></BucketName><Resource>/otag-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get v2 under marker",
+    "request": "GET /otag-ver-<run>/k?tagging=&versionId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-version-id": "<id:2>"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Tagging><TagSet><Tag><Key>gen</Key><Value>two</Value></Tag></TagSet></Tagging>"
+  },
+  {
+    "step": "get marker by version",
+    "request": "GET /otag-ver-<run>/k?tagging=&versionId=<id:3>",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Key>k</Key><BucketName>otag-ver-<run></BucketName><Resource>/otag-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "put marker by version",
+    "request": "PUT /otag-ver-<run>/k?tagging=&versionId=<id:3>",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><Key>k</Key><BucketName>otag-ver-<run></BucketName><Resource>/otag-ver-<run>/k</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

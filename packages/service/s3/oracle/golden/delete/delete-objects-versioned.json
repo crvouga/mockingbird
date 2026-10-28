@@ -1,0 +1,93 @@
+[
+  {
+    "step": "markers",
+    "request": "POST /del-mver-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><DeleteMarker>true</DeleteMarker><DeleteMarkerVersionId><id:4></DeleteMarkerVersionId><Key>other</Key></Deleted><Deleted><DeleteMarker>true</DeleteMarker><DeleteMarkerVersionId><id:5></DeleteMarkerVersionId><Key>never</Key></Deleted></DeleteResult>"
+  },
+  {
+    "step": "marker on marker",
+    "request": "POST /del-mver-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><DeleteMarker>true</DeleteMarker><DeleteMarkerVersionId><id:6></DeleteMarkerVersionId><Key>other</Key></Deleted></DeleteResult>"
+  },
+  {
+    "step": "by version",
+    "request": "POST /del-mver-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><Key>k</Key><VersionId><id:2></VersionId></Deleted><Deleted><Key>k</Key><VersionId><id:7></VersionId></Deleted><Deleted><Key>k</Key><VersionId>null</VersionId></Deleted><Deleted><DeleteMarker>true</DeleteMarker><DeleteMarkerVersionId><id:9></DeleteMarkerVersionId><Key>k</Key></Deleted><Error><Code>NoSuchVersion</Code><Message>The specified version does not exist. (invalid UUID length: 5)</Message><Key>k</Key><VersionId><id:8></VersionId></Error></DeleteResult>"
+  },
+  {
+    "step": "list versions",
+    "request": "GET /del-mver-<run>?versions=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>del-mver-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><DeleteMarker><Key>k</Key><LastModified><date></LastModified><ETag></ETag><Size>0</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId><id:9></VersionId></DeleteMarker><Version><Key>k</Key><LastModified><date></LastModified><ETag>&#34;f97c5d29941bfb1b2fdab0874906ab82&#34;</ETag><Size>3</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:1></VersionId></Version><DeleteMarker><Key>other</Key><LastModified><date></LastModified><ETag></ETag><Size>0</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId><id:6></VersionId></DeleteMarker><DeleteMarker><Key>other</Key><LastModified><date></LastModified><ETag></ETag><Size>0</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:4></VersionId></DeleteMarker><Version><Key>other</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>false</IsLatest><VersionId><id:3></VersionId></Version></ListVersionsResult>"
+  },
+  {
+    "step": "remove markers",
+    "request": "POST /del-mver-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Deleted><Key>k</Key><VersionId><id:9></VersionId></Deleted><Deleted><Key>other</Key><VersionId><id:6></VersionId></Deleted><Deleted><Key>other</Key><VersionId><id:4></VersionId></Deleted></DeleteResult>"
+  },
+  {
+    "step": "remove markers quiet",
+    "request": "POST /del-mver-<run>?delete=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<DeleteResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"></DeleteResult>"
+  },
+  {
+    "step": "list versions after",
+    "request": "GET /del-mver-<run>?versions=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListVersionsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>del-mver-<run></Name><Prefix></Prefix><KeyMarker></KeyMarker><NextVersionIdMarker></NextVersionIdMarker><VersionIdMarker></VersionIdMarker><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Version><Key>other</Key><LastModified><date></LastModified><ETag>&#34;9dd4e461268c8034f5c8564e155c67a6&#34;</ETag><Size>1</Size><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>minio</DisplayName></Owner><StorageClass>STANDARD</StorageClass><IsLatest>true</IsLatest><VersionId><id:3></VersionId></Version></ListVersionsResult>"
+  }
+]

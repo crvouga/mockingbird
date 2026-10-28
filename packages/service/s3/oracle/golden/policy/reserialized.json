@@ -1,0 +1,223 @@
+[
+  {
+    "step": "put shorthand",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get shorthand",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "216",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"ID\":\"my-id\",\"Version\":\"2012-10-17\",\"Statement\":[{\"Sid\":\"public \\u003cread\\u003e \\u0026 'more'\",\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::pol-json-<run>/*\"]}]}"
+  },
+  {
+    "step": "put conditions",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get conditions",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "269",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:ListBucket\"],\"Resource\":[\"arn:aws:s3:::pol-json-<run>\"],\"Condition\":{\"StringEquals\":{\"s3:delimiter\":[\"/\"],\"s3:max-keys\":[\"10\"]},\"StringLike\":{\"s3:prefix\":[\"public/*\"]}}}]}"
+  },
+  {
+    "step": "put duplicates",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get duplicates",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "157",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::pol-json-<run>/*\"]}]}"
+  },
+  {
+    "step": "put lowercase fields",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get lowercase fields",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "157",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::pol-json-<run>/*\"]}]}"
+  },
+  {
+    "step": "put ip condition",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get ip condition",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "215",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::pol-json-<run>/*\"],\"Condition\":{\"IpAddress\":{\"aws:SourceIp\":[\"10.0.0.0/8\"]}}}]}"
+  },
+  {
+    "step": "put bool and numeric",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get bool and numeric",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "251",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:ListBucket\"],\"Resource\":[\"arn:aws:s3:::pol-json-<run>\"],\"Condition\":{\"Bool\":{\"aws:SecureTransport\":[\"false\"]},\"NumericLessThan\":{\"s3:max-keys\":[100]}}}]}"
+  },
+  {
+    "step": "put wildcard bucket resource",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get wildcard bucket resource",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "149",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::pol-json*/*\"]}]}"
+  },
+  {
+    "step": "put star resource",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get star resource",
+    "request": "GET /pol-json-<run>?policy=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "139",
+      "content-type": "application/json",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"*\"]},\"Action\":[\"s3:GetObject\"],\"Resource\":[\"arn:aws:s3:::*\"]}]}"
+  },
+  {
+    "step": "put no version field",
+    "request": "PUT /pol-json-<run>?policy=",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPolicy</Code><Message>The policy must contain a valid version string</Message><BucketName>pol-json-<run></BucketName><Resource>/pol-json-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

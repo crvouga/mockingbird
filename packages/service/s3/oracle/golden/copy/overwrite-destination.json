@@ -1,0 +1,35 @@
+[
+  {
+    "step": "copy",
+    "request": "PUT /copy-over-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"96c15c2bb2921193bf290df8cd85e2ba\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc64nvme": "ayeLsqXzO4g=",
+      "x-amz-checksum-type": "FULL_OBJECT",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<CopyObjectResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><LastModified><date></LastModified><ETag>&#34;96c15c2bb2921193bf290df8cd85e2ba&#34;</ETag></CopyObjectResult>"
+  },
+  {
+    "step": "get-dst",
+    "request": "GET /copy-over-<run>/dst",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "11",
+      "content-type": "text/plain",
+      "etag": "\"96c15c2bb2921193bf290df8cd85e2ba\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-meta-from": "src",
+      "x-amz-request-id": "*"
+    },
+    "body": "new content"
+  }
+]

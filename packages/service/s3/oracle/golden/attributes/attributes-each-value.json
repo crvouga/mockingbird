@@ -1,0 +1,114 @@
+[
+  {
+    "step": "ETag",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>5eb63bbbe01eeed093cb22bb8f5acdc3</ETag></getObjectAttributesResponse>"
+  },
+  {
+    "step": "ObjectSize",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectSize>11</ObjectSize></getObjectAttributesResponse>"
+  },
+  {
+    "step": "StorageClass",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><StorageClass>STANDARD</StorageClass></getObjectAttributesResponse>"
+  },
+  {
+    "step": "Checksum",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse></getObjectAttributesResponse>"
+  },
+  {
+    "step": "ObjectParts",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>10000</MaxParts><NextPartNumberMarker>1</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>1</PartsCount><Part><PartNumber>1</PartNumber><Size>11</Size></Part></ObjectParts></getObjectAttributesResponse>"
+  },
+  {
+    "step": "all",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>5eb63bbbe01eeed093cb22bb8f5acdc3</ETag><ObjectParts><IsTruncated>false</IsTruncated><MaxParts>10000</MaxParts><NextPartNumberMarker>1</NextPartNumberMarker><PartNumberMarker>0</PartNumberMarker><PartsCount>1</PartsCount><Part><PartNumber>1</PartNumber><Size>11</Size></Part></ObjectParts><StorageClass>STANDARD</StorageClass><ObjectSize>11</ObjectSize></getObjectAttributesResponse>"
+  },
+  {
+    "step": "duplicates",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>5eb63bbbe01eeed093cb22bb8f5acdc3</ETag><ObjectSize>11</ObjectSize></getObjectAttributesResponse>"
+  },
+  {
+    "step": "trimmed",
+    "request": "GET /attrs-<run>/k?attributes=",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<getObjectAttributesResponse><ETag>5eb63bbbe01eeed093cb22bb8f5acdc3</ETag><ObjectSize>11</ObjectSize></getObjectAttributesResponse>"
+  }
+]

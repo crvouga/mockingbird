@@ -1,0 +1,190 @@
+[
+  {
+    "step": "signed: chunk too big",
+    "request": "PUT /auth-framing-<run>/f [streaming]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>chunk too big: choose chunk size &lt;= 16MiB</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "signed: uppercase hex size",
+    "request": "PUT /auth-framing-<run>/f [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"6aa8de45918023095f6e831efe48d00b\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "signed: no content-encoding",
+    "request": "PUT /auth-framing-<run>/f [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"6aa8de45918023095f6e831efe48d00b\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get f",
+    "request": "GET /auth-framing-<run>/f",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "20",
+      "content-type": "binary/octet-stream",
+      "etag": "\"6aa8de45918023095f6e831efe48d00b\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "abcdefghijklmnopqrst"
+  },
+  {
+    "step": "signed: chunk extension spaces",
+    "request": "PUT /auth-framing-<run>/f [streaming]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>malformed chunked encoding</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "signed: trailing bytes after final chunk",
+    "request": "PUT /auth-framing-<run>/f [streaming]",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"6aa8de45918023095f6e831efe48d00b\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "unsigned: chunk-signature extension",
+    "request": "PUT /auth-framing-<run>/f [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>malformed chunked encoding</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned: chunk too big",
+    "request": "PUT /auth-framing-<run>/f [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>chunk too big: choose chunk size &lt;= 16MiB</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned: missing CRLF",
+    "request": "PUT /auth-framing-<run>/f [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>malformed chunked encoding</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned: unknown trailer",
+    "request": "PUT /auth-framing-<run>/f [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>BadRequest</Code><Message>malformed chunked encoding</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned: uppercase trailer name",
+    "request": "PUT /auth-framing-<run>/f [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "unsigned: invalid trailer base64",
+    "request": "PUT /auth-framing-<run>/f [streaming-unsigned-trailer]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "streaming on POST is header auth",
+    "request": "POST /auth-framing-<run>/f?uploads= [streaming]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentSHA256Mismatch</Code><Message>The provided &#39;x-amz-content-sha256&#39; header does not match what was computed.</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "streaming GET is header auth",
+    "request": "GET /auth-framing-<run>/f [streaming]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentSHA256Mismatch</Code><Message>The provided &#39;x-amz-content-sha256&#39; header does not match what was computed.</Message><Key>f</Key><BucketName>auth-framing-<run></BucketName><Resource>/auth-framing-<run>/f</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  }
+]

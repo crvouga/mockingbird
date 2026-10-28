@@ -1,0 +1,149 @@
+[
+  {
+    "step": "head",
+    "request": "HEAD /obj-<run>/mp",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5242889",
+      "content-type": "binary/octet-stream",
+      "etag": "\"528dc964193f0e986d6713e3297a1f51-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head checksum mode",
+    "request": "HEAD /obj-<run>/mp",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5242889",
+      "content-type": "binary/octet-stream",
+      "etag": "\"528dc964193f0e986d6713e3297a1f51-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "aJz96w==-2",
+      "x-amz-checksum-type": "COMPOSITE",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "head part 1",
+    "request": "HEAD /obj-<run>/mp?partNumber=1",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5242880",
+      "content-range": "bytes 0-5242879/5242889",
+      "content-type": "binary/octet-stream",
+      "etag": "\"528dc964193f0e986d6713e3297a1f51-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-mp-parts-count": "2",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get part 2",
+    "request": "GET /obj-<run>/mp?partNumber=2",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "9",
+      "content-range": "bytes 5242880-5242888/5242889",
+      "content-type": "binary/octet-stream",
+      "etag": "\"528dc964193f0e986d6713e3297a1f51-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-mp-parts-count": "2",
+      "x-amz-request-id": "*"
+    },
+    "body": "tail part"
+  },
+  {
+    "step": "head part 2 checksum mode",
+    "request": "HEAD /obj-<run>/mp?partNumber=2",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "9",
+      "content-range": "bytes 5242880-5242888/5242889",
+      "content-type": "binary/octet-stream",
+      "etag": "\"528dc964193f0e986d6713e3297a1f51-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "n5Vgmw==",
+      "x-amz-id-2": "*",
+      "x-amz-mp-parts-count": "2",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get part 3",
+    "request": "GET /obj-<run>/mp?partNumber=3",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidPartNumber</Code><Message>The requested partnumber is not satisfiable</Message><Key>mp</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/mp</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head part 3",
+    "request": "HEAD /obj-<run>/mp?partNumber=3",
+    "status": 416,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "ranged across parts",
+    "request": "GET /obj-<run>/mp",
+    "status": 206,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "5",
+      "content-range": "bytes 5242878-5242882/5242889",
+      "content-type": "binary/octet-stream",
+      "etag": "\"528dc964193f0e986d6713e3297a1f51-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "aatai"
+  },
+  {
+    "step": "if-match multipart etag",
+    "request": "HEAD /obj-<run>/mp",
+    "status": 412,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "etag": "\"528dc964193f0e986d6713e3297a1f51-2\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

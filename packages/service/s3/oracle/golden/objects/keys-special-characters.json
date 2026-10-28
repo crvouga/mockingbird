@@ -1,0 +1,700 @@
+[
+  {
+    "step": "put spaces in name.txt",
+    "request": "PUT /obj-<run>/spaces%20in%20name.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"0912f11c16f3fa11625ad7c08743b729\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get spaces in name.txt",
+    "request": "GET /obj-<run>/spaces%20in%20name.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "18",
+      "content-type": "binary/octet-stream",
+      "etag": "\"0912f11c16f3fa11625ad7c08743b729\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "spaces in name.txt"
+  },
+  {
+    "step": "head spaces in name.txt",
+    "request": "HEAD /obj-<run>/spaces%20in%20name.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "18",
+      "content-type": "binary/octet-stream",
+      "etag": "\"0912f11c16f3fa11625ad7c08743b729\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put plus+sign",
+    "request": "PUT /obj-<run>/plus%2Bsign",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"77b5f54245a4551c5876226678f88b52\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get plus+sign",
+    "request": "GET /obj-<run>/plus%2Bsign",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "9",
+      "content-type": "binary/octet-stream",
+      "etag": "\"77b5f54245a4551c5876226678f88b52\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "plus+sign"
+  },
+  {
+    "step": "head plus+sign",
+    "request": "HEAD /obj-<run>/plus%2Bsign",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "9",
+      "content-type": "binary/octet-stream",
+      "etag": "\"77b5f54245a4551c5876226678f88b52\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put percent%25literal",
+    "request": "PUT /obj-<run>/percent%2525literal",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"429a16a47f2175e770ed6384e81ee10c\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get percent%25literal",
+    "request": "GET /obj-<run>/percent%2525literal",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "17",
+      "content-type": "binary/octet-stream",
+      "etag": "\"429a16a47f2175e770ed6384e81ee10c\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "percent%25literal"
+  },
+  {
+    "step": "head percent%25literal",
+    "request": "HEAD /obj-<run>/percent%2525literal",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "17",
+      "content-type": "binary/octet-stream",
+      "etag": "\"429a16a47f2175e770ed6384e81ee10c\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put percent%",
+    "request": "PUT /obj-<run>/percent%25",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"2a8f272e386e1bd76b94acfe2f3cc208\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get percent%",
+    "request": "GET /obj-<run>/percent%25",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "8",
+      "content-type": "binary/octet-stream",
+      "etag": "\"2a8f272e386e1bd76b94acfe2f3cc208\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "percent%"
+  },
+  {
+    "step": "head percent%",
+    "request": "HEAD /obj-<run>/percent%25",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "8",
+      "content-type": "binary/octet-stream",
+      "etag": "\"2a8f272e386e1bd76b94acfe2f3cc208\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put dir/",
+    "request": "PUT /obj-<run>/dir/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"a31e441cb3888c8dce1048fb6270e086\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get dir/",
+    "request": "GET /obj-<run>/dir/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"a31e441cb3888c8dce1048fb6270e086\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "dir/"
+  },
+  {
+    "step": "head dir/",
+    "request": "HEAD /obj-<run>/dir/",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "4",
+      "content-type": "binary/octet-stream",
+      "etag": "\"a31e441cb3888c8dce1048fb6270e086\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put a/b/c/d.txt",
+    "request": "PUT /obj-<run>/a/b/c/d.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"dca817357e3792564cab869e4de5cd7d\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get a/b/c/d.txt",
+    "request": "GET /obj-<run>/a/b/c/d.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "11",
+      "content-type": "binary/octet-stream",
+      "etag": "\"dca817357e3792564cab869e4de5cd7d\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "a/b/c/d.txt"
+  },
+  {
+    "step": "head a/b/c/d.txt",
+    "request": "HEAD /obj-<run>/a/b/c/d.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "11",
+      "content-type": "binary/octet-stream",
+      "etag": "\"dca817357e3792564cab869e4de5cd7d\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put üñíçødé/日本語.txt",
+    "request": "PUT /obj-<run>/%C3%BC%C3%B1%C3%AD%C3%A7%C3%B8d%C3%A9/%E6%97%A5%E6%9C%AC%E8%AA%9E.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"9c7692f49b36bcb76f70e18194746be3\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get üñíçødé/日本語.txt",
+    "request": "GET /obj-<run>/%C3%BC%C3%B1%C3%AD%C3%A7%C3%B8d%C3%A9/%E6%97%A5%E6%9C%AC%E8%AA%9E.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "27",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9c7692f49b36bcb76f70e18194746be3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<27 bytes sha256:8060a48ab70929df>"
+  },
+  {
+    "step": "head üñíçødé/日本語.txt",
+    "request": "HEAD /obj-<run>/%C3%BC%C3%B1%C3%AD%C3%A7%C3%B8d%C3%A9/%E6%97%A5%E6%9C%AC%E8%AA%9E.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "27",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9c7692f49b36bcb76f70e18194746be3\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put emoji-🎉",
+    "request": "PUT /obj-<run>/emoji-%F0%9F%8E%89",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"4a24d85b2d6a981f744cbee732ad9c79\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get emoji-🎉",
+    "request": "GET /obj-<run>/emoji-%F0%9F%8E%89",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-type": "binary/octet-stream",
+      "etag": "\"4a24d85b2d6a981f744cbee732ad9c79\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<10 bytes sha256:1e9ceeb9ed2c7a60>"
+  },
+  {
+    "step": "head emoji-🎉",
+    "request": "HEAD /obj-<run>/emoji-%F0%9F%8E%89",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "10",
+      "content-type": "binary/octet-stream",
+      "etag": "\"4a24d85b2d6a981f744cbee732ad9c79\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put tilde~and*star(paren)'quote'",
+    "request": "PUT /obj-<run>/tilde~and%2Astar%28paren%29%27quote%27",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"817b3b0f8947b1a04ba4024aa817916f\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get tilde~and*star(paren)'quote'",
+    "request": "GET /obj-<run>/tilde~and%2Astar%28paren%29%27quote%27",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "28",
+      "content-type": "binary/octet-stream",
+      "etag": "\"817b3b0f8947b1a04ba4024aa817916f\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "tilde~and*star(paren)'quote'"
+  },
+  {
+    "step": "head tilde~and*star(paren)'quote'",
+    "request": "HEAD /obj-<run>/tilde~and%2Astar%28paren%29%27quote%27",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "28",
+      "content-type": "binary/octet-stream",
+      "etag": "\"817b3b0f8947b1a04ba4024aa817916f\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put semi;colon,comma=eq&amp",
+    "request": "PUT /obj-<run>/semi%3Bcolon%2Ccomma%3Deq%26amp",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"6cdec6c4f111899bf0273a69c556e5fc\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get semi;colon,comma=eq&amp",
+    "request": "GET /obj-<run>/semi%3Bcolon%2Ccomma%3Deq%26amp",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "23",
+      "content-type": "binary/octet-stream",
+      "etag": "\"6cdec6c4f111899bf0273a69c556e5fc\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "semi;colon,comma=eq&amp"
+  },
+  {
+    "step": "head semi;colon,comma=eq&amp",
+    "request": "HEAD /obj-<run>/semi%3Bcolon%2Ccomma%3Deq%26amp",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "23",
+      "content-type": "binary/octet-stream",
+      "etag": "\"6cdec6c4f111899bf0273a69c556e5fc\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put hash#frag?query",
+    "request": "PUT /obj-<run>/hash%23frag%3Fquery",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"59608ebb69ee0bcf468547fbb75649fd\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get hash#frag?query",
+    "request": "GET /obj-<run>/hash%23frag%3Fquery",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "15",
+      "content-type": "binary/octet-stream",
+      "etag": "\"59608ebb69ee0bcf468547fbb75649fd\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "hash#frag?query"
+  },
+  {
+    "step": "head hash#frag?query",
+    "request": "HEAD /obj-<run>/hash%23frag%3Fquery",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "15",
+      "content-type": "binary/octet-stream",
+      "etag": "\"59608ebb69ee0bcf468547fbb75649fd\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put brackets[]{}|^`",
+    "request": "PUT /obj-<run>/brackets%5B%5D%7B%7D%7C%5E%60",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"4b07fa1d3369598ba2c843912eff9b34\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get brackets[]{}|^`",
+    "request": "GET /obj-<run>/brackets%5B%5D%7B%7D%7C%5E%60",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "15",
+      "content-type": "binary/octet-stream",
+      "etag": "\"4b07fa1d3369598ba2c843912eff9b34\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "brackets[]{}|^`"
+  },
+  {
+    "step": "head brackets[]{}|^`",
+    "request": "HEAD /obj-<run>/brackets%5B%5D%7B%7D%7C%5E%60",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "15",
+      "content-type": "binary/octet-stream",
+      "etag": "\"4b07fa1d3369598ba2c843912eff9b34\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put   leading-spaces",
+    "request": "PUT /obj-<run>/%20%20leading-spaces",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"9ba84bff0c18e4bed35fa5ca1991b788\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get   leading-spaces",
+    "request": "GET /obj-<run>/%20%20leading-spaces",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "16",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9ba84bff0c18e4bed35fa5ca1991b788\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "  leading-spaces"
+  },
+  {
+    "step": "head   leading-spaces",
+    "request": "HEAD /obj-<run>/%20%20leading-spaces",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "16",
+      "content-type": "binary/octet-stream",
+      "etag": "\"9ba84bff0c18e4bed35fa5ca1991b788\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put trailing-dot.",
+    "request": "PUT /obj-<run>/trailing-dot.",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"468393602523064efb24536fb9e6d4d8\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "get trailing-dot.",
+    "request": "GET /obj-<run>/trailing-dot.",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"468393602523064efb24536fb9e6d4d8\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "trailing-dot."
+  },
+  {
+    "step": "head trailing-dot.",
+    "request": "HEAD /obj-<run>/trailing-dot.",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "13",
+      "content-type": "binary/octet-stream",
+      "etag": "\"468393602523064efb24536fb9e6d4d8\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "put double//slash",
+    "request": "PUT /obj-<run>/double//slash",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key>double//slash</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/double//slash</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "get double//slash",
+    "request": "GET /obj-<run>/double//slash",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XMinioInvalidObjectName</Code><Message>Object name contains unsupported characters.</Message><Key>double//slash</Key><BucketName>obj-<run></BucketName><Resource>/obj-<run>/double//slash</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head double//slash",
+    "request": "HEAD /obj-<run>/double//slash",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-minio-error-code": "XMinioInvalidObjectName",
+      "x-minio-error-desc": "\"Object name contains unsupported characters.\""
+    },
+    "body": ""
+  },
+  {
+    "step": "list",
+    "request": "GET /obj-<run>?list-type=2&encoding-type=url",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>obj-<run></Name><Prefix></Prefix><KeyCount>14</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>++leading-spaces</Key><LastModified><date></LastModified><ETag>&#34;9ba84bff0c18e4bed35fa5ca1991b788&#34;</ETag><Size>16</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>a/b/c/d.txt</Key><LastModified><date></LastModified><ETag>&#34;dca817357e3792564cab869e4de5cd7d&#34;</ETag><Size>11</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>brackets%5B%5D%7B%7D%7C%5E%60</Key><LastModified><date></LastModified><ETag>&#34;4b07fa1d3369598ba2c843912eff9b34&#34;</ETag><Size>15</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>dir/</Key><LastModified><date></LastModified><ETag>&#34;a31e441cb3888c8dce1048fb6270e086&#34;</ETag><Size>4</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>emoji-%F0%9F%8E%89</Key><LastModified><date></LastModified><ETag>&#34;4a24d85b2d6a981f744cbee732ad9c79&#34;</ETag><Size>10</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>hash%23frag%3Fquery</Key><LastModified><date></LastModified><ETag>&#34;59608ebb69ee0bcf468547fbb75649fd&#34;</ETag><Size>15</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>percent%25</Key><LastModified><date></LastModified><ETag>&#34;2a8f272e386e1bd76b94acfe2f3cc208&#34;</ETag><Size>8</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>percent%2525literal</Key><LastModified><date></LastModified><ETag>&#34;429a16a47f2175e770ed6384e81ee10c&#34;</ETag><Size>17</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>plus%2Bsign</Key><LastModified><date></LastModified><ETag>&#34;77b5f54245a4551c5876226678f88b52&#34;</ETag><Size>9</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>semi%3Bcolon%2Ccomma%3Deq%26amp</Key><LastModified><date></LastModified><ETag>&#34;6cdec6c4f111899bf0273a69c556e5fc&#34;</ETag><Size>23</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>spaces+in+name.txt</Key><LastModified><date></LastModified><ETag>&#34;0912f11c16f3fa11625ad7c08743b729&#34;</ETag><Size>18</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>tilde%7Eand*star%28paren%29%27quote%27</Key><LastModified><date></LastModified><ETag>&#34;817b3b0f8947b1a04ba4024aa817916f&#34;</ETag><Size>28</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>trailing-dot.</Key><LastModified><date></LastModified><ETag>&#34;468393602523064efb24536fb9e6d4d8&#34;</ETag><Size>13</Size><StorageClass>STANDARD</StorageClass></Contents><Contents><Key>%C3%BC%C3%B1%C3%AD%C3%A7%C3%B8d%C3%A9/%E6%97%A5%E6%9C%AC%E8%AA%9E.txt</Key><LastModified><date></LastModified><ETag>&#34;9c7692f49b36bcb76f70e18194746be3&#34;</ETag><Size>27</Size><StorageClass>STANDARD</StorageClass></Contents><EncodingType>url</EncodingType></ListBucketResult>"
+  }
+]

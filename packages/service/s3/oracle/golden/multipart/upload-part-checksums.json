@@ -1,0 +1,153 @@
+[
+  {
+    "step": "crc32 right",
+    "request": "PUT /mp-pck-<run>/plain?partNumber=1&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"1164e88f32586c0cdedbdce3025efed9\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "4QFj8Q==",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "crc32 wrong",
+    "request": "PUT /mp-pck-<run>/plain?partNumber=2&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>plain</Key><BucketName>mp-pck-<run></BucketName><Resource>/mp-pck-<run>/plain</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "sha256 right",
+    "request": "PUT /mp-pck-<run>/plain?partNumber=3&uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"1164e88f32586c0cdedbdce3025efed9\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-sha256": "lYiyHn1SB7KCIbiShBH9CVDbRfQr7Sp3HiMGnSD4+O4=",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "sha1 malformed",
+    "request": "PUT /mp-pck-<run>/plain?partNumber=4&uploadId=<id:1>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid checksum provided.</Message><Key>plain</Key><BucketName>mp-pck-<run></BucketName><Resource>/mp-pck-<run>/plain</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "list plain",
+    "request": "GET /mp-pck-<run>/plain?uploadId=<id:1>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-pck-<run></Bucket><Key>plain</Key><UploadId><id:1></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm></ChecksumAlgorithm><ChecksumType></ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;1164e88f32586c0cdedbdce3025efed9&#34;</ETag><Size>16</Size><ChecksumCRC32>4QFj8Q==</ChecksumCRC32></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;1164e88f32586c0cdedbdce3025efed9&#34;</ETag><Size>16</Size><ChecksumSHA256>lYiyHn1SB7KCIbiShBH9CVDbRfQr7Sp3HiMGnSD4+O4=</ChecksumSHA256></Part></ListPartsResult>"
+  },
+  {
+    "step": "missing checksum",
+    "request": "PUT /mp-pck-<run>/crc?partNumber=1&uploadId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid arguments provided for mp-pck-<run>/<upload-path>: (checksum missing, want &#34;CRC32&#34;, got &#34;&#34;)</Message><Key>crc</Key><BucketName>mp-pck-<run></BucketName><Resource>/mp-pck-<run>/crc</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "other algorithm",
+    "request": "PUT /mp-pck-<run>/crc?partNumber=1&uploadId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>InvalidArgument</Code><Message>Invalid arguments provided for mp-pck-<run>/<upload-path>: (checksum missing, want &#34;CRC32&#34;, got &#34;SHA256&#34;)</Message><Key>crc</Key><BucketName>mp-pck-<run></BucketName><Resource>/mp-pck-<run>/crc</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "matching algorithm",
+    "request": "PUT /mp-pck-<run>/crc?partNumber=1&uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"1164e88f32586c0cdedbdce3025efed9\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "4QFj8Q==",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "matching wrong value",
+    "request": "PUT /mp-pck-<run>/crc?partNumber=2&uploadId=<id:2>",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>XAmzContentChecksumMismatch</Code><Message>The provided &#39;x-amz-checksum&#39; header does not match what was computed.</Message><Key>crc</Key><BucketName>mp-pck-<run></BucketName><Resource>/mp-pck-<run>/crc</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "sdk algorithm header",
+    "request": "PUT /mp-pck-<run>/crc?partNumber=3&uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "0",
+      "etag": "\"1164e88f32586c0cdedbdce3025efed9\"",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-checksum-crc32": "4QFj8Q==",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "list crc",
+    "request": "GET /mp-pck-<run>/crc?uploadId=<id:2>",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListPartsResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Bucket>mp-pck-<run></Bucket><Key>crc</Key><UploadId><id:2></UploadId><Initiator><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Initiator><Owner><ID>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</ID><DisplayName>02d6176db174dc93cb1b899f7c6078f08654445fe8cf1b6ce98d8855f66bdbf4</DisplayName></Owner><StorageClass>STANDARD</StorageClass><PartNumberMarker>0</PartNumberMarker><NextPartNumberMarker>0</NextPartNumberMarker><MaxParts>10000</MaxParts><IsTruncated>false</IsTruncated><ChecksumAlgorithm>CRC32</ChecksumAlgorithm><ChecksumType>COMPOSITE</ChecksumType><Part><PartNumber>1</PartNumber><LastModified><date></LastModified><ETag>&#34;1164e88f32586c0cdedbdce3025efed9&#34;</ETag><Size>16</Size><ChecksumCRC32>4QFj8Q==</ChecksumCRC32></Part><Part><PartNumber>3</PartNumber><LastModified><date></LastModified><ETag>&#34;1164e88f32586c0cdedbdce3025efed9&#34;</ETag><Size>16</Size><ChecksumCRC32>4QFj8Q==</ChecksumCRC32></Part></ListPartsResult>"
+  }
+]

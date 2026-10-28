@@ -1,0 +1,18 @@
+[
+  {
+    "step": "head after plain overwrite",
+    "request": "HEAD /cks-<run>/k",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "binary/octet-stream",
+      "etag": "\"8c11468b5e8f6c9bda0f8c52e546acf4\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  }
+]

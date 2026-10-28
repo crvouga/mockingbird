@@ -1,0 +1,189 @@
+[
+  {
+    "step": "missing file",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data. (The file or text content is missing)</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing key",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data. (The name of the uploaded key is missing)</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "key after file",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data. (The name of the uploaded key is missing)</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "file under other name",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data. (The file or text content is missing)</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "empty body",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>EmptyRequestBody</Code><Message>Request body cannot be empty.</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "garbage body",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data. (The file or text content is missing)</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing closing boundary",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data. (unexpected EOF)</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "no boundary parameter",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data. (no multipart boundary param in Content-Type)</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "missing bucket",
+    "request": "POST /post-missing-bucket-zz [anonymous]",
+    "status": 404,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>NoSuchBucket</Code><Message>The specified bucket does not exist</Message><BucketName>post-missing-bucket-zz</BucketName><Resource>/post-missing-bucket-zz</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "to an object path",
+    "request": "POST /post-form-<run>/some-key [anonymous]",
+    "status": 405,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MethodNotAllowed</Code><Message>The specified method is not allowed against this resource.</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run>/some-key</Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "with tagging",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 204,
+    "headers": {
+      "accept-ranges": "bytes",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "location": "http://<host>/post-form-<run>/tagged.txt",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": ""
+  },
+  {
+    "step": "with bad tagging",
+    "request": "POST /post-form-<run> [anonymous]",
+    "status": 400,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Error><Code>MalformedPOSTRequest</Code><Message>The body of your POST request is not well-formed multipart/form-data.</Message><BucketName>post-form-<run></BucketName><Resource>/post-form-<run></Resource><Region>us-east-1</Region><RequestId>*</RequestId><HostId>*</HostId></Error>"
+  },
+  {
+    "step": "head tagged",
+    "request": "HEAD /post-form-<run>/tagged.txt",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-length": "14",
+      "content-type": "text/plain",
+      "etag": "\"312868ea31829c8a6f7a7684b3f1228a\"",
+      "last-modified": "<date>",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*",
+      "x-amz-tagging-count": "1"
+    },
+    "body": ""
+  },
+  {
+    "step": "list",
+    "request": "GET /post-form-<run>?list-type=2",
+    "status": 200,
+    "headers": {
+      "accept-ranges": "bytes",
+      "content-type": "application/xml",
+      "x-amz-bucket-region": "us-east-1",
+      "x-amz-id-2": "*",
+      "x-amz-request-id": "*"
+    },
+    "body": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<ListBucketResult xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Name>post-form-<run></Name><Prefix></Prefix><KeyCount>1</KeyCount><MaxKeys>1000</MaxKeys><IsTruncated>false</IsTruncated><Contents><Key>tagged.txt</Key><LastModified><date></LastModified><ETag>&#34;312868ea31829c8a6f7a7684b3f1228a&#34;</ETag><Size>14</Size><StorageClass>STANDARD</StorageClass></Contents></ListBucketResult>"
+  }
+]
