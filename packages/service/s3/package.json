@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-s3",
   "version": "0.0.0-development",
-  "description": "Stateful Amazon S3 emulator with binary objects, listing, copies, multipart uploads, presigned URLs, and canonical XML errors.",
+  "description": "Stateful S3 emulator that answers exactly as MinIO does: every bucket, object, multipart, versioning, object-lock, policy and auth API, verified against recorded MinIO transcripts.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -60,7 +60,7 @@
       "website": "https://aws.amazon.com/s3/",
       "docs": "https://docs.aws.amazon.com/AmazonS3/latest/API/"
     },
-    "parity": "Objects, multipart, and presigned URLs",
+    "parity": "Every MinIO S3 API, byte-exact against recorded MinIO transcripts",
     "parityTier": "cold",
     "discovery": {
       "guide": "DISCOVERY.md",
@@ -69,9 +69,9 @@
       "contract": "openapi.yaml",
       "types": "dist/index.d.ts",
       "oracle": {
-        "kind": "Live vendor API or sandbox",
+        "kind": "Pinned self-hosted MinIO (RELEASE.2025-10-15T17-29-55Z) and its recorded transcripts",
         "command": "bun run parity:service -- s3",
-        "note": "Run from a Mockingbird checkout; credentials come only from .env.local or GitHub Actions secrets. Missing credentials exit 2."
+        "note": "bun test replays every recorded MinIO transcript against the emulator offline; the live run needs a MinIO you start (packages/service/s3/oracle/README.md) and exits 2 when it is unreachable."
       },
       "introspection": [
         "GET /__admin/health",

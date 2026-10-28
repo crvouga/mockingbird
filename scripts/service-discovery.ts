@@ -155,6 +155,12 @@ function oracleFor(name: string): Discovery["oracle"] {
       command: "bun run --cwd packages/service/redis parity",
       note: "The repository also differentially exercises BullMQ with parity:bullmq.",
     }
+  if (name === "s3")
+    return {
+      kind: "Pinned self-hosted MinIO (RELEASE.2025-10-15T17-29-55Z) and its recorded transcripts",
+      command: "bun run parity:service -- s3",
+      note: "bun test replays every recorded MinIO transcript against the emulator offline; the live run needs a MinIO you start (packages/service/s3/oracle/README.md) and exits 2 when it is unreachable.",
+    }
   if (name === "medplum")
     return {
       kind: "Pinned self-hosted Medplum",

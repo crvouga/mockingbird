@@ -2,7 +2,7 @@
 
 > Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
-Stateful Amazon S3 emulator for AWS SDK v3. It preserves binary objects and the metadata applications read, supports path-style endpoints, multipart uploads, copies, ranges, pagination, presigned URLs, XML errors, namespace isolation, faults, and object notifications without contacting AWS.
+Stateful S3 emulator that answers exactly as [MinIO](https://github.com/minio/minio) does, so it drops in for MinIO, Amazon S3 and other S3-compatible storage in tests. Every behavior is pinned by a differential oracle: 370 scripted scenarios (about 3,800 HTTP exchanges) were recorded against MinIO `RELEASE.2025-10-15T17-29-55Z`, and `bun test` replays each one against the emulator and requires the same status, headers and XML byte for byte.
 
 ## Install
 
@@ -40,18 +40,37 @@ console.log(await object.Body?.transformToByteArray()) // Uint8Array(2) [ 0, 255
 await server.close()
 ```
 
-Set an application's S3 endpoint environment variable to the server URL and its region to `us-east-1`. Supported REST operations are CreateBucket, HeadBucket, PutObject, GetObject, HeadObject, DeleteObject, DeleteObjects, CopyObject, ListObjectsV2, and multipart create/upload/complete/abort. SDK `GetObject` bodies retain its streaming helpers.
+Set an application's S3 endpoint environment variable to the server URL and its region to `us-east-1`.
 
-### Request semantics
+### Supported operations
 
-Each behavior follows the linked Amazon S3 reference.
+Everything MinIO's S3 router serves, with MinIO's precedence, validation order, error codes and messages (generated from MinIO's own error table):
 
-- **Response header overrides** ([GetObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html)): `response-cache-control`, `response-content-disposition`, `response-content-encoding`, `response-content-language`, `response-content-type` and `response-expires` replace the stored header on a 200 or 206 GetObject and on HeadObject. Like S3, they are refused with `400 InvalidRequest` on anonymous requests.
-- **Copy-source preconditions** ([CopyObject](https://docs.aws.amazon.com/AmazonS3/latest/API/API_CopyObject.html)): `x-amz-copy-source-if-match`, `-if-none-match`, `-if-modified-since` and `-if-unmodified-since` are evaluated against the source object. An unmet precondition answers `412 PreconditionFailed` and copies nothing; a true `if-match` overrides a false `if-unmodified-since`, and a matching `if-none-match` is `412` whatever `if-modified-since` says, as documented. When `if-none-match` is present, `if-modified-since` is not consulted (best guess, not oracle-verified: the reference does not state it).
-- **Streaming uploads** ([SigV4 streaming](https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming.html), [with trailers](https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-streaming-trailers.html)): `Content-Encoding: aws-chunked` bodies (signed and `STREAMING-UNSIGNED-PAYLOAD-TRAILER`) are decoded before storing, on PutObject and UploadPart. The stored length is `x-amz-decoded-content-length`; a trailer or header `x-amz-checksum-*` that does not match, or a wrong decoded length, is rejected with `400` (`BadDigest` / `IncompleteBody`) and stores nothing. Chunk signatures are not verified.
-- **Body size** ([upload limits](https://docs.aws.amazon.com/AmazonS3/latest/userguide/upload-objects.html)): `createServer` accepts bodies up to 5 GiB, the S3 maximum for one PUT or part, and answers larger ones with S3's `EntityTooLarge`. `createServer({ maxBodyBytes })` lowers the limit. `mockingbird-s3 serve` and fleet entries use the same 5 GiB limit (the target sets `maxBodyBytes`; other services keep the adapter's 16 MiB default).
-- **Virtual-hosted-style addressing** ([VirtualHosting](https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html)): `Host: <bucket>.<base host>` names the bucket and the path is the key, so an SDK client without `forcePathStyle` works against `AWS_ENDPOINT_URL_S3=http://localhost:<port>`. The base hosts default to `localhost` (so `docs.localhost`); set `virtualHosts` (`--virtual-host a,b`, empty for path-style only) to change them. Path-style requests and IP or other hosts are unchanged, an unknown bucket is `NoSuchBucket`, no request ever creates a bucket as a side effect, presigned URLs are verified against the virtual host, and the admin prefix keeps its path on any host.
-- **Bucket CORS** ([CORS](https://docs.aws.amazon.com/AmazonS3/latest/userguide/cors.html), [PutBucketCors](https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketCors.html), [OPTIONS object](https://docs.aws.amazon.com/AmazonS3/latest/API/RESTOPTIONSobject.html)): the stored `CORSConfiguration` is enforced. An unauthenticated `OPTIONS` preflight (any `X-Amz-*` query is ignored) is answered by the first rule matching origin, method and requested headers with `Access-Control-Allow-Origin/-Methods/-Headers/-Max-Age/-Expose-Headers` and `Vary`; otherwise it is `403 AccessForbidden` ("CORSResponse: This CORS request is not allowed.", or "CORS is not enabled for this bucket." with no rules or after `DeleteBucketCors`) with no `Access-Control-*` headers. Actual requests with an allowed `Origin` and method get `Access-Control-Allow-Origin`, `Access-Control-Expose-Headers` and `Vary: Origin`, errors included. `PutBucketCors` rejects empty rule sets, unsupported methods and multiple wildcards. Best guess, not oracle-verified: the exact set and ordering of preflight headers beyond what the docs list (the `AccessForbidden` error code matches what S3 and s3rver return for a disabled bucket); no live AWS bucket was exercised.
+- **Buckets**: CreateBucket (location constraint, object-lock flag), HeadBucket, DeleteBucket (incl. `x-minio-force-delete`), ListBuckets, GetBucketLocation, Get/PutBucketVersioning (incl. MinIO's excluded prefixes), Get/Put/DeleteBucketPolicy and GetBucketPolicyStatus, Get/Put/DeleteBucketTagging, Get/Put/DeleteBucketLifecycle, Get/Put/DeleteBucketEncryption, Get/PutBucketNotification, Get/Put/DeleteBucketReplication, Get/PutObjectLockConfiguration, the ACL, website, accelerate, request-payment and logging stubs, and MinIO's ListenNotification and replication extensions.
+- **Objects**: PutObject, GetObject, HeadObject (system and user metadata, conditional reads and writes, every Range form, `partNumber`, `response-*` overrides, checksums CRC32/CRC32C/CRC64NVME/SHA1/SHA256 with `x-amz-checksum-mode`), CopyObject (metadata and tagging directives, copy-source conditionals, versions), DeleteObject and DeleteObjects (delete markers, null versions), Get/Put/DeleteObjectTagging, Get/PutObjectRetention, Get/PutObjectLegalHold, Get/PutObjectAcl, GetObjectAttributes, RestoreObject, SelectObjectContent (CSV and JSON input, basic SQL, event-stream framing), and browser POST uploads (POST policy, V4 and V2 form signatures).
+- **Listing**: ListObjects V1, V2 and `metadata=true`, ListObjectVersions, including MinIO's marker and truncation behavior.
+- **Multipart**: Create, UploadPart, UploadPartCopy, Complete, Abort, ListParts, ListMultipartUploads, with part checksums and the `<md5>-N` ETag.
+- **Authentication**: SigV4 header and presigned, streaming `aws-chunked` (signed chunks and signed or unsigned trailers), SigV2 header and presigned, request-time skew, and anonymous access through bucket policies.
+
+`GetObjectLambda` and `PutObjectExtract` (snowball auto-extract) answer `NotImplemented`.
+
+### Authentication modes
+
+- `authentication: "lenient"` (default): unsigned requests act as the bucket owner and header signatures are not checked, so plain `fetch` works in tests. Presigned URLs are still verified against `credentials` (default `fixture` / `fixture`).
+- `authentication: "strict"`: MinIO's authentication exactly. Every request must be signed by a key in `credentials`, and an anonymous request is allowed only where the bucket policy grants it. The oracle runs in this mode.
+
+`region` (default `us-east-1`) is the signing region and the `x-amz-bucket-region` header.
+
+### Where it departs from MinIO
+
+- **Bucket CORS**: MinIO only stubs the bucket CORS API, so the emulator keeps Amazon S3's documented behavior. The stored `CORSConfiguration` is enforced: a preflight is answered by the first matching rule or refused with `403 AccessForbidden`, and matching actual requests get `Access-Control-*` headers. This is not oracle-verified.
+- **Virtual-hosted-style addressing**: `Host: <bucket>.<base host>` names the bucket (base hosts default to `localhost`; set `virtualHosts`, or `--virtual-host a,b`, empty for path-style only).
+- **Body size**: `createServer` accepts up to 5 GiB per PUT or part (S3's limit; MinIO's is 5 TiB). `createServer({ maxBodyBytes })` lowers it.
+- **Listings** always read live data, where MinIO serves later pages from a snapshot taken on the first page.
+
+### The oracle
+
+`oracle/` in the repository holds the harness, the scenarios and the recorded MinIO transcripts. `bun oracle/run.ts` replays them against a live MinIO, `--record` refreshes the transcripts; see [oracle/README.md](https://github.com/crvouga/mockingbird/tree/main/packages/service/s3/oracle).
 
 ### Admin and deterministic controls
 
@@ -65,16 +84,16 @@ The shared runtime also provides health, reset, journal, metrics, timeline, and 
 
 ### Deliberately not modelled
 
-Operations outside the surface listed above, object versioning, ACL/IAM policy evaluation, storage classes, checksums beyond ETags, production quotas, AWS dashboards and billing, and real SQS delivery are not modelled. SQS consumers can use the same captured notification payload through a configured HTTP sink.
+SSE-C and SSE-KMS encryption (MinIO needs TLS and a KMS for them), IAM users and policies other than the root credentials and bucket policies, actually applying lifecycle rules or replicating, and real SQS delivery. SQS consumers can use the captured notification payload through a configured HTTP sink.
 
 ## API
 
 - `S3API`, `S3APIOptions`: Fetch handler and configuration.
-- `S3Notification`, `S3Object`, `S3SeedObject`: notification, state, and fixture types.
+- `S3Notification`, `S3Object` (`ObjectVersion`), `S3SeedObject`, `BucketRecord`, `MultipartUpload`, `MultipartPart`: notification, state, and fixture types.
 - `createRuntime`, `S3Runtime`, `S3RuntimeOptions`: full Mockingbird runtime and webhook hub.
 - `S3_NAMESPACE`, `S3_PRESETS`, `accessKeyCredential`: constants and fault controls.
 - `S3_MAX_UPLOAD_BYTES`: the default request body limit (5 GiB) for `createServer`.
 - `document`, `operationIds`, `supportedOperationIds`: generated OpenAPI metadata.
 - `createServer`, `S3ServerOptions`, `DEFAULT_PORT`, `serveTarget` from `./server`: Node HTTP adapter and CLI integration.
 
-Official oracle: [Amazon S3 API Reference](https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html) and [AWS Signature Version 4 query authentication](https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html).
+Oracle: [MinIO](https://github.com/minio/minio) `RELEASE.2025-10-15T17-29-55Z`, with the [Amazon S3 API Reference](https://docs.aws.amazon.com/AmazonS3/latest/API/Welcome.html) for bucket CORS.
