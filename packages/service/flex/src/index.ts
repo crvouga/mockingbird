@@ -38,6 +38,7 @@ import {
   type PaymentMethodRecord,
   type ProductRecord,
   type Recurring,
+  type RefundRecord,
   type SessionMode,
   type SessionRecord,
   type Settings,
@@ -103,6 +104,23 @@ export const FLEX_EVENT_TYPES = [
   "charge.refund.updated",
 ] as const
 export type FlexEventType = (typeof FLEX_EVENT_TYPES)[number]
+
+/**
+ * The key Flex nests an event's object under (`EventObject` in Flex's OpenAPI): a
+ * `refund.created` event carries `{refund: {...}}`, a `checkout.session.completed` event
+ * `{checkout_session: {...}}`. `charge.refund.updated` carries the refund.
+ */
+export const eventObjectKey = (type: string): string => {
+  const prefixes: [string, string][] = [
+    ["checkout.session.", "checkout_session"],
+    ["checkout_session.", "checkout_session"],
+    ["charge.refund.", "refund"],
+    ["charge.dispute.", "dispute"],
+    ["customer.subscription.", "subscription"],
+  ]
+  const match = prefixes.find(([prefix]) => type.startsWith(prefix))
+  return match ? match[1] : (type.split(".")[0] as string)
+}
 
 /** The event inside the `{event: {...}}` webhook envelope. */
 export type FlexEvent = {
@@ -719,35 +737,101 @@ export class FlexAPI implements FetchAPI {
     return this.sessionResponse(context, id)
   }
 
-  /** Refund part or all of a paid session, emitting the refund events. */
+  /**
+   * Refund part or all of a paid session, emitting the refund events in the order Flex sends
+   * them for a dashboard refund: `refund.created` twice, `charge.refunded`, then
+   * `refund.updated` and `charge.refund.updated`.
+   */
   applyRefund(id: string, amount: number): SessionRecord | undefined {
     const session = this.state.sessions.get(id)
     if (!session) return undefined
     const next = { ...session, amount_refunded: session.amount_refunded + amount }
     this.state.sessions.update(id, next)
-    const refund = {
+    const refund: RefundRecord = {
       refund_id: this.state.nextId("fre_"),
       checkout_session: id,
       payment_intent: session.payment_intent,
       amount,
-      status: "succeeded" as const,
+      status: "succeeded",
       created_at: this.iso(),
     }
     this.state.refunds.insert(refund.refund_id, refund)
-    const charge = {
-      charge_id: `fch_${refund.refund_id.slice(4)}`,
-      checkout_session_id: id,
-      payment_intent: session.payment_intent,
-      amount: session.amount_received,
-      amount_refunded: next.amount_refunded,
-      refunded: next.amount_refunded >= (session.amount_received ?? 0),
-    }
-    this.emit("refund.created", { ...refund, status: "pending" }, session.test_mode)
-    this.emit("charge.refunded", charge, session.test_mode)
-    this.emitSession("checkout.session.refunded", id)
-    this.emit("refund.updated", refund, session.test_mode)
-    this.emit("charge.refund.updated", { ...refund, charge: charge.charge_id }, session.test_mode)
+    const refundObject = this.presentRefund(refund, session.test_mode)
+    const chargeObject = this.presentCharge(next, refund.refund_id)
+    this.emit("refund.created", refundObject, session.test_mode)
+    this.emit("refund.created", refundObject, session.test_mode)
+    this.emit("charge.refunded", chargeObject, session.test_mode)
+    this.emit("refund.updated", refundObject, session.test_mode)
+    this.emit("charge.refund.updated", refundObject, session.test_mode)
     return this.state.sessions.get(id)
+  }
+
+  /** Refund a paid session from Flex's dashboard (`POST /__admin/sessions/:id/refund`). */
+  dashboardRefund(
+    id: string,
+    amount?: number,
+  ): { session: SessionRecord } | { status: 400 | 404 | 409; message: string } {
+    const session = this.state.sessions.get(id)
+    if (!session) return { status: 404, message: `no session ${id}` }
+    const received = session.amount_received ?? 0
+    if (session.status !== "complete" || received <= 0) {
+      return { status: 409, message: `session ${id} has no payment to refund` }
+    }
+    const remaining = received - session.amount_refunded
+    const value = amount ?? remaining
+    if (!Number.isInteger(value) || value <= 0 || value > remaining) {
+      return { status: 400, message: `amount must be between 1 and ${remaining}` }
+    }
+    return { session: this.applyRefund(id, value) as SessionRecord }
+  }
+
+  private presentRefund(refund: RefundRecord, testMode: boolean): Record<string, unknown> {
+    return {
+      refund_id: refund.refund_id,
+      amount: refund.amount,
+      status: refund.status,
+      payment_intent_id: refund.payment_intent,
+      items: [],
+      metadata: null,
+      reason: null,
+      reference_id: null,
+      reference_type: null,
+      reference_status: null,
+      balance_transaction: null,
+      failure_balance_transaction: null,
+      test_mode: testMode,
+      created_at: refund.created_at,
+    }
+  }
+
+  private presentCharge(session: SessionRecord, seed: string): Record<string, unknown> {
+    const intent = session.payment_intent
+      ? this.state.paymentIntents.get(session.payment_intent)
+      : undefined
+    const received = session.amount_received ?? 0
+    return {
+      charge_id: `fch_${seed.slice(4)}`,
+      payment_intent: session.payment_intent,
+      amount: received,
+      amount_captured: received,
+      amount_refunded: session.amount_refunded,
+      refunded: session.amount_refunded >= received,
+      paid: true,
+      captured: true,
+      status: "succeeded",
+      customer: session.customer,
+      payment_method_id: intent?.payment_method ?? null,
+      invoice: null,
+      refunds: null,
+      disputed: false,
+      failure_message: null,
+      balance_transaction: null,
+      failure_balance_transaction: null,
+      application_fee_amount: null,
+      transfer_group: null,
+      test_mode: session.test_mode,
+      created_at: intent?.created_at ?? this.iso(),
+    }
   }
 
   // --- customers and setup intents ---------------------------------------------------------
@@ -890,11 +974,7 @@ export class FlexAPI implements FetchAPI {
     const intent = { ...this.paymentIntentFor(session), ...patch }
     this.state.paymentIntents.update(intent.payment_intent_id, intent)
     if (patch.status === "succeeded") {
-      this.emit(
-        "payment_intent.succeeded",
-        { ...intent, checkout_session_id: id },
-        session.test_mode,
-      )
+      this.emit("payment_intent.succeeded", { ...intent }, session.test_mode)
     }
     return intent
   }
@@ -1055,8 +1135,48 @@ export class FlexAPI implements FetchAPI {
       const product = this.state.products.get(target.productId)
       return product ? this.emit(type, { ...product }, product.test_mode) : undefined
     }
-    if (target.sessionId) return this.emitSession(type, target.sessionId)
-    return undefined
+    if (!target.sessionId) return undefined
+    const session = this.state.sessions.get(target.sessionId)
+    if (!session) return undefined
+    const key = eventObjectKey(type)
+    const existingIntent = session.payment_intent
+      ? this.state.paymentIntents.get(session.payment_intent)
+      : undefined
+    if (key === "payment_intent") {
+      const intent = existingIntent ?? {
+        payment_intent_id: `fpi_${session.checkout_session_id.slice(4)}`,
+        amount: session.amount_total,
+        amount_received: null,
+        customer: session.customer,
+        payment_method: null,
+        status: "requires_payment_method",
+        created_at: session.created_at,
+      }
+      return this.emit(type, { ...intent }, session.test_mode)
+    }
+    if (key === "refund" || key === "charge") {
+      const refund = this.state.refunds
+        .list()
+        .map((row) => row.value)
+        .filter((row) => row.checkout_session === session.checkout_session_id)
+        .at(-1) ?? {
+        refund_id: this.state.nextId("fre_"),
+        checkout_session: session.checkout_session_id,
+        payment_intent: session.payment_intent,
+        amount: session.amount_received ?? session.amount_total,
+        status: "succeeded" as const,
+        created_at: this.iso(),
+      }
+      const current = this.state.sessions.get(session.checkout_session_id) as SessionRecord
+      return this.emit(
+        type,
+        key === "refund"
+          ? this.presentRefund(refund, session.test_mode)
+          : this.presentCharge(current, refund.refund_id),
+        session.test_mode,
+      )
+    }
+    return this.emitSession(type, target.sessionId)
   }
 
   private emitSession(type: string, id: string): FlexEvent | undefined {
@@ -1073,7 +1193,7 @@ export class FlexAPI implements FetchAPI {
     const event: FlexEvent = {
       event_id: this.state.nextId("fevt_"),
       event_type: type,
-      object,
+      object: { [eventObjectKey(type)]: object },
       event_dt: Math.floor(this.now() / 1000),
       test_mode: testMode,
       created_at: this.iso(),

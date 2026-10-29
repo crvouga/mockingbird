@@ -140,10 +140,14 @@ overrides the origin.
 
 Svix-signed (`svix-id`, `svix-timestamp` = wall clock, `svix-signature: v1,<base64
 HMAC-SHA256(key, "<id>.<ts>.<body>")>`, key = base64-decoded secret after `fwhsec_`/`whsec_`).
-Body: `{event: {event_id, event_type, object, event_dt, test_mode, created_at}}`.
-Checkout events carry the session (so `object.checkout_session_id`), payment-intent events the
-intent plus `checkout_session_id`, refund events `checkout_session` and `payment_intent`, and
-`product.updated` the product (`object.product_id`).
+Body: `{event: {event_id, event_type, object, event_dt, test_mode, created_at}}`. As in Flex's
+OpenAPI (`EventObject`) and production deliveries, `object` holds one key named for the
+resource: checkout events `{checkout_session}` (so `object.checkout_session.checkout_session_id`),
+payment-intent events `{payment_intent}`, `charge.*` events `{charge}` (its intent is
+`charge.payment_intent`), `refund.*` and `charge.refund.updated` events `{refund}` (its intent is
+`refund.payment_intent_id`), `customer.subscription.*` `{subscription}` and `product.updated`
+`{product}`. Payment-intent, charge and refund objects name no checkout session: a receiver
+finds the payment through the payment intent.
 
 | Event | When |
 | --- | --- |
@@ -152,7 +156,7 @@ intent plus `checkout_session_id`, refund events `checkout_session` and `payment
 | `checkout.session.async_payment_succeeded` | settling a session whose intent was `processing` |
 | `checkout.session.async_payment_failed` | a decline (page, admin, off-session) |
 | `checkout.session.expired` | `…/expire`, or `expires_at` passing on the emulator clock (default 24 h) |
-| `refund.created`, `charge.refunded`, `checkout.session.refunded`, `refund.updated`, `charge.refund.updated` | each refund |
+| `refund.created` (twice), `charge.refunded`, `refund.updated`, `charge.refund.updated` | each refund, through the API or the dashboard (`POST /__admin/sessions/:id/refund`), in the order production delivers a dashboard refund. `checkout.session.refunded` is in Flex's event list but has never been seen on a refund, so it is only sent through `POST /__admin/events` |
 | `product.updated` | `PATCH /v1/products/{id}` and `PUT /__admin/products/:id` |
 | `checkout_session.completed`, `checkout_session.expired` | the aliases, with `PUT /__admin/settings {"eventNaming": "underscored"}` |
 
@@ -168,6 +172,7 @@ retried (immediately, 5 s, 5 min, 30 min, 2 h); `GET /__admin/webhooks`, `…/ev
 | `POST /__admin/sessions/:id/complete` | `{card?}`: settle as if paid (HSA card unless `card` is `4242…`). |
 | `POST /__admin/sessions/:id/decline` | Payment intent → `requires_payment_method`. |
 | `POST /__admin/sessions/:id/expire` | Session → `expired`. |
+| `POST /__admin/sessions/:id/refund` | `{amount?}`: a refund made in Flex's dashboard (full by default); emits the refund events. 409 when unpaid, 400 over the unrefunded amount. |
 | `POST /__admin/sessions/:id/require_action` | `{next_action_type?}`: `collect_letter_of_medical_necessity` (default), `provide_second_payment_method`, `provide_alternative_payment_method`, `payment_failed`. |
 | `PUT /__admin/sessions/:id/payment-intent` | `{status, amount_received?}`: `requires_payment_method`, `requires_action`, `processing`, `succeeded`, `canceled`. |
 | `GET /__admin/sessions`, `GET /__admin/sessions/:id` | The namespace's sessions. |
@@ -221,11 +226,12 @@ so product names are synthesised.
 
 | Export | Kind | Description |
 | --- | --- | --- |
-| `FlexAPI` | class | The in-process emulator: `fetch(request)`, `reset()`, `settle(id)`, `decline(id)`, `expire(id)`, `requireAction(id, type)`, `setPaymentIntent(id, patch)`, `applyRefund(id, amount)`, `putProduct(product)`, `emitFor(type, target)`, `tick()`, `sessions()`, `subscriptions()`, `present(session, view)`. Options: `sqlite`, `now`, `namespace`, `publicNamespace`, `products`, `settings`, `onEvent`. |
+| `FlexAPI` | class | The in-process emulator: `fetch(request)`, `reset()`, `settle(id)`, `decline(id)`, `expire(id)`, `requireAction(id, type)`, `setPaymentIntent(id, patch)`, `applyRefund(id, amount)`, `dashboardRefund(id, amount?)`, `putProduct(product)`, `emitFor(type, target)`, `tick()`, `sessions()`, `subscriptions()`, `present(session, view)`. Options: `sqlite`, `now`, `namespace`, `publicNamespace`, `products`, `settings`, `onEvent`. |
 | `createRuntime` | function | The emulator with the full service contract. Options: `webhooks: {url, secret, retryDelaysMs?, fetch?}`, `products`, `settings`, `tickMs`, `clock`, `seed`, `adminKey`, `onLog`. |
 | `FLEX_PRESETS` | object | Every named fault preset. |
 | `FLEX_NAMESPACE` | string | The service name, `"flex"`. |
 | `FLEX_EVENT_TYPES` | array | Every webhook event type, aliases included. |
+| `eventObjectKey` | function | The key an event type's `object` is nested under (`refund.created` → `refund`, `charge.refund.updated` → `refund`). |
 | `keyMode` | function | `"test"` for `fsk_test_…`, `"live"` for `fsk_…`, otherwise `undefined`. |
 | `isNextActionType` | function | Whether a string is a next-action type. |
 | `CARDS`, `classifyCard`, `substituteSessionId` | values | The hosted page's test cards, its card classifier, and the `{CHECKOUT_SESSION_ID}` substitution. |

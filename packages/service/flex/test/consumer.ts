@@ -1198,7 +1198,7 @@ const getProviderSessionId = (object: Record<string, unknown>) => {
   return typeof providerSessionId === "string" ? providerSessionId : null
 }
 
-const getProviderPaymentId = (object: Record<string, unknown>) => {
+const readPaymentIntentId = (object: object): string | null => {
   const providerPaymentId = Reflect.get(object, "payment_intent_id")
   if (typeof providerPaymentId === "string") return providerPaymentId
   const paymentIntent = Reflect.get(object, "payment_intent")
@@ -1206,6 +1206,18 @@ const getProviderPaymentId = (object: Record<string, unknown>) => {
   if (typeof paymentIntent !== "object" || paymentIntent === null) return null
   const nestedId = Reflect.get(paymentIntent, "payment_intent_id")
   return typeof nestedId === "string" ? nestedId : null
+}
+
+const getProviderPaymentId = (object: Record<string, unknown>) => {
+  const direct = readPaymentIntentId(object)
+  if (direct) return direct
+  for (const key of ["refund", "charge"]) {
+    const nested = Reflect.get(object, key)
+    if (typeof nested !== "object" || nested === null) continue
+    const id = readPaymentIntentId(nested)
+    if (id) return id
+  }
+  return null
 }
 
 const getProviderProductId = (object: Record<string, unknown>) => {
