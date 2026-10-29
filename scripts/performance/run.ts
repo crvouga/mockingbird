@@ -83,7 +83,17 @@ if (process.argv.includes("--profile-worker")) {
     // A real regression is slow on every attempt and still fails.
     const timing = /^(.+?): (?:median [\d.]+ ms exceeds|exceeds [\d.]+x )/
     for (let attempt = 1; attempt < timingAttempts; attempt++) {
-      const slow = new Set(gate().flatMap((failure) => timing.exec(failure)?.[1] ?? []))
+      const failures = gate()
+      // A workload that also breaks a deterministic limit is a real regression; re-measuring it
+      // only burns time.
+      const broken = new Set(
+        failures.flatMap((failure) => (timing.test(failure) ? [] : [failure.split(": ")[0]])),
+      )
+      const slow = new Set(
+        failures
+          .flatMap((failure) => timing.exec(failure)?.[1] ?? [])
+          .filter((name) => !broken.has(name)),
+      )
       if (slow.size === 0) break
       for (const workload of selected.filter((candidate) => slow.has(candidate.name))) {
         const index = report.results.findIndex((result) => result.name === workload.name)
