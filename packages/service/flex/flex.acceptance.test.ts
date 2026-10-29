@@ -191,9 +191,13 @@ describe("S4.10 acceptance: our consumer's logic against the mock", () => {
     for (const delivery of h.deliveries) {
       const headers = Object.fromEntries(delivery.headers.entries())
       const verified = svix.verify(delivery.body, headers) as {
-        event: { event_type: string; object: Record<string, unknown> }
+        event: { event_type: string; object: Record<string, Record<string, unknown>> }
       }
-      expect(verified.event.object.checkout_session_id).toBe(result.providerReference)
+      if (verified.event.event_type === "checkout.session.completed") {
+        expect(verified.event.object.checkout_session?.checkout_session_id).toBe(
+          result.providerReference,
+        )
+      }
     }
     for (const delivery of h.runtime.webhooks.deliveries()) {
       expect(new URL(delivery.url).pathname).toBe("/billing/webhooks/flex")
@@ -239,10 +243,10 @@ describe("S4.10 acceptance: our consumer's logic against the mock", () => {
       delivery.body,
       Object.fromEntries(delivery.headers.entries()),
     ) as {
-      event: { event_type: string; object: { product_id: string } }
+      event: { event_type: string; object: { product: { product_id: string } } }
     }
     expect(verified.event.event_type).toBe("product.updated")
-    expect(verified.event.object.product_id).toBe(LMN_PRODUCT)
+    expect(verified.event.object.product.product_id).toBe(LMN_PRODUCT)
     expect(() =>
       createRuntime({ webhooks: { url: "http://x/", secret: "not-a-flex-secret" } }),
     ).toThrow(TypeError)
@@ -448,10 +452,12 @@ describe("S4.5: every state the orchestrator distinguishes is producible", () =>
       expect.arrayContaining([
         "refund.created",
         "charge.refunded",
-        "checkout.session.refunded",
         "refund.updated",
         "charge.refund.updated",
       ]),
+    )
+    expect(full.h.receiver.received.map((r) => r.eventType)).not.toContain(
+      "checkout.session.refunded",
     )
     // The refund idempotency key replays the stored response; our client sends it on retry.
     const again = await full.h.api.refundCheckoutSession(
@@ -465,6 +471,71 @@ describe("S4.5: every state the orchestrator distinguishes is producible", () =>
     await partial.h.settle()
     const quarantined = await partial.h.orchestrator.refundAttempt(partial.attempt.id, 1_000)
     expect(quarantined.status).toBe("quarantined")
+  })
+
+  test("a dashboard refund reaches the attempt through the refund webhooks alone", async () => {
+    const { h, attempt, id } = await openSession()
+    await h.admin(`/sessions/${id}/complete`, {})
+    await h.settle()
+    const before = h.receiver.received.length
+    expect((await h.admin(`/sessions/${id}/refund`, {})).status).toBe(200)
+    await h.settle()
+    expect(h.receiver.received.slice(before).map((r) => r.eventType)).toEqual([
+      "refund.created",
+      "refund.created",
+      "charge.refunded",
+      "refund.updated",
+      "charge.refund.updated",
+    ])
+    expect(h.attempt(attempt.id).status).toBe("refunded")
+  })
+
+  test("a dashboard refund over the unrefunded amount is refused", async () => {
+    const { h, id } = await openSession()
+    expect((await h.admin(`/sessions/${id}/refund`, {})).status).toBe(409)
+    await h.admin(`/sessions/${id}/complete`, {})
+    expect((await h.admin(`/sessions/${id}/refund`, { amount: 9_999 })).status).toBe(400)
+  })
+
+  test("webhook objects sit under their resource key, with Flex's field names", async () => {
+    const { h, id } = await openSession()
+    await h.admin(`/sessions/${id}/complete`, {})
+    await h.admin(`/sessions/${id}/refund`, {})
+    await h.settle()
+    const objects = h.deliveries.map((d) => {
+      const { event } = JSON.parse(d.body) as {
+        event: { event_type: string; object: Record<string, Record<string, unknown>> }
+      }
+      return { type: event.event_type, object: event.object }
+    })
+    const keyOf = (type: string) =>
+      Object.keys((objects.find((o) => o.type === type) as (typeof objects)[number]).object)
+    expect(keyOf("payment_intent.succeeded")).toEqual(["payment_intent"])
+    expect(keyOf("checkout.session.completed")).toEqual(["checkout_session"])
+    expect(keyOf("refund.created")).toEqual(["refund"])
+    expect(keyOf("charge.refunded")).toEqual(["charge"])
+    expect(keyOf("refund.updated")).toEqual(["refund"])
+    expect(keyOf("charge.refund.updated")).toEqual(["refund"])
+    const refund = objects.find((o) => o.type === "refund.created")?.object.refund
+    expect(refund).toMatchObject({
+      refund_id: expect.stringMatching(/^fre_/),
+      payment_intent_id: expect.stringMatching(/^fpi_/),
+      amount: 4_500,
+      status: "succeeded",
+    })
+    expect(refund).not.toHaveProperty("payment_intent")
+    expect(refund).not.toHaveProperty("checkout_session")
+    const charge = objects.find((o) => o.type === "charge.refunded")?.object.charge
+    expect(charge).toMatchObject({
+      charge_id: expect.stringMatching(/^fch_/),
+      payment_intent: expect.stringMatching(/^fpi_/),
+      amount_refunded: 4_500,
+      refunded: true,
+    })
+    expect(charge).not.toHaveProperty("checkout_session_id")
+    const intent = objects.find((o) => o.type === "payment_intent.succeeded")?.object.payment_intent
+    expect(intent).toMatchObject({ payment_intent_id: expect.stringMatching(/^fpi_/) })
+    expect(intent).not.toHaveProperty("checkout_session_id")
   })
 
   test("amount_mismatch quarantines as provider_amount_mismatch", async () => {
@@ -712,7 +783,13 @@ describe("S4.7 webhooks", () => {
     expect(h.receiver.received.map((r) => r.eventType).sort()).toEqual(
       [...types, "product.updated"].sort(),
     )
-    expect(h.receiver.received.every((r) => r.outcome === "processed")).toBe(true)
+    // Flex's payment-intent, refund and charge events name no checkout session, only a payment
+    // intent; this session was never paid, so it has none and they are ignored, as in
+    // production. A paid session's refund events reconcile (the dashboard refund test).
+    const byIntentOnly = (type: string) => /^(payment_intent|refund|charge)\./.test(type)
+    for (const r of h.receiver.received) {
+      expect(r.outcome).toBe(byIntentOnly(r.eventType) ? "ignored" : "processed")
+    }
     const envelope = JSON.parse((h.deliveries[0] as Delivery).body) as {
       event: Record<string, unknown>
     }
@@ -721,7 +798,7 @@ describe("S4.7 webhooks", () => {
       event_id: expect.stringMatching(/^fevt_/),
       event_type: "checkout.session.completed",
       test_mode: true,
-      object: { checkout_session_id: result.providerReference },
+      object: { checkout_session: { checkout_session_id: result.providerReference } },
     })
     expect(typeof envelope.event.event_dt).toBe("number")
     expect(h.attempt(attempt.id).status).toBe("pending")
@@ -1055,9 +1132,9 @@ describe("hosted checkout: subscription and one-time modes (Flex API reference)"
           expect(after.amount_received).toBe(total)
           expect(intent.status).toBe("succeeded")
           expect(after.customer).toMatch(/^fcus_/)
-          const eventObject = (type: string) =>
-            JSON.parse(h.seen.find((s) => s.type === type)?.body ?? "{}").event.object as Json
-          const completed = eventObject("checkout.session.completed")
+          const eventObject = (type: string, key: string) =>
+            JSON.parse(h.seen.find((s) => s.type === type)?.body ?? "{}").event.object[key] as Json
+          const completed = eventObject("checkout.session.completed", "checkout_session")
           expect(completed.subscription).toBe(after.subscription)
           if (mode === "payment") {
             expect(after.subscription).toBeNull()
@@ -1068,7 +1145,7 @@ describe("hosted checkout: subscription and one-time modes (Flex API reference)"
           const got = await h.call("GET", `/v1/subscriptions/${after.subscription}`)
           expect(got.status).toBe(200)
           const subscription = got.body.subscription as Json
-          const announced = eventObject("customer.subscription.created")
+          const announced = eventObject("customer.subscription.created", "subscription")
           expect(announced).toEqual(subscription)
           expect(subscription).toMatchObject({
             subscription_id: after.subscription,

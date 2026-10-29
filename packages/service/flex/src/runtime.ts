@@ -237,6 +237,19 @@ const adminRoutes = (runtime: ServiceRuntime<FlexAPI>): AdminRoutes => {
         `session ${params.id}`,
       )
     },
+    "POST /sessions/:id/refund": ({ namespace, params, body }) => {
+      if (body !== undefined && body !== null && !isRecord(body)) {
+        return adminError(400, 'expected {"amount"?: <cents>}')
+      }
+      const amount = isRecord(body) ? body.amount : undefined
+      if (amount !== undefined && typeof amount !== "number") {
+        return adminError(400, "amount: integer cents")
+      }
+      const outcome = runtime.instance(namespace).dashboardRefund(params.id as string, amount)
+      return "session" in outcome
+        ? json(200, outcome.session)
+        : adminError(outcome.status, outcome.message)
+    },
     "PUT /sessions/:id/payment-intent": ({ namespace, params, body }) => {
       if (
         !isRecord(body) ||
