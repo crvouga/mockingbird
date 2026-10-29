@@ -54,7 +54,27 @@ type Delivery = { headers: Headers; body: string }
  * A runtime whose webhooks land on our receiver (`POST /billing/webhooks/flex`), with our
  * consumer's client, catalog and orchestrator pointed at it.
  */
-const harness = (options: { timeoutMs?: number; toleranceSeconds?: number } = {}) => {
+/** The event types the consumer's production endpoint subscribes to: no `checkout.session.refunded`. */
+const PRODUCTION_SUBSCRIPTION = [
+  "product.updated",
+  "checkout.session.completed",
+  "checkout.session.expired",
+  "payment_intent.succeeded",
+  "payment_intent.canceled",
+  "payment_intent.payment_failed",
+  "payment_method.attached",
+  "customer.created",
+  "charge.succeeded",
+  "charge.failed",
+  "charge.refunded",
+  "charge.refund.updated",
+  "refund.created",
+  "refund.updated",
+]
+
+const harness = (
+  options: { timeoutMs?: number; toleranceSeconds?: number; events?: string[] } = {},
+) => {
   const deliveries: Delivery[] = []
   const responses: number[] = []
   let receiver: FlexWebhookReceiver | undefined
@@ -62,6 +82,7 @@ const harness = (options: { timeoutMs?: number; toleranceSeconds?: number } = {}
     webhooks: {
       url: "http://backend.local/billing/webhooks/flex",
       secret: SECRET,
+      ...(options.events ? { events: options.events } : {}),
       fetch: async (request) => {
         const body = await request.text()
         deliveries.push({ headers: request.headers, body })
@@ -357,8 +378,8 @@ describe("S4.10 acceptance: our consumer's logic against the mock", () => {
 })
 
 describe("S4.5: every state the orchestrator distinguishes is producible", () => {
-  const openSession = async () => {
-    const h = harness()
+  const openSession = async (options: Parameters<typeof harness>[0] = {}) => {
+    const h = harness(options)
     const { attempt, result } = await h.orchestrator.createCheckout(
       command("marketplace", SHOP, 4_500),
     )
@@ -450,14 +471,12 @@ describe("S4.5: every state the orchestrator distinguishes is producible", () =>
     await full.h.settle()
     expect(full.h.receiver.received.map((r) => r.eventType)).toEqual(
       expect.arrayContaining([
+        "checkout.session.refunded",
         "refund.created",
         "charge.refunded",
         "refund.updated",
         "charge.refund.updated",
       ]),
-    )
-    expect(full.h.receiver.received.map((r) => r.eventType)).not.toContain(
-      "checkout.session.refunded",
     )
     // The refund idempotency key replays the stored response; our client sends it on retry.
     const again = await full.h.api.refundCheckoutSession(
@@ -473,8 +492,31 @@ describe("S4.5: every state the orchestrator distinguishes is producible", () =>
     expect(quarantined.status).toBe("quarantined")
   })
 
-  test("a dashboard refund reaches the attempt through the refund webhooks alone", async () => {
+  test("a dashboard refund sends checkout.session.refunded, then the refund and charge events", async () => {
     const { h, attempt, id } = await openSession()
+    await h.admin(`/sessions/${id}/complete`, {})
+    await h.settle()
+    const before = h.runtime.webhooks.deliveries().length
+    expect((await h.admin(`/sessions/${id}/refund`, {})).status).toBe(200)
+    await h.settle()
+    expect(
+      h.runtime.webhooks
+        .deliveries()
+        .slice(before)
+        .map((d) => d.type),
+    ).toEqual([
+      "checkout.session.refunded",
+      "refund.created",
+      "refund.created",
+      "charge.refunded",
+      "refund.updated",
+      "charge.refund.updated",
+    ])
+    expect(h.attempt(attempt.id).status).toBe("refunded")
+  })
+
+  test("a dashboard refund reaches an endpoint without checkout.session.refunded through the refund webhooks alone", async () => {
+    const { h, attempt, id } = await openSession({ events: PRODUCTION_SUBSCRIPTION })
     await h.admin(`/sessions/${id}/complete`, {})
     await h.settle()
     const before = h.receiver.received.length
@@ -516,12 +558,26 @@ describe("S4.5: every state the orchestrator distinguishes is producible", () =>
     expect(keyOf("charge.refunded")).toEqual(["charge"])
     expect(keyOf("refund.updated")).toEqual(["refund"])
     expect(keyOf("charge.refund.updated")).toEqual(["refund"])
+    expect(keyOf("checkout.session.refunded")).toEqual(["checkout_session"])
     const refund = objects.find((o) => o.type === "refund.created")?.object.refund
     expect(refund).toMatchObject({
       refund_id: expect.stringMatching(/^fre_/),
       payment_intent_id: expect.stringMatching(/^fpi_/),
       amount: 4_500,
       status: "succeeded",
+      items: [
+        {
+          payment_intent: (refund as Record<string, unknown>).payment_intent_id,
+          amount_refunded: 4_500,
+        },
+      ],
+    })
+    const refunded = objects.find((o) => o.type === "checkout.session.refunded")?.object
+      .checkout_session
+    expect(refunded).toMatchObject({
+      checkout_session_id: id,
+      amount_refunded: 4_500,
+      refunds: [refund],
     })
     expect(refund).not.toHaveProperty("payment_intent")
     expect(refund).not.toHaveProperty("checkout_session")
