@@ -651,10 +651,16 @@ export class FlexAPI implements FetchAPI {
         ? (this.state.paymentIntents.get(session.payment_intent) ?? session.payment_intent)
         : session.payment_intent
       : null
+    const refunds = this.state.refunds
+      .list()
+      .map((row) => row.value)
+      .filter((refund) => refund.checkout_session === session.checkout_session_id)
+      .map((refund) => this.presentRefund(refund, session.test_mode))
     const out: Record<string, unknown> = {
       ...rest,
       customer,
       payment_intent: intent,
+      refunds,
       redirect_url: url,
       url,
     }
@@ -738,9 +744,11 @@ export class FlexAPI implements FetchAPI {
   }
 
   /**
-   * Refund part or all of a paid session, emitting the refund events in the order Flex sends
-   * them for a dashboard refund: `refund.created` twice, `charge.refunded`, then
-   * `refund.updated` and `charge.refund.updated`.
+   * Refund part or all of a paid session, emitting the refund events Flex sends:
+   * `checkout.session.refunded` (seen in test mode, carrying the session and its refunds),
+   * then, in the order production delivers a dashboard refund, `refund.created` twice,
+   * `charge.refunded`, `refund.updated` and `charge.refund.updated`. An endpoint receives only
+   * the types it subscribes to.
    */
   applyRefund(id: string, amount: number): SessionRecord | undefined {
     const session = this.state.sessions.get(id)
@@ -758,6 +766,7 @@ export class FlexAPI implements FetchAPI {
     this.state.refunds.insert(refund.refund_id, refund)
     const refundObject = this.presentRefund(refund, session.test_mode)
     const chargeObject = this.presentCharge(next, refund.refund_id)
+    this.emitSession("checkout.session.refunded", id)
     this.emit("refund.created", refundObject, session.test_mode)
     this.emit("refund.created", refundObject, session.test_mode)
     this.emit("charge.refunded", chargeObject, session.test_mode)
@@ -786,12 +795,24 @@ export class FlexAPI implements FetchAPI {
   }
 
   private presentRefund(refund: RefundRecord, testMode: boolean): Record<string, unknown> {
+    const intent = refund.payment_intent
+      ? this.state.paymentIntents.get(refund.payment_intent)
+      : undefined
     return {
       refund_id: refund.refund_id,
       amount: refund.amount,
       status: refund.status,
       payment_intent_id: refund.payment_intent,
-      items: [],
+      items: [
+        {
+          payment_intent: refund.payment_intent,
+          amount_refunded: refund.amount,
+          payment_method_id: intent?.payment_method ?? null,
+          reference_id: null,
+          reference_type: null,
+          reference_status: null,
+        },
+      ],
       metadata: null,
       reason: null,
       reference_id: null,

@@ -156,9 +156,14 @@ finds the payment through the payment intent.
 | `checkout.session.async_payment_succeeded` | settling a session whose intent was `processing` |
 | `checkout.session.async_payment_failed` | a decline (page, admin, off-session) |
 | `checkout.session.expired` | `…/expire`, or `expires_at` passing on the emulator clock (default 24 h) |
-| `refund.created` (twice), `charge.refunded`, `refund.updated`, `charge.refund.updated` | each refund, through the API or the dashboard (`POST /__admin/sessions/:id/refund`), in the order production delivers a dashboard refund. `checkout.session.refunded` is in Flex's event list but has never been seen on a refund, so it is only sent through `POST /__admin/events` |
+| `checkout.session.refunded` (the session, with every refund in `refunds`), then `refund.created` (twice), `charge.refunded`, `refund.updated`, `charge.refund.updated` | each refund, through the API or the dashboard (`POST /__admin/sessions/:id/refund`). The refund and charge events follow the order production delivers a dashboard refund; each refund's `items` name its payment intent |
 | `product.updated` | `PATCH /v1/products/{id}` and `PUT /__admin/products/:id` |
 | `checkout_session.completed`, `checkout_session.expired` | the aliases, with `PUT /__admin/settings {"eventNaming": "underscored"}` |
+
+An endpoint receives only the event types it subscribes to, as in Flex's dashboard: pass
+`webhooks: {events: [...]}` (default: every type) or `PUT /__admin/webhook-endpoints`. Subscribe
+to what your production endpoint subscribes to, so a test cannot pass on an event production
+never receives.
 
 `POST /__admin/events {type, session | product}` emits any type on demand. Non-2xx answers are
 retried (immediately, 5 s, 5 min, 30 min, 2 h); `GET /__admin/webhooks`, `…/events`,
@@ -227,7 +232,7 @@ so product names are synthesised.
 | Export | Kind | Description |
 | --- | --- | --- |
 | `FlexAPI` | class | The in-process emulator: `fetch(request)`, `reset()`, `settle(id)`, `decline(id)`, `expire(id)`, `requireAction(id, type)`, `setPaymentIntent(id, patch)`, `applyRefund(id, amount)`, `dashboardRefund(id, amount?)`, `putProduct(product)`, `emitFor(type, target)`, `tick()`, `sessions()`, `subscriptions()`, `present(session, view)`. Options: `sqlite`, `now`, `namespace`, `publicNamespace`, `products`, `settings`, `onEvent`. |
-| `createRuntime` | function | The emulator with the full service contract. Options: `webhooks: {url, secret, retryDelaysMs?, fetch?}`, `products`, `settings`, `tickMs`, `clock`, `seed`, `adminKey`, `onLog`. |
+| `createRuntime` | function | The emulator with the full service contract. Options: `webhooks: {url, secret, events?, retryDelaysMs?, fetch?}`, `products`, `settings`, `tickMs`, `clock`, `seed`, `adminKey`, `onLog`. |
 | `FLEX_PRESETS` | object | Every named fault preset. |
 | `FLEX_NAMESPACE` | string | The service name, `"flex"`. |
 | `FLEX_EVENT_TYPES` | array | Every webhook event type, aliases included. |
