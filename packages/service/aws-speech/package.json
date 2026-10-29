@@ -102,7 +102,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.11.9"
+    "hono": "4.13.11"
   },
   "devDependencies": {
     "@aws-sdk/client-polly": "3.1132.0",

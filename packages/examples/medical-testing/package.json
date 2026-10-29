@@ -32,7 +32,7 @@
     "@crvouga/mockingbird-service-oauth": "workspace:*",
     "@crvouga/mockingbird-service-postgres": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",
-    "hono": "4.11.9",
+    "hono": "4.13.11",
     "htm": "3.1.1",
     "oauth4webapi": "3.8.8",
     "preact": "10.24.3"
