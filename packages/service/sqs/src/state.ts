@@ -23,6 +23,8 @@ export type SqsMessage = {
   receiveCount: number
   firstReceivedAt?: number
   receiptHandle?: string
+  /** Handles from earlier receives of this message, superseded by `receiptHandle`. */
+  staleReceiptHandles?: string[]
   messageAttributes: Record<string, SqsMessageAttribute>
   groupId?: string
   deduplicationId?: string

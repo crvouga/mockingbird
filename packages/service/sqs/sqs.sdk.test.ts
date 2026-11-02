@@ -57,8 +57,14 @@ describe("AWS SDK v3 against SQS mock", () => {
       ).Messages?.[0]
       expect(second?.Attributes?.ApproximateReceiveCount).toBe("2")
       expect(second?.ReceiptHandle).not.toBe(first?.ReceiptHandle)
+      // A superseded handle: AWS answers success but "the message might not be deleted".
+      await client.send(new DeleteMessageCommand({ QueueUrl, ReceiptHandle: first?.ReceiptHandle }))
+      expect(
+        (await client.send(new GetQueueAttributesCommand({ QueueUrl, AttributeNames: ["All"] })))
+          .Attributes?.ApproximateNumberOfMessagesNotVisible,
+      ).toBe("1")
       await expect(
-        client.send(new DeleteMessageCommand({ QueueUrl, ReceiptHandle: first?.ReceiptHandle })),
+        client.send(new DeleteMessageCommand({ QueueUrl, ReceiptHandle: "never-issued" })),
       ).rejects.toMatchObject({ name: "ReceiptHandleIsInvalid" })
       await client.send(
         new ChangeMessageVisibilityCommand({

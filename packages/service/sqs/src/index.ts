@@ -319,6 +319,9 @@ export class SqsAPI {
         firstReceivedAt: message.firstReceivedAt ?? this.now(),
         visibleAt: this.now() + visibility,
         receiptHandle,
+        ...(message.receiptHandle
+          ? { staleReceiptHandles: [...(message.staleReceiptHandles ?? []), message.receiptHandle] }
+          : {}),
       }
       this.state.messages.insert(message.id, next)
       selected.push(next)
@@ -384,6 +387,16 @@ export class SqsAPI {
     return this.state.messages
       .list({
         where: (message) => message.queue === queue.name && message.receiptHandle === receipt,
+      })
+      .map(({ value }) => value)[0]
+  }
+  private bySupersededReceipt(queue: SqsQueue, receipt: unknown) {
+    return this.state.messages
+      .list({
+        where: (message) =>
+          message.queue === queue.name &&
+          typeof receipt === "string" &&
+          (message.staleReceiptHandles ?? []).includes(receipt),
       })
       .map(({ value }) => value)[0]
   }
@@ -634,6 +647,10 @@ export class SqsAPI {
   }
   private receiptOperation(queue: SqsQueue, input: Input, remove: boolean): Response | undefined {
     const message = this.byReceipt(queue, input.ReceiptHandle)
+    // AWS: "If you use an old ReceiptHandle, the request will succeed, but the message might not
+    // be deleted." The emulator answers success and keeps the message, so a consumer that deletes
+    // with a superseded handle sees its message come back, as it can on SQS.
+    if (!message && remove && this.bySupersededReceipt(queue, input.ReceiptHandle)) return undefined
     if (!message)
       return this.error("ReceiptHandleIsInvalid", "The input receipt handle is invalid.")
     if (remove) this.state.messages.delete(message.id)
