@@ -2,6 +2,7 @@
 import catalog from "virtual:mockingbird/catalog"
 import GuideArticle from "../../components/GuideArticle.astro"
 import Base from "../../layouts/Base.astro"
+import { guideCanonicalPath } from "../../lib/guides.ts"
 import type { Guide } from "../../lib/types.ts"
 
 export function getStaticPaths() {
@@ -14,7 +15,13 @@ interface Props {
 const { guide } = Astro.props
 ---
 
-<Base title={guide.title} description={guide.summary} markdown={`/docs/${guide.slug}.md`} type="article">
+<Base
+  title={guide.title}
+  description={guide.summary}
+  markdown={`/docs/${guide.slug}.md`}
+  canonicalPath={guideCanonicalPath(guide.slug)}
+  type="article"
+>
   <div class="container">
     <GuideArticle guide={guide} repo={catalog.repo} />
   </div>
