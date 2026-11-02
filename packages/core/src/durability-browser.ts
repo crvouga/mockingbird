@@ -44,7 +44,12 @@ export class IndexedDBDurabilityBackend implements DurabilityBackend {
   }
 
   private open(): Promise<IDBDatabase> {
-    this.database ??= new Promise((resolve, reject) => {
+    if (this.database) return this.database
+    const opening = new Promise<IDBDatabase>((resolve, reject) => {
+      // Forget only this connection: a newer one may already have replaced it.
+      const forget = () => {
+        if (this.database === opening) this.database = undefined
+      }
       const request = this.factory.open(this.name, 1)
       request.onupgradeneeded = () => {
         const db = request.result
@@ -53,7 +58,7 @@ export class IndexedDBDurabilityBackend implements DurabilityBackend {
         pages.createIndex("image", "key")
       }
       request.onerror = () => {
-        this.database = undefined
+        forget()
         reject(request.error)
       }
       request.onblocked = () => {
@@ -63,12 +68,16 @@ export class IndexedDBDurabilityBackend implements DurabilityBackend {
         const db = request.result
         db.onversionchange = () => {
           db.close()
-          this.database = undefined
+          forget()
         }
+        // The browser closed the connection abnormally (Safari "connection lost", site data
+        // cleared). Every later transaction on it would throw, so reopen on the next call.
+        db.onclose = forget
         resolve(db)
       }
     })
-    return this.database
+    this.database = opening
+    return opening
   }
 
   async load(key: string): Promise<DurableImage | undefined> {
