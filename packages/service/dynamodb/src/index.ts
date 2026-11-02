@@ -1,5 +1,6 @@
 import { type APIOptions, bootSqlite, sigV4AccessKeyId } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
+import { compileCondition, condition } from "./expression.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 import {
   type AttributeValue,
@@ -44,8 +45,6 @@ type Values = Record<string, AttributeValue>
 const clone = <T>(value: T): T => structuredClone(value)
 const scalar = (value: AttributeValue | undefined): string | number | boolean | undefined =>
   value?.S ?? (value?.N !== undefined ? Number(value.N) : (value?.BOOL ?? value?.B))
-const equal = (left: AttributeValue | undefined, right: AttributeValue | undefined) =>
-  JSON.stringify(left) === JSON.stringify(right)
 const resolveName = (name: string, names: Names) =>
   name
     .split(".")
@@ -94,65 +93,6 @@ const splitTop = (value: string, separator = ",") => {
   }
   out.push(value.slice(start).trim())
   return out.filter(Boolean)
-}
-const condition = (
-  expression: unknown,
-  item: Item | undefined,
-  names: Names,
-  values: Values,
-): boolean => {
-  if (typeof expression !== "string" || !expression.trim()) return true
-  const source = expression.trim().replace(/^\((.*)\)$/, "$1")
-  const ors = source.split(/\s+OR\s+/i)
-  if (ors.length > 1) return ors.some((part) => condition(part, item, names, values))
-  const ands = source.split(/\s+AND\s+/i)
-  if (ands.length > 1 && !/\s+BETWEEN\s+/i.test(source))
-    return ands.every((part) => condition(part, item, names, values))
-  const exists = /^attribute_(not_)?exists\s*\(([^)]+)\)$/i.exec(source)
-  if (exists)
-    return exists[1]
-      ? get(item ?? {}, exists[2] as string, names) === undefined
-      : get(item ?? {}, exists[2] as string, names) !== undefined
-  const begins = /^begins_with\s*\(([^,]+),\s*(:\w+)\)$/i.exec(source)
-  if (begins)
-    return String(scalar(get(item ?? {}, begins[1] as string, names)) ?? "").startsWith(
-      String(scalar(values[begins[2] as string]) ?? ""),
-    )
-  const between = /^(.+?)\s+BETWEEN\s+(:\w+)\s+AND\s+(:\w+)$/i.exec(source)
-  if (between) {
-    const actual = scalar(get(item ?? {}, between[1] as string, names))
-    const low = scalar(values[between[2] as string])
-    const high = scalar(values[between[3] as string])
-    return (
-      actual !== undefined &&
-      low !== undefined &&
-      high !== undefined &&
-      actual >= low &&
-      actual <= high
-    )
-  }
-  const comparison = /^(.+?)\s*(=|<>|<=|>=|<|>)\s*(:\w+)$/.exec(source)
-  if (comparison) {
-    const leftValue = get(item ?? {}, comparison[1] as string, names)
-    const rightValue = values[comparison[3] as string]
-    const left = scalar(leftValue)
-    const right = scalar(rightValue)
-    switch (comparison[2]) {
-      case "=":
-        return equal(leftValue, rightValue)
-      case "<>":
-        return !equal(leftValue, rightValue)
-      case "<":
-        return left !== undefined && right !== undefined && left < right
-      case "<=":
-        return left !== undefined && right !== undefined && left <= right
-      case ">":
-        return left !== undefined && right !== undefined && left > right
-      case ">=":
-        return left !== undefined && right !== undefined && left >= right
-    }
-  }
-  throw new SyntaxError(`Unsupported expression: ${expression}`)
 }
 const project = (item: Item, expression: unknown, names: Names) =>
   typeof expression !== "string"
@@ -403,14 +343,12 @@ export class DynamoAPI {
       const found = rows.findIndex((row) => row.key === start)
       if (found >= 0) rows = rows.slice(found + 1)
     }
-    const matching = rows.filter(
-      (row) => !query || condition(input.KeyConditionExpression, row.value, names, values),
-    )
+    const keyCondition = compileCondition(query ? input.KeyConditionExpression : "", names, values)
+    const filter = compileCondition(input.FilterExpression, names, values)
+    const matching = rows.filter((row) => keyCondition(row.value))
     const limit = input.Limit === undefined ? matching.length : Math.max(0, Number(input.Limit))
     const evaluated = matching.slice(0, limit)
-    const filtered = evaluated.filter((row) =>
-      condition(input.FilterExpression, row.value, names, values),
-    )
+    const filtered = evaluated.filter((row) => filter(row.value))
     const last = matching.length > evaluated.length ? evaluated.at(-1) : undefined
     return {
       Items: filtered.map((row) => project(row.value, input.ProjectionExpression, names)),
