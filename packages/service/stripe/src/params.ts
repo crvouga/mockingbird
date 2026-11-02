@@ -312,7 +312,31 @@ const withoutExpand = (raw: FormValue | undefined): { rest: FormValue; expand: s
 }
 
 /** Body parameters for POST operations. Stripe treats a missing/empty body as no parameters. */
-export const bodyParams = (context: OperationContext, options: ParamOptions = {}): Params => {
+/** Mark an error raised while reading parameters, so its response is not saved for a key. */
+const validating = (read: () => Params): Params => {
+  try {
+    return read()
+  } catch (error) {
+    if (error instanceof StripeError) error.validation = true
+    throw error
+  }
+}
+
+/** Body parameters for POST operations. Stripe treats a missing/empty body as no parameters. */
+export const bodyParams = (context: OperationContext, options: ParamOptions = {}): Params =>
+  validating(() => readBodyParams(context, options))
+
+/**
+ * A DELETE's parameters: stripe-node sends them in the query string, other clients in a form
+ * body, and Stripe reads either, validated against the operation's body schema.
+ */
+export const deleteParams = (context: OperationContext, options: ParamOptions = {}): Params =>
+  validating(() => readDeleteParams(context, options))
+
+export const queryParams = (context: OperationContext, options: ParamOptions = {}): Params =>
+  validating(() => readQueryParams(context, options))
+
+const readBodyParams = (context: OperationContext, options: ParamOptions = {}): Params => {
   const body = context.body
   const raw = body.kind === "form" ? (body.value as FormValue) : {}
   if (
@@ -331,11 +355,7 @@ export const bodyParams = (context: OperationContext, options: ParamOptions = {}
   return expand.length === 0 ? params : { ...params, expand }
 }
 
-/**
- * A DELETE's parameters: stripe-node sends them in the query string, other clients in a form
- * body, and Stripe reads either, validated against the operation's body schema.
- */
-export const deleteParams = (context: OperationContext, options: ParamOptions = {}): Params => {
+const readDeleteParams = (context: OperationContext, options: ParamOptions = {}): Params => {
   const query = context.query as FormValue
   const fromQuery =
     typeof query === "object" &&
@@ -348,7 +368,7 @@ export const deleteParams = (context: OperationContext, options: ParamOptions = 
   return expand.length === 0 ? params : { ...params, expand }
 }
 
-export const queryParams = (context: OperationContext, options: ParamOptions = {}): Params => {
+const readQueryParams = (context: OperationContext, options: ParamOptions = {}): Params => {
   const { rest, expand } = withoutExpand(context.query as FormValue)
   const params = stringMetadata(parseParams(querySchema(context), rest, options))
   // Every list that takes both refuses them together (probed against live Stripe).
