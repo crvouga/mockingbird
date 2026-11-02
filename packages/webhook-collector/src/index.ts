@@ -10,6 +10,13 @@ export type WebhookRow = {
   payload: unknown
 }
 
+/**
+ * Credentials a sender attaches to a delivery, such as the basic auth some providers let you set
+ * on a webhook URL. The read API returns stored headers, so these keep their name (proof the
+ * header was sent) but not their value. Signature headers are kept for verification.
+ */
+const REDACTED_HEADERS = new Set(["authorization", "proxy-authorization", "cookie"])
+
 export type WebhookStore = {
   insert(row: WebhookRow): Promise<void>
   list(filter: { service?: string; runId?: string }): Promise<readonly WebhookRow[]>
@@ -88,12 +95,5 @@ export const createWebhookCollector = (
   })
   return app
 }
-
-/**
- * Credentials a sender attaches to a delivery, such as the basic auth some providers let you set
- * on a webhook URL. The read API returns stored headers, so these keep their name (proof the
- * header was sent) but not their value. Signature headers are kept for verification.
- */
-const REDACTED_HEADERS = new Set(["authorization", "proxy-authorization", "cookie"])
 
 export type { Hono }
