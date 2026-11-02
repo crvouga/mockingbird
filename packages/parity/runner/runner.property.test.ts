@@ -388,6 +388,52 @@ describe("parity runner", () => {
     expect((failure as Error).message).toContain("webhook: event count real=0 mock=1")
     expect(difference).toBe("event count real=0 mock=1")
   })
+  test("a delete marks the resource it actually deleted, even when it may target deleted refs", async () => {
+    // With deletedRefProbability > 0 a delete may resolve to an already-deleted customer. The
+    // table must then mark that same customer, never a different, still-live one.
+    const wrong: string[] = []
+    let tick = 1_700_000_000_000
+    const clock = () => (tick += 1000)
+    const real = referenceServer("R", "none", clock)
+    await parity({
+      provider: "reference",
+      spec,
+      seed: 11,
+      numRuns: 30,
+      maxCommands: 12,
+      only: ["customers.create", "customers.delete"],
+      weights: { "customers.delete": 3 },
+      deletedRefProbability: 0.5,
+      deletionTypes: { "customers.delete": ["customer"] },
+      invalidProbability: 0,
+      missingProbability: 0,
+      shrink: false,
+      latencyToleranceMs: 1_000,
+      clockSkewSeconds: 0,
+      now: clock,
+      sleep: async () => {},
+      log: () => {},
+      real: {
+        baseUrl: "https://reference.local",
+        allowedHosts: ["reference.local"],
+        fetch: (request) => real.fetch(request),
+      },
+      mock: { create: () => referenceServer("M", "none", clock) },
+      cleanup: async ({ table, real: target }) => {
+        const live = new Set(table.handles("customer"))
+        for (const handle of table.handlesAll("customer")) {
+          const id = table.idOf({ type: "customer", handle }, "real")
+          const response = await target.fetch(new Request(`${target.baseUrl}/v1/customers/${id}`))
+          if ((response.status === 200) !== live.has(handle))
+            wrong.push(
+              `${id}: table says ${live.has(handle) ? "live" : "deleted"}, real says ${response.status}`,
+            )
+        }
+      },
+    })
+    expect(wrong).toEqual([])
+  })
+
   test("API failures take precedence over webhook comparison", async () => {
     const real = referenceServer("R", "none", () => 1_700_000_000_000)
     let snapshots = 0

@@ -14,7 +14,12 @@ import {
   toRequest,
 } from "@crvouga/mockingbird-commands"
 import { mediaTypeOf, readBody } from "@crvouga/mockingbird-http-codec"
-import type { ResourceTable, Side } from "@crvouga/mockingbird-model"
+import {
+  collectPlaceholders,
+  pickRef,
+  type ResourceTable,
+  type Side,
+} from "@crvouga/mockingbird-model"
 import type { OpenAPIDocument, ResponseObject, SchemaObject } from "@crvouga/mockingbird-openapi"
 import { responseForStatus, validateValue } from "@crvouga/mockingbird-openapi"
 import { parityHeaders } from "@crvouga/mockingbird-openapi-metadata"
@@ -357,5 +362,25 @@ export const executeWarmupCommand = async (
     request,
     exchange,
     resealed: alreadySealed,
+  }
+}
+
+/**
+ * Mark the resources a deleting command targeted as deleted. Each ref is picked exactly as
+ * {@link concretize} picked it for the request, including `deletedRefProbability`, so the mark
+ * lands on the resource the request named rather than on a different, still-live one.
+ */
+export const markDeletedRefs = (context: ExecutionContext, command: LogicalCommand) => {
+  const deletionTypes = context.deletionTypes?.[command.operationId] ?? []
+  if (deletionTypes.length === 0) return
+  for (const placeholder of collectPlaceholders([command.parameters, command.body])) {
+    if (placeholder.$mockingbird !== "ref" || !deletionTypes.includes(placeholder.type)) continue
+    const ref = pickRef(
+      context.table,
+      placeholder.type,
+      placeholder.pick,
+      context.deletedRefProbability,
+    )
+    if (ref) context.table.markDeleted(ref.handle)
   }
 }
