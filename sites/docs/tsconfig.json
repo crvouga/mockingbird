@@ -7,6 +7,12 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src/**/*.ts", "integrations/**/*.ts", "astro.config.ts", ".astro/types.d.ts"],
+  "include": [
+    "src/**/*.ts",
+    "integrations/**/*.ts",
+    "server/**/*.ts",
+    "astro.config.ts",
+    ".astro/types.d.ts"
+  ],
   "exclude": ["dist"]
 }

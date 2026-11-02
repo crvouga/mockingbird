@@ -2,6 +2,7 @@
 import catalog from "virtual:mockingbird/catalog"
 import BirdMark from "../../components/BirdMark.astro"
 import Icon from "../../components/Icon.astro"
+import InlineScript from "../../components/InlineScript.astro"
 import ServiceCard from "../../components/ServiceCard.astro"
 import Base from "../../layouts/Base.astro"
 
@@ -9,6 +10,10 @@ const { services, categories, totals } = catalog
 const orderedServices = [...services].sort(
   (a, b) => Number(b.featured) - Number(a.featured) || a.displayName.localeCompare(b.displayName),
 )
+// Restores the list view before the grid paints.
+const VIEW_SCRIPT = `try {
+  if (localStorage.getItem("mb:services:view") === "list") document.querySelector("[data-grid]").dataset.view = "list"
+} catch (e) {}`
 ---
 
 <Base title="Emulators" description={`Search and filter ${totals.services} stateful emulators by category. Every emulator runs in the browser, in a worker, and on a server.`}>
@@ -60,11 +65,7 @@ const orderedServices = [...services].sort(
     <div class="grid" data-grid data-view="grid">
       {orderedServices.map((s) => <ServiceCard service={s} />)}
     </div>
-    <script is:inline>
-      try {
-        if (localStorage.getItem("mb:services:view") === "list") document.querySelector("[data-grid]").dataset.view = "list"
-      } catch (e) {}
-    </script>
+    <InlineScript code={VIEW_SCRIPT} />
 
     <div class="empty" data-empty hidden>
       <BirdMark size={56} />

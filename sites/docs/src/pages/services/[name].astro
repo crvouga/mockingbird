@@ -2,6 +2,7 @@
 import catalog from "virtual:mockingbird/catalog"
 import FeaturedBadge from "../../components/FeaturedBadge.astro"
 import Icon from "../../components/Icon.astro"
+import InlineScript from "../../components/InlineScript.astro"
 import Install from "../../components/Install.astro"
 import Monogram from "../../components/Monogram.astro"
 import Playground from "../../components/Playground.astro"
@@ -40,16 +41,17 @@ const toc = [
   { depth: 2, slug: "docs", text: "Documentation" },
   ...s.readme.toc.map((t) => ({ ...t, depth: t.depth + 1 })),
 ]
+// Remembers this service in the header's recently viewed list.
+const RECENT_SCRIPT = `try {
+  var name = document.currentScript.dataset.service
+  var recent = JSON.parse(localStorage.getItem("mb:recent") || "[]").filter(function (n) { return n !== name })
+  recent.unshift(name)
+  localStorage.setItem("mb:recent", JSON.stringify(recent.slice(0, 5)))
+} catch (e) {}`
 ---
 
 <Base title={`${s.displayName} emulator`} description={s.description} markdown={`/services/${s.name}.md`}>
-  <script is:inline define:vars={{ name: s.name }}>
-    try {
-      var recent = JSON.parse(localStorage.getItem("mb:recent") || "[]").filter(function (n) { return n !== name })
-      recent.unshift(name)
-      localStorage.setItem("mb:recent", JSON.stringify(recent.slice(0, 5)))
-    } catch (e) {}
-  </script>
+  <InlineScript code={RECENT_SCRIPT} data-service={s.name} />
   <div class="container">
     <nav class="crumbs" aria-label="Breadcrumb">
       <a href="/services">Emulators</a>

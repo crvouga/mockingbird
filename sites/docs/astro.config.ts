@@ -3,6 +3,7 @@ import node from "@astrojs/node"
 import { defineConfig } from "astro/config"
 import { catalog } from "./integrations/catalog/index.ts"
 import { deployment } from "./integrations/deployment.ts"
+import { PAGE_CSP_DIRECTIVES } from "./server/headers.ts"
 
 const docsRoot = fileURLToPath(new URL(".", import.meta.url))
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url))
@@ -15,7 +16,18 @@ const pinDocsPort =
   Number.isInteger(reservedDocsPort) && reservedDocsPort > 0 && reservedDocsPort < 65536
 
 export default defineConfig({
-  adapter: node({ mode: "standalone" }),
+  // staticHeaders sends each prerendered page's hashed CSP as a header instead of a <meta>, which
+  // is what lets it carry frame-ancestors. server/index.ts adds the other security headers.
+  adapter: node({ mode: "standalone", staticHeaders: true }),
+  security: {
+    csp: {
+      directives: [...PAGE_CSP_DIRECTIVES],
+      // Shiki highlights with style="" attributes, which cannot be hashed; <style> elements are.
+      styleDirective: {
+        resources: ["'self'", { resource: "'unsafe-inline'", kind: "attribute" }],
+      },
+    },
+  },
   redirects: {
     "/docs/infrastructure-mocks": "/docs/infrastructure-emulators",
     "/docs/infrastructure-mocks.md": "/docs/infrastructure-emulators.md",
