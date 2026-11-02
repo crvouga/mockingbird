@@ -10,4 +10,4 @@ Generated from `openapi.yaml`; do not edit by hand.
 | --- | --- | --- | --- | --- |
 | `CognitoRpc` | `POST /` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `Discovery` | `GET /{poolId}/.well-known/openid-configuration` | ✅ supported | ❌ disabled | Namespace-scoped local issuer metadata with configured public origin/prefix. |
-| `Jwks` | `GET /{poolId}/.well-known/jwks.json` | ✅ supported | ❌ disabled | Namespace-scoped RS256 keys; portable snapshots retain the current key and two prior keys. |
+| `Jwks` | `GET /{poolId}/.well-known/jwks.json` | ✅ supported | ❌ disabled | Namespace-scoped RS256 keys; one key signs ID tokens and another signs access tokens as in Cognito; portable snapshots retain the current pair and two prior pairs. |

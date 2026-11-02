@@ -68,7 +68,7 @@ Responses contain SDK-consumed Cognito fields and AWS-shaped exceptions (`__type
 - `GET/POST /__admin/users` lists redacted users or seeds one. Passwords and tokens are never returned.
 - `GET /__admin/codes?username=…` returns local confirmation/reset codes without sending mail.
 - `POST /__admin/sessions/revoke {"username":"…"}` invalidates access and refresh sessions.
-- `POST /__admin/keys/rotate {"retainPrevious":true}` rotates signing keys and retains at most two prior keys. Every new key receives a fresh random UUID `kid`, independently of the virtual clock. Reset starts a fresh key ring.
+- `POST /__admin/keys/rotate {"retainPrevious":true}` rotates signing keys and retains at most two prior keys. As in Cognito, ID and access tokens are signed with different keys, so the JWKS lists one key of each kind per generation and rotation replaces both (the response names them `kid` and `accessKid`). Every new key receives a fresh random UUID `kid`, independently of the virtual clock. Reset starts a fresh key ring.
 - Fault presets: `throttled`, `unavailable`.
 
 The shared runtime supplies reset, clock, snapshots, journals, metrics, faults, branches, and namespace isolation. Select namespaces through `x-mockingbird-namespace`, `/__admin/ns/<name>`, or SigV4 access-key mappings.
