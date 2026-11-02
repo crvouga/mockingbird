@@ -43,11 +43,15 @@ export const migrate = (sqlite: SqliteClient, migrations: readonly Migration[]):
   })
 }
 
-/** Applied migration ids in application order (by `applied_at`, then `id`). */
+/**
+ * Applied migration ids in application order: by `applied_at`, then `rowid`.
+ * `schema_migrations` is a rowid table, so `rowid` follows insertion order and
+ * breaks same-second ties in the order the migrations ran.
+ */
 export const listAppliedMigrations = (sqlite: SqliteClient): string[] => {
   ensureMigrationsTable(sqlite)
   return sqlite
-    .prepare("SELECT id FROM schema_migrations ORDER BY applied_at ASC, id ASC")
+    .prepare("SELECT id FROM schema_migrations ORDER BY applied_at ASC, rowid ASC")
     .all<{ id: string }>()
     .map((row) => row.id)
 }
