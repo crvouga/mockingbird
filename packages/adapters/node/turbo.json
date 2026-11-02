@@ -1,0 +1,14 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!README.md",
+        "$TURBO_ROOT$/sites/docs/public/schemas/fleet-v1.json",
+        "$TURBO_ROOT$/docs/FLEETS.md"
+      ]
+    }
+  }
+}
