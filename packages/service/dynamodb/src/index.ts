@@ -71,6 +71,27 @@ const set = (item: Item, path: string, value: AttributeValue, names: Names) => {
   }
   current[leaf] = clone(value)
 }
+const utf8 = new TextEncoder()
+const bytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
+const compareBytes = (left: Uint8Array, right: Uint8Array) => {
+  for (let i = 0; i < Math.min(left.length, right.length); i++)
+    if (left[i] !== right[i]) return (left[i] as number) - (right[i] as number)
+  return left.length - right.length
+}
+/**
+ * Key order as DynamoDB sorts it: N by numeric value, S by its UTF-8 bytes and B by its raw
+ * bytes (unsigned). An item without the key attribute sorts after every item that has one.
+ */
+const compareKeyValues = (left: AttributeValue | undefined, right: AttributeValue | undefined) => {
+  if (left === undefined || right === undefined)
+    return left === right ? 0 : left === undefined ? 1 : -1
+  if (left.N !== undefined && right.N !== undefined) return Number(left.N) - Number(right.N)
+  if (left.S !== undefined && right.S !== undefined)
+    return compareBytes(utf8.encode(left.S), utf8.encode(right.S))
+  if (left.B !== undefined && right.B !== undefined)
+    return compareBytes(bytes(left.B), bytes(right.B))
+  return 0
+}
 const remove = (item: Item, path: string, names: Names) => {
   const parts = resolveName(path.trim(), names).split(".")
   const leaf = parts.pop() as string
@@ -193,10 +214,8 @@ export class DynamoAPI {
   }
   private compare(table: DynamoTable, left: Item, right: Item, schema = table.keySchema) {
     for (const key of schema) {
-      const a = scalar(left[key.AttributeName])
-      const b = scalar(right[key.AttributeName])
-      if (a === b) continue
-      return a !== undefined && b !== undefined && a < b ? -1 : 1
+      const order = compareKeyValues(left[key.AttributeName], right[key.AttributeName])
+      if (order !== 0) return order < 0 ? -1 : 1
     }
     return 0
   }
