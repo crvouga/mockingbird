@@ -270,3 +270,55 @@ describe("Cognito fleet fixtures", () => {
     }
   })
 })
+
+// https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-the-id-token.html
+// https://docs.aws.amazon.com/cognito/latest/developerguide/amazon-cognito-user-pools-using-the-access-token.html
+describe("Cognito token claim sets", () => {
+  test("the ID token names the user cognito:username; the access token carries username and no profile claims", async () => {
+    const runtime = createRuntime({
+      users: [
+        {
+          ...user,
+          attributes: [
+            { Name: "email", Value: user.username },
+            { Name: "email_verified", Value: "true" },
+          ],
+          identities: [{ providerName: "Google", userId: "fixture-id" }],
+        },
+      ],
+      poolId,
+      clientId,
+    })
+    const response = await runtime.fetch(
+      request(
+        "/",
+        {
+          AuthFlow: "USER_PASSWORD_AUTH",
+          ClientId: clientId,
+          AuthParameters: { USERNAME: user.username, PASSWORD: user.password },
+        },
+        { "x-amz-target": "AWSCognitoIdentityProviderService.InitiateAuth" },
+      ),
+    )
+    const result = (await response.json()).AuthenticationResult
+    const id = decode(result.IdToken.split(".")[1])
+    const access = decode(result.AccessToken.split(".")[1])
+    expect(id).toMatchObject({
+      "cognito:username": user.username,
+      email: user.username,
+      email_verified: true,
+      aud: clientId,
+      token_use: "id",
+    })
+    expect(id).not.toHaveProperty("username")
+    expect(id).not.toHaveProperty("client_id")
+    expect(access).toMatchObject({
+      username: user.username,
+      client_id: clientId,
+      token_use: "access",
+      scope: "aws.cognito.signin.user.admin",
+    })
+    for (const claim of ["cognito:username", "email", "email_verified", "identities", "aud"])
+      expect(access).not.toHaveProperty(claim)
+  })
+})

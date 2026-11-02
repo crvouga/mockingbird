@@ -23,6 +23,15 @@ export interface GuideInfo {
  */
 export const guideSlug = (file: string): string => file.toLowerCase().replace(/_/g, "-")
 
+/** Guides that also have a top-level page (`src/pages/why.astro`), keyed by slug. */
+const GUIDE_PAGES: Readonly<Record<string, string>> = { why: "/why" }
+
+/**
+ * The address search engines should index for a guide. A guide with a top-level page renders
+ * at both addresses, so `/docs/<slug>` must point at that page rather than compete with it.
+ */
+export const guideCanonicalPath = (slug: string): string => GUIDE_PAGES[slug] ?? `/docs/${slug}`
+
 /** The first `# ` heading and the first paragraph after it, as plain one-line text. */
 export function guideInfo({ file, markdown }: GuideSource): GuideInfo {
   const lines = markdown.split("\n")
