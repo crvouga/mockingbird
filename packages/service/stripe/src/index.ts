@@ -30,6 +30,7 @@ import { customerSessionHandlers } from "./customer-sessions.js"
 import { customerHandlers } from "./customers.js"
 import { disputeHandlers } from "./disputes.js"
 import {
+  IDEMPOTENCY_UNSAVED,
   invalidRequest,
   parameterInvalidEmpty,
   resourceMissing,
@@ -256,8 +257,10 @@ export class StripeAPI implements FetchAPI {
       now: this.now,
       notFound: (request) => this.errorResponse({ status: 404, message: unrecognizedUrl(request) }),
       onError: (error) => {
-        if (error instanceof StripeError) return this.errorResponse(error.init)
-        throw error
+        if (!(error instanceof StripeError)) throw error
+        const response = this.errorResponse(error.init)
+        if (error.validation) response.headers.set(IDEMPOTENCY_UNSAVED, "true")
+        return response
       },
       before: (context) => {
         if (BROWSER_PATH.test(context.url.pathname)) return undefined
@@ -322,6 +325,7 @@ export class StripeAPI implements FetchAPI {
 
   private decorate(response: Response, version: string, cors: boolean): Response {
     const headers = new Headers(response.headers)
+    headers.delete(IDEMPOTENCY_UNSAVED)
     headers.set("request-id", this.state.ids.next("req_"))
     headers.set("stripe-version", version)
     if (cors) for (const [name, value] of Object.entries(CORS_HEADERS)) headers.set(name, value)
@@ -437,10 +441,10 @@ export class StripeAPI implements FetchAPI {
             }),
         },
         handle,
-        // Stripe saves the first response once the endpoint began executing, "including `500`
-        // errors". An admin-injected status fault answers before this API runs, so it is never
-        // saved: the same key runs the request once the fault clears.
-        () => true,
+        // Stripe saves the first response once the endpoint began executing, so a decline or
+        // a missing resource replays; a request whose parameters failed validation never got
+        // that far and can be retried, fixed, under the same key.
+        (_status, reply) => !reply.headers.has(IDEMPOTENCY_UNSAVED),
       )
     }
     return this.decorate(response, version, cors)

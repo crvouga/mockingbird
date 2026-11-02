@@ -42,6 +42,10 @@ const send = async (
   }
 }
 
+const rejectedParameters = (reply: { status: number; text: string }) =>
+  reply.status === 400 &&
+  String((JSON.parse(reply.text) as { error: Json }).error.code).startsWith("parameter_")
+
 const KEYS = ["k-1", "k-2", "k-3"]
 const step = fc.record({
   key: fc.option(fc.constantFrom(...KEYS), { nil: undefined }),
@@ -59,6 +63,7 @@ describe("Idempotency-Key", () => {
       fc.asyncProperty(fc.array(step, { minLength: 1, maxLength: 12 }), async (steps) => {
         const api = new StripeAPI({ now })
         const first = new Map<string, { fingerprint: string; status: number; text: string }>()
+        let createdCustomers = 0
         for (const item of steps) {
           const fingerprint = `${item.path} ${encodeForm(item.body)}`
           const reply = await send(api, "POST", item.path, item.body, item.key)
@@ -66,8 +71,11 @@ describe("Idempotency-Key", () => {
           if (seen === undefined) {
             expect(reply.replayed).toBeNull()
             expect(reply.status).toBeLessThan(500)
-            if (item.key !== undefined)
+            // A parameter-validation rejection (`products` with no or an empty `name`) is not
+            // saved: the key stays free for the next request.
+            if (item.key !== undefined && !rejectedParameters(reply))
               first.set(item.key, { fingerprint, status: reply.status, text: reply.text })
+            if (item.path === "/v1/customers") createdCustomers++
             continue
           }
           if (seen.fingerprint === fingerprint) {
@@ -90,15 +98,7 @@ describe("Idempotency-Key", () => {
             (await send(api, "GET", "/v1/customers?limit=100", undefined, undefined)).text,
           ) as { data: Json[] }
         ).data
-        const createdCustomers = steps.filter(
-          (item, index) =>
-            item.path === "/v1/customers" &&
-            !(
-              item.key !== undefined &&
-              steps.slice(0, index).some((prior) => prior.key === item.key)
-            ),
-        )
-        expect(customers.length).toBe(createdCustomers.length)
+        expect(customers.length).toBe(createdCustomers)
       }),
       { ...params, numRuns: params.numRuns ?? 60 },
     )
@@ -178,5 +178,46 @@ describe("Idempotency-Key", () => {
     expect(retry.headers.get("idempotent-replayed")).toBeNull()
     const replay = await runtime.fetch(request())
     expect(replay.headers.get("idempotent-replayed")).toBe("true")
+  })
+
+  // "If incoming parameters fail validation … we don't save the idempotent result because no
+  // API endpoint initiates the execution. You can retry these requests."
+  // (https://docs.stripe.com/api/idempotent_requests)
+  test("a request whose parameters fail validation is not saved, so the fixed retry runs", async () => {
+    const api = new StripeAPI({ now })
+    const rejected = await send(api, "POST", "/v1/customers", { nmae: "Ada" }, "fix-me")
+    expect(rejected.status).toBe(400)
+    expect((JSON.parse(rejected.text) as { error: Json }).error.code).toBe("parameter_unknown")
+    const again = await send(api, "POST", "/v1/customers", { nmae: "Ada" }, "fix-me")
+    expect(again.status).toBe(400)
+    expect(again.replayed).toBeNull()
+    const fixed = await send(api, "POST", "/v1/customers", { name: "Ada" }, "fix-me")
+    expect(fixed.status).toBe(200)
+    expect(fixed.replayed).toBeNull()
+    const replay = await send(api, "POST", "/v1/customers", { name: "Ada" }, "fix-me")
+    expect(replay.replayed).toBe("true")
+    expect(replay.text).toBe(fixed.text)
+  })
+
+  test("an error raised once the endpoint ran is saved and replayed", async () => {
+    const api = new StripeAPI({ now })
+    const missing = await send(api, "POST", "/v1/refunds", { charge: "ch_missing" }, "refund-1")
+    expect((JSON.parse(missing.text) as { error: Json }).error.code).toBe("resource_missing")
+    const replay = await send(api, "POST", "/v1/refunds", { charge: "ch_missing" }, "refund-1")
+    expect(replay.replayed).toBe("true")
+    expect(replay.text).toBe(missing.text)
+  })
+
+  test("the internal not-saved marker never reaches the client", async () => {
+    const api = new StripeAPI({ now })
+    const response = await api.fetch(
+      new Request(`${HOST}/v1/customers`, {
+        method: "POST",
+        headers: { ...AUTH, "content-type": "application/x-www-form-urlencoded" },
+        body: "nmae=Ada",
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect([...response.headers.keys()].filter((name) => name.includes("unsaved"))).toEqual([])
   })
 })

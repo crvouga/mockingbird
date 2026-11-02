@@ -39,15 +39,16 @@ export class IdempotencyStore {
   /**
    * Run `handler` once per `key`. `fingerprint` identifies the request's parameters (e.g.
    * the method, path and canonical body). Only `replayable` responses are stored (default:
-   * every status below 500), so a transient failure can be retried. Stripe passes its own:
-   * it saves 500s too.
+   * every status below 500), so a transient failure can be retried. `replayable` also sees the
+   * response, for vendors that decide from more than the status.
+   * Stripe also saves endpoint-produced 500 responses.
    */
   async run(
     key: string,
     fingerprint: string,
     errors: IdempotencyErrors,
     handler: () => Promise<Response> | Response,
-    replayable: (status: number) => boolean = (status) => status < 500,
+    replayable: (status: number, response: Response) => boolean = (status) => status < 500,
   ): Promise<Response> {
     const slot = `${this.namespace}\u0000${key}`
     const stored = this.responses.get(key)
@@ -68,7 +69,7 @@ export class IdempotencyStore {
     )
     try {
       const response = await handler()
-      if (!replayable(response.status)) return response
+      if (!replayable(response.status, response)) return response
       const body = await response.clone().text()
       this.responses.insert(key, {
         fingerprint,
