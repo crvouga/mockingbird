@@ -44,27 +44,6 @@ type Values = Record<string, AttributeValue>
 const clone = <T>(value: T): T => structuredClone(value)
 const scalar = (value: AttributeValue | undefined): string | number | boolean | undefined =>
   value?.S ?? (value?.N !== undefined ? Number(value.N) : (value?.BOOL ?? value?.B))
-const utf8 = new TextEncoder()
-const bytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
-const compareBytes = (left: Uint8Array, right: Uint8Array) => {
-  for (let i = 0; i < Math.min(left.length, right.length); i++)
-    if (left[i] !== right[i]) return (left[i] as number) - (right[i] as number)
-  return left.length - right.length
-}
-/**
- * Key order as DynamoDB sorts it: N by numeric value, S by its UTF-8 bytes and B by its raw
- * bytes (unsigned). An item without the key attribute sorts after every item that has one.
- */
-const compareKeyValues = (left: AttributeValue | undefined, right: AttributeValue | undefined) => {
-  if (left === undefined || right === undefined)
-    return left === right ? 0 : left === undefined ? 1 : -1
-  if (left.N !== undefined && right.N !== undefined) return Number(left.N) - Number(right.N)
-  if (left.S !== undefined && right.S !== undefined)
-    return compareBytes(utf8.encode(left.S), utf8.encode(right.S))
-  if (left.B !== undefined && right.B !== undefined)
-    return compareBytes(bytes(left.B), bytes(right.B))
-  return 0
-}
 const equal = (left: AttributeValue | undefined, right: AttributeValue | undefined) =>
   JSON.stringify(left) === JSON.stringify(right)
 const resolveName = (name: string, names: Names) =>
@@ -92,6 +71,27 @@ const set = (item: Item, path: string, value: AttributeValue, names: Names) => {
     current = current[part]?.M as Item
   }
   current[leaf] = clone(value)
+}
+const utf8 = new TextEncoder()
+const bytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
+const compareBytes = (left: Uint8Array, right: Uint8Array) => {
+  for (let i = 0; i < Math.min(left.length, right.length); i++)
+    if (left[i] !== right[i]) return (left[i] as number) - (right[i] as number)
+  return left.length - right.length
+}
+/**
+ * Key order as DynamoDB sorts it: N by numeric value, S by its UTF-8 bytes and B by its raw
+ * bytes (unsigned). An item without the key attribute sorts after every item that has one.
+ */
+const compareKeyValues = (left: AttributeValue | undefined, right: AttributeValue | undefined) => {
+  if (left === undefined || right === undefined)
+    return left === right ? 0 : left === undefined ? 1 : -1
+  if (left.N !== undefined && right.N !== undefined) return Number(left.N) - Number(right.N)
+  if (left.S !== undefined && right.S !== undefined)
+    return compareBytes(utf8.encode(left.S), utf8.encode(right.S))
+  if (left.B !== undefined && right.B !== undefined)
+    return compareBytes(bytes(left.B), bytes(right.B))
+  return 0
 }
 const remove = (item: Item, path: string, names: Names) => {
   const parts = resolveName(path.trim(), names).split(".")
