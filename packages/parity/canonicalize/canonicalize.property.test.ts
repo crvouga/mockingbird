@@ -161,6 +161,68 @@ describe("canonicalizeValue", () => {
   })
 })
 
+describe("token stability", () => {
+  // Resource #3 has the numeric-string id "1" on the real side and "2" on the mock side.
+  const numericTable = () => {
+    const table = new ResourceTable()
+    table.register("customer", { real: "cus_real_a", mock: "cus_mock_a" }) // #1
+    table.register("customer", { real: "cus_real_b", mock: "cus_mock_b" }) // #2
+    table.register("customer", { real: "1", mock: "2" }) // #3
+    return table
+  }
+
+  test("a short known id never rewrites the handle inside an emitted token", () => {
+    const table = numericTable()
+    expect(replaceKnownIds("cus_real_a", table, "real")).toBe(canonicalToken("customer", 1))
+    expect(replaceKnownIds("cus_mock_b", table, "mock")).toBe(canonicalToken("customer", 2))
+    expect(replaceKnownIds("see cus_real_a and 1", table, "real")).toBe(
+      `see ${canonicalToken("customer", 1)} and ${canonicalToken("customer", 3)}`,
+    )
+  })
+
+  test("different resources on each side never canonicalize to the same value", () => {
+    const table = numericTable()
+    const options = { document, schema: customerSchema, parityHeaders: [] as string[], table }
+    // Real answers customer #1, the mock answers customer #2: a divergence.
+    const real = canonicalizeValue(
+      { id: "cus_real_a", name: "for cus_real_a" },
+      { ...options, side: "real" },
+    )
+    const mock = canonicalizeValue(
+      { id: "cus_mock_b", name: "for cus_mock_b" },
+      { ...options, side: "mock" },
+    )
+    expect(structuralDiff(real, mock).map((d) => formatDifference(d))).toEqual([
+      '$.id: real="resource:customer:1" mock="resource:customer:2"',
+      '$.name: real="for resource:customer:1" mock="for resource:customer:2"',
+    ])
+  })
+
+  test("canonical forms agree iff the referenced handles agree", () => {
+    fc.assert(
+      fc.property(
+        fc.uniqueArray(fc.stringMatching(/^[0-9a-z:_]{1,4}$/), { minLength: 2, maxLength: 8 }),
+        fc.uniqueArray(fc.stringMatching(/^[0-9a-z:_]{1,4}$/), { minLength: 2, maxLength: 8 }),
+        fc.nat(),
+        fc.nat(),
+        (realIds, mockIds, a, b) => {
+          const n = Math.min(realIds.length, mockIds.length)
+          const table = new ResourceTable()
+          for (let i = 0; i < n; i++)
+            table.register("customer", { real: realIds[i] as string, mock: mockIds[i] as string })
+          const realId = realIds[a % n] as string
+          const mockId = mockIds[b % n] as string
+          const options = { document, schema: customerSchema, parityHeaders: [] as string[], table }
+          const real = canonicalizeValue({ id: realId }, { ...options, side: "real" })
+          const mock = canonicalizeValue({ id: mockId }, { ...options, side: "mock" })
+          expect(structuralDiff(real, mock).length === 0).toBe(a % n === b % n)
+        },
+      ),
+      params,
+    )
+  })
+})
+
 describe("discoverIdentities", () => {
   test("pairs fresh ids at the same path, ignores known or mismatched locations", () => {
     fc.assert(
