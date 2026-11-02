@@ -16,13 +16,24 @@ const ensureMigrationsTable = (sqlite: SqliteClient) => {
   `)
 }
 
+const assertUniqueIds = (migrations: readonly Migration[]) => {
+  const seen = new Set<string>()
+  for (const { id } of migrations) {
+    if (seen.has(id)) throw new Error(`migrate: duplicate migration id "${id}"; ids must be unique`)
+    seen.add(id)
+  }
+}
+
 /**
  * Apply pending migrations in order inside a single transaction.
  *
  * Idempotent: already-applied ids are skipped. Re-running with the same list
  * is a no-op after the first successful boot.
+ *
+ * @throws {Error} If two migrations in the list share an id; nothing is applied.
  */
 export const migrate = (sqlite: SqliteClient, migrations: readonly Migration[]): void => {
+  assertUniqueIds(migrations)
   ensureMigrationsTable(sqlite)
   const applied = new Set(
     sqlite
