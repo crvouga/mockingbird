@@ -301,7 +301,7 @@ describe("RESP protocol errors (#508)", () => {
     const redis = createRedis()
     const listening = await serve(redis, { port: 0, host: "127.0.0.1" })
     stop = () => listening.close()
-    return new Promise<{ received: string; closed: boolean }>((resolve) => {
+    return new Promise<{ received: string; closed: boolean; redis: typeof redis }>((resolve) => {
       const socket = connect(listening.port, listening.host)
       let received = ""
       let closed = false
@@ -315,7 +315,7 @@ describe("RESP protocol errors (#508)", () => {
       socket.write(payload, "latin1")
       setTimeout(() => {
         socket.destroy()
-        resolve({ received, closed })
+        resolve({ received, closed, redis })
       }, 150)
     })
   }
@@ -360,6 +360,14 @@ describe("RESP protocol errors (#508)", () => {
       expect(closed).toBe(false)
     })
   }
+
+  test("QUIT closes the connection and nothing pipelined after it runs", async () => {
+    const set = "*3\r\n$3\r\nSET\r\n$1\r\nk\r\n$1\r\nv\r\n"
+    const { received, closed, redis } = await exchange(`${ping}*1\r\n$4\r\nQUIT\r\n${set}${ping}`)
+    expect(received).toBe("+PONG\r\n+OK\r\n")
+    expect(closed).toBe(true)
+    expect(redis.inspect(0)).toEqual([])
+  })
 
   test("inline commands honour quotes and escapes", async () => {
     const { received } = await exchange(

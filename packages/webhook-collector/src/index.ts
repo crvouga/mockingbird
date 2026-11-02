@@ -20,6 +20,34 @@ export type WebhookCollectorEnv = { Variables: { store: WebhookStore } }
 const SERVICE_SLUG = /^[a-z][a-z0-9-]{0,63}$/
 const MAX_BODY_BYTES = 1_048_576
 
+/**
+ * The body as text, or `undefined` once it passes `limit` bytes. Counted as it arrives, so a
+ * chunked upload (no Content-Length) is cut off at the limit instead of buffered whole.
+ */
+const readBounded = async (body: ReadableStream<Uint8Array> | null, limit: number) => {
+  if (!body) return ""
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel().catch(() => {})
+      return undefined
+    }
+    chunks.push(value)
+  }
+  const joined = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    joined.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(joined)
+}
+
 export const createWebhookCollector = (
   store: WebhookStore,
   readToken?: string,
@@ -49,9 +77,8 @@ export const createWebhookCollector = (
     if (!SERVICE_SLUG.test(service)) return c.json({ error: "invalid_service" }, 400)
     const declaredLength = Number(c.req.header("content-length"))
     if (declaredLength > MAX_BODY_BYTES) return c.json({ error: "payload_too_large" }, 413)
-    const raw = await c.req.text()
-    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES)
-      return c.json({ error: "payload_too_large" }, 413)
+    const raw = await readBounded(c.req.raw.body, MAX_BODY_BYTES)
+    if (raw === undefined) return c.json({ error: "payload_too_large" }, 413)
     let payload: unknown
     try {
       payload = JSON.parse(raw)
