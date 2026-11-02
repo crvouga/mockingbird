@@ -16,6 +16,8 @@ interface Props {
   type?: "website" | "article"
   /** Keep the page out of search results and link previews (the 404, unlisted pages). */
   noindex?: boolean
+  /** The address to index when this content is also served elsewhere; defaults to this page's own. */
+  canonicalPath?: string
 }
 
 const {
@@ -24,13 +26,14 @@ const {
   markdown,
   type = "website",
   noindex = false,
+  canonicalPath,
 } = Astro.props
 const fullTitle = title
   ? `${title} · Mockingbird`
   : "Mockingbird · Stateful emulators for the APIs you depend on"
 const path = Astro.url.pathname.replace(/\/$/, "") || "/"
 // Crawlers need absolute URLs, and the same page must not be shared under two addresses.
-const canonical = new URL(path, IDENTITY.docs).href
+const canonical = new URL(canonicalPath ?? path, IDENTITY.docs).href
 const socialImage = new URL(SOCIAL_CARD.href, IDENTITY.docs).href
 const nav = [
   { href: "/services", label: "Emulators" },

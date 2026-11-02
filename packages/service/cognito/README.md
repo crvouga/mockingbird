@@ -61,7 +61,7 @@ await emulator.close() // after the test
 
 `POST /` dispatches by `X-Amz-Target` and supports SignUp, ConfirmSignUp, ResendConfirmationCode, InitiateAuth (`USER_PASSWORD_AUTH`, `REFRESH_TOKEN_AUTH`), ForgotPassword, ConfirmForgotPassword, ChangePassword, GetUser, DeleteUser, AdminCreateUser, AdminSetUserPassword, AdminConfirmSignUp, AdminGetUser, AdminUpdateUserAttributes, AdminDeleteUser, ListUsers, AdminLinkProviderForUser, AdminAddUserToGroup, AdminRemoveUserFromGroup, and AdminUserGlobalSignOut.
 
-Responses contain SDK-consumed Cognito fields and AWS-shaped exceptions (`__type`, `message`, HTTP status, `x-amzn-requestid`). Tokens are RS256 JWTs with Cognito issuer, subject, client, `token_use`, timestamps, username, email, groups, and linked identities. Discovery and JWKS are at `/<poolId>/.well-known/openid-configuration` and `/<poolId>/.well-known/jwks.json`.
+Responses contain SDK-consumed Cognito fields and AWS-shaped exceptions (`__type`, `message`, HTTP status, `x-amzn-requestid`). Tokens are RS256 JWTs with Cognito issuer, subject, `token_use`, timestamps and groups. The ID token adds `aud`, `cognito:username`, email and linked identities; the access token adds `client_id`, `username` and `scope`, and no user attributes, as Cognito does. Discovery and JWKS are at `/<poolId>/.well-known/openid-configuration` and `/<poolId>/.well-known/jwks.json`.
 
 ### Admin and deterministic controls
 
