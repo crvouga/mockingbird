@@ -60,7 +60,7 @@ export const createWebhookCollector = (
     }
     const headers: Record<string, string> = {}
     c.req.raw.headers.forEach((value, key) => {
-      headers[key] = value
+      headers[key] = REDACTED_HEADERS.has(key) ? "[redacted]" : value
     })
     await c.var.store.insert({
       service,
@@ -88,5 +88,12 @@ export const createWebhookCollector = (
   })
   return app
 }
+
+/**
+ * Credentials a sender attaches to a delivery, such as the basic auth some providers let you set
+ * on a webhook URL. The read API returns stored headers, so these keep their name (proof the
+ * header was sent) but not their value. Signature headers are kept for verification.
+ */
+const REDACTED_HEADERS = new Set(["authorization", "proxy-authorization", "cookie"])
 
 export type { Hono }
