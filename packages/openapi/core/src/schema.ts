@@ -75,9 +75,10 @@ export const jsonTypeOf = (value: unknown): SchemaType | "undefined" => {
 export type SchemaVisitor = (schema: SchemaObject, path: string[]) => void
 
 /**
- * Depth-first walk over a schema tree, resolving `$ref`s. Each resolved schema is visited once per
- * call: the annotation consumers (identities, refs, volatile/scope marks) only care that a node is
- * reachable, and visiting per path is exponential on densely cross-referenced documents.
+ * Depth-first walk over a schema tree, resolving `$ref`s, that terminates on recursive schemas.
+ * Each schema node is visited once per call: the annotation consumers (identities, refs,
+ * volatile/scope marks) only care that a node is reachable, and visiting per path is exponential
+ * on densely cross-referenced documents.
  */
 export const walkSchema = (
   document: OpenAPIDocument,
@@ -87,8 +88,13 @@ export const walkSchema = (
 ) => {
   const seen = new Set<SchemaObject>()
   const go = (node: SchemaObject, at: string[]) => {
+    // `resolveSchema` returns a fresh object whenever it follows a `$ref`, so identity of the
+    // resolved schema alone never repeats on a recursive schema. The raw node does: every child is
+    // an object of the document itself, so remembering raw nodes bounds the walk.
+    if (seen.has(node)) return
+    seen.add(node)
     const resolved = resolveSchema(document, node)
-    if (seen.has(resolved)) return
+    if (resolved !== node && seen.has(resolved)) return
     seen.add(resolved)
     visit(resolved, at)
     for (const [name, child] of Object.entries(resolved.properties ?? {}))

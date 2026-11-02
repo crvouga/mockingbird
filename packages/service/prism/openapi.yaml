@@ -488,6 +488,9 @@ components:
             kind: id
         token:
           type: string
+          x-mockingbird-resource:
+            type: user
+            identity: true
         sex:
           type: string
         region:
@@ -521,6 +524,9 @@ components:
           examples:
           - user-token-1
           - user-token-2
+          x-mockingbird-resource-ref:
+            type: user
+            missing: mockingbird-missing-user
         deviceConfigName:
           type: string
           enum:

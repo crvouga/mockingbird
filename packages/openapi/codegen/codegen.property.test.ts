@@ -76,6 +76,49 @@ describe("codegen", () => {
     )
   })
 
+  test("a spec with a recursive schema loads, and its metadata is still checked", () => {
+    const spec = (refType: string) =>
+      stringify({
+        openapi: "3.1.0",
+        info: { title: "recursive", version: "1" },
+        paths: {
+          "/v1/comments": {
+            get: {
+              operationId: "ListComments",
+              responses: {
+                "200": {
+                  description: "ok",
+                  content: {
+                    "application/json": { schema: { $ref: "#/components/schemas/comment" } },
+                  },
+                },
+              },
+            },
+          },
+        },
+        components: {
+          schemas: {
+            comment: {
+              type: "object",
+              properties: {
+                id: {
+                  type: "string",
+                  "x-mockingbird-resource": { type: "comment", identity: true },
+                },
+                parent_id: { type: "string", "x-mockingbird-resource-ref": { type: refType } },
+                // A property that is itself a `$ref` back to its own schema.
+                parent: { $ref: "#/components/schemas/comment" },
+              },
+            },
+          },
+        },
+      })
+    expect(listOperations(loadSpec(spec("comment"))).map((o) => o.operationId)).toEqual([
+      "ListComments",
+    ])
+    expect(() => loadSpec(spec("missing"))).toThrow(SpecValidationError)
+  })
+
   test("metadata problems surface as SpecValidationError", () => {
     fc.assert(
       fc.property(documentArb, (document) => {
