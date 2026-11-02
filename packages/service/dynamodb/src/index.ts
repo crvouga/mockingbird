@@ -79,6 +79,110 @@ const remove = (item: Item, path: string, names: Names) => {
   for (const part of parts) current = current?.[part]?.M
   if (current) delete current[leaf]
 }
+/**
+ * The right-hand side of a SET action, as DynamoDB's grammar defines it:
+ *   value   ::= operand | operand '+' operand | operand '-' operand
+ *   operand ::= path | :placeholder | if_not_exists(path, operand) | list_append(operand, operand)
+ */
+type SetOperand =
+  | { kind: "path"; path: string }
+  | { kind: "value"; name: string }
+  | { kind: "call"; fn: "if_not_exists" | "list_append"; args: [SetOperand, SetOperand] }
+type SetValue = { left: SetOperand; op?: "+" | "-"; right?: SetOperand }
+const updateSyntax = (near: string) =>
+  new SyntaxError(`Invalid UpdateExpression: Syntax error; token: "${near.trim().split(/\s/)[0]}"`)
+const parseSetValue = (source: string): SetValue => {
+  let at = 0
+  const skip = () => {
+    while (/\s/.test(source[at] ?? "")) at++
+  }
+  const operand = (): SetOperand => {
+    skip()
+    const token = /^[:#\w][\w#:.[\]]*/.exec(source.slice(at))?.[0]
+    if (!token) throw updateSyntax(source.slice(at) || "<EOF>")
+    at += token.length
+    skip()
+    if (source[at] !== "(")
+      return token.startsWith(":") ? { kind: "value", name: token } : { kind: "path", path: token }
+    if (token !== "if_not_exists" && token !== "list_append")
+      throw new SyntaxError(`Invalid UpdateExpression: Invalid function name; function: ${token}`)
+    at++
+    const args = [operand()]
+    skip()
+    while (source[at] === ",") {
+      at++
+      args.push(operand())
+      skip()
+    }
+    if (source[at] !== ")") throw updateSyntax(source.slice(at) || "<EOF>")
+    at++
+    if (args.length !== 2)
+      throw new SyntaxError(
+        `Invalid UpdateExpression: Incorrect number of operands for operator or function; operator or function: ${token}, number of operands: ${args.length}`,
+      )
+    if (token === "if_not_exists" && args[0]?.kind !== "path")
+      throw new SyntaxError(
+        "Invalid UpdateExpression: Operator or function requires a document path; operator or function: if_not_exists",
+      )
+    return { kind: "call", fn: token, args: args as [SetOperand, SetOperand] }
+  }
+  const left = operand()
+  skip()
+  if (at === source.length) return { left }
+  const op = source[at]
+  if (op !== "+" && op !== "-") throw updateSyntax(source.slice(at))
+  at++
+  const right = operand()
+  skip()
+  if (at !== source.length) throw updateSyntax(source.slice(at))
+  return { left, op, right }
+}
+const MISSING_ATTRIBUTE =
+  "The provided expression refers to an attribute that does not exist in the item"
+const operandType = (fn: string, value: AttributeValue) =>
+  new SyntaxError(
+    `Invalid UpdateExpression: Incorrect operand type for operator or function; operator or function: ${fn}, operand type: ${Object.keys(value)[0]}`,
+  )
+/** Evaluates a SET operand against the item as it was before the update (DynamoDB's rule). */
+const evaluateOperand = (
+  operand: SetOperand,
+  item: Item,
+  names: Names,
+  values: Values,
+): AttributeValue | undefined => {
+  if (operand.kind === "value") {
+    const value = values[operand.name]
+    if (!value)
+      throw new SyntaxError(
+        `Invalid UpdateExpression: An expression attribute value used in expression is not defined; attribute value: ${operand.name}`,
+      )
+    return value
+  }
+  if (operand.kind === "path") return get(item, operand.path, names)
+  const [first, second] = operand.args
+  if (operand.fn === "if_not_exists")
+    return (
+      get(item, (first as { path: string }).path, names) ??
+      evaluateOperand(second, item, names, values)
+    )
+  const head = evaluateOperand(first, item, names, values)
+  const tail = evaluateOperand(second, item, names, values)
+  if (!head || !tail) throw new SyntaxError(MISSING_ATTRIBUTE)
+  if (!head.L) throw operandType("list_append", head)
+  if (!tail.L) throw operandType("list_append", tail)
+  return { L: [...head.L, ...tail.L] }
+}
+const evaluateSetValue = (value: SetValue, item: Item, names: Names, values: Values) => {
+  const left = evaluateOperand(value.left, item, names, values)
+  if (!left) throw new SyntaxError(MISSING_ATTRIBUTE)
+  if (!value.op || !value.right) return left
+  const right = evaluateOperand(value.right, item, names, values)
+  if (!right) throw new SyntaxError(MISSING_ATTRIBUTE)
+  if (left.N === undefined) throw operandType(value.op, left)
+  if (right.N === undefined) throw operandType(value.op, right)
+  const sum = value.op === "+" ? Number(left.N) + Number(right.N) : Number(left.N) - Number(right.N)
+  return { N: String(sum) }
+}
 const splitTop = (value: string, separator = ",") => {
   const out: string[] = []
   let depth = 0
@@ -318,6 +422,8 @@ export class DynamoAPI {
   }
   private applyUpdate(item: Item, expression: unknown, names: Names, values: Values) {
     if (typeof expression !== "string") throw new SyntaxError("UpdateExpression is required")
+    // Every operand reads the item as it was before the update, not after earlier actions.
+    const original = clone(item)
     const clauses = [...expression.matchAll(/(?:^|\s)(SET|ADD|REMOVE|DELETE)\s+/gi)]
     for (let index = 0; index < clauses.length; index++) {
       const clause = clauses[index] as RegExpMatchArray
@@ -326,37 +432,16 @@ export class DynamoAPI {
       const end =
         index + 1 < clauses.length ? (clauses[index + 1]?.index as number) : expression.length
       const body = expression.slice(start, end).trim()
-      if (kind === "SET")
-        for (const assignment of splitTop(body)) {
-          const [path, raw = ""] = assignment.split(/\s*=\s*/, 2)
-          const fallback = /^if_not_exists\(([^,]+),\s*(:\w+)\)(?:\s*\+\s*(:\w+))?$/.exec(raw)
-          const addition = /^(.+?)\s*\+\s*(:\w+)$/.exec(raw)
-          if (fallback) {
-            const base = get(item, fallback[1] as string, names) ?? values[fallback[2] as string]
-            const plus = fallback[3]
-              ? Number(base?.N ?? "0") + Number(values[fallback[3]]?.N ?? "0")
-              : undefined
-            set(
-              item,
-              path as string,
-              plus === undefined ? (base as AttributeValue) : { N: String(plus) },
-              names,
-            )
-          } else if (addition) {
-            const base = Number(get(item, addition[1] as string, names)?.N ?? "0")
-            set(
-              item,
-              path as string,
-              { N: String(base + Number(values[addition[2] as string]?.N ?? "0")) },
-              names,
-            )
-          } else {
-            const value = values[raw.trim()]
-            if (!value) throw new SyntaxError(`Unknown value ${raw}`)
-            set(item, path as string, value, names)
-          }
-        }
-      else if (kind === "ADD")
+      if (kind === "SET") {
+        const assignments = splitTop(body).map((assignment) => {
+          const split = assignment.indexOf("=")
+          if (split < 0) throw updateSyntax(assignment)
+          const value = parseSetValue(assignment.slice(split + 1))
+          return { path: assignment.slice(0, split).trim(), value }
+        })
+        for (const { path, value } of assignments)
+          set(item, path, evaluateSetValue(value, original, names, values), names)
+      } else if (kind === "ADD")
         for (const addition of splitTop(body)) {
           const [path, token] = addition.split(/\s+/)
           const value = values[token as string]

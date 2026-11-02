@@ -46,7 +46,7 @@ const { Item } = await db.send(new GetCommand({ TableName: "records", Key: { pk:
 await emulator.close() // after the test
 ```
 
-Supported operations are CreateTable, DescribeTable, GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan, BatchGetItem, BatchWriteItem, TransactGetItems, and TransactWriteItems. The expression subset includes expression name/value aliases, SET/ADD/REMOVE/DELETE, `if_not_exists`, `attribute_exists`, `attribute_not_exists`, `begins_with`, comparisons, BETWEEN, AND/OR, projection, conditions, limits, cursors, index ordering, and return values.
+Supported operations are CreateTable, DescribeTable, GetItem, PutItem, UpdateItem, DeleteItem, Query, Scan, BatchGetItem, BatchWriteItem, TransactGetItems, and TransactWriteItems. The expression subset includes expression name/value aliases, SET/ADD/REMOVE/DELETE, `if_not_exists`, `list_append`, `+`/`-` arithmetic, attribute-to-attribute SET, `attribute_exists`, `attribute_not_exists`, `begins_with`, comparisons, BETWEEN, AND/OR, projection, conditions, limits, cursors, index ordering, and return values.
 
 ### Admin and deterministic controls
 
