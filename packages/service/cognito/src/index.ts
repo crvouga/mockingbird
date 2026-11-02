@@ -155,20 +155,27 @@ export class CognitoAPI {
       auth_time: now,
       iat: now,
       exp: now + 3600,
-      username: user.username,
-      email: attr(user, "email"),
-      email_verified: attr(user, "email_verified") === "true",
       ...(user.groups.length ? { "cognito:groups": user.groups } : {}),
-      ...(identities.length ? { identities } : {}),
     }
     const signer = new CognitoSigner((await this.keyRing())[0])
+    // Cognito names the user `username` in the access token but `cognito:username` in the ID
+    // token, and keeps user attributes (email, identities) out of the access token entirely.
     const access = await signer.sign({
       ...common,
+      username: user.username,
       client_id: clientId,
       token_use: "access",
       scope: "aws.cognito.signin.user.admin",
     })
-    const id = await signer.sign({ ...common, aud: clientId, token_use: "id" })
+    const id = await signer.sign({
+      ...common,
+      "cognito:username": user.username,
+      email: attr(user, "email"),
+      email_verified: attr(user, "email_verified") === "true",
+      ...(identities.length ? { identities } : {}),
+      aud: clientId,
+      token_use: "id",
+    })
     this.state.sessions.insert(access, {
       username: user.username,
       clientId,
