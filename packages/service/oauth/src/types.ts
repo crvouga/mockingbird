@@ -120,6 +120,8 @@ export type Grant = Authorization & {
   family: string
   identity: { sub: string; email: string; privateEmail: boolean }
   issueRefresh: boolean
+  /** Set once the code is redeemed; a later replay revokes the tokens it issued. */
+  consumed?: boolean
 }
 export type Token = Grant & { kind: "access" | "refresh"; consumed?: boolean; lastUsed?: number }
 /** What one client sees for one account: see `OAuthAPI.grant`. */
