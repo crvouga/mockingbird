@@ -67,8 +67,17 @@ function attach(redis: Redis, socket: Socket, onGone: () => void, controlPrivile
   // A protocol error is queued behind the commands before it, then closes the connection.
   const pending: Array<{ name: string; args: Uint8Array[] } | { fatal: string }> = []
   let pumping = false
+  // Set once the connection is closing after its last reply (QUIT or a protocol error). Redis
+  // stops reading input then, so nothing pipelined behind it may run.
+  let closing = false
+  const closeAfterReply = () => {
+    closing = true
+    pending.length = 0
+    socket.end()
+  }
   const write = (reply: Reply) => {
-    if (!socket.destroyed) socket.write(encodeReply(reply, session.protocol))
+    if (!socket.destroyed && !socket.writableEnded)
+      socket.write(encodeReply(reply, session.protocol))
   }
   session.onPush = write
   const stop = redis.onDisconnect((dropped) => {
@@ -80,6 +89,7 @@ function attach(redis: Redis, socket: Socket, onGone: () => void, controlPrivile
     onGone()
   }
   socket.on("data", (chunk: Uint8Array) => {
+    if (closing) return
     const { requests, error } = parser.push(chunk)
     pending.push(...requests)
     if (error !== null) pending.push({ fatal: error })
@@ -94,15 +104,14 @@ function attach(redis: Redis, socket: Socket, onGone: () => void, controlPrivile
         if (!command) break
         if ("fatal" in command) {
           write(err(`ERR Protocol error: ${command.fatal}`))
-          socket.end()
-          pending.length = 0
+          closeAfterReply()
           break
         }
         try {
           const reply = await redis.perform(session, command.name, command.args)
           write(reply)
           if (session.quit) {
-            socket.end()
+            closeAfterReply()
             break
           }
         } catch (error) {

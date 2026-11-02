@@ -188,20 +188,26 @@ export class CognitoAPI {
       auth_time: now,
       iat: now,
       exp: now + 3600,
-      username: user.username,
-      email: attr(user, "email"),
-      email_verified: attr(user, "email_verified") === "true",
       ...(user.groups.length ? { "cognito:groups": user.groups } : {}),
-      ...(identities.length ? { identities } : {}),
     }
     const signer = await this.tokenSigner(origin)
+    // Keep user attributes in the ID token and username in the access token.
     const access = await signer.sign({
       ...common,
+      username: user.username,
       client_id: clientId,
       token_use: "access",
       scope: "aws.cognito.signin.user.admin",
     })
-    const id = await signer.sign({ ...common, aud: clientId, token_use: "id" })
+    const id = await signer.sign({
+      ...common,
+      "cognito:username": user.username,
+      email: attr(user, "email"),
+      email_verified: attr(user, "email_verified") === "true",
+      ...(identities.length ? { identities } : {}),
+      aud: clientId,
+      token_use: "id",
+    })
     this.state.sessions.insert(access, {
       username: user.username,
       clientId,
@@ -332,6 +338,7 @@ export class CognitoAPI {
         const user = session && this.state.find(session.username)
         if (
           session?.kind !== "refresh" ||
+          session.clientId !== clientId ||
           session.revoked ||
           session.expires <= this.now() ||
           !user

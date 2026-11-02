@@ -23,6 +23,7 @@ import {
   type AdminRoutes,
   assertAdminPrefixAvailable,
   createControlPlane,
+  hasAdminKey,
   isAdminPath,
   matchNamespacePath,
   NAMESPACE_HEADER,
@@ -1394,7 +1395,7 @@ export const createRuntime = <T extends ServiceInstance>(
       if (
         (requested || rewinds) &&
         options.adminKey !== undefined &&
-        request.headers.get(ADMIN_KEY_HEADER) !== options.adminKey
+        !hasAdminKey(request.headers, options.adminKey)
       )
         return refuse(401, `control headers need ${ADMIN_KEY_HEADER}`)
       controls.ensure(namespace)

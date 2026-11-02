@@ -2,7 +2,7 @@ import catalog from "virtual:mockingbird/catalog"
 import type { APIRoute } from "astro"
 import { CATEGORIES, type CategorySlug } from "../lib/categories.ts"
 import { initials } from "../lib/format.ts"
-import { plainSummary } from "../lib/guides.ts"
+import { guideCanonicalPath, plainSummary } from "../lib/guides.ts"
 
 export interface PaletteEntry {
   kind: "service" | "page"
@@ -66,7 +66,7 @@ export const GET: APIRoute = () => {
     // the words people look for it by and the interface it defines, then by what it mentions.
     ...catalog.guides.map((g) => ({
       kind: "page" as const,
-      href: `/docs/${g.slug}`,
+      href: guideCanonicalPath(g.slug),
       name: `docs/${g.slug}`,
       displayName: g.title,
       initials: "",
