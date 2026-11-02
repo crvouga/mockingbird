@@ -342,6 +342,9 @@ with different parameters is 400 `idempotency_error`; a concurrent request on an
 (any `parameter_*` error, such as an unknown or missing parameter) is not saved, so the corrected
 request can be retried under the same key; an error raised once the endpoint ran (a decline,
 `resource_missing`) is saved and replayed.
+As Stripe does, every response the endpoint produced is saved, a 500 included. A fault injected
+with `POST /__admin/faults` (such as the `api_error` preset) answers before the API runs, like a
+failure at Stripe's edge, so it is not saved: once the fault clears, a retry under the same key runs.
 
 ### Fault presets
 

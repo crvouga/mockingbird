@@ -444,7 +444,7 @@ export class StripeAPI implements FetchAPI {
         // Stripe saves the first response once the endpoint began executing, so a decline or
         // a missing resource replays; a request whose parameters failed validation never got
         // that far and can be retried, fixed, under the same key.
-        (status, reply) => status < 500 && !reply.headers.has(IDEMPOTENCY_UNSAVED),
+        (_status, reply) => !reply.headers.has(IDEMPOTENCY_UNSAVED),
       )
     }
     return this.decorate(response, version, cors)
