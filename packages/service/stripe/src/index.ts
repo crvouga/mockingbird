@@ -99,6 +99,9 @@ export {
   STRIPE_API_VERSION,
 } from "./version.js"
 
+/** How long Stripe keeps an idempotency key (https://docs.stripe.com/api/idempotent_requests). */
+const IDEMPOTENCY_KEY_TTL_MS = 24 * 60 * 60 * 1000
+
 const MISSING_API_KEY =
   "You did not provide an API key. You need to provide your API key in the Authorization header, using Bearer auth (e.g. 'Authorization: Bearer YOUR_SECRET_KEY'). See https://stripe.com/docs/api#authentication for details, or we can help at https://support.stripe.com/."
 const INVALID_API_KEY = "Invalid API Key provided: This key is not valid."
@@ -221,7 +224,11 @@ export class StripeAPI implements FetchAPI {
       ...(options.onEndpointsChanged ? { endpointsChanged: options.onEndpointsChanged } : {}),
     }
     this.services = services
-    this.idempotency = new IdempotencyStore(sqlite, namespace, "stripe_idempotency")
+    // Stripe prunes a key once it is at least 24 hours old; a reuse after that is a new request.
+    this.idempotency = new IdempotencyStore(sqlite, namespace, "stripe_idempotency", {
+      now: () => this.now(),
+      ttlMs: IDEMPOTENCY_KEY_TTL_MS,
+    })
     const handlers = {
       ...customerSessionHandlers(services),
       ...customerHandlers(services),

@@ -339,6 +339,8 @@ POSTs with `Idempotency-Key` go through the shared `IdempotencyStore`, scoped pe
 replay returns the stored response byte for byte (with `idempotent-replayed: true`); the same key
 with different parameters is 400 `idempotency_error`; a concurrent request on an in-flight key is
 409 `idempotency_key_in_use`, with Stripe's wording.
+A key is pruned once it is 24 hours old on the mock clock (Stripe keeps keys "at least 24
+hours"), so reusing it after `POST /__admin/clock {"advance": "24h"}` runs a new request.
 
 ### Fault presets
 
