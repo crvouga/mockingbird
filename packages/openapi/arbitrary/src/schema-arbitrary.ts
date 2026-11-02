@@ -148,6 +148,135 @@ const formatArbitrary = (format: string | undefined): fc.Arbitrary<string> | und
   }
 }
 
+const ALNUM = "abcdefghijklmnopqrstuvwxyz0123456789"
+const LETTERS = "abcdefghijklmnopqrstuvwxyz"
+const HEX = "0123456789abcdef"
+
+type Segment = string | { alphabet: string; min: number; max?: number }
+
+/**
+ * Strings shaped by `segments` (literals and runs of an alphabet) whose total length lies in
+ * [minLength, maxLength] by construction. The first run takes any length the others cannot.
+ */
+const fitted = (segments: Segment[], minLength: number, maxLength: number) => {
+  const runs = segments.filter((s): s is Exclude<Segment, string> => typeof s !== "string")
+  const floor = segments.reduce((n, s) => n + (typeof s === "string" ? s.length : s.min), 0)
+  if (floor > maxLength) return undefined
+  const slackMin = Math.max(0, minLength - floor)
+  const slackMax = Math.min(maxLength - floor, slackMin + DEFAULT_MAX_LENGTH)
+  return fc
+    .array(fc.nat(runs.length - 1), { minLength: slackMin, maxLength: slackMax })
+    .chain((picks) => {
+      const lengths = runs.map((run) => run.min)
+      for (const i of picks) {
+        const target = (lengths[i] as number) < (runs[i]?.max ?? Number.POSITIVE_INFINITY) ? i : 0
+        lengths[target] = (lengths[target] as number) + 1
+      }
+      let run = 0
+      return fc
+        .tuple(
+          ...segments.map((segment) => {
+            if (typeof segment === "string") return fc.constant(segment)
+            const length = lengths[run++] as number
+            return fc.string({
+              unit: fc.constantFrom(...segment.alphabet.split("")),
+              minLength: length,
+              maxLength: length,
+            })
+          }),
+        )
+        .map((parts) => parts.join(""))
+    })
+}
+
+/** IPv4 with octets trimmed (255 → 55 → 5) until the address fits `maxLength`. */
+const shortIpV4 = (maxLength: number) =>
+  fc.tuple(fc.nat(255), fc.nat(255), fc.nat(255), fc.nat(255)).map((octets) => {
+    const text = () => octets.join(".")
+    while (text().length > maxLength) {
+      const longest = octets.reduce(
+        (best, o, i) => (String(o).length > String(octets[best]).length ? i : best),
+        0,
+      )
+      const octet = octets[longest] as number
+      octets[longest] = octet % 10 ** (String(octet).length - 1)
+    }
+    return text()
+  })
+
+/** Compressed IPv6 (`::a:1`), dropping trailing groups until it fits `maxLength`. */
+const shortIpV6 = (maxLength: number) =>
+  fc
+    .array(fc.string({ unit: fc.constantFrom(...HEX.split("")), minLength: 1, maxLength: 4 }), {
+      maxLength: 7,
+    })
+    .map((groups) => {
+      while (groups.length > 0 && 2 + groups.join(":").length > maxLength) groups.pop()
+      return `::${groups.join(":")}`
+    })
+
+/** Formats whose generators always produce one length. */
+const FIXED_FORMAT_LENGTH: Record<string, number> = { uuid: 36, date: 10, "date-time": 24 }
+
+/**
+ * A format generator that meets the schema's length bounds by construction, or `undefined` when
+ * the bounds are loose enough for the stock generators plus a cheap filter.
+ */
+const formatWithinLength = (schema: SchemaObject): fc.Arbitrary<string> | undefined => {
+  const format = schema.format
+  const min = schema.minLength ?? 0
+  const max = schema.maxLength ?? Number.POSITIVE_INFINITY
+  const unsatisfiable = () =>
+    new Error(`unsatisfiable schema: no ${format} string satisfies ${JSON.stringify(schema)}`)
+  if (format === undefined) return undefined
+  const fixed = FIXED_FORMAT_LENGTH[format]
+  if (fixed !== undefined) {
+    if (min <= fixed && fixed <= max) return undefined
+    // RFC 3339 makes the fraction optional: 1970-01-02T00:00:00Z is 20 characters.
+    if (format === "date-time" && min <= 20 && max >= 20)
+      return dateTimeArbitrary.map((d) => d.replace(/\.\d+Z$/, "Z"))
+    throw unsatisfiable()
+  }
+  const tight = max < 32 || min > 12
+  if (!tight) return undefined
+  switch (format) {
+    case "email": {
+      const email = fitted(
+        [
+          { alphabet: ALNUM, min: 1 },
+          "@",
+          { alphabet: ALNUM, min: 1, max: 12 },
+          ".",
+          { alphabet: LETTERS, min: 2, max: 6 },
+        ],
+        min,
+        max,
+      )
+      if (!email) throw unsatisfiable()
+      return email
+    }
+    case "uri":
+    case "url": {
+      const web = fitted(
+        ["https://", { alphabet: ALNUM, min: 1 }, ".", { alphabet: LETTERS, min: 2, max: 6 }],
+        min,
+        max,
+      )
+      const urn = fitted(["urn:", { alphabet: ALNUM, min: 1 }], min, max)
+      if (!web && !urn) throw unsatisfiable()
+      return web && urn ? fc.oneof(web, urn) : ((web ?? urn) as fc.Arbitrary<string>)
+    }
+    case "ipv4":
+      if (max < 7 || min > 15) throw unsatisfiable()
+      return min > 7 ? shortIpV4(max).filter((s) => s.length >= min) : shortIpV4(max)
+    case "ipv6":
+      if (max < 2 || min > 39) throw unsatisfiable()
+      return min > 2 ? undefined : shortIpV6(max)
+    default:
+      return undefined
+  }
+}
+
 /** Mostly printable ASCII, sometimes full unicode, so encodings and length rules get exercised. */
 const stringUnits = fc.oneof(
   {
@@ -204,6 +333,8 @@ const stringArbitrary = (schema: SchemaObject): fc.Arbitrary<string> => {
       // unsupported pattern syntax: fall back to unconstrained strings
     }
   }
+  const withinLength = formatWithinLength(schema)
+  if (withinLength) return withinLength
   const byFormat = formatArbitrary(schema.format)
   if (byFormat) return byFormat.filter(withinDeclaredLength(schema))
   const lengths = uniq([min, min + 1, max - 1, max].filter((n) => n >= min && n <= max))
