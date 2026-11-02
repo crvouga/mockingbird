@@ -30,6 +30,7 @@ export const nativeProviders = [
   "clerk",
   "linear",
 ] as const
+export type NativeProvider = (typeof nativeProviders)[number]
 export async function target(
   name: (typeof nativeProviders)[number],
   baseUrl: string,
