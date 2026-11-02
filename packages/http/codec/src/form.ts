@@ -86,6 +86,9 @@ const parsePath = (rawKey: string): string[] => {
 
 const isIndex = (segment: string) => /^(0|[1-9][0-9]*)$/.test(segment)
 
+/** 2^32 - 2: larger integer keys are plain properties of an array, never elements. */
+const MAX_ARRAY_INDEX = 4_294_967_294
+
 /**
  * Write an own property. `__proto__` is the one key with an inherited setter, so it needs
  * `defineProperty`; every other key shadows its inherited namesake by plain assignment.
@@ -157,7 +160,17 @@ export const decodeFormPairs = (pairs: Iterable<[string, string]>): FormObject =
 /** Sparse arrays (`a[2]=x` without `a[0]`) become dense in bracket parsers. */
 const densify = (value: FormValue): FormValue => {
   if (typeof value === "string") return value
-  if (Array.isArray(value)) return value.filter((item) => item !== undefined).map(densify)
+  if (Array.isArray(value)) {
+    // Walk the indices that were written, not `length`: `a[4294967294]=x` makes a one-entry
+    // array whose length is ~4.3 billion. Own index keys enumerate in ascending order.
+    const dense: FormValue[] = []
+    for (const key of Object.keys(value)) {
+      if (!isIndex(key) || Number(key) > MAX_ARRAY_INDEX) continue
+      const item = value[Number(key)]
+      if (item !== undefined) dense.push(densify(item))
+    }
+    return dense
+  }
   const out: FormObject = {}
   for (const [key, item] of Object.entries(value)) put(out, key, densify(item))
   return out

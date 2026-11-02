@@ -113,3 +113,17 @@ test("malformed JSON never throws", () => {
     params,
   )
 })
+
+test("sparse bracket indices densify in index order", () => {
+  expect(decodeForm("a[3]=d&a[1]=b&a[0]=a&a[2]=c")).toEqual({ a: ["a", "b", "c", "d"] })
+  expect(decodeForm("items[7][name]=y&items[2][name]=x")).toEqual({
+    items: [{ name: "x" }, { name: "y" }],
+  })
+})
+
+test("a huge bracket index costs one entry, not one per skipped slot", () => {
+  // The largest array index: densifying by walking `length` would visit ~4.3 billion holes.
+  const started = performance.now()
+  expect(decodeForm("a[4294967294]=x&b[0][99999999]=y")).toEqual({ a: ["x"], b: [["y"]] })
+  expect(performance.now() - started).toBeLessThan(1000)
+}, 5_000)

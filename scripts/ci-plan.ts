@@ -13,7 +13,7 @@
  * Turbo's content hashes are the fine-grained filter: an unchanged package replays from cache.
  * `changes` is the coarse one, and works on Turborepo's dependency graph (scripts/affected.ts): a
  * package is affected when a file in it or in a workspace package it depends on, transitively,
- * changed. The shards run only the affected packages, and live parity only the hot services among
+ * changed, or a file one of its tasks declares as a `$TURBO_ROOT$/…` input. The shards run only the affected packages, and live parity only the hot services among
  * them. A file that belongs to no package and is not on a list of paths the shards provably do not
  * read runs every package.
  *
@@ -194,6 +194,8 @@ async function changes(args: string[]): Promise<void> {
           global: () => false,
           unowned: "all",
           lockfile,
+          // A task reading another package's file declares it as a turbo input; schedule it too.
+          externalInputs: true,
         })
   const parityReached =
     files === null
@@ -203,6 +205,8 @@ async function changes(args: string[]): Promise<void> {
           global: parityGlobal,
           unowned: "none",
           lockfile,
+          // Parity has its own extras (`mockingbird.parityInputs`); build/test inputs are not it.
+          externalInputs: false,
         })
 
   // Only hot services run on a PR (each service's tier is in its package.json), and only those
