@@ -18,6 +18,7 @@ import type { FaultPresetList } from "./faults.js"
 import type { Journal } from "./journal.js"
 import type { Metrics } from "./metrics.js"
 import { createNamespaceControls, type NamespaceControls } from "./namespace-controls.js"
+import { timingSafeEqual } from "./signing.js"
 import { ADMIN_ROUTE_REFERENCE } from "./surface.js"
 
 export { parseDuration } from "./controls.js"
@@ -64,6 +65,15 @@ export const assertAdminPrefixAvailable = (prefix: string, paths: readonly strin
 
 /** Carries the admin key, which is separate from any vendor credential. */
 export const ADMIN_KEY_HEADER = CONTROL_HEADERS.adminKey
+
+/**
+ * Whether `headers` carry `adminKey`. Constant-time, so response timing does not tell a caller
+ * how many leading characters of a guess were right.
+ */
+export const hasAdminKey = (headers: Headers, adminKey: string): boolean => {
+  const sent = headers.get(ADMIN_KEY_HEADER)
+  return sent !== null && timingSafeEqual(sent, adminKey)
+}
 /** Selects the isolated namespace a request reads and writes. */
 export const NAMESPACE_HEADER = CONTROL_HEADERS.namespace
 /** Where the admin controls are documented, for people and agents. */
@@ -717,7 +727,7 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
       if (
         !shell &&
         context.adminKey !== undefined &&
-        request.headers.get(ADMIN_KEY_HEADER) !== context.adminKey
+        !hasAdminKey(request.headers, context.adminKey)
       ) {
         return adminError(401, `missing or wrong ${ADMIN_KEY_HEADER}`)
       }
