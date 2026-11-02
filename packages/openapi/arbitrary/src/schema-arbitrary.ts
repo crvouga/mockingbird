@@ -219,19 +219,35 @@ const stringArbitrary = (schema: SchemaObject): fc.Arbitrary<string> => {
   )
 }
 
+/** Bounds that every allOf branch imposes at once: the tightest one wins. */
+const LOWER_BOUNDS = ["minimum", "exclusiveMinimum", "minLength", "minItems", "minProperties"]
+const UPPER_BOUNDS = ["maximum", "exclusiveMaximum", "maxLength", "maxItems", "maxProperties"]
+
 const mergeAllOf = (document: OpenAPIDocument, branches: SchemaObject[]): SchemaObject => {
   const merged: SchemaObject = {}
-  for (const raw of branches) {
-    const branch = resolveSchema(document, raw)
+  const into = merged as Record<string, unknown>
+  const mergeBranch = (branch: SchemaObject) => {
     for (const [key, value] of Object.entries(branch)) {
-      if (key === "properties")
-        merged.properties = { ...(merged.properties ?? {}), ...(branch.properties ?? {}) }
-      else if (key === "required")
+      if (key === "properties") {
+        const properties = { ...(merged.properties ?? {}) }
+        for (const [name, property] of Object.entries(branch.properties ?? {})) {
+          const existing = properties[name]
+          // Both declarations constrain the value; `build` merges this allOf when it gets there.
+          properties[name] = existing ? { allOf: [existing, property] } : property
+        }
+        merged.properties = properties
+      } else if (key === "required")
         merged.required = uniq([...(merged.required ?? []), ...(branch.required ?? [])])
-      else if (key === "allOf") Object.assign(merged, mergeAllOf(document, branch.allOf ?? []))
-      else (merged as Record<string, unknown>)[key] = value
+      else if (key === "allOf") mergeBranch(mergeAllOf(document, branch.allOf ?? []))
+      else if (typeof value === "number" && typeof into[key] === "number") {
+        const current = into[key] as number
+        if (LOWER_BOUNDS.includes(key)) into[key] = Math.max(current, value)
+        else if (UPPER_BOUNDS.includes(key)) into[key] = Math.min(current, value)
+        else into[key] = value
+      } else into[key] = value
     }
   }
+  for (const raw of branches) mergeBranch(resolveSchema(document, raw))
   return merged
 }
 
