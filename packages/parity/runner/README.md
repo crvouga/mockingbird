@@ -185,7 +185,7 @@ Other errors (host not allowed, no parity-enabled operations, bad env integers) 
 | `deletedRefProbability` | `0.15` | Chance a reference may target a resource marked deleted. |
 | `deletionTypes` | `{}` | operationId -> resource types to mark deleted after it runs. |
 | `timeLimitMs` | none | Stop starting new walks after this long; finished walks still count. |
-| `webhooks` | none | `beforeWalk(scope)` snapshots the receiver, `collectMock(mock, scope)` returns expected events, and `collectReal(scope, mockEvents)` waits for delivery. `compare(real, mock, table)` can normalize provider IDs and timing; without it events are compared by exact JSON and order. Webhook comparison runs only after the API walk succeeds. |
+| `webhooks` | none | `beforeWalk(scope)` snapshots the receiver, `collectMock(mock, scope)` returns expected events, and `collectReal(scope, mockEvents)` waits for delivery. `compare(real, mock, table)` can normalize provider IDs and timing; without it each event is canonicalized against the walk's resource table (known ids become tokens), then diffed with key order ignored and event order kept. Webhook comparison runs only after the API walk succeeds. |
 | `latencyToleranceMs` | `0` | Emulator may be at most this much slower than real. **Set it (e.g. `1000`) for self-parity**, where both sides are in-process. |
 
 Returns `ParityReport`: `{ provider, seed, walks, operations, exercised: Record<operationId, count>, planned: string[] }`.
