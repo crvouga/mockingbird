@@ -301,6 +301,7 @@ export class CognitoAPI {
         const user = session && this.state.find(session.username)
         if (
           session?.kind !== "refresh" ||
+          session.clientId !== clientId ||
           session.revoked ||
           session.expires <= this.now() ||
           !user
