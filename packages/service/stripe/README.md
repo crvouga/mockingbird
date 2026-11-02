@@ -344,6 +344,9 @@ request can be retried under the same key; an error raised once the endpoint ran
 `resource_missing`) is saved and replayed.
 A key is pruned once it is 24 hours old on the mock clock (Stripe keeps keys "at least 24
 hours"), so reusing it after `POST /__admin/clock {"advance": "24h"}` runs a new request.
+As Stripe does, every response the endpoint produced is saved, a 500 included. A fault injected
+with `POST /__admin/faults` (such as the `api_error` preset) answers before the API runs, like a
+failure at Stripe's edge, so it is not saved: once the fault clears, a retry under the same key runs.
 
 ### Fault presets
 

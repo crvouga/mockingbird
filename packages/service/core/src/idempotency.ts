@@ -54,6 +54,7 @@ export class IdempotencyStore {
    * the method, path and canonical body). Only `replayable` responses are stored (default:
    * every status below 500), so a transient failure can be retried. `replayable` also sees the
    * response, for vendors that decide from more than the status.
+   * Stripe also saves endpoint-produced 500 responses.
    */
   async run(
     key: string,
