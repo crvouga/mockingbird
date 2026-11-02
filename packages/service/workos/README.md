@@ -56,7 +56,7 @@ over HTTP, including PKCE, JWT signature validation and expired-session refresh.
 ### Routes
 
 - `GET /user_management/authorize`: registered callback, code, state, optional organization/PKCE.
-- `POST /user_management/authenticate`: client secret with authorization_code or refresh_token.
+- `POST /user_management/authenticate`: client secret with authorization_code or refresh_token. A public (browser or native) client may omit `client_secret` and send the PKCE `code_verifier` instead, as AuthKit's browser SDK does; a session started that way also refreshes without a secret.
 - `GET /user_management/users`: bearer API key, limit/after and email filtering.
 - `GET /sso/jwks/{clientId}`: public ephemeral RS256 verification key used by AuthKit.
 
