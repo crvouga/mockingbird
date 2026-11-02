@@ -22,6 +22,8 @@ export type CognitoSession = {
   expires: number
   revoked: boolean
   kind: "access" | "refresh" | "challenge"
+  /** Unix seconds of the sign-in a refresh token came from; refreshed tokens keep it. */
+  authTime?: number
 }
 export type CognitoSeedUser = Partial<CognitoUser> & { username: string; password: string }
 

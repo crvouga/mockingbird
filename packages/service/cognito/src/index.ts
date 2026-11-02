@@ -145,6 +145,7 @@ export class CognitoAPI {
     user: CognitoUser,
     clientId: string,
     includeRefresh = true,
+    authTime?: number,
   ) {
     const now = Math.floor(this.now() / 1000)
     const issuer = this.issuer(request)
@@ -152,7 +153,7 @@ export class CognitoAPI {
     const common = {
       iss: issuer,
       sub: user.sub,
-      auth_time: now,
+      auth_time: authTime ?? now,
       iat: now,
       exp: now + 3600,
       username: user.username,
@@ -185,6 +186,7 @@ export class CognitoAPI {
         expires: (now + 2_592_000) * 1000,
         revoked: false,
         kind: "refresh",
+        authTime: now,
       })
     }
     return {
@@ -300,7 +302,13 @@ export class CognitoAPI {
         )
           return this.error("NotAuthorizedException", "Invalid Refresh Token")
         return this.response({
-          AuthenticationResult: await this.tokens(request, user, session.clientId, false),
+          AuthenticationResult: await this.tokens(
+            request,
+            user,
+            session.clientId,
+            false,
+            session.authTime,
+          ),
         })
       }
       const user = this.requireUser(parameters.USERNAME)
