@@ -13,6 +13,7 @@ import {
   responseForStatus,
   type SchemaObject,
   validateValue,
+  walkSchema,
 } from "./src/index.js"
 
 const params = fcParameters(process.env)
@@ -227,4 +228,40 @@ test("validateValue admits null for nullable enums without listing null in enum"
     }),
     params,
   )
+})
+
+test("walkSchema terminates on self- and mutually-referential schemas and visits every node", () => {
+  const document: OpenAPIDocument = {
+    openapi: "3.1.0",
+    info: { title: "t", version: "1" },
+    paths: {},
+    components: {
+      schemas: {
+        // A tree node (Stripe's `expandable` objects, GitHub's nested comments, JSON values…).
+        node: {
+          type: "object",
+          properties: {
+            parent: { $ref: "#/components/schemas/node", nullable: true },
+            children: { type: "array", items: { $ref: "#/components/schemas/node" } },
+            owner: { $ref: "#/components/schemas/owner" },
+          },
+        },
+        owner: {
+          type: "object",
+          properties: {
+            pinned: { anyOf: [{ $ref: "#/components/schemas/node" }, { type: "null" }] },
+          },
+        },
+      },
+    },
+  }
+  const visited: string[] = []
+  walkSchema(document, { $ref: "#/components/schemas/node" }, (_node, path) => {
+    visited.push(path.join("/"))
+  })
+  // Each node is visited once, under the first path that reaches it.
+  const reached = (suffix: string) => visited.some((path) => path.endsWith(suffix))
+  for (const suffix of ["children", "children/items", "owner", "pinned", "anyOf/0", "anyOf/1"])
+    expect(reached(suffix)).toBe(true)
+  expect(visited.length).toBe(new Set(visited).size)
 })
