@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { encodeForm } from "@crvouga/mockingbird-http-codec"
 import { fcParameters } from "@crvouga/mockingbird-testing"
 import fc from "fast-check"
-import { StripeAPI } from "./src/index.js"
+import { createRuntime, StripeAPI } from "./src/index.js"
 
 /**
  * Stripe's idempotency layer (https://docs.stripe.com/api/idempotent_requests): the first
@@ -129,5 +129,54 @@ describe("Idempotency-Key", () => {
       ),
       { ...params, numRuns: params.numRuns ?? 20 },
     )
+  })
+
+  // "Stripe saves the status code and body of the first request made with a given idempotency
+  // key after endpoint execution begins. Retries with the same key return the saved response,
+  // including `500` errors." (https://docs.stripe.com/api/idempotent_requests)
+  test("a 500 the endpoint produced is saved and replayed", async () => {
+    const api = new StripeAPI({ now })
+    const inner = (api as unknown as { service: { fetch: (r: Request) => Promise<Response> } })
+      .service
+    const real = inner.fetch.bind(inner)
+    let calls = 0
+    inner.fetch = async (request) => {
+      calls++
+      if (calls > 1) return real(request)
+      return new Response(
+        JSON.stringify({ error: { type: "api_error", message: "An unknown error occurred" } }),
+        { status: 500, headers: { "content-type": "application/json" } },
+      )
+    }
+    const failed = await send(api, "POST", "/v1/customers", { name: "Ada" }, "boom-1")
+    expect(failed.status).toBe(500)
+    const retry = await send(api, "POST", "/v1/customers", { name: "Ada" }, "boom-1")
+    expect(retry.status).toBe(500)
+    expect(retry.replayed).toBe("true")
+    expect(retry.text).toBe(failed.text)
+    expect(calls).toBe(1)
+  })
+
+  // An admin-injected status fault answers before the API (like a failure at Stripe's edge), so
+  // no endpoint ran and nothing is saved: once the fault clears, the same key runs the request.
+  test("an injected 500 fault is not saved under the key", async () => {
+    const runtime = createRuntime()
+    runtime.applyPreset("api_error", undefined, { count: 1 })
+    const request = () =>
+      new Request(`${HOST}/v1/customers`, {
+        method: "POST",
+        headers: {
+          ...AUTH,
+          "content-type": "application/x-www-form-urlencoded",
+          "idempotency-key": "edge-1",
+        },
+        body: encodeForm({ name: "Ada" }),
+      })
+    expect((await runtime.fetch(request())).status).toBe(500)
+    const retry = await runtime.fetch(request())
+    expect(retry.status).toBe(200)
+    expect(retry.headers.get("idempotent-replayed")).toBeNull()
+    const replay = await runtime.fetch(request())
+    expect(replay.headers.get("idempotent-replayed")).toBe("true")
   })
 })

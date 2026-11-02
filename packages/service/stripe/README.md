@@ -339,6 +339,9 @@ POSTs with `Idempotency-Key` go through the shared `IdempotencyStore`, scoped pe
 replay returns the stored response byte for byte (with `idempotent-replayed: true`); the same key
 with different parameters is 400 `idempotency_error`; a concurrent request on an in-flight key is
 409 `idempotency_key_in_use`, with Stripe's wording.
+As Stripe does, every response the endpoint produced is saved, a 500 included. A fault injected
+with `POST /__admin/faults` (such as the `api_error` preset) answers before the API runs, like a
+failure at Stripe's edge, so it is not saved: once the fault clears, a retry under the same key runs.
 
 ### Fault presets
 

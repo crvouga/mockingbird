@@ -39,7 +39,8 @@ export class IdempotencyStore {
   /**
    * Run `handler` once per `key`. `fingerprint` identifies the request's parameters (e.g.
    * the method, path and canonical body). Only `replayable` responses are stored (default:
-   * every status below 500, as Stripe does), so a transient failure can be retried.
+   * every status below 500), so a transient failure can be retried. Stripe passes its own:
+   * it saves 500s too.
    */
   async run(
     key: string,

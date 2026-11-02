@@ -437,6 +437,10 @@ export class StripeAPI implements FetchAPI {
             }),
         },
         handle,
+        // Stripe saves the first response once the endpoint began executing, "including `500`
+        // errors". An admin-injected status fault answers before this API runs, so it is never
+        // saved: the same key runs the request once the fault clears.
+        () => true,
       )
     }
     return this.decorate(response, version, cors)
