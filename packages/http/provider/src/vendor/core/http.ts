@@ -137,7 +137,7 @@ export class HonoRequest<P extends string = string> {
     }
     if (contentType.includes("application/x-www-form-urlencoded")) {
       const params = new URLSearchParams(await this.raw.text());
-      const out: Record<string, string | string[]> = {};
+      const out = bodyRecord<string>();
       for (const [key, value] of params) {
         appendBodyValue(out, key, value);
       }
@@ -492,15 +492,24 @@ function defaultContentType(headers: HeadersInit | undefined, contentType: strin
 }
 
 function formDataToObject(formData: FormData): Record<string, FormDataEntryValue | FormDataEntryValue[]> {
-  const out: Record<string, FormDataEntryValue | FormDataEntryValue[]> = {};
+  const out = bodyRecord<FormDataEntryValue>();
   for (const [key, value] of formData) {
     appendBodyValue(out, key, value);
   }
   return out;
 }
 
+/**
+ * A field map with no prototype. Field names come from the client, so on a plain object
+ * `constructor` or `toString` would read inherited members and `__proto__` would replace the
+ * prototype instead of being stored.
+ */
+function bodyRecord<T>(): Record<string, T | T[]> {
+  return Object.create(null) as Record<string, T | T[]>;
+}
+
 function appendBodyValue<T>(target: Record<string, T | T[]>, key: string, value: T): void {
-  const existing = target[key];
+  const existing = Object.hasOwn(target, key) ? target[key] : undefined;
   if (existing === undefined) {
     target[key] = value;
   } else if (Array.isArray(existing)) {
