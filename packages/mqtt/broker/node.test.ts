@@ -3,8 +3,10 @@
  * SDK tests drive the same listeners with a real client library.
  */
 import { describe, expect, test } from "bun:test"
-import { createServer as createHttpServer } from "node:http"
+import { EventEmitter } from "node:events"
+import { createServer as createHttpServer, type Server as HttpServer } from "node:http"
 import { type AddressInfo, connect as connectSocket } from "node:net"
+import { PassThrough } from "node:stream"
 import { bootSqlite } from "@crvouga/mockingbird-service"
 import {
   Broker,
@@ -196,6 +198,46 @@ describe("attachWebSocket", () => {
       webSocket.close()
       await new Promise<void>((resolve) => http.close(() => resolve()))
     }
+  })
+  test("reassembles a large frame from many small chunks in linear time", () => {
+    // A fake server and socket, so the parser sees exactly the chunks written here.
+    const server = new EventEmitter()
+    const socket = Object.assign(new PassThrough(), { setNoDelay: () => {} })
+    let received = 0
+    attachWebSocket(server as unknown as HttpServer, {
+      route: () => () => ({
+        receive: (chunk) => {
+          received += chunk.length
+        },
+        closed: () => {},
+      }),
+    })
+    server.emit(
+      "upgrade",
+      {
+        url: "/mqtt",
+        headers: {
+          "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+          "sec-websocket-protocol": "mqtt",
+        },
+      },
+      socket,
+      Buffer.alloc(0),
+    )
+    // One 16 MB binary frame in 1 KB chunks: re-copying the buffered bytes on each chunk copies
+    // ~128 GB and takes many seconds.
+    const frame = Buffer.alloc(10 + 4 + 16 * 1024 * 1024)
+    frame[0] = 0x82
+    frame[1] = 0x80 | 127
+    frame.writeBigUInt64BE(BigInt(16 * 1024 * 1024), 2)
+    const started = performance.now()
+    for (let offset = 0; offset < frame.length; offset += 1024) {
+      socket.emit("data", frame.subarray(offset, offset + 1024))
+    }
+    const elapsed = performance.now() - started
+    socket.destroy()
+    expect(received).toBe(16 * 1024 * 1024)
+    expect(elapsed).toBeLessThan(1000)
   })
 })
 

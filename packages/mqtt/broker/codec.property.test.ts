@@ -193,6 +193,32 @@ describe("MQTT 5 codec", () => {
     )
   })
 
+  test("a large packet in many small chunks is reassembled in linear time", () => {
+    // 16 MB in 1 KB chunks. Re-copying everything buffered on each chunk copies ~128 GB here
+    // and takes many seconds; copying each byte once takes milliseconds.
+    const payload = new Uint8Array(16 * 1024 * 1024).map((_, index) => index & 0xff)
+    const wire = encodePacket({
+      type: "publish",
+      topic: "big",
+      payload,
+      qos: 0,
+      retain: false,
+      dup: false,
+      properties: {},
+    })
+    const reader = new PacketReader()
+    const packets: Packet[] = []
+    const started = performance.now()
+    for (let offset = 0; offset < wire.length; offset += 1024) {
+      packets.push(...reader.push(wire.subarray(offset, offset + 1024)).packets)
+    }
+    const elapsed = performance.now() - started
+    expect(packets).toHaveLength(1)
+    const [packet] = packets
+    expect(packet?.type === "publish" && packet.payload).toEqual(payload)
+    expect(elapsed).toBeLessThan(1000)
+  })
+
   test("arbitrary bytes never throw anything but a protocol error", () => {
     fc.assert(
       fc.property(fc.uint8Array({ maxLength: 64 }), (noise) => {

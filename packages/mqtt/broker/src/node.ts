@@ -110,15 +110,33 @@ const encodeFrame = (opcode: number, payload: Uint8Array): Uint8Array => {
   return Buffer.concat([header, payload])
 }
 
-/** Splits a byte stream into WebSocket messages; control frames are reported as they come. */
+/**
+ * Splits a byte stream into WebSocket messages; control frames are reported as they come.
+ * Chunks are held until the next header or the whole frame is there and joined only then, so a
+ * large frame in many small chunks costs time linear in its size.
+ */
 const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: () => void) => {
-  let buffer: Buffer = Buffer.alloc(0)
+  let held: Buffer[] = []
+  let heldBytes = 0
+  /** Bytes needed before parsing can move on. */
+  let need = 2
   let fragments: Buffer[] = []
   let fragmentOpcode = 0
   return (chunk: Buffer): void => {
-    buffer = buffer.length === 0 ? chunk : Buffer.concat([buffer, chunk])
+    held.push(chunk)
+    heldBytes += chunk.length
+    if (heldBytes < need) return
+    let buffer = held.length === 1 ? chunk : Buffer.concat(held, heldBytes)
+    const wait = (bytes: number): void => {
+      need = bytes
+      held = buffer.length > 0 ? [buffer] : []
+      heldBytes = buffer.length
+    }
     for (;;) {
-      if (buffer.length < 2) return
+      if (buffer.length < 2) {
+        wait(2)
+        return
+      }
       const first = buffer[0] ?? 0
       const second = buffer[1] ?? 0
       // No extension is negotiated, so the reserved bits must be clear; a client must mask.
@@ -131,11 +149,17 @@ const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: (
       let length = second & 0x7f
       let offset = 2
       if (length === 126) {
-        if (buffer.length < 4) return
+        if (buffer.length < 4) {
+          wait(4)
+          return
+        }
         length = buffer.readUInt16BE(2)
         offset = 4
       } else if (length === 127) {
-        if (buffer.length < 10) return
+        if (buffer.length < 10) {
+          wait(10)
+          return
+        }
         const wide = buffer.readBigUInt64BE(2)
         if (wide > BigInt(MAX_FRAME_BYTES)) {
           onError()
@@ -144,7 +168,10 @@ const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: (
         length = Number(wide)
         offset = 10
       }
-      if (buffer.length < offset + 4 + length) return
+      if (buffer.length < offset + 4 + length) {
+        wait(offset + 4 + length)
+        return
+      }
       const mask = buffer.subarray(offset, offset + 4)
       const payload = Buffer.alloc(length)
       for (let index = 0; index < length; index++) {

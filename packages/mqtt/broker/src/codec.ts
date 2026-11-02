@@ -686,9 +686,17 @@ const packetLength = (buffer: Uint8Array): number | undefined => {
   throw malformed("remaining length longer than four bytes")
 }
 
-/** Reassembles control packets from a byte stream, in whatever chunks the transport delivers. */
+/**
+ * Reassembles control packets from a byte stream, in whatever chunks the transport delivers.
+ * Chunks are held as they come and each packet's bytes are copied once, when it is complete,
+ * so a large packet in many small chunks costs time linear in its size.
+ */
 export class PacketReader {
-  private buffer: Uint8Array = new Uint8Array(0)
+  private chunks: Uint8Array[] = []
+  /** Bytes of `chunks[0]` already consumed. */
+  private head = 0
+  /** Bytes held and not yet consumed. */
+  private buffered = 0
 
   /** `maxPacketSize` is the Maximum Packet Size this endpoint advertised (3.2.2.3.6). */
   constructor(private readonly maxPacketSize: number = MAX_VARIABLE_BYTE_INTEGER + 5) {}
@@ -698,27 +706,65 @@ export class PacketReader {
    * decoded stops the stream: its error is returned after the packets before it.
    */
   push(chunk: Uint8Array): { packets: Packet[]; error?: MqttProtocolError } {
-    const joined = new Uint8Array(this.buffer.length + chunk.length)
-    joined.set(this.buffer)
-    joined.set(chunk, this.buffer.length)
-    this.buffer = joined
+    if (chunk.length > 0) {
+      this.chunks.push(chunk)
+      this.buffered += chunk.length
+    }
     const packets: Packet[] = []
     try {
       for (;;) {
-        const length = packetLength(this.buffer)
+        const length = packetLength(this.peek(5))
         if (length === undefined) break
         if (length > this.maxPacketSize) {
           throw new MqttProtocolError(ReasonCode.PacketTooLarge, `packet of ${length} bytes`)
         }
-        if (this.buffer.length < length) break
-        packets.push(decodePacket(this.buffer.subarray(0, length)))
-        this.buffer = this.buffer.slice(length)
+        if (this.buffered < length) break
+        packets.push(decodePacket(this.take(length)))
       }
     } catch (error) {
-      this.buffer = new Uint8Array(0)
+      this.chunks = []
+      this.head = 0
+      this.buffered = 0
       if (error instanceof MqttProtocolError) return { packets, error }
       throw error
     }
     return { packets }
+  }
+
+  /** Up to the first `count` held bytes, without consuming them. */
+  private peek(count: number): Uint8Array {
+    const bytes: number[] = []
+    let skip = this.head
+    for (const chunk of this.chunks) {
+      for (let index = skip; index < chunk.length && bytes.length < count; index++) {
+        bytes.push(chunk[index] ?? 0)
+      }
+      if (bytes.length === count) break
+      skip = 0
+    }
+    return Uint8Array.from(bytes)
+  }
+
+  /** Consume the first `length` held bytes into a fresh array (decoded packets keep views of it). */
+  private take(length: number): Uint8Array {
+    const out = new Uint8Array(length)
+    let filled = 0
+    let used = 0
+    while (filled < length) {
+      const chunk = this.chunks[used]
+      if (!chunk) break
+      const count = Math.min(chunk.length - this.head, length - filled)
+      out.set(chunk.subarray(this.head, this.head + count), filled)
+      filled += count
+      this.head += count
+      if (this.head === chunk.length) {
+        used += 1
+        this.head = 0
+      }
+    }
+    // One splice per packet: shifting chunk by chunk would be quadratic in the chunk count.
+    this.chunks.splice(0, used)
+    this.buffered -= length
+    return out
   }
 }
