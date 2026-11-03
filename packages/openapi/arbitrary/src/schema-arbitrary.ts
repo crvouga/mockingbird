@@ -50,19 +50,51 @@ const boundaryIntegers = (min: number, max: number) =>
     ),
   )
 
+/**
+ * Smallest positive integer that is a multiple of `multipleOf` (2.5 → 5, 0.1 → 1), or
+ * `undefined` when there is none in a sane range, leaving 0 as the only integer multiple.
+ */
+const integerStep = (multipleOf: number): number | undefined => {
+  for (let q = 1; q <= 1_000_000; q++) {
+    const step = Math.round(multipleOf * q)
+    if (step > 0 && Math.abs(multipleOf * q - step) <= 1e-9 * step) return step
+  }
+  return undefined
+}
+
 const integerArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
-  let min =
-    schema.minimum ??
-    (schema.exclusiveMinimum !== undefined ? schema.exclusiveMinimum + 1 : -DEFAULT_INTEGER_BOUND)
-  let max =
-    schema.maximum ??
-    (schema.exclusiveMaximum !== undefined ? schema.exclusiveMaximum - 1 : DEFAULT_INTEGER_BOUND)
-  min = Math.max(Math.ceil(min), -SAFE_INTEGER_BOUND)
-  max = Math.min(Math.floor(max), SAFE_INTEGER_BOUND)
-  if (min > max) return fc.constant(min)
-  const random = fc.integer({ min, max })
-  const boundaries = boundaryIntegers(min, max)
+  // Every declared bound applies; the tightest one wins.
+  const lower = [
+    schema.minimum === undefined ? undefined : Math.ceil(schema.minimum),
+    schema.exclusiveMinimum === undefined ? undefined : Math.floor(schema.exclusiveMinimum) + 1,
+  ].filter((n): n is number => n !== undefined)
+  const upper = [
+    schema.maximum === undefined ? undefined : Math.floor(schema.maximum),
+    schema.exclusiveMaximum === undefined ? undefined : Math.ceil(schema.exclusiveMaximum) - 1,
+  ].filter((n): n is number => n !== undefined)
+  const min = Math.max(
+    lower.length > 0 ? Math.max(...lower) : -DEFAULT_INTEGER_BOUND,
+    -SAFE_INTEGER_BOUND,
+  )
+  const max = Math.min(
+    upper.length > 0 ? Math.min(...upper) : DEFAULT_INTEGER_BOUND,
+    SAFE_INTEGER_BOUND,
+  )
+  const unsatisfiable = () =>
+    new Error(`unsatisfiable schema: no integer satisfies ${JSON.stringify(schema)}`)
   const multiple = schema.multipleOf
+  // Generate the multiplier k and emit k * step, so every value is a multiple by construction.
+  const step = multiple !== undefined && multiple > 0 ? integerStep(multiple) : 1
+  if (step === undefined) {
+    if (min <= 0 && max >= 0) return fc.constant(0)
+    throw unsatisfiable()
+  }
+  // `|| 0` turns `Math.ceil(-0.4)`'s -0 into 0 so it never leaks out as a boundary value.
+  const low = Math.ceil(min / step) || 0
+  const high = Math.floor(max / step) || 0
+  if (low > high) throw unsatisfiable()
+  const random = fc.integer({ min: low, max: high })
+  const boundaries = boundaryIntegers(low, high)
   const base =
     boundaries.length > 0
       ? fc.oneof(
@@ -70,10 +102,7 @@ const integerArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
           { arbitrary: fc.constantFrom(...boundaries), weight: 2 },
         )
       : random
-  if (multiple !== undefined && multiple > 0 && Number.isInteger(multiple)) {
-    return base.map((n) => Math.round(n / multiple) * multiple).filter((n) => n >= min && n <= max)
-  }
-  return base
+  return step === 1 ? base : base.map((k) => k * step)
 }
 
 /** Strip float noise (`3 * 0.1` → `0.3`) so generated decimals look like the ones people write. */
