@@ -34,6 +34,7 @@ import {
   lockfileImpactSince,
   type WorkspaceGraph,
 } from "./affected.ts"
+import { assertShardIrrelevantUnread, SHARD_IRRELEVANT } from "./ci-paths.ts"
 import { parityServices } from "./parity-tiers.ts"
 import { discoverPackages } from "./release/lib.ts"
 
@@ -41,42 +42,6 @@ const root = join(import.meta.dir, "..")
 
 /** Parallel shard runners. .github/actions/setup restores one turbo cache per shard. */
 const SHARDS = 4
-
-/**
- * Paths no shard task reads: not a package input, not a turbo global dependency, not a build
- * script. A change made only of these skips the shards (and the consumer smoke).
- */
-const SHARD_IRRELEVANT = [
-  "AGENTS.md",
-  "CLAUDE.md",
-  "README.md",
-  "LICENSE",
-  "commitlint.config.js",
-  "secrets.manifest.yaml",
-  ".husky/**",
-  ".agents/**",
-  ".claude/**",
-  ".cursor/**",
-  ".opencode/**",
-  ".windsurf/**",
-  ".superset/**",
-  ".super.engineering/**",
-  ".github/prompts/**",
-  ".github/ISSUE_TEMPLATE/**",
-  ".github/labels.json",
-  ".github/pull_request_template.md",
-  // Workflows other than pr.yml do not change what the pull-request gate runs.
-  ".github/workflows/{advisory,cache-cleanup,ci,issue-labels,parity,publish,resolve-issues,verify}.yml",
-  // Read only by junction's live parity script (its `parityInputs`).
-  "PARITY_FAILURE_SEED_REGISTRY.json",
-  "scripts/parity-tiers.ts",
-  "scripts/worktree/**",
-  "scripts/secrets/**",
-  "scripts/{agent-commands,check-workflows,ci-local,github-app-token,parity-remote,parity-service,pr-ready,resolve-issues}.ts",
-  "scripts/tsconfig.json",
-  "scripts/{github-app-token,resolve-issues}.test.ts",
-  ".github/resolve-issues-app.json",
-]
 
 /**
  * Paths the consumer smoke does not read, on top of SHARD_IRRELEVANT: it packs the public
@@ -170,6 +135,7 @@ async function changedFiles(base: string): Promise<string[] | null> {
 async function changes(args: string[]): Promise<void> {
   checkTasks()
   assertSetupRestoresEveryShard()
+  assertShardIrrelevantUnread()
 
   const baseAt = args.indexOf("--base")
   const base = baseAt >= 0 ? args[baseAt + 1] : undefined
