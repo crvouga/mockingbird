@@ -2,6 +2,7 @@
 import catalog from "virtual:mockingbird/catalog"
 import BirdMark from "../components/BirdMark.astro"
 import Icon from "../components/Icon.astro"
+import InlineScript from "../components/InlineScript.astro"
 import Sprite from "../components/Sprite.astro"
 import { IDENTITY, MARK_HREF, RISK_DISCLAIMER, SOCIAL_CARD } from "../lib/content.ts"
 import { inline } from "../lib/inline.ts"
@@ -30,6 +31,17 @@ const {
   noindex = false,
   canonicalPath,
 } = Astro.props
+// Runs before first paint so the page never flashes the wrong theme.
+const THEME_SCRIPT = `try {
+  var mode = localStorage.getItem("mb:theme")
+  if (mode !== "light" && mode !== "dark" && mode !== "system") mode = "system"
+  var theme = mode === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : mode
+  document.documentElement.dataset.theme = theme
+  document.documentElement.dataset.themeMode = mode
+} catch (e) {
+  document.documentElement.dataset.theme = "light"
+  document.documentElement.dataset.themeMode = "system"
+}`
 const description = metaDescription(copy)
 const fullTitle = title
   ? `${title} · Mockingbird`
@@ -83,18 +95,7 @@ const currentNav = nav
     <link rel="icon" type="image/svg+xml" href={MARK_HREF} />
     <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
     {markdown && <link rel="alternate" type="text/markdown" href={markdown} />}
-    <script is:inline>
-      try {
-        var mode = localStorage.getItem("mb:theme")
-        if (mode !== "light" && mode !== "dark" && mode !== "system") mode = "system"
-        var theme = mode === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : mode
-        document.documentElement.dataset.theme = theme
-        document.documentElement.dataset.themeMode = mode
-      } catch (e) {
-        document.documentElement.dataset.theme = "light"
-        document.documentElement.dataset.themeMode = "system"
-      }
-    </script>
+    <InlineScript code={THEME_SCRIPT} />
   </head>
   <body>
     <Sprite />

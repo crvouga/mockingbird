@@ -1,0 +1,19 @@
+---
+import { createHash } from "node:crypto"
+import type { HTMLAttributes } from "astro/types"
+
+/**
+ * A classic inline script the page's Content-Security-Policy allows by hash. Astro hashes the
+ * scripts it bundles, not `is:inline` ones, so this registers its own. Pass per-page values as
+ * `data-*` attributes (read from `document.currentScript.dataset`), so the code and its hash stay
+ * the same on every page.
+ */
+interface Props extends HTMLAttributes<"script"> {
+  code: string
+}
+
+const { code, ...attributes } = Astro.props
+Astro.csp?.insertScriptHash(`sha256-${createHash("sha256").update(code).digest("base64")}`)
+---
+
+<script is:inline {...attributes} set:html={code} />

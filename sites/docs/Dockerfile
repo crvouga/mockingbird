@@ -32,5 +32,7 @@ WORKDIR /app/sites/docs
 ENV HOST=0.0.0.0 PORT=80 WEBHOOK_DB=/data/events.sqlite
 COPY --from=build /app/sites/docs/dist ./dist
 COPY --from=build /app/sites/docs/package.json ./package.json
+COPY --from=build /app/sites/docs/server ./server
 EXPOSE 80
-CMD ["bun", "./dist/server/entry.mjs"]
+# server/index.ts wraps Astro's handler with the security headers.
+CMD ["bun", "./server/index.ts"]
