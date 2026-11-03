@@ -127,3 +127,12 @@ export const text = (value: unknown): string => {
 export const pretty = (value: unknown): string => JSON.stringify(value, null, 2) ?? ""
 export const errorMessage = (error: unknown): string =>
   error instanceof Error ? error.message : String(error)
+/**
+ * An audit event's time in the viewer's locale. A missing time shows "—", and a value
+ * that is not a date is shown as written, so neither renders "Invalid Date".
+ */
+export const auditTime = (value: unknown): string => {
+  if (value === undefined || value === null || value === "") return "—"
+  const date = new Date(typeof value === "number" ? value : text(value))
+  return Number.isNaN(date.getTime()) ? text(value) : date.toLocaleString()
+}
