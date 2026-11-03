@@ -1,4 +1,4 @@
-import { resolveAdminPrefix } from "@crvouga/mockingbird-service"
+import { resolveAdminPrefix, timingSafeEqual } from "@crvouga/mockingbird-service"
 import { Hono } from "hono"
 
 export type WebhookRow = {
@@ -10,6 +10,13 @@ export type WebhookRow = {
   payload: unknown
 }
 
+/**
+ * Credentials a sender attaches to a delivery, such as the basic auth some providers let you set
+ * on a webhook URL. The read API returns stored headers, so these keep their name (proof the
+ * header was sent) but not their value. Signature headers are kept for verification.
+ */
+const REDACTED_HEADERS = new Set(["authorization", "proxy-authorization", "cookie"])
+
 export type WebhookStore = {
   insert(row: WebhookRow): Promise<void>
   list(filter: { service?: string; runId?: string }): Promise<readonly WebhookRow[]>
@@ -19,6 +26,34 @@ export type WebhookCollectorEnv = { Variables: { store: WebhookStore } }
 
 const SERVICE_SLUG = /^[a-z][a-z0-9-]{0,63}$/
 const MAX_BODY_BYTES = 1_048_576
+
+/**
+ * The body as text, or `undefined` once it passes `limit` bytes. Counted as it arrives, so a
+ * chunked upload (no Content-Length) is cut off at the limit instead of buffered whole.
+ */
+const readBounded = async (body: ReadableStream<Uint8Array> | null, limit: number) => {
+  if (!body) return ""
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.byteLength
+    if (size > limit) {
+      await reader.cancel().catch(() => {})
+      return undefined
+    }
+    chunks.push(value)
+  }
+  const joined = new Uint8Array(size)
+  let offset = 0
+  for (const chunk of chunks) {
+    joined.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(joined)
+}
 
 export const createWebhookCollector = (
   store: WebhookStore,
@@ -34,13 +69,13 @@ export const createWebhookCollector = (
   app.get(`${adminPrefix}/health`, (c) => c.json({ status: "ok" }))
   app.use(`${adminPrefix}/events/*`, async (c, next) => {
     if (!readToken) return c.json({ error: "collector_read_token_not_configured" }, 503)
-    if (c.req.header("authorization") !== `Bearer ${readToken}`)
+    if (!hasBearer(c.req.header("authorization"), readToken))
       return c.json({ error: "unauthorized" }, 401)
     return next()
   })
   app.use(`${adminPrefix}/events`, async (c, next) => {
     if (!readToken) return c.json({ error: "collector_read_token_not_configured" }, 503)
-    if (c.req.header("authorization") !== `Bearer ${readToken}`)
+    if (!hasBearer(c.req.header("authorization"), readToken))
       return c.json({ error: "unauthorized" }, 401)
     return next()
   })
@@ -49,9 +84,8 @@ export const createWebhookCollector = (
     if (!SERVICE_SLUG.test(service)) return c.json({ error: "invalid_service" }, 400)
     const declaredLength = Number(c.req.header("content-length"))
     if (declaredLength > MAX_BODY_BYTES) return c.json({ error: "payload_too_large" }, 413)
-    const raw = await c.req.text()
-    if (new TextEncoder().encode(raw).byteLength > MAX_BODY_BYTES)
-      return c.json({ error: "payload_too_large" }, 413)
+    const raw = await readBounded(c.req.raw.body, MAX_BODY_BYTES)
+    if (raw === undefined) return c.json({ error: "payload_too_large" }, 413)
     let payload: unknown
     try {
       payload = JSON.parse(raw)
@@ -60,7 +94,7 @@ export const createWebhookCollector = (
     }
     const headers: Record<string, string> = {}
     c.req.raw.headers.forEach((value, key) => {
-      headers[key] = value
+      headers[key] = REDACTED_HEADERS.has(key) ? "[redacted]" : value
     })
     await c.var.store.insert({
       service,
@@ -88,5 +122,9 @@ export const createWebhookCollector = (
   })
   return app
 }
+
+/** Constant-time, so response timing does not reveal how much of a guessed token was right. */
+const hasBearer = (authorization: string | undefined, token: string) =>
+  authorization !== undefined && timingSafeEqual(authorization, `Bearer ${token}`)
 
 export type { Hono }

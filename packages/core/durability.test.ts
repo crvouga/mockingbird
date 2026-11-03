@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Buffer } from "node:buffer"
-import { IDBFactory, IDBObjectStore } from "fake-indexeddb"
+import { forceCloseDatabase, IDBFactory, IDBObjectStore } from "fake-indexeddb"
 import {
   type DurabilityBackend,
   DurabilityConflictError,
@@ -400,4 +400,35 @@ test("word-wise dirty-page comparison preserves every byte at aligned and unalig
     }
     await handle.close()
   }
+})
+
+test("IndexedDB reopens after the browser force-closes its connection", async () => {
+  // Browsers close a connection abnormally (Safari "connection lost", clearing site data in
+  // DevTools) by firing "close" on it. Each later transaction on it throws InvalidStateError.
+  const factory = new IDBFactory()
+  const connections: IDBDatabase[] = []
+  const backend = new IndexedDBDurabilityBackend({
+    indexedDB: {
+      open(name: string, version?: number) {
+        const request = factory.open(name, version)
+        request.addEventListener("success", () => connections.push(request.result))
+        return request
+      },
+    },
+  })
+  const handle = await openDurable({ backend, key: "image", codec, pageSize: 2 })
+  await handle.write((value) => {
+    value.bytes = new Uint8Array([1, 2, 3])
+  })
+  const [first] = connections
+  if (!first) throw new Error("no connection opened")
+  // fake-indexeddb types the parameter as the IDBDatabase class; it takes a connection.
+  forceCloseDatabase(first as unknown as typeof IDBDatabase)
+  await handle.write((value) => {
+    value.bytes = new Uint8Array([4, 5, 6])
+  })
+  expect((await backend.load("image"))?.bytes).toEqual(new Uint8Array([4, 5, 6]))
+  expect(connections).toHaveLength(2)
+  await handle.close()
+  await backend.close()
 })

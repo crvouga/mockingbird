@@ -24,6 +24,9 @@
     "packages/auth/*",
     "sites/docs"
   ],
+  "overrides": {
+    "postcss": "^8.5.30"
+  },
   "trustedDependencies": [
     "embedded-postgres",
     "@embedded-postgres/darwin-arm64",
@@ -42,6 +45,7 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "generate": "turbo run generate",
+    "openapi:check": "turbo run openapi:check",
     "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:agents check:worktree check:llms check:readme check:brands check:parity-tiers check:service-discovery check:performance check:scripts check:workflows check:format",
     "check:full": "bun scripts/ci-local.ts",
     "pack:check": "turbo run pack:check",

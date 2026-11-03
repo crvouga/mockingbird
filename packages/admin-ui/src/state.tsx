@@ -17,7 +17,7 @@ import {
 import { useState } from "react"
 import { DataTable, ErrorNotice, Refresh, useAction, useResource, ViewTitle } from "./components.js"
 import type { Api, StatePage, StateRecord, StateView } from "./model.js"
-import { isRecord, pretty } from "./model.js"
+import { pretty, recordRow } from "./model.js"
 
 export function StateExplorer({
   api,
@@ -107,10 +107,7 @@ function Records({
   const resource = useResource<StatePage>(api, path, revision)
   const [editor, setEditor] = useState<StateRecord | "new" | null>(null)
   const records = resource.data?.records ?? []
-  const rows = records.map((record) => ({
-    id: record.id,
-    ...(isRecord(record.value) ? record.value : { value: record.value }),
-  }))
+  const rows = records.map(recordRow)
   return (
     <Flex vertical gap="middle">
       <Flex gap="middle" wrap justify="space-between">
