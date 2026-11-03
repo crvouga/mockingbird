@@ -69,6 +69,18 @@ describe("migrate", () => {
   )
 })
 
+describe("listAppliedMigrations order", () => {
+  test("returns migrations applied in the same second in run order, not id order", () => {
+    const sqlite = createDefaultSqlite()
+    migrate(sqlite, [
+      { id: "002_z", sql: "CREATE TABLE z (id INTEGER PRIMARY KEY)" },
+      { id: "001_a", sql: "CREATE TABLE a (id INTEGER PRIMARY KEY)" },
+      { id: "003_m", sql: "CREATE TABLE m (id INTEGER PRIMARY KEY)" },
+    ])
+    expect(listAppliedMigrations(sqlite)).toEqual(["002_z", "001_a", "003_m"])
+  })
+})
+
 describe("migrate duplicate ids", () => {
   test("rejects a list that repeats an id, naming it, before applying anything", () => {
     const sqlite = createDefaultSqlite()
