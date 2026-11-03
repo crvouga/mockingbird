@@ -458,6 +458,14 @@ const mergeAllOf = (document: OpenAPIDocument, branches: SchemaObject[]): Schema
   return merged
 }
 
+/** Key under which structurally equal JSON values collide: object keys sorted, -0 read as 0. */
+const structuralKey = (value: unknown): string =>
+  JSON.stringify(value, (_key, v: unknown) =>
+    v !== null && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)))
+      : v,
+  ) ?? "undefined"
+
 /** How many draws a `oneOf` gets to land in exactly one branch before it settles for the last. */
 const ONE_OF_ATTEMPTS = 32
 
@@ -606,18 +614,18 @@ export const schemaArbitrary = (
       )
     }
     const lengths = uniq([min, min + 1, max - 1, max].filter((n) => n >= min && n <= max))
+    // JSON Schema compares items structurally, so two equal objects are duplicates.
+    const unique = { selector: structuralKey, comparator: "SameValueZero" } as const
+    // fast-check's uniqueArray never returns when minLength exceeds the distinct items available
+    // (unique booleans, length 3), so the boundary aims for `length` but settles for `min`.
     const sized = (length: number) =>
       node.uniqueItems
-        ? fc.uniqueArray(items, {
-            minLength: length,
-            maxLength: length,
-            comparator: "SameValueZero",
-          })
+        ? fc.uniqueArray(items, { minLength: min, maxLength: length, ...unique })
         : fc.array(items, { minLength: length, maxLength: length })
     return fc.oneof(
       {
         arbitrary: node.uniqueItems
-          ? fc.uniqueArray(items, { minLength: min, maxLength: max, comparator: "SameValueZero" })
+          ? fc.uniqueArray(items, { minLength: min, maxLength: max, ...unique })
           : fc.array(items, { minLength: min, maxLength: max }),
         weight: boundaryWeights(max).random,
       },
