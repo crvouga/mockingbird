@@ -1,4 +1,4 @@
-import { resolveAdminPrefix } from "@crvouga/mockingbird-service"
+import { resolveAdminPrefix, timingSafeEqual } from "@crvouga/mockingbird-service"
 import { Hono } from "hono"
 
 export type WebhookRow = {
@@ -62,13 +62,13 @@ export const createWebhookCollector = (
   app.get(`${adminPrefix}/health`, (c) => c.json({ status: "ok" }))
   app.use(`${adminPrefix}/events/*`, async (c, next) => {
     if (!readToken) return c.json({ error: "collector_read_token_not_configured" }, 503)
-    if (c.req.header("authorization") !== `Bearer ${readToken}`)
+    if (!hasBearer(c.req.header("authorization"), readToken))
       return c.json({ error: "unauthorized" }, 401)
     return next()
   })
   app.use(`${adminPrefix}/events`, async (c, next) => {
     if (!readToken) return c.json({ error: "collector_read_token_not_configured" }, 503)
-    if (c.req.header("authorization") !== `Bearer ${readToken}`)
+    if (!hasBearer(c.req.header("authorization"), readToken))
       return c.json({ error: "unauthorized" }, 401)
     return next()
   })
@@ -115,5 +115,9 @@ export const createWebhookCollector = (
   })
   return app
 }
+
+/** Constant-time, so response timing does not reveal how much of a guessed token was right. */
+const hasBearer = (authorization: string | undefined, token: string) =>
+  authorization !== undefined && timingSafeEqual(authorization, `Bearer ${token}`)
 
 export type { Hono }
