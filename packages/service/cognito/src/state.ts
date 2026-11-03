@@ -24,6 +24,8 @@ export type CognitoSession = {
   kind: "access" | "refresh" | "challenge"
   /** origin_jti and event_id of the sign-in a refresh token came from; refreshes keep them. */
   origin?: TokenOrigin
+  /** Unix seconds of the sign-in a refresh token came from; refreshed tokens keep it. */
+  authTime?: number
 }
 export type TokenOrigin = { originJti: string; eventId: string }
 export type CognitoSeedUser = Partial<CognitoUser> & { username: string; password: string }

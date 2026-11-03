@@ -178,6 +178,7 @@ export class CognitoAPI {
       originJti: this.state.uuid("origin_jti"),
       eventId: this.state.uuid("event_id"),
     },
+    authTime?: number,
   ) {
     const now = Math.floor(this.now() / 1000)
     const issuer = this.issuer(request)
@@ -185,7 +186,7 @@ export class CognitoAPI {
     const common = {
       iss: issuer,
       sub: user.sub,
-      auth_time: now,
+      auth_time: authTime ?? now,
       iat: now,
       exp: now + 3600,
       ...(user.groups.length ? { "cognito:groups": user.groups } : {}),
@@ -225,6 +226,7 @@ export class CognitoAPI {
         revoked: false,
         kind: "refresh",
         origin,
+        authTime: now,
       })
     }
     return {
@@ -351,6 +353,7 @@ export class CognitoAPI {
             session.clientId,
             false,
             session.origin,
+            session.authTime,
           ),
         })
       }
