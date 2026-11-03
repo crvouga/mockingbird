@@ -131,6 +131,47 @@ describe("Idempotency-Key", () => {
     )
   })
 
+  // "You can remove keys from the system automatically after they're at least 24 hours old. We
+  // generate a new request if a key is reused after the original is pruned."
+  // (https://docs.stripe.com/api/idempotent_requests)
+  test("a key is pruned 24 hours after first use; reusing it then runs a new request", async () => {
+    const runtime = createRuntime()
+    const create = () =>
+      runtime.fetch(
+        new Request(`${HOST}/v1/customers`, {
+          method: "POST",
+          headers: {
+            ...AUTH,
+            "content-type": "application/x-www-form-urlencoded",
+            "idempotency-key": "day-old",
+          },
+          body: encodeForm({ name: "Ada" }),
+        }),
+      )
+    const advance = (by: string) =>
+      runtime.fetch(
+        new Request(`${HOST}/__admin/clock`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ advance: by }),
+        }),
+      )
+    const first = (await (await create()).json()) as { id: string }
+    expect((await advance("23h")).status).toBe(200)
+    const within = await create()
+    expect(within.headers.get("idempotent-replayed")).toBe("true")
+    expect(((await within.json()) as { id: string }).id).toBe(first.id)
+    expect((await advance("1h")).status).toBe(200)
+    const pruned = await create()
+    expect(pruned.status).toBe(200)
+    expect(pruned.headers.get("idempotent-replayed")).toBeNull()
+    const second = (await pruned.json()) as { id: string }
+    expect(second.id).not.toBe(first.id)
+    const replay = await create()
+    expect(replay.headers.get("idempotent-replayed")).toBe("true")
+    expect(((await replay.json()) as { id: string }).id).toBe(second.id)
+  })
+
   // "Stripe saves the status code and body of the first request made with a given idempotency
   // key after endpoint execution begins. Retries with the same key return the saved response,
   // including `500` errors." (https://docs.stripe.com/api/idempotent_requests)
