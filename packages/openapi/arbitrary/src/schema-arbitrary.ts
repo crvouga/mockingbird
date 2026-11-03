@@ -510,6 +510,7 @@ export const schemaArbitrary = (
       return true
     })
     const fields: Record<string, fc.Arbitrary<unknown>> = {}
+    const optional: Record<string, fc.Arbitrary<unknown>> = {}
     const requiredKeys: string[] = []
     for (const [name, raw] of properties) {
       const property = resolveSchema(document, raw)
@@ -521,20 +522,63 @@ export const schemaArbitrary = (
         fields[name] = arbitrary
         requiredKeys.push(name)
       } else if (depth < maxDepth) {
-        fields[name] = fc.option(arbitrary, {
-          nil: undefined,
-          freq: nilFrequency(optionalProbability),
-        })
+        optional[name] = arbitrary
       }
     }
-    const declared = fc.record(fields).map((record) => {
+    const { minProperties, maxProperties } = node
+    const unsatisfiable = () =>
+      new Error(`unsatisfiable schema: no object satisfies ${JSON.stringify(node)}`)
+    if (maxProperties !== undefined && requiredKeys.length > maxProperties) throw unsatisfiable()
+    const optionalKeys = Object.keys(optional)
+    const omitAbsent = (record: Record<string, unknown>) => {
       const out: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(record)) if (value !== undefined) out[key] = value
       return out
-    })
+    }
+    // Property counts bound how many optional keys appear, so pick that subset explicitly.
+    const counted = minProperties !== undefined || maxProperties !== undefined
+    const maxOptional = Math.min(
+      optionalKeys.length,
+      (maxProperties ?? Number.POSITIVE_INFINITY) - requiredKeys.length,
+    )
+    const declared = counted
+      ? fc
+          .subarray(optionalKeys, {
+            minLength: Math.min(
+              maxOptional,
+              Math.max(0, (minProperties ?? 0) - requiredKeys.length),
+            ),
+            maxLength: maxOptional,
+          })
+          .chain((keys) =>
+            fc.record({
+              ...fields,
+              ...Object.fromEntries(keys.map((k) => [k, optional[k] as fc.Arbitrary<unknown>])),
+            }),
+          )
+          .map(omitAbsent)
+      : fc
+          .record({
+            ...fields,
+            ...Object.fromEntries(
+              Object.entries(optional).map(([k, arbitrary]) => [
+                k,
+                fc.option(arbitrary, {
+                  nil: undefined,
+                  freq: nilFrequency(optionalProbability),
+                }),
+              ]),
+            ),
+          })
+          .map(omitAbsent)
     const additional = node.additionalProperties
-    if (additional === undefined || additional === false || depth >= maxDepth) return declared
-    const valueSchema: SchemaObject = additional === true ? {} : additional
+    // Undeclared keys are allowed unless `additionalProperties: false`; use them only when the
+    // schema asks for them or the declared keys alone cannot reach minProperties.
+    const needsExtra = (minProperties ?? 0) > requiredKeys.length + maxOptional
+    if (needsExtra && additional === false) throw unsatisfiable()
+    if (!needsExtra && (additional === undefined || additional === false || depth >= maxDepth))
+      return declared
+    const valueSchema: SchemaObject = typeof additional === "object" ? additional : {}
     const nameSchema = node.propertyNames ? resolveSchema(document, node.propertyNames) : undefined
     const keyArbitrary = nameSchema
       ? stringArbitrary({ ...nameSchema, type: "string" }).filter(
@@ -542,17 +586,22 @@ export const schemaArbitrary = (
         )
       : fc.stringMatching(/^[a-z][a-z0-9_]{0,11}$/)
     const knownKeys = new Set(properties.map(([name]) => name))
-    const minKeys = Math.max(0, (node.minProperties ?? 0) - requiredKeys.length)
-    const maxKeys = Math.max(
-      minKeys,
-      Math.min(node.maxProperties ?? DEFAULT_MAX_PROPERTIES, DEFAULT_MAX_PROPERTIES),
-    )
-    const extra = fc.dictionary(
-      keyArbitrary.filter((k) => !knownKeys.has(k)),
-      build(valueSchema, [...path, "additionalProperties"], depth + 1),
-      { minKeys, maxKeys },
-    )
-    return fc.tuple(declared, extra).map(([base, more]) => ({ ...more, ...base }))
+    const extraValue = build(valueSchema, [...path, "additionalProperties"], depth + 1)
+    return declared.chain((base) => {
+      const present = Object.keys(base).length
+      const minKeys = Math.max(0, (minProperties ?? 0) - present)
+      const maxKeys = Math.max(
+        minKeys,
+        Math.min((maxProperties ?? DEFAULT_MAX_PROPERTIES) - present, DEFAULT_MAX_PROPERTIES),
+      )
+      return fc
+        .dictionary(
+          keyArbitrary.filter((k) => !knownKeys.has(k)),
+          extraValue,
+          { minKeys, maxKeys },
+        )
+        .map((more) => ({ ...more, ...base }))
+    })
   }
 
   return build(schema, [], 0)
