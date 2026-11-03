@@ -612,6 +612,7 @@ export class DynamoAPI {
     )) {
       const table = this.table(name)
       if (!table) return this.error("ResourceNotFoundException", "Requested resource not found")
+      this.expire(table)
       responses[name] = ((request.Keys as Item[]) ?? []).flatMap((key) => {
         const row = this.state.items.get(`${name}:${this.key(table, key)}`)
         return row ? [project(row.value, request.ProjectionExpression, this.names(request))] : []
@@ -638,6 +639,7 @@ export class DynamoAPI {
       const getInput = request.Get as Input
       const table = this.table(getInput.TableName)
       if (!table) return this.error("ResourceNotFoundException", "Requested resource not found")
+      this.expire(table)
       const row = this.state.items.get(`${table.name}:${this.key(table, getInput.Key as Item)}`)
       responses.push(
         row
