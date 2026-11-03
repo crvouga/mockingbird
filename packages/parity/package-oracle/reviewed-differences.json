@@ -89,9 +89,7 @@
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "data": {
-            "array": []
-          },
+          "data": [],
           "has_more": "boolean",
           "object": "string",
           "url": "string"
@@ -101,11 +99,18 @@
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "data": {
-            "array": [
-              "{\"created\":\"number\",\"description\":\"null\",\"email\":\"string\",\"id\":\"string\",\"livemode\":\"boolean\",\"metadata\":{},\"name\":\"string\",\"object\":\"string\"}"
-            ]
-          },
+          "data": [
+            {
+              "created": "number",
+              "description": "null",
+              "email": "string",
+              "id": "string",
+              "livemode": "boolean",
+              "metadata": {},
+              "name": "string",
+              "object": "string"
+            }
+          ],
           "has_more": "boolean",
           "object": "string",
           "url": "string"
@@ -338,9 +343,7 @@
           "next_invoice_sequence": "number",
           "object": "string",
           "phone": "null",
-          "preferred_locales": {
-            "array": []
-          },
+          "preferred_locales": [],
           "shipping": "null",
           "tax_exempt": "string",
           "test_clock": "null"
@@ -565,9 +568,7 @@
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "data": {
-            "array": []
-          },
+          "data": [],
           "has_more": "boolean",
           "object": "string"
         }
@@ -576,9 +577,7 @@
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "data": {
-            "array": []
-          },
+          "data": [],
           "object": "string"
         }
       }
@@ -773,11 +772,38 @@
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "files": {
-            "array": [
-              "{\"channels\":{\"array\":[]},\"comments_count\":\"number\",\"created\":\"number\",\"display_as_bot\":\"boolean\",\"editable\":\"boolean\",\"external_type\":\"string\",\"filetype\":\"string\",\"groups\":{\"array\":[]},\"has_rich_preview\":\"boolean\",\"id\":\"string\",\"ims\":{\"array\":[]},\"is_external\":\"boolean\",\"is_public\":\"boolean\",\"is_starred\":\"boolean\",\"mimetype\":\"string\",\"mode\":\"string\",\"name\":\"string\",\"permalink\":\"string\",\"pretty_type\":\"string\",\"public_url_shared\":\"boolean\",\"shares\":{},\"size\":\"number\",\"timestamp\":\"number\",\"title\":\"string\",\"url_private\":\"string\",\"url_private_download\":\"string\",\"user\":\"string\",\"user_team\":\"string\"}"
-            ]
-          },
+          "files": [
+            {
+              "channels": [],
+              "comments_count": "number",
+              "created": "number",
+              "display_as_bot": "boolean",
+              "editable": "boolean",
+              "external_type": "string",
+              "filetype": "string",
+              "groups": [],
+              "has_rich_preview": "boolean",
+              "id": "string",
+              "ims": [],
+              "is_external": "boolean",
+              "is_public": "boolean",
+              "is_starred": "boolean",
+              "mimetype": "string",
+              "mode": "string",
+              "name": "string",
+              "permalink": "string",
+              "pretty_type": "string",
+              "public_url_shared": "boolean",
+              "shares": {},
+              "size": "number",
+              "timestamp": "number",
+              "title": "string",
+              "url_private": "string",
+              "url_private_download": "string",
+              "user": "string",
+              "user_team": "string"
+            }
+          ],
           "ok": "boolean",
           "paging": {
             "count": "number",
@@ -791,9 +817,7 @@
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "files": {
-            "array": []
-          },
+          "files": [],
           "ok": "boolean",
           "paging": {
             "count": "number",
@@ -833,17 +857,233 @@
         }
       }
     },
+    "POST /api/conversations.list": {
+      "reason": "Native Slack keeps its own seeded channels and users (general, alerts; the bot and a sample member), so list lengths differ from the competitor's fixtures.",
+      "actual": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "channels": [
+            {
+              "created": "number",
+              "creator": "string",
+              "id": "string",
+              "is_archived": "boolean",
+              "is_channel": "boolean",
+              "is_group": "boolean",
+              "is_im": "boolean",
+              "is_member": "boolean",
+              "is_mpim": "boolean",
+              "is_open": "boolean",
+              "is_private": "boolean",
+              "last_read": "string",
+              "name": "string",
+              "name_normalized": "string",
+              "num_members": "number",
+              "purpose": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              },
+              "topic": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              }
+            },
+            {
+              "created": "number",
+              "creator": "string",
+              "id": "string",
+              "is_archived": "boolean",
+              "is_channel": "boolean",
+              "is_group": "boolean",
+              "is_im": "boolean",
+              "is_member": "boolean",
+              "is_mpim": "boolean",
+              "is_open": "boolean",
+              "is_private": "boolean",
+              "last_read": "string",
+              "name": "string",
+              "name_normalized": "string",
+              "num_members": "number",
+              "purpose": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              },
+              "topic": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              }
+            },
+            {
+              "created": "number",
+              "creator": "string",
+              "id": "string",
+              "is_archived": "boolean",
+              "is_channel": "boolean",
+              "is_group": "boolean",
+              "is_im": "boolean",
+              "is_member": "boolean",
+              "is_mpim": "boolean",
+              "is_open": "boolean",
+              "is_private": "boolean",
+              "last_read": "string",
+              "name": "string",
+              "name_normalized": "string",
+              "num_members": "number",
+              "purpose": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              },
+              "topic": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              }
+            },
+            {
+              "created": "number",
+              "creator": "string",
+              "id": "string",
+              "is_archived": "boolean",
+              "is_channel": "boolean",
+              "is_group": "boolean",
+              "is_im": "boolean",
+              "is_member": "boolean",
+              "is_mpim": "boolean",
+              "is_open": "boolean",
+              "is_private": "boolean",
+              "last_read": "string",
+              "name": "string",
+              "name_normalized": "string",
+              "num_members": "number",
+              "purpose": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              },
+              "topic": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              }
+            }
+          ],
+          "ok": "boolean",
+          "response_metadata": {
+            "next_cursor": "string"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "channels": [
+            {
+              "created": "number",
+              "creator": "string",
+              "id": "string",
+              "is_archived": "boolean",
+              "is_channel": "boolean",
+              "is_group": "boolean",
+              "is_im": "boolean",
+              "is_member": "boolean",
+              "is_mpim": "boolean",
+              "is_open": "boolean",
+              "is_private": "boolean",
+              "last_read": "string",
+              "name": "string",
+              "name_normalized": "string",
+              "num_members": "number",
+              "purpose": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              },
+              "topic": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              }
+            },
+            {
+              "created": "number",
+              "creator": "string",
+              "id": "string",
+              "is_archived": "boolean",
+              "is_channel": "boolean",
+              "is_group": "boolean",
+              "is_im": "boolean",
+              "is_member": "boolean",
+              "is_mpim": "boolean",
+              "is_open": "boolean",
+              "is_private": "boolean",
+              "last_read": "string",
+              "name": "string",
+              "name_normalized": "string",
+              "num_members": "number",
+              "purpose": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              },
+              "topic": {
+                "creator": "string",
+                "last_set": "number",
+                "value": "string"
+              }
+            }
+          ],
+          "ok": "boolean",
+          "response_metadata": {
+            "next_cursor": "string"
+          }
+        }
+      }
+    },
     "POST /api/files.list": {
       "reason": "Native Slack keeps its existing seeded files and returns bot/enterprise identity in auth.test.",
       "actual": {
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "files": {
-            "array": [
-              "{\"channels\":{\"array\":[]},\"comments_count\":\"number\",\"created\":\"number\",\"display_as_bot\":\"boolean\",\"editable\":\"boolean\",\"external_type\":\"string\",\"filetype\":\"string\",\"groups\":{\"array\":[]},\"has_rich_preview\":\"boolean\",\"id\":\"string\",\"ims\":{\"array\":[]},\"is_external\":\"boolean\",\"is_public\":\"boolean\",\"is_starred\":\"boolean\",\"mimetype\":\"string\",\"mode\":\"string\",\"name\":\"string\",\"permalink\":\"string\",\"pretty_type\":\"string\",\"public_url_shared\":\"boolean\",\"shares\":{},\"size\":\"number\",\"timestamp\":\"number\",\"title\":\"string\",\"url_private\":\"string\",\"url_private_download\":\"string\",\"user\":\"string\",\"user_team\":\"string\"}"
-            ]
-          },
+          "files": [
+            {
+              "channels": [],
+              "comments_count": "number",
+              "created": "number",
+              "display_as_bot": "boolean",
+              "editable": "boolean",
+              "external_type": "string",
+              "filetype": "string",
+              "groups": [],
+              "has_rich_preview": "boolean",
+              "id": "string",
+              "ims": [],
+              "is_external": "boolean",
+              "is_public": "boolean",
+              "is_starred": "boolean",
+              "mimetype": "string",
+              "mode": "string",
+              "name": "string",
+              "permalink": "string",
+              "pretty_type": "string",
+              "public_url_shared": "boolean",
+              "shares": {},
+              "size": "number",
+              "timestamp": "number",
+              "title": "string",
+              "url_private": "string",
+              "url_private_download": "string",
+              "user": "string",
+              "user_team": "string"
+            }
+          ],
           "ok": "boolean",
           "paging": {
             "count": "number",
@@ -857,15 +1097,148 @@
         "status": 200,
         "contentType": "application/json",
         "body": {
-          "files": {
-            "array": []
-          },
+          "files": [],
           "ok": "boolean",
           "paging": {
             "count": "number",
             "page": "number",
             "pages": "number",
             "total": "number"
+          }
+        }
+      }
+    },
+    "POST /api/users.list": {
+      "reason": "Native Slack keeps its own seeded channels and users (general, alerts; the bot and a sample member), so list lengths differ from the competitor's fixtures.",
+      "actual": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "members": [
+            {
+              "deleted": "boolean",
+              "id": "string",
+              "is_admin": "boolean",
+              "is_bot": "boolean",
+              "name": "string",
+              "profile": {
+                "display_name": "string",
+                "display_name_normalized": "string",
+                "email": "string",
+                "huddle_state": "string",
+                "huddle_state_expiration_ts": "number",
+                "image_192": "string",
+                "image_48": "string",
+                "phone": "string",
+                "real_name": "string",
+                "real_name_normalized": "string",
+                "skype": "string",
+                "status_emoji": "string",
+                "status_emoji_display_info": [],
+                "status_expiration": "number",
+                "status_text": "string",
+                "title": "string"
+              },
+              "real_name": "string",
+              "team_id": "string"
+            },
+            {
+              "deleted": "boolean",
+              "id": "string",
+              "is_admin": "boolean",
+              "is_bot": "boolean",
+              "name": "string",
+              "profile": {
+                "display_name": "string",
+                "display_name_normalized": "string",
+                "email": "string",
+                "huddle_state": "string",
+                "huddle_state_expiration_ts": "number",
+                "image_192": "string",
+                "image_48": "string",
+                "phone": "string",
+                "real_name": "string",
+                "real_name_normalized": "string",
+                "skype": "string",
+                "status_emoji": "string",
+                "status_emoji_display_info": [],
+                "status_expiration": "number",
+                "status_text": "string",
+                "title": "string"
+              },
+              "real_name": "string",
+              "team_id": "string"
+            },
+            {
+              "deleted": "boolean",
+              "id": "string",
+              "is_admin": "boolean",
+              "is_bot": "boolean",
+              "name": "string",
+              "profile": {
+                "display_name": "string",
+                "display_name_normalized": "string",
+                "email": "string",
+                "huddle_state": "string",
+                "huddle_state_expiration_ts": "number",
+                "image_192": "string",
+                "image_48": "string",
+                "phone": "string",
+                "real_name": "string",
+                "real_name_normalized": "string",
+                "skype": "string",
+                "status_emoji": "string",
+                "status_emoji_display_info": [],
+                "status_expiration": "number",
+                "status_text": "string",
+                "title": "string"
+              },
+              "real_name": "string",
+              "team_id": "string"
+            }
+          ],
+          "ok": "boolean",
+          "response_metadata": {
+            "next_cursor": "string"
+          }
+        }
+      },
+      "expected": {
+        "status": 200,
+        "contentType": "application/json",
+        "body": {
+          "members": [
+            {
+              "deleted": "boolean",
+              "id": "string",
+              "is_admin": "boolean",
+              "is_bot": "boolean",
+              "name": "string",
+              "profile": {
+                "display_name": "string",
+                "display_name_normalized": "string",
+                "email": "string",
+                "huddle_state": "string",
+                "huddle_state_expiration_ts": "number",
+                "image_192": "string",
+                "image_48": "string",
+                "phone": "string",
+                "real_name": "string",
+                "real_name_normalized": "string",
+                "skype": "string",
+                "status_emoji": "string",
+                "status_emoji_display_info": [],
+                "status_expiration": "number",
+                "status_text": "string",
+                "title": "string"
+              },
+              "real_name": "string",
+              "team_id": "string"
+            }
+          ],
+          "ok": "boolean",
+          "response_metadata": {
+            "next_cursor": "string"
           }
         }
       }
