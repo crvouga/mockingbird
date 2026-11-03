@@ -5,6 +5,7 @@ import Icon from "../components/Icon.astro"
 import Sprite from "../components/Sprite.astro"
 import { IDENTITY, MARK_HREF, RISK_DISCLAIMER, SOCIAL_CARD } from "../lib/content.ts"
 import { inline } from "../lib/inline.ts"
+import { metaDescription } from "../lib/meta.ts"
 import "../styles/global.css"
 
 interface Props {
@@ -22,12 +23,14 @@ interface Props {
 
 const {
   title,
-  description = `Stateful emulators for ${catalog.totals.services} third-party APIs and SQL databases. Every emulator runs in Node, Bun, browsers, and Workers.`,
+  description:
+    copy = `Stateful emulators for ${catalog.totals.services} third-party APIs and SQL databases. Every emulator runs in Node, Bun, browsers, and Workers.`,
   markdown,
   type = "website",
   noindex = false,
   canonicalPath,
 } = Astro.props
+const description = metaDescription(copy)
 const fullTitle = title
   ? `${title} · Mockingbird`
   : "Mockingbird · Stateful emulators for the APIs you depend on"
