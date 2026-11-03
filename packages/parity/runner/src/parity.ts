@@ -8,11 +8,17 @@ import {
   type Scope,
 } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
-import { collectPlaceholders, pickRef, ResourceTable } from "@crvouga/mockingbird-model"
+import { ResourceTable } from "@crvouga/mockingbird-model"
 import type { OpenAPIDocument } from "@crvouga/mockingbird-openapi"
 import fc from "fast-check"
 import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "./defaults.js"
-import { type ExecutionContext, executeCommand, type FetchLike, type Target } from "./execute.js"
+import {
+  type ExecutionContext,
+  executeCommand,
+  type FetchLike,
+  markDeletedRefs,
+  type Target,
+} from "./execute.js"
 import { ParityError, type Redactor } from "./report.js"
 import { compareWebhookEvents, webhookEventNames } from "./webhooks.js"
 
@@ -140,15 +146,7 @@ class Step implements fc.AsyncCommand<WalkModel, WalkReal> {
   async run(_model: WalkModel, context: WalkReal) {
     context.firstCommand ??= this.command
     await executeCommand(context, this.command)
-    const deletionTypes = context.deletionTypes?.[this.command.operationId] ?? []
-    if (deletionTypes.length > 0) {
-      for (const placeholder of collectPlaceholders([this.command.parameters, this.command.body])) {
-        if (placeholder.$mockingbird !== "ref" || !deletionTypes.includes(placeholder.type))
-          continue
-        const ref = pickRef(context.table, placeholder.type, placeholder.pick)
-        if (ref) context.table.markDeleted(ref.handle)
-      }
-    }
+    markDeletedRefs(context, this.command)
     context.history.push(describeCommand(this.command))
     if (context.coverage) {
       context.coverage[this.command.operationId] =

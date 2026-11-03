@@ -16,7 +16,7 @@ import {
   sampleGuidedCommand,
 } from "@crvouga/mockingbird-commands"
 import type { FetchAPI } from "@crvouga/mockingbird-core"
-import { collectPlaceholders, pickRef, ResourceTable } from "@crvouga/mockingbird-model"
+import { ResourceTable } from "@crvouga/mockingbird-model"
 import fc from "fast-check"
 import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "./defaults.js"
 import {
@@ -24,6 +24,7 @@ import {
   executeCommand,
   executeWarmupCommand,
   type FetchLike,
+  markDeletedRefs,
   observationCacheKey,
   requestBodyForCacheKey,
   type Target,
@@ -191,16 +192,6 @@ const exchangeBodyForCache = (exchange: Exchange): unknown => {
   return undefined
 }
 
-const applyDeletionTypes = (context: ExecutionContext, command: LogicalCommand) => {
-  const deletionTypes = context.deletionTypes?.[command.operationId] ?? []
-  if (deletionTypes.length === 0) return
-  for (const placeholder of collectPlaceholders([command.parameters, command.body])) {
-    if (placeholder.$mockingbird !== "ref" || !deletionTypes.includes(placeholder.type)) continue
-    const ref = pickRef(context.table, placeholder.type, placeholder.pick)
-    if (ref) context.table.markDeleted(ref.handle)
-  }
-}
-
 const recordHistory = (context: ExecutionContext, command: LogicalCommand) => {
   context.history.push(describeCommand(command))
   if (context.coverage) {
@@ -228,13 +219,13 @@ const runWarmup = async (context: WalkReal, command: LogicalCommand) => {
       })
     }
   }
-  applyDeletionTypes(context, command)
+  markDeletedRefs(context, command)
   recordHistory(context, command)
 }
 
 const runCompare = async (context: WalkReal, command: LogicalCommand) => {
   await executeCommand(context, command)
-  applyDeletionTypes(context, command)
+  markDeletedRefs(context, command)
   recordHistory(context, command)
 }
 
