@@ -376,7 +376,7 @@ export async function openBufferedDurable<T, Token>(
   stopLifecycle = !closed
     ? options.lifecycle?.subscribe(() => {
         if (!closed && !closing && !conflict && codec.canCapture(value))
-          void enqueue(persist).catch(() => {})
+          void enqueue(() => persist()).catch(() => {})
       })
     : undefined
   if (checkpointRequired) schedule()
