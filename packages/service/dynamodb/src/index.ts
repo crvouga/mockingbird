@@ -649,6 +649,9 @@ export class DynamoAPI {
   }
   private transactWrite(input: Input) {
     const actions = (input.TransactItems as Input[]) ?? []
+    const targeted = new Set<string>()
+    // One reason per action, in request order: "None" when its condition held.
+    const reasons: { Code: string; Message?: string; Item?: Item }[] = []
     for (const action of actions) {
       const request = (action.Put ??
         action.Update ??
@@ -657,13 +660,34 @@ export class DynamoAPI {
       const table = this.table(request.TableName)
       if (!table) return this.error("ResourceNotFoundException", "Requested resource not found")
       const keyItem = (request.Item ?? request.Key) as Item
-      const prior = this.state.items.get(`${table.name}:${this.key(table, keyItem)}`)?.value
-      if (!condition(request.ConditionExpression, prior, this.names(request), this.values(request)))
+      const id = `${table.name}:${this.key(table, keyItem)}`
+      if (targeted.has(id))
         return this.error(
-          "TransactionCanceledException",
-          "Transaction cancelled, please refer cancellation reasons for specific reasons [ConditionalCheckFailed]",
+          "ValidationException",
+          "Transaction request cannot include multiple operations on one item",
         )
+      targeted.add(id)
+      const prior = this.state.items.get(id)?.value
+      if (condition(request.ConditionExpression, prior, this.names(request), this.values(request)))
+        reasons.push({ Code: "None" })
+      else
+        reasons.push({
+          Code: "ConditionalCheckFailed",
+          Message: "The conditional request failed",
+          ...(request.ReturnValuesOnConditionCheckFailure === "ALL_OLD" && prior
+            ? { Item: clone(prior) }
+            : {}),
+        })
     }
+    if (reasons.some((reason) => reason.Code !== "None"))
+      return this.response(
+        {
+          __type: "com.amazonaws.dynamodb.v20120810#TransactionCanceledException",
+          message: `Transaction cancelled, please refer cancellation reasons for specific reasons [${reasons.map((reason) => reason.Code).join(", ")}]`,
+          CancellationReasons: reasons,
+        },
+        400,
+      )
     for (const action of actions) {
       if (action.Put) {
         const request = action.Put as Input
