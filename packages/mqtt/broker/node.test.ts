@@ -77,6 +77,68 @@ const collector = () => {
   }
 }
 
+/** A masked client frame (RFC 6455 5.2), built by hand so a test can fragment at will. */
+const clientFrame = (opcode: number, payload: Uint8Array, fin: boolean): Buffer => {
+  const length = payload.length
+  const header =
+    length < 126
+      ? Buffer.from([0, 0x80 | length])
+      : length < 65_536
+        ? Buffer.from([0, 0x80 | 126, length >> 8, length & 0xff])
+        : (() => {
+            const wide = Buffer.alloc(10)
+            wide[1] = 0x80 | 127
+            wide.writeBigUInt64BE(BigInt(length), 2)
+            return wide
+          })()
+  header[0] = (fin ? 0x80 : 0) | opcode
+  const mask = Buffer.from([1, 2, 3, 4])
+  const masked = Buffer.from(payload.map((byte, index) => byte ^ (mask[index % 4] ?? 0)))
+  return Buffer.concat([header, mask, masked])
+}
+
+/** A raw WebSocket client on a plain TCP socket: everything the server sends after the 101. */
+const rawWebSocket = async (port: number) => {
+  const socket = connectSocket(port, "127.0.0.1")
+  let received = Buffer.alloc(0)
+  let upgraded: () => void = () => {}
+  const upgrade = new Promise<void>((resolve) => {
+    upgraded = resolve
+  })
+  socket.on("data", (chunk: Buffer) => {
+    received = Buffer.concat([received, chunk])
+    const end = received.indexOf("\r\n\r\n")
+    if (end >= 0 && received.subarray(0, 12).toString() === "HTTP/1.1 101") {
+      received = received.subarray(end + 4)
+      upgraded()
+    }
+  })
+  const closed = new Promise<void>((resolve) => socket.once("close", () => resolve()))
+  socket.write(
+    [
+      "GET /mqtt HTTP/1.1",
+      "Host: 127.0.0.1",
+      "Upgrade: websocket",
+      "Connection: Upgrade",
+      "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==",
+      "Sec-WebSocket-Version: 13",
+      "Sec-WebSocket-Protocol: mqtt",
+      "",
+      "",
+    ].join("\r\n"),
+  )
+  await upgrade
+  return {
+    write: (bytes: Uint8Array) => socket.write(bytes),
+    /** What the server sent once the socket closed, or after `ms` if it stays open. */
+    settle: async (ms: number) => {
+      await Promise.race([closed, new Promise((resolve) => setTimeout(resolve, ms))])
+      return { bytes: received, closed: socket.destroyed || socket.readableEnded }
+    },
+    destroy: () => socket.destroy(),
+  }
+}
+
 describe("listenTcp", () => {
   test("serves the broker on an OS-assigned port and closes its connections", async () => {
     const broker = newBroker()
@@ -238,6 +300,61 @@ describe("attachWebSocket", () => {
     socket.destroy()
     expect(received).toBe(16 * 1024 * 1024)
     expect(elapsed).toBeLessThan(1000)
+  })
+
+  test("closes with 1009 once fragments outgrow the message cap, before buffering more", async () => {
+    const broker = newBroker()
+    const http = createHttpServer()
+    await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve))
+    const { port } = http.address() as AddressInfo
+    const webSocket = attachWebSocket(http, {
+      maxMessageBytes: 1024,
+      route: () => (transport, info) => broker.connect(transport, info),
+    })
+    try {
+      const client = await rawWebSocket(port)
+      // A message that never ends: one binary frame without FIN, then continuations.
+      client.write(clientFrame(0x2, new Uint8Array(512), false))
+      for (let index = 0; index < 8; index++) {
+        client.write(clientFrame(0x0, new Uint8Array(512), false))
+      }
+      // Still open, this would be answered with a pong.
+      client.write(clientFrame(0x9, Uint8Array.of(1), true))
+      const { bytes, closed } = await client.settle(1000)
+      client.destroy()
+      // RFC 6455 7.4.1: 1009 is "message too big to process".
+      expect([...bytes]).toEqual([0x88, 0x02, 0x03, 0xf1])
+      expect(closed).toBe(true)
+    } finally {
+      webSocket.close()
+      await new Promise<void>((resolve) => http.close(() => resolve()))
+    }
+  })
+
+  test("reassembles a fragmented message within the cap", async () => {
+    const broker = newBroker()
+    const http = createHttpServer()
+    await new Promise<void>((resolve) => http.listen(0, "127.0.0.1", resolve))
+    const { port } = http.address() as AddressInfo
+    const webSocket = attachWebSocket(http, {
+      maxMessageBytes: 1024,
+      route: () => (transport, info) => broker.connect(transport, info),
+    })
+    try {
+      const client = await rawWebSocket(port)
+      const connect = encodePacket(CONNECT("fragments"))
+      client.write(clientFrame(0x2, connect.subarray(0, 5), false))
+      client.write(clientFrame(0x0, connect.subarray(5, 10), false))
+      client.write(clientFrame(0x0, connect.subarray(10), true))
+      const { bytes } = await client.settle(200)
+      client.destroy()
+      // One binary frame carrying the CONNACK.
+      expect(bytes[0]).toBe(0x82)
+      expect(new PacketReader().push(bytes.subarray(2)).packets[0]?.type).toBe("connack")
+    } finally {
+      webSocket.close()
+      await new Promise<void>((resolve) => http.close(() => resolve()))
+    }
   })
 })
 

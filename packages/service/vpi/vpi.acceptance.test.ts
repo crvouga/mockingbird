@@ -333,10 +333,12 @@ describe("S12.2 acceptance: our VPI draft rail against the mock", () => {
     await client.getAllFamiliesAndCategories()
     await client.getShippingStates()
     expect(auths()).toBe(1)
-    runtime.clock.advance((3_600 - 30) * 1000 - 1_000)
+    // `iat` is floored to whole seconds, so the cache cutoff can sit up to 1 s
+    // before `start + exp - 30 s`. Stay 2 s clear of it on both sides.
+    runtime.clock.advance((3_600 - 30) * 1000 - 2_000)
     await client.getAllFamiliesAndCategories()
     expect(auths()).toBe(1)
-    runtime.clock.advance(2_000)
+    runtime.clock.advance(3_000)
     await client.getAllFamiliesAndCategories()
     expect(auths()).toBe(2)
   })

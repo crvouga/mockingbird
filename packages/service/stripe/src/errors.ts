@@ -42,11 +42,24 @@ export const stripeErrorBody = (init: StripeErrorInit, requestLogUrl: string) =>
 }
 
 export class StripeError extends HttpError {
+  /**
+   * Raised while reading the request's parameters, before the endpoint began executing.
+   * Stripe saves no idempotent result for these (see `IDEMPOTENCY_UNSAVED`).
+   */
+  validation = false
+
   constructor(readonly init: StripeErrorInit) {
     super(init.status, undefined)
     this.name = "StripeError"
   }
 }
+
+/**
+ * Internal header on a response Stripe would not save under an `Idempotency-Key`: "If incoming
+ * parameters fail validation … we don't save the idempotent result because no API endpoint
+ * initiates the execution" (https://docs.stripe.com/api/idempotent_requests). Never sent out.
+ */
+export const IDEMPOTENCY_UNSAVED = "x-mockingbird-idempotency-unsaved"
 
 export const invalidRequest = (message: string, param?: string, code?: string) =>
   new StripeError({
