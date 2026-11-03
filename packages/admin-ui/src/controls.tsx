@@ -26,6 +26,7 @@ import {
   useResource,
   ViewTitle,
 } from "./components.js"
+import { downloadJson } from "./download.js"
 import { journalPath, type RequestTarget, requestAttempts } from "./manual-model.js"
 import type {
   Api,
@@ -860,15 +861,6 @@ export function FaultsView({ api, revision }: { api: Api; revision: number }) {
   )
 }
 
-const download = (name: string, value: unknown): void => {
-  const url = URL.createObjectURL(new Blob([pretty(value)], { type: "application/json" }))
-  const link = document.createElement("a")
-  link.href = url
-  link.download = name
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 export function SnapshotsView({ api, revision }: { api: Api; revision: number }) {
   const snapshots = useResource<{ snapshots: Snapshot[] }>(api, "/snapshots", revision)
   const [name, setName] = useState("")
@@ -1030,7 +1022,7 @@ export function SnapshotsView({ api, revision }: { api: Api; revision: number })
             <Space>
               <Button
                 icon={<DownloadOutlined />}
-                onClick={() => download(`${shown.id}.json`, shown.value)}
+                onClick={() => downloadJson(`${shown.id}.json`, shown.value)}
               >
                 Download JSON
               </Button>
