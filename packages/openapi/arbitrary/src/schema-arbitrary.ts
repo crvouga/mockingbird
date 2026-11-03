@@ -327,6 +327,35 @@ const mergeAllOf = (document: OpenAPIDocument, branches: SchemaObject[]): Schema
   return merged
 }
 
+/** How many draws a `oneOf` gets to land in exactly one branch before it settles for the last. */
+const ONE_OF_ATTEMPTS = 32
+
+/**
+ * `filter` with a retry budget: a plain `.filter` retries forever, so `oneOf` branches that
+ * overlap completely would hang generation. After `attempts` misses the last draw is returned.
+ */
+class RetryUntil<T> extends fc.Arbitrary<T> {
+  constructor(
+    private readonly arbitrary: fc.Arbitrary<T>,
+    private readonly accept: (value: T) => boolean,
+    private readonly attempts: number,
+  ) {
+    super()
+  }
+  generate(mrng: fc.Random, biasFactor: number | undefined): fc.Value<T> {
+    let drawn = this.arbitrary.generate(mrng, biasFactor)
+    for (let i = 1; i < this.attempts && !this.accept(drawn.value); i++)
+      drawn = this.arbitrary.generate(mrng, biasFactor)
+    return drawn
+  }
+  canShrinkWithoutContext(value: unknown): value is T {
+    return this.arbitrary.canShrinkWithoutContext(value)
+  }
+  shrink(value: T, context: unknown): fc.Stream<fc.Value<T>> {
+    return this.arbitrary.shrink(value, context).filter((shrunk) => this.accept(shrunk.value))
+  }
+}
+
 const literalWeighted = (schema: SchemaObject): fc.Arbitrary<JsonValue> | undefined => {
   const candidates: JsonValue[] = []
   if (schema.default !== undefined) candidates.push(schema.default)
@@ -363,9 +392,28 @@ export const schemaArbitrary = (
     const union = resolved.oneOf ?? resolved.anyOf
     if (union && union.length > 0) {
       const keyword = resolved.oneOf ? "oneOf" : "anyOf"
-      return fc.oneof(
-        ...union.map((branch, i) => build(branch, [...path, keyword, String(i)], depth + 1)),
+      // Sibling keywords (`properties`, `required`, …) constrain every branch: fold them in.
+      const {
+        [keyword]: _union,
+        default: _default,
+        example: _example,
+        examples: _examples,
+        ...siblings
+      } = resolved
+      const hasSiblings = Object.keys(siblings).length > 0
+      const branches = fc.oneof(
+        ...union.map((branch, i) =>
+          build(
+            hasSiblings ? mergeAllOf(document, [siblings, branch]) : branch,
+            [...path, keyword, String(i)],
+            depth + 1,
+          ),
+        ),
       )
+      if (keyword === "anyOf") return branches
+      const exactlyOne = (value: unknown) =>
+        union.filter((branch) => validateValue(document, branch, value).length === 0).length === 1
+      return new RetryUntil(branches, exactlyOne, ONE_OF_ATTEMPTS)
     }
     const types = schemaTypes(resolved)
     const literal = literalWeighted(resolved)
