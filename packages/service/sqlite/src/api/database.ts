@@ -218,7 +218,9 @@ export class Database {
           this.transactions.commit();
           return value;
         } catch (error) {
-          this.transactions.rollback();
+          // `fn` may have ended the transaction itself (SQL COMMIT/ROLLBACK); then there
+          // is nothing to undo, and rolling back would mask `error` with "no transaction".
+          if (this.transactions.inTransaction) this.transactions.rollback();
           throw error;
         }
       }
@@ -229,8 +231,10 @@ export class Database {
         this.transactions.release(name);
         return value;
       } catch (error) {
-        this.transactions.rollback(name);
-        this.transactions.release(name);
+        if (this.transactions.hasSavepoint(name)) {
+          this.transactions.rollback(name);
+          this.transactions.release(name);
+        }
         throw error;
       }
     } finally {

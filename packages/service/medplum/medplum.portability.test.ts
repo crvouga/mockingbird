@@ -55,7 +55,6 @@ beforeAll(async () => {
       {
         config: {
           name: "medplum",
-          type: "worker",
           compatibilityDate: "2025-01-01",
           manifest: {
             mainModule: "worker.js",
@@ -72,9 +71,10 @@ afterAll(async () => {
 })
 
 const call = async (path: string, init?: RequestInit) => {
-  const response = await mf.dispatchFetch(
+  const worker = await mf.getWorker("medplum")
+  const response = await worker.fetch(
     `https://medplum.worker${path}`,
-    init as Parameters<Miniflare["dispatchFetch"]>[1],
+    init as Parameters<typeof worker.fetch>[1],
   )
   const text = await response.text()
   let body: unknown = text
@@ -169,7 +169,8 @@ describe("portability: the published bundle in workerd (no Node APIs)", () => {
       body: "bytes",
     })
     expect(upload.status).toBe(201)
-    const download = await mf.dispatchFetch(upload.body.url as string)
+    const worker = await mf.getWorker("medplum")
+    const download = await worker.fetch(upload.body.url as string)
     expect(await download.text()).toBe("bytes")
   }, 60_000)
 })

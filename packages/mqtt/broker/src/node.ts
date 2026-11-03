@@ -9,6 +9,7 @@ import type { Server as HttpServer, IncomingMessage } from "node:http"
 import { createServer, type Socket } from "node:net"
 import { Duplex } from "node:stream"
 import type { Broker, Connection, Transport, TransportInfo } from "./broker.js"
+import { MAX_VARIABLE_BYTE_INTEGER } from "./codec.js"
 import { MQTT_WEBSOCKET_PATH } from "./runtime.js"
 
 /** Hand a new transport to a broker (`broker.connect`, or `routeConnection` for tenants). */
@@ -86,8 +87,11 @@ export const listenTcp = (
 // ── WebSocket (RFC 6455) ─────────────────────────────────────────────────────
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
-/** Above any MQTT packet (the Remaining Length caps one at 256 MB); bounds a hostile frame. */
-const MAX_FRAME_BYTES = 268_435_460
+/**
+ * The largest MQTT packet (a 256 MB Remaining Length plus its fixed header): the default cap on
+ * one frame and on a whole reassembled message, so a hostile peer cannot grow either past it.
+ */
+const MAX_MESSAGE_BYTES = MAX_VARIABLE_BYTE_INTEGER + 5
 
 const OPCODE = { continuation: 0x0, text: 0x1, binary: 0x2, close: 0x8, ping: 0x9, pong: 0xa }
 
@@ -110,12 +114,28 @@ const encodeFrame = (opcode: number, payload: Uint8Array): Uint8Array => {
   return Buffer.concat([header, payload])
 }
 
+/** Why a frame parser gave up: a malformed frame, or a message above its cap. */
+type FrameError = "protocol" | "too-big"
+
 /** Splits a byte stream into WebSocket messages; control frames are reported as they come. */
-const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: () => void) => {
+const frameParser = (
+  onFrame: (opcode: number, data: Buffer) => void,
+  onError: (error: FrameError) => void,
+  maxMessageBytes: number,
+) => {
   let buffer: Buffer = Buffer.alloc(0)
   let fragments: Buffer[] = []
+  let fragmentBytes = 0
   let fragmentOpcode = 0
+  let failed = false
+  const fail = (error: FrameError): void => {
+    failed = true
+    fragments = []
+    buffer = Buffer.alloc(0)
+    onError(error)
+  }
   return (chunk: Buffer): void => {
+    if (failed) return
     buffer = buffer.length === 0 ? chunk : Buffer.concat([buffer, chunk])
     for (;;) {
       if (buffer.length < 2) return
@@ -123,7 +143,7 @@ const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: (
       const second = buffer[1] ?? 0
       // No extension is negotiated, so the reserved bits must be clear; a client must mask.
       if ((first & 0x70) !== 0 || (second & 0x80) === 0) {
-        onError()
+        fail("protocol")
         return
       }
       const fin = (first & 0x80) !== 0
@@ -137,12 +157,21 @@ const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: (
       } else if (length === 127) {
         if (buffer.length < 10) return
         const wide = buffer.readBigUInt64BE(2)
-        if (wide > BigInt(MAX_FRAME_BYTES)) {
-          onError()
+        if (wide > BigInt(MAX_MESSAGE_BYTES)) {
+          fail("too-big")
           return
         }
         length = Number(wide)
         offset = 10
+      }
+      // Checked from the header, before the frame is buffered: a message's fragments together
+      // stay under the cap, not just each frame.
+      if (opcode < 0x8) {
+        const total = (opcode === OPCODE.continuation ? fragmentBytes : 0) + length
+        if (total > maxMessageBytes) {
+          fail("too-big")
+          return
+        }
       }
       if (buffer.length < offset + 4 + length) return
       const mask = buffer.subarray(offset, offset + 4)
@@ -157,14 +186,16 @@ const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: (
       }
       if (opcode === OPCODE.continuation) {
         if (fragmentOpcode === 0) {
-          onError()
+          fail("protocol")
           return
         }
         fragments.push(payload)
+        fragmentBytes += length
         if (fin) {
           const message = Buffer.concat(fragments)
           const type = fragmentOpcode
           fragments = []
+          fragmentBytes = 0
           fragmentOpcode = 0
           onFrame(type, message)
         }
@@ -174,6 +205,7 @@ const frameParser = (onFrame: (opcode: number, data: Buffer) => void, onError: (
       else {
         fragmentOpcode = opcode
         fragments = [payload]
+        fragmentBytes = length
       }
     }
   }
@@ -195,6 +227,11 @@ export type WebSocketOptions = {
   subprotocols?: readonly string[]
   /** Answer 400 to an upgrade offering none of them. Default `true`. */
   requireSubprotocol?: boolean
+  /**
+   * Largest message, all its fragments together, before the connection is closed with 1009
+   * (RFC 6455 7.4.1). Default: the largest MQTT packet, 268,435,460 bytes.
+   */
+  maxMessageBytes?: number
 }
 
 export type WebSocketListening = {
@@ -270,7 +307,14 @@ export const attachWebSocket = (
         // MQTT 5.0 6.0: control packets travel in binary frames; a text frame ends the connection.
         else if (opcode === OPCODE.text) socket.destroy()
       },
-      () => socket.destroy(),
+      (error) => {
+        if (error === "too-big" && socket.writable) {
+          // 1009: the message is too big to process.
+          socket.write(encodeFrame(OPCODE.close, Uint8Array.of(0x03, 0xf1)))
+          socket.end(() => socket.destroy())
+        } else socket.destroy()
+      },
+      Math.min(options.maxMessageBytes ?? MAX_MESSAGE_BYTES, MAX_MESSAGE_BYTES),
     )
     socket.on("data", (chunk: Buffer) => parse(chunk))
     socket.on("error", () => socket.destroy())

@@ -105,7 +105,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.11.9"
+    "hono": "4.13.11"
   },
   "devDependencies": {
     "fast-check": "4.9.0",
@@ -122,9 +122,9 @@
     "@crvouga/mockingbird-http-codec": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@opentelemetry/api": "1.9.0",
-    "@opentelemetry/resources": "2.0.1",
-    "@opentelemetry/sdk-trace-base": "2.0.1",
-    "@opentelemetry/exporter-trace-otlp-http": "0.201.1",
-    "@opentelemetry/exporter-trace-otlp-proto": "0.201.1"
+    "@opentelemetry/resources": "2.8.0",
+    "@opentelemetry/sdk-trace-base": "2.8.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.219.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "0.219.0"
   }
 }

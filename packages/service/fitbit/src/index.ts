@@ -39,7 +39,16 @@ export const FITBIT_SCOPES = [
 ] as const
 export const ACCESS_TOKEN_SECONDS = 28800
 export const CODE_SECONDS = 600
-export type Client = { id: string; secret: string; redirectUris?: string[] }
+/**
+ * `type` is the Fitbit application type. Server and personal apps (the default) authenticate
+ * with HTTP Basic; "client" apps send `client_id` in the body instead and use no secret.
+ */
+export type Client = {
+  id: string
+  secret: string
+  redirectUris?: string[]
+  type?: "server" | "client" | "personal"
+}
 export type User = { encodedId: string; profile?: Record<string, unknown> }
 export type Grant = {
   token: string
@@ -325,16 +334,27 @@ export class FitbitAPI implements FetchAPI {
     })
     return redirect(target, { code, state })
   }
+  /**
+   * The calling app: HTTP Basic id and secret, or, for a "client" type app only, a `client_id`
+   * with no Authorization header.
+   */
+  private authenticate(request: Request, clientId: string | null): Client | undefined {
+    const basic = basicAuth(request)
+    if (basic) {
+      const client = this.clients.get(basic.username)
+      return client?.secret === basic.password ? client : undefined
+    }
+    const client = clientId ? this.clients.get(clientId) : undefined
+    return client?.type === "client" ? client : undefined
+  }
   private async exchange(c: OperationContext): Promise<Response> {
-    const basic = basicAuth(c.request),
-      client = basic ? this.clients.get(basic.username) : undefined
-    if (!basic || !client || client.secret !== basic.password)
-      return fitbitError(401, "invalid_client", `Invalid client credentials. ${GUIDE}`)
-    if (!c.request.headers.get("content-type")?.startsWith("application/x-www-form-urlencoded"))
-      return fitbitError(400, "invalid_request", "Expected a form encoded body.")
     const body = new URLSearchParams(
       c.body.kind === "form" ? (c.body.value as Record<string, string>) : {},
     )
+    const client = this.authenticate(c.request, body.get("client_id"))
+    if (!client) return fitbitError(401, "invalid_client", `Invalid client credentials. ${GUIDE}`)
+    if (!c.request.headers.get("content-type")?.startsWith("application/x-www-form-urlencoded"))
+      return fitbitError(400, "invalid_request", "Expected a form encoded body.")
     if (body.has("client_id") && body.get("client_id") !== client.id)
       return fitbitError(401, "invalid_client", `Invalid client credentials. ${GUIDE}`)
     let userId: string, scopes: string[]
@@ -404,12 +424,15 @@ export class FitbitAPI implements FetchAPI {
     })
   }
   private revoke(c: OperationContext): Response {
-    const basic = basicAuth(c.request),
-      client = basic ? this.clients.get(basic.username) : undefined
-    if (!basic || !client || client.secret !== basic.password)
-      return fitbitError(401, "invalid_client", `Invalid client credentials. ${GUIDE}`)
-    const token =
-      c.body.kind === "form" ? (c.body.value as Record<string, string>).token : undefined
+    const fields = c.body.kind === "form" ? (c.body.value as Record<string, string>) : {}
+    const token = fields.token
+    // A public app's client_id is optional on revoke; without one, the token names its app.
+    const owner = token
+      ? this.grants.list().find((r) => r.value.token === token || r.value.refreshToken === token)
+          ?.value.clientId
+      : undefined
+    const client = this.authenticate(c.request, fields.client_id ?? owner ?? null)
+    if (!client) return fitbitError(401, "invalid_client", `Invalid client credentials. ${GUIDE}`)
     if (!token) return fitbitError(400, "invalid_request", "token is required.", "token")
     const grant = this.grants
       .list({ order: "oldest" })

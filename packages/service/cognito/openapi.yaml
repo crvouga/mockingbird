@@ -60,7 +60,7 @@ paths:
     get:
       operationId: Jwks
       security: []
-      x-mockingbird: { supported: true, parity: { enabled: false, reason: Namespace-scoped RS256 keys; portable snapshots retain the current key and two prior keys. } }
+      x-mockingbird: { supported: true, parity: { enabled: false, reason: Namespace-scoped RS256 keys; one key signs ID tokens and another signs access tokens as in Cognito; portable snapshots retain the current pair and two prior pairs. } }
       parameters:
         - { name: poolId, in: path, required: true, schema: { type: string } }
       responses:

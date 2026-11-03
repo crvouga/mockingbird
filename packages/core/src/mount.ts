@@ -77,17 +77,10 @@ export function mount(
     if (
       incoming.method !== "HEAD" &&
       response.body &&
-      headers.get("content-type")?.split(";")[0] === "text/html"
+      // Media types are case-insensitive (RFC 9110 §8.3.1), and whitespace may precede ";".
+      headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() === "text/html"
     ) {
-      const html = (await response.text())
-        .replace(
-          /(\b(?:href|action|src)\s*=\s*["'])(\/[^"']*)(["'])/gi,
-          (_, lead: string, value: string, quote: string) => lead + local(value) + quote,
-        )
-        .replace(
-          /(url\(\s*["']?)(\/[^\s)'";]*)(["']?\s*\))/gi,
-          (_, lead: string, value: string, end: string) => lead + local(value) + end,
-        )
+      const html = rewriteHtml(await response.text(), local)
       headers.delete("content-length")
       headers.delete("content-encoding")
       headers.delete("etag")
@@ -115,3 +108,43 @@ export function mount(
     OPTIONS: fetch,
   }
 }
+
+/** Rewrite root-relative URLs in the markup a mounted API serves so they stay under the mount. */
+const rewriteHtml = (html: string, local: (value: string) => string): string =>
+  html
+    .replace(
+      /(\b(?:href|action|formaction|src)\s*=\s*["'])(\/[^"']*)(["'])/gi,
+      (_, lead: string, value: string, quote: string) => lead + local(value) + quote,
+    )
+    // srcset is a comma-separated list of "url [descriptor]" candidates.
+    .replace(
+      /(\bsrcset\s*=\s*)(["'])([^"']*)\2/gi,
+      (_, lead: string, quote: string, list: string) =>
+        lead +
+        quote +
+        list.replace(
+          /(^|,)(\s*)(\/[^\s,]*)/g,
+          (_, comma: string, space: string, value: string) => comma + space + local(value),
+        ) +
+        quote,
+    )
+    // <meta http-equiv="refresh" content="5; url=/path"> navigates like a link.
+    .replace(/<meta\b[^>]*>/gi, (tag) =>
+      /\bhttp-equiv\s*=\s*["']?refresh\b/i.test(tag)
+        ? tag.replace(
+            /(\bcontent\s*=\s*)(["'])(.*?)\2/i,
+            (_, lead: string, quote: string, content: string) =>
+              lead +
+              quote +
+              content.replace(
+                /^(\s*\d*(?:\.\d*)?\s*[;,]\s*(?:url\s*=\s*)?["']?)(\/[^"'\s]*)/i,
+                (_, start: string, value: string) => start + local(value),
+              ) +
+              quote,
+          )
+        : tag,
+    )
+    .replace(
+      /(url\(\s*["']?)(\/[^\s)'";]*)(["']?\s*\))/gi,
+      (_, lead: string, value: string, end: string) => lead + local(value) + end,
+    )

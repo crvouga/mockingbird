@@ -3,7 +3,7 @@ import { useMemo } from "react"
 import { createApi } from "./api.js"
 import { DataTable, ErrorNotice, Refresh, useAction, useResource } from "./components.js"
 import type { MembersConfig } from "./model.js"
-import { text } from "./model.js"
+import { auditTime } from "./model.js"
 
 type Member = {
   id: string
@@ -118,7 +118,7 @@ export function Members({ config }: { config: MembersConfig }) {
                   rows={
                     resource.data?.audit.map((event) => ({
                       ...event,
-                      createdAt: new Date(text(event.createdAt)).toLocaleString(),
+                      createdAt: auditTime(event.createdAt),
                     })) ?? []
                   }
                   columns={["createdAt", "actor", "action", "target"]}

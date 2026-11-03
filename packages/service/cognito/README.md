@@ -61,14 +61,14 @@ await emulator.close() // after the test
 
 `POST /` dispatches by `X-Amz-Target` and supports SignUp, ConfirmSignUp, ResendConfirmationCode, InitiateAuth (`USER_PASSWORD_AUTH`, `REFRESH_TOKEN_AUTH`), ForgotPassword, ConfirmForgotPassword, ChangePassword, GetUser, DeleteUser, AdminCreateUser, AdminSetUserPassword, AdminConfirmSignUp, AdminGetUser, AdminUpdateUserAttributes, AdminDeleteUser, ListUsers, AdminLinkProviderForUser, AdminAddUserToGroup, AdminRemoveUserFromGroup, and AdminUserGlobalSignOut.
 
-Responses contain SDK-consumed Cognito fields and AWS-shaped exceptions (`__type`, `message`, HTTP status, `x-amzn-requestid`). Tokens are RS256 JWTs with Cognito issuer, subject, client, `token_use`, timestamps, username, email, groups, and linked identities. Discovery and JWKS are at `/<poolId>/.well-known/openid-configuration` and `/<poolId>/.well-known/jwks.json`.
+Responses contain SDK-consumed Cognito fields and AWS-shaped exceptions (`__type`, `message`, HTTP status, `x-amzn-requestid`). Tokens are RS256 JWTs with Cognito issuer, subject, `token_use`, timestamps and groups. The ID token adds `aud`, `cognito:username`, email and linked identities; the access token adds `client_id`, `username` and `scope`, and no user attributes, as Cognito does. Discovery and JWKS are at `/<poolId>/.well-known/openid-configuration` and `/<poolId>/.well-known/jwks.json`.
 
 ### Admin and deterministic controls
 
 - `GET/POST /__admin/users` lists redacted users or seeds one. Passwords and tokens are never returned.
 - `GET /__admin/codes?username=…` returns local confirmation/reset codes without sending mail.
 - `POST /__admin/sessions/revoke {"username":"…"}` invalidates access and refresh sessions.
-- `POST /__admin/keys/rotate {"retainPrevious":true}` rotates signing keys and retains at most two prior keys. Every new key receives a fresh random UUID `kid`, independently of the virtual clock. Reset starts a fresh key ring.
+- `POST /__admin/keys/rotate {"retainPrevious":true}` rotates signing keys and retains at most two prior keys. As in Cognito, ID and access tokens are signed with different keys, so the JWKS lists one key of each kind per generation and rotation replaces both (the response names them `kid` and `accessKid`). Every new key receives a fresh random UUID `kid`, independently of the virtual clock. Reset starts a fresh key ring.
 - Fault presets: `throttled`, `unavailable`.
 
 The shared runtime supplies reset, clock, snapshots, journals, metrics, faults, branches, and namespace isolation. Select namespaces through `x-mockingbird-namespace`, `/__admin/ns/<name>`, or SigV4 access-key mappings.

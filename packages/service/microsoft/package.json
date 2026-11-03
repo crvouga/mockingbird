@@ -106,6 +106,7 @@
     "graphql": "17.0.0"
   },
   "devDependencies": {
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-provider": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",

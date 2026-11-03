@@ -426,12 +426,14 @@ export class PaddleAPI implements FetchAPI {
   private page<T extends { id: string }>(
     context: OperationContext,
     rows: T[],
+    source: { list(): { id: string; seq: number }[] },
     perPage = DEFAULT_PER_PAGE,
     maxPerPage = MAX_PER_PAGE,
   ): Response {
     const page = paginate(context, this.prefix(), rows, {
       defaultPerPage: perPage,
       maxPerPage,
+      source,
     })
     return envelope(200, page.data, this.requestId(context.request), page.pagination)
   }
@@ -506,7 +508,7 @@ export class PaddleAPI implements FetchAPI {
             (c.name ?? "").toLowerCase().includes(search)),
       })
       .map((row) => row.value)
-    return this.page(context, rows)
+    return this.page(context, rows, this.state.customers)
   }
 
   private createCustomerOp(context: OperationContext): Response {
@@ -635,7 +637,7 @@ export class PaddleAPI implements FetchAPI {
             )),
       })
       .map((row) => row.value)
-    return this.page(context, rows)
+    return this.page(context, rows, this.state.addresses)
   }
 
   private createAddressOp(context: OperationContext): Response {
@@ -737,7 +739,7 @@ export class PaddleAPI implements FetchAPI {
             )),
       })
       .map((row) => row.value)
-    return this.page(context, rows)
+    return this.page(context, rows, this.state.businesses)
   }
 
   private contacts(value: unknown): { name?: string | null; email: string }[] | null | undefined {
@@ -864,6 +866,7 @@ export class PaddleAPI implements FetchAPI {
     const page = paginate(context, this.prefix(), rows, {
       defaultPerPage: DEFAULT_PER_PAGE,
       maxPerPage: MAX_PER_PAGE,
+      source: this.state.products,
     })
     return envelope(
       200,
@@ -1043,6 +1046,7 @@ export class PaddleAPI implements FetchAPI {
     const page = paginate(context, this.prefix(), rows, {
       defaultPerPage: DEFAULT_PER_PAGE,
       maxPerPage: MAX_PER_PAGE,
+      source: this.state.prices,
     })
     return envelope(
       200,
@@ -1619,6 +1623,7 @@ export class PaddleAPI implements FetchAPI {
     const page = paginate(context, this.prefix(), rows, {
       defaultPerPage: TRANSACTIONS_PER_PAGE,
       maxPerPage: TRANSACTIONS_PER_PAGE,
+      source: this.state.transactions,
     })
     return envelope(
       200,
@@ -2287,6 +2292,7 @@ export class PaddleAPI implements FetchAPI {
     const page = paginate(context, this.prefix(), rows, {
       defaultPerPage: DEFAULT_PER_PAGE,
       maxPerPage: MAX_PER_PAGE,
+      source: this.state.subscriptions,
     })
     return envelope(
       200,
@@ -2776,6 +2782,7 @@ export class PaddleAPI implements FetchAPI {
     const page = paginate(context, this.prefix(), rows, {
       defaultPerPage: DEFAULT_PER_PAGE,
       maxPerPage: MAX_PER_PAGE,
+      source: this.state.events,
     })
     return envelope(
       200,
@@ -2837,7 +2844,7 @@ export class PaddleAPI implements FetchAPI {
     const rows = this.state.notificationSettings
       .list()
       .map((row) => this.notificationView(row.value, false))
-    return this.page(context, rows)
+    return this.page(context, rows, this.state.notificationSettings)
   }
 
   private createNotificationSetting(context: OperationContext): Response {
