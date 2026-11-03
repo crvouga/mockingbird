@@ -60,7 +60,7 @@ All methods are synchronous; do not `await` them.
 | --- | --- | --- |
 | `createDefaultSqlite` | `() => SqliteClient` | New in-memory `@crvouga/mockingbird-service-sqlite` `Database`. |
 | `resolveSqlite` | `(sqlite?: SqliteClient) => SqliteClient` | Return the injected client, or `createDefaultSqlite()`. |
-| `migrate` | `(sqlite, migrations: readonly Migration[]) => void` | Apply pending migrations in order, all in one transaction. Idempotent by `id`. |
+| `migrate` | `(sqlite, migrations: readonly Migration[]) => void` | Apply pending migrations in order, all in one transaction. Idempotent by `id`. Throws, applying nothing, if the list repeats an `id`. |
 | `listAppliedMigrations` | `(sqlite) => string[]` | Applied ids ordered by `applied_at` (whole seconds), then `id`. Migrations applied in the same second come back sorted by id, not in application order. |
 | `CORE_MIGRATIONS` | `readonly Migration[]` | Core schema: `mockingbird_records` (namespaced JSON records) and `mockingbird_sequences`. |
 | `migrateCore` | `(sqlite) => void` | `migrate(sqlite, CORE_MIGRATIONS)`. |
