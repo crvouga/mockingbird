@@ -131,7 +131,9 @@ export class HonoRequest<P extends string = string> {
   }
 
   async parseBody(): Promise<Record<string, FormDataEntryValue | FormDataEntryValue[]>> {
-    const contentType = this.header("Content-Type") ?? "";
+    // Media types are case-insensitive (RFC 9110 §8.3.1). Lowercase only for matching: the
+    // multipart boundary in the header itself is case-sensitive and is left as sent.
+    const contentType = (this.header("Content-Type") ?? "").toLowerCase();
     if (contentType.includes("multipart/form-data")) {
       return formDataToObject(await this.raw.formData());
     }
