@@ -124,6 +124,15 @@ const project = (item: Item, expression: unknown, names: Names) =>
           .filter((entry) => entry[1] !== undefined),
       )
 
+const OPERAND_TYPE = "An operand in the update expression has an incorrect data type"
+const SET_TYPES = ["SS", "NS", "BS"] as const
+type SetType = (typeof SET_TYPES)[number]
+const setType = (value: AttributeValue | undefined): SetType | undefined =>
+  SET_TYPES.find((type) => value?.[type] !== undefined)
+/** Set members compare by value: numbers numerically ("1" = "1.0"), strings and blobs exactly. */
+const setEntryKey = (type: SetType, entry: string) =>
+  type === "NS" ? String(Number(entry)) : entry
+
 export class DynamoAPI {
   readonly state: DynamoState
   private readonly sqlite
@@ -327,16 +336,22 @@ export class DynamoAPI {
           const [path, token] = addition.split(/\s+/)
           const value = values[token as string]
           const prior = get(item, path as string, names)
-          if (value?.N !== undefined)
+          if (value?.N !== undefined) {
+            if (prior && prior.N === undefined) throw new SyntaxError(OPERAND_TYPE)
             set(item, path as string, { N: String(Number(prior?.N ?? 0) + Number(value.N)) }, names)
-          else if (value?.SS)
-            set(
-              item,
-              path as string,
-              { SS: [...new Set([...(prior?.SS ?? []), ...value.SS])] },
-              names,
-            )
-          else throw new SyntaxError("ADD supports numbers and string sets")
+            continue
+          }
+          const type = setType(value)
+          if (!type) throw new SyntaxError(`${OPERAND_TYPE}; ADD supports numbers and sets`)
+          if (prior && prior[type] === undefined) throw new SyntaxError(OPERAND_TYPE)
+          const merged = [...(prior?.[type] ?? [])]
+          const seen = new Set(merged.map((entry) => setEntryKey(type, entry)))
+          for (const entry of value?.[type] ?? [])
+            if (!seen.has(setEntryKey(type, entry))) {
+              seen.add(setEntryKey(type, entry))
+              merged.push(entry)
+            }
+          set(item, path as string, { [type]: merged }, names)
         }
       else if (kind === "REMOVE") for (const path of splitTop(body)) remove(item, path, names)
       else if (kind === "DELETE")
@@ -344,13 +359,15 @@ export class DynamoAPI {
           const [path, token] = deletion.split(/\s+/)
           const value = values[token as string]
           const prior = get(item, path as string, names)
-          if (value?.SS && prior?.SS)
-            set(
-              item,
-              path as string,
-              { SS: prior.SS.filter((entry) => !value.SS?.includes(entry)) },
-              names,
-            )
+          const type = setType(value)
+          if (!type) throw new SyntaxError(`${OPERAND_TYPE}; DELETE supports only sets`)
+          if (!prior) continue
+          if (prior[type] === undefined) throw new SyntaxError(OPERAND_TYPE)
+          const dropped = new Set(value?.[type]?.map((entry) => setEntryKey(type, entry)))
+          const kept = prior[type]?.filter((entry) => !dropped.has(setEntryKey(type, entry))) ?? []
+          // DynamoDB has no empty sets: deleting the last element removes the attribute.
+          if (kept.length > 0) set(item, path as string, { [type]: kept }, names)
+          else remove(item, path as string, names)
         }
     }
   }
