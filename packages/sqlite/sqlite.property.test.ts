@@ -69,6 +69,20 @@ describe("migrate", () => {
   )
 })
 
+describe("migrate duplicate ids", () => {
+  test("rejects a list that repeats an id, naming it, before applying anything", () => {
+    const sqlite = createDefaultSqlite()
+    const migrations = [
+      { id: "001_a", sql: "CREATE TABLE a (id INTEGER PRIMARY KEY)" },
+      { id: "002_b", sql: "CREATE TABLE b (id INTEGER PRIMARY KEY)" },
+      { id: "001_a", sql: "CREATE TABLE c (id INTEGER PRIMARY KEY)" },
+    ]
+    expect(() => migrate(sqlite, migrations)).toThrow('duplicate migration id "001_a"')
+    expect(tableExists(sqlite, "a")).toBe(false)
+    expect(listAppliedMigrations(sqlite)).toEqual([])
+  })
+})
+
 describe("migrateCore legacy names", () => {
   const legacySchema = (prefix: "emulates" | "emulators") => `
     CREATE TABLE schema_migrations (id TEXT PRIMARY KEY NOT NULL, applied_at INTEGER NOT NULL);

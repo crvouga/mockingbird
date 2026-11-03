@@ -104,7 +104,7 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.11.9"
+    "hono": "4.13.11"
   },
   "devDependencies": {
     "fast-check": "4.9.0",

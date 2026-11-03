@@ -27,3 +27,4 @@ export type {
 export { formatFailure, ParityError, redactHeaders, redactValue } from "./report.js"
 export type { SeedCacheEntry, SeedParityOptions } from "./seed-parity.js"
 export { seedParity } from "./seed-parity.js"
+export { compareWebhookEvents } from "./webhooks.js"

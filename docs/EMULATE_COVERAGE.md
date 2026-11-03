@@ -97,7 +97,7 @@ bun run check
 
 The native suite checks all 14 catalogs, per-route response probes, stateful scenarios/reset,
 namespace isolation, snapshot/cache restoration, branch/historical reads, controlled timestamps,
-and mixed operations. The **85 native cases** include HTTP discovery for all five OIDC providers
+and mixed operations. The **88 native cases** include HTTP discovery for all five OIDC providers
 at ephemeral listener ports and namespace paths. A complete Google OAuth exchange verifies its
 token against the advertised JWKS and checks expiry against the frozen native clock.
 The adapted licensed provider suite passes **635 cases**, with **75 expected
@@ -107,7 +107,8 @@ models and portable handlers; a test-only Node listener supports SDK cases.
 
 Native Stripe has richer objects and error diagnostics than the competitor, and starts each
 account empty. Native GitHub errors retain their string `status` field. Native Resend lists
-retain `has_more`. Native Slack retains its existing seeded files and bot/enterprise identity.
+retain `has_more`. Native Slack retains its existing seeded files, channels and users, and its
+bot/enterprise identity.
 Existing authentication, API versions, fault semantics, inbound integrations, Socket Mode and
 richer payment workflows are retained. These differences are intentional: exact route-specific
 actual/oracle contracts are pinned in `reviewed-differences.json`, and an unreviewed change fails

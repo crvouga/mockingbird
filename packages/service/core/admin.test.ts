@@ -321,6 +321,31 @@ describe("admin ui", () => {
     ).toThrow(/method and route path/)
   })
 
+  test("every view the admin shell's menu owns is reserved", () => {
+    // Keep in sync with coreNav in packages/admin-ui/src/browser.tsx.
+    const shellViews = [
+      "overview",
+      "manual",
+      "state",
+      "clock",
+      "latency",
+      "faults",
+      "snapshots",
+      "journal",
+      "checkpoints",
+      "routes",
+    ]
+    for (const id of shellViews) {
+      expect(() =>
+        createRuntime({
+          name: "notes",
+          create: () => ({ fetch: async () => new Response("ok"), reset: async () => {} }),
+          adminUi: { panels: [{ id, title: "Mine", html: "" }] },
+        }),
+      ).toThrow(`admin panel id ${id} is reserved by the admin shell`)
+    }
+  })
+
   test("a panel id the shell cannot mount is rejected up front", () => {
     expect(() =>
       createRuntime({

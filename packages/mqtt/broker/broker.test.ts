@@ -872,4 +872,50 @@ describe("controls", () => {
     expect(brokers.get("one")?.clients()).toHaveLength(0)
     expect(connect("nobody").ended).toBe("destroyed")
   })
+
+  test("routeConnection drops a transport whose first packet is too large to be a CONNECT", () => {
+    let selected = 0
+    const feed = (chunks: Iterable<Uint8Array>) => {
+      let destroyed = false
+      let fed = 0
+      const connection = routeConnection(
+        { send: () => {}, close: () => {}, destroy: () => (destroyed = true) },
+        () => {
+          selected += 1
+          return undefined
+        },
+      )
+      for (const chunk of chunks) {
+        if (destroyed) break
+        fed += chunk.length
+        connection.receive(chunk)
+      }
+      return { destroyed, fed }
+    }
+    // A CONNECT fixed header declaring a 200 MB body, then the body 64 KB at a time.
+    function* huge() {
+      yield Uint8Array.of(0x10, 0x80, 0x80, 0x80, 0x64)
+      for (let sent = 0; sent < 8 * 1024 * 1024; sent += 65_536) yield new Uint8Array(65_536)
+    }
+    const { destroyed, fed } = feed(huge())
+    // Dropped from the fixed header alone, nothing of the body held.
+    expect(fed).toBe(5)
+    expect(destroyed).toBe(true)
+    expect(selected).toBe(0)
+
+    // A large but plausible CONNECT is still read and offered to `select`.
+    const connect = encodePacket({
+      type: "connect",
+      protocolName: "MQTT",
+      protocolVersion: 5,
+      cleanStart: true,
+      keepAlive: 0,
+      properties: {},
+      clientId: "c",
+      username: "u",
+      password: new Uint8Array(65_535),
+    })
+    feed([connect])
+    expect(selected).toBe(1)
+  })
 })

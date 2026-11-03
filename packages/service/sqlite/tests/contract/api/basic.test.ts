@@ -65,6 +65,35 @@ matrixBoth("transaction rolls back when the callback throws", (memory, sqlite) =
   expectParity(memory.query("SELECT name FROM t ORDER BY id"), sqlite.query("SELECT name FROM t ORDER BY id"));
 });
 
+for (const ending of ["ROLLBACK", "COMMIT"] as const) {
+  matrixBoth(`transaction rethrows the callback error after it ran SQL ${ending}`, (memory, sqlite) => {
+    setupBoth(memory, sqlite, ["CREATE TABLE t(id INTEGER PRIMARY KEY, name TEXT)"]);
+    for (const db of [memory, sqlite]) {
+      // Outermost: the callback ends the transaction itself, then throws.
+      expect(() =>
+        db.transaction(() => {
+          db.exec("INSERT INTO t(name) VALUES ('outer')");
+          db.exec(ending);
+          throw new Error("outer boom");
+        }),
+      ).toThrow("outer boom");
+      // Nested (savepoint): the callback ends the enclosing transaction, then throws.
+      expect(() =>
+        db.transaction(() => {
+          db.exec("INSERT INTO t(name) VALUES ('nested-outer')");
+          db.transaction(() => {
+            db.exec("INSERT INTO t(name) VALUES ('nested-inner')");
+            db.exec(ending);
+            throw new Error("inner boom");
+          });
+        }),
+      ).toThrow("inner boom");
+      expect(db.inTransaction()).toBe(false);
+    }
+    expectParity(memory.query("SELECT name FROM t ORDER BY id"), sqlite.query("SELECT name FROM t ORDER BY id"));
+  });
+}
+
 describe("api memory-only", () => {
   test("lastInsertRowid and changes track writes", () => {
     const db = new Database();

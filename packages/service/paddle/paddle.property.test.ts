@@ -113,61 +113,93 @@ describe("PaddleAPI", () => {
         maxCommands: 100,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
       })
-      // Random lifecycle commands can cancel subscriptions before an update becomes
-      // eligible. Compare a successful update of an explicitly discovered fixture too;
-      // keep the unrestricted walks and require coverage of all 42 operations.
-      const subscriptions = await seedParity({
-        ...options,
-        only: ["UpdateSubscription"],
-        numRuns: 1,
-        warmupCommands: 0,
-        compareCommands: 1,
-        seed: 0,
-        invalidProbability: 0,
-        missingProbability: 0,
-        reshapeCommand: (command) => ({
-          ...command,
-          parameters: { subscription_id: { $mockingbird: "ref", type: "subscription", pick: 0 } },
-          body: { custom_data: { coverage: "subscription-update" } },
-          invalid: undefined,
-        }),
-        seedMock: async ({ real, mock, table }) => {
-          const url = `https://${MOCK_HOST}/subscriptions`
-          const responses = await Promise.all([
-            real.fetch(new Request(url, { headers: auth })),
-            mock.fetch(new Request(url, { headers: auth })),
-          ])
-          for (const response of responses) expect(response.status).toBe(200)
-          const [referenceRows, mockRows] = await Promise.all(
-            responses.map(
-              async (response) => (await response.json()) as { data: { id: string }[] },
-            ),
-          )
-          const realId = referenceRows?.data[0]?.id
-          const mockId = mockRows?.data[0]?.id
-          if (!realId || !mockId) throw new Error("Missing seeded subscription")
-          table.register("subscription", { real: realId, mock: mockId })
-        },
-        mock: {
-          ...options.mock,
-          create: async () => {
-            await reseed(mock)
-            return {
-              fetch: async (request: Request) => {
-                const response = await mock.fetch(request)
-                if (request.method === "PATCH") expect(response.status).toBe(200)
-                return response
-              },
-            }
+      /**
+       * Random walks reach some updates too rarely to rely on, so compare one successful update
+       * of an explicitly discovered fixture as well, keeping the unrestricted walks and the
+       * all-42 coverage assertion below.
+       */
+      const updateFixture = (
+        operationId: string,
+        type: string,
+        list: string,
+        body: Record<string, unknown>,
+      ) =>
+        seedParity({
+          ...options,
+          only: [operationId],
+          numRuns: 1,
+          warmupCommands: 0,
+          compareCommands: 1,
+          seed: 0,
+          invalidProbability: 0,
+          missingProbability: 0,
+          reshapeCommand: (command) => ({
+            ...command,
+            parameters: { [`${type}_id`]: { $mockingbird: "ref", type, pick: 0 } },
+            body,
+            invalid: undefined,
+          }),
+          seedMock: async ({ real, mock, table }) => {
+            const url = `https://${MOCK_HOST}${list}`
+            const responses = await Promise.all([
+              real.fetch(new Request(url, { headers: auth })),
+              mock.fetch(new Request(url, { headers: auth })),
+            ])
+            for (const response of responses) expect(response.status).toBe(200)
+            const [referenceRows, mockRows] = await Promise.all(
+              responses.map(
+                async (response) => (await response.json()) as { data: { id: string }[] },
+              ),
+            )
+            const realId = referenceRows?.data[0]?.id
+            const mockId = mockRows?.data[0]?.id
+            if (!realId || !mockId) throw new Error(`Missing seeded ${type}`)
+            table.register(type, { real: realId, mock: mockId })
           },
+          mock: {
+            ...options.mock,
+            create: async () => {
+              await reseed(mock)
+              return {
+                fetch: async (request: Request) => {
+                  const response = await mock.fetch(request)
+                  if (request.method === "PATCH") expect(response.status).toBe(200)
+                  return response
+                },
+              }
+            },
+          },
+        })
+      // Random lifecycle commands can cancel subscriptions before an update becomes eligible.
+      const subscriptions = await updateFixture(
+        "UpdateSubscription",
+        "subscription",
+        "/subscriptions",
+        {
+          custom_data: { coverage: "subscription-update" },
         },
-      })
+      )
+      // A random UpdateTransaction almost always references a customer, address and business
+      // (its optional body ids) besides the transaction, so it is eligible only in walks that
+      // discovered all four, and some seeds never run it. The fixture `ready` transaction is
+      // still updatable.
+      const transactions = await updateFixture(
+        "UpdateTransaction",
+        "transaction",
+        "/transactions?status=ready",
+        { custom_data: { coverage: "transaction-update" } },
+      )
       expect(report.walks).toBeGreaterThan(0)
       expect(subscriptions.exercised.UpdateSubscription).toBe(1)
+      expect(transactions.exercised.UpdateTransaction).toBe(1)
       expect(parityOperations).toHaveLength(42)
-      expect(Object.keys({ ...report.exercised, ...subscriptions.exercised }).sort()).toEqual(
-        parityOperations,
-      )
+      expect(
+        Object.keys({
+          ...report.exercised,
+          ...subscriptions.exercised,
+          ...transactions.exercised,
+        }).sort(),
+      ).toEqual(parityOperations)
     },
     { timeout: 180_000 },
   )

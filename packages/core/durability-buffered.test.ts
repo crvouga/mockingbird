@@ -278,3 +278,37 @@ test("independent engine close stops background work and reports unacknowledged 
   expect(String(handle.lastError)).toContain("not acknowledged")
   await expect(handle.close()).rejects.toThrow("not acknowledged")
 })
+
+test("a page-hide save after a write that returned a truthy value is not forced", async () => {
+  let pageHide: (() => void) | undefined
+  let captures = 0
+  const adapter = codec()
+  const capture = adapter.capture
+  adapter.capture = (...args) => {
+    captures++
+    return capture(...args)
+  }
+  const handle = await openBufferedDurable({
+    key: "t",
+    backend: new MemoryDurabilityBackend(),
+    codec: adapter,
+    scheduler: new Scheduler(),
+    lifecycle: {
+      subscribe(run) {
+        pageHide = run
+        return () => {}
+      },
+    },
+  })
+  await handle.write((state) => {
+    state.set(1)
+    return true // The queue resolves with this value; it must not reach persist's `force`.
+  })
+  expect(handle.pending).toBe(false)
+  captures = 0
+  must(pageHide)()
+  await settle()
+  await settle()
+  expect(captures).toBe(0) // Nothing changed since the write saved it: page-hide has nothing to do.
+  await handle.close()
+})

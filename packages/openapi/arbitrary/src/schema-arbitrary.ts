@@ -50,19 +50,51 @@ const boundaryIntegers = (min: number, max: number) =>
     ),
   )
 
+/**
+ * Smallest positive integer that is a multiple of `multipleOf` (2.5 → 5, 0.1 → 1), or
+ * `undefined` when there is none in a sane range, leaving 0 as the only integer multiple.
+ */
+const integerStep = (multipleOf: number): number | undefined => {
+  for (let q = 1; q <= 1_000_000; q++) {
+    const step = Math.round(multipleOf * q)
+    if (step > 0 && Math.abs(multipleOf * q - step) <= 1e-9 * step) return step
+  }
+  return undefined
+}
+
 const integerArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
-  let min =
-    schema.minimum ??
-    (schema.exclusiveMinimum !== undefined ? schema.exclusiveMinimum + 1 : -DEFAULT_INTEGER_BOUND)
-  let max =
-    schema.maximum ??
-    (schema.exclusiveMaximum !== undefined ? schema.exclusiveMaximum - 1 : DEFAULT_INTEGER_BOUND)
-  min = Math.max(Math.ceil(min), -SAFE_INTEGER_BOUND)
-  max = Math.min(Math.floor(max), SAFE_INTEGER_BOUND)
-  if (min > max) return fc.constant(min)
-  const random = fc.integer({ min, max })
-  const boundaries = boundaryIntegers(min, max)
+  // Every declared bound applies; the tightest one wins.
+  const lower = [
+    schema.minimum === undefined ? undefined : Math.ceil(schema.minimum),
+    schema.exclusiveMinimum === undefined ? undefined : Math.floor(schema.exclusiveMinimum) + 1,
+  ].filter((n): n is number => n !== undefined)
+  const upper = [
+    schema.maximum === undefined ? undefined : Math.floor(schema.maximum),
+    schema.exclusiveMaximum === undefined ? undefined : Math.ceil(schema.exclusiveMaximum) - 1,
+  ].filter((n): n is number => n !== undefined)
+  const min = Math.max(
+    lower.length > 0 ? Math.max(...lower) : -DEFAULT_INTEGER_BOUND,
+    -SAFE_INTEGER_BOUND,
+  )
+  const max = Math.min(
+    upper.length > 0 ? Math.min(...upper) : DEFAULT_INTEGER_BOUND,
+    SAFE_INTEGER_BOUND,
+  )
+  const unsatisfiable = () =>
+    new Error(`unsatisfiable schema: no integer satisfies ${JSON.stringify(schema)}`)
   const multiple = schema.multipleOf
+  // Generate the multiplier k and emit k * step, so every value is a multiple by construction.
+  const step = multiple !== undefined && multiple > 0 ? integerStep(multiple) : 1
+  if (step === undefined) {
+    if (min <= 0 && max >= 0) return fc.constant(0)
+    throw unsatisfiable()
+  }
+  // `|| 0` turns `Math.ceil(-0.4)`'s -0 into 0 so it never leaks out as a boundary value.
+  const low = Math.ceil(min / step) || 0
+  const high = Math.floor(max / step) || 0
+  if (low > high) throw unsatisfiable()
+  const random = fc.integer({ min: low, max: high })
+  const boundaries = boundaryIntegers(low, high)
   const base =
     boundaries.length > 0
       ? fc.oneof(
@@ -70,21 +102,63 @@ const integerArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
           { arbitrary: fc.constantFrom(...boundaries), weight: 2 },
         )
       : random
-  if (multiple !== undefined && multiple > 0 && Number.isInteger(multiple)) {
-    return base.map((n) => Math.round(n / multiple) * multiple).filter((n) => n >= min && n <= max)
-  }
-  return base
+  return step === 1 ? base : base.map((k) => k * step)
 }
 
+/** Strip float noise (`3 * 0.1` → `0.3`) so generated decimals look like the ones people write. */
+const tidy = (n: number, digits: number) =>
+  Number.isInteger(n) ? n : Number(n.toPrecision(digits))
+
 const numberArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
-  const min =
-    schema.minimum ??
-    (schema.exclusiveMinimum !== undefined ? schema.exclusiveMinimum : -DEFAULT_INTEGER_BOUND)
-  const max =
-    schema.maximum ??
-    (schema.exclusiveMaximum !== undefined ? schema.exclusiveMaximum : DEFAULT_INTEGER_BOUND)
-  const minExcluded = schema.minimum === undefined && schema.exclusiveMinimum !== undefined
-  const maxExcluded = schema.maximum === undefined && schema.exclusiveMaximum !== undefined
+  const { minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf } = schema
+  // Both keywords apply when both are present; the tighter one wins.
+  const minExcluded =
+    exclusiveMinimum !== undefined && (minimum === undefined || exclusiveMinimum >= minimum)
+  const maxExcluded =
+    exclusiveMaximum !== undefined && (maximum === undefined || exclusiveMaximum <= maximum)
+  const min = minExcluded ? (exclusiveMinimum as number) : (minimum ?? -DEFAULT_INTEGER_BOUND)
+  const max = maxExcluded ? (exclusiveMaximum as number) : (maximum ?? DEFAULT_INTEGER_BOUND)
+  const hasMin = minimum !== undefined || exclusiveMinimum !== undefined
+  const hasMax = maximum !== undefined || exclusiveMaximum !== undefined
+  /** Against the declared bounds only; the default ±1e6 range is a generation choice. */
+  const inRange = (n: number) =>
+    (!hasMin || (minExcluded ? n > min : n >= min)) &&
+    (!hasMax || (maxExcluded ? n < max : n <= max))
+  const unsatisfiable = () =>
+    new Error(`unsatisfiable schema: no number satisfies ${JSON.stringify(schema)}`)
+  if (multipleOf !== undefined && multipleOf > 0) {
+    // Generate the multiplier k, never the value: values are k * multipleOf by construction.
+    // An undeclared bound limits k rather than the value, so `value / multipleOf` stays precise.
+    const lowK = hasMin ? Math.ceil(min / multipleOf) : undefined
+    const highK = hasMax ? Math.floor(max / multipleOf) : undefined
+    let low = Math.max(
+      lowK ?? (highK ?? DEFAULT_INTEGER_BOUND) - 2 * DEFAULT_INTEGER_BOUND,
+      -SAFE_INTEGER_BOUND,
+    )
+    let high = Math.min(
+      highK ?? (lowK ?? -DEFAULT_INTEGER_BOUND) + 2 * DEFAULT_INTEGER_BOUND,
+      SAFE_INTEGER_BOUND,
+    )
+    const at = (k: number) => {
+      const exact = k * multipleOf
+      const tidied = tidy(exact, 15)
+      // Prefer the tidy decimal unless float division would no longer read it as a multiple.
+      return Math.abs(tidied / multipleOf - k) <= 1e-9 ? tidied : exact
+    }
+    while (low <= high && !inRange(at(low))) low++
+    while (high >= low && !inRange(at(high))) high--
+    if (low > high) throw unsatisfiable()
+    return fc
+      .oneof(
+        { arbitrary: fc.integer({ min: low, max: high }), weight: 3 },
+        {
+          arbitrary: fc.constantFrom(...uniq([low, high, Math.min(Math.max(0, low), high)])),
+          weight: 1,
+        },
+      )
+      .map(at)
+  }
+  if (min > max || (min === max && (minExcluded || maxExcluded))) throw unsatisfiable()
   const doubles = fc.double({
     min,
     max,
@@ -94,9 +168,7 @@ const numberArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
     noDefaultInfinity: true,
   })
   const edges = uniq(
-    [schema.minimum, schema.maximum, 0].filter(
-      (n): n is number => n !== undefined && n >= min && n <= max,
-    ),
+    [minimum, maximum, 0].filter((n): n is number => n !== undefined && inRange(n)),
   )
   const arbitrary =
     edges.length > 0
@@ -105,7 +177,11 @@ const numberArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
           { arbitrary: fc.constantFrom(...edges), weight: 1 },
         )
       : doubles
-  return arbitrary.map((n) => (Number.isInteger(n) ? n : Number(n.toPrecision(12))))
+  // Rounding can land on an exclusive bound (0.1000000000001 → 0.1); keep the raw double then.
+  return arbitrary.map((n) => {
+    const rounded = tidy(n, 12)
+    return inRange(rounded) ? rounded : n
+  })
 }
 
 const pad = (n: number, width = 2) => String(n).padStart(width, "0")
@@ -143,6 +219,135 @@ const formatArbitrary = (format: string | undefined): fc.Arbitrary<string> | und
       return fc.ipV4()
     case "ipv6":
       return fc.ipV6()
+    default:
+      return undefined
+  }
+}
+
+const ALNUM = "abcdefghijklmnopqrstuvwxyz0123456789"
+const LETTERS = "abcdefghijklmnopqrstuvwxyz"
+const HEX = "0123456789abcdef"
+
+type Segment = string | { alphabet: string; min: number; max?: number }
+
+/**
+ * Strings shaped by `segments` (literals and runs of an alphabet) whose total length lies in
+ * [minLength, maxLength] by construction. The first run takes any length the others cannot.
+ */
+const fitted = (segments: Segment[], minLength: number, maxLength: number) => {
+  const runs = segments.filter((s): s is Exclude<Segment, string> => typeof s !== "string")
+  const floor = segments.reduce((n, s) => n + (typeof s === "string" ? s.length : s.min), 0)
+  if (floor > maxLength) return undefined
+  const slackMin = Math.max(0, minLength - floor)
+  const slackMax = Math.min(maxLength - floor, slackMin + DEFAULT_MAX_LENGTH)
+  return fc
+    .array(fc.nat(runs.length - 1), { minLength: slackMin, maxLength: slackMax })
+    .chain((picks) => {
+      const lengths = runs.map((run) => run.min)
+      for (const i of picks) {
+        const target = (lengths[i] as number) < (runs[i]?.max ?? Number.POSITIVE_INFINITY) ? i : 0
+        lengths[target] = (lengths[target] as number) + 1
+      }
+      let run = 0
+      return fc
+        .tuple(
+          ...segments.map((segment) => {
+            if (typeof segment === "string") return fc.constant(segment)
+            const length = lengths[run++] as number
+            return fc.string({
+              unit: fc.constantFrom(...segment.alphabet.split("")),
+              minLength: length,
+              maxLength: length,
+            })
+          }),
+        )
+        .map((parts) => parts.join(""))
+    })
+}
+
+/** IPv4 with octets trimmed (255 → 55 → 5) until the address fits `maxLength`. */
+const shortIpV4 = (maxLength: number) =>
+  fc.tuple(fc.nat(255), fc.nat(255), fc.nat(255), fc.nat(255)).map((octets) => {
+    const text = () => octets.join(".")
+    while (text().length > maxLength) {
+      const longest = octets.reduce(
+        (best, o, i) => (String(o).length > String(octets[best]).length ? i : best),
+        0,
+      )
+      const octet = octets[longest] as number
+      octets[longest] = octet % 10 ** (String(octet).length - 1)
+    }
+    return text()
+  })
+
+/** Compressed IPv6 (`::a:1`), dropping trailing groups until it fits `maxLength`. */
+const shortIpV6 = (maxLength: number) =>
+  fc
+    .array(fc.string({ unit: fc.constantFrom(...HEX.split("")), minLength: 1, maxLength: 4 }), {
+      maxLength: 7,
+    })
+    .map((groups) => {
+      while (groups.length > 0 && 2 + groups.join(":").length > maxLength) groups.pop()
+      return `::${groups.join(":")}`
+    })
+
+/** Formats whose generators always produce one length. */
+const FIXED_FORMAT_LENGTH: Record<string, number> = { uuid: 36, date: 10, "date-time": 24 }
+
+/**
+ * A format generator that meets the schema's length bounds by construction, or `undefined` when
+ * the bounds are loose enough for the stock generators plus a cheap filter.
+ */
+const formatWithinLength = (schema: SchemaObject): fc.Arbitrary<string> | undefined => {
+  const format = schema.format
+  const min = schema.minLength ?? 0
+  const max = schema.maxLength ?? Number.POSITIVE_INFINITY
+  const unsatisfiable = () =>
+    new Error(`unsatisfiable schema: no ${format} string satisfies ${JSON.stringify(schema)}`)
+  if (format === undefined) return undefined
+  const fixed = FIXED_FORMAT_LENGTH[format]
+  if (fixed !== undefined) {
+    if (min <= fixed && fixed <= max) return undefined
+    // RFC 3339 makes the fraction optional: 1970-01-02T00:00:00Z is 20 characters.
+    if (format === "date-time" && min <= 20 && max >= 20)
+      return dateTimeArbitrary.map((d) => d.replace(/\.\d+Z$/, "Z"))
+    throw unsatisfiable()
+  }
+  const tight = max < 32 || min > 12
+  if (!tight) return undefined
+  switch (format) {
+    case "email": {
+      const email = fitted(
+        [
+          { alphabet: ALNUM, min: 1 },
+          "@",
+          { alphabet: ALNUM, min: 1, max: 12 },
+          ".",
+          { alphabet: LETTERS, min: 2, max: 6 },
+        ],
+        min,
+        max,
+      )
+      if (!email) throw unsatisfiable()
+      return email
+    }
+    case "uri":
+    case "url": {
+      const web = fitted(
+        ["https://", { alphabet: ALNUM, min: 1 }, ".", { alphabet: LETTERS, min: 2, max: 6 }],
+        min,
+        max,
+      )
+      const urn = fitted(["urn:", { alphabet: ALNUM, min: 1 }], min, max)
+      if (!web && !urn) throw unsatisfiable()
+      return web && urn ? fc.oneof(web, urn) : ((web ?? urn) as fc.Arbitrary<string>)
+    }
+    case "ipv4":
+      if (max < 7 || min > 15) throw unsatisfiable()
+      return min > 7 ? shortIpV4(max).filter((s) => s.length >= min) : shortIpV4(max)
+    case "ipv6":
+      if (max < 2 || min > 39) throw unsatisfiable()
+      return min > 2 ? undefined : shortIpV6(max)
     default:
       return undefined
   }
@@ -204,6 +409,8 @@ const stringArbitrary = (schema: SchemaObject): fc.Arbitrary<string> => {
       // unsupported pattern syntax: fall back to unconstrained strings
     }
   }
+  const withinLength = formatWithinLength(schema)
+  if (withinLength) return withinLength
   const byFormat = formatArbitrary(schema.format)
   if (byFormat) return byFormat.filter(withinDeclaredLength(schema))
   const lengths = uniq([min, min + 1, max - 1, max].filter((n) => n >= min && n <= max))
@@ -219,20 +426,65 @@ const stringArbitrary = (schema: SchemaObject): fc.Arbitrary<string> => {
   )
 }
 
+/** Bounds that every allOf branch imposes at once: the tightest one wins. */
+const LOWER_BOUNDS = ["minimum", "exclusiveMinimum", "minLength", "minItems", "minProperties"]
+const UPPER_BOUNDS = ["maximum", "exclusiveMaximum", "maxLength", "maxItems", "maxProperties"]
+
 const mergeAllOf = (document: OpenAPIDocument, branches: SchemaObject[]): SchemaObject => {
   const merged: SchemaObject = {}
-  for (const raw of branches) {
-    const branch = resolveSchema(document, raw)
+  const into = merged as Record<string, unknown>
+  const mergeBranch = (branch: SchemaObject) => {
     for (const [key, value] of Object.entries(branch)) {
-      if (key === "properties")
-        merged.properties = { ...(merged.properties ?? {}), ...(branch.properties ?? {}) }
-      else if (key === "required")
+      if (key === "properties") {
+        const properties = { ...(merged.properties ?? {}) }
+        for (const [name, property] of Object.entries(branch.properties ?? {})) {
+          const existing = properties[name]
+          // Both declarations constrain the value; `build` merges this allOf when it gets there.
+          properties[name] = existing ? { allOf: [existing, property] } : property
+        }
+        merged.properties = properties
+      } else if (key === "required")
         merged.required = uniq([...(merged.required ?? []), ...(branch.required ?? [])])
-      else if (key === "allOf") Object.assign(merged, mergeAllOf(document, branch.allOf ?? []))
-      else (merged as Record<string, unknown>)[key] = value
+      else if (key === "allOf") mergeBranch(mergeAllOf(document, branch.allOf ?? []))
+      else if (typeof value === "number" && typeof into[key] === "number") {
+        const current = into[key] as number
+        if (LOWER_BOUNDS.includes(key)) into[key] = Math.max(current, value)
+        else if (UPPER_BOUNDS.includes(key)) into[key] = Math.min(current, value)
+        else into[key] = value
+      } else into[key] = value
     }
   }
+  for (const raw of branches) mergeBranch(resolveSchema(document, raw))
   return merged
+}
+
+/** How many draws a `oneOf` gets to land in exactly one branch before it settles for the last. */
+const ONE_OF_ATTEMPTS = 32
+
+/**
+ * `filter` with a retry budget: a plain `.filter` retries forever, so `oneOf` branches that
+ * overlap completely would hang generation. After `attempts` misses the last draw is returned.
+ */
+class RetryUntil<T> extends fc.Arbitrary<T> {
+  constructor(
+    private readonly arbitrary: fc.Arbitrary<T>,
+    private readonly accept: (value: T) => boolean,
+    private readonly attempts: number,
+  ) {
+    super()
+  }
+  generate(mrng: fc.Random, biasFactor: number | undefined): fc.Value<T> {
+    let drawn = this.arbitrary.generate(mrng, biasFactor)
+    for (let i = 1; i < this.attempts && !this.accept(drawn.value); i++)
+      drawn = this.arbitrary.generate(mrng, biasFactor)
+    return drawn
+  }
+  canShrinkWithoutContext(value: unknown): value is T {
+    return this.arbitrary.canShrinkWithoutContext(value)
+  }
+  shrink(value: T, context: unknown): fc.Stream<fc.Value<T>> {
+    return this.arbitrary.shrink(value, context).filter((shrunk) => this.accept(shrunk.value))
+  }
 }
 
 const literalWeighted = (schema: SchemaObject): fc.Arbitrary<JsonValue> | undefined => {
@@ -271,9 +523,28 @@ export const schemaArbitrary = (
     const union = resolved.oneOf ?? resolved.anyOf
     if (union && union.length > 0) {
       const keyword = resolved.oneOf ? "oneOf" : "anyOf"
-      return fc.oneof(
-        ...union.map((branch, i) => build(branch, [...path, keyword, String(i)], depth + 1)),
+      // Sibling keywords (`properties`, `required`, …) constrain every branch: fold them in.
+      const {
+        [keyword]: _union,
+        default: _default,
+        example: _example,
+        examples: _examples,
+        ...siblings
+      } = resolved
+      const hasSiblings = Object.keys(siblings).length > 0
+      const branches = fc.oneof(
+        ...union.map((branch, i) =>
+          build(
+            hasSiblings ? mergeAllOf(document, [siblings, branch]) : branch,
+            [...path, keyword, String(i)],
+            depth + 1,
+          ),
+        ),
       )
+      if (keyword === "anyOf") return branches
+      const exactlyOne = (value: unknown) =>
+        union.filter((branch) => validateValue(document, branch, value).length === 0).length === 1
+      return new RetryUntil(branches, exactlyOne, ONE_OF_ATTEMPTS)
     }
     const types = schemaTypes(resolved)
     const literal = literalWeighted(resolved)
@@ -370,6 +641,7 @@ export const schemaArbitrary = (
       return true
     })
     const fields: Record<string, fc.Arbitrary<unknown>> = {}
+    const optional: Record<string, fc.Arbitrary<unknown>> = {}
     const requiredKeys: string[] = []
     for (const [name, raw] of properties) {
       const property = resolveSchema(document, raw)
@@ -381,20 +653,63 @@ export const schemaArbitrary = (
         fields[name] = arbitrary
         requiredKeys.push(name)
       } else if (depth < maxDepth) {
-        fields[name] = fc.option(arbitrary, {
-          nil: undefined,
-          freq: nilFrequency(optionalProbability),
-        })
+        optional[name] = arbitrary
       }
     }
-    const declared = fc.record(fields).map((record) => {
+    const { minProperties, maxProperties } = node
+    const unsatisfiable = () =>
+      new Error(`unsatisfiable schema: no object satisfies ${JSON.stringify(node)}`)
+    if (maxProperties !== undefined && requiredKeys.length > maxProperties) throw unsatisfiable()
+    const optionalKeys = Object.keys(optional)
+    const omitAbsent = (record: Record<string, unknown>) => {
       const out: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(record)) if (value !== undefined) out[key] = value
       return out
-    })
+    }
+    // Property counts bound how many optional keys appear, so pick that subset explicitly.
+    const counted = minProperties !== undefined || maxProperties !== undefined
+    const maxOptional = Math.min(
+      optionalKeys.length,
+      (maxProperties ?? Number.POSITIVE_INFINITY) - requiredKeys.length,
+    )
+    const declared = counted
+      ? fc
+          .subarray(optionalKeys, {
+            minLength: Math.min(
+              maxOptional,
+              Math.max(0, (minProperties ?? 0) - requiredKeys.length),
+            ),
+            maxLength: maxOptional,
+          })
+          .chain((keys) =>
+            fc.record({
+              ...fields,
+              ...Object.fromEntries(keys.map((k) => [k, optional[k] as fc.Arbitrary<unknown>])),
+            }),
+          )
+          .map(omitAbsent)
+      : fc
+          .record({
+            ...fields,
+            ...Object.fromEntries(
+              Object.entries(optional).map(([k, arbitrary]) => [
+                k,
+                fc.option(arbitrary, {
+                  nil: undefined,
+                  freq: nilFrequency(optionalProbability),
+                }),
+              ]),
+            ),
+          })
+          .map(omitAbsent)
     const additional = node.additionalProperties
-    if (additional === undefined || additional === false || depth >= maxDepth) return declared
-    const valueSchema: SchemaObject = additional === true ? {} : additional
+    // Undeclared keys are allowed unless `additionalProperties: false`; use them only when the
+    // schema asks for them or the declared keys alone cannot reach minProperties.
+    const needsExtra = (minProperties ?? 0) > requiredKeys.length + maxOptional
+    if (needsExtra && additional === false) throw unsatisfiable()
+    if (!needsExtra && (additional === undefined || additional === false || depth >= maxDepth))
+      return declared
+    const valueSchema: SchemaObject = typeof additional === "object" ? additional : {}
     const nameSchema = node.propertyNames ? resolveSchema(document, node.propertyNames) : undefined
     const keyArbitrary = nameSchema
       ? stringArbitrary({ ...nameSchema, type: "string" }).filter(
@@ -402,17 +717,22 @@ export const schemaArbitrary = (
         )
       : fc.stringMatching(/^[a-z][a-z0-9_]{0,11}$/)
     const knownKeys = new Set(properties.map(([name]) => name))
-    const minKeys = Math.max(0, (node.minProperties ?? 0) - requiredKeys.length)
-    const maxKeys = Math.max(
-      minKeys,
-      Math.min(node.maxProperties ?? DEFAULT_MAX_PROPERTIES, DEFAULT_MAX_PROPERTIES),
-    )
-    const extra = fc.dictionary(
-      keyArbitrary.filter((k) => !knownKeys.has(k)),
-      build(valueSchema, [...path, "additionalProperties"], depth + 1),
-      { minKeys, maxKeys },
-    )
-    return fc.tuple(declared, extra).map(([base, more]) => ({ ...more, ...base }))
+    const extraValue = build(valueSchema, [...path, "additionalProperties"], depth + 1)
+    return declared.chain((base) => {
+      const present = Object.keys(base).length
+      const minKeys = Math.max(0, (minProperties ?? 0) - present)
+      const maxKeys = Math.max(
+        minKeys,
+        Math.min((maxProperties ?? DEFAULT_MAX_PROPERTIES) - present, DEFAULT_MAX_PROPERTIES),
+      )
+      return fc
+        .dictionary(
+          keyArbitrary.filter((k) => !knownKeys.has(k)),
+          extraValue,
+          { minKeys, maxKeys },
+        )
+        .map((more) => ({ ...more, ...base }))
+    })
   }
 
   return build(schema, [], 0)

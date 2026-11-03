@@ -31,7 +31,7 @@ paths:
           application/json:
             schema:
               type: object
-              required: [client_id, client_secret, grant_type]
+              required: [client_id, grant_type]
               properties:
                 client_id: { type: string, example: client_mock }
                 client_secret: { type: string, example: mock_workos_key }

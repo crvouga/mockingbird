@@ -375,6 +375,35 @@ describe("hardening", () => {
     expect((await call("/customers?per_page=two")).status).toBe(400)
   })
 
+  // Paddle ids are "lexicographically sortable" and sort by creation date, and a list returns
+  // "results after the cursor, not including it" (https://developer.paddle.com/api-reference/about/pagination,
+  // https://developer.paddle.com/api-reference/about/paddle-ids). A cursor entity that has since
+  // left the filter (archived between pages) still marks a place in that order.
+  test("a cursor archived between pages still pages on from its place", async () => {
+    type Listed = {
+      data: { id: string }[]
+      meta: { pagination: { next: string; has_more: boolean } }
+    }
+    for (const order of ["id[DESC]", "id[ASC]"]) {
+      const { call, json } = harness()
+      const ids: string[] = []
+      for (const n of [1, 2, 3]) {
+        const created = await json<Envelope<{ id: string }>>("/customers", {
+          body: { email: `c${n}@example.com` },
+        })
+        ids.push(created.data.id)
+      }
+      const inOrder = order === "id[DESC]" ? [...ids].reverse() : ids
+      const first = await json<Listed>(`/customers?status=active&per_page=1&order_by=${order}`)
+      expect(first.data.map((c) => c.id)).toEqual([inOrder[0] as string])
+      await call(`/customers/${inOrder[0]}`, { method: "PATCH", body: { status: "archived" } })
+      const next = new URL(first.meta.pagination.next)
+      const second = await json<Listed>(`${next.pathname}${next.search}`)
+      expect(second.data.map((c) => c.id)).toEqual([inOrder[1] as string])
+      expect(second.meta.pagination.has_more).toBe(true)
+    }
+  })
+
   test("an immediate item change bills only what it adds", async () => {
     const { json } = harness()
     const seed = await json<Seed>("/__admin/seed", { method: "POST" })

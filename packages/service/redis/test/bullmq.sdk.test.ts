@@ -1,6 +1,14 @@
 import { expect, test } from "bun:test"
 import { startFleet } from "@crvouga/mockingbird-adapter-node"
-import { DelayedError, FlowProducer, Queue, QueueEvents, UnrecoverableError, Worker } from "bullmq"
+import {
+  type ConnectionOptions,
+  DelayedError,
+  FlowProducer,
+  Queue,
+  QueueEvents,
+  UnrecoverableError,
+  Worker,
+} from "bullmq"
 import { Redis as IORedis } from "ioredis"
 import { Redis as LegacyRedis } from "ioredis-5-9"
 import { createRedis } from "../src/index.ts"
@@ -39,7 +47,7 @@ test("fleet snapshots reject a running BullMQ job and succeed after completion",
   }
 })
 
-test("BullMQ 5.67 Queue, Worker and QueueEvents complete a job and close", async () => {
+test("BullMQ 5.76 Queue, Worker and QueueEvents complete a job and close", async () => {
   const redis = createRedis()
   const server = await serve(redis, { port: 0 })
   const connection = { host: server.host, port: server.port, maxRetriesPerRequest: null }
@@ -127,10 +135,12 @@ test("BullMQ public-client contract used by the native oracle", async () => {
 test("BullMQ accepts an unmodified ioredis 5.9.2 connection", async () => {
   await manual(async (_queue, _worker, _redis, connection) => {
     const legacy = new LegacyRedis(connection)
-    // BullMQ publishes types against its own ioredis version; the wire/API contract is the test.
-    const queue = new Queue("legacy", { connection: legacy })
+    // BullMQ's current types include commands absent from ioredis 5.9.2. This test
+    // deliberately passes the older, unmodified client to verify runtime compatibility.
+    const legacyConnection = legacy as unknown as ConnectionOptions
+    const queue = new Queue("legacy", { connection: legacyConnection })
     const worker = new Worker("legacy", undefined, {
-      connection: legacy,
+      connection: legacyConnection,
       autorun: false,
     })
     try {

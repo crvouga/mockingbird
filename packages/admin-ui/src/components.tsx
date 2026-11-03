@@ -2,9 +2,10 @@ import { ReloadOutlined, SearchOutlined } from "@ant-design/icons"
 import type { TableProps } from "antd"
 import { Alert, Button, Empty, Flex, Input, Table, Tag, Typography } from "antd"
 import type { ReactNode } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react"
 import type { Api } from "./model.js"
 import { errorMessage, pretty, text } from "./model.js"
+import { initialResource, resourceFor, resourceReducer } from "./resource.js"
 
 const LIVE_REFRESH_MS = 1_500
 
@@ -33,11 +34,15 @@ export function ViewTitle({ page, children }: { page?: string; children: ReactNo
  * Admin reads stay live while their view is mounted. Polling is deliberately
  * quiet: it preserves the last successful payload and only shows the spinner
  * for the initial/manual load, so changing emulator state never flashes the UI.
+ * Switching to another api or path starts empty instead of showing the old payload.
  */
 export function useResource<T>(api: Api, path: string, revision = 0, live = true) {
-  const [data, setData] = useState<T | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  // A payload belongs to the api and path that fetched it. Switching either drops it,
+  // so a failed request for a new emulator never shows the previous emulator's data.
+  const source = useMemo(() => ({ api, path }), [api, path])
+  const [state, dispatch] = useReducer(resourceReducer<T>, source, (initial: unknown) =>
+    initialResource<T>(initial),
+  )
   const [retry, setRetry] = useState(0)
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision and retry intentionally invalidate the request.
   useEffect(() => {
@@ -47,18 +52,17 @@ export function useResource<T>(api: Api, path: string, revision = 0, live = true
     const load = async (foreground: boolean) => {
       if (pending) return
       pending = true
-      if (foreground) setLoading(true)
+      dispatch({ type: "start", source, foreground })
       try {
-        const value = await api.get<T>(path, controller.signal)
-        if (current) {
-          setData(value)
-          setError(null)
-        }
+        const value = await source.api.get<T>(source.path, controller.signal)
+        if (current) dispatch({ type: "loaded", source, value })
       } catch (error) {
-        if (current && !controller.signal.aborted) setError(errorMessage(error))
+        if (current && !controller.signal.aborted) {
+          dispatch({ type: "failed", source, error: errorMessage(error) })
+        }
       } finally {
         pending = false
-        if (current && foreground) setLoading(false)
+        if (current) dispatch({ type: "settled", source, foreground })
       }
     }
     void load(true)
@@ -71,7 +75,8 @@ export function useResource<T>(api: Api, path: string, revision = 0, live = true
       if (interval !== undefined) window.clearInterval(interval)
       if (live) window.removeEventListener("focus", refresh)
     }
-  }, [api, path, revision, retry, live])
+  }, [source, revision, retry, live])
+  const { data, error, loading } = resourceFor(state, source)
   return { data, error, loading, reload: useCallback(() => setRetry((n) => n + 1), []) }
 }
 

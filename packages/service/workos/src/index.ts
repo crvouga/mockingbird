@@ -51,6 +51,8 @@ type Session = {
   organizationId: string | null
   revoked: boolean
   expiresAt: number
+  /** Started by a PKCE exchange without a client secret; it may refresh without one too. */
+  public?: boolean
 }
 type Refresh = { sessionId: string; used: boolean; expiresAt: number }
 export type WorkOSAPIOptions = APIOptions & {
@@ -179,17 +181,23 @@ export class WorkOSAPI implements FetchAPI {
       return fail(400, "invalid_request", "Invalid authentication parameters")
     const b = c.body.value as Record<string, unknown>
     const client = this.clients.get(String(b.client_id ?? ""))
-    if (!client || b.client_secret !== client.secret)
+    // A public (browser or native) client sends no secret and proves itself with PKCE instead.
+    const secretless = b.client_secret === undefined
+    if (!client || (!secretless && b.client_secret !== client.secret))
       return fail(401, "invalid_client", "Invalid client credentials")
     let session: Session
     if (b.grant_type === "authorization_code") {
+      if (secretless && typeof b.code_verifier !== "string")
+        return fail(401, "invalid_client", "Invalid client credentials")
       const codeId = String(b.code ?? "")
       const code = this.codes.get(codeId)
       if (!code || code.used || code.clientId !== client.id || code.expiresAt <= this.now())
         return fail(400, "invalid_grant", "The code is invalid or has expired")
       if (
-        code.challenge &&
-        (typeof b.code_verifier !== "string" || (await digest(b.code_verifier)) !== code.challenge)
+        (code.challenge || secretless) &&
+        (typeof b.code_verifier !== "string" ||
+          !code.challenge ||
+          (await digest(b.code_verifier)) !== code.challenge)
       )
         return fail(400, "invalid_grant", "Invalid code verifier")
       // PKCE hashing yields; another exchange may have consumed the code meanwhile.
@@ -204,6 +212,7 @@ export class WorkOSAPI implements FetchAPI {
         organizationId: code.organizationId,
         revoked: false,
         expiresAt: this.now() + (this.options.refreshTtlMs ?? 30 * 86400_000),
+        ...(secretless ? { public: true } : {}),
       }
       this.codes.update(codeId, { ...code, used: true })
       this.sessions.insert(session.id, session)
@@ -222,6 +231,8 @@ export class WorkOSAPI implements FetchAPI {
         !this.users.has(previous.userId)
       )
         return fail(400, "invalid_grant", "The refresh token is invalid or has expired")
+      if (secretless && !previous.public)
+        return fail(401, "invalid_client", "Invalid client credentials")
       const organizationId =
         typeof b.organization_id === "string" ? b.organization_id : previous.organizationId
       if (organizationId && !this.memberships.has(`${previous.userId}:${organizationId}`))

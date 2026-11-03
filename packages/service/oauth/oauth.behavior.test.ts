@@ -294,6 +294,26 @@ test("rotating refresh reuse revokes its family, isolated from other authorizati
   expect((await refresh(api, other.tokens.refresh_token)).status).toBe(200)
 })
 
+// RFC 6749 §4.1.2: "If an authorization code is used more than once, the authorization server
+// MUST deny the request and SHOULD revoke (when possible) all tokens previously issued based on
+// that authorization code." https://www.rfc-editor.org/rfc/rfc6749#section-4.1.2
+test("replaying an authorization code revokes the tokens it issued, isolated from other authorizations", async () => {
+  const api = make("oidc")
+  const authorization = await login(api)
+  const issued = await (await exchange(api, authorization.code)).json()
+  const other = await tokens(api)
+  expect((await userinfo(api, issued.access_token)).status).toBe(200)
+
+  const replay = await exchange(api, authorization.code)
+  expect(replay.status).toBe(400)
+  expect((await replay.json()).error).toBe("invalid_grant")
+  expect((await userinfo(api, issued.access_token)).status).toBe(401)
+  expect((await refresh(api, issued.refresh_token)).status).toBe(400)
+
+  expect((await userinfo(api, other.tokens.access_token)).status).toBe(200)
+  expect((await refresh(api, other.tokens.refresh_token)).status).toBe(200)
+})
+
 test("transient token failures preserve codes for retries; probabilities and config are validated", async () => {
   const api = make("oidc", { behavior: { probabilities: { tokenUnavailable: 1 } } })
   const authorization = await login(api)

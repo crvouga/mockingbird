@@ -101,7 +101,9 @@ Every response is Paddle's envelope: `{data, meta: {request_id}}`, lists add
 `meta.pagination: {per_page, next, has_more, estimated_total}`. Lists take `after=<id>` (the
 cursor in `next`, an absolute URL the SDK follows as-is), `per_page` (default 50, max 200;
 transactions 30; more than the maximum gets the maximum, as Paddle documents) and
-`order_by=id[ASC]|id[DESC]` (default newest first). Errors are
+`order_by=id[ASC]|id[DESC]` (default newest first). A page holds the entities created past the
+`after` entity in that order, so a cursor that left the filter between pages (archived, say) still
+pages on. Errors are
 `{error: {type, code, detail, documentation_url, errors?: [{field, message}]}, meta}`.
 
 | Route | Behaviour |

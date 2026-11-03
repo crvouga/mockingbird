@@ -262,6 +262,7 @@ export type AdminUi = {
 const PANEL_ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/
 const RESERVED_VIEWS = new Set([
   "overview",
+  "manual",
   "state",
   "clock",
   "latency",

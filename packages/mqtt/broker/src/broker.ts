@@ -1126,16 +1126,25 @@ export class Broker {
 }
 
 /**
+ * Largest first packet {@link routeConnection} holds while it waits for a CONNECT. Every
+ * length-prefixed CONNECT field at its 65,535-byte maximum fits with room to spare; a client
+ * declaring more is dropped from its fixed header, before any of the body is buffered.
+ */
+const MAX_ROUTED_CONNECT_BYTES = 1024 * 1024
+
+/**
  * Hold a new transport until its CONNECT arrives, ask `select` which broker it belongs to
  * (a tenant chosen by username or client identifier), and attach it there. A transport whose
- * first packet is not a CONNECT, or that `select` turns away, is dropped.
+ * first packet is not a CONNECT, is larger than {@link MAX_ROUTED_CONNECT_BYTES}, or that
+ * `select` turns away, is dropped.
  */
 export const routeConnection = (
   transport: Transport,
   select: (connect: ConnectPacket) => Broker | undefined,
   info: TransportInfo = { kind: "memory" },
 ): Connection => {
-  const reader = new PacketReader()
+  // Bounds what is held before CONNECT: at most one packet of this size.
+  const reader = new PacketReader(MAX_ROUTED_CONNECT_BYTES)
   const held: Uint8Array[] = []
   let attached: Connection | undefined
   let done = false

@@ -46,7 +46,7 @@ await server.close()
 
 Supported operations are CreateQueue, ListQueues, GetQueueUrl, DeleteQueue, SetQueueAttributes, GetQueueAttributes, TagQueue, UntagQueue, ListQueueTags, ListDeadLetterSourceQueues, SendMessage, SendMessageBatch, ReceiveMessage, DeleteMessage, DeleteMessageBatch, ChangeMessageVisibility, ChangeMessageVisibilityBatch, and PurgeQueue. Receive honors maximum messages, visibility timeout, wait time, system attribute selection, and message attribute selection. The injected shared clock controls visibility expiry and redrive without sleeps.
 
-Batches answer per entry: `DeleteMessageBatch` and `ChangeMessageVisibilityBatch` list each entry in `Successful` or `Failed` (a stale handle fails as `ReceiptHandleIsInvalid` and the rest still succeed). `ListQueues` filters by `QueueNamePrefix` and pages with `MaxResults` and `NextToken`. `DeleteQueue` drops the queue and its messages. `SetQueueAttributes` validates and replaces the given attributes, and later receives use them.
+Batches answer per entry: `DeleteMessageBatch` and `ChangeMessageVisibilityBatch` list each entry in `Successful` or `Failed` (a handle the queue never issued fails as `ReceiptHandleIsInvalid` and the rest still succeed). Deleting with a superseded handle, one from an earlier receive of a message received again since, succeeds without deleting the message, as AWS documents. `ListQueues` filters by `QueueNamePrefix` and pages with `MaxResults` and `NextToken`. `DeleteQueue` drops the queue and its messages. `SetQueueAttributes` validates and replaces the given attributes, and later receives use them.
 
 ### Long polling
 

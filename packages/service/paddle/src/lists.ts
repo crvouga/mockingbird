@@ -19,17 +19,24 @@ export const listParam = (value: unknown): string[] | undefined => {
     .filter((s) => s !== "")
 }
 
+/** An unfiltered collection: every row's id and creation sequence. */
+type CreationOrder = { list(): { id: string; seq: number }[] }
+
 /**
  * Paddle's cursor pagination over an already-filtered list: `order_by` (`id[ASC]` or the
  * default `id[DESC]`, newest first), `per_page` (a request above the maximum gets the maximum,
  * as Paddle documents; below 1 is invalid), and `after=<id>` for the entities past that one.
  * `next` is an absolute URL carrying the same filters, as the SDK follows it verbatim.
+ *
+ * Paddle ids sort by creation date, and a page holds the entities past the cursor in that
+ * order. When the cursor entity is no longer in the filtered list (archived between pages),
+ * `limits.source` (the unfiltered collection) still places it, so paging goes on.
  */
 export const paginate = <T extends { id: string }>(
   context: OperationContext,
   publicPrefix: string,
   rowsNewestFirst: T[],
-  limits: { defaultPerPage: number; maxPerPage: number },
+  limits: { defaultPerPage: number; maxPerPage: number; source?: CreationOrder },
 ): Page<T> => {
   const errors: { field: string; message: string }[] = []
   const orderBy = asString(context.query.order_by) ?? "id[DESC]"
@@ -53,7 +60,10 @@ export const paginate = <T extends { id: string }>(
   let start = 0
   if (after !== undefined) {
     const index = ordered.findIndex((row) => row.id === after)
-    start = index < 0 ? ordered.length : index + 1
+    start =
+      index < 0
+        ? pastMissingCursor(ordered, after, orderBy === "id[ASC]", limits.source)
+        : index + 1
   }
   const data = ordered.slice(start, start + perPage)
   const hasMore = start + perPage < ordered.length
@@ -70,4 +80,21 @@ export const paginate = <T extends { id: string }>(
       estimated_total: ordered.length,
     },
   }
+}
+
+/** Where a page starts after a cursor that the filters left out: the first row created past it. */
+const pastMissingCursor = <T extends { id: string }>(
+  ordered: T[],
+  after: string,
+  ascending: boolean,
+  source: CreationOrder | undefined,
+): number => {
+  const created = new Map(source?.list().map((row) => [row.id, row.seq]))
+  const cursor = created.get(after)
+  if (cursor === undefined) return ordered.length
+  const index = ordered.findIndex((row) => {
+    const seq = created.get(row.id)
+    return seq !== undefined && (ascending ? seq > cursor : seq < cursor)
+  })
+  return index < 0 ? ordered.length : index
 }
