@@ -109,6 +109,15 @@ export type SqlResult = {
 }
 export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
+/**
+ * One State table row. The `id` column is always the record id. A value's own `id`
+ * field would overwrite it, so that field is shown as `value.id` instead.
+ */
+export const recordRow = (record: Pick<StateRecord, "id" | "value">): Record<string, unknown> => {
+  if (!isRecord(record.value)) return { id: record.id, value: record.value }
+  const { id, ...rest } = record.value
+  return { id: record.id, ...("id" in record.value ? { "value.id": id } : {}), ...rest }
+}
 export const text = (value: unknown): string => {
   if (value === null) return "NULL"
   if (value === undefined) return "—"

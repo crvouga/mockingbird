@@ -1,5 +1,6 @@
 import { type APIOptions, bootSqlite, sigV4AccessKeyId } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
+import { compileCondition, condition } from "./expression.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 import {
   type AttributeValue,
@@ -44,8 +45,6 @@ type Values = Record<string, AttributeValue>
 const clone = <T>(value: T): T => structuredClone(value)
 const scalar = (value: AttributeValue | undefined): string | number | boolean | undefined =>
   value?.S ?? (value?.N !== undefined ? Number(value.N) : (value?.BOOL ?? value?.B))
-const equal = (left: AttributeValue | undefined, right: AttributeValue | undefined) =>
-  JSON.stringify(left) === JSON.stringify(right)
 const resolveName = (name: string, names: Names) =>
   name
     .split(".")
@@ -72,6 +71,27 @@ const set = (item: Item, path: string, value: AttributeValue, names: Names) => {
   }
   current[leaf] = clone(value)
 }
+const utf8 = new TextEncoder()
+const bytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
+const compareBytes = (left: Uint8Array, right: Uint8Array) => {
+  for (let i = 0; i < Math.min(left.length, right.length); i++)
+    if (left[i] !== right[i]) return (left[i] as number) - (right[i] as number)
+  return left.length - right.length
+}
+/**
+ * Key order as DynamoDB sorts it: N by numeric value, S by its UTF-8 bytes and B by its raw
+ * bytes (unsigned). An item without the key attribute sorts after every item that has one.
+ */
+const compareKeyValues = (left: AttributeValue | undefined, right: AttributeValue | undefined) => {
+  if (left === undefined || right === undefined)
+    return left === right ? 0 : left === undefined ? 1 : -1
+  if (left.N !== undefined && right.N !== undefined) return Number(left.N) - Number(right.N)
+  if (left.S !== undefined && right.S !== undefined)
+    return compareBytes(utf8.encode(left.S), utf8.encode(right.S))
+  if (left.B !== undefined && right.B !== undefined)
+    return compareBytes(bytes(left.B), bytes(right.B))
+  return 0
+}
 const remove = (item: Item, path: string, names: Names) => {
   const parts = resolveName(path.trim(), names).split(".")
   const leaf = parts.pop() as string
@@ -94,65 +114,6 @@ const splitTop = (value: string, separator = ",") => {
   }
   out.push(value.slice(start).trim())
   return out.filter(Boolean)
-}
-const condition = (
-  expression: unknown,
-  item: Item | undefined,
-  names: Names,
-  values: Values,
-): boolean => {
-  if (typeof expression !== "string" || !expression.trim()) return true
-  const source = expression.trim().replace(/^\((.*)\)$/, "$1")
-  const ors = source.split(/\s+OR\s+/i)
-  if (ors.length > 1) return ors.some((part) => condition(part, item, names, values))
-  const ands = source.split(/\s+AND\s+/i)
-  if (ands.length > 1 && !/\s+BETWEEN\s+/i.test(source))
-    return ands.every((part) => condition(part, item, names, values))
-  const exists = /^attribute_(not_)?exists\s*\(([^)]+)\)$/i.exec(source)
-  if (exists)
-    return exists[1]
-      ? get(item ?? {}, exists[2] as string, names) === undefined
-      : get(item ?? {}, exists[2] as string, names) !== undefined
-  const begins = /^begins_with\s*\(([^,]+),\s*(:\w+)\)$/i.exec(source)
-  if (begins)
-    return String(scalar(get(item ?? {}, begins[1] as string, names)) ?? "").startsWith(
-      String(scalar(values[begins[2] as string]) ?? ""),
-    )
-  const between = /^(.+?)\s+BETWEEN\s+(:\w+)\s+AND\s+(:\w+)$/i.exec(source)
-  if (between) {
-    const actual = scalar(get(item ?? {}, between[1] as string, names))
-    const low = scalar(values[between[2] as string])
-    const high = scalar(values[between[3] as string])
-    return (
-      actual !== undefined &&
-      low !== undefined &&
-      high !== undefined &&
-      actual >= low &&
-      actual <= high
-    )
-  }
-  const comparison = /^(.+?)\s*(=|<>|<=|>=|<|>)\s*(:\w+)$/.exec(source)
-  if (comparison) {
-    const leftValue = get(item ?? {}, comparison[1] as string, names)
-    const rightValue = values[comparison[3] as string]
-    const left = scalar(leftValue)
-    const right = scalar(rightValue)
-    switch (comparison[2]) {
-      case "=":
-        return equal(leftValue, rightValue)
-      case "<>":
-        return !equal(leftValue, rightValue)
-      case "<":
-        return left !== undefined && right !== undefined && left < right
-      case "<=":
-        return left !== undefined && right !== undefined && left <= right
-      case ">":
-        return left !== undefined && right !== undefined && left > right
-      case ">=":
-        return left !== undefined && right !== undefined && left >= right
-    }
-  }
-  throw new SyntaxError(`Unsupported expression: ${expression}`)
 }
 const project = (item: Item, expression: unknown, names: Names) =>
   typeof expression !== "string"
@@ -244,6 +205,13 @@ export class DynamoAPI {
       ]),
     )
   }
+  /** The table key plus, when reading an index, the index key: what AWS returns as a cursor. */
+  private lastKey(table: DynamoTable, item: Item, schema: KeySchemaElement[]) {
+    const key = this.keyItem(table, item)
+    for (const { AttributeName } of schema)
+      key[AttributeName] = clone(item[AttributeName] as AttributeValue)
+    return key
+  }
   private rows(table: DynamoTable) {
     this.expire(table)
     return this.state.items
@@ -253,10 +221,8 @@ export class DynamoAPI {
   }
   private compare(table: DynamoTable, left: Item, right: Item, schema = table.keySchema) {
     for (const key of schema) {
-      const a = scalar(left[key.AttributeName])
-      const b = scalar(right[key.AttributeName])
-      if (a === b) continue
-      return a !== undefined && b !== undefined && a < b ? -1 : 1
+      const order = compareKeyValues(left[key.AttributeName], right[key.AttributeName])
+      if (order !== 0) return order < 0 ? -1 : 1
     }
     return 0
   }
@@ -396,27 +362,28 @@ export class DynamoAPI {
         ? table.globalSecondaryIndexes.find((value) => value.IndexName === input.IndexName)
         : undefined
     const schema = index?.KeySchema ?? table.keySchema
-    let rows = this.rows(table).sort((a, b) => this.compare(table, a.value, b.value, schema))
+    // A GSI is sparse: an item missing any of the index key attributes is not in the index.
+    let rows = this.rows(table)
+      .filter((row) => schema.every(({ AttributeName }) => row.value[AttributeName] !== undefined))
+      .sort((a, b) => this.compare(table, a.value, b.value, schema))
     if (query && input.ScanIndexForward === false) rows.reverse()
     if (input.ExclusiveStartKey && typeof input.ExclusiveStartKey === "object") {
       const start = this.key(table, input.ExclusiveStartKey as Item)
       const found = rows.findIndex((row) => row.key === start)
       if (found >= 0) rows = rows.slice(found + 1)
     }
-    const matching = rows.filter(
-      (row) => !query || condition(input.KeyConditionExpression, row.value, names, values),
-    )
+    const keyCondition = compileCondition(query ? input.KeyConditionExpression : "", names, values)
+    const filter = compileCondition(input.FilterExpression, names, values)
+    const matching = rows.filter((row) => keyCondition(row.value))
     const limit = input.Limit === undefined ? matching.length : Math.max(0, Number(input.Limit))
     const evaluated = matching.slice(0, limit)
-    const filtered = evaluated.filter((row) =>
-      condition(input.FilterExpression, row.value, names, values),
-    )
+    const filtered = evaluated.filter((row) => filter(row.value))
     const last = matching.length > evaluated.length ? evaluated.at(-1) : undefined
     return {
       Items: filtered.map((row) => project(row.value, input.ProjectionExpression, names)),
       Count: filtered.length,
       ScannedCount: evaluated.length,
-      ...(last ? { LastEvaluatedKey: this.keyItem(table, last.value) } : {}),
+      ...(last ? { LastEvaluatedKey: this.lastKey(table, last.value, schema) } : {}),
     }
   }
   async fetch(request: Request): Promise<Response> {
@@ -529,7 +496,9 @@ export class DynamoAPI {
         ...index,
         IndexArn: `${table.arn}/index/${index.IndexName}`,
         IndexStatus: "ACTIVE",
-        ItemCount: this.rows(table).length,
+        ItemCount: this.rows(table).filter((row) =>
+          index.KeySchema.every(({ AttributeName }) => row.value[AttributeName] !== undefined),
+        ).length,
         IndexSizeBytes: 0,
       })),
     }

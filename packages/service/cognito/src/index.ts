@@ -14,6 +14,7 @@ import {
   type CognitoSeedUser,
   CognitoState,
   type CognitoUser,
+  type TokenOrigin,
 } from "./state.js"
 
 export type { CognitoFixtures } from "./fixtures.js"
@@ -40,6 +41,9 @@ const headers = (requestId: string) => ({
 })
 const attr = (user: CognitoUser, name: string) =>
   user.attributes.find((value) => value.Name === name)?.Value
+// Cognito signs ID and access tokens with different keys, so each token type has its own ring.
+const KEY_RINGS = { id: "ring", access: "access-ring" } as const
+type KeyRing = (typeof KEY_RINGS)[keyof typeof KEY_RINGS]
 const publicUser = (user: CognitoUser) => ({
   Username: user.username,
   Attributes: [{ Name: "sub", Value: user.sub }, ...user.attributes],
@@ -52,7 +56,7 @@ const publicUser = (user: CognitoUser) => ({
 export class CognitoAPI {
   readonly state: CognitoState
   private readonly signingKeys: Collection<CognitoSigningKey[]>
-  private initializingKeys: Promise<CognitoSigningKey[]> | undefined
+  private readonly initializingKeys = new Map<KeyRing, Promise<CognitoSigningKey[]>>()
   private readonly publicNamespace: string
   private readonly adminPrefix: string
   private readonly baseUrl: string | undefined
@@ -88,29 +92,54 @@ export class CognitoAPI {
     clearNamespace(this.sqlite, this.namespace)
     this.state.seed()
   }
-  private async keyRing(): Promise<CognitoSigningKey[]> {
-    const stored = this.signingKeys.get("ring")
+  private async keyRing(name: KeyRing): Promise<CognitoSigningKey[]> {
+    const stored = this.signingKeys.get(name)
     if (stored) return stored
     // Concurrent first requests share initialization. Subsequent requests always read storage,
     // so portable restore and time travel cannot leave an obsolete in-memory signer behind.
-    this.initializingKeys ??= new CognitoSigner()
-      .export()
-      .then((key) => {
-        const ring = this.signingKeys.get("ring") ?? [key]
-        this.signingKeys.insert("ring", ring)
-        return ring
-      })
-      .finally(() => {
-        this.initializingKeys = undefined
-      })
-    return this.initializingKeys
+    // A ring missing from an older archive (the access ring) is created on first use.
+    let pending = this.initializingKeys.get(name)
+    if (!pending) {
+      pending = new CognitoSigner()
+        .export()
+        .then((key) => {
+          const ring = this.signingKeys.get(name) ?? [key]
+          this.signingKeys.insert(name, ring)
+          return ring
+        })
+        .finally(() => this.initializingKeys.delete(name))
+      this.initializingKeys.set(name, pending)
+    }
+    return pending
   }
   async rotateSigningKey(retainPrevious = true) {
-    await this.keyRing()
-    const key = await new CognitoSigner().export()
-    const retained = retainPrevious ? (this.signingKeys.get("ring") ?? []).slice(0, 2) : []
-    this.signingKeys.insert("ring", [key, ...retained])
-    return { kid: key.kid }
+    const rotate = async (name: KeyRing) => {
+      await this.keyRing(name)
+      const key = await new CognitoSigner().export()
+      const retained = retainPrevious ? (this.signingKeys.get(name) ?? []).slice(0, 2) : []
+      this.signingKeys.insert(name, [key, ...retained])
+      return key.kid
+    }
+    return { kid: await rotate(KEY_RINGS.id), accessKid: await rotate(KEY_RINGS.access) }
+  }
+  /**
+   * Signs each token with its type's current key (picked by `token_use`) and stamps a fresh
+   * `jti` plus the sign-in's `origin_jti` and `event_id`.
+   */
+  private async tokenSigner(origin: TokenOrigin) {
+    const signers = {
+      id: new CognitoSigner((await this.keyRing(KEY_RINGS.id))[0]),
+      access: new CognitoSigner((await this.keyRing(KEY_RINGS.access))[0]),
+    }
+    return {
+      sign: (claims: Record<string, unknown> & { token_use: "id" | "access" }) =>
+        signers[claims.token_use].sign({
+          ...claims,
+          jti: this.state.uuid("jti"),
+          origin_jti: origin.originJti,
+          event_id: origin.eventId,
+        }),
+    }
   }
   private issuer(request: Request, poolId = this.poolId) {
     const prefix =
@@ -145,6 +174,10 @@ export class CognitoAPI {
     user: CognitoUser,
     clientId: string,
     includeRefresh = true,
+    origin: TokenOrigin = {
+      originJti: this.state.uuid("origin_jti"),
+      eventId: this.state.uuid("event_id"),
+    },
     authTime?: number,
   ) {
     const now = Math.floor(this.now() / 1000)
@@ -156,20 +189,26 @@ export class CognitoAPI {
       auth_time: authTime ?? now,
       iat: now,
       exp: now + 3600,
-      username: user.username,
-      email: attr(user, "email"),
-      email_verified: attr(user, "email_verified") === "true",
       ...(user.groups.length ? { "cognito:groups": user.groups } : {}),
-      ...(identities.length ? { identities } : {}),
     }
-    const signer = new CognitoSigner((await this.keyRing())[0])
+    const signer = await this.tokenSigner(origin)
+    // Keep user attributes in the ID token and username in the access token.
     const access = await signer.sign({
       ...common,
+      username: user.username,
       client_id: clientId,
       token_use: "access",
       scope: "aws.cognito.signin.user.admin",
     })
-    const id = await signer.sign({ ...common, aud: clientId, token_use: "id" })
+    const id = await signer.sign({
+      ...common,
+      "cognito:username": user.username,
+      email: attr(user, "email"),
+      email_verified: attr(user, "email_verified") === "true",
+      ...(identities.length ? { identities } : {}),
+      aud: clientId,
+      token_use: "id",
+    })
     this.state.sessions.insert(access, {
       username: user.username,
       clientId,
@@ -186,6 +225,7 @@ export class CognitoAPI {
         expires: (now + 2_592_000) * 1000,
         revoked: false,
         kind: "refresh",
+        origin,
         authTime: now,
       })
     }
@@ -216,7 +256,11 @@ export class CognitoAPI {
     if (request.method === "GET" && jwks)
       return Response.json({
         keys: (
-          await Promise.all((await this.keyRing()).map((key) => new CognitoSigner(key).jwks()))
+          await Promise.all(
+            [...(await this.keyRing(KEY_RINGS.id)), ...(await this.keyRing(KEY_RINGS.access))].map(
+              (key) => new CognitoSigner(key).jwks(),
+            ),
+          )
         ).flatMap((set) => set.keys),
       })
     if (request.method !== "POST" || url.pathname !== "/")
@@ -296,6 +340,7 @@ export class CognitoAPI {
         const user = session && this.state.find(session.username)
         if (
           session?.kind !== "refresh" ||
+          session.clientId !== clientId ||
           session.revoked ||
           session.expires <= this.now() ||
           !user
@@ -307,6 +352,7 @@ export class CognitoAPI {
             user,
             session.clientId,
             false,
+            session.origin,
             session.authTime,
           ),
         })

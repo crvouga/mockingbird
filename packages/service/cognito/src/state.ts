@@ -22,9 +22,12 @@ export type CognitoSession = {
   expires: number
   revoked: boolean
   kind: "access" | "refresh" | "challenge"
+  /** origin_jti and event_id of the sign-in a refresh token came from; refreshes keep them. */
+  origin?: TokenOrigin
   /** Unix seconds of the sign-in a refresh token came from; refreshed tokens keep it. */
   authTime?: number
 }
+export type TokenOrigin = { originJti: string; eventId: string }
 export type CognitoSeedUser = Partial<CognitoUser> & { username: string; password: string }
 
 export class CognitoState {
@@ -78,5 +81,13 @@ export class CognitoState {
   }
   token(prefix: string): string {
     return this.ids.next(prefix, 32)
+  }
+  /** A version-4-shaped UUID from the namespace's seeded sequence, so runs stay reproducible. */
+  uuid(sequence: string): string {
+    const hex = [...this.ids.next(`${sequence}:`, 32).slice(sequence.length + 1)]
+      .map((char) => (char.charCodeAt(0) % 16).toString(16))
+      .join("")
+    const variant = ((Number.parseInt(hex[16] as string, 16) & 0x3) | 0x8).toString(16)
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${variant}${hex.slice(17, 20)}-${hex.slice(20, 32)}`
   }
 }

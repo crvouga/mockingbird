@@ -30,6 +30,7 @@ import { customerSessionHandlers } from "./customer-sessions.js"
 import { customerHandlers } from "./customers.js"
 import { disputeHandlers } from "./disputes.js"
 import {
+  IDEMPOTENCY_UNSAVED,
   invalidRequest,
   parameterInvalidEmpty,
   resourceMissing,
@@ -98,6 +99,9 @@ export {
   LEGACY_API_VERSION,
   STRIPE_API_VERSION,
 } from "./version.js"
+
+/** How long Stripe keeps an idempotency key (https://docs.stripe.com/api/idempotent_requests). */
+const IDEMPOTENCY_KEY_TTL_MS = 24 * 60 * 60 * 1000
 
 const MISSING_API_KEY =
   "You did not provide an API key. You need to provide your API key in the Authorization header, using Bearer auth (e.g. 'Authorization: Bearer YOUR_SECRET_KEY'). See https://stripe.com/docs/api#authentication for details, or we can help at https://support.stripe.com/."
@@ -221,7 +225,11 @@ export class StripeAPI implements FetchAPI {
       ...(options.onEndpointsChanged ? { endpointsChanged: options.onEndpointsChanged } : {}),
     }
     this.services = services
-    this.idempotency = new IdempotencyStore(sqlite, namespace, "stripe_idempotency")
+    // Stripe prunes a key once it is at least 24 hours old; a reuse after that is a new request.
+    this.idempotency = new IdempotencyStore(sqlite, namespace, "stripe_idempotency", {
+      now: () => this.now(),
+      ttlMs: IDEMPOTENCY_KEY_TTL_MS,
+    })
     const handlers = {
       ...customerSessionHandlers(services),
       ...customerHandlers(services),
@@ -256,8 +264,10 @@ export class StripeAPI implements FetchAPI {
       now: this.now,
       notFound: (request) => this.errorResponse({ status: 404, message: unrecognizedUrl(request) }),
       onError: (error) => {
-        if (error instanceof StripeError) return this.errorResponse(error.init)
-        throw error
+        if (!(error instanceof StripeError)) throw error
+        const response = this.errorResponse(error.init)
+        if (error.validation) response.headers.set(IDEMPOTENCY_UNSAVED, "true")
+        return response
       },
       before: (context) => {
         if (BROWSER_PATH.test(context.url.pathname)) return undefined
@@ -322,6 +332,7 @@ export class StripeAPI implements FetchAPI {
 
   private decorate(response: Response, version: string, cors: boolean): Response {
     const headers = new Headers(response.headers)
+    headers.delete(IDEMPOTENCY_UNSAVED)
     headers.set("request-id", this.state.ids.next("req_"))
     headers.set("stripe-version", version)
     if (cors) for (const [name, value] of Object.entries(CORS_HEADERS)) headers.set(name, value)
@@ -437,6 +448,10 @@ export class StripeAPI implements FetchAPI {
             }),
         },
         handle,
+        // Stripe saves the first response once the endpoint began executing, so a decline or
+        // a missing resource replays; a request whose parameters failed validation never got
+        // that far and can be retried, fixed, under the same key.
+        (_status, reply) => !reply.headers.has(IDEMPOTENCY_UNSAVED),
       )
     }
     return this.decorate(response, version, cors)
