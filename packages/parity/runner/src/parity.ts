@@ -14,6 +14,7 @@ import fc from "fast-check"
 import { DEFAULT_PARITY_STEPS, DEFAULT_PROPERTY_RUNS } from "./defaults.js"
 import { type ExecutionContext, executeCommand, type FetchLike, type Target } from "./execute.js"
 import { ParityError, type Redactor } from "./report.js"
+import { compareWebhookEvents, webhookEventNames } from "./webhooks.js"
 
 export type RealTarget = {
   baseUrl: string
@@ -44,23 +45,16 @@ export type WebhookParityOptions = {
   beforeWalk?: (scope: Scope) => Promise<void>
   collectReal: (scope: Scope, mockEvents: readonly unknown[]) => Promise<readonly unknown[]>
   collectMock: (mock: FetchAPI, scope: Scope) => Promise<readonly unknown[]>
-  /** Return a description of the first mismatch; default compares exact JSON and order. */
+  /**
+   * Return a description of the first mismatch. Default ({@link compareWebhookEvents}):
+   * canonicalize known ids, ignore key order, keep event order.
+   */
   compare?: (
     real: readonly unknown[],
     mock: readonly unknown[],
     table: ResourceTable,
   ) => string | undefined
 }
-
-const webhookPayload = (events: readonly unknown[]) => JSON.stringify(events)
-
-const webhookEventNames = (events: readonly unknown[]) =>
-  events.map((event) => {
-    if (typeof event !== "object" || event === null || Array.isArray(event)) return "unknown"
-    const eventType =
-      (event as Record<string, unknown>).event_type ?? (event as Record<string, unknown>).type
-    return typeof eventType === "string" ? eventType : "unknown"
-  })
 
 export type WalkCleanup = (context: {
   table: ResourceTable
@@ -358,11 +352,7 @@ export const parity = async (options: ParityOptions): Promise<ParityReport> => {
       )
       const firstDifference = options.webhooks.compare
         ? options.webhooks.compare(realEvents, mockEvents, table)
-        : webhookPayload(realEvents) === webhookPayload(mockEvents)
-          ? undefined
-          : realEvents.length !== mockEvents.length
-            ? `event count real=${realEvents.length} mock=${mockEvents.length}`
-            : `event payload/order differs at index ${realEvents.findIndex((event, index) => JSON.stringify(event) !== JSON.stringify(mockEvents[index]))}`
+        : compareWebhookEvents(realEvents, mockEvents, table)
       if (firstDifference !== undefined) {
         webhookFailure = new ParityError(
           {
