@@ -1411,6 +1411,16 @@ export class OAuthAPI {
       },
     )
   }
+  /**
+   * RFC 6749 §4.1.2: deny a reused authorization code and revoke every token issued from it.
+   * Tokens inherit the code's `family`, and refreshes keep it, so this reaches all of them.
+   */
+  private replayedCode(code: string, family: string): Response {
+    for (const row of this.tokens.list({ where: (t) => t.family === family }))
+      this.tokens.delete(row.id)
+    this.codes.delete(code)
+    return fail("invalid_grant", "Authorization code already consumed; issued tokens revoked")
+  }
   private async token(request: Request, issuer: string): Promise<Response> {
     let p: URLSearchParams | undefined
     if (
@@ -1443,6 +1453,8 @@ export class OAuthAPI {
     const key = p.get(type === "authorization_code" ? "code" : "refresh_token") ?? ""
     const stored = type === "authorization_code" ? this.codes.get(key) : this.tokens.get(key)
     const account = stored && this.accounts.get(stored.accountId)
+    if (type === "authorization_code" && stored?.consumed && stored.clientId === client.id)
+      return this.replayedCode(key, stored.family)
     if (
       !stored ||
       stored.clientId !== client.id ||
@@ -1521,9 +1533,12 @@ export class OAuthAPI {
         )
           return fail("invalid_grant", "PKCE verification failed")
       }
-      // Recheck after async hashing: concurrent redemptions may have consumed it.
-      if (!this.codes.delete(key))
-        return fail("invalid_grant", "Authorization code already consumed")
+      // Recheck after async hashing: concurrent redemptions may have consumed it. The get and
+      // update below run without an await between them, so only one redemption can win.
+      const current = this.codes.get(key)
+      if (!current) return fail("invalid_grant", "Invalid, expired or consumed grant")
+      if (current.consumed) return this.replayedCode(key, current.family)
+      this.codes.update(key, { ...current, consumed: true })
     }
     const grant = { ...stored }
     if (type === "refresh_token" && p.has("scope")) {

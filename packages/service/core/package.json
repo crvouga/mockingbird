@@ -51,7 +51,7 @@
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-ui": "workspace:*",
     "fast-xml-parser": "5.11.2",
-    "hono": "4.11.9"
+    "hono": "4.13.11"
   },
   "devDependencies": {
     "fast-check": "4.9.0",

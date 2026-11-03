@@ -6,20 +6,9 @@ import { createEmulator as oracle } from "emulate"
 import coverage from "../coverage.json" with { type: "json" }
 import reviewed from "../reviewed-differences.json" with { type: "json" }
 import { scenarios } from "./scenarios.js"
+import { shape } from "./shape.js"
 import { nativeProviders, target } from "./targets.js"
 
-function shape(value: unknown): unknown {
-  if (value === null) return "null"
-  if (Array.isArray(value))
-    return { array: [...new Set(value.map((item) => JSON.stringify(shape(item))))].sort() }
-  if (typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, item]) => [key, shape(item)]),
-    )
-  return typeof value
-}
 async function contract(response: Response): Promise<unknown> {
   const contentType = response.headers.get("content-type")?.split(";")[0] ?? null
   const body = await response.arrayBuffer()

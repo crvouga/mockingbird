@@ -450,6 +450,36 @@ describe("outbox and idempotency", () => {
       (await store.run("k", requestFingerprint("POST", "/v1/x", { a: 2 }), errors, handler)).status,
     ).toBe(400)
   })
+
+  test("idempotency: a key older than ttlMs is pruned and its reuse runs a new request", async () => {
+    const { runtime } = notesRuntime()
+    let clock = 1_000
+    const store = new IdempotencyStore(runtime.sqlite, "idem-ttl", "idempotency", {
+      now: () => clock,
+      ttlMs: 100,
+    })
+    const errors = {
+      mismatch: () => jsonRes(400, { error: "mismatch" }),
+      conflict: () => jsonRes(409, { error: "in_use" }),
+    }
+    let calls = 0
+    const handler = () => jsonRes(200, { n: ++calls })
+    const fp = requestFingerprint("POST", "/v1/x", {})
+    await store.run("k", fp, errors, handler)
+    clock += 99
+    expect(await (await store.run("k", fp, errors, handler)).json()).toEqual({ n: 1 })
+    clock += 1
+    expect(await (await store.run("k", fp, errors, handler)).json()).toEqual({ n: 2 })
+    // A pruned key is free for different parameters too.
+    clock += 100
+    const other = await store.run(
+      "k",
+      requestFingerprint("POST", "/v1/x", { a: 1 }),
+      errors,
+      handler,
+    )
+    expect(await other.json()).toEqual({ n: 3 })
+  })
 })
 
 test("signV4 reproduces the AWS-published S3 GetObject example signature", async () => {

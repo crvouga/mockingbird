@@ -1,5 +1,6 @@
 import { type APIOptions, bootSqlite, sigV4AccessKeyId } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
+import { compileCondition, condition } from "./expression.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 import {
   type AttributeValue,
@@ -44,8 +45,6 @@ type Values = Record<string, AttributeValue>
 const clone = <T>(value: T): T => structuredClone(value)
 const scalar = (value: AttributeValue | undefined): string | number | boolean | undefined =>
   value?.S ?? (value?.N !== undefined ? Number(value.N) : (value?.BOOL ?? value?.B))
-const equal = (left: AttributeValue | undefined, right: AttributeValue | undefined) =>
-  JSON.stringify(left) === JSON.stringify(right)
 const resolveName = (name: string, names: Names) =>
   name
     .split(".")
@@ -72,12 +71,137 @@ const set = (item: Item, path: string, value: AttributeValue, names: Names) => {
   }
   current[leaf] = clone(value)
 }
+const utf8 = new TextEncoder()
+const bytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0))
+const compareBytes = (left: Uint8Array, right: Uint8Array) => {
+  for (let i = 0; i < Math.min(left.length, right.length); i++)
+    if (left[i] !== right[i]) return (left[i] as number) - (right[i] as number)
+  return left.length - right.length
+}
+/**
+ * Key order as DynamoDB sorts it: N by numeric value, S by its UTF-8 bytes and B by its raw
+ * bytes (unsigned). An item without the key attribute sorts after every item that has one.
+ */
+const compareKeyValues = (left: AttributeValue | undefined, right: AttributeValue | undefined) => {
+  if (left === undefined || right === undefined)
+    return left === right ? 0 : left === undefined ? 1 : -1
+  if (left.N !== undefined && right.N !== undefined) return Number(left.N) - Number(right.N)
+  if (left.S !== undefined && right.S !== undefined)
+    return compareBytes(utf8.encode(left.S), utf8.encode(right.S))
+  if (left.B !== undefined && right.B !== undefined)
+    return compareBytes(bytes(left.B), bytes(right.B))
+  return 0
+}
 const remove = (item: Item, path: string, names: Names) => {
   const parts = resolveName(path.trim(), names).split(".")
   const leaf = parts.pop() as string
   let current: Item | undefined = item
   for (const part of parts) current = current?.[part]?.M
   if (current) delete current[leaf]
+}
+/**
+ * The right-hand side of a SET action, as DynamoDB's grammar defines it:
+ *   value   ::= operand | operand '+' operand | operand '-' operand
+ *   operand ::= path | :placeholder | if_not_exists(path, operand) | list_append(operand, operand)
+ */
+type SetOperand =
+  | { kind: "path"; path: string }
+  | { kind: "value"; name: string }
+  | { kind: "call"; fn: "if_not_exists" | "list_append"; args: [SetOperand, SetOperand] }
+type SetValue = { left: SetOperand; op?: "+" | "-"; right?: SetOperand }
+const updateSyntax = (near: string) =>
+  new SyntaxError(`Invalid UpdateExpression: Syntax error; token: "${near.trim().split(/\s/)[0]}"`)
+const parseSetValue = (source: string): SetValue => {
+  let at = 0
+  const skip = () => {
+    while (/\s/.test(source[at] ?? "")) at++
+  }
+  const operand = (): SetOperand => {
+    skip()
+    const token = /^[:#\w][\w#:.[\]]*/.exec(source.slice(at))?.[0]
+    if (!token) throw updateSyntax(source.slice(at) || "<EOF>")
+    at += token.length
+    skip()
+    if (source[at] !== "(")
+      return token.startsWith(":") ? { kind: "value", name: token } : { kind: "path", path: token }
+    if (token !== "if_not_exists" && token !== "list_append")
+      throw new SyntaxError(`Invalid UpdateExpression: Invalid function name; function: ${token}`)
+    at++
+    const args = [operand()]
+    skip()
+    while (source[at] === ",") {
+      at++
+      args.push(operand())
+      skip()
+    }
+    if (source[at] !== ")") throw updateSyntax(source.slice(at) || "<EOF>")
+    at++
+    if (args.length !== 2)
+      throw new SyntaxError(
+        `Invalid UpdateExpression: Incorrect number of operands for operator or function; operator or function: ${token}, number of operands: ${args.length}`,
+      )
+    if (token === "if_not_exists" && args[0]?.kind !== "path")
+      throw new SyntaxError(
+        "Invalid UpdateExpression: Operator or function requires a document path; operator or function: if_not_exists",
+      )
+    return { kind: "call", fn: token, args: args as [SetOperand, SetOperand] }
+  }
+  const left = operand()
+  skip()
+  if (at === source.length) return { left }
+  const op = source[at]
+  if (op !== "+" && op !== "-") throw updateSyntax(source.slice(at))
+  at++
+  const right = operand()
+  skip()
+  if (at !== source.length) throw updateSyntax(source.slice(at))
+  return { left, op, right }
+}
+const MISSING_ATTRIBUTE =
+  "The provided expression refers to an attribute that does not exist in the item"
+const operandType = (fn: string, value: AttributeValue) =>
+  new SyntaxError(
+    `Invalid UpdateExpression: Incorrect operand type for operator or function; operator or function: ${fn}, operand type: ${Object.keys(value)[0]}`,
+  )
+/** Evaluates a SET operand against the item as it was before the update (DynamoDB's rule). */
+const evaluateOperand = (
+  operand: SetOperand,
+  item: Item,
+  names: Names,
+  values: Values,
+): AttributeValue | undefined => {
+  if (operand.kind === "value") {
+    const value = values[operand.name]
+    if (!value)
+      throw new SyntaxError(
+        `Invalid UpdateExpression: An expression attribute value used in expression is not defined; attribute value: ${operand.name}`,
+      )
+    return value
+  }
+  if (operand.kind === "path") return get(item, operand.path, names)
+  const [first, second] = operand.args
+  if (operand.fn === "if_not_exists")
+    return (
+      get(item, (first as { path: string }).path, names) ??
+      evaluateOperand(second, item, names, values)
+    )
+  const head = evaluateOperand(first, item, names, values)
+  const tail = evaluateOperand(second, item, names, values)
+  if (!head || !tail) throw new SyntaxError(MISSING_ATTRIBUTE)
+  if (!head.L) throw operandType("list_append", head)
+  if (!tail.L) throw operandType("list_append", tail)
+  return { L: [...head.L, ...tail.L] }
+}
+const evaluateSetValue = (value: SetValue, item: Item, names: Names, values: Values) => {
+  const left = evaluateOperand(value.left, item, names, values)
+  if (!left) throw new SyntaxError(MISSING_ATTRIBUTE)
+  if (!value.op || !value.right) return left
+  const right = evaluateOperand(value.right, item, names, values)
+  if (!right) throw new SyntaxError(MISSING_ATTRIBUTE)
+  if (left.N === undefined) throw operandType(value.op, left)
+  if (right.N === undefined) throw operandType(value.op, right)
+  const sum = value.op === "+" ? Number(left.N) + Number(right.N) : Number(left.N) - Number(right.N)
+  return { N: String(sum) }
 }
 const splitTop = (value: string, separator = ",") => {
   const out: string[] = []
@@ -95,65 +219,6 @@ const splitTop = (value: string, separator = ",") => {
   out.push(value.slice(start).trim())
   return out.filter(Boolean)
 }
-const condition = (
-  expression: unknown,
-  item: Item | undefined,
-  names: Names,
-  values: Values,
-): boolean => {
-  if (typeof expression !== "string" || !expression.trim()) return true
-  const source = expression.trim().replace(/^\((.*)\)$/, "$1")
-  const ors = source.split(/\s+OR\s+/i)
-  if (ors.length > 1) return ors.some((part) => condition(part, item, names, values))
-  const ands = source.split(/\s+AND\s+/i)
-  if (ands.length > 1 && !/\s+BETWEEN\s+/i.test(source))
-    return ands.every((part) => condition(part, item, names, values))
-  const exists = /^attribute_(not_)?exists\s*\(([^)]+)\)$/i.exec(source)
-  if (exists)
-    return exists[1]
-      ? get(item ?? {}, exists[2] as string, names) === undefined
-      : get(item ?? {}, exists[2] as string, names) !== undefined
-  const begins = /^begins_with\s*\(([^,]+),\s*(:\w+)\)$/i.exec(source)
-  if (begins)
-    return String(scalar(get(item ?? {}, begins[1] as string, names)) ?? "").startsWith(
-      String(scalar(values[begins[2] as string]) ?? ""),
-    )
-  const between = /^(.+?)\s+BETWEEN\s+(:\w+)\s+AND\s+(:\w+)$/i.exec(source)
-  if (between) {
-    const actual = scalar(get(item ?? {}, between[1] as string, names))
-    const low = scalar(values[between[2] as string])
-    const high = scalar(values[between[3] as string])
-    return (
-      actual !== undefined &&
-      low !== undefined &&
-      high !== undefined &&
-      actual >= low &&
-      actual <= high
-    )
-  }
-  const comparison = /^(.+?)\s*(=|<>|<=|>=|<|>)\s*(:\w+)$/.exec(source)
-  if (comparison) {
-    const leftValue = get(item ?? {}, comparison[1] as string, names)
-    const rightValue = values[comparison[3] as string]
-    const left = scalar(leftValue)
-    const right = scalar(rightValue)
-    switch (comparison[2]) {
-      case "=":
-        return equal(leftValue, rightValue)
-      case "<>":
-        return !equal(leftValue, rightValue)
-      case "<":
-        return left !== undefined && right !== undefined && left < right
-      case "<=":
-        return left !== undefined && right !== undefined && left <= right
-      case ">":
-        return left !== undefined && right !== undefined && left > right
-      case ">=":
-        return left !== undefined && right !== undefined && left >= right
-    }
-  }
-  throw new SyntaxError(`Unsupported expression: ${expression}`)
-}
 const project = (item: Item, expression: unknown, names: Names) =>
   typeof expression !== "string"
     ? clone(item)
@@ -162,6 +227,15 @@ const project = (item: Item, expression: unknown, names: Names) =>
           .map((path) => [resolveName(path, names), get(item, path, names)])
           .filter((entry) => entry[1] !== undefined),
       )
+
+const OPERAND_TYPE = "An operand in the update expression has an incorrect data type"
+const SET_TYPES = ["SS", "NS", "BS"] as const
+type SetType = (typeof SET_TYPES)[number]
+const setType = (value: AttributeValue | undefined): SetType | undefined =>
+  SET_TYPES.find((type) => value?.[type] !== undefined)
+/** Set members compare by value: numbers numerically ("1" = "1.0"), strings and blobs exactly. */
+const setEntryKey = (type: SetType, entry: string) =>
+  type === "NS" ? String(Number(entry)) : entry
 
 export class DynamoAPI {
   readonly state: DynamoState
@@ -244,6 +318,13 @@ export class DynamoAPI {
       ]),
     )
   }
+  /** The table key plus, when reading an index, the index key: what AWS returns as a cursor. */
+  private lastKey(table: DynamoTable, item: Item, schema: KeySchemaElement[]) {
+    const key = this.keyItem(table, item)
+    for (const { AttributeName } of schema)
+      key[AttributeName] = clone(item[AttributeName] as AttributeValue)
+    return key
+  }
   private rows(table: DynamoTable) {
     this.expire(table)
     return this.state.items
@@ -253,10 +334,8 @@ export class DynamoAPI {
   }
   private compare(table: DynamoTable, left: Item, right: Item, schema = table.keySchema) {
     for (const key of schema) {
-      const a = scalar(left[key.AttributeName])
-      const b = scalar(right[key.AttributeName])
-      if (a === b) continue
-      return a !== undefined && b !== undefined && a < b ? -1 : 1
+      const order = compareKeyValues(left[key.AttributeName], right[key.AttributeName])
+      if (order !== 0) return order < 0 ? -1 : 1
     }
     return 0
   }
@@ -318,6 +397,8 @@ export class DynamoAPI {
   }
   private applyUpdate(item: Item, expression: unknown, names: Names, values: Values) {
     if (typeof expression !== "string") throw new SyntaxError("UpdateExpression is required")
+    // Every operand reads the item as it was before the update, not after earlier actions.
+    const original = clone(item)
     const clauses = [...expression.matchAll(/(?:^|\s)(SET|ADD|REMOVE|DELETE)\s+/gi)]
     for (let index = 0; index < clauses.length; index++) {
       const clause = clauses[index] as RegExpMatchArray
@@ -326,51 +407,36 @@ export class DynamoAPI {
       const end =
         index + 1 < clauses.length ? (clauses[index + 1]?.index as number) : expression.length
       const body = expression.slice(start, end).trim()
-      if (kind === "SET")
-        for (const assignment of splitTop(body)) {
-          const [path, raw = ""] = assignment.split(/\s*=\s*/, 2)
-          const fallback = /^if_not_exists\(([^,]+),\s*(:\w+)\)(?:\s*\+\s*(:\w+))?$/.exec(raw)
-          const addition = /^(.+?)\s*\+\s*(:\w+)$/.exec(raw)
-          if (fallback) {
-            const base = get(item, fallback[1] as string, names) ?? values[fallback[2] as string]
-            const plus = fallback[3]
-              ? Number(base?.N ?? "0") + Number(values[fallback[3]]?.N ?? "0")
-              : undefined
-            set(
-              item,
-              path as string,
-              plus === undefined ? (base as AttributeValue) : { N: String(plus) },
-              names,
-            )
-          } else if (addition) {
-            const base = Number(get(item, addition[1] as string, names)?.N ?? "0")
-            set(
-              item,
-              path as string,
-              { N: String(base + Number(values[addition[2] as string]?.N ?? "0")) },
-              names,
-            )
-          } else {
-            const value = values[raw.trim()]
-            if (!value) throw new SyntaxError(`Unknown value ${raw}`)
-            set(item, path as string, value, names)
-          }
-        }
-      else if (kind === "ADD")
+      if (kind === "SET") {
+        const assignments = splitTop(body).map((assignment) => {
+          const split = assignment.indexOf("=")
+          if (split < 0) throw updateSyntax(assignment)
+          const value = parseSetValue(assignment.slice(split + 1))
+          return { path: assignment.slice(0, split).trim(), value }
+        })
+        for (const { path, value } of assignments)
+          set(item, path, evaluateSetValue(value, original, names, values), names)
+      } else if (kind === "ADD")
         for (const addition of splitTop(body)) {
           const [path, token] = addition.split(/\s+/)
           const value = values[token as string]
           const prior = get(item, path as string, names)
-          if (value?.N !== undefined)
+          if (value?.N !== undefined) {
+            if (prior && prior.N === undefined) throw new SyntaxError(OPERAND_TYPE)
             set(item, path as string, { N: String(Number(prior?.N ?? 0) + Number(value.N)) }, names)
-          else if (value?.SS)
-            set(
-              item,
-              path as string,
-              { SS: [...new Set([...(prior?.SS ?? []), ...value.SS])] },
-              names,
-            )
-          else throw new SyntaxError("ADD supports numbers and string sets")
+            continue
+          }
+          const type = setType(value)
+          if (!type) throw new SyntaxError(`${OPERAND_TYPE}; ADD supports numbers and sets`)
+          if (prior && prior[type] === undefined) throw new SyntaxError(OPERAND_TYPE)
+          const merged = [...(prior?.[type] ?? [])]
+          const seen = new Set(merged.map((entry) => setEntryKey(type, entry)))
+          for (const entry of value?.[type] ?? [])
+            if (!seen.has(setEntryKey(type, entry))) {
+              seen.add(setEntryKey(type, entry))
+              merged.push(entry)
+            }
+          set(item, path as string, { [type]: merged }, names)
         }
       else if (kind === "REMOVE") for (const path of splitTop(body)) remove(item, path, names)
       else if (kind === "DELETE")
@@ -378,13 +444,15 @@ export class DynamoAPI {
           const [path, token] = deletion.split(/\s+/)
           const value = values[token as string]
           const prior = get(item, path as string, names)
-          if (value?.SS && prior?.SS)
-            set(
-              item,
-              path as string,
-              { SS: prior.SS.filter((entry) => !value.SS?.includes(entry)) },
-              names,
-            )
+          const type = setType(value)
+          if (!type) throw new SyntaxError(`${OPERAND_TYPE}; DELETE supports only sets`)
+          if (!prior) continue
+          if (prior[type] === undefined) throw new SyntaxError(OPERAND_TYPE)
+          const dropped = new Set(value?.[type]?.map((entry) => setEntryKey(type, entry)))
+          const kept = prior[type]?.filter((entry) => !dropped.has(setEntryKey(type, entry))) ?? []
+          // DynamoDB has no empty sets: deleting the last element removes the attribute.
+          if (kept.length > 0) set(item, path as string, { [type]: kept }, names)
+          else remove(item, path as string, names)
         }
     }
   }
@@ -396,27 +464,28 @@ export class DynamoAPI {
         ? table.globalSecondaryIndexes.find((value) => value.IndexName === input.IndexName)
         : undefined
     const schema = index?.KeySchema ?? table.keySchema
-    let rows = this.rows(table).sort((a, b) => this.compare(table, a.value, b.value, schema))
+    // A GSI is sparse: an item missing any of the index key attributes is not in the index.
+    let rows = this.rows(table)
+      .filter((row) => schema.every(({ AttributeName }) => row.value[AttributeName] !== undefined))
+      .sort((a, b) => this.compare(table, a.value, b.value, schema))
     if (query && input.ScanIndexForward === false) rows.reverse()
     if (input.ExclusiveStartKey && typeof input.ExclusiveStartKey === "object") {
       const start = this.key(table, input.ExclusiveStartKey as Item)
       const found = rows.findIndex((row) => row.key === start)
       if (found >= 0) rows = rows.slice(found + 1)
     }
-    const matching = rows.filter(
-      (row) => !query || condition(input.KeyConditionExpression, row.value, names, values),
-    )
+    const keyCondition = compileCondition(query ? input.KeyConditionExpression : "", names, values)
+    const filter = compileCondition(input.FilterExpression, names, values)
+    const matching = rows.filter((row) => keyCondition(row.value))
     const limit = input.Limit === undefined ? matching.length : Math.max(0, Number(input.Limit))
     const evaluated = matching.slice(0, limit)
-    const filtered = evaluated.filter((row) =>
-      condition(input.FilterExpression, row.value, names, values),
-    )
+    const filtered = evaluated.filter((row) => filter(row.value))
     const last = matching.length > evaluated.length ? evaluated.at(-1) : undefined
     return {
       Items: filtered.map((row) => project(row.value, input.ProjectionExpression, names)),
       Count: filtered.length,
       ScannedCount: evaluated.length,
-      ...(last ? { LastEvaluatedKey: this.keyItem(table, last.value) } : {}),
+      ...(last ? { LastEvaluatedKey: this.lastKey(table, last.value, schema) } : {}),
     }
   }
   async fetch(request: Request): Promise<Response> {
@@ -529,7 +598,9 @@ export class DynamoAPI {
         ...index,
         IndexArn: `${table.arn}/index/${index.IndexName}`,
         IndexStatus: "ACTIVE",
-        ItemCount: this.rows(table).length,
+        ItemCount: this.rows(table).filter((row) =>
+          index.KeySchema.every(({ AttributeName }) => row.value[AttributeName] !== undefined),
+        ).length,
         IndexSizeBytes: 0,
       })),
     }
@@ -578,6 +649,9 @@ export class DynamoAPI {
   }
   private transactWrite(input: Input) {
     const actions = (input.TransactItems as Input[]) ?? []
+    const targeted = new Set<string>()
+    // One reason per action, in request order: "None" when its condition held.
+    const reasons: { Code: string; Message?: string; Item?: Item }[] = []
     for (const action of actions) {
       const request = (action.Put ??
         action.Update ??
@@ -586,13 +660,34 @@ export class DynamoAPI {
       const table = this.table(request.TableName)
       if (!table) return this.error("ResourceNotFoundException", "Requested resource not found")
       const keyItem = (request.Item ?? request.Key) as Item
-      const prior = this.state.items.get(`${table.name}:${this.key(table, keyItem)}`)?.value
-      if (!condition(request.ConditionExpression, prior, this.names(request), this.values(request)))
+      const id = `${table.name}:${this.key(table, keyItem)}`
+      if (targeted.has(id))
         return this.error(
-          "TransactionCanceledException",
-          "Transaction cancelled, please refer cancellation reasons for specific reasons [ConditionalCheckFailed]",
+          "ValidationException",
+          "Transaction request cannot include multiple operations on one item",
         )
+      targeted.add(id)
+      const prior = this.state.items.get(id)?.value
+      if (condition(request.ConditionExpression, prior, this.names(request), this.values(request)))
+        reasons.push({ Code: "None" })
+      else
+        reasons.push({
+          Code: "ConditionalCheckFailed",
+          Message: "The conditional request failed",
+          ...(request.ReturnValuesOnConditionCheckFailure === "ALL_OLD" && prior
+            ? { Item: clone(prior) }
+            : {}),
+        })
     }
+    if (reasons.some((reason) => reason.Code !== "None"))
+      return this.response(
+        {
+          __type: "com.amazonaws.dynamodb.v20120810#TransactionCanceledException",
+          message: `Transaction cancelled, please refer cancellation reasons for specific reasons [${reasons.map((reason) => reason.Code).join(", ")}]`,
+          CancellationReasons: reasons,
+        },
+        400,
+      )
     for (const action of actions) {
       if (action.Put) {
         const request = action.Put as Input

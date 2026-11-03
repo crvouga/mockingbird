@@ -113,6 +113,12 @@ export class TransactionManager {
     }
   }
 
+  /** Whether `name` is still on the savepoint stack of the open transaction. */
+  hasSavepoint(name: string): boolean {
+    const normalized = name.toLowerCase();
+    return this.inTransaction && this.savepoints.some((savepoint) => savepoint.name.toLowerCase() === normalized);
+  }
+
   private findSavepoint(name: string): number {
     const normalized = name.toLowerCase();
     for (let index = this.savepoints.length - 1; index >= 0; index--) {

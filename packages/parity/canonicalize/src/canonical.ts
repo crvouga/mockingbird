@@ -46,21 +46,6 @@ export const volatileToken = (kind: string, value: unknown) =>
   kind === "opaque" ? `volatile:${kind}` : `volatile:${kind}:${jsonTypeOf(value)}`
 export const unknownToken = (type: string, id: string) => `unknown:${type}:${id}`
 
-const setAt = (root: unknown, path: JsonPath, value: unknown): unknown => {
-  if (path.length === 0) return value
-  const [head, ...rest] = path
-  if (Array.isArray(root) && typeof head === "number") {
-    const copy = [...root]
-    copy[head] = setAt(root[head], rest, value)
-    return copy
-  }
-  if (typeof root === "object" && root !== null && typeof head === "string") {
-    const record = root as Record<string, unknown>
-    return { ...record, [head]: setAt(record[head], rest, value) }
-  }
-  return root
-}
-
 const getAt = (root: unknown, path: JsonPath): unknown => {
   let current = root
   for (const segment of path) {
@@ -74,26 +59,26 @@ const getAt = (root: unknown, path: JsonPath): unknown => {
 
 /**
  * Replace every known concrete id of `side` inside a string with its symbolic token.
- * Longest ids first so an id that is a prefix of another never clobbers it.
+ * Longest ids first so an id that is a prefix of another never clobbers it. Emitted tokens are
+ * never scanned again: otherwise a short id such as `"1"` would rewrite the handle inside
+ * `resource:customer:1`, and two different resources could canonicalize to the same text.
  */
 export const replaceKnownIds = (text: string, table: ResourceTable, side: Side): string => {
-  let out = text
+  let segments: Array<{ text: string; token: boolean }> = [{ text, token: false }]
   for (const { id, resource } of table.knownIds(side)) {
     if (id.length === 0) continue
-    out = out.split(id).join(canonicalToken(resource.type, resource.handle))
+    const token = canonicalToken(resource.type, resource.handle)
+    segments = segments.flatMap((segment) => {
+      if (segment.token || !segment.text.includes(id)) return [segment]
+      return segment.text
+        .split(id)
+        .flatMap((part, i) => [
+          ...(i > 0 ? [{ text: token, token: true }] : []),
+          { text: part, token: false },
+        ])
+    })
   }
-  return out
-}
-
-const mapStrings = (value: unknown, f: (s: string) => string): unknown => {
-  if (typeof value === "string") return f(value)
-  if (Array.isArray(value)) return value.map((item) => mapStrings(item, f))
-  if (typeof value === "object" && value !== null) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [f(key), mapStrings(item, f)]),
-    )
-  }
-  return value
+  return segments.map((segment) => segment.text).join("")
 }
 
 /**
@@ -102,6 +87,7 @@ const mapStrings = (value: unknown, f: (s: string) => string): unknown => {
  * 2. declared volatile locations become `volatile:<kind>:<json type>`
  * 3. every remaining occurrence of a known id (inside messages, urls, keys…) becomes its token
  *
+ * Tokens from steps 1 and 2 are final: step 3 never rewrites them.
  * Nothing else is touched: omitted vs null, ordering, numeric vs string all survive.
  */
 export const canonicalizeValue = (value: unknown, options: CanonicalizeOptions): unknown => {
@@ -109,24 +95,38 @@ export const canonicalizeValue = (value: unknown, options: CanonicalizeOptions):
     ? annotateValue(options.document, options.schema, value)
     : []
   const seen = new Set<string>()
-  let out = value
+  const replaceIds = (s: string) => replaceKnownIds(s, options.table, options.side)
+  const replacements = new Map<string, string>()
   for (const annotation of annotations) {
     const key = pathKey(annotation.path)
     if (seen.has(key)) continue
     seen.add(key)
-    const current = getAt(out, annotation.path)
+    const current = getAt(value, annotation.path)
     if (annotation.kind === "identity") {
       if (typeof current !== "string") continue
       const resource = options.table.lookup(options.side, annotation.type, current)
-      const replacement = resource
-        ? canonicalToken(resource.type, resource.handle)
-        : unknownToken(annotation.type, current)
-      out = setAt(out, annotation.path, replacement)
-    } else {
-      out = setAt(out, annotation.path, volatileToken(annotation.volatile, current))
-    }
+      replacements.set(
+        key,
+        resource
+          ? canonicalToken(resource.type, resource.handle)
+          : unknownToken(annotation.type, replaceIds(current)),
+      )
+    } else replacements.set(key, volatileToken(annotation.volatile, current))
   }
-  return mapStrings(out, (s) => replaceKnownIds(s, options.table, options.side))
+  const walk = (node: unknown, path: JsonPath): unknown => {
+    const replacement = replacements.size > 0 ? replacements.get(pathKey(path)) : undefined
+    if (replacement !== undefined) return replacement
+    if (typeof node === "string") return replaceIds(node)
+    if (Array.isArray(node)) return node.map((item, index) => walk(item, [...path, index]))
+    if (typeof node === "object" && node !== null) {
+      // `Object.fromEntries` keeps keys like `__proto__` as own properties.
+      return Object.fromEntries(
+        Object.entries(node).map(([key, item]) => [replaceIds(key), walk(item, [...path, key])]),
+      )
+    }
+    return node
+  }
+  return walk(value, [])
 }
 
 const canonicalizeBody = (body: DecodedBody, options: CanonicalizeOptions): CanonicalBody => {

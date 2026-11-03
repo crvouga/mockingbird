@@ -76,15 +76,60 @@ const integerArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
   return base
 }
 
+/** Strip float noise (`3 * 0.1` → `0.3`) so generated decimals look like the ones people write. */
+const tidy = (n: number, digits: number) =>
+  Number.isInteger(n) ? n : Number(n.toPrecision(digits))
+
 const numberArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
-  const min =
-    schema.minimum ??
-    (schema.exclusiveMinimum !== undefined ? schema.exclusiveMinimum : -DEFAULT_INTEGER_BOUND)
-  const max =
-    schema.maximum ??
-    (schema.exclusiveMaximum !== undefined ? schema.exclusiveMaximum : DEFAULT_INTEGER_BOUND)
-  const minExcluded = schema.minimum === undefined && schema.exclusiveMinimum !== undefined
-  const maxExcluded = schema.maximum === undefined && schema.exclusiveMaximum !== undefined
+  const { minimum, maximum, exclusiveMinimum, exclusiveMaximum, multipleOf } = schema
+  // Both keywords apply when both are present; the tighter one wins.
+  const minExcluded =
+    exclusiveMinimum !== undefined && (minimum === undefined || exclusiveMinimum >= minimum)
+  const maxExcluded =
+    exclusiveMaximum !== undefined && (maximum === undefined || exclusiveMaximum <= maximum)
+  const min = minExcluded ? (exclusiveMinimum as number) : (minimum ?? -DEFAULT_INTEGER_BOUND)
+  const max = maxExcluded ? (exclusiveMaximum as number) : (maximum ?? DEFAULT_INTEGER_BOUND)
+  const hasMin = minimum !== undefined || exclusiveMinimum !== undefined
+  const hasMax = maximum !== undefined || exclusiveMaximum !== undefined
+  /** Against the declared bounds only; the default ±1e6 range is a generation choice. */
+  const inRange = (n: number) =>
+    (!hasMin || (minExcluded ? n > min : n >= min)) &&
+    (!hasMax || (maxExcluded ? n < max : n <= max))
+  const unsatisfiable = () =>
+    new Error(`unsatisfiable schema: no number satisfies ${JSON.stringify(schema)}`)
+  if (multipleOf !== undefined && multipleOf > 0) {
+    // Generate the multiplier k, never the value: values are k * multipleOf by construction.
+    // An undeclared bound limits k rather than the value, so `value / multipleOf` stays precise.
+    const lowK = hasMin ? Math.ceil(min / multipleOf) : undefined
+    const highK = hasMax ? Math.floor(max / multipleOf) : undefined
+    let low = Math.max(
+      lowK ?? (highK ?? DEFAULT_INTEGER_BOUND) - 2 * DEFAULT_INTEGER_BOUND,
+      -SAFE_INTEGER_BOUND,
+    )
+    let high = Math.min(
+      highK ?? (lowK ?? -DEFAULT_INTEGER_BOUND) + 2 * DEFAULT_INTEGER_BOUND,
+      SAFE_INTEGER_BOUND,
+    )
+    const at = (k: number) => {
+      const exact = k * multipleOf
+      const tidied = tidy(exact, 15)
+      // Prefer the tidy decimal unless float division would no longer read it as a multiple.
+      return Math.abs(tidied / multipleOf - k) <= 1e-9 ? tidied : exact
+    }
+    while (low <= high && !inRange(at(low))) low++
+    while (high >= low && !inRange(at(high))) high--
+    if (low > high) throw unsatisfiable()
+    return fc
+      .oneof(
+        { arbitrary: fc.integer({ min: low, max: high }), weight: 3 },
+        {
+          arbitrary: fc.constantFrom(...uniq([low, high, Math.min(Math.max(0, low), high)])),
+          weight: 1,
+        },
+      )
+      .map(at)
+  }
+  if (min > max || (min === max && (minExcluded || maxExcluded))) throw unsatisfiable()
   const doubles = fc.double({
     min,
     max,
@@ -94,9 +139,7 @@ const numberArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
     noDefaultInfinity: true,
   })
   const edges = uniq(
-    [schema.minimum, schema.maximum, 0].filter(
-      (n): n is number => n !== undefined && n >= min && n <= max,
-    ),
+    [minimum, maximum, 0].filter((n): n is number => n !== undefined && inRange(n)),
   )
   const arbitrary =
     edges.length > 0
@@ -105,7 +148,11 @@ const numberArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
           { arbitrary: fc.constantFrom(...edges), weight: 1 },
         )
       : doubles
-  return arbitrary.map((n) => (Number.isInteger(n) ? n : Number(n.toPrecision(12))))
+  // Rounding can land on an exclusive bound (0.1000000000001 → 0.1); keep the raw double then.
+  return arbitrary.map((n) => {
+    const rounded = tidy(n, 12)
+    return inRange(rounded) ? rounded : n
+  })
 }
 
 const pad = (n: number, width = 2) => String(n).padStart(width, "0")

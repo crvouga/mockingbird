@@ -388,6 +388,76 @@ describe("parity runner", () => {
     expect((failure as Error).message).toContain("webhook: event count real=0 mock=1")
     expect(difference).toBe("event count real=0 mock=1")
   })
+  // Each side emits one `customer.created` event per created customer, carrying its own id.
+  const webhookWalk = async (mockEvent: (customer: Record<string, unknown>) => unknown) => {
+    const realEvents: unknown[] = []
+    const mockEvents: unknown[] = []
+    const recording =
+      (
+        server: { fetch: (request: Request) => Promise<Response> },
+        emit: (c: Record<string, unknown>) => void,
+      ) =>
+      async (request: Request) => {
+        const response = await server.fetch(request)
+        if (request.method === "POST" && response.status === 200)
+          emit((await response.clone().json()) as Record<string, unknown>)
+        return response
+      }
+    const real = referenceServer("R", "none", () => 1_700_000_000_000)
+    return parity({
+      provider: "reference",
+      spec,
+      seed: 7,
+      numRuns: 1,
+      maxCommands: 3,
+      only: ["customers.create"],
+      invalidProbability: 0,
+      shrink: false,
+      latencyToleranceMs: 1_000,
+      log: () => {},
+      real: {
+        baseUrl: "https://reference.local",
+        allowedHosts: ["reference.local"],
+        fetch: recording(real, (customer) =>
+          realEvents.push({ type: "customer.created", data: { object: { id: customer.id } } }),
+        ),
+      },
+      mock: {
+        create: () => ({
+          fetch: recording(
+            referenceServer("M", "none", () => 1_700_000_000_000),
+            (customer) => mockEvents.push(mockEvent(customer)),
+          ),
+        }),
+      },
+      webhooks: { collectMock: async () => mockEvents, collectReal: async () => realEvents },
+    }).then(
+      () => undefined,
+      (error: unknown) => error,
+    )
+  }
+
+  test("default webhook comparison canonicalizes known ids and ignores key order", async () => {
+    // Same events, the mock's ids and key order differ: a match.
+    const failure = await webhookWalk((customer) => ({
+      data: { object: { id: customer.id } },
+      type: "customer.created",
+    }))
+    expect(failure).toBeUndefined()
+  })
+
+  test("default webhook comparison still reports a diverging event", async () => {
+    const failure = await webhookWalk((customer) => ({
+      type: "customer.updated",
+      data: { object: { id: customer.id } },
+    }))
+    expect(failure).toBeInstanceOf(ParityError)
+    expect((failure as ParityError).details.kind).toBe("webhook-mismatch")
+    expect((failure as Error).message).toContain(
+      'event[0] $.type: real="customer.created" mock="customer.updated"',
+    )
+  })
+
   test("a delete marks the resource it actually deleted, even when it may target deleted refs", async () => {
     // With deletedRefProbability > 0 a delete may resolve to an already-deleted customer. The
     // table must then mark that same customer, never a different, still-live one.

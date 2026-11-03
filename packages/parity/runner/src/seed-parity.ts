@@ -36,6 +36,7 @@ import {
   type WalkWebhookEvents,
 } from "./parity.js"
 import { ParityError } from "./report.js"
+import { compareWebhookEvents, webhookEventNames } from "./webhooks.js"
 
 export type SeedCacheEntry = {
   status: number
@@ -178,16 +179,6 @@ const throttled = (
     return fetchImpl(request)
   }
 }
-
-const webhookPayload = (events: readonly unknown[]) => JSON.stringify(events)
-
-const webhookEventNames = (events: readonly unknown[]) =>
-  events.map((event) => {
-    if (typeof event !== "object" || event === null || Array.isArray(event)) return "unknown"
-    const eventType =
-      (event as Record<string, unknown>).event_type ?? (event as Record<string, unknown>).type
-    return typeof eventType === "string" ? eventType : "unknown"
-  })
 
 const shouldRecordObservation = (method: string, operationId: string, path: string) => {
   if (method.toUpperCase() === "GET") return true
@@ -402,11 +393,7 @@ export const seedParity = async (options: SeedParityOptions): Promise<ParityRepo
       )
       const firstDifference = options.webhooks.compare
         ? options.webhooks.compare(realEvents, mockEvents, args.table)
-        : webhookPayload(realEvents) === webhookPayload(mockEvents)
-          ? undefined
-          : realEvents.length !== mockEvents.length
-            ? `event count real=${realEvents.length} mock=${mockEvents.length}`
-            : `event payload/order differs at index ${realEvents.findIndex((event, index) => JSON.stringify(event) !== JSON.stringify(mockEvents[index]))}`
+        : compareWebhookEvents(realEvents, mockEvents, args.table)
       if (firstDifference !== undefined) {
         webhookFailure = new ParityError(
           {
