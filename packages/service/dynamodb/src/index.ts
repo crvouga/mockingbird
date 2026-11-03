@@ -205,6 +205,13 @@ export class DynamoAPI {
       ]),
     )
   }
+  /** The table key plus, when reading an index, the index key: what AWS returns as a cursor. */
+  private lastKey(table: DynamoTable, item: Item, schema: KeySchemaElement[]) {
+    const key = this.keyItem(table, item)
+    for (const { AttributeName } of schema)
+      key[AttributeName] = clone(item[AttributeName] as AttributeValue)
+    return key
+  }
   private rows(table: DynamoTable) {
     this.expire(table)
     return this.state.items
@@ -355,7 +362,10 @@ export class DynamoAPI {
         ? table.globalSecondaryIndexes.find((value) => value.IndexName === input.IndexName)
         : undefined
     const schema = index?.KeySchema ?? table.keySchema
-    let rows = this.rows(table).sort((a, b) => this.compare(table, a.value, b.value, schema))
+    // A GSI is sparse: an item missing any of the index key attributes is not in the index.
+    let rows = this.rows(table)
+      .filter((row) => schema.every(({ AttributeName }) => row.value[AttributeName] !== undefined))
+      .sort((a, b) => this.compare(table, a.value, b.value, schema))
     if (query && input.ScanIndexForward === false) rows.reverse()
     if (input.ExclusiveStartKey && typeof input.ExclusiveStartKey === "object") {
       const start = this.key(table, input.ExclusiveStartKey as Item)
@@ -373,7 +383,7 @@ export class DynamoAPI {
       Items: filtered.map((row) => project(row.value, input.ProjectionExpression, names)),
       Count: filtered.length,
       ScannedCount: evaluated.length,
-      ...(last ? { LastEvaluatedKey: this.keyItem(table, last.value) } : {}),
+      ...(last ? { LastEvaluatedKey: this.lastKey(table, last.value, schema) } : {}),
     }
   }
   async fetch(request: Request): Promise<Response> {
@@ -486,7 +496,9 @@ export class DynamoAPI {
         ...index,
         IndexArn: `${table.arn}/index/${index.IndexName}`,
         IndexStatus: "ACTIVE",
-        ItemCount: this.rows(table).length,
+        ItemCount: this.rows(table).filter((row) =>
+          index.KeySchema.every(({ AttributeName }) => row.value[AttributeName] !== undefined),
+        ).length,
         IndexSizeBytes: 0,
       })),
     }
