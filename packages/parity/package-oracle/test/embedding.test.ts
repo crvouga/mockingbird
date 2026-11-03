@@ -12,6 +12,7 @@ import { createRuntime as google } from "../../../service/google/src/index.js"
 import { serveTarget as googleTarget } from "../../../service/google/src/server.js"
 import { createRuntime as stripe } from "../../../service/stripe/src/index.js"
 import { serveTarget as vercelTarget } from "../../../service/vercel/src/server.js"
+import type { NativeProvider } from "./targets.js"
 
 test("mounted Google OAuth preserves discovery, namespace forms, callbacks, JWKS and native controls", async () => {
   const clock = createClock(() => 1700000000000)
@@ -240,7 +241,7 @@ test("native GitHub fixture preparation returns only generated App keys and reta
   expect((await app()).status).toBe(200)
 })
 
-for (const name of ["google", "apple", "microsoft", "okta", "clerk"] as const) {
+for (const name of ["google", "apple", "microsoft", "okta", "clerk"] satisfies NativeProvider[]) {
   test(`${name}: OIDC keys are isolated and snapshots restore the identity in a separate process`, async () => {
     const modulePath = fileURLToPath(
       new URL(`../../../service/${name}/src/index.ts`, import.meta.url),

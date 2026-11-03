@@ -292,6 +292,7 @@
       "devDependencies": {
         "@aws-sdk/client-s3": "3.1031.0",
         "@aws-sdk/s3-presigned-post": "3.1031.0",
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
         "@crvouga/mockingbird-http-provider": "workspace:*",
         "@crvouga/mockingbird-openapi": "workspace:*",
         "@crvouga/mockingbird-openapi-metadata": "workspace:*",

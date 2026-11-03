@@ -8,7 +8,8 @@
  *   3. a workspace package never depends on itself,
  *   4. every module import in a package's code is declared in its package.json
  *      (dependencies + peerDependencies for shipped src; plus devDependencies
- *      for tests / scripts / benchmarks),
+ *      for tests / scripts / benchmarks), and a relative import that reaches
+ *      into another workspace package declares that package too,
  *   5. a published package never needs a private one at runtime (npm consumers
  *      could not install it),
  *   6. every workspace package is named `@crvouga/mockingbird` or
@@ -21,7 +22,7 @@
  *   bun run check:boundaries
  */
 import { existsSync, readdirSync } from "node:fs"
-import { join, relative } from "node:path"
+import { dirname, join, relative } from "node:path"
 
 const root = join(import.meta.dir, "..")
 const errors: string[] = []
@@ -326,6 +327,19 @@ async function resolveOwner(file: string): Promise<Pkg | null> {
   return null
 }
 
+/** Whether `pkg` reaches `name` through any workspace dependency, dev ones included. */
+function dependsOn(pkg: Pkg, name: string, seen = new Set<string>()): boolean {
+  for (const dep of [...pkg.dependencies, ...pkg.devDependencies, ...pkg.peerDependencies]) {
+    if (dep === name) return true
+    const next = packages.get(dep)
+    if (next && !seen.has(dep)) {
+      seen.add(dep)
+      if (dependsOn(next, name, seen)) return true
+    }
+  }
+  return false
+}
+
 const files: string[] = []
 const glob = new Bun.Glob("packages/**/*.ts")
 for (const entry of glob.scanSync({ cwd: root })) {
@@ -371,6 +385,26 @@ for (const file of files) {
   }
 
   for (const specifier of findModuleSpecifiers(text)) {
+    if (specifier.startsWith("./") || specifier.startsWith("../")) {
+      // A relative path into another workspace package bypasses its exports, and only a declared
+      // dependency makes turbo and the CI plan rerun this package when that one changes. The
+      // exception is a package that already depends on this one, where declaring it is a cycle
+      // (service-sqlite inlines service core this way).
+      const target = await resolveOwner(join(dirname(file), specifier))
+      if (
+        target &&
+        target !== owner &&
+        !owner.dependencies.has(target.name) &&
+        !owner.devDependencies.has(target.name) &&
+        !owner.peerDependencies.has(target.name) &&
+        !dependsOn(target, owner.name)
+      ) {
+        fail(
+          `${rel} imports "${specifier}" from ${target.name}, which is not in ${owner.name} dependencies, devDependencies, or peerDependencies`,
+        )
+      }
+      continue
+    }
     if (!VALID_SPECIFIER.test(specifier)) continue
     if (specifier === owner.name) {
       fail(`${rel} self-imports ${owner.name}`)
