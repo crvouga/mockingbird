@@ -276,3 +276,141 @@ paths:
                   isClearState: { type: boolean }
                   reevaluationIntervalDays: { type: ["integer", "null"] }
         "404": { description: Account not found }
+  /1.0/kb/security/permissions:
+    get:
+      operationId: GetUserPermissions
+      description: Global permissions for the configured emulator administrator. Best guess, not oracle-verified; returns the default Shiro root permission '*:*'.
+      x-mockingbird: { supported: true, reason: "Best guess, not oracle-verified; see README for contract and limits", parity: { enabled: true, safe: true } }
+      responses:
+        "200":
+          description: Permission strings; Basic authentication only, no tenant headers
+          content:
+            application/json:
+              schema: { type: array, items: { type: string } }
+        "401": { description: Invalid or missing Basic credentials }
+  /1.0/kb/accounts/{accountId}:
+    parameters: [{ name: accountId, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: UpdateAccount
+      description: Partial name/email update. Best guess, not oracle-verified; changed immutable fields and other update fields are rejected without mutation.
+      x-mockingbird: { supported: true, reason: "Best guess, not oracle-verified; see README for contract and limits", parity: { enabled: true, safe: false } }
+      parameters: [{ name: treatNullAsReset, in: query, schema: { type: boolean, default: false } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: [string, "null"] }
+                email: { type: [string, "null"] }
+              additionalProperties: true
+      responses:
+        "204": { description: Account updated }
+        "400": { description: Invalid immutable field change or unsupported update field }
+        "404": { description: Account not found }
+  /1.0/kb/subscriptions/{subscriptionId}/block:
+    parameters: [{ name: subscriptionId, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: AddSubscriptionBlockingState
+      description: Best guess, not oracle-verified; billing-only blocking states, with entitlement/change blocking explicitly unsupported.
+      x-mockingbird: { supported: true, reason: "Best guess, not oracle-verified; see README for contract and limits", parity: { enabled: true, safe: false } }
+      parameters: [{ name: requestedDate, in: query, schema: { type: string, format: date } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stateName, service, isBlockBilling]
+              properties:
+                stateName: { type: string }
+                service: { type: string }
+                isBlockBilling: { type: boolean }
+                isBlockChange: { type: boolean }
+                isBlockEntitlement: { type: boolean }
+      responses:
+        "201": { description: Blocking state recorded }
+        "400": { description: Invalid or unsupported blocking state }
+        "404": { description: Subscription not found }
+  /1.0/kb/subscriptions/{subscriptionId}/bcd:
+    parameters: [{ name: subscriptionId, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: UpdateSubscriptionBCD
+      description: Best guess, not oracle-verified; monthly billing uses the selected calendar day with full charges and no proration.
+      x-mockingbird: { supported: true, reason: "Best guess, not oracle-verified; see README for contract and limits", parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: effectiveFromDate, in: query, schema: { type: string, format: date } }
+        - { name: forceNewBcdWithPastEffectiveDate, in: query, schema: { type: boolean } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [billCycleDayLocal]
+              properties:
+                subscriptionId: { type: string }
+                billCycleDayLocal: { type: integer, minimum: 1, maximum: 31 }
+      responses:
+        "204": { description: Billing day scheduled }
+        "400": { description: Invalid or unsupported billing day update }
+        "404": { description: Subscription not found }
+  /1.0/kb/invoices/dryRun:
+    post:
+      operationId: GenerateDryRunInvoice
+      description: Best guess, not oracle-verified; TARGET_DATE previews without persisting invoices or advancing billing state.
+      x-mockingbird: { supported: true, reason: "Best guess, not oracle-verified; see README for contract and limits", parity: { enabled: true, safe: true } }
+      parameters:
+        - { name: accountId, in: query, required: true, schema: { type: string } }
+        - { name: targetDate, in: query, schema: { type: string, format: date } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dryRunType: { type: string, enum: [TARGET_DATE] }
+      responses:
+        "200": { description: Preview invoice with subscription items }
+        "204": { description: Nothing to invoice }
+        "400": { description: Invalid date or unsupported dry-run type/action }
+        "404": { description: Account not found }
+  /1.0/kb/invoices/{invoiceId}:
+    parameters: [{ name: invoiceId, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: AdjustInvoiceItem
+      description: Best guess, not oracle-verified; adds a negative ITEM_ADJ linked to the original item, bounded by its remaining adjustable amount.
+      x-mockingbird: { supported: true, reason: "Best guess, not oracle-verified; see README for contract and limits", parity: { enabled: true, safe: false } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [accountId, invoiceItemId]
+              properties:
+                accountId: { type: string }
+                invoiceItemId: { type: string }
+                amount: { type: number, exclusiveMinimum: 0 }
+                currency: { type: string }
+                description: { type: string }
+      responses:
+        "201": { description: Item adjusted; Location points to invoice }
+        "400": { description: Invalid item, amount, account or currency }
+        "404": { description: Invoice not found }
+  /1.0/kb/accounts/{accountId}/invoicePayments:
+    parameters: [{ name: accountId, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: PayAccountInvoices
+      description: Best guess, not oracle-verified; pays full outstanding balances and emits invoice payment events. Partial paymentAmount and pluginProperty options are explicitly unsupported.
+      x-mockingbird: { supported: true, reason: "Best guess, not oracle-verified; full balances only; paymentAmount and pluginProperty explicitly unsupported", parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: targetDate, in: query, schema: { type: string, format: date } }
+        - { name: externalPayment, in: query, schema: { type: boolean } }
+        - { name: paymentMethodId, in: query, schema: { type: string } }
+      responses:
+        "201": { description: Payments attempted; Location points to account invoices }
+        "204": { description: No outstanding invoices }
+        "400": { description: Invalid payment method, date, or unsupported payment options }
+        "404": { description: Account not found }

@@ -1,7 +1,7 @@
 import type { DecodedBody } from "@crvouga/mockingbird-http-codec"
 import { canonicalToken, type ResourceTable, type Side } from "@crvouga/mockingbird-model"
 import type { OpenAPIDocument, SchemaObject } from "@crvouga/mockingbird-openapi"
-import { jsonTypeOf } from "@crvouga/mockingbird-openapi"
+import { jsonTypeOf, resolveSchema } from "@crvouga/mockingbird-openapi"
 import {
   type Annotation,
   annotateValue,
@@ -113,20 +113,64 @@ export const canonicalizeValue = (value: unknown, options: CanonicalizeOptions):
       )
     } else replacements.set(key, volatileToken(annotation.volatile, current))
   }
-  const walk = (node: unknown, path: JsonPath): unknown => {
+  // Property names declared by the response schema describe its structure, not resource IDs.
+  // A concrete ID such as "i" must not rewrite "id" (or "a" rewrite "name").
+  // Expand composition so this also holds for referenced, nested and union schemas.
+  const expand = (schemas: SchemaObject[], depth = 0): SchemaObject[] => {
+    if (depth > 64) return []
+    return schemas.flatMap((schema) => {
+      const resolved = resolveSchema(options.document, schema)
+      return [
+        resolved,
+        ...expand(
+          [...(resolved.allOf ?? []), ...(resolved.oneOf ?? []), ...(resolved.anyOf ?? [])],
+          depth + 1,
+        ),
+      ]
+    })
+  }
+  const walk = (node: unknown, path: JsonPath, schemas: SchemaObject[]): unknown => {
     const replacement = replacements.size > 0 ? replacements.get(pathKey(path)) : undefined
     if (replacement !== undefined) return replacement
     if (typeof node === "string") return replaceIds(node)
-    if (Array.isArray(node)) return node.map((item, index) => walk(item, [...path, index]))
+    const resolved = expand(schemas)
+    if (Array.isArray(node))
+      return node.map((item, index) =>
+        walk(
+          item,
+          [...path, index],
+          resolved.flatMap((schema) => {
+            const itemSchema = schema.prefixItems?.[index] ?? schema.items
+            return itemSchema ? [itemSchema] : []
+          }),
+        ),
+      )
     if (typeof node === "object" && node !== null) {
       // `Object.fromEntries` keeps keys like `__proto__` as own properties.
       return Object.fromEntries(
-        Object.entries(node).map(([key, item]) => [replaceIds(key), walk(item, [...path, key])]),
+        Object.entries(node).map(([key, item]) => {
+          const properties = resolved.flatMap((schema) => {
+            const property = schema.properties?.[key]
+            return property ? [property] : []
+          })
+          const children =
+            properties.length > 0
+              ? properties
+              : resolved.flatMap((schema) =>
+                  typeof schema.additionalProperties === "object"
+                    ? [schema.additionalProperties]
+                    : [],
+                )
+          return [
+            properties.length > 0 ? key : replaceIds(key),
+            walk(item, [...path, key], children),
+          ]
+        }),
       )
     }
     return node
   }
-  return walk(value, [])
+  return walk(value, [], options.schema ? [options.schema] : [])
 }
 
 const canonicalizeBody = (body: DecodedBody, options: CanonicalizeOptions): CanonicalBody => {

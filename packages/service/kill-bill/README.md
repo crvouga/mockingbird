@@ -83,3 +83,58 @@ and is not enabled by the current runner.
 ## Fidelity boundary
 
 The emulator targets deterministic adapter and lifecycle tests. It does not run Kill Bill plugins, tax engines, databases, notification workers, or production entitlement and dunning algorithms. Invoice payments with `externalPayment=true` are the exception: they are stored on the built-in `__EXTERNAL_PAYMENT__` method and are not sent to a gateway. `GET /1.0/kb/invoices/{invoiceId}/payments` returns those payments with `targetInvoiceId`. `GET /1.0/kb/invoicePayments/{paymentId}` returns that payment plus `targetInvoiceId`. `POST /1.0/kb/invoicePayments/{paymentId}/refunds` adds a `REFUND` on the same payment (Kill Bill 0.24.10). `externalPayment=true` on that refund records a separate credit payment instead, and leaves the original `refundedAmount` unchanged. `GET /1.0/kb/test/queues` only reports whether due notifications and bus events are still outstanding. A future-dated notification, including an end-of-term plan change whose effective date is still ahead of the clock, does not count. `GET /1.0/kb/accounts/{accountId}/overdue` uses a fixed Kill Bill 0.24.10 config: the synthetic clear state `__KILLBILL__CLEAR__OVERDUE_STATE__`, and state `OD1` once the earliest unpaid invoice (positive balance, not void) is at least one day old (`timeSinceEarliestUnpaidInvoiceEqualsOrExceeds`). Uploading a replacement overdue config is not modelled. A subscription `priceOverrides` entry whose `phaseName` is `{planName}-evergreen` (or whose `phaseType` is `EVERGREEN` when the name is omitted) replaces the catalog amount on the recurring invoice item, and `GET /1.0/kb/subscriptions/{id}` returns the overrides that were sent. Other catalog phases are not modelled.
+
+## Account, subscription and invoice compatibility additions
+
+The contracts below are **best guess, not oracle-verified**. They follow the official
+[account API](https://apidocs.killbill.io/account),
+[SubscriptionResource](https://github.com/killbill/killbill/blob/master/jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/SubscriptionResource.java),
+[InvoiceResource](https://github.com/killbill/killbill/blob/master/jaxrs/src/main/java/org/killbill/billing/jaxrs/resources/InvoiceResource.java),
+[Shiro administrator configuration](https://github.com/killbill/killbill/blob/master/profiles/killbill/src/main/resources/shiro.ini), and
+[external bus listener](https://github.com/killbill/killbill/blob/master/beatrix/src/main/java/org/killbill/billing/beatrix/extbus/BeatrixListener.java).
+The live parity runner exits 2 because it requires an isolated tenant and is not enabled;
+exact vendor errors, account-specific permissions, proration and billing transitions were not replayed.
+
+- `GET /1.0/kb/security/permissions` requires only the configured Basic credentials and returns
+  `["*:*"]`, modelling the default administrator. Missing or incorrect credentials return 401
+  `UNAUTHORIZED`. Custom roles and user-specific permission inventories are not modelled.
+- `PUT /1.0/kb/accounts/{accountId}` updates only the supplied `name` and `email` fields and
+  returns 204. Null leaves a value unchanged unless `treatNullAsReset=true`. Changed immutable
+  fields return 400 `INVALID_ACCOUNT`; other update fields return the emulator limitation
+  `UNSUPPORTED_ACCOUNT_UPDATE`. Rejected updates leave the account unchanged.
+- `POST /1.0/kb/subscriptions/{subscriptionId}/block` records a billing-only blocking state and
+  returns 201. The latest effective state per `service` applies; any blocking service pauses
+  billing. `requestedDate` optionally schedules a state. Subscription and bundle reads remain
+  available. Resume uses another state for the same service with `isBlockBilling: false`.
+  Entitlement or change blocking returns the explicit emulator limitation
+  `UNSUPPORTED_BLOCKING_STATE`. The next clock advancement after resume generates at most one
+  full overdue renewal; there is no multi-period catch-up or proration.
+- `PUT /1.0/kb/subscriptions/{subscriptionId}/bcd` accepts `billCycleDayLocal` from 1 through 31
+  and returns 204. Monthly plans only: from `effectiveFromDate` (today by default), the next
+  eligible due date moves to that calendar day on or after its existing date; earlier due
+  dates remain unchanged. Later renewals use calendar months, clamped to month-end. Retroactive
+  changes and non-monthly plans return `UNSUPPORTED_BCD`; transition proration is not modelled.
+  Only one BCD schedule change per subscription is modelled. A later request changing the day
+  or effective date returns `UNSUPPORTED_BCD` without mutation; repeating the same pair is
+  accepted. Multiple transitions require a new subscription fixture.
+- `POST /1.0/kb/invoices/dryRun?accountId=...&targetDate=YYYY-MM-DD` previews the next due
+  recurring charge per active, unblocked subscription without creating invoices, consuming IDs,
+  emitting events, charging payments or advancing billing state. It supports `TARGET_DATE` only;
+  other dry-run types/actions return an explicit error. A due charge returns 200 with invoice
+  `items`; nothing due returns 204. Preview IDs are synthetic. Multi-cycle catch-up, tax and
+  entitlement-change simulations are not modelled.
+- `POST /1.0/kb/invoices/{invoiceId}` adjusts the specified `invoiceItemId` by a positive
+  `amount`, or its remaining adjustable amount when omitted. It returns 201 and appends a
+  negative `ITEM_ADJ` linked to the original item, reducing invoice amount and balance. Invalid
+  items, amounts, accounts or currencies fail without changing the invoice. Exact error codes
+  and paid-invoice credit accounting are emulator approximations.
+- Successful and failed invoice purchases emit `INVOICE_PAYMENT_SUCCESS` and
+  `INVOICE_PAYMENT_FAILED` alongside `PAYMENT_SUCCESS` and `PAYMENT_FAILED`, with `objectType: "INVOICE"`, `objectId` equal to the invoice ID, and the account ID. Pending payments emit only
+  `PAYMENT_PENDING`. Events use both the in-process hook and registered tenant callbacks.
+  `POST /1.0/kb/accounts/{accountId}/invoicePayments` pays full unpaid invoice balances up to
+  `targetDate` (today by default), returning 201, or 204 when none are due. Custom `paymentAmount`
+  and `pluginProperty` return `UNSUPPORTED_INVOICE_PAYMENT`. Successful admin retries also emit
+  the invoice success event.
+
+Unknown account, subscription and invoice IDs retain their existing 404 error envelopes;
+tenant isolation applies to these operations.
