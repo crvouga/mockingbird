@@ -53,6 +53,8 @@ export type KillBillAPIOptions = APIOptions & {
 }
 const DEFAULT_TENANT_ID = "tenant-default"
 const NOTIFICATION_KEY = "PUSH_NOTIFICATION_CB"
+// Kill Bill's built-in AUTO_PAY_OFF control tag definition.
+const AUTO_PAY_OFF_TAG_ID = "00000000-0000-0000-0000-000000000001"
 const money = (value: unknown) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
 const object = (value: unknown): Input =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Input) : {}
@@ -313,6 +315,9 @@ export class KillBillAPI {
     }
     this.state.methods.insert(paymentMethodId, method)
     return method
+  }
+  private autoPayOff(accountId: string) {
+    return this.state.tags.get(`${accountId}\0${AUTO_PAY_OFF_TAG_ID}`) !== undefined
   }
   private invoicePayment(
     payment: Payment,
@@ -947,11 +952,14 @@ export class KillBillAPI {
       const method = this.state.methods
         .list({ where: (m) => m.accountId === subscription.accountId && m.isDefault })
         .map(({ value }) => value)[0]
-      if (invoice && method)
+      // Kill Bill 0.24.10 skips automatic payment on an AUTO_PAY_OFF account, and pays only what is
+      // still owed: a push-notification consumer may have paid the invoice during INVOICE_CREATION.
+      const owed = invoice ? (this.state.invoices.get(invoice.invoiceId)?.balance ?? 0) : 0
+      if (invoice && method && owed > 0 && !this.autoPayOff(subscription.accountId))
         await this.pay(
           subscription.accountId,
           tenantId,
-          { amount: invoice.balance, transactionType: "PURCHASE", currency: invoice.currency },
+          { amount: owed, transactionType: "PURCHASE", currency: invoice.currency },
           invoice.invoiceId,
           method.paymentMethodId,
         )
@@ -1610,15 +1618,18 @@ export class KillBillAPI {
         ? this.externalPaymentMethod(accountId).paymentMethodId
         : (url.searchParams.get("paymentMethodId") ??
           this.defaultPaymentMethod(accountId)?.paymentMethodId)
-      for (const { value: invoice } of unpaid)
-        await this.pay(
-          accountId,
-          tenantId,
-          { amount: invoice.balance, transactionType: "PURCHASE" },
-          invoice.invoiceId,
-          methodId,
-          external,
-        )
+      for (const { value: invoice } of unpaid) {
+        const owed = this.state.invoices.get(invoice.invoiceId)?.balance ?? 0
+        if (owed > 0)
+          await this.pay(
+            accountId,
+            tenantId,
+            { amount: owed, transactionType: "PURCHASE" },
+            invoice.invoiceId,
+            methodId,
+            external,
+          )
+      }
       return this.empty(201, {
         location: this.location(request, `/1.0/kb/accounts/${accountId}/invoices`),
       })
@@ -1824,6 +1835,24 @@ export class KillBillAPI {
             "INVALID_PAYMENT",
             "InvoicePaymentJson should not contain a paymentMethodId when this is an external payment",
           )
+        // Kill Bill 0.24.10 takes no payment on an invoice with nothing owed (204) and refuses an
+        // amount above the balance (PaymentApiException 7199), for external and method payments.
+        if (invoice.balance <= 0) return this.empty()
+        const requestedAmount = body.purchasedAmount ?? body.amount
+        if (requestedAmount !== undefined && money(requestedAmount) > invoice.balance)
+          return this.json(
+            {
+              className: "org.killbill.billing.payment.api.PaymentApiException",
+              code: 7199,
+              message:
+                `Plugin exception Invalid amount '${String(requestedAmount)}' for invoice ` +
+                `'${invoice.invoiceId}': invoice balance is = '${invoice.balance.toFixed(2)}'`,
+              causeClassName: null,
+              causeMessage: null,
+              stackTrace: [],
+            },
+            400,
+          )
         const payerId = typeof body.accountId === "string" ? body.accountId : invoice.accountId
         const requestedMethod =
           typeof body.paymentMethodId === "string" ? body.paymentMethodId : undefined
@@ -1837,7 +1866,7 @@ export class KillBillAPI {
           tenantId,
           {
             ...body,
-            amount: body.purchasedAmount ?? body.amount ?? invoice.balance,
+            amount: requestedAmount ?? invoice.balance,
             transactionType: externalPayment ? "PURCHASE" : (body.transactionType ?? "PURCHASE"),
           },
           invoice.invoiceId,
