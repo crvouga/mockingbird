@@ -37,6 +37,14 @@ export type Subscription = Record<string, unknown> & {
   chargedThroughDate?: string
   cancelledDate?: string
   pendingChangePlan?: string
+  billCycleDayLocal?: number
+  bcdEffectiveFromDate?: string
+  blockingStates?: {
+    stateName: string
+    service: string
+    isBlockBilling: boolean
+    effectiveDate: string
+  }[]
   /** Phase prices sent on create. Kill Bill 0.24 echoes these on GET. */
   priceOverrides?: Record<string, unknown>[]
 }

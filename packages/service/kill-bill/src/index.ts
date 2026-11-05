@@ -671,7 +671,34 @@ export class KillBillAPI {
       accountId,
       tenantId,
     )
+    if (invoiceId && type === "PURCHASE" && status !== "PENDING")
+      await this.emit(
+        status === "SUCCESS" ? "INVOICE_PAYMENT_SUCCESS" : "INVOICE_PAYMENT_FAILED",
+        "INVOICE",
+        invoiceId,
+        this.state.invoices.get(invoiceId)?.accountId ?? accountId,
+        tenantId,
+      )
     return payment
+  }
+  async notifyInvoicePaymentSuccess(payment: Payment) {
+    const account = this.state.accounts.get(payment.accountId)
+    if (!account) return
+    await this.emit(
+      "PAYMENT_SUCCESS",
+      "PAYMENT",
+      payment.paymentId,
+      payment.accountId,
+      account.tenantId,
+    )
+    if (payment.invoiceId && payment.transactions.at(-1)?.transactionType === "PURCHASE")
+      await this.emit(
+        "INVOICE_PAYMENT_SUCCESS",
+        "INVOICE",
+        payment.invoiceId,
+        this.state.invoices.get(payment.invoiceId)?.accountId ?? payment.accountId,
+        account.tenantId,
+      )
   }
   private overdueState(accountId: string) {
     const earliest = this.state.invoices
@@ -842,6 +869,32 @@ export class KillBillAPI {
     }
     return plan.amount
   }
+  /** Deterministic monthly BCD approximation; no prorated transition invoice. */
+  subscriptionBillingDue(subscription: Subscription) {
+    const due = subscription.chargedThroughDate ?? subscription.startDate
+    const day = subscription.billCycleDayLocal
+    const effective = subscription.bcdEffectiveFromDate
+    if (!day || !effective || due < effective) return due
+    const base = new Date(`${due}T00:00:00.000Z`)
+    const aligned = (month: number) => {
+      const last = new Date(Date.UTC(base.getUTCFullYear(), month + 1, 0)).getUTCDate()
+      return isoDate(Date.UTC(base.getUTCFullYear(), month, Math.min(day, last)))
+    }
+    const candidate = aligned(base.getUTCMonth())
+    return candidate >= due ? candidate : aligned(base.getUTCMonth() + 1)
+  }
+  subscriptionBillingBlocked(subscription: Subscription, date: string) {
+    const services = new Map<string, { isBlockBilling: boolean; effectiveDate: string }>()
+    for (const entry of subscription.blockingStates ?? []) {
+      const previous = services.get(entry.service)
+      if (
+        entry.effectiveDate <= date &&
+        (!previous || entry.effectiveDate >= previous.effectiveDate)
+      )
+        services.set(entry.service, entry)
+    }
+    return [...services.values()].some((entry) => entry.isBlockBilling)
+  }
   private async billDue(tenantId: string) {
     const today = isoDate(this.now())
     for (const { value: subscription } of this.state.subscriptions.list({
@@ -851,8 +904,8 @@ export class KillBillAPI {
         subscription.planName = subscription.pendingChangePlan
         delete subscription.pendingChangePlan
       }
-      const due = subscription.chargedThroughDate ?? subscription.startDate
-      if (due > today) continue
+      const due = this.subscriptionBillingDue(subscription)
+      if (due > today || this.subscriptionBillingBlocked(subscription, today)) continue
       const plan = this.plan(subscription.planName)
       if (!plan) continue
       const invoice = await this.createInvoice(
@@ -871,7 +924,21 @@ export class KillBillAPI {
         ],
         "Recurring charge",
       )
-      const nextDate = isoDate(this.now() + (plan.intervalDays ?? 30) * 86_400_000)
+      const nextDate =
+        subscription.billCycleDayLocal && due >= (subscription.bcdEffectiveFromDate ?? "")
+          ? (() => {
+              const date = new Date(`${today}T00:00:00.000Z`)
+              const month = date.getUTCMonth() + 1
+              const last = new Date(Date.UTC(date.getUTCFullYear(), month + 1, 0)).getUTCDate()
+              return isoDate(
+                Date.UTC(
+                  date.getUTCFullYear(),
+                  month,
+                  Math.min(subscription.billCycleDayLocal, last),
+                ),
+              )
+            })()
+          : isoDate(this.now() + (plan.intervalDays ?? 30) * 86_400_000)
       this.clearEntitlement(subscription.subscriptionId)
       this.state.subscriptions.insert(subscription.subscriptionId, {
         ...subscription,
@@ -1010,6 +1077,9 @@ export class KillBillAPI {
     if (url.pathname === "/1.0/healthcheck" || url.pathname === "/healthcheck")
       return this.json({ status: "UP" })
     if (!this.basicAuthorized(request)) return this.problem(401, "UNAUTHORIZED", "Unauthorized")
+    // Permissions are global to the authenticated user, independent of tenant access.
+    if (url.pathname === "/1.0/kb/security/permissions" && request.method === "GET")
+      return this.json(["*:*"])
     // Kill Bill 0.24 TenantFilter skips api key headers on exactly /1.0/kb/tenants.
     if (url.pathname === "/1.0/kb/tenants") {
       if (request.method !== "GET" && !request.headers.get("x-killbill-createdby"))
@@ -1144,6 +1214,38 @@ export class KillBillAPI {
       return account
         ? this.json(this.publicAccount(account))
         : this.problem(404, "ACCOUNT_DOES_NOT_EXIST", "Account not found")
+    }
+    if (parts[0] === "accounts" && parts.length === 2 && request.method === "PUT") {
+      const account = this.account(parts[1] as string, tenantId)
+      if (!account) return this.problem(404, "ACCOUNT_DOES_NOT_EXIST", "Account not found")
+      const immutable = ["accountId", "externalKey", "currency", "timeZone", "referenceTime"]
+      for (const field of immutable)
+        if (field in body && body[field] !== account[field])
+          return this.problem(400, "INVALID_ACCOUNT", `${field} cannot be changed`)
+      const mutable = ["name", "email"]
+      for (const field of Object.keys(body))
+        if (!immutable.includes(field) && !mutable.includes(field))
+          return this.problem(
+            400,
+            "UNSUPPORTED_ACCOUNT_UPDATE",
+            `Updating ${field} is not modelled`,
+          )
+      const changes: Input = {}
+      for (const field of mutable) {
+        const value = body[field]
+        if (
+          value === undefined ||
+          (value === null && url.searchParams.get("treatNullAsReset") !== "true")
+        )
+          continue
+        if (value !== null && typeof value !== "string")
+          return this.problem(400, "INVALID_ACCOUNT", `${field} must be a string or null`)
+        changes[field] = value
+      }
+      this.state.accounts.insert(account.accountId, { ...account, ...changes })
+      this.audit(request, "ACCOUNT", account.accountId)
+      await this.emit("ACCOUNT_CHANGE", "ACCOUNT", account.accountId, account.accountId, tenantId)
+      return this.empty()
     }
     const accountId = parts[0] === "accounts" ? (parts[1] as string) : undefined
     if (accountId && parts[2] === "overdue" && parts.length === 3 && request.method === "GET") {
@@ -1285,6 +1387,114 @@ export class KillBillAPI {
       const subscription = this.state.subscriptions.get(parts[1])
       if (!subscription || !this.account(subscription.accountId, tenantId))
         return this.problem(404, "SUBSCRIPTION_DOES_NOT_EXIST", "Subscription not found")
+      if (parts[2] === "block" && parts.length === 3) {
+        if (request.method !== "POST")
+          return this.problem(405, "METHOD_NOT_ALLOWED", "Use POST to add a blocking state")
+        if (
+          typeof body.stateName !== "string" ||
+          !body.stateName ||
+          typeof body.service !== "string" ||
+          !body.service ||
+          typeof body.isBlockBilling !== "boolean"
+        )
+          return this.problem(
+            400,
+            "INVALID_BLOCKING_STATE",
+            "stateName, service and isBlockBilling are required",
+          )
+        if (
+          (body.isBlockChange !== undefined && typeof body.isBlockChange !== "boolean") ||
+          (body.isBlockEntitlement !== undefined && typeof body.isBlockEntitlement !== "boolean")
+        )
+          return this.problem(400, "INVALID_BLOCKING_STATE", "Blocking flags must be booleans")
+        if (body.isBlockChange === true || body.isBlockEntitlement === true)
+          return this.problem(
+            400,
+            "UNSUPPORTED_BLOCKING_STATE",
+            "The emulator supports billing blocking only",
+          )
+        const effectiveDate = url.searchParams.get("requestedDate") ?? isoDate(this.now())
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) ||
+          !Number.isFinite(Date.parse(effectiveDate)) ||
+          isoDate(Date.parse(effectiveDate)) !== effectiveDate
+        )
+          return this.problem(400, "INVALID_DATE", "requestedDate must be a valid YYYY-MM-DD date")
+        const next = {
+          ...subscription,
+          blockingStates: [
+            ...(subscription.blockingStates ?? []),
+            {
+              stateName: body.stateName,
+              service: body.service,
+              isBlockBilling: body.isBlockBilling,
+              effectiveDate,
+            },
+          ],
+        }
+        this.state.subscriptions.insert(subscription.subscriptionId, next)
+        this.audit(request, "SUBSCRIPTION", subscription.subscriptionId)
+        return this.empty(201)
+      }
+      if (parts[2] === "bcd" && parts.length === 3) {
+        if (request.method !== "PUT")
+          return this.problem(405, "METHOD_NOT_ALLOWED", "Use PUT to update the BCD")
+        const day = body.billCycleDayLocal
+        if (typeof day !== "number" || !Number.isInteger(day) || day < 1 || day > 31)
+          return this.problem(
+            400,
+            "INVALID_BCD",
+            "billCycleDayLocal must be an integer from 1 to 31",
+          )
+        if ((this.plan(subscription.planName)?.intervalDays ?? 30) !== 30)
+          return this.problem(
+            400,
+            "UNSUPPORTED_BCD",
+            "The emulator models BCD changes for monthly plans only",
+          )
+        const effective = url.searchParams.get("effectiveFromDate") ?? isoDate(this.now())
+        if (
+          !/^\d{4}-\d{2}-\d{2}$/.test(effective) ||
+          !Number.isFinite(Date.parse(effective)) ||
+          isoDate(Date.parse(effective)) !== effective
+        )
+          return this.problem(
+            400,
+            "INVALID_DATE",
+            "effectiveFromDate must be a valid YYYY-MM-DD date",
+          )
+        if (
+          effective < isoDate(this.now()) ||
+          url.searchParams.has("forceNewBcdWithPastEffectiveDate")
+        )
+          return this.problem(
+            400,
+            "UNSUPPORTED_BCD",
+            "The emulator does not model retroactive BCD changes",
+          )
+        if (
+          body.subscriptionId !== undefined &&
+          body.subscriptionId !== subscription.subscriptionId
+        )
+          return this.problem(400, "INVALID_SUBSCRIPTION", "subscriptionId must match the path")
+        if (
+          subscription.billCycleDayLocal !== undefined &&
+          (subscription.billCycleDayLocal !== day ||
+            subscription.bcdEffectiveFromDate !== effective)
+        )
+          return this.problem(
+            400,
+            "UNSUPPORTED_BCD",
+            "The emulator supports only one BCD schedule change per subscription",
+          )
+        this.state.subscriptions.insert(subscription.subscriptionId, {
+          ...subscription,
+          billCycleDayLocal: day,
+          bcdEffectiveFromDate: effective,
+        })
+        this.audit(request, "SUBSCRIPTION", subscription.subscriptionId)
+        return this.empty()
+      }
       if (parts[2] === "uncancel" && request.method === "PUT") {
         const next = { ...subscription, state: "ACTIVE" as const }
         delete next.cancelledDate
@@ -1373,6 +1583,46 @@ export class KillBillAPI {
             .filter(Boolean),
         })),
       )
+    if (accountId && parts[2] === "invoicePayments" && request.method === "POST") {
+      if (url.searchParams.has("paymentAmount") || url.searchParams.has("pluginProperty"))
+        return this.problem(
+          400,
+          "UNSUPPORTED_INVOICE_PAYMENT",
+          "Emulator account payments support full balances without plugin properties only",
+        )
+      const targetDate = url.searchParams.get("targetDate") ?? isoDate(this.now())
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(targetDate) ||
+        !Number.isFinite(Date.parse(targetDate)) ||
+        isoDate(Date.parse(targetDate)) !== targetDate
+      )
+        return this.problem(400, "INVALID_DATE", "targetDate must be a valid YYYY-MM-DD date")
+      const unpaid = this.state.invoices.list({
+        where: (invoice) =>
+          invoice.accountId === accountId &&
+          invoice.status !== "VOID" &&
+          invoice.balance > 0 &&
+          invoice.targetDate <= targetDate,
+      })
+      if (unpaid.length === 0) return this.empty()
+      const external = url.searchParams.get("externalPayment") === "true"
+      const methodId = external
+        ? this.externalPaymentMethod(accountId).paymentMethodId
+        : (url.searchParams.get("paymentMethodId") ??
+          this.defaultPaymentMethod(accountId)?.paymentMethodId)
+      for (const { value: invoice } of unpaid)
+        await this.pay(
+          accountId,
+          tenantId,
+          { amount: invoice.balance, transactionType: "PURCHASE" },
+          invoice.invoiceId,
+          methodId,
+          external,
+        )
+      return this.empty(201, {
+        location: this.location(request, `/1.0/kb/accounts/${accountId}/invoices`),
+      })
+    }
     if (accountId && parts[2] === "invoices" && request.method === "GET")
       return this.json(
         this.state.invoices
@@ -1433,10 +1683,131 @@ export class KillBillAPI {
           })
         : this.problem(404, "ACCOUNT_DOES_NOT_EXIST", "Account not found")
     }
+    if (parts[0] === "invoices" && parts[1] === "dryRun" && request.method === "POST") {
+      const previewAccountId = url.searchParams.get("accountId") ?? ""
+      const account = this.account(previewAccountId, tenantId)
+      if (!account) return this.problem(404, "ACCOUNT_DOES_NOT_EXIST", "Account not found")
+      if (
+        body.dryRunAction !== undefined ||
+        (body.dryRunType !== undefined && body.dryRunType !== "TARGET_DATE")
+      )
+        return this.problem(
+          400,
+          "UNSUPPORTED_DRY_RUN",
+          "Emulator supports TARGET_DATE previews only",
+        )
+      const targetDate = url.searchParams.get("targetDate") ?? isoDate(this.now())
+      if (
+        !/^\d{4}-\d{2}-\d{2}$/.test(targetDate) ||
+        !Number.isFinite(Date.parse(targetDate)) ||
+        isoDate(Date.parse(targetDate)) !== targetDate
+      )
+        return this.problem(400, "INVALID_DATE", "targetDate must be a valid YYYY-MM-DD date")
+      const items: InvoiceItem[] = []
+      for (const { value: subscription } of this.state.subscriptions.list({
+        where: (value) => value.accountId === previewAccountId && value.state === "ACTIVE",
+      })) {
+        const due = this.subscriptionBillingDue(subscription)
+        if (due > targetDate || this.subscriptionBillingBlocked(subscription, targetDate)) continue
+        const plan = this.plan(subscription.pendingChangePlan ?? subscription.planName)
+        if (!plan) continue
+        // Preview the next recurring charge without consuming IDs, advancing the clock,
+        // applying scheduled changes, creating invoices or sending payment notifications.
+        items.push({
+          invoiceItemId: `preview-item-${subscription.subscriptionId}`,
+          invoiceId: "preview",
+          accountId: previewAccountId,
+          itemType: "RECURRING",
+          amount: this.recurringAmount(subscription, plan),
+          currency: plan.currency ?? account.currency,
+          description: plan.name,
+          startDate: due,
+          subscriptionId: subscription.subscriptionId,
+          planName: plan.name,
+        })
+      }
+      if (items.length === 0) return this.empty()
+      const amount = money(items.reduce((total, item) => total + item.amount, 0))
+      return this.json({
+        invoiceId: "preview",
+        accountId: previewAccountId,
+        invoiceNumber: null,
+        invoiceDate: isoDate(this.now()),
+        targetDate,
+        currency: account.currency,
+        status: "COMMITTED",
+        amount,
+        balance: amount,
+        creditAdj: 0,
+        refundAdj: 0,
+        items,
+      })
+    }
     if (parts[0] === "invoices" && parts[1]) {
       const invoice = this.state.invoices.get(parts[1])
       if (!invoice || !this.account(invoice.accountId, tenantId))
         return this.problem(404, "INVOICE_DOES_NOT_EXIST", "Invoice not found")
+      if (parts.length === 2 && request.method === "POST") {
+        const item = invoice.items.find(
+          (candidate) => candidate.invoiceItemId === body.invoiceItemId,
+        )
+        if (
+          !item ||
+          body.accountId !== invoice.accountId ||
+          invoice.status === "VOID" ||
+          item.amount <= 0 ||
+          item.itemType === "ITEM_ADJ"
+        )
+          return this.problem(
+            400,
+            "INVALID_INVOICE_ITEM_ADJUSTMENT",
+            "A positive invoice item and its accountId are required",
+          )
+        const adjusted = invoice.items
+          .filter(
+            (candidate) =>
+              candidate.itemType === "ITEM_ADJ" &&
+              candidate.linkedInvoiceItemId === item.invoiceItemId,
+          )
+          .reduce((total, candidate) => total + candidate.amount, 0)
+        const remaining = money(item.amount + adjusted)
+        const amount = body.amount === undefined ? remaining : body.amount
+        if (
+          typeof amount !== "number" ||
+          !Number.isFinite(amount) ||
+          amount <= 0 ||
+          money(amount) <= 0 ||
+          money(amount) > remaining ||
+          (body.currency !== undefined && body.currency !== item.currency)
+        )
+          return this.problem(
+            400,
+            "INVALID_INVOICE_ITEM_ADJUSTMENT",
+            "Adjustment must be positive, use the item currency, and not exceed its remaining amount",
+          )
+        const adjustment: InvoiceItem = {
+          invoiceItemId: this.state.ids.next("item-", 32),
+          invoiceId: invoice.invoiceId,
+          accountId: invoice.accountId,
+          itemType: "ITEM_ADJ",
+          amount: -money(amount),
+          currency: item.currency,
+          description:
+            typeof body.description === "string" ? body.description : "Invoice item adjustment",
+          startDate: isoDate(this.now()),
+          linkedInvoiceItemId: item.invoiceItemId,
+          ...(item.subscriptionId ? { subscriptionId: item.subscriptionId } : {}),
+        }
+        this.state.invoices.insert(invoice.invoiceId, {
+          ...invoice,
+          amount: money(invoice.amount - money(amount)),
+          balance: money(invoice.balance - money(amount)),
+          items: [...invoice.items, adjustment],
+        })
+        return this.empty(201, {
+          location: this.location(request, `/1.0/kb/invoices/${invoice.invoiceId}`),
+        })
+      }
       if (parts[2] === "voidInvoice" && request.method === "PUT")
         return this.voidInvoice(invoice, tenantId)
       if (parts[2] === "payments") {

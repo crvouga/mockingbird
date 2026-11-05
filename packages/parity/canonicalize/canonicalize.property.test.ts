@@ -198,6 +198,40 @@ describe("token stability", () => {
     ])
   })
 
+  test("short ids never rewrite schema property names while dynamic keys still canonicalize", () => {
+    const table = new ResourceTable()
+    table.register("customer", { real: "_", mock: ":" })
+    table.register("customer", { real: "a", mock: "i" })
+    const options = { document, schema: customerSchema, parityHeaders: [] as string[], table }
+    const real = canonicalizeValue({ id: "a", name: "a" }, { ...options, side: "real" })
+    const mock = canonicalizeValue({ id: "i", name: "i" }, { ...options, side: "mock" })
+    expect(real).toEqual({ id: canonicalToken("customer", 2), name: canonicalToken("customer", 2) })
+    expect(mock).toEqual(real)
+    const composedSchema: SchemaObject = {
+      type: "array",
+      items: { allOf: [{ oneOf: [customerSchema] }] },
+    }
+    expect(
+      canonicalizeValue([{ id: "a", name: "a" }], {
+        ...options,
+        schema: composedSchema,
+        side: "real",
+      }),
+    ).toEqual(
+      canonicalizeValue([{ id: "i", name: "i" }], {
+        ...options,
+        schema: composedSchema,
+        side: "mock",
+      }),
+    )
+    const mapSchema: SchemaObject = { type: "object", additionalProperties: customerSchema }
+    expect(
+      canonicalizeValue({ a: { id: "a" } }, { ...options, schema: mapSchema, side: "real" }),
+    ).toEqual(
+      canonicalizeValue({ i: { id: "i" } }, { ...options, schema: mapSchema, side: "mock" }),
+    )
+  })
+
   test("canonical forms agree iff the referenced handles agree", () => {
     fc.assert(
       fc.property(

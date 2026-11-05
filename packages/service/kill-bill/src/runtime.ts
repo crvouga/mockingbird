@@ -105,7 +105,7 @@ const admin = (runtime: ServiceRuntime<KillBillAPI>): AdminRoutes => ({
     })
     return Response.json({ pendingNext: true })
   },
-  "POST /payments/:id/retry": ({ namespace, params }) => {
+  "POST /payments/:id/retry": async ({ namespace, params }) => {
     const api = runtime.instance(namespace)
     const payment = api.state.payments.get(params.id as string)
     if (!payment) return problem(404, "payment not found")
@@ -145,6 +145,7 @@ const admin = (runtime: ServiceRuntime<KillBillAPI>): AdminRoutes => ({
           balance: Math.max(0, Math.round((invoice.balance - failed.amount) * 100) / 100),
         })
     }
+    await api.notifyInvoicePaymentSuccess(next)
     return Response.json(next)
   },
   "POST /catalog/plans": ({ namespace, body }) => {
