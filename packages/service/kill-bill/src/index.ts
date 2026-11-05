@@ -122,6 +122,27 @@ const catalogPlans = (xml: string): CatalogPlan[] => {
   }
   return plans
 }
+const JAVA_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+const JAVA_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+]
+// java.util.Date#toString in GMT, as Kill Bill prints the catalog input date: "Thu Nov 05 22:29:00 GMT 2026".
+const javaDate = (ms: number) => {
+  const date = new Date(ms)
+  const two = (n: number) => String(n).padStart(2, "0")
+  return `${JAVA_DAYS[date.getUTCDay()]} ${JAVA_MONTHS[date.getUTCMonth()]} ${two(date.getUTCDate())} ${two(date.getUTCHours())}:${two(date.getUTCMinutes())}:${two(date.getUTCSeconds())} GMT ${date.getUTCFullYear()}`
+}
 const FIXED_OFFSET = /^([+-])(\d{2}):(\d{2})$/
 // Kill Bill 0.24 DateTimeZone.forID: omitted means UTC; otherwise a fixed offset or an IANA id.
 const clockZone = (raw: string | null) => {
@@ -217,6 +238,26 @@ export class KillBillAPI {
   private problem(status: number, code: string, message: string) {
     return this.json(
       { className: "org.killbill.billing.util.api.KillBillException", code, message },
+      status,
+    )
+  }
+  // Kill Bill 0.24.10 serializes an uncaught Java exception with its class, code and cause.
+  private javaException(
+    status: number,
+    className: string,
+    code: number | null,
+    message: string,
+    cause?: { className: string; message: string },
+  ) {
+    return this.json(
+      {
+        className,
+        code,
+        message,
+        causeClassName: cause?.className ?? null,
+        causeMessage: cause?.message ?? null,
+        stackTrace: [],
+      },
       status,
     )
   }
@@ -1323,14 +1364,31 @@ export class KillBillAPI {
         if (
           typeof input.accountId !== "string" ||
           !this.account(input.accountId, tenantId) ||
-          typeof input.planName !== "string" ||
-          !this.plan(input.planName)
+          typeof input.planName !== "string"
         )
           return this.problem(
             400,
             "INVALID_SUBSCRIPTION",
             "valid accountId and planName are required",
           )
+        // Kill Bill 0.24.10 with no catalog uploaded fails before it looks the plan up.
+        if (this.state.plans.list().length === 0)
+          return this.javaException(
+            500,
+            "java.lang.IllegalStateException",
+            null,
+            `No existing versions in the VersionedCatalog catalog for input date ${javaDate(this.now())}`,
+          )
+        if (!this.plan(input.planName)) {
+          const message = `Could not find any plans named '${input.planName}'`
+          return this.javaException(
+            400,
+            "org.killbill.billing.subscription.api.user.SubscriptionBaseApiException",
+            2021,
+            message,
+            { className: "org.killbill.billing.catalog.api.CatalogApiException", message },
+          )
+        }
         const externalKey =
           typeof input.externalKey === "string"
             ? input.externalKey
