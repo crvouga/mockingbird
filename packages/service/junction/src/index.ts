@@ -71,6 +71,8 @@ import {
   seedFrom as seedStateFrom,
 } from "./seed-from.js"
 import {
+  availabilityWindowDaysFrom,
+  DEFAULT_AVAILABILITY_WINDOW_DAYS,
   type GeoMode,
   type GetCacheEntry,
   JunctionState,
@@ -175,7 +177,12 @@ export type {
   UserRecord,
   WebhookPublisher,
 } from "./state.js"
-export { MOCK_TEAM_ID, observationCacheKey } from "./state.js"
+export {
+  DEFAULT_AVAILABILITY_WINDOW_DAYS,
+  MAX_AVAILABILITY_WINDOW_DAYS,
+  MOCK_TEAM_ID,
+  observationCacheKey,
+} from "./state.js"
 export type { Divergence, VerifyOptions, VerifyReport } from "./verify.js"
 export { verifyAgainstReal } from "./verify.js"
 export type {
@@ -238,6 +245,11 @@ export type JunctionAPIOptions = APIOptions & {
   teamId?: string
   /** Sandbox-only restrictions to enforce. Every one is off unless set here. */
   limits?: JunctionLimitsInput
+  /**
+   * Days from `start_date` that phlebotomy and PSC availability return, 1 to 60.
+   * Default 14, the window Junction answers with.
+   */
+  availabilityWindowDays?: number
   /** `adopt-users` creates an unknown (well-formed) `user_id` on first use. Default `strict`. */
   identity?: IdentityMode
   /**
@@ -329,6 +341,9 @@ export class JunctionAPI implements FetchAPI {
     this.explicitTeamId = options.teamId
     state.teamId = options.teamId ?? options.corpus?.teamId ?? MOCK_TEAM_ID
     state.limits = mergeLimits(DEFAULT_LIMITS, options.limits ?? {})
+    state.availabilityWindowDays = availabilityWindowDaysFrom(
+      options.availabilityWindowDays ?? DEFAULT_AVAILABILITY_WINDOW_DAYS,
+    )
     if (options.identity !== undefined && !IDENTITY_MODES.includes(options.identity))
       throw new TypeError(`identity must be one of ${IDENTITY_MODES.join(", ")}`)
     state.identity = options.identity ?? "strict"

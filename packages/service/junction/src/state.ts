@@ -10,6 +10,23 @@ import {
 import type { IdentityMode } from "./fixtures.js"
 import { DEFAULT_LIMITS, type JunctionLimits } from "./limits.js"
 
+/** Junction answers availability with about two weeks of days from `start_date`. */
+export const DEFAULT_AVAILABILITY_WINDOW_DAYS = 14
+export const MAX_AVAILABILITY_WINDOW_DAYS = 60
+
+export const availabilityWindowDaysFrom = (value: unknown): number => {
+  if (
+    typeof value !== "number" ||
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > MAX_AVAILABILITY_WINDOW_DAYS
+  )
+    throw new TypeError(
+      `availabilityWindowDays must be a whole number from 1 to ${MAX_AVAILABILITY_WINDOW_DAYS}`,
+    )
+  return value
+}
+
 export type { CatalogMarker, ExpectedResult, LabTestRecord } from "./catalog.js"
 export { expectedResultsFor, LAB_TEST_CATALOG, labTestById, TEAM_LABS } from "./catalog.js"
 
@@ -334,6 +351,8 @@ export class JunctionState {
   teamId: string = MOCK_TEAM_ID
   /** Sandbox-only restrictions to enforce; every one is off by default. */
   limits: JunctionLimits = { ...DEFAULT_LIMITS }
+  /** Days from `start_date` that phlebotomy and PSC availability return. */
+  availabilityWindowDays: number = DEFAULT_AVAILABILITY_WINDOW_DAYS
   /** Lab slug → the `billing_type` an order for that lab gets when it omits one. */
   labAccountOmissionPolicies: Readonly<
     Record<string, import("./lab-accounts.js").LabAccountOmissionPolicy>

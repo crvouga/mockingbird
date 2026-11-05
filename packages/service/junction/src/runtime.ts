@@ -19,7 +19,7 @@ import type { JunctionLimitsInput } from "./limits.js"
 import type { MarkerCatalogEntry } from "./markers.js"
 import { type JunctionQuirks, quirksFrom } from "./quirks.js"
 import type { SealedCorpus } from "./sealed-corpus.js"
-import type { GeoMode, WebhookPublisher } from "./state.js"
+import { availabilityWindowDaysFrom, type GeoMode, type WebhookPublisher } from "./state.js"
 import {
   createWebhookDispatcher,
   type WebhookDispatcher,
@@ -53,6 +53,8 @@ export type JunctionRuntimeOptions = {
   teamId?: string
   /** Sandbox-only restrictions, every one off by default; per namespace via `PUT /__admin/limits`. */
   limits?: JunctionLimitsInput
+  /** Days of availability per call; see {@link JunctionAPIOptions.availabilityWindowDays}. */
+  availabilityWindowDays?: number
   /** `adopt-users` creates unknown user ids on first use. Default `strict`. */
   identity?: IdentityMode
   /**
@@ -96,6 +98,8 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
   if (options.labAccountBehavior)
     labAccountBehaviorFrom({ profile: "native", ...options.labAccountBehavior })
   if (options.quirks) quirksFrom(options.quirks)
+  if (options.availabilityWindowDays !== undefined)
+    availabilityWindowDaysFrom(options.availabilityWindowDays)
   const webhooks = options.webhooks ? createWebhookDispatcher(options.webhooks) : undefined
   const runtime: ServiceRuntime<JunctionAPI> = createServiceRuntime<JunctionAPI>({
     name: JUNCTION_NAMESPACE,
@@ -130,6 +134,9 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
         ...(options.quirks ? { quirks: options.quirks } : {}),
         ...(options.teamId !== undefined ? { teamId: options.teamId } : {}),
         ...(options.limits ? { limits: options.limits } : {}),
+        ...(options.availabilityWindowDays !== undefined
+          ? { availabilityWindowDays: options.availabilityWindowDays }
+          : {}),
         ...(options.identity ? { identity: options.identity } : {}),
         ...(options.defaultBillingTypes
           ? { defaultBillingTypes: options.defaultBillingTypes }
