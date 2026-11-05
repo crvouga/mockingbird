@@ -574,6 +574,7 @@ const putObject = async (ctx: Ctx): Promise<Response> => {
   const expires = parseHttpDate(system.get("expires") ?? "")
   const objectTags = tagging || system.get("x-amz-tagging") || ""
   const objectClass = system.get("x-amz-storage-class")
+  checkPutPreconditions(ctx)
   const version = ctx.core.write(
     {
       ...(versionId ? { versionId } : {}),
