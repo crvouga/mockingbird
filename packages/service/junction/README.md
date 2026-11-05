@@ -856,7 +856,7 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 
 | Export | Description |
 | --- | --- |
-| `createRuntime` | `(options?: JunctionRuntimeOptions) => JunctionRuntime` — the served emulator (health, admin, namespaces, clock, faults, metrics, journal, webhooks) as one `fetch`. Options: `corpus`, `geo`, `zipOverlays`, `catalogOverlays`, `markerCatalog`, `addOnSourceMarkers`, `labAccounts`, `teamId`, `limits`, `identity`, `defaultBillingTypes`, `labAccountBehavior`, `quirks`, `fixtures`, `journalSize`, `webhooks`, `onWebhook`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`. |
+| `createRuntime` | `(options?: JunctionRuntimeOptions) => JunctionRuntime` — the served emulator (health, admin, namespaces, clock, faults, metrics, journal, webhooks) as one `fetch`. Options: `corpus`, `geo`, `zipOverlays`, `catalogOverlays`, `markerCatalog`, `addOnSourceMarkers`, `labAccounts`, `teamId`, `limits`, `availabilityWindowDays`, `identity`, `defaultBillingTypes`, `labAccountBehavior`, `quirks`, `fixtures`, `journalSize`, `webhooks`, `onWebhook`, `sqlite`, `clock`, `seed`, `adminKey`, `onLog`. |
 | `JunctionAPI` | Class. `new JunctionAPI(options?)`: one namespace's emulator, implementing `fetch(request: Request): Promise<Response>`. |
 | `JUNCTION_NAMESPACE` | `"junction"` — the default namespace's storage key when sharing a `sqlite` client. |
 | `document` | The vendored Junction OpenAPI document (Mockingbird subset) that drives routing. |
@@ -870,6 +870,7 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `SEALED_CORPUS_VERSION` | Current corpus format version (`2`: adds `teamId`). |
 | `SUPPORTED_SEALED_CORPUS_VERSIONS` | Versions `parseSealedCorpus` loads (`[1, 2]`). |
 | `MOCK_TEAM_ID` | The team id used when neither `teamId` nor the corpus gives one. |
+| `DEFAULT_AVAILABILITY_WINDOW_DAYS` / `MAX_AVAILABILITY_WINDOW_DAYS` | `14` / `60` — the days phlebotomy and PSC availability return from `start_date` by default, and the most `availabilityWindowDays` accepts. |
 | `OTHER_TEAM_ID` | A team that is not the emulator's, for fixtures modelling another team's account. |
 | `isLinkedToTeam` | `(account, teamId) => boolean` — the allowlist rule (`[]` counts as linked). |
 | `LAB_ACCOUNT_PRESETS` | The [lab-account presets](#lab-account-presets), without ids. |
@@ -963,6 +964,7 @@ type JunctionAPIOptions = {
   labAccounts?: LabAccountInput[] | { presets?: (string | { name; id? })[]; accounts?: LabAccountInput[] }
   teamId?: string                // default: the corpus's recorded team, else MOCK_TEAM_ID
   limits?: { maxUsers?: number | null; simulateRequiresSandbox?: boolean; rateLimitPerSecond?: number | null }
+  availabilityWindowDays?: number  // days phlebotomy/PSC availability return from start_date, 1–60; default 14
   identity?: "strict" | "adopt-users"  // default "strict"
   defaultBillingTypes?: Record<string, BillingType>  // lab slug → billing_type when omitted; default client_bill
   fixtures?: { users?: UserFixture[]; orders?: OrderFixture[] }  // loaded now and on every reset()
