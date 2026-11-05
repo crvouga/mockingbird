@@ -133,12 +133,18 @@ describe("Kill Bill REST adapter", () => {
         transactionExternalKey: "txn-ext",
       })
       const paymentId = paid.headers.get("location")?.split("/").at(-1) as string
+      // Kill Bill 0.24.10 answers any payment on a settled invoice with 204, a retry included.
       const duplicate = await post(`/invoices/${invoiceId}/payments`, {
         amount: 10.01,
         paymentMethodId,
         paymentExternalKey: "pay-ext",
       })
-      expect(duplicate.headers.get("location")).toEndWith(paymentId)
+      expect(duplicate.status).toBe(204)
+      expect(
+        (await json<{ paymentId: string }[]>(`/invoices/${invoiceId}/payments`)).map(
+          (payment) => payment.paymentId,
+        ),
+      ).toEqual([paymentId])
       await post(`/payments/${paymentId}/refunds`, {
         amount: 3.33,
         transactionExternalKey: "refund-ext",
@@ -574,8 +580,8 @@ describe("Kill Bill REST adapter", () => {
         currency: "USD",
         paymentExternalKey: "ext-pay-1",
       })
-      expect(duplicate.status).toBe(201)
-      expect(duplicate.headers.get("location")).toEndWith(paymentId)
+      expect(duplicate.status).toBe(204)
+      expect(duplicate.headers.get("location")).toBeNull()
       const payments = await json<
         Array<{
           targetInvoiceId?: string
