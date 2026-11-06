@@ -210,7 +210,7 @@ test("tenant callbacks receive invoice success for auto-pay, account payment, an
       return new Response(null, { status: 204 })
     },
   })
-  const server = await createServer()
+  const server = await createServer({ notificationDelayMs: 0 })
   const call = (path: string, body?: unknown, method?: string) =>
     fetch(`${server.url}${path}`, {
       headers,
@@ -232,6 +232,8 @@ test("tenant callbacks receive invoice success for auto-pay, account payment, an
     })
     await call("/1.0/kb/subscriptions", { accountId, planName: "standard-monthly" })
     const [invoice] = await (await call(`/1.0/kb/accounts/${accountId}/invoices`)).json()
+    // Kill Bill delivers notifications after the request; GET /test/queues waits for them.
+    await call("/1.0/kb/test/queues?timeoutSec=10")
     expect(deliveries).toContainEqual(
       expect.objectContaining({
         eventType: "INVOICE_PAYMENT_SUCCESS",
@@ -256,12 +258,14 @@ test("tenant callbacks receive invoice success for auto-pay, account payment, an
     await call("/__admin/payments/decline-next", {})
     deliveries.length = 0
     expect((await call(`/1.0/kb/accounts/${accountId}/invoicePayments`, {})).status).toBe(201)
+    await call("/1.0/kb/test/queues?timeoutSec=10")
     expect(deliveries).toContainEqual(
       expect.objectContaining({ eventType: "INVOICE_PAYMENT_FAILED", objectId: invoiceId }),
     )
     const payments = await (await call(`/1.0/kb/invoices/${invoiceId}/payments`)).json()
     deliveries.length = 0
     expect((await call(`/__admin/payments/${payments[0].paymentId}/retry`, {})).status).toBe(200)
+    await call("/1.0/kb/test/queues?timeoutSec=10")
     expect(deliveries.map((event) => event.eventType)).toEqual([
       "PAYMENT_SUCCESS",
       "INVOICE_PAYMENT_SUCCESS",
@@ -403,13 +407,16 @@ describe("invoice payments stop at the invoice balance (oracle: Kill Bill 0.24.1
   })
 })
 
-test("auto-pay charges only what a notification consumer left unpaid during invoice creation", async () => {
-  const server = await createServer()
+test("a notification consumer paying on INVOICE_CREATION finds the invoice already auto-paid", async () => {
+  const server = await createServer({ notificationDelayMs: 0 })
   const call = (path: string, body?: unknown) =>
     fetch(`${server.url}/1.0/kb${path}`, {
       headers,
       ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }),
     })
+  // Kill Bill 0.24.16: auto-pay runs before the INVOICE_CREATION notification is delivered, so the
+  // consumer's payment finds nothing owed (204) and the invoice has one payment.
+  const consumerPaid: number[] = []
   const sink = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -420,12 +427,16 @@ test("auto-pay charges only what a notification consumer left unpaid during invo
         accountId: string
       }
       if (event.eventType === "INVOICE_CREATION")
-        await call(`/invoices/${event.objectId}/payments?externalPayment=true`, {
-          accountId: event.accountId,
-          purchasedAmount: 100,
-          currency: "USD",
-          paymentExternalKey: "checkout",
-        })
+        consumerPaid.push(
+          (
+            await call(`/invoices/${event.objectId}/payments?externalPayment=true`, {
+              accountId: event.accountId,
+              purchasedAmount: 100,
+              currency: "USD",
+              paymentExternalKey: "checkout",
+            })
+          ).status,
+        )
       return new Response(null, { status: 204 })
     },
   })
@@ -440,6 +451,8 @@ test("auto-pay charges only what a notification consumer left unpaid during invo
       pluginName: "__EXTERNAL_PAYMENT__",
     })
     await call("/subscriptions", { accountId, planName: "standard-monthly" })
+    await call("/test/queues?timeoutSec=10")
+    expect(consumerPaid).toEqual([204])
     const [invoice] = await (
       await call(`/accounts/${accountId}/invoices?includeInvoiceComponents=true`)
     ).json()
@@ -452,7 +465,8 @@ test("auto-pay charges only what a notification consumer left unpaid during invo
         paymentExternalKey,
         purchasedAmount,
       })),
-    ).toEqual([{ paymentExternalKey: "checkout", purchasedAmount: 100 }])
+    ).toEqual([expect.objectContaining({ purchasedAmount: 100 })])
+    expect(payments[0]?.paymentExternalKey).not.toBe("checkout")
     expect((await (await call(`/invoices/${invoice.invoiceId}`)).json()).balance).toBe(0)
   } finally {
     await server.close()

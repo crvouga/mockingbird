@@ -50,6 +50,8 @@ export type KillBillAPIOptions = APIOptions & {
   tenantKey?: string
   tenantSecret?: string
   plans?: readonly CatalogPlan[]
+  /** Delay before a push notification is delivered (Kill Bill's bus took 2–3 s). Default 2000. */
+  notificationDelayMs?: number
   onEvent?: (event: KillBillEvent) => void
 }
 const DEFAULT_TENANT_ID = "tenant-default"
@@ -57,6 +59,12 @@ type RequestAudit = AuditStamp & { level: "NONE" | "MINIMAL" | "FULL" }
 const TOMCAT_404 =
   '<!doctype html><html lang="en"><head><title>HTTP Status 404 – Not Found</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {color:black;} .line {height:1px;background-color:#525D76;border:none;}</style></head><body><h1>HTTP Status 404 – Not Found</h1><hr class="line" /><p><b>Type</b> Status Report</p><p><b>Message</b> Not Found</p><p><b>Description</b> The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.</p><hr class="line" /><h3>Apache Tomcat/9.0.98</h3></body></html>'
 const NOTIFICATION_KEY = "PUSH_NOTIFICATION_CB"
+/**
+ * Kill Bill 0.24.16 retries a push notification its callback refused 15 minutes, 30 minutes,
+ * 2 hours and 12 hours after each failed attempt (measured with the test clock), then a day.
+ */
+const NOTIFICATION_RETRY_MS = [15, 30, 120, 720, 1440].map((minutes) => minutes * 60_000)
+const PUSH_RETRY = "PUSH_NOTIFICATION_RETRY"
 /** Kill Bill's default org.killbill.invoice.maxDailyNumberOfItemsSafetyBound. */
 const SAFETY_BOUND = 15
 // Kill Bill's built-in AUTO_PAY_OFF control tag definition.
@@ -229,6 +237,15 @@ export class KillBillAPI {
   private readonly password: string
   private readonly tenantKey: string
   private readonly tenantSecret: string
+  /**
+   * Push notifications are delivered after the request that raised them, in order per account and
+   * callback, each `notificationDelayMs` after its event (delays never add up). Every per-request
+   * view shares this object, so chains are replaced inside it, never on `this`.
+   */
+  private readonly outbox: { chains: Map<string, Promise<void>>; queued: Set<string> } = {
+    chains: new Map(),
+    queued: new Set(),
+  }
   constructor(private readonly options: KillBillAPIOptions = {}) {
     this.sqlite = bootSqlite(options.sqlite)
     this.namespace = options.namespace ?? KILL_BILL_NAMESPACE
@@ -343,7 +360,8 @@ export class KillBillAPI {
     })
     const callbacks = this.state.tenants.get(tenantId)?.callbacks ?? []
     if (callbacks.length === 0) return
-    // Kill Bill 0.24 PushNotificationListener posts NotificationJson and ignores failure.
+    // Kill Bill 0.24.16 posts NotificationJson from its bus after the request has answered (2–3 s
+    // later), in order, and GET /test/queues waits for it.
     const body = JSON.stringify({
       eventType,
       accountId: accountId ?? null,
@@ -351,21 +369,80 @@ export class KillBillAPI {
       objectId,
       metaData: null,
     })
-    await Promise.all(callbacks.map((url) => this.postNotification(url, body)))
+    for (const url of callbacks) {
+      const id = this.state.ids.next("push-", 24)
+      this.state.busEvents.insert(id, { id, eventType, delivery: { url, body, attempts: 0 } })
+      this.queueDelivery(id, this.options.notificationDelayMs ?? 2000)
+    }
   }
-  private async postNotification(url: string, body: string) {
+  private queueDelivery(id: string, delayMs: number) {
+    if (this.outbox.queued.has(id)) return
+    const delivery = (this.state.busEvents.get(id) ?? this.state.notifications.get(id))?.delivery
+    if (!delivery) return
+    this.outbox.queued.add(id)
+    const accountId = (JSON.parse(delivery.body) as { accountId?: string | null }).accountId
+    const key = `${delivery.url} ${accountId ?? ""}`
+    const due = Date.now() + delayMs
+    const chain = (this.outbox.chains.get(key) ?? Promise.resolve())
+      .then(() => new Promise((resolve) => setTimeout(resolve, Math.max(0, due - Date.now()))))
+      .then(() => this.deliver(id))
+      .catch(() => undefined)
+      .finally(() => {
+        this.outbox.queued.delete(id)
+        if (this.outbox.chains.get(key) === chain) this.outbox.chains.delete(key)
+      })
+    this.outbox.chains.set(key, chain)
+  }
+  /**
+   * One delivery attempt. A 2xx answer ends it; anything else (or no answer) is retried on Kill
+   * Bill's schedule, when the clock reaches it (a clock move, or the next request).
+   */
+  private async deliver(id: string) {
+    const queued = this.state.busEvents.get(id) ?? this.state.notifications.get(id)
+    const delivery = queued?.delivery
+    if (!delivery) return
+    let delivered = false
     try {
-      await fetch(url, {
+      const response = await fetch(delivery.url, {
         method: "POST",
         headers: {
           "user-agent": "KillBill/1.0",
           "content-type": "application/json; charset=UTF-8",
         },
-        body,
+        body: delivery.body,
       })
+      delivered = response.ok
+      await response.body?.cancel()
     } catch {
-      // Delivery failure is retried by Kill Bill; it does not fail the API call.
+      delivered = false
     }
+    this.state.busEvents.delete(id)
+    this.state.notifications.delete(id)
+    const delay = NOTIFICATION_RETRY_MS[delivery.attempts]
+    if (delivered || delay === undefined) return
+    this.state.notifications.insert(id, {
+      id,
+      kind: PUSH_RETRY,
+      effectiveDate: new Date(this.now() + delay).toISOString(),
+      delivery: { ...delivery, attempts: delivery.attempts + 1 },
+    })
+  }
+  /**
+   * Retries whose time the clock has reached are delivered now, in order, and so is any first
+   * delivery not yet on its way (one restored from a snapshot).
+   */
+  private retryDueNotifications() {
+    for (const { value } of this.state.busEvents.list({
+      order: "oldest",
+      where: (row) => row.delivery !== undefined,
+    }))
+      this.queueDelivery(value.id, 0)
+    const now = this.now()
+    for (const { value } of this.state.notifications.list({
+      order: "oldest",
+      where: (row) => row.kind === PUSH_RETRY && Date.parse(row.effectiveDate) <= now,
+    }))
+      this.queueDelivery(value.id, 0)
   }
   private audit(request: Request, objectType: string, objectId: string) {
     const createdBy = request.headers.get("x-killbill-createdby") ?? "mockingbird"
@@ -1957,16 +2034,12 @@ export class KillBillAPI {
     return due.length === 0 && this.state.busEvents.count() === 0
   }
   private async waitForQueues(timeoutSec: number) {
-    let triesLeft = timeoutSec
-    let idle = false
-    while (!idle && triesLeft > 0) {
-      idle = this.queuesIdle()
-      if (!idle) {
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        triesLeft -= 1
-      }
+    const deadline = Date.now() + timeoutSec * 1000
+    while (!this.queuesIdle()) {
+      if (Date.now() >= deadline) return false
+      await new Promise((resolve) => setTimeout(resolve, 50))
     }
-    return idle
+    return true
   }
   private async body(request: Request) {
     const text = await request.text()
@@ -2057,6 +2130,7 @@ export class KillBillAPI {
       userToken: request.headers.get("x-request-id") ?? "",
       level: level === "FULL" || level === "MINIMAL" ? level : "NONE",
     }
+    this.retryDueNotifications()
     const scoped: KillBillAPI = Object.create(this)
     scoped.requestAudit = audit
     return scoped.handle(request)
@@ -2141,6 +2215,7 @@ export class KillBillAPI {
         return this.problem(400, "INVALID_DATE", "requestedDate is required")
       this.state.settings.insert("settings", { ...settings, clockMs: parsed })
       await this.billDue(tenantId)
+      this.retryDueNotifications()
       return this.json(clockJson(parsed, zone))
     }
     if (parts[0] === "test" && parts[1] === "queues" && parts.length === 2) {
