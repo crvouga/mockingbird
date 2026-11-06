@@ -47,6 +47,23 @@ export type Subscription = Record<string, unknown> & {
   cancelledDate?: string
   /** The day billing stops (Kill Bill's billingEndDate); renewals from it on are not billed. */
   billingEndDate?: string
+  /**
+   * Plan changes in the order they were requested: applied ones and those still ahead (a requested
+   * date, or the period end). Kill Bill reports each as a CHANGE event.
+   */
+  planChanges?: {
+    effectiveDate: string
+    planName: string
+    fromPlanName: string
+    /** When the request was made: an immediate change reports this instant. */
+    createdAt: string
+    endOfTerm?: boolean
+    /** Requested with billingPolicy=IMMEDIATE: dated by the request instant. */
+    immediate?: boolean
+    applied?: boolean
+  }[]
+  /** The day the latest applied plan change took effect: periods align to its month. */
+  billingAnchorDate?: string
   /** The day a billing pause took effect and credited the rest of the billed period. */
   billingPausedFrom?: string
   /** When the cancel request ran: a stop on that day reads as this instant. */
@@ -54,8 +71,11 @@ export type Subscription = Record<string, unknown> & {
   /** Billing stopped at the requested instant before entitlement (STOP_BILLING listed first). */
   billingStopFirst?: boolean
   pendingChangePlan?: string
+  /** The latest BCD change: its day and effective date (earlier ones are in `bcdChanges`). */
   billCycleDayLocal?: number
   bcdEffectiveFromDate?: string
+  /** Every BCD change, in effective-date order; each takes over from its effective date. */
+  bcdChanges?: { day: number; effectiveFrom: string }[]
   blockingStates?: {
     stateName: string
     service: string
@@ -65,6 +85,8 @@ export type Subscription = Record<string, unknown> & {
     effectiveDate: string
     /** When the state was added, for the subscription's event list. */
     createdAt?: string
+    /** Added with a requestedDate: its event is dated that day, not when it was added. */
+    requested?: boolean
   }[]
   /** When the subscription was created: Kill Bill reports startDate as this instant. */
   createdAt?: string

@@ -178,28 +178,36 @@ describe("Kill Bill subscription billing controls", () => {
     }
   })
 
-  test("a second BCD change is explicitly unsupported and preserves the existing renewal schedule", async () => {
+  test("BCD changes stack: each takes over from its own effective date", async () => {
     const s = await session()
     try {
+      // Kill Bill 0.24.16 (parity scenario bcd-twice): BCD 5 from 02-01, then BCD 10 from 04-01.
       const path = `/subscriptions/${s.subscriptionId}/bcd`
-      expect((await s.request(path, "PUT", { billCycleDayLocal: 5 })).status).toBe(204)
-      const before = await s.subscription()
-      const response = await s.request(`${path}?effectiveFromDate=2030-03-01`, "PUT", {
-        billCycleDayLocal: 20,
-      })
-      expect(response.status).toBe(400)
-      expect((await response.json()).code).toBe("UNSUPPORTED_BCD")
-      expect(await s.subscription()).toEqual(before)
-      const initial = (await s.invoices()).length
-      // Kill Bill 0.24.16 (test clock): BCD 5 from the start day bills the 02-01..02-05 stub on
-      // 01-05 at 4/31 of the new 01-05..02-05 period, then renews on the 5th.
-      await s.clock("2030-01-04")
-      expect((await s.invoices()).length).toBe(initial)
-      await s.clock("2030-01-05")
-      expect((await s.invoices()).length).toBe(initial + 1)
+      await s.clock("2030-01-15")
+      expect(
+        (await s.request(`${path}?effectiveFromDate=2030-02-01`, "PUT", { billCycleDayLocal: 5 }))
+          .status,
+      ).toBe(204)
+      expect(
+        (await s.request(`${path}?effectiveFromDate=2030-04-01`, "PUT", { billCycleDayLocal: 10 }))
+          .status,
+      ).toBe(204)
+      const read = async () => {
+        const subscription = await s.subscription()
+        return [
+          subscription.chargedThroughDate,
+          subscription.billCycleDayLocal,
+          (await s.items()).at(-1),
+        ]
+      }
+      await s.clock("2030-02-01")
+      expect(await read()).toEqual(["2030-02-05", 1, "RECURRING 2030-02-01 14.29"])
       await s.clock("2030-02-05")
-      expect((await s.invoices()).length).toBe(initial + 2)
-      expect((await s.subscription()).chargedThroughDate).toBe("2030-03-05")
+      expect(await read()).toEqual(["2030-03-05", 5, "RECURRING 2030-02-05 100"])
+      await s.clock("2030-04-05")
+      expect(await read()).toEqual(["2030-04-10", 5, "RECURRING 2030-04-05 16.67"])
+      await s.clock("2030-04-10")
+      expect(await read()).toEqual(["2030-05-10", 10, "RECURRING 2030-04-10 100"])
     } finally {
       await s.server.close()
     }

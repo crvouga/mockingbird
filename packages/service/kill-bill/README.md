@@ -74,9 +74,13 @@ The scenarios cover not-found answers, catalog errors, renewal invoicing
 (`POST /1.0/kb/invoices`) and its target-date limits, account credit (committed and draft) and its
 use, an adjustment of a paid item, seven cancellation shapes, an item-adjusted external refund
 with its key lookup and audit logs, a future-dated subscription cancelled before it starts, an
-entitlement pause and resume, a billing pause across two renewals, three BCD changes under the
-test clock, and an annual BCD change. All of them matched Kill Bill 0.24.16 (the version Geviti
-runs in production) on 2026-11-06.
+entitlement pause and resume, a billing pause across two renewals, BCD changes under the test
+clock (one, two stacked, and on an annual plan), plan changes on annual and semiannual plans
+(immediate, on a requested day, at the period end, to the same plan, and with a cancellation
+after it), and a renewal-day move (a billing hold, its release and a BCD change). Plan-change
+scenarios use a second catalog whose rules leave changes and cancellations at END_OF_TERM and
+every alignment at Kill Bill's defaults. All of them matched Kill Bill 0.24.16 (the version
+Geviti runs in production) on 2026-11-06.
 
 ## Controls
 
@@ -137,11 +141,25 @@ exact vendor errors, account-specific permissions, proration and billing transit
   the last new billing day on or before the stub: billed on a new billing day it is prorated over
   that new period (BCD 5 from 01-01 bills 02-01..02-05 on 01-05 at 4/31), otherwise over the month
   from its start (BCD 5 from 02-01 bills it on 02-01 at 4/28). The subscription reports the new day
-  from the first new billing day on. An annual plan accepts the change and reads back unchanged.
-  Retroactive changes return `UNSUPPORTED_BCD`. Only one BCD schedule change per subscription is
-  modelled. A later request changing the day or effective date returns `UNSUPPORTED_BCD` without
-  mutation; repeating the same pair is accepted. Multiple transitions require a new subscription
-  fixture.
+  from the first new billing day on. Semiannual and annual plans follow the same rules over their
+  longer periods. Changes stack, each taking over from its own effective date (a later change with
+  the same date replaces it; parity scenario `bcd-twice`), and a `billCycleDayLocal` sent when the
+  subscription is created is its BCD from the start. A billing hold from the period end, released
+  on a later day with the BCD moved to that day, renews a full period from it (parity scenario
+  `move-renewal-day-annual`). Retroactive changes return `UNSUPPORTED_BCD`.
+- `PUT /1.0/kb/subscriptions/{subscriptionId}` changes the plan (Kill Bill 0.24.16, parity
+  scenarios `change-*`). With `billingPolicy=IMMEDIATE` (the default) the change takes effect today;
+  with only a `requestedDate`, on that day; with `billingPolicy=END_OF_TERM`, on the
+  charged-through date, when the renewal bills the new plan. Taking effect, it bills one invoice:
+  the new plan from that day to its next billing day, the period now falling in that day's month
+  (an annual plan changed on 04-11 bills 04-11..next 04-01 at 355/365), and a `REPAIR_ADJ` for the
+  unused share of the old plan's billed period, then pays the difference as automatic payment
+  would. `priceOverrides` sent with the change replace the subscription's. Each change is a
+  `CHANGE` event from the request on (dated the request instant when immediate), `prices` lists
+  every plan the subscription has had or is changing to, and events report the plan in effect
+  when they happen. Cancelling drops a change scheduled on or after the cancellation;
+  `undoChangePlan` and `DELETE …/changePlan` drop any change not yet in effect. The catalog's own
+  change-policy rules are not read: no policy and no date means `IMMEDIATE`.
 - `POST /1.0/kb/invoices/dryRun?accountId=...&targetDate=YYYY-MM-DD` previews the recurring
   periods due through `targetDate` per active, unblocked subscription without creating invoices,
   consuming IDs, emitting events, charging payments or advancing billing state. It supports
@@ -197,7 +215,6 @@ exact vendor errors, account-specific permissions, proration and billing transit
   key an unkeyed subscription and its bundle by their ids, report `chargedThroughDate` null until
   the first invoice, and read `PENDING` until a later start (also when cancelled before it). The
   account invoice list carries amounts and items only with `includeInvoiceComponents=true`.
-  `pendingChangePlan` is an emulator extra that Kill Bill does not return.
 - `POST /1.0/kb/invoices/{invoiceId}` adjusts the specified `invoiceItemId` by a positive
   `amount`, or its remaining adjustable amount when omitted. It returns 201 and appends a
   negative `ITEM_ADJ` linked to the original item, reducing the invoice amount. What it takes
