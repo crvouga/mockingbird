@@ -80,11 +80,21 @@ const addPeriod = (date: string, intervalDays = 30) => {
   return isoDate(Date.UTC(start.getUTCFullYear(), target, Math.min(start.getUTCDate(), last)))
 }
 const billingPeriod = (intervalDays?: number) => {
-  if (intervalDays === 1) return "DAILY"
-  if (intervalDays === 7) return "WEEKLY"
-  if (intervalDays !== undefined && intervalDays >= 365) return "ANNUAL"
-  return "MONTHLY"
+  if (intervalDays === undefined) return "MONTHLY"
+  if (intervalDays >= 365) return "ANNUAL"
+  return (
+    Object.entries(billingPeriodDays).find(
+      ([name, days]) => days === intervalDays && name !== "THIRTY_DAYS",
+    )?.[0] ?? "MONTHLY"
+  )
 }
+/** Calendar months in one period of a month-based plan (1, 3, 6, 12…); 0 for day-based plans. */
+const periodMonths = (intervalDays = 30) =>
+  intervalDays >= 365
+    ? 12 * Math.round(intervalDays / 365)
+    : intervalDays % 30 === 0
+      ? intervalDays / 30
+      : 0
 // Mock billing advances by intervalDays, so month-based periods use a 30-day month.
 const billingPeriodDays: Record<string, number> = {
   DAILY: 1,
@@ -661,7 +671,14 @@ export class KillBillAPI {
       billingEndDate: billingStop,
       cancelledAt: new Date(now).toISOString(),
       billingStopFirst: billingPolicy === null && useRequested && requested?.includes("T") === true,
+      // Kill Bill 0.24.16 drops a plan change scheduled on or after the cancellation (parity
+      // scenario change-end-of-term).
+      planChanges: (subscription.planChanges ?? []).filter(
+        (row) => row.applied || row.effectiveDate < entitlementStop,
+      ),
     }
+    if (subscription.pendingChangePlan !== undefined && billingStop <= periodEnd)
+      delete next.pendingChangePlan
     this.state.subscriptions.insert(subscription.subscriptionId, next)
     if (billingStop < periodEnd) await this.repairUnusedPeriod(subscription, billingStop, tenantId)
     return undefined
@@ -718,20 +735,31 @@ export class KillBillAPI {
     const {
       blockingStates: _blockingStates,
       bcdEffectiveFromDate: _bcd,
+      bcdChanges: _bcdChanges,
       createdAt: _createdAt,
       cancelledAt: _cancelledAt,
       billingStopFirst: _billingStopFirst,
       billingPausedFrom: _billingPausedFrom,
+      planChanges: _planChanges,
+      billingAnchorDate: _billingAnchorDate,
+      pendingChangePlan: _pendingChangePlan,
       ...stored
     } = subscription
     const plan = this.plan(subscription.planName)
     const period = billingPeriod(plan?.intervalDays)
     const product = plan?.product ?? subscription.planName
-    const phase = `${subscription.planName}-evergreen`
     const startedAt =
       subscription.createdAt && subscription.createdAt.slice(0, 10) === subscription.startDate
         ? subscription.createdAt
         : `${subscription.startDate}T00:00:00.000Z`
+    const changes = subscription.planChanges ?? []
+    const changeInstant = (change: (typeof changes)[number]) =>
+      change.immediate ? change.createdAt : `${change.effectiveDate}T00:00:00.000Z`
+    // Each event reports the plan in effect when it happens.
+    const planAt = (instant: string) =>
+      changes.filter((change) => changeInstant(change) <= instant).at(-1)?.planName ??
+      changes[0]?.fromPlanName ??
+      subscription.planName
     const event = (
       eventId: string,
       eventType: string,
@@ -739,22 +767,26 @@ export class KillBillAPI {
       serviceName: string,
       serviceStateName: string,
       blocked: { billing: boolean; entitlement: boolean },
-    ) => ({
-      auditLogs: [],
-      billingPeriod: period,
-      catalogEffectiveDate: startedAt,
-      effectiveDate,
-      eventId,
-      eventType,
-      isBlockedBilling: blocked.billing,
-      isBlockedEntitlement: blocked.entitlement,
-      phase,
-      plan: subscription.planName,
-      priceList: "DEFAULT",
-      product,
-      serviceName,
-      serviceStateName,
-    })
+      planName = planAt(effectiveDate),
+    ) => {
+      const eventPlan = this.plan(planName)
+      return {
+        auditLogs: [],
+        billingPeriod: billingPeriod(eventPlan?.intervalDays),
+        catalogEffectiveDate: startedAt,
+        effectiveDate,
+        eventId,
+        eventType,
+        isBlockedBilling: blocked.billing,
+        isBlockedEntitlement: blocked.entitlement,
+        phase: `${planName}-evergreen`,
+        plan: planName,
+        priceList: "DEFAULT",
+        product: eventPlan?.product ?? planName,
+        serviceName,
+        serviceStateName,
+      }
+    }
     const events = [
       event(
         `${subscription.subscriptionId}-ent`,
@@ -773,15 +805,34 @@ export class KillBillAPI {
         { billing: false, entitlement: false },
       ),
     ]
-    ;(subscription.blockingStates ?? []).forEach((state, index) => {
-      const at = state.createdAt ?? `${state.effectiveDate}T00:00:00.000Z`
+    for (const [index, change] of changes.entries())
+      events.push(
+        event(
+          `${subscription.subscriptionId}-chg-${index}`,
+          "CHANGE",
+          changeInstant(change),
+          "entitlement+billing-service",
+          "CHANGE",
+          { billing: false, entitlement: false },
+          change.planName,
+        ),
+      )
+    // Blocking states take effect in effective-date order, whatever order they were added in.
+    const blocking = [...(subscription.blockingStates ?? [])].sort((a, b) =>
+      a.effectiveDate.localeCompare(b.effectiveDate),
+    )
+    blocking.forEach((state, index) => {
+      const at =
+        state.requested || !state.createdAt
+          ? `${state.effectiveDate}T00:00:00.000Z`
+          : state.createdAt
       const blocked = {
         billing: state.isBlockBilling,
         entitlement: state.isBlockEntitlement === true,
       }
       const id = `${subscription.subscriptionId}-blk-${index}`
       // Kill Bill reports one event per service a blocking state starts or stops blocking.
-      const previous = (subscription.blockingStates ?? [])
+      const previous = blocking
         .slice(0, index)
         .filter((entry) => entry.service === state.service)
         .at(-1)
@@ -839,6 +890,16 @@ export class KillBillAPI {
           { billing: false, entitlement: false },
         ),
       ])
+    // Kill Bill 0.24.16 lists the start events first and the stop events last (also for a
+    // subscription cancelled before it starts), and plan changes and blocking states between
+    // them by effective date.
+    const [startEntitlement, startBilling, ...between] = events
+    between.sort((a, b) => a.effectiveDate.localeCompare(b.effectiveDate))
+    events.splice(
+      0,
+      events.length,
+      ...[startEntitlement, startBilling, ...between].filter((e) => e !== undefined),
+    )
     events.push(...stops.sort(([a], [b]) => a.localeCompare(b)).map(([, stop]) => stop))
     const today = isoDate(this.now())
     const entitlementBlocked = this.subscriptionBlocked(subscription, today, "entitlement")
@@ -856,16 +917,21 @@ export class KillBillAPI {
       events,
       priceList: "DEFAULT",
       priceOverrides: subscription.priceOverrides ?? null,
-      prices: [
-        {
-          fixedPrice: null,
-          phaseName: phase,
-          phaseType: subscription.phaseType,
-          planName: subscription.planName,
-          recurringPrice: plan ? this.recurringAmount(subscription, plan) : null,
-          usagePrices: [],
-        },
-      ],
+      // Kill Bill 0.24.16 lists the price of every plan the subscription has had or is changing
+      // to, in order (parity scenarios change-*).
+      prices: [changes[0]?.fromPlanName ?? subscription.planName, ...changes.map((c) => c.planName)]
+        .filter((planName, index, all) => index === 0 || planName !== all[index - 1])
+        .map((planName) => {
+          const pricePlan = this.plan(planName)
+          return {
+            fixedPrice: null,
+            phaseName: `${planName}-evergreen`,
+            phaseType: subscription.phaseType,
+            planName,
+            recurringPrice: pricePlan ? this.recurringAmount(subscription, pricePlan) : null,
+            usagePrices: [],
+          }
+        }),
       productCategory: "BASE",
       productName: product,
       quantity: 1,
@@ -1532,61 +1598,78 @@ export class KillBillAPI {
     }
     return plan.amount
   }
+  /** The subscription's BCD changes in effective-date order (older state kept only the latest). */
+  private bcdSchedule(subscription: Subscription) {
+    if (subscription.bcdChanges) return subscription.bcdChanges
+    return subscription.billCycleDayLocal !== undefined &&
+      subscription.bcdEffectiveFromDate !== undefined
+      ? [{ day: subscription.billCycleDayLocal, effectiveFrom: subscription.bcdEffectiveFromDate }]
+      : []
+  }
+  /** The BCD change in force for a period starting on `start`, if any. */
+  private bcdChangeAt(subscription: Subscription, start: string) {
+    return this.bcdSchedule(subscription)
+      .filter((change) => change.effectiveFrom <= start)
+      .at(-1)
+  }
   /**
    * The BCD Kill Bill 0.24.16 reports: the start day until the clock reaches the first new billing
-   * day on or after the BCD's effective date (BCD 5 from 02-01 reads 5 from 02-05).
+   * day on or after a BCD change's effective date (BCD 5 from 02-01 reads 5 from 02-05), then that
+   * change's day.
    */
   private reportedBillingDay(subscription: Subscription) {
-    const startDay = Number(subscription.startDate.slice(8, 10))
-    const day = subscription.billCycleDayLocal
-    const effective = subscription.bcdEffectiveFromDate
-    if (day === undefined || effective === undefined) return startDay
-    const [year, month] = effective.split("-").map(Number) as [number, number]
-    const onDay = (monthIndex: number) => {
-      const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
-      return isoDate(Date.UTC(year, monthIndex, Math.min(day, last)))
+    const today = isoDate(this.now())
+    let reported = Number(subscription.startDate.slice(8, 10))
+    for (const { day, effectiveFrom } of this.bcdSchedule(subscription)) {
+      const [year, month] = effectiveFrom.split("-").map(Number) as [number, number]
+      const onDay = (monthIndex: number) => {
+        const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+        return isoDate(Date.UTC(year, monthIndex, Math.min(day, last)))
+      }
+      const first = onDay(month - 1) >= effectiveFrom ? onDay(month - 1) : onDay(month)
+      if (today >= first) reported = day
     }
-    const first = onDay(month - 1) >= effective ? onDay(month - 1) : onDay(month)
-    return isoDate(this.now()) >= first ? day : startDay
+    return reported
   }
   /** The day of the month a period starting on `start` bills on: the BCD once it is effective. */
   private billingDay(subscription: Subscription, start: string) {
-    const changed =
-      subscription.billCycleDayLocal !== undefined &&
-      subscription.bcdEffectiveFromDate !== undefined &&
-      start >= subscription.bcdEffectiveFromDate
-    return changed
-      ? (subscription.billCycleDayLocal as number)
-      : Number(subscription.startDate.slice(8, 10))
+    return this.bcdChangeAt(subscription, start)?.day ?? Number(subscription.startDate.slice(8, 10))
   }
   /**
    * One billing period from `start`, as Kill Bill 0.24.16 cuts it (probed with the test clock).
-   * Monthly plans bill calendar months on the billing day, clamped to the month's last day. A start
-   * off that day bills a stub up to the next billing day, prorated over the month from `start`
-   * (02-01..02-05 of a $10 plan is $1.43), on the later of the BCD's effective date and the last
-   * billing day on or before `start` (BCD 31 from 01-01 bills 02-01..02-28 on 01-31). Other plans
-   * bill whole periods: years for annual plans, days otherwise.
+   * Month-based plans bill calendar periods on the billing day, clamped to the month's last day;
+   * periods longer than a month fall in the months of the subscription's anchor (its start, or the
+   * day its plan last changed). A start off the billing day bills a stub up to the next one,
+   * prorated over the period from `start` (02-01..02-05 of a $10 monthly plan is $1.43; an annual
+   * plan changed on 04-11 bills 04-11..next 04-01 at 355/365), on the later of the BCD's effective
+   * date and the last billing day on or before `start` (BCD 31 from 01-01 bills 02-01..02-28 on
+   * 01-31). Day-based plans bill whole periods.
    */
   private billingPeriod(subscription: Subscription, plan: CatalogPlan, start: string) {
     const days = plan.intervalDays ?? 30
-    if (days !== 30) return { end: addPeriod(start, days), fraction: 1, billOn: start }
+    const months = periodMonths(days)
+    if (months === 0) return { end: addPeriod(start, days), fraction: 1, billOn: start }
     const day = this.billingDay(subscription, start)
     const [year, month] = start.split("-").map(Number) as [number, number]
     const onDay = (monthIndex: number) => {
       const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
       return isoDate(Date.UTC(year, monthIndex, Math.min(day, last)))
     }
-    const thisMonth = onDay(month - 1)
-    if (thisMonth === start) return { end: onDay(month), fraction: 1, billOn: start }
-    const end = thisMonth > start ? thisMonth : onDay(month)
-    const previous = thisMonth < start ? thisMonth : onDay(month - 2)
-    const effective = subscription.bcdEffectiveFromDate ?? start
+    const anchorMonth =
+      Number((subscription.billingAnchorDate ?? subscription.startDate).slice(5, 7)) - 1
+    const offset = (((month - 1 - anchorMonth) % months) + months) % months
+    const aligned = month - 1 - offset
+    const thisPeriod = onDay(aligned)
+    if (thisPeriod === start) return { end: onDay(aligned + months), fraction: 1, billOn: start }
+    const end = thisPeriod > start ? thisPeriod : onDay(aligned + months)
+    const previous = thisPeriod < start ? thisPeriod : onDay(aligned - months)
+    const effective = this.bcdChangeAt(subscription, start)?.effectiveFrom ?? start
     // Billed on a new billing day, the stub is prorated over that new period (BCD 5 from 01-01:
-    // 02-01..02-05 is 4/31 of 01-05..02-05); otherwise over the month from its start (4/28).
+    // 02-01..02-05 is 4/31 of 01-05..02-05); otherwise over the period from its start (4/28).
     const realigned = previous > effective
     const whole = realigned
       ? Date.parse(end) - Date.parse(previous)
-      : Date.parse(addPeriod(start, 30)) - Date.parse(start)
+      : Date.parse(addPeriod(start, days)) - Date.parse(start)
     return {
       end,
       fraction: (Date.parse(end) - Date.parse(start)) / whole,
@@ -1603,6 +1686,12 @@ export class KillBillAPI {
       return { items, chargedThroughDate: start }
     if (subscription.billingPausedFrom !== undefined)
       start = this.billingTransition(subscription, through, false) ?? start
+    // A hold that starts on the period end (a renewal-day move) bills from its release.
+    else if (this.subscriptionBlocked(subscription, start, "billing")) {
+      const release = this.billingTransition(subscription, through, false)
+      if (release === undefined || release <= start) return { items, chargedThroughDate: start }
+      start = release
+    }
     while (true) {
       // A cancelled subscription bills nothing from the day its billing stops.
       if (subscription.billingEndDate !== undefined && start >= subscription.billingEndDate) break
@@ -1704,7 +1793,8 @@ export class KillBillAPI {
         this.billable(s, today) &&
         this.account(s.accountId, tenantId) !== undefined,
     })) {
-      const current = await this.startBillingPause(stored, today, tenantId)
+      const changed = await this.applyDuePlanChanges(stored, today, tenantId)
+      const current = await this.startBillingPause(changed, today, tenantId)
       // An end-of-term plan change takes effect on the renewal it was scheduled for.
       const planName = current.pendingChangePlan ?? current.planName
       const plan = this.plan(planName)
@@ -1724,21 +1814,120 @@ export class KillBillAPI {
       delete next.billingPausedFrom
       this.clearEntitlement(subscription.subscriptionId)
       this.state.subscriptions.insert(subscription.subscriptionId, next)
-      const method = this.state.methods
-        .list({ where: (m) => m.accountId === subscription.accountId && m.isDefault })
-        .map(({ value }) => value)[0]
-      // Kill Bill 0.24.10 skips automatic payment on an AUTO_PAY_OFF account, and pays only what is
-      // still owed: a push-notification consumer may have paid the invoice during INVOICE_CREATION.
-      const owed = invoice ? (this.state.invoices.get(invoice.invoiceId)?.balance ?? 0) : 0
-      if (invoice && method && owed > 0 && !this.autoPayOff(subscription.accountId))
-        await this.pay(
-          subscription.accountId,
-          tenantId,
-          { amount: owed, transactionType: "PURCHASE", currency: invoice.currency },
-          invoice.invoiceId,
-          method.paymentMethodId,
-        )
+      if (invoice) await this.autoPay(invoice, tenantId)
     }
+  }
+  /**
+   * Kill Bill 0.24.10 skips automatic payment on an AUTO_PAY_OFF account, and pays only what is
+   * still owed: a push-notification consumer may have paid the invoice during INVOICE_CREATION.
+   */
+  private async autoPay(invoice: Invoice, tenantId: string) {
+    const method = this.state.methods
+      .list({ where: (m) => m.accountId === invoice.accountId && m.isDefault })
+      .map(({ value }) => value)[0]
+    const owed = this.state.invoices.get(invoice.invoiceId)?.balance ?? 0
+    if (method && owed > 0 && !this.autoPayOff(invoice.accountId))
+      await this.pay(
+        invoice.accountId,
+        tenantId,
+        { amount: owed, transactionType: "PURCHASE", currency: invoice.currency },
+        invoice.invoiceId,
+        method.paymentMethodId,
+      )
+  }
+  /**
+   * A plan change taking effect on `day`, as Kill Bill 0.24.16 bills it (parity scenarios
+   * `change-immediate-*`, `change-requested-date`): one invoice with the new plan from that day to
+   * its next billing day (the period now aligned to that month) and a REPAIR_ADJ for the unused
+   * share of the old plan's billed period, then automatic payment of the difference.
+   */
+  private async applyPlanChange(
+    subscription: Subscription,
+    planName: string,
+    day: string,
+    tenantId: string,
+    priceOverrides?: Record<string, unknown>[],
+  ) {
+    const plan = this.plan(planName)
+    if (!plan) return subscription
+    const items: Input[] = []
+    const billed = this.state.invoices
+      .list({
+        where: (row) => row.accountId === subscription.accountId && row.status === "COMMITTED",
+      })
+      .flatMap(({ value }) => value.items)
+      .filter(
+        (row) =>
+          row.itemType === "RECURRING" &&
+          row.subscriptionId === subscription.subscriptionId &&
+          row.startDate <= day &&
+          typeof row.endDate === "string" &&
+          day < row.endDate,
+      )
+      .at(-1)
+    const next: Subscription = {
+      ...subscription,
+      planName,
+      billingAnchorDate: day,
+      chargedThroughDate: day,
+      planChanges: (subscription.planChanges ?? []).map((change) =>
+        !change.applied && change.planName === planName && change.effectiveDate === day
+          ? { ...change, applied: true }
+          : change,
+      ),
+      ...(priceOverrides ? { priceOverrides } : {}),
+    }
+    if (!priceOverrides) delete next.priceOverrides
+    delete next.pendingChangePlan
+    if (!this.subscriptionBlocked(next, day, "billing")) {
+      const { end, fraction } = this.billingPeriod(next, plan, day)
+      items.push({
+        itemType: "RECURRING",
+        amount: money(this.recurringAmount(next, plan) * fraction),
+        currency: plan.currency ?? "USD",
+        description: plan.name,
+        startDate: day,
+        endDate: end,
+        subscriptionId: subscription.subscriptionId,
+        planName: plan.name,
+      })
+      next.chargedThroughDate = end
+    }
+    if (billed) {
+      const end = billed.endDate as string
+      const share =
+        (Date.parse(end) - Date.parse(day)) / (Date.parse(end) - Date.parse(billed.startDate))
+      items.push({
+        itemType: "REPAIR_ADJ",
+        amount: -money(billed.amount * share),
+        startDate: day,
+        endDate: end,
+        linkedInvoiceItemId: billed.invoiceItemId,
+        subscriptionId: subscription.subscriptionId,
+        description: "Adjustment (subscription repair)",
+      })
+    }
+    this.clearEntitlement(subscription.subscriptionId)
+    this.state.subscriptions.insert(subscription.subscriptionId, next)
+    if (items.length > 0) {
+      const invoice = await this.createInvoice(
+        subscription.accountId,
+        tenantId,
+        items,
+        "Plan change",
+      )
+      if (invoice) await this.autoPay(invoice, tenantId)
+    }
+    return next
+  }
+  /** Dated plan changes whose day has come take effect before the period is billed. */
+  private async applyDuePlanChanges(subscription: Subscription, today: string, tenantId: string) {
+    let current = subscription
+    for (const change of subscription.planChanges ?? []) {
+      if (change.applied || change.endOfTerm || change.effectiveDate > today) continue
+      current = await this.applyPlanChange(current, change.planName, change.effectiveDate, tenantId)
+    }
+    return current
   }
   private entitlementNotificationId(subscriptionId: string) {
     return `entitlement:${subscriptionId}`
@@ -2212,8 +2401,16 @@ export class KillBillAPI {
           })
         if (!createdSubscriptionId) createdSubscriptionId = subscriptionId
         const date = url.searchParams.get("entitlementDate") ?? isoDate(this.now())
+        // A billCycleDayLocal sent on create is the BCD from the start: no change when it is the
+        // start day, otherwise a change effective from the start.
+        const { billCycleDayLocal: requestedBcd, ...fields } = input
+        const startBcd =
+          typeof requestedBcd === "number" && requestedBcd !== Number(date.slice(8, 10))
+            ? { bcdChanges: [{ day: requestedBcd, effectiveFrom: date }] }
+            : {}
         const subscription: Subscription = {
-          ...input,
+          ...fields,
+          ...startBcd,
           subscriptionId,
           accountId: input.accountId,
           bundleId,
@@ -2289,6 +2486,7 @@ export class KillBillAPI {
               isBlockChange: body.isBlockChange === true,
               effectiveDate,
               createdAt: new Date(this.now()).toISOString(),
+              ...(url.searchParams.has("requestedDate") ? { requested: true } : {}),
             },
           ],
         }
@@ -2309,9 +2507,9 @@ export class KillBillAPI {
             "INVALID_BCD",
             "billCycleDayLocal must be an integer from 1 to 31",
           )
-        // Kill Bill 0.24.16 accepts a BCD change on a non-monthly plan (204) and the subscription
-        // reads back unchanged; the emulator records nothing for it.
-        if ((this.plan(subscription.planName)?.intervalDays ?? 30) !== 30) return this.empty()
+        // Kill Bill 0.24.16 moves the billing day of month-based plans of any length (an annual
+        // plan reads it from its first new billing day on); day-based plans keep theirs.
+        if (periodMonths(this.plan(subscription.planName)?.intervalDays) === 0) return this.empty()
         const effective = url.searchParams.get("effectiveFromDate") ?? isoDate(this.now())
         if (
           !/^\d{4}-\d{2}-\d{2}$/.test(effective) ||
@@ -2337,20 +2535,16 @@ export class KillBillAPI {
           body.subscriptionId !== subscription.subscriptionId
         )
           return this.problem(400, "INVALID_SUBSCRIPTION", "subscriptionId must match the path")
-        if (
-          subscription.billCycleDayLocal !== undefined &&
-          (subscription.billCycleDayLocal !== day ||
-            subscription.bcdEffectiveFromDate !== effective)
-        )
-          return this.problem(
-            400,
-            "UNSUPPORTED_BCD",
-            "The emulator supports only one BCD schedule change per subscription",
-          )
+        // Kill Bill keeps every BCD change; a later one with the same effective date replaces it.
+        const bcdChanges = [
+          ...this.bcdSchedule(subscription).filter((change) => change.effectiveFrom !== effective),
+          { day, effectiveFrom: effective },
+        ].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))
         this.state.subscriptions.insert(subscription.subscriptionId, {
           ...subscription,
           billCycleDayLocal: day,
           bcdEffectiveFromDate: effective,
+          bcdChanges,
         })
         this.audit(request, "SUBSCRIPTION", subscription.subscriptionId)
         return this.empty()
@@ -2372,7 +2566,8 @@ export class KillBillAPI {
         return this.empty()
       }
       if (parts[2] === "undoChangePlan" && request.method === "PUT") {
-        if (!subscription.pendingChangePlan)
+        const pending = (subscription.planChanges ?? []).some((row) => !row.applied)
+        if (!subscription.pendingChangePlan && !pending)
           return this.json(
             {
               className: "org.killbill.billing.subscription.api.user.SubscriptionBaseApiException",
@@ -2387,13 +2582,19 @@ export class KillBillAPI {
             },
             400,
           )
-        const next = { ...subscription }
+        const next = {
+          ...subscription,
+          planChanges: (subscription.planChanges ?? []).filter((row) => row.applied),
+        }
         delete next.pendingChangePlan
         this.state.subscriptions.insert(subscription.subscriptionId, next)
         return this.empty()
       }
       if (parts[2] === "changePlan" && request.method === "DELETE") {
-        const next = { ...subscription }
+        const next = {
+          ...subscription,
+          planChanges: (subscription.planChanges ?? []).filter((row) => row.applied),
+        }
         delete next.pendingChangePlan
         this.state.subscriptions.insert(subscription.subscriptionId, next)
         this.clearEntitlement(subscription.subscriptionId)
@@ -2415,13 +2616,60 @@ export class KillBillAPI {
       if (request.method === "PUT") {
         const planName = typeof body.planName === "string" ? body.planName : ""
         if (!this.plan(planName)) return this.problem(400, "INVALID_PLAN", "Unknown plan")
-        const immediate = (url.searchParams.get("billingPolicy") ?? "IMMEDIATE") === "IMMEDIATE"
-        const next = immediate
-          ? { ...subscription, planName }
-          : { ...subscription, pendingChangePlan: planName }
-        this.state.subscriptions.insert(subscription.subscriptionId, next)
-        if (immediate) this.clearEntitlement(subscription.subscriptionId)
-        else this.scheduleEntitlement(next)
+        const today = isoDate(this.now())
+        const requested = url.searchParams.get("requestedDate")
+        const requestedDay = requested?.slice(0, 10)
+        if (
+          requestedDay !== undefined &&
+          (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDay) ||
+            isoDate(Date.parse(requestedDay)) !== requestedDay)
+        )
+          return this.problem(400, "INVALID_DATE", "requestedDate must be a valid date")
+        const policy = url.searchParams.get("billingPolicy") ?? (requested ? null : "IMMEDIATE")
+        const overrides = Array.isArray(body.priceOverrides)
+          ? body.priceOverrides.map(object)
+          : undefined
+        const change = {
+          planName,
+          fromPlanName: subscription.planName,
+          createdAt: new Date(this.now()).toISOString(),
+        }
+        // Kill Bill 0.24.16 (parity scenarios change-*): END_OF_TERM changes the plan on the
+        // charged-through date; a requestedDate alone on that day; IMMEDIATE (or a day that has
+        // come) now, billing the difference at once. Each is a CHANGE event from the request on.
+        if (policy === "END_OF_TERM") {
+          const day = subscription.chargedThroughDate ?? subscription.startDate
+          const next = {
+            ...subscription,
+            pendingChangePlan: planName,
+            planChanges: [
+              ...(subscription.planChanges ?? []).filter((row) => row.applied),
+              { ...change, effectiveDate: day, endOfTerm: true },
+            ],
+          }
+          this.state.subscriptions.insert(subscription.subscriptionId, next)
+          this.scheduleEntitlement(next)
+        } else if (requestedDay !== undefined && requestedDay > today) {
+          const next = {
+            ...subscription,
+            planChanges: [
+              ...(subscription.planChanges ?? []).filter((row) => row.applied),
+              { ...change, effectiveDate: requestedDay },
+            ],
+          }
+          delete next.pendingChangePlan
+          this.state.subscriptions.insert(subscription.subscriptionId, next)
+        } else {
+          const day = requestedDay ?? today
+          const recorded = {
+            ...subscription,
+            planChanges: [
+              ...(subscription.planChanges ?? []).filter((row) => row.applied),
+              { ...change, effectiveDate: day, ...(requestedDay ? {} : { immediate: true }) },
+            ],
+          }
+          await this.applyPlanChange(recorded, planName, day, tenantId, overrides)
+        }
         await this.emit(
           "SUBSCRIPTION_CHANGE",
           "SUBSCRIPTION",
