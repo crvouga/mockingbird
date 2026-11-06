@@ -66,10 +66,11 @@ their components (amounts zero, no items), as Kill Bill 0.24.16 does.
 request scenarios (`scripts/scenarios.ts`) against a Kill Bill you run and a fresh emulator, each in
 a new tenant it creates, and diffs the normalized transcripts (ids become placeholders, instants
 `<ts>`; dates, amounts and states compare as they are). It writes, so it refuses a non-loopback
-`KILL_BILL_URL` without `--allow-remote`. The scenarios cover the catalog errors, renewal invoicing
-(`POST /1.0/kb/invoices`), an item-adjusted external refund and its key lookup, an entitlement
-pause and resume, three BCD changes under the test clock, and an annual BCD change. All of them
-matched Kill Bill 0.24.16 (the version Geviti runs in production) on 2026-11-06.
+`KILL_BILL_URL` without `--allow-remote`. The scenarios cover not-found answers, the catalog errors, renewal
+invoicing (`POST /1.0/kb/invoices`), account credit and its use, seven cancel shapes, an
+item-adjusted external refund with its key lookup and audit logs, an entitlement pause and resume,
+three BCD changes under the test clock, and an annual BCD change. All of them matched Kill Bill
+0.24.16 (the version Geviti runs in production) on 2026-11-06.
 
 ## Controls
 
@@ -149,6 +150,32 @@ exact vendor errors, account-specific permissions, proration and billing transit
   lower the amount and leave the balance; without it the refund reopens the balance. An unkeyed
   payment or transaction is keyed by its own id, except the credit payment of an external refund,
   which gets a generated key (Kill Bill 0.24.16, parity scenario `refund-adjusted`).
+- `POST /1.0/kb/credits` adds, per credit, a `CREDIT_ADJ` (−amount, the given description) and a
+  `CBA_ADJ` (+amount, "Adjustment (account credit)") on a new invoice, `COMMITTED` with
+  `autoCommit=true` and `DRAFT` otherwise, and answers 200 with the `CREDIT_ADJ` items (amounts
+  positive). The account's `accountCBA` is the `creditAdj` of its committed invoices and its
+  `accountBalance` the open balance minus that credit. A new invoice uses the credit first
+  ("Adjustment (use of account credit)").
+- `DELETE /1.0/kb/subscriptions/{id}`: entitlement stops at the period end with
+  `entitlementPolicy=END_OF_TERM`, now with `IMMEDIATE`, else on `requestedDate` (a day or an
+  instant) or now; billing stops at the period end with `billingPolicy=END_OF_TERM` and by default,
+  now with `IMMEDIATE`, or on `requestedDate` with `useRequestedDateForBilling=true`. The
+  subscription reads `CANCELLED` from the entitlement stop, carries `STOP_ENTITLEMENT` and
+  `STOP_BILLING` events, and bills nothing from the billing stop. Billing that stops inside a
+  billed period credits its unused share: a `REPAIR_ADJ` invoice whose `CBA_ADJ` becomes account
+  credit. A requested instant before the subscription started is `EntitlementApiException` 1001.
+- An unknown account, subscription or invoice id is 404 `ObjectDoesNotExist` ("Object id=…
+  type=ACCOUNT doesn't exist!"); an unknown account external key is 404 `AccountApiException`
+  3003. Kill Bill answers a malformed (non-UUID) id with Tomcat's 404 page; emulator ids are not
+  UUIDs, so the emulator answers every unknown id with `ObjectDoesNotExist`.
+- `audit=FULL` (or `MINIMAL`) on a read adds each invoice, invoice item, payment and transaction's
+  audit rows: `INSERT` (and `UPDATE` for payments and transactions) with the writing request's
+  `X-Killbill-CreatedBy`, `-Comment`, `-Reason`, and its `X-Request-Id` as `userToken`
+  (generated when absent). A billing run writes as `SubscriptionBaseTransition`. Without `audit`
+  every object carries `auditLogs: []`.
+- A catalog XML upload with an `effectiveDate` the tenant already uploaded is 400
+  `CatalogApiException` 2080 "Invalid catalog for tenant : <record id>"; earlier and later dates
+  load.
 - Subscription, bundle, invoice, invoice item, payment and account reads carry the same fields as
   Kill Bill 0.24.16 production responses: subscriptions add `prices`, `events`, `billingPeriod`,
   `productName` and the other `SubscriptionJson` fields, report `startDate` as the creation instant,

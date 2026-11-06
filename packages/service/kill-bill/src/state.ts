@@ -1,5 +1,13 @@
 import { Collection, IdSequence } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+/** Who wrote a row: Kill Bill's audit columns, from the writing request's headers. */
+export type AuditStamp = {
+  changeDate: string
+  changedBy: string
+  comments: string | null
+  reasonCode: string | null
+  userToken: string
+}
 export type Account = Record<string, unknown> & {
   accountId: string
   tenantId: string
@@ -35,7 +43,14 @@ export type Subscription = Record<string, unknown> & {
   state: "PENDING" | "ACTIVE" | "CANCELLED"
   startDate: string
   chargedThroughDate?: string
+  /** The day entitlement stops (Kill Bill's cancelledDate). */
   cancelledDate?: string
+  /** The day billing stops (Kill Bill's billingEndDate); renewals from it on are not billed. */
+  billingEndDate?: string
+  /** When the cancel request ran: a stop on that day reads as this instant. */
+  cancelledAt?: string
+  /** Billing stopped at the requested instant before entitlement (STOP_BILLING listed first). */
+  billingStopFirst?: boolean
   pendingChangePlan?: string
   billCycleDayLocal?: number
   bcdEffectiveFromDate?: string
@@ -61,6 +76,7 @@ export type Bundle = {
   subscriptions: string[]
 }
 export type InvoiceItem = Record<string, unknown> & {
+  audit?: AuditStamp
   invoiceItemId: string
   invoiceId: string
   accountId: string
@@ -74,13 +90,14 @@ export type InvoiceItem = Record<string, unknown> & {
   planName?: string
 }
 export type Invoice = {
+  audit?: AuditStamp
   invoiceId: string
   accountId: string
   invoiceNumber: string
   invoiceDate: string
   targetDate: string
   currency: string
-  status: "COMMITTED" | "VOID"
+  status: "COMMITTED" | "DRAFT" | "VOID"
   amount: number
   balance: number
   creditAdj: number
@@ -88,6 +105,7 @@ export type Invoice = {
   items: InvoiceItem[]
 }
 export type Transaction = {
+  audit?: AuditStamp
   transactionId: string
   paymentId: string
   transactionExternalKey: string
@@ -100,6 +118,7 @@ export type Transaction = {
   gatewayErrorMsg?: string
 }
 export type Payment = {
+  audit?: AuditStamp
   paymentId: string
   accountId: string
   invoiceId?: string
@@ -152,6 +171,8 @@ export class KillBillState {
   readonly payments: Collection<Payment>
   readonly tags: Collection<{ objectId: string; tagDefinitionId: string }>
   readonly plans: Collection<CatalogPlan>
+  /** Effective dates of the catalog versions each tenant uploaded, keyed by tenantId. */
+  readonly catalogVersions: Collection<{ effectiveDates: string[] }>
   readonly audits: Collection<Audit>
   readonly notifications: Collection<QueuedNotification>
   readonly busEvents: Collection<QueuedBusEvent>
@@ -167,6 +188,7 @@ export class KillBillState {
     this.payments = new Collection(sqlite, namespace, "kb_payments")
     this.tags = new Collection(sqlite, namespace, "kb_tags")
     this.plans = new Collection(sqlite, namespace, "kb_plans")
+    this.catalogVersions = new Collection(sqlite, namespace, "kb_catalog_versions")
     this.audits = new Collection(sqlite, namespace, "kb_audits")
     this.notifications = new Collection(sqlite, namespace, "kb_notifications")
     this.busEvents = new Collection(sqlite, namespace, "kb_bus_events")

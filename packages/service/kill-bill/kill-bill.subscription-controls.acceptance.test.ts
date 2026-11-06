@@ -59,7 +59,10 @@ describe("Kill Bill subscription billing controls", () => {
       expect((await s.request(path, "PUT", blocking(true))).status).toBe(405)
       const missing = await s.request("/subscriptions/missing/block", "POST", blocking(true))
       expect(missing.status).toBe(404)
-      expect((await missing.json()).code).toBe("SUBSCRIPTION_DOES_NOT_EXIST")
+      // Kill Bill 0.24.16: an unknown id is ObjectDoesNotExist.
+      expect((await missing.json()).message).toBe(
+        "Object id=missing type=SUBSCRIPTION doesn't exist!",
+      )
     } finally {
       await s.server.close()
     }
@@ -156,7 +159,10 @@ describe("Kill Bill subscription billing controls", () => {
       expect(items).toContain("2030-02-05..2030-03-05 100")
       const missing = await s.request("/subscriptions/missing/bcd", "PUT", { billCycleDayLocal: 5 })
       expect(missing.status).toBe(404)
-      expect((await missing.json()).code).toBe("SUBSCRIPTION_DOES_NOT_EXIST")
+      // Kill Bill 0.24.16: an unknown id is ObjectDoesNotExist.
+      expect((await missing.json()).message).toBe(
+        "Object id=missing type=SUBSCRIPTION doesn't exist!",
+      )
     } finally {
       await s.server.close()
     }

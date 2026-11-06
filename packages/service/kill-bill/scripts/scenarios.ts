@@ -70,6 +70,7 @@ type Client = {
     path: string,
     body?: unknown,
     contentType?: string,
+    headers?: Record<string, string>,
   ) => Promise<Step>
   idFrom: (step: Step) => string
   drain: () => Promise<void>
@@ -85,13 +86,20 @@ async function client(target: Target, scenario: string): Promise<Client> {
   const tenantHeaders = { "x-killbill-apikey": tenant, "x-killbill-apisecret": `${tenant}-secret` }
   const steps: Step[] = []
   const locations = new WeakMap<Step, string>()
-  const raw = async (method: string, path: string, body?: unknown, contentType?: string) => {
+  const raw = async (
+    method: string,
+    path: string,
+    body?: unknown,
+    contentType?: string,
+    extra: Record<string, string> = {},
+  ) => {
     const response = await fetch(`${target.baseUrl}${path}`, {
       method,
       headers: {
         ...base,
         ...(path.startsWith("/1.0/kb/tenants") ? {} : tenantHeaders),
         ...(body === undefined ? {} : { "content-type": contentType ?? "application/json" }),
+        ...extra,
       },
       ...(body === undefined
         ? {}
@@ -122,8 +130,8 @@ async function client(target: Target, scenario: string): Promise<Client> {
     raw,
     steps,
     drain,
-    async call(name, method, path, body, contentType) {
-      const result = await raw(method, path, body, contentType)
+    async call(name, method, path, body, contentType, headers) {
+      const result = await raw(method, path, body, contentType, headers)
       if (method !== "GET") await drain()
       const step = { name, status: result.status, body: result.body }
       locations.set(step, result.location)
@@ -168,6 +176,18 @@ type Invoice = {
 type Subscription = { chargedThroughDate?: string }
 
 const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
+  /** Lookups of what does not exist: an external key, then account, subscription and invoice ids. */
+  async "not-found"(kb) {
+    await kb.call(
+      "account by unknown external key",
+      "GET",
+      "/1.0/kb/accounts?externalKey=parity-nobody",
+    )
+    const id = "00000000-0000-0000-0000-000000000000"
+    await kb.call("unknown account id", "GET", `/1.0/kb/accounts/${id}`)
+    await kb.call("unknown subscription id", "GET", `/1.0/kb/subscriptions/${id}`)
+    await kb.call("unknown invoice id", "GET", `/1.0/kb/invoices/${id}`)
+  },
   /** A tenant with no catalog, then an uploaded catalog without the plan (backend catalog sync). */
   async "catalog-errors"(kb) {
     const account = await kb.call("create account", "POST", "/1.0/kb/accounts", {
@@ -214,6 +234,100 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
     )
     await kb.call("read subscription after", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
   },
+  /** Backend addAccountCredit (POST /credits?autoCommit=true) and the next invoices using it. */
+  async "account-credit"(kb) {
+    const { accountId } = await member(kb, MONTHLY)
+    for (const amount of [40, 250]) {
+      await kb.call(`credit ${amount}`, "POST", "/1.0/kb/credits?autoCommit=true", [
+        { accountId, amount, currency: "USD", description: `parity-credit-${amount}` },
+      ])
+      await kb.call(
+        `read account after credit ${amount}`,
+        "GET",
+        `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`,
+      )
+      await kb.call(`subscribe again after credit ${amount}`, "POST", "/1.0/kb/subscriptions", {
+        accountId,
+        planName: MONTHLY,
+      })
+      await kb.call(
+        `read account after subscribing ${amount}`,
+        "GET",
+        `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`,
+      )
+    }
+    await kb.call(
+      "list invoices",
+      "GET",
+      `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`,
+    )
+  },
+  /** Backend cancelSubscription: each cancel shape it sends, on its own member. */
+  async "cancel-variants"(kb) {
+    const today = todayOf(new Date().toISOString(), 0)
+    const inTen = todayOf(new Date().toISOString(), 10)
+    const variants: Array<[string, string]> = [
+      ["end of term", "entitlementPolicy=END_OF_TERM&billingPolicy=END_OF_TERM"],
+      ["billing end of term only", "billingPolicy=END_OF_TERM"],
+      ["today, billing immediate", `requestedDate=${today}&billingPolicy=IMMEDIATE`],
+      ["in ten days, billing immediate", `requestedDate=${inTen}&billingPolicy=IMMEDIATE`],
+      [
+        "in ten days, use requested date",
+        `requestedDate=${inTen}&billingPolicy=IMMEDIATE&useRequestedDateForBilling=true`,
+      ],
+      ["now as an instant", "requestedDate=<now>&useRequestedDateForBilling=true"],
+      ["immediate policies", "entitlementPolicy=IMMEDIATE&billingPolicy=IMMEDIATE"],
+    ]
+    for (const [name, query] of variants) {
+      const { accountId, subscriptionId } = await member(kb, MONTHLY)
+      // An instant must not precede the subscription's start, so it is taken after creating it.
+      const sent = query.replace("<now>", new Date().toISOString())
+      await kb.call(`cancel ${name}`, "DELETE", `/1.0/kb/subscriptions/${subscriptionId}?${sent}`)
+      // Real Kill Bill applies a stop at "now" asynchronously: let it settle before reading.
+      if (kb.settles) await new Promise((resolve) => setTimeout(resolve, 3000))
+      await kb.drain()
+      const sub = (await kb.raw("GET", `/1.0/kb/subscriptions/${subscriptionId}`)).body as Record<
+        string,
+        unknown
+      > & {
+        events?: Array<{ eventType: string; effectiveDate: string }>
+      }
+      const invoices = (
+        await kb.raw("GET", `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`)
+      ).body as Array<{
+        amount: number
+        balance: number
+        creditAdj: number
+        items?: Array<{ itemType: string; amount: number; startDate: string; endDate: string }>
+      }>
+      const account = (
+        await kb.raw("GET", `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`)
+      ).body as Record<string, unknown>
+      kb.steps.push({
+        name: `after cancel ${name}`,
+        status: 200,
+        body: {
+          state: sub.state,
+          cancelledDate: sub.cancelledDate,
+          billingEndDate: sub.billingEndDate,
+          chargedThroughDate: sub.chargedThroughDate,
+          events: (sub.events ?? []).map(
+            (event) => `${event.eventType} ${String(event.effectiveDate).slice(0, 10)}`,
+          ),
+          invoices: invoices.map((invoice) => ({
+            amount: invoice.amount,
+            balance: invoice.balance,
+            creditAdj: invoice.creditAdj,
+            items: (invoice.items ?? []).map(
+              (item) => `${item.itemType} ${item.startDate}..${item.endDate} ${item.amount}`,
+            ),
+          })),
+          accountBalance: account.accountBalance,
+          accountCBA: account.accountCBA,
+        },
+      })
+    }
+  },
   /** Backend refundInvoicePayment: an external refund with item adjustment, then the key lookup. */
   async "refund-adjusted"(kb) {
     const { accountId, paymentMethodId } = await member(kb, MONTHLY)
@@ -245,11 +359,18 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
         isAdjusted: true,
         adjustments: [{ invoiceItemId: item?.invoiceItemId, amount: 40 }],
       },
+      undefined,
+      { "x-request-id": crypto.randomUUID(), "x-killbill-comment": "parity refund" },
     )
     await kb.call(
       "look the refund up by key",
       "GET",
       "/1.0/kb/paymentTransactions?transactionExternalKey=parity-refund-1&audit=FULL",
+    )
+    await kb.call(
+      "read invoice with audit",
+      "GET",
+      `/1.0/kb/invoices/${invoice?.invoiceId}?withItems=true&audit=FULL`,
     )
     await kb.call(
       "unknown key",
@@ -407,7 +528,7 @@ export function normalize(transcript: Transcript): Transcript {
     if (value && typeof value === "object")
       return Object.fromEntries(
         Object.entries(value as Record<string, unknown>)
-          .filter(([k]) => k !== "auditLogs" && k !== "stackTrace")
+          .filter(([k]) => k !== "stackTrace")
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([k, v]) => [k, walk(v, k)]),
       )
@@ -415,6 +536,8 @@ export function normalize(transcript: Transcript): Transcript {
       if (key.endsWith("Number") && value !== "") return id(value, key)
       if (UUID.test(value) || (ID_KEYS.test(key) && value !== "")) return id(value)
       if (TIMESTAMP.test(value)) return "<ts>"
+      if (value.startsWith("Invalid catalog for tenant : "))
+        return "Invalid catalog for tenant : <n>"
       if (value.startsWith("No existing versions in the VersionedCatalog catalog for input date "))
         return "No existing versions in the VersionedCatalog catalog for input date <date>"
       return value.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (m) =>
