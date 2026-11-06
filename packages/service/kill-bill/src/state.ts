@@ -47,6 +47,8 @@ export type Subscription = Record<string, unknown> & {
   cancelledDate?: string
   /** The day billing stops (Kill Bill's billingEndDate); renewals from it on are not billed. */
   billingEndDate?: string
+  /** The day a billing pause took effect and credited the rest of the billed period. */
+  billingPausedFrom?: string
   /** When the cancel request ran: a stop on that day reads as this instant. */
   cancelledAt?: string
   /** Billing stopped at the requested instant before entitlement (STOP_BILLING listed first). */

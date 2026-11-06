@@ -57,6 +57,8 @@ type RequestAudit = AuditStamp & { level: "NONE" | "MINIMAL" | "FULL" }
 const TOMCAT_404 =
   '<!doctype html><html lang="en"><head><title>HTTP Status 404 – Not Found</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {color:black;} .line {height:1px;background-color:#525D76;border:none;}</style></head><body><h1>HTTP Status 404 – Not Found</h1><hr class="line" /><p><b>Type</b> Status Report</p><p><b>Message</b> Not Found</p><p><b>Description</b> The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.</p><hr class="line" /><h3>Apache Tomcat/9.0.98</h3></body></html>'
 const NOTIFICATION_KEY = "PUSH_NOTIFICATION_CB"
+/** Kill Bill's default org.killbill.invoice.maxDailyNumberOfItemsSafetyBound. */
+const SAFETY_BOUND = 15
 // Kill Bill's built-in AUTO_PAY_OFF control tag definition.
 const AUTO_PAY_OFF_TAG_ID = "00000000-0000-0000-0000-000000000001"
 const money = (value: unknown) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
@@ -64,7 +66,7 @@ const object = (value: unknown): Input =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Input) : {}
 const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10)
 /** The next period start: calendar months for month-based plans, years for annual ones. */
-const addPeriod = (date: string, intervalDays = 30, periods = 1) => {
+const addPeriod = (date: string, intervalDays = 30) => {
   const start = new Date(`${date}T00:00:00.000Z`)
   const months =
     intervalDays >= 365
@@ -72,8 +74,8 @@ const addPeriod = (date: string, intervalDays = 30, periods = 1) => {
       : intervalDays % 30 === 0
         ? intervalDays / 30
         : 0
-  if (months === 0) return isoDate(start.getTime() + intervalDays * periods * 86_400_000)
-  const target = start.getUTCMonth() + months * periods
+  if (months === 0) return isoDate(start.getTime() + intervalDays * 86_400_000)
+  const target = start.getUTCMonth() + months
   const last = new Date(Date.UTC(start.getUTCFullYear(), target + 1, 0)).getUTCDate()
   return isoDate(Date.UTC(start.getUTCFullYear(), target, Math.min(start.getUTCDate(), last)))
 }
@@ -280,6 +282,14 @@ export class KillBillAPI {
       "org.killbill.billing.util.callcontext.InternalCallContextFactory$ObjectDoesNotExist",
       null,
       `Object id=${id} type=${type} doesn't exist!`,
+    )
+  }
+  private accountKeyNotFound(externalKey: string) {
+    return this.javaException(
+      404,
+      "org.killbill.billing.account.api.AccountApiException",
+      3003,
+      `Account does not exist for key ${externalKey}`,
     )
   }
   // Kill Bill 0.24.16 serializes an uncaught Java exception with its class, code and cause.
@@ -711,6 +721,7 @@ export class KillBillAPI {
       createdAt: _createdAt,
       cancelledAt: _cancelledAt,
       billingStopFirst: _billingStopFirst,
+      billingPausedFrom: _billingPausedFrom,
       ...stored
     } = subscription
     const plan = this.plan(subscription.planName)
@@ -978,13 +989,7 @@ export class KillBillAPI {
   private async invoiceThrough(request: Request, url: URL, tenantId: string) {
     const accountId = url.searchParams.get("accountId") ?? ""
     const account = this.account(accountId, tenantId)
-    if (!account)
-      return this.javaException(
-        404,
-        "org.killbill.billing.util.callcontext.InternalCallContextFactory$ObjectDoesNotExist",
-        null,
-        `Object id=${accountId} type=ACCOUNT doesn't exist!`,
-      )
+    if (!account) return this.objectDoesNotExist("ACCOUNT", accountId)
     const targetDate = url.searchParams.get("targetDate") ?? isoDate(this.now())
     if (
       !/^\d{4}-\d{2}-\d{2}$/.test(targetDate) ||
@@ -992,20 +997,31 @@ export class KillBillAPI {
       isoDate(Date.parse(targetDate)) !== targetDate
     )
       return this.problem(400, "INVALID_DATE", "targetDate must be a valid YYYY-MM-DD date")
+    const tooFar = this.targetTooFar(targetDate)
+    if (tooFar) return tooFar
+    const today = isoDate(this.now())
+    const due: Array<{ subscription: Subscription; planName: string; chargedThroughDate: string }> =
+      []
     const items: Input[] = []
     for (const { value: subscription } of this.state.subscriptions.list({
-      where: (row) => row.accountId === accountId && row.state === "ACTIVE",
+      where: (row) => row.accountId === accountId && this.billable(row, targetDate),
     })) {
       const planName = subscription.pendingChangePlan ?? subscription.planName
       const plan = this.plan(planName)
       if (!plan) continue
-      const due = this.duePeriods({ ...subscription, planName }, plan, targetDate)
-      if (due.items.length === 0) continue
+      const periods = this.duePeriods({ ...subscription, planName }, plan, targetDate)
+      if (periods.items.length === 0) continue
+      const bound = this.safetyBound(subscription, planName, periods.items, today)
+      if (bound) return bound
       items.push(
-        ...due.items.map((item) => ({ ...item, currency: plan.currency ?? account.currency })),
+        ...periods.items.map((item) => ({ ...item, currency: plan.currency ?? account.currency })),
       )
-      const next = { ...subscription, planName, chargedThroughDate: due.chargedThroughDate }
+      due.push({ subscription, planName, chargedThroughDate: periods.chargedThroughDate })
+    }
+    for (const { subscription, planName, chargedThroughDate } of due) {
+      const next = { ...subscription, planName, chargedThroughDate, state: "ACTIVE" as const }
       delete next.pendingChangePlan
+      delete next.billingPausedFrom
       this.clearEntitlement(subscription.subscriptionId)
       this.state.subscriptions.insert(subscription.subscriptionId, next)
     }
@@ -1028,7 +1044,11 @@ export class KillBillAPI {
     })
   }
   /** Billing, entitlement or change blocked on `date` by the latest state of any service. */
-  subscriptionBlocked(subscription: Subscription, date: string, kind: "billing" | "entitlement") {
+  private subscriptionBlocked(
+    subscription: Subscription,
+    date: string,
+    kind: "billing" | "entitlement",
+  ) {
     const services = new Map<string, NonNullable<Subscription["blockingStates"]>[number]>()
     for (const entry of subscription.blockingStates ?? []) {
       const previous = services.get(entry.service)
@@ -1377,13 +1397,18 @@ export class KillBillAPI {
     const requested = Array.isArray(adjustments)
       ? adjustments.map(object).filter((entry) => typeof entry.invoiceItemId === "string")
       : []
+    // An adjustment without an amount adjusts its whole item, never more than the refund left.
+    let left = amount
     const targets = !adjust
       ? []
       : requested.length > 0
-        ? requested.map((entry) => ({
-            itemId: entry.invoiceItemId as string,
-            amount: money(entry.amount ?? amount),
-          }))
+        ? requested.map((entry) => {
+            const item = invoice.items.find((row) => row.invoiceItemId === entry.invoiceItemId)
+            const wanted = money(entry.amount ?? item?.amount ?? left)
+            const take = money(Math.min(wanted, left))
+            left = money(left - take)
+            return { itemId: entry.invoiceItemId as string, amount: take }
+          })
         : [{ itemId: invoice.items[0]?.invoiceItemId, amount }]
     const audit = this.stamp()
     const items: InvoiceItem[] = targets.map((target) => ({
@@ -1407,7 +1432,7 @@ export class KillBillAPI {
       items: [...invoice.items, ...items],
     })
   }
-  /** Kill Bill 0.24.10 `InvoicePaymentResource.createRefundWithAdjustments`. */
+  /** Kill Bill 0.24.16 `InvoicePaymentResource.createRefundWithAdjustments`. */
   private async refundInvoicePayment(
     request: Request,
     url: URL,
@@ -1572,9 +1597,12 @@ export class KillBillAPI {
   private duePeriods(subscription: Subscription, plan: CatalogPlan, through: string) {
     const items: Input[] = []
     let start = subscription.chargedThroughDate ?? subscription.startDate
-    // As before this change: a subscription whose billing is blocked on `through` bills nothing.
-    if (this.subscriptionBillingBlocked(subscription, through))
+    // A subscription whose billing is blocked on `through` bills nothing. After a pause, Kill Bill
+    // 0.24.16 bills from the resume day (parity scenario `billing-pause-resume`).
+    if (this.subscriptionBlocked(subscription, through, "billing"))
       return { items, chargedThroughDate: start }
+    if (subscription.billingPausedFrom !== undefined)
+      start = this.billingTransition(subscription, through, false) ?? start
     while (true) {
       // A cancelled subscription bills nothing from the day its billing stops.
       if (subscription.billingEndDate !== undefined && start >= subscription.billingEndDate) break
@@ -1594,21 +1622,91 @@ export class KillBillAPI {
     }
     return { items, chargedThroughDate: start }
   }
-  subscriptionBillingBlocked(subscription: Subscription, date: string) {
-    return this.subscriptionBlocked(subscription, date, "billing")
+  /** A subscription bills from its start: active ones, and pending ones whose start has come. */
+  private billable(subscription: Subscription, date: string) {
+    return (
+      subscription.state === "ACTIVE" ||
+      (subscription.state === "PENDING" && subscription.startDate.slice(0, 10) <= date)
+    )
+  }
+  /**
+   * Kill Bill 0.24.16 refuses to create more than 15 items for one subscription in a day, previews
+   * included (InvoiceApiException 4, parity scenario `invoice-target-dates`).
+   */
+  private safetyBound(subscription: Subscription, planName: string, items: Input[], today: string) {
+    const createdToday = this.state.invoices
+      .list({
+        where: (row) => row.accountId === subscription.accountId && row.invoiceDate === today,
+      })
+      .flatMap(({ value }) => value.items)
+      .filter((row) => row.subscriptionId === subscription.subscriptionId).length
+    const item = items[Math.max(SAFETY_BOUND - createdToday, 0)]
+    if (!item) return undefined
+    return this.javaException(
+      400,
+      "org.killbill.billing.invoice.api.InvoiceApiException",
+      4,
+      `SAFETY BOUND TRIGGERED subscriptionId='${subscription.subscriptionId}', resultingItem=RECURRING{planName='${planName}', startDate=${item.startDate}, endDate=${item.endDate}, amount=${item.amount}}`,
+    )
+  }
+  /**
+   * Kill Bill 0.24.16 refuses a target date 37 months or more after today (InvoiceApiException
+   * 4005; 2029-12-05 passed and 2029-12-06 failed on 2026-11-06, parity scenario
+   * `invoice-target-dates`).
+   */
+  private targetTooFar(targetDate: string) {
+    const today = new Date(`${isoDate(this.now())}T00:00:00.000Z`)
+    const limit = isoDate(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 37, today.getUTCDate()),
+    )
+    if (targetDate < limit) return undefined
+    return this.javaException(
+      400,
+      "org.killbill.billing.invoice.api.InvoiceApiException",
+      4005,
+      `The target date was too far in the future. Target Date: ${targetDate}`,
+    )
+  }
+  /** The latest day on or before `date` that billing became blocked (`true`) or unblocked. */
+  private billingTransition(subscription: Subscription, date: string, blocked: boolean) {
+    const days = [...new Set((subscription.blockingStates ?? []).map((s) => s.effectiveDate))]
+      .filter((day) => day <= date)
+      .sort()
+    let previous = false
+    let found: string | undefined
+    for (const day of days) {
+      const now = this.subscriptionBlocked(subscription, day, "billing")
+      if (now !== previous && now === blocked) found = day
+      previous = now
+    }
+    return found
+  }
+  /**
+   * A billing pause that has taken effect credits the rest of the billed period it falls in, as
+   * Kill Bill 0.24.16 does (REPAIR_ADJ + CBA_ADJ; parity scenario `billing-pause-resume`).
+   */
+  private async startBillingPause(subscription: Subscription, today: string, tenantId: string) {
+    if (subscription.billingPausedFrom !== undefined) return subscription
+    if (!this.subscriptionBlocked(subscription, today, "billing")) return subscription
+    const from = this.billingTransition(subscription, today, true)
+    if (from === undefined) return subscription
+    const next = { ...subscription, billingPausedFrom: from }
+    this.state.subscriptions.insert(subscription.subscriptionId, next)
+    if (subscription.chargedThroughDate !== undefined && from < subscription.chargedThroughDate)
+      await this.repairUnusedPeriod(subscription, from, tenantId)
+    return next
   }
   private async billDue(tenantId: string) {
     const today = isoDate(this.now())
     for (const { value: stored } of this.state.subscriptions.list({
-      where: (s) =>
-        (s.state === "ACTIVE" || (s.state === "PENDING" && s.startDate <= today)) &&
-        this.account(s.accountId, tenantId) !== undefined,
+      where: (s) => this.billable(s, today) && this.account(s.accountId, tenantId) !== undefined,
     })) {
       // An end-of-term plan change takes effect on the renewal it was scheduled for.
-      const planName = stored.pendingChangePlan ?? stored.planName
+      const current = await this.startBillingPause(stored, today, tenantId)
+      const planName = current.pendingChangePlan ?? current.planName
       const plan = this.plan(planName)
       if (!plan) continue
-      const subscription = { ...stored, planName }
+      const subscription = { ...current, planName }
       const { items, chargedThroughDate } = this.duePeriods(subscription, plan, today)
       if (items.length === 0) continue
       const invoice = await this.createInvoice(
@@ -1620,6 +1718,7 @@ export class KillBillAPI {
       )
       const next = { ...subscription, chargedThroughDate, state: "ACTIVE" as const }
       delete next.pendingChangePlan
+      delete next.billingPausedFrom
       this.clearEntitlement(subscription.subscriptionId)
       this.state.subscriptions.insert(subscription.subscriptionId, next)
       const method = this.state.methods
@@ -1756,13 +1855,14 @@ export class KillBillAPI {
   async fetch(request: Request): Promise<Response> {
     const level = (new URL(request.url).searchParams.get("audit") ?? "NONE").toUpperCase()
     // Kill Bill 0.24.16 stamps every row a request writes with its X-Killbill-CreatedBy, -Comment
-    // and -Reason, and its X-Request-Id as userToken (one is generated when absent).
+    // and -Reason, and its X-Request-Id as userToken (one is generated, from the instance's ids,
+    // when absent and the request writes).
     const audit: RequestAudit = {
       changeDate: new Date(Math.floor(this.now() / 1000) * 1000).toISOString(),
       changedBy: request.headers.get("x-killbill-createdby") ?? "",
       comments: request.headers.get("x-killbill-comment") ?? null,
       reasonCode: request.headers.get("x-killbill-reason") ?? null,
-      userToken: request.headers.get("x-request-id") ?? crypto.randomUUID(),
+      userToken: request.headers.get("x-request-id") ?? "",
       level: level === "FULL" || level === "MINIMAL" ? level : "NONE",
     }
     const scoped: KillBillAPI = Object.create(this)
@@ -1773,6 +1873,7 @@ export class KillBillAPI {
   private stamp(changedBy?: string): AuditStamp | undefined {
     const current = this.requestAudit
     if (!current) return undefined
+    if (!current.userToken) current.userToken = this.state.ids.next("request-", 24)
     const { level: _level, ...stamp } = current
     return changedBy ? { ...stamp, changedBy } : stamp
   }
@@ -1914,12 +2015,7 @@ export class KillBillAPI {
         const account = external ? this.byExternal(external, tenantId) : undefined
         return account
           ? this.json(this.publicAccount(account))
-          : this.javaException(
-              404,
-              "org.killbill.billing.account.api.AccountApiException",
-              3003,
-              `Account does not exist for key ${external ?? ""}`,
-            )
+          : this.accountKeyNotFound(external ?? "")
       }
       const externalKey =
         typeof body.externalKey === "string"
@@ -2194,6 +2290,9 @@ export class KillBillAPI {
           ],
         }
         this.state.subscriptions.insert(subscription.subscriptionId, next)
+        // Kill Bill re-runs invoicing on a blocking state change: a pause credits the rest of the
+        // period and a resume bills from that day.
+        await this.billDue(tenantId)
         this.audit(request, "SUBSCRIPTION", subscription.subscriptionId)
         return this.empty(201)
       }
@@ -2525,19 +2624,18 @@ export class KillBillAPI {
         return this.problem(400, "INVALID_DATE", "targetDate must be a valid YYYY-MM-DD date")
       const items: InvoiceItem[] = []
       for (const { value: subscription } of this.state.subscriptions.list({
-        where: (value) => value.accountId === previewAccountId && value.state === "ACTIVE",
+        where: (value) => value.accountId === previewAccountId && this.billable(value, targetDate),
       })) {
-        if (this.subscriptionBillingBlocked(subscription, targetDate)) continue
+        if (this.subscriptionBlocked(subscription, targetDate, "billing")) continue
         const planName = subscription.pendingChangePlan ?? subscription.planName
         const plan = this.plan(planName)
         if (!plan) continue
         // Preview the due recurring charges without consuming IDs, advancing the clock,
         // applying scheduled changes, creating invoices or sending payment notifications.
-        for (const [index, item] of this.duePeriods(
-          { ...subscription, planName },
-          plan,
-          targetDate,
-        ).items.entries())
+        const due = this.duePeriods({ ...subscription, planName }, plan, targetDate).items
+        const bound = this.safetyBound(subscription, planName, due, isoDate(this.now()))
+        if (bound) return bound
+        for (const [index, item] of due.entries())
           items.push({
             ...item,
             invoiceItemId: `preview-item-${subscription.subscriptionId}${index === 0 ? "" : `-${index}`}`,
@@ -2617,14 +2715,33 @@ export class KillBillAPI {
             typeof body.description === "string" ? body.description : "Invoice item adjustment",
           startDate: isoDate(this.now()),
           linkedInvoiceItemId: item.invoiceItemId,
-          ...(item.subscriptionId ? { subscriptionId: item.subscriptionId } : {}),
           ...(adjustmentAudit ? { audit: adjustmentAudit } : {}),
         }
+        // Kill Bill 0.24.16 (parity scenario `item-adjust-paid`): what the adjustment takes
+        // beyond the open balance becomes account credit (CBA_ADJ), so the balance stays at 0.
+        const credit = money(money(amount) - Math.max(invoice.balance, 0))
+        const cba: InvoiceItem[] =
+          credit > 0
+            ? [
+                {
+                  invoiceItemId: this.state.ids.next("item-", 32),
+                  invoiceId: invoice.invoiceId,
+                  accountId: invoice.accountId,
+                  itemType: "CBA_ADJ",
+                  amount: credit,
+                  currency: item.currency,
+                  description: "Adjustment (account credit)",
+                  startDate: isoDate(this.now()),
+                  ...(adjustmentAudit ? { audit: adjustmentAudit } : {}),
+                },
+              ]
+            : []
         this.state.invoices.insert(invoice.invoiceId, {
           ...invoice,
           amount: money(invoice.amount - money(amount)),
-          balance: money(invoice.balance - money(amount)),
-          items: [...invoice.items, adjustment],
+          balance: money(invoice.balance - money(amount) + Math.max(credit, 0)),
+          creditAdj: money(invoice.creditAdj + Math.max(credit, 0)),
+          items: [...invoice.items, adjustment, ...cba],
         })
         return this.empty(201, {
           location: this.location(request, `/1.0/kb/invoices/${invoice.invoiceId}`),
@@ -2632,6 +2749,13 @@ export class KillBillAPI {
       }
       if (parts[2] === "voidInvoice" && request.method === "PUT")
         return this.voidInvoice(invoice, tenantId)
+      // Kill Bill 0.24.16: 204, and a committed credit becomes account credit (parity scenario
+      // `account-credit-draft`).
+      if (parts[2] === "commitInvoice" && request.method === "PUT") {
+        if (invoice.status === "DRAFT")
+          this.state.invoices.insert(invoice.invoiceId, { ...invoice, status: "COMMITTED" })
+        return this.empty()
+      }
       if (parts[2] === "payments") {
         if (request.method === "GET")
           return this.json(
@@ -2692,7 +2816,7 @@ export class KillBillAPI {
       }
       if (request.method === "GET") return this.json(this.invoiceJson(invoice))
       if (request.method === "DELETE") {
-        if (invoice.balance !== invoice.amount)
+        if (this.netCollected(invoice.invoiceId) !== 0)
           return this.problem(409, "INVOICE_NOT_WRITABLE", "Paid invoice cannot be voided")
         this.state.invoices.insert(invoice.invoiceId, { ...invoice, status: "VOID", balance: 0 })
         await this.emit("INVOICE_VOID", "INVOICE", invoice.invoiceId, invoice.accountId, tenantId)
@@ -2703,13 +2827,7 @@ export class KillBillAPI {
       const account = url.searchParams.get("externalKey")
         ? this.byExternal(url.searchParams.get("externalKey") as string, tenantId)
         : undefined
-      if (!account)
-        return this.javaException(
-          404,
-          "org.killbill.billing.account.api.AccountApiException",
-          3003,
-          `Account does not exist for key ${url.searchParams.get("externalKey") ?? ""}`,
-        )
+      if (!account) return this.accountKeyNotFound(url.searchParams.get("externalKey") ?? "")
       const payment = await this.pay(
         account.accountId,
         tenantId,
@@ -2755,35 +2873,14 @@ export class KillBillAPI {
           transactions: [...payment.transactions, transaction],
         }
         this.state.payments.insert(payment.paymentId, next)
-        if (payment.invoiceId) {
-          const invoice = this.state.invoices.get(payment.invoiceId)
-          if (invoice) {
-            const original = invoice.items[0]
-            const item: InvoiceItem = {
-              invoiceItemId: this.state.ids.next("item-", 32),
-              invoiceId: invoice.invoiceId,
-              accountId: invoice.accountId,
-              itemType: "ITEM_ADJ",
-              amount: -amount,
-              currency: invoice.currency,
-              description: "Refund adjustment",
-              startDate: isoDate(this.now()),
-              ...(original ? { linkedInvoiceItemId: original.invoiceItemId } : {}),
-            }
-            this.state.invoices.insert(invoice.invoiceId, {
-              ...invoice,
-              balance: money(invoice.balance + amount),
-              refundAdj: money(invoice.refundAdj + amount),
-              items: [...invoice.items, item],
-            })
-          }
-        }
+        // The default invoice payment control plugin reopens the invoice by the refund.
+        this.reopenInvoice(payment, amount, false)
         await this.emit("PAYMENT_REFUND", "PAYMENT", payment.paymentId, payment.accountId, tenantId)
         return this.empty(201, {
           location: this.location(request, `/1.0/kb/payments/${payment.paymentId}`),
         })
       }
-      if (request.method === "GET") return this.json(payment)
+      if (request.method === "GET") return this.json(this.paymentJson(payment))
     }
     return this.problem(
       404,

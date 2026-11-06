@@ -44,13 +44,13 @@ describe("invoice operations regressions", () => {
     const input = { accountId, invoiceItemId: invoice.items[0].invoiceItemId }
     expect((await call(path, { ...input, amount: 5 })).status).toBe(201)
     let current = await (await call(path)).json()
-    expect(current.amount).toBe(95)
-    expect(current.balance).toBe(-5)
-    expect(current.items.at(-1)).toMatchObject({
-      itemType: "ITEM_ADJ",
-      amount: -5,
-      linkedInvoiceItemId: input.invoiceItemId,
-    })
+    // Kill Bill 0.24.16 (parity scenario item-adjust-paid): adjusting a paid item keeps the
+    // balance at 0 and turns the adjustment into account credit.
+    expect(current).toMatchObject({ amount: 95, balance: 0, creditAdj: 5 })
+    expect(current.items.slice(-2)).toMatchObject([
+      { itemType: "ITEM_ADJ", amount: -5, linkedInvoiceItemId: input.invoiceItemId },
+      { itemType: "CBA_ADJ", amount: 5, description: "Adjustment (account credit)" },
+    ])
     for (const invalid of [
       { ...input, amount: 96 },
       { ...input, invoiceItemId: "missing" },
@@ -63,9 +63,8 @@ describe("invoice operations regressions", () => {
     }
     expect((await call(path, input)).status).toBe(201)
     current = await (await call(path)).json()
-    expect(current.amount).toBe(0)
-    expect(current.balance).toBe(-100)
-    expect(current.items.at(-1).amount).toBe(-95)
+    expect(current).toMatchObject({ amount: 0, balance: 0, creditAdj: 100 })
+    expect(current.items.at(-2)).toMatchObject({ itemType: "ITEM_ADJ", amount: -95 })
     expect((await call("/invoices/missing", input)).status).toBe(404)
   })
 

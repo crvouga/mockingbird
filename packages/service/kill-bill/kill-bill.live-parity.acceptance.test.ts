@@ -230,4 +230,91 @@ describe("Kill Bill 0.24.16 behaviour", () => {
       await s.server.close()
     }
   })
+
+  test("invoicing refuses a target 37 months ahead and more than 15 items in a day", async () => {
+    const s = await session()
+    try {
+      await s.subscribe()
+      const tooFar = await s.request(
+        `/invoices?accountId=${s.accountId}&targetDate=2033-02-01`,
+        "POST",
+      )
+      expect(tooFar.status).toBe(400)
+      expect(await tooFar.json()).toMatchObject({
+        code: 4005,
+        message: "The target date was too far in the future. Target Date: 2033-02-01",
+      })
+      const bounded = await s.request(
+        `/invoices?accountId=${s.accountId}&targetDate=2031-04-01`,
+        "POST",
+      )
+      expect(bounded.status).toBe(400)
+      expect((await bounded.json()).message).toStartWith("SAFETY BOUND TRIGGERED")
+      expect(await s.invoices()).toHaveLength(1)
+      const fifteen = await s.request(
+        `/invoices?accountId=${s.accountId}&targetDate=2031-03-01`,
+        "POST",
+      )
+      expect(fifteen.status).toBe(201)
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("invoicing through a later start bills the pending subscription", async () => {
+    const s = await session()
+    try {
+      const created = await s.request(
+        "/subscriptions?entitlementDate=2030-01-11&billingDate=2030-01-11",
+        "POST",
+        { accountId: s.accountId, planName: "monthly-100" },
+      )
+      const id = created.headers.get("location")?.split("/").at(-1) as string
+      expect((await s.json(`/subscriptions/${id}`)).state).toBe("PENDING")
+      const billed = await s.request(
+        `/invoices?accountId=${s.accountId}&targetDate=2030-01-13`,
+        "POST",
+      )
+      expect(billed.status).toBe(201)
+      expect(await s.json(`/subscriptions/${id}`)).toMatchObject({
+        state: "PENDING",
+        chargedThroughDate: "2030-02-11",
+      })
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("a credit without autoCommit is a DRAFT until commitInvoice", async () => {
+    const s = await session()
+    try {
+      await s.request("/credits", "POST", [{ accountId: s.accountId, amount: 15, currency: "USD" }])
+      expect(await s.account()).toMatchObject({ accountBalance: 0, accountCBA: 0 })
+      const draft = (await s.invoices()).find(
+        (invoice: { status: string }) => invoice.status === "DRAFT",
+      )
+      const committed = await s.request(`/invoices/${draft.invoiceId}/commitInvoice`, "PUT")
+      expect(committed.status).toBe(204)
+      expect(await s.account()).toMatchObject({ accountBalance: -15, accountCBA: 15 })
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("a generated audit userToken comes from the instance, so two instances agree", async () => {
+    const tokens = []
+    for (const _ of [1, 2]) {
+      const s = await session()
+      try {
+        await s.subscribe()
+        const [invoice] = await s.invoices()
+        const read = await s.json(`/invoices/${invoice.invoiceId}?audit=FULL`)
+        tokens.push(read.auditLogs[0]?.userToken)
+      } finally {
+        await s.server.close()
+      }
+    }
+    expect(tokens[0]).toBeString()
+    expect(tokens[0]).toBe(tokens[1])
+  })
 })

@@ -211,11 +211,12 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
     const sub = (
       await kb.call("read subscription", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
     ).body as Subscription
-    const ctd = sub.chargedThroughDate ?? ""
+    const ctd = sub.chargedThroughDate
+    if (!ctd) throw new Error("invoice-renewal: the new subscription has no chargedThroughDate")
     await kb.call(
       "nothing due today",
       "POST",
-      `/1.0/kb/invoices?accountId=${accountId}&targetDate=${ctd.slice(0, 10) === "" ? "" : todayOf(ctd, -1)}`,
+      `/1.0/kb/invoices?accountId=${accountId}&targetDate=${todayOf(ctd, -1)}`,
     )
     await kb.call(
       "bill the renewal",
@@ -233,6 +234,127 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
       `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`,
     )
     await kb.call("read subscription after", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
+  },
+  /** Backend adjustInvoiceItem on a paid invoice: the adjustment becomes account credit. */
+  async "item-adjust-paid"(kb) {
+    const { accountId } = await member(kb, MONTHLY)
+    const [invoice] = (
+      await kb.call(
+        "list invoices",
+        "GET",
+        `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`,
+      )
+    ).body as Invoice[]
+    const item = invoice?.items?.find((row) => row.itemType === "RECURRING")
+    if (!invoice || !item) throw new Error("item-adjust-paid: no recurring item to adjust")
+    await kb.call("adjust the paid item by 5", "POST", `/1.0/kb/invoices/${invoice.invoiceId}`, {
+      accountId,
+      invoiceItemId: item.invoiceItemId,
+      amount: 5,
+      currency: "USD",
+    })
+    await kb.call(
+      "read the adjusted invoice",
+      "GET",
+      `/1.0/kb/invoices/${invoice.invoiceId}?includeInvoiceComponents=true`,
+    )
+    await kb.call(
+      "read the account",
+      "GET",
+      `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`,
+    )
+  },
+  /** A credit without autoCommit stays a DRAFT invoice until it is committed. */
+  async "account-credit-draft"(kb) {
+    const { accountId } = await member(kb, MONTHLY)
+    await kb.call("add a draft credit", "POST", "/1.0/kb/credits", [
+      { accountId, amount: 15, currency: "USD", description: "goodwill" },
+    ])
+    const account = `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`
+    await kb.call("read the account", "GET", account)
+    const invoices = (
+      await kb.call(
+        "list invoices",
+        "GET",
+        `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`,
+      )
+    ).body as Array<Invoice & { status: string }>
+    const draft = invoices.find((invoice) => invoice.status === "DRAFT")
+    if (draft)
+      await kb.call("commit it", "PUT", `/1.0/kb/invoices/${draft.invoiceId}/commitInvoice`)
+    await kb.call("read the account after", "GET", account)
+  },
+  /** Invoicing ahead: a subscription that has not started yet, then a target years away. */
+  async "invoice-target-dates"(kb) {
+    await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", PARITY_CATALOG_XML, "text/xml")
+    const accountId = kb.idFrom(
+      await kb.call("create account", "POST", "/1.0/kb/accounts", {
+        name: "Parity Member",
+        currency: "USD",
+      }),
+    )
+    await kb.call(
+      "add default external payment method",
+      "POST",
+      `/1.0/kb/accounts/${accountId}/paymentMethods?isDefault=true`,
+      { pluginName: "__EXTERNAL_PAYMENT__" },
+    )
+    const today = todayOf(new Date().toISOString(), 0)
+    const start = todayOf(today, 10)
+    const subscriptionId = kb.idFrom(
+      await kb.call(
+        "subscribe from a later day",
+        "POST",
+        `/1.0/kb/subscriptions?entitlementDate=${start}&billingDate=${start}`,
+        { accountId, planName: MONTHLY },
+      ),
+    )
+    await kb.call(
+      "invoice past the later start",
+      "POST",
+      `/1.0/kb/invoices?accountId=${accountId}&targetDate=${todayOf(start, 2)}`,
+    )
+    await kb.call(
+      "read the invoiced subscription",
+      "GET",
+      `/1.0/kb/subscriptions/${subscriptionId}`,
+    )
+    // Kill Bill refuses a target 37 months or more ahead (4005), and more than 15 items for one
+    // subscription in a day (the safety bound, code 4).
+    const months = (count: number) => {
+      const date = new Date(`${today}T00:00:00.000Z`)
+      date.setUTCMonth(date.getUTCMonth() + count)
+      return date.toISOString().slice(0, 10)
+    }
+    await kb.call(
+      "preview 37 months ahead",
+      "POST",
+      `/1.0/kb/invoices/dryRun?accountId=${accountId}&targetDate=${months(37)}`,
+      { dryRunType: "TARGET_DATE" },
+    )
+    await kb.call(
+      "invoice 37 months ahead",
+      "POST",
+      `/1.0/kb/invoices?accountId=${accountId}&targetDate=${months(37)}`,
+    )
+    await kb.call(
+      "invoice the day before 37 months ahead",
+      "POST",
+      `/1.0/kb/invoices?accountId=${accountId}&targetDate=${todayOf(months(37), -1)}`,
+    )
+    const invoices = (
+      await kb.raw("GET", `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`)
+    ).body as Array<{ items?: Array<{ itemType: string; startDate: string; endDate: string }> }>
+    const periods = invoices.flatMap((invoice) => invoice.items ?? [])
+    kb.steps.push({
+      name: "invoiced periods",
+      status: 200,
+      body: {
+        count: periods.length,
+        first: periods[0] ? `${periods[0].startDate}..${periods[0].endDate}` : null,
+        last: periods.at(-1) ? `${periods.at(-1)?.startDate}..${periods.at(-1)?.endDate}` : null,
+      },
+    })
   },
   /** Backend addAccountCredit (POST /credits?autoCommit=true) and the next invoices using it. */
   async "account-credit"(kb) {
@@ -451,6 +573,30 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
     })
     await kb.call("read resumed subscription", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
   },
+  /** A billing-only pause across two renewals, resumed mid-period: what the paused months bill. */
+  "billing-pause-resume": (kb) => {
+    const block = (name: string, isBlockBilling: boolean) => async (subject: Member) => {
+      await kb.call(name, "POST", `/1.0/kb/subscriptions/${subject.subscriptionId}/block`, {
+        stateName: isBlockBilling ? "billing-console-pause" : "billing-console-resume",
+        service: "billing-console",
+        isBlockChange: false,
+        isBlockBilling,
+        isBlockEntitlement: false,
+      })
+    }
+    // Pause and resume at midday: at midnight the clock is still before the account's reference
+    // time, so real Kill Bill would apply the change only at the next clock move.
+    return billingOverTime(kb, MONTHLY, [
+      "2030-01-15T12:00:00Z",
+      block("pause billing", true),
+      "2030-02-01",
+      "2030-03-01",
+      "2030-03-10T12:00:00Z",
+      block("resume billing", false),
+      "2030-03-11",
+      "2030-04-01",
+    ])
+  },
   /** Monthly renewals and a BCD change under the test clock (calendar months, prorated stub). */
   "bcd-5-from-february": (kb) =>
     bcdClock(kb, 5, "2030-02-01", [
@@ -484,50 +630,79 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
 }
 
 async function bcdClock(kb: Client, day: number, effective: string, days: string[]) {
+  await billingOverTime(kb, MONTHLY, days, async ({ subscriptionId }) => {
+    await kb.call(
+      `move the billing day to ${day} from ${effective}`,
+      "PUT",
+      `/1.0/kb/subscriptions/${subscriptionId}/bcd?effectiveFromDate=${effective}`,
+      { subscriptionId, billCycleDayLocal: day },
+    )
+  })
+}
+
+type Member = Awaited<ReturnType<typeof member>>
+type Moment = string | ((member: Member) => Promise<void>)
+
+/**
+ * Starts a member on 2030-01-01 under the test clock, runs `setup`, then walks `moments`: a date
+ * moves the clock and records the billing so far; a function runs a request at the current clock.
+ * The test clock is global to the Kill Bill server, so it is reset however the walk ends.
+ */
+async function billingOverTime(
+  kb: Client,
+  planName: string,
+  moments: Moment[],
+  setup: (member: Member) => Promise<void> = async () => {},
+) {
   await kb.call("set the clock", "POST", "/1.0/kb/test/clock?requestedDate=2030-01-01")
-  const { accountId, subscriptionId } = await member(kb, MONTHLY)
-  await kb.call(
-    `move the billing day to ${day} from ${effective}`,
-    "PUT",
-    `/1.0/kb/subscriptions/${subscriptionId}/bcd?effectiveFromDate=${effective}`,
-    { subscriptionId, billCycleDayLocal: day },
-  )
-  const read = async () => {
-    const invoices = (
-      await kb.raw("GET", `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`)
-    ).body as Array<{
-      items?: Array<{ itemType: string; startDate: string; endDate: string; amount: number }>
-    }>
-    const sub = (await kb.raw("GET", `/1.0/kb/subscriptions/${subscriptionId}`)).body as {
-      chargedThroughDate?: string
-      billCycleDayLocal?: number
-    }
-    return {
-      periods: invoices
-        .flatMap((invoice) =>
-          (invoice.items ?? []).map(
-            (item) => `${item.itemType} ${item.startDate}..${item.endDate} ${item.amount}`,
-          ),
+  try {
+    const subject = await member(kb, planName)
+    await setup(subject)
+    const read = async () => {
+      const invoices = (
+        await kb.raw(
+          "GET",
+          `/1.0/kb/accounts/${subject.accountId}/invoices?includeInvoiceComponents=true`,
         )
-        .sort(),
-      chargedThroughDate: sub.chargedThroughDate,
-      billCycleDayLocal: sub.billCycleDayLocal,
+      ).body as Array<{
+        items?: Array<{ itemType: string; startDate: string; endDate: string; amount: number }>
+      }>
+      const sub = (await kb.raw("GET", `/1.0/kb/subscriptions/${subject.subscriptionId}`)).body as {
+        chargedThroughDate?: string
+        billCycleDayLocal?: number
+      }
+      return {
+        periods: invoices
+          .flatMap((invoice) =>
+            (invoice.items ?? []).map(
+              (item) => `${item.itemType} ${item.startDate}..${item.endDate} ${item.amount}`,
+            ),
+          )
+          .sort(),
+        chargedThroughDate: sub.chargedThroughDate,
+        billCycleDayLocal: sub.billCycleDayLocal,
+      }
     }
-  }
-  for (const date of days) {
-    await kb.call(`clock ${date}`, "POST", `/1.0/kb/test/clock?requestedDate=${date}`)
-    // Real Kill Bill can finish a clock move's invoicing just after its queues report idle: read
-    // until two reads a few seconds apart agree.
-    let state = await read()
-    for (let attempt = 0; kb.settles && attempt < 5; attempt += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 3000))
-      const again = await read()
-      if (JSON.stringify(again) === JSON.stringify(state)) break
-      state = again
+    for (const moment of moments) {
+      if (typeof moment !== "string") {
+        await moment(subject)
+        continue
+      }
+      await kb.call(`clock ${moment}`, "POST", `/1.0/kb/test/clock?requestedDate=${moment}`)
+      // Real Kill Bill can finish a clock move's invoicing just after its queues report idle: read
+      // until two reads a few seconds apart agree.
+      let state = await read()
+      for (let attempt = 0; kb.settles && attempt < 5; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+        const again = await read()
+        if (JSON.stringify(again) === JSON.stringify(state)) break
+        state = again
+      }
+      kb.steps.push({ name: `billing on ${moment}`, status: 200, body: state })
     }
-    kb.steps.push({ name: `billing on ${date}`, status: 200, body: state })
+  } finally {
+    await kb.call("reset the clock", "POST", "/1.0/kb/test/clock")
   }
-  await kb.call("reset the clock", "POST", "/1.0/kb/test/clock")
 }
 
 function todayOf(iso: string, plusDays: number) {
@@ -546,7 +721,7 @@ export async function runScenario(target: Target, scenario: string): Promise<Tra
   return { scenario, steps: kb.steps }
 }
 
-const ID_KEYS = /(Id|Key|Number|recordId|userToken)$/
+const ID_KEYS = /(Id|Key|Number|userToken)$/
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/
 
@@ -578,6 +753,8 @@ export function normalize(transcript: Transcript): Transcript {
       if (TIMESTAMP.test(value)) return "<ts>"
       if (value.startsWith("Invalid catalog for tenant : "))
         return "Invalid catalog for tenant : <n>"
+      // The safety bound's message prints the subscription id and Kill Bill's whole item.
+      if (value.startsWith("SAFETY BOUND TRIGGERED ")) return "SAFETY BOUND TRIGGERED <item>"
       if (value.startsWith("No existing versions in the VersionedCatalog catalog for input date "))
         return "No existing versions in the VersionedCatalog catalog for input date <date>"
       return value.replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, (m) =>

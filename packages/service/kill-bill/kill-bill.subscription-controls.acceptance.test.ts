@@ -27,7 +27,15 @@ const session = async () => {
   const subscriptionId = created.headers.get("location")?.split("/").at(-1) as string
   const subscription = () => request(`/subscriptions/${subscriptionId}`).then((r) => r.json())
   const invoices = () => request(`/accounts/${accountId}/invoices`).then((r) => r.json())
-  return { server, request, clock, accountId, subscriptionId, subscription, invoices }
+  const items = async () =>
+    (
+      (await request(`/accounts/${accountId}/invoices?includeInvoiceComponents=true`).then((r) =>
+        r.json(),
+      )) as Array<{ items: Array<{ itemType: string; startDate: string; amount: number }> }>
+    ).flatMap((invoice) =>
+      invoice.items.map((item) => `${item.itemType} ${item.startDate} ${item.amount}`),
+    )
+  return { server, request, clock, accountId, subscriptionId, subscription, invoices, items }
 }
 const blocking = (isBlockBilling: boolean, service = "example-service") => ({
   stateName: isBlockBilling ? "paused" : "resumed",
@@ -42,20 +50,22 @@ describe("Kill Bill subscription billing controls", () => {
     const s = await session()
     try {
       const path = `/subscriptions/${s.subscriptionId}/block`
-      const initial = (await s.invoices()).length
+      // Kill Bill 0.24.16 (parity scenario billing-pause-resume): a pause credits the rest of the
+      // billed period, the paused renewals bill nothing, and a resume bills from that day.
       expect((await s.request(path, "POST", blocking(true))).status).toBe(201)
       expect((await s.subscription()).subscriptionId).toBe(s.subscriptionId)
       const bundles = await (await s.request(`/accounts/${s.accountId}/bundles`)).json()
       expect(bundles[0].subscriptions[0].subscriptionId).toBe(s.subscriptionId)
+      const paused = await s.items()
+      expect(paused).toContain("REPAIR_ADJ 2030-01-01 -100")
       expect((await s.clock("2030-02-01")).status).toBe(200)
-      expect((await s.invoices()).length).toBe(initial)
+      expect(await s.items()).toEqual(paused)
       // Another service cannot clear the original service's blocking state.
       await s.request(path, "POST", blocking(false, "another-service"))
       await s.clock("2030-02-02")
-      expect((await s.invoices()).length).toBe(initial)
+      expect(await s.items()).toEqual(paused)
       expect((await s.request(path, "POST", blocking(false))).status).toBe(201)
-      await s.clock("2030-02-03")
-      expect((await s.invoices()).length).toBe(initial + 1)
+      expect(await s.items()).toContain("RECURRING 2030-02-02 96.43")
       expect((await s.request(path, "PUT", blocking(true))).status).toBe(405)
       const missing = await s.request("/subscriptions/missing/block", "POST", blocking(true))
       expect(missing.status).toBe(404)

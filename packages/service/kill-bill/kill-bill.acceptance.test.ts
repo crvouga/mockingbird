@@ -157,11 +157,10 @@ describe("Kill Bill REST adapter", () => {
         refundAdj: number
         items: Array<{ invoiceItemId: string; itemType: string; linkedInvoiceItemId?: string }>
       }>(`/invoices/${invoiceId}`)
-      expect(adjusted).toMatchObject({ balance: 3.33, refundAdj: 3.33 })
-      expect(adjusted.items.at(-1)).toMatchObject({
-        itemType: "ITEM_ADJ",
-        linkedInvoiceItemId: adjusted.items[0]?.invoiceItemId,
-      })
+      // Kill Bill 0.24.16 (parity scenario refund-adjusted): a refund without item adjustments
+      // reopens the balance and lowers refundAdj; it adds no invoice item.
+      expect(adjusted).toMatchObject({ balance: 3.33, refundAdj: -3.33 })
+      expect(adjusted.items.map((item) => item.itemType)).not.toContain("ITEM_ADJ")
 
       const voidable = await post(`/invoices/charges/${accountId}`, [{ amount: 4.25 }])
       expect(

@@ -264,7 +264,16 @@ paths:
         - { name: targetDate, in: query, required: false, schema: { type: string, format: date } }
       responses:
         "201": { description: Invoice for every period starting on or before targetDate (Location) }
+        "400": { description: InvoiceApiException 4005 (target 37 months or more ahead) or 4 (more than 15 items for a subscription in a day) }
         "404": { description: Nothing to invoice (Tomcat page, no entity), or the account does not exist }
+  /1.0/kb/invoices/{invoiceId}/commitInvoice:
+    parameters: [{ name: invoiceId, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: CommitInvoice
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      responses:
+        "204": { description: A DRAFT invoice becomes COMMITTED }
+        "404": { description: Invoice not found }
   /1.0/kb/paymentTransactions:
     get:
       operationId: GetPaymentByTransactionExternalKey

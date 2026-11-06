@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **25**
-- supported by the emulator: **25**
-- parity enabled: **25**
+- operations in spec: **26**
+- supported by the emulator: **26**
+- parity enabled: **26**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -24,6 +24,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `UndoChangeSubscriptionPlan` | `PUT /1.0/kb/subscriptions/{subscriptionId}/undoChangePlan` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `VoidInvoice` | `PUT /1.0/kb/invoices/{invoiceId}/voidInvoice` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `CreateFutureInvoice` | `POST /1.0/kb/invoices` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `CommitInvoice` | `PUT /1.0/kb/invoices/{invoiceId}/commitInvoice` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetPaymentByTransactionExternalKey` | `GET /1.0/kb/paymentTransactions` | ✅ supported | ✅ |  |
 | `GetAccountOverdue` | `GET /1.0/kb/accounts/{accountId}/overdue` | ✅ supported | ✅ |  |
 | `GetUserPermissions` | `GET /1.0/kb/security/permissions` | ✅ supported | ✅ | Best guess, not oracle-verified; see README for contract and limits |
