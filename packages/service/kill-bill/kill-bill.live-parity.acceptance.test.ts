@@ -364,6 +364,22 @@ describe("Kill Bill 0.24.16 push notifications", () => {
     }
   })
 
+  test("notifications of several accounts each arrive one delay after their event", async () => {
+    const s = await callback(() => false)
+    try {
+      const started = Date.now()
+      await Promise.all(
+        [1, 2, 3, 4, 5, 6].map(() => s.request("/accounts", "POST", { currency: "USD" })),
+      )
+      await s.request("/test/queues?timeoutSec=5")
+      expect(s.received).toHaveLength(6)
+      // With a 50 ms delay, six deliveries queued one after another would take 300 ms or more.
+      expect(Date.now() - started).toBeLessThan(250)
+    } finally {
+      await s.close()
+    }
+  })
+
   test("a refused notification is retried 15 minutes later, then 30 minutes after that", async () => {
     let failures = 2
     const s = await callback(() => failures-- > 0)

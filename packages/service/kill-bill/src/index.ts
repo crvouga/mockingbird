@@ -1845,16 +1845,12 @@ export class KillBillAPI {
     return due.length === 0 && this.state.busEvents.count() === 0
   }
   private async waitForQueues(timeoutSec: number) {
-    let triesLeft = timeoutSec
-    let idle = false
-    while (!idle && triesLeft > 0) {
-      idle = this.queuesIdle()
-      if (!idle) {
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        triesLeft -= 1
-      }
+    const deadline = Date.now() + timeoutSec * 1000
+    while (!this.queuesIdle()) {
+      if (Date.now() >= deadline) return false
+      await new Promise((resolve) => setTimeout(resolve, 50))
     }
-    return idle
+    return true
   }
   private async body(request: Request) {
     const text = await request.text()
