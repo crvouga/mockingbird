@@ -69,9 +69,9 @@
       "contract": "openapi.yaml",
       "types": "dist/index.d.ts",
       "oracle": {
-        "kind": "Live vendor API or sandbox",
+        "kind": "Self-hosted Kill Bill (0.24.16 verified)",
         "command": "bun run parity:service -- kill-bill",
-        "note": "Run from a Mockingbird checkout; credentials come only from .env.local or GitHub Actions secrets. Missing credentials exit 2."
+        "note": "Replays fixed scenarios against a Kill Bill you run (KILL_BILL_URL, loopback unless --allow-remote) and a fresh emulator, each in a new tenant. Without KILL_BILL_URL it exits 2."
       },
       "introspection": [
         "GET /__admin/health",
@@ -103,6 +103,7 @@
   },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-canonicalize": "workspace:*",
     "@crvouga/mockingbird-core": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",

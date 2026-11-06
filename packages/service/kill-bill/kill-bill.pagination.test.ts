@@ -100,7 +100,17 @@ describe("Kill Bill collection reconciliation", () => {
       ).toBe(true)
       const invoices = await send("/1.0/kb/invoices/pagination", undefined, tenant)
       expect(invoices.status).toBe(200)
-      expect(await invoices.json()).toEqual(fixtures.invoices)
+      // Kill Bill 0.24.16 pages invoices without their components: amounts zero, no items.
+      expect(await invoices.json()).toEqual(
+        fixtures.invoices.map((row) => ({
+          ...row,
+          amount: 0,
+          balance: 0,
+          creditAdj: 0,
+          refundAdj: 0,
+          items: [],
+        })),
+      )
       expect(accounts.headers.get("x-killbill-pagination-totalnbrecords")).toBe(
         String(fixtures.accounts.length),
       )

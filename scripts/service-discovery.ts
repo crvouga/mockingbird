@@ -161,6 +161,12 @@ function oracleFor(name: string): Discovery["oracle"] {
       command: "bun run parity:service -- s3",
       note: "bun test replays every recorded MinIO transcript against the emulator offline; the live run needs a MinIO you start (packages/service/s3/oracle/README.md) and exits 2 when it is unreachable.",
     }
+  if (name === "kill-bill")
+    return {
+      kind: "Self-hosted Kill Bill (0.24.16 verified)",
+      command: "bun run parity:service -- kill-bill",
+      note: "Replays fixed scenarios against a Kill Bill you run (KILL_BILL_URL, loopback unless --allow-remote) and a fresh emulator, each in a new tenant. Without KILL_BILL_URL it exits 2.",
+    }
   if (name === "medplum")
     return {
       kind: "Pinned self-hosted Medplum",

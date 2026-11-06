@@ -46,7 +46,7 @@ describe("Kill Bill subscription price overrides", () => {
     }
     const recurring = async (subscriptionId: string) => {
       const invoices = await json<Array<{ items: RecurringItem[] }>>(
-        `/accounts/${accountId}/invoices`,
+        `/accounts/${accountId}/invoices?includeInvoiceComponents=true`,
       )
       return invoices
         .flatMap((invoice) => invoice.items)

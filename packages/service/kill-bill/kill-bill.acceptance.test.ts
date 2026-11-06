@@ -157,11 +157,10 @@ describe("Kill Bill REST adapter", () => {
         refundAdj: number
         items: Array<{ invoiceItemId: string; itemType: string; linkedInvoiceItemId?: string }>
       }>(`/invoices/${invoiceId}`)
-      expect(adjusted).toMatchObject({ balance: 3.33, refundAdj: 3.33 })
-      expect(adjusted.items.at(-1)).toMatchObject({
-        itemType: "ITEM_ADJ",
-        linkedInvoiceItemId: adjusted.items[0]?.invoiceItemId,
-      })
+      // Kill Bill 0.24.16 (parity scenario refund-adjusted): a refund without item adjustments
+      // reopens the balance and lowers refundAdj; it adds no invoice item.
+      expect(adjusted).toMatchObject({ balance: 3.33, refundAdj: -3.33 })
+      expect(adjusted.items.map((item) => item.itemType)).not.toContain("ITEM_ADJ")
 
       const voidable = await post(`/invoices/charges/${accountId}`, [{ amount: 4.25 }])
       expect(
@@ -495,7 +494,8 @@ describe("Kill Bill REST adapter", () => {
     })
     expect(typeof document.bundleId).toBe("string")
     expect(document.bundleId).not.toBe(subscriptionId)
-    expect(document.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    // Kill Bill 0.24.16 reports startDate as the creation instant, chargedThroughDate as a day.
+    expect(document.startDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
     expect(document.chargedThroughDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(addon.status).toBe(201)
     expect(addonLocation).toEndWith(`/1.0/kb/subscriptions/${addonId}`)

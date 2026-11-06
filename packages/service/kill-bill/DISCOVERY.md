@@ -23,9 +23,9 @@ consumer-side workaround.
 
 - Declared parity surface: **Accounts, subscriptions, and invoices**.
 - Parity tier: **cold** (the repository controls when live checks run).
-- Oracle: **Live vendor API or sandbox**.
+- Oracle: **Self-hosted Kill Bill (0.24.16 verified)**.
 - Repository command: `bun run parity:service -- kill-bill`.
-- Evidence model: Run from a Mockingbird checkout; credentials come only from .env.local or GitHub Actions secrets. Missing credentials exit 2.
+- Evidence model: Replays fixed scenarios against a Kill Bill you run (KILL_BILL_URL, loopback unless --allow-remote) and a fresh emulator, each in a new tenant. Without KILL_BILL_URL it exits 2.
 
 The npm package contains evidence summaries and the exact contract, not credentials or the
 repository-only parity harness. Self-parity/property and acceptance tests run in the Mockingbird
