@@ -1,4 +1,3 @@
-import { AsyncLocalStorage } from "node:async_hooks"
 import { type APIOptions, bootSqlite } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
@@ -55,8 +54,6 @@ export type KillBillAPIOptions = APIOptions & {
 }
 const DEFAULT_TENANT_ID = "tenant-default"
 type RequestAudit = AuditStamp & { level: "NONE" | "MINIMAL" | "FULL" }
-/** The audit columns and requested audit level of the request being handled. */
-const requestAudit = new AsyncLocalStorage<RequestAudit>()
 const TOMCAT_404 =
   '<!doctype html><html lang="en"><head><title>HTTP Status 404 – Not Found</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {color:black;} .line {height:1px;background-color:#525D76;border:none;}</style></head><body><h1>HTTP Status 404 – Not Found</h1><hr class="line" /><p><b>Type</b> Status Report</p><p><b>Message</b> Not Found</p><p><b>Description</b> The origin server did not find a current representation for the target resource or is not willing to disclose that one exists.</p><hr class="line" /><h3>Apache Tomcat/9.0.98</h3></body></html>'
 const NOTIFICATION_KEY = "PUSH_NOTIFICATION_CB"
@@ -207,6 +204,11 @@ const CLEAR_OVERDUE_STATE = "__KILLBILL__CLEAR__OVERDUE_STATE__"
 const OVERDUE_UNPAID_INVOICE_DAYS = 1
 
 export class KillBillAPI {
+  /**
+   * The audit columns and requested audit level of the request being handled. Each request runs on
+   * its own Object.create(this) view that sets this, so overlapping requests keep their own.
+   */
+  private requestAudit: RequestAudit | undefined
   readonly state: KillBillState
   private readonly sqlite
   private readonly namespace: string
@@ -1763,11 +1765,13 @@ export class KillBillAPI {
       userToken: request.headers.get("x-request-id") ?? crypto.randomUUID(),
       level: level === "FULL" || level === "MINIMAL" ? level : "NONE",
     }
-    return requestAudit.run(audit, () => this.handle(request))
+    const scoped: KillBillAPI = Object.create(this)
+    scoped.requestAudit = audit
+    return scoped.handle(request)
   }
   /** The audit stamp for rows the current request writes; billing runs write as Kill Bill. */
   private stamp(changedBy?: string): AuditStamp | undefined {
-    const current = requestAudit.getStore()
+    const current = this.requestAudit
     if (!current) return undefined
     const { level: _level, ...stamp } = current
     return changedBy ? { ...stamp, changedBy } : stamp
@@ -1779,7 +1783,7 @@ export class KillBillAPI {
     objectId: string,
     updated = false,
   ) {
-    const level = requestAudit.getStore()?.level ?? "NONE"
+    const level = this.requestAudit?.level ?? "NONE"
     if (level === "NONE" || !stamp) return []
     const row = (changeType: string) => ({
       changeType,
