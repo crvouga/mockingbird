@@ -228,11 +228,12 @@ export class KillBillAPI {
   private readonly tenantKey: string
   private readonly tenantSecret: string
   /**
-   * Push notifications are delivered one at a time, in order, after the request that raised them.
-   * Every per-request view shares this object, so the chain is replaced inside it, never on `this`.
+   * Push notifications are delivered after the request that raised them, in order per account and
+   * callback, each `notificationDelayMs` after its event (delays never add up). Every per-request
+   * view shares this object, so chains are replaced inside it, never on `this`.
    */
-  private readonly outbox: { chain: Promise<void>; queued: Set<string> } = {
-    chain: Promise.resolve(),
+  private readonly outbox: { chains: Map<string, Promise<void>>; queued: Set<string> } = {
+    chains: new Map(),
     queued: new Set(),
   }
   constructor(private readonly options: KillBillAPIOptions = {}) {
@@ -366,12 +367,21 @@ export class KillBillAPI {
   }
   private queueDelivery(id: string, delayMs: number) {
     if (this.outbox.queued.has(id)) return
+    const delivery = (this.state.busEvents.get(id) ?? this.state.notifications.get(id))?.delivery
+    if (!delivery) return
     this.outbox.queued.add(id)
-    this.outbox.chain = this.outbox.chain
-      .then(() => new Promise((resolve) => setTimeout(resolve, delayMs)))
+    const accountId = (JSON.parse(delivery.body) as { accountId?: string | null }).accountId
+    const key = `${delivery.url} ${accountId ?? ""}`
+    const due = Date.now() + delayMs
+    const chain = (this.outbox.chains.get(key) ?? Promise.resolve())
+      .then(() => new Promise((resolve) => setTimeout(resolve, Math.max(0, due - Date.now()))))
       .then(() => this.deliver(id))
       .catch(() => undefined)
-      .finally(() => this.outbox.queued.delete(id))
+      .finally(() => {
+        this.outbox.queued.delete(id)
+        if (this.outbox.chains.get(key) === chain) this.outbox.chains.delete(key)
+      })
+    this.outbox.chains.set(key, chain)
   }
   /**
    * One delivery attempt. A 2xx answer ends it; anything else (or no answer) is retried on Kill
