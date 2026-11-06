@@ -318,3 +318,71 @@ describe("Kill Bill 0.24.16 behaviour", () => {
     expect(tokens[0]).toBe(tokens[1])
   })
 })
+
+describe("Kill Bill 0.24.16 push notifications", () => {
+  async function callback(fail: () => boolean) {
+    const received: string[] = []
+    const sink = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        received.push(((await request.json()) as { eventType: string }).eventType)
+        return new Response(null, { status: fail() ? 500 : 204 })
+      },
+    })
+    const server = await createServer({ notificationDelayMs: 50 })
+    const request = (path: string, method = "GET", body?: unknown) =>
+      fetch(`${server.url}/1.0/kb${path}`, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+    await request("/test/clock?requestedDate=2030-01-01T12:00:00Z", "POST")
+    await request(
+      `/tenants/registerNotificationCallback?cb=${encodeURIComponent(sink.url.toString())}`,
+      "POST",
+    )
+    return {
+      received,
+      request,
+      close: async () => {
+        await server.close()
+        sink.stop(true)
+      },
+    }
+  }
+
+  test("a notification arrives after the request has answered, and test/queues waits for it", async () => {
+    const s = await callback(() => false)
+    try {
+      expect((await s.request("/accounts", "POST", { currency: "USD" })).status).toBe(201)
+      expect(s.received).toEqual([])
+      expect((await s.request("/test/queues?timeoutSec=5")).status).toBe(200)
+      expect(s.received).toEqual(["ACCOUNT_CREATION"])
+    } finally {
+      await s.close()
+    }
+  })
+
+  test("a refused notification is retried 15 minutes later, then 30 minutes after that", async () => {
+    let failures = 2
+    const s = await callback(() => failures-- > 0)
+    try {
+      await s.request("/accounts", "POST", { currency: "USD" })
+      await s.request("/test/queues?timeoutSec=5")
+      expect(s.received).toEqual(["ACCOUNT_CREATION"])
+      const at = async (instant: string) => {
+        await s.request(`/test/clock?requestedDate=${instant}`, "POST")
+        await s.request("/test/queues?timeoutSec=5")
+        return s.received.length
+      }
+      expect(await at("2030-01-01T12:14:00Z")).toBe(1)
+      expect(await at("2030-01-01T12:16:00Z")).toBe(2)
+      expect(await at("2030-01-01T12:45:00Z")).toBe(2)
+      expect(await at("2030-01-01T12:47:00Z")).toBe(3)
+      expect(await at("2030-01-02T12:00:00Z")).toBe(3)
+    } finally {
+      await s.close()
+    }
+  })
+})

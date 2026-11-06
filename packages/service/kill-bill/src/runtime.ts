@@ -68,6 +68,8 @@ export type KillBillRuntimeOptions = {
   tenantKey?: string
   tenantSecret?: string
   plans?: readonly CatalogPlan[]
+  /** Delay before a push notification is delivered (Kill Bill's bus took 2–3 s). Default 2000. */
+  notificationDelayMs?: number
   webhooks?: {
     endpoints?: WebhookEndpoint[]
     retryDelaysMs?: readonly number[]
@@ -185,6 +187,9 @@ export const createRuntime = (options: KillBillRuntimeOptions = {}): KillBillRun
         ...(options.tenantKey ? { tenantKey: options.tenantKey } : {}),
         ...(options.tenantSecret ? { tenantSecret: options.tenantSecret } : {}),
         ...(options.plans ? { plans: options.plans } : {}),
+        ...(options.notificationDelayMs !== undefined
+          ? { notificationDelayMs: options.notificationDelayMs }
+          : {}),
         onEvent: (event) => hub.publish({ namespace, type: event.eventType, body: event }),
       }),
     admin,

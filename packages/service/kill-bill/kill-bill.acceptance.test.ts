@@ -870,6 +870,8 @@ describe("Kill Bill tenants and notification callbacks", () => {
         ).status,
       ).toBe(201)
       await server.runtime.webhooks.idle()
+      // Kill Bill delivers tenant callbacks after the request; GET /test/queues waits for them.
+      await call(server.url, "/test/queues?timeoutSec=10", {}, headers)
       const invoiceOrPayment = (objectType: string) =>
         objectType === "INVOICE" || objectType === "PAYMENT"
       expect(posted.some((event) => invoiceOrPayment(event.objectType))).toBe(true)

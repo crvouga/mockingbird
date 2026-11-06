@@ -150,10 +150,15 @@ export type QueuedNotification = {
   id: string
   effectiveDate: string
   kind: string
+  /** A push notification to retry: where, what, and how many attempts it has had. */
+  delivery?: PushDelivery
 }
+export type PushDelivery = { url: string; body: string; attempts: number }
 export type QueuedBusEvent = {
   id: string
   eventType: string
+  /** A push notification waiting for its first delivery. */
+  delivery?: PushDelivery
 }
 export type Audit = {
   id: string
