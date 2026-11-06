@@ -329,6 +329,102 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
       await kb.call("commit it", "PUT", `/1.0/kb/invoices/${draft.invoiceId}/commitInvoice`)
     await kb.call("read the account after", "GET", account)
   },
+  /**
+   * Backend test hold: AUTO_INVOICING_OFF on an account holding $20 of credit, a subscription, an
+   * invoice request while held, then the tag removed.
+   */
+  async "auto-invoicing-off"(kb) {
+    await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", PARITY_CATALOG_XML, "text/xml")
+    const accountId = kb.idFrom(
+      await kb.call("create account", "POST", "/1.0/kb/accounts", {
+        name: "Parity Member",
+        currency: "USD",
+      }),
+    )
+    await kb.call(
+      "add default external payment method",
+      "POST",
+      `/1.0/kb/accounts/${accountId}/paymentMethods?isDefault=true`,
+      { pluginName: "__EXTERNAL_PAYMENT__" },
+    )
+    await kb.call("credit 20", "POST", "/1.0/kb/credits?autoCommit=true", [
+      { accountId, amount: 20, currency: "USD", description: "parity-credit" },
+    ])
+    const tag = "00000000-0000-0000-0000-000000000002"
+    await kb.call("hold invoicing", "POST", `/1.0/kb/accounts/${accountId}/tags`, [tag])
+    const subscriptionId = kb.idFrom(
+      await kb.call("subscribe while held", "POST", "/1.0/kb/subscriptions", {
+        accountId,
+        planName: MONTHLY,
+      }),
+    )
+    const invoices = `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`
+    const account = `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`
+    await kb.call("invoices while held", "GET", invoices)
+    await kb.call("subscription while held", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
+    const today = todayOf(new Date().toISOString(), 0)
+    await kb.call(
+      "invoice while held",
+      "POST",
+      `/1.0/kb/invoices?accountId=${accountId}&targetDate=${today}`,
+    )
+    await kb.call("release invoicing", "DELETE", `/1.0/kb/accounts/${accountId}/tags?tagDef=${tag}`)
+    await kb.call("invoices after release", "GET", invoices)
+    await kb.call("subscription after release", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
+    await kb.call("account after release", "GET", account)
+  },
+  /** Credit added while an invoice is open (automatic payment off), then more than is owed. */
+  async "credit-pays-open-invoice"(kb) {
+    await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", PARITY_CATALOG_XML, "text/xml")
+    const accountId = kb.idFrom(
+      await kb.call("create account", "POST", "/1.0/kb/accounts", {
+        name: "Parity Member",
+        currency: "USD",
+      }),
+    )
+    await kb.call("automatic payment off", "POST", `/1.0/kb/accounts/${accountId}/tags`, [
+      "00000000-0000-0000-0000-000000000001",
+    ])
+    await kb.call("subscribe", "POST", "/1.0/kb/subscriptions", { accountId, planName: MONTHLY })
+    const invoices = `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`
+    const account = `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`
+    await kb.call("open invoice", "GET", invoices)
+    await kb.call("credit 30", "POST", "/1.0/kb/credits?autoCommit=true", [
+      { accountId, amount: 30, currency: "USD", description: "parity-credit" },
+    ])
+    await kb.call("invoices after a partial credit", "GET", invoices)
+    await kb.call("account after a partial credit", "GET", account)
+    await kb.call("credit 100", "POST", "/1.0/kb/credits?autoCommit=true", [
+      { accountId, amount: 100, currency: "USD", description: "parity-credit" },
+    ])
+    await kb.call("invoices after more credit than owed", "GET", invoices)
+    await kb.call("account after more credit than owed", "GET", account)
+  },
+  /** A paid charge adjusted by 15, then billing stopped now: the repair credits what is left. */
+  async "cancel-after-item-adjust"(kb) {
+    const { accountId, subscriptionId } = await member(kb, MONTHLY)
+    const invoices = `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`
+    const [invoice] = (await kb.call("list invoices", "GET", invoices)).body as Invoice[]
+    const item = invoice?.items?.find((row) => row.itemType === "RECURRING")
+    if (!invoice || !item) throw new Error("cancel-after-item-adjust: no recurring item")
+    await kb.call("adjust the paid item by 15", "POST", `/1.0/kb/invoices/${invoice.invoiceId}`, {
+      accountId,
+      invoiceItemId: item.invoiceItemId,
+      amount: 15,
+      currency: "USD",
+    })
+    await kb.call(
+      "stop billing now",
+      "DELETE",
+      `/1.0/kb/subscriptions/${subscriptionId}?entitlementPolicy=IMMEDIATE&billingPolicy=IMMEDIATE`,
+    )
+    await kb.call("invoices after the stop", "GET", invoices)
+    await kb.call(
+      "account after the stop",
+      "GET",
+      `/1.0/kb/accounts/${accountId}?accountWithBalanceAndCBA=true`,
+    )
+  },
   /** Invoicing ahead: a subscription that has not started yet, then a target years away. */
   async "invoice-target-dates"(kb) {
     await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", PARITY_CATALOG_XML, "text/xml")
