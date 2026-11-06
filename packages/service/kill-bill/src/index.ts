@@ -1696,13 +1696,16 @@ export class KillBillAPI {
       await this.repairUnusedPeriod(subscription, from, tenantId)
     return next
   }
-  private async billDue(tenantId: string) {
+  private async billDue(tenantId: string, accountId?: string) {
     const today = isoDate(this.now())
     for (const { value: stored } of this.state.subscriptions.list({
-      where: (s) => this.billable(s, today) && this.account(s.accountId, tenantId) !== undefined,
+      where: (s) =>
+        (accountId === undefined || s.accountId === accountId) &&
+        this.billable(s, today) &&
+        this.account(s.accountId, tenantId) !== undefined,
     })) {
-      // An end-of-term plan change takes effect on the renewal it was scheduled for.
       const current = await this.startBillingPause(stored, today, tenantId)
+      // An end-of-term plan change takes effect on the renewal it was scheduled for.
       const planName = current.pendingChangePlan ?? current.planName
       const plan = this.plan(planName)
       if (!plan) continue
@@ -2290,9 +2293,9 @@ export class KillBillAPI {
           ],
         }
         this.state.subscriptions.insert(subscription.subscriptionId, next)
-        // Kill Bill re-runs invoicing on a blocking state change: a pause credits the rest of the
-        // period and a resume bills from that day.
-        await this.billDue(tenantId)
+        // Kill Bill re-runs the account's invoicing on a blocking state change: a pause credits
+        // the rest of the period and a resume bills from that day.
+        await this.billDue(tenantId, subscription.accountId)
         this.audit(request, "SUBSCRIPTION", subscription.subscriptionId)
         return this.empty(201)
       }
