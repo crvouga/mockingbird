@@ -773,6 +773,7 @@ export const multipartHandlers: Handlers = {
       }
     }
     const etag = multipartEtag(requested.map((part) => canonicalEtag(part.etag)))
+    checkPutPreconditions(ctx)
     const version: ObjectVersion = ctx.core.write(
       defined({
         bucket: ctx.bucket,
