@@ -255,6 +255,26 @@ paths:
         "204": { description: Invoice voided }
         "400": { description: Invoice is paid or already void }
         "404": { description: Invoice not found }
+  /1.0/kb/invoices:
+    post:
+      operationId: CreateFutureInvoice
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: accountId, in: query, required: true, schema: { type: string } }
+        - { name: targetDate, in: query, required: false, schema: { type: string, format: date } }
+      responses:
+        "201": { description: Invoice for every period starting on or before targetDate (Location) }
+        "404": { description: Nothing to invoice (Tomcat page, no entity), or the account does not exist }
+  /1.0/kb/paymentTransactions:
+    get:
+      operationId: GetPaymentByTransactionExternalKey
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: true } }
+      parameters:
+        - { name: transactionExternalKey, in: query, required: true, schema: { type: string } }
+        - { name: audit, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: The payment holding the transaction (Kill Bill 0.24.16 PaymentJson) }
+        "404": { description: PaymentApiException 7020, no transaction with that key }
   /1.0/kb/accounts/{accountId}/overdue:
     parameters: [{ name: accountId, in: path, required: true, schema: { type: string } }]
     get:

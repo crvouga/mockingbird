@@ -43,8 +43,14 @@ export type Subscription = Record<string, unknown> & {
     stateName: string
     service: string
     isBlockBilling: boolean
+    isBlockEntitlement?: boolean
+    isBlockChange?: boolean
     effectiveDate: string
+    /** When the state was added, for the subscription's event list. */
+    createdAt?: string
   }[]
+  /** When the subscription was created: Kill Bill reports startDate as this instant. */
+  createdAt?: string
   /** Phase prices sent on create. Kill Bill 0.24 echoes these on GET. */
   priceOverrides?: Record<string, unknown>[]
 }
@@ -111,7 +117,14 @@ export type Payment = {
   transactions: Transaction[]
   paymentAttempts: Record<string, unknown>[]
 }
-export type CatalogPlan = { name: string; amount: number; currency?: string; intervalDays?: number }
+export type CatalogPlan = {
+  name: string
+  amount: number
+  currency?: string
+  intervalDays?: number
+  /** Catalog product of the plan (`<product>` in catalog XML); the plan name when not given. */
+  product?: string
+}
 export type QueuedNotification = {
   id: string
   effectiveDate: string

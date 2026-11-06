@@ -31,7 +31,9 @@ const fixture = async () => {
   })
   const subscription = await call("/subscriptions", { accountId, planName: "standard-monthly" })
   const subscriptionId = subscription.headers.get("location")?.split("/").at(-1) as string
-  const [invoice] = await (await call(`/accounts/${accountId}/invoices`)).json()
+  const [invoice] = await (
+    await call(`/accounts/${accountId}/invoices?includeInvoiceComponents=true`)
+  ).json()
   return { api, call, accountId, subscriptionId, invoice, events }
 }
 
@@ -130,7 +132,8 @@ describe("invoice operations regressions", () => {
         subscriptionId,
         itemType: "RECURRING",
         amount: 100,
-        startDate: "2026-01-31",
+        // Kill Bill 0.24.16 bills calendar months: a 2026-01-01 start renews on 2026-02-01.
+        startDate: "2026-02-01",
       }),
     )
     expect(
@@ -438,7 +441,9 @@ test("auto-pay charges only what a notification consumer left unpaid during invo
       pluginName: "__EXTERNAL_PAYMENT__",
     })
     await call("/subscriptions", { accountId, planName: "standard-monthly" })
-    const [invoice] = await (await call(`/accounts/${accountId}/invoices`)).json()
+    const [invoice] = await (
+      await call(`/accounts/${accountId}/invoices?includeInvoiceComponents=true`)
+    ).json()
     const payments = (await (await call(`/invoices/${invoice.invoiceId}/payments`)).json()) as {
       paymentExternalKey: string
       purchasedAmount: number

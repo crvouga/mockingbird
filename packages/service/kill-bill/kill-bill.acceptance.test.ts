@@ -495,7 +495,8 @@ describe("Kill Bill REST adapter", () => {
     })
     expect(typeof document.bundleId).toBe("string")
     expect(document.bundleId).not.toBe(subscriptionId)
-    expect(document.startDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+    // Kill Bill 0.24.16 reports startDate as the creation instant, chargedThroughDate as a day.
+    expect(document.startDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
     expect(document.chargedThroughDate).toMatch(/^\d{4}-\d{2}-\d{2}$/)
     expect(addon.status).toBe(201)
     expect(addonLocation).toEndWith(`/1.0/kb/subscriptions/${addonId}`)

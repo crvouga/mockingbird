@@ -57,8 +57,19 @@ The oracle is Kill Bill's [account resource](https://github.com/killbill/killbil
 and [ordering implementation](https://github.com/killbill/killbill/blob/a21c14d61ab93b902ddba2a1c5ecfbc7aca76e07/util/src/main/java/org/killbill/billing/util/entity/dao/DefaultPaginationSqlDaoHelper.java).
 Counts are exact for the emulator's finite collections; the vendor's large-dataset count heuristic,
 audit projections and search endpoints are unmodelled. Invalid pagination uses the emulator's existing
-error envelope; exact live error text remains unverified. Live parity requires an isolated tenant
-and is not enabled by the current runner.
+error envelope; exact live error text remains unverified. Invoice pagination returns invoices without
+their components (amounts zero, no items), as Kill Bill 0.24.16 does.
+
+## Live parity
+
+`KILL_BILL_URL=http://127.0.0.1:8080 bun scripts/parity.ts [scenario…] [--out dir]` replays fixed
+request scenarios (`scripts/scenarios.ts`) against a Kill Bill you run and a fresh emulator, each in
+a new tenant it creates, and diffs the normalized transcripts (ids become placeholders, instants
+`<ts>`; dates, amounts and states compare as they are). It writes, so it refuses a non-loopback
+`KILL_BILL_URL` without `--allow-remote`. The scenarios cover the catalog errors, renewal invoicing
+(`POST /1.0/kb/invoices`), an item-adjusted external refund and its key lookup, an entitlement
+pause and resume, three BCD changes under the test clock, and an annual BCD change. All of them
+matched Kill Bill 0.24.16 (the version Geviti runs in production) on 2026-11-06.
 
 ## Controls
 
@@ -66,7 +77,7 @@ and is not enabled by the current runner.
 - `POST /__admin/payments/:id/retry` succeeds the latest failed or pending transaction.
 - `POST /__admin/catalog/plans` seeds a plan.
 - `GET /__admin/billing` inspects billing state and audit entries. `GET /__admin/state` is the shared collection view.
-- `GET /1.0/kb/test/clock` returns Kill Bill's clock JSON (`currentUtcTime`, `localDate`, `timeZone`). `PUT /1.0/kb/test/clock?requestedDate=...` advances recurring billing.
+- `GET /1.0/kb/test/clock` returns Kill Bill's clock JSON (`currentUtcTime`, `localDate`, `timeZone`). `PUT /1.0/kb/test/clock?requestedDate=...` advances recurring billing; `POST /1.0/kb/test/clock` with no `requestedDate` resets it to the system time.
 - `PUT /1.0/kb/subscriptions/:id/undoChangePlan` cancels a pending plan change. With no pending change it returns 400 and Kill Bill error code 1071.
 - `GET /1.0/kb/test/queues?timeoutSec=` returns 200 when no due notification or bus event is outstanding, and 412 after that many seconds when work remains. The default timeout is 5 seconds. A notification counts only when its `effectiveDate` is at or before the clock; rows in `kb_bus_events` always count. Both collections are visible through `GET /__admin/state`.
 - Fault presets cover plugin failure, rate limiting, network loss, and webhook duplicate/reorder/drop delivery.
@@ -102,27 +113,48 @@ exact vendor errors, account-specific permissions, proration and billing transit
   returns 204. Null leaves a value unchanged unless `treatNullAsReset=true`. Changed immutable
   fields return 400 `INVALID_ACCOUNT`; other update fields return the emulator limitation
   `UNSUPPORTED_ACCOUNT_UPDATE`. Rejected updates leave the account unchanged.
-- `POST /1.0/kb/subscriptions/{subscriptionId}/block` records a billing-only blocking state and
-  returns 201. The latest effective state per `service` applies; any blocking service pauses
-  billing. `requestedDate` optionally schedules a state. Subscription and bundle reads remain
-  available. Resume uses another state for the same service with `isBlockBilling: false`.
-  Entitlement or change blocking returns the explicit emulator limitation
-  `UNSUPPORTED_BLOCKING_STATE`. The next clock advancement after resume generates at most one
-  full overdue renewal; there is no multi-period catch-up or proration.
+- `POST /1.0/kb/subscriptions/{subscriptionId}/block` records a blocking state and returns 201
+  (Kill Bill 0.24.16, parity scenario `block-entitlement`). The latest effective state per
+  `service` applies; any blocking service pauses billing, and `isBlockEntitlement` makes the
+  subscription read `BLOCKED`. Each state adds `PAUSE_`/`RESUME_ENTITLEMENT` and `_BILLING` events to
+  the subscription and its bundle `timeline`. `requestedDate` optionally schedules a state. A
+  subscription blocked on the billing date bills nothing; after a resume, the next clock
+  advancement bills the periods then due, without proration for the paused days (not replayed).
 - `PUT /1.0/kb/subscriptions/{subscriptionId}/bcd` accepts `billCycleDayLocal` from 1 through 31
-  and returns 204. Monthly plans only: from `effectiveFromDate` (today by default), the next
-  eligible due date moves to that calendar day on or after its existing date; earlier due
-  dates remain unchanged. Later renewals use calendar months, clamped to month-end. Retroactive
-  changes and non-monthly plans return `UNSUPPORTED_BCD`; transition proration is not modelled.
-  Only one BCD schedule change per subscription is modelled. A later request changing the day
+  and returns 204 (Kill Bill 0.24.16, parity scenarios `bcd-*`). Monthly plans renew in calendar
+  months on the billing day, clamped to month-end. From `effectiveFromDate` (today by default) the
+  first period off the new day is a stub up to it, billed on the later of the effective date and
+  the last new billing day on or before the stub: billed on a new billing day it is prorated over
+  that new period (BCD 5 from 01-01 bills 02-01..02-05 on 01-05 at 4/31), otherwise over the month
+  from its start (BCD 5 from 02-01 bills it on 02-01 at 4/28). The subscription reports the new day
+  from the first new billing day on. An annual plan accepts the change and reads back unchanged.
+  Retroactive changes return `UNSUPPORTED_BCD`. Only one BCD schedule change per subscription is modelled. A later request changing the day
   or effective date returns `UNSUPPORTED_BCD` without mutation; repeating the same pair is
   accepted. Multiple transitions require a new subscription fixture.
-- `POST /1.0/kb/invoices/dryRun?accountId=...&targetDate=YYYY-MM-DD` previews the next due
-  recurring charge per active, unblocked subscription without creating invoices, consuming IDs,
-  emitting events, charging payments or advancing billing state. It supports `TARGET_DATE` only;
-  other dry-run types/actions return an explicit error. A due charge returns 200 with invoice
-  `items`; nothing due returns 204. Preview IDs are synthetic. Multi-cycle catch-up, tax and
+- `POST /1.0/kb/invoices/dryRun?accountId=...&targetDate=YYYY-MM-DD` previews the recurring
+  periods due through `targetDate` per active, unblocked subscription without creating invoices,
+  consuming IDs, emitting events, charging payments or advancing billing state. It supports
+  `TARGET_DATE` only; other dry-run types/actions return an explicit error. A due charge returns
+  200 with invoice `items`; nothing due returns 204. Preview IDs are synthetic. Tax and
   entitlement-change simulations are not modelled.
+- `POST /1.0/kb/invoices?accountId=...&targetDate=YYYY-MM-DD` invoices every period of the
+  account's active subscriptions that starts on or before `targetDate`, without moving the clock,
+  pays it as automatic payment would, and returns 201 with the invoice `Location`. With nothing to
+  invoice it returns Kill Bill 0.24.16's 404 with no entity (Tomcat's HTML page) (parity scenario
+  `invoice-renewal`).
+- `GET /1.0/kb/paymentTransactions?transactionExternalKey=...` returns the payment holding that
+  transaction as `PaymentJson`, or 404 `PaymentApiException` 7020 "Payment … does not exist".
+- An invoice-payment refund lowers the invoice's `refundAdj` by the refund. With `isAdjusted` it
+  adds `ITEM_ADJ` items ("Invoice item adjustment", linked to the requested `adjustments`) that
+  lower the amount and leave the balance; without it the refund reopens the balance. An unkeyed
+  payment or transaction is keyed by its own id, except the credit payment of an external refund,
+  which gets a generated key (Kill Bill 0.24.16, parity scenario `refund-adjusted`).
+- Subscription, bundle, invoice, invoice item, payment and account reads carry the same fields as
+  Kill Bill 0.24.16 production responses: subscriptions add `prices`, `events`, `billingPeriod`,
+  `productName` and the other `SubscriptionJson` fields, report `startDate` as the creation instant,
+  and key an unkeyed subscription and its bundle by their ids; the account invoice list carries
+  amounts and items only with `includeInvoiceComponents=true`. `pendingChangePlan` is an emulator
+  extra that Kill Bill does not return.
 - `POST /1.0/kb/invoices/{invoiceId}` adjusts the specified `invoiceItemId` by a positive
   `amount`, or its remaining adjustable amount when omitted. It returns 201 and appends a
   negative `ITEM_ADJ` linked to the original item, reducing invoice amount and balance. Invalid
