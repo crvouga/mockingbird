@@ -65,10 +65,14 @@ const NOTIFICATION_KEY = "PUSH_NOTIFICATION_CB"
  */
 const NOTIFICATION_RETRY_MS = [15, 30, 120, 720, 1440].map((minutes) => minutes * 60_000)
 const PUSH_RETRY = "PUSH_NOTIFICATION_RETRY"
+/** How long Kill Bill's bus keeps polling after a delivery before it sleeps again. */
+const BUS_REPOLL_MS = 100
 /** Kill Bill's default org.killbill.invoice.maxDailyNumberOfItemsSafetyBound. */
 const SAFETY_BOUND = 15
 // Kill Bill's built-in AUTO_PAY_OFF control tag definition.
 const AUTO_PAY_OFF_TAG_ID = "00000000-0000-0000-0000-000000000001"
+/** Kill Bill's built-in AUTO_INVOICING_OFF control tag definition: no invoicing while set. */
+const AUTO_INVOICING_OFF_TAG_ID = "00000000-0000-0000-0000-000000000002"
 const money = (value: unknown) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
 const object = (value: unknown): Input =>
   value && typeof value === "object" && !Array.isArray(value) ? (value as Input) : {}
@@ -242,10 +246,13 @@ export class KillBillAPI {
    * callback, each `notificationDelayMs` after its event (delays never add up). Every per-request
    * view shares this object, so chains are replaced inside it, never on `this`.
    */
-  private readonly outbox: { chains: Map<string, Promise<void>>; queued: Set<string> } = {
-    chains: new Map(),
-    queued: new Set(),
-  }
+  private readonly outbox: {
+    chains: Map<string, Promise<void>>
+    queued: Set<string>
+    /** Deliveries in progress, and when the last one ended: the bus is polling while either. */
+    delivering: number
+    lastDeliveryEnd: number
+  } = { chains: new Map(), queued: new Set(), delivering: 0, lastDeliveryEnd: 0 }
   constructor(private readonly options: KillBillAPIOptions = {}) {
     this.sqlite = bootSqlite(options.sqlite)
     this.namespace = options.namespace ?? KILL_BILL_NAMESPACE
@@ -369,10 +376,15 @@ export class KillBillAPI {
       objectId,
       metaData: null,
     })
+    // Kill Bill's bus polls again as soon as it has delivered, and sleeps when it finds nothing:
+    // an event raised during or right after a delivery (a payment the callback made) goes out at
+    // once (~70 ms, measured), one raised while it sleeps waits for its next poll (2–3 s).
+    const polling =
+      this.outbox.delivering > 0 || Date.now() - this.outbox.lastDeliveryEnd < BUS_REPOLL_MS
     for (const url of callbacks) {
       const id = this.state.ids.next("push-", 24)
       this.state.busEvents.insert(id, { id, eventType, delivery: { url, body, attempts: 0 } })
-      this.queueDelivery(id, this.options.notificationDelayMs ?? 2000)
+      this.queueDelivery(id, polling ? 0 : (this.options.notificationDelayMs ?? 2000))
     }
   }
   private queueDelivery(id: string, delayMs: number) {
@@ -385,7 +397,15 @@ export class KillBillAPI {
     const due = Date.now() + delayMs
     const chain = (this.outbox.chains.get(key) ?? Promise.resolve())
       .then(() => new Promise((resolve) => setTimeout(resolve, Math.max(0, due - Date.now()))))
-      .then(() => this.deliver(id))
+      .then(async () => {
+        this.outbox.delivering += 1
+        try {
+          await this.deliver(id)
+        } finally {
+          this.outbox.delivering -= 1
+          this.outbox.lastDeliveryEnd = Date.now()
+        }
+      })
       .catch(() => undefined)
       .finally(() => {
         this.outbox.queued.delete(id)
@@ -497,6 +517,9 @@ export class KillBillAPI {
   }
   private autoPayOff(accountId: string) {
     return this.state.tags.get(`${accountId}\0${AUTO_PAY_OFF_TAG_ID}`) !== undefined
+  }
+  private autoInvoicingOff(accountId: string) {
+    return this.state.tags.get(`${accountId}\0${AUTO_INVOICING_OFF_TAG_ID}`) !== undefined
   }
   private invoicePayment(
     payment: Payment,
@@ -760,6 +783,19 @@ export class KillBillAPI {
     if (billingStop < periodEnd) await this.repairUnusedPeriod(subscription, billingStop, tenantId)
     return undefined
   }
+  /**
+   * What a billed item is still worth: its amount less the item adjustments linked to it. Kill Bill
+   * 0.24.16 repairs from this (100 adjusted by 15 repairs 85; parity scenario
+   * cancel-after-item-adjust).
+   */
+  private netItemAmount(item: InvoiceItem) {
+    const adjusted = (this.state.invoices.get(item.invoiceId)?.items ?? [])
+      .filter(
+        (row) => row.itemType === "ITEM_ADJ" && row.linkedInvoiceItemId === item.invoiceItemId,
+      )
+      .reduce((sum, row) => sum + row.amount, 0)
+    return money(item.amount + adjusted)
+  }
   /** Credit the unused share of the billed period that billing stops inside (REPAIR_ADJ + CBA_ADJ). */
   private async repairUnusedPeriod(subscription: Subscription, stop: string, tenantId: string) {
     const item = this.state.invoices
@@ -780,7 +816,7 @@ export class KillBillAPI {
     const end = item.endDate as string
     const share =
       (Date.parse(end) - Date.parse(stop)) / (Date.parse(end) - Date.parse(item.startDate))
-    const credit = money(item.amount * share)
+    const credit = money(this.netItemAmount(item) * share)
     if (credit <= 0) return
     await this.createInvoice(
       subscription.accountId,
@@ -792,8 +828,7 @@ export class KillBillAPI {
           startDate: stop,
           endDate: end,
           linkedInvoiceItemId: item.invoiceItemId,
-          subscriptionId: subscription.subscriptionId,
-          description: "Adjustment (subscription repair)",
+          description: "Adjustment (subscription change)",
         },
         {
           itemType: "CBA_ADJ",
@@ -1142,6 +1177,8 @@ export class KillBillAPI {
       return this.problem(400, "INVALID_DATE", "targetDate must be a valid YYYY-MM-DD date")
     const tooFar = this.targetTooFar(targetDate)
     if (tooFar) return tooFar
+    // Kill Bill 0.24.16 answers 201 for an AUTO_INVOICING_OFF account and invoices nothing.
+    if (this.autoInvoicingOff(accountId)) return this.empty(201)
     const today = isoDate(this.now())
     const due: Array<{ subscription: Subscription; planName: string; chargedThroughDate: string }> =
       []
@@ -1276,7 +1313,47 @@ export class KillBillAPI {
     }
     this.state.invoices.insert(invoiceId, invoice)
     await this.emit("INVOICE_CREATION", "INVOICE", invoiceId, accountId, tenantId)
-    return invoice
+    if (invoice.status === "COMMITTED" && creditAdj > 0) this.useCreditOnOpenInvoices(accountId)
+    return this.state.invoices.get(invoiceId) ?? invoice
+  }
+  /**
+   * Kill Bill 0.24.16 spends new account credit on the account's open invoices at once, oldest
+   * first: each gets a CBA_ADJ "Adjustment (use of account credit)" up to its balance, and only the
+   * rest stays as account credit (parity scenario credit-pays-open-invoice).
+   */
+  private useCreditOnOpenInvoices(accountId: string) {
+    let available = this.accountCredit(accountId)
+    const today = isoDate(this.now())
+    const open = this.state.invoices
+      .list({
+        where: (row) =>
+          row.accountId === accountId && row.status === "COMMITTED" && row.balance > 0,
+      })
+      .map(({ value }) => value)
+      .sort((a, b) => Number(a.invoiceNumber) - Number(b.invoiceNumber))
+    for (const invoice of open) {
+      if (available <= 0) break
+      const used = money(Math.min(available, invoice.balance))
+      this.state.invoices.insert(invoice.invoiceId, {
+        ...invoice,
+        balance: money(invoice.balance - used),
+        creditAdj: money(invoice.creditAdj - used),
+        items: [
+          ...invoice.items,
+          {
+            invoiceItemId: this.state.ids.next("item-", 32),
+            invoiceId: invoice.invoiceId,
+            accountId,
+            itemType: "CBA_ADJ",
+            amount: -used,
+            currency: invoice.currency,
+            description: "Adjustment (use of account credit)",
+            startDate: today,
+          },
+        ],
+      })
+      available = money(available - used)
+    }
   }
 
   /** Net successful purchase minus refund. Kill Bill 0.24.10 voids only when this is zero. */
@@ -1867,6 +1944,9 @@ export class KillBillAPI {
     for (const { value: stored } of this.state.subscriptions.list({
       where: (s) =>
         (accountId === undefined || s.accountId === accountId) &&
+        // Kill Bill 0.24.16 invoices nothing for an AUTO_INVOICING_OFF account (parity scenario
+        // auto-invoicing-off); removing the tag bills what was held.
+        !this.autoInvoicingOff(s.accountId) &&
         this.billable(s, today) &&
         this.account(s.accountId, tenantId) !== undefined,
     })) {
@@ -1976,12 +2056,12 @@ export class KillBillAPI {
         (Date.parse(end) - Date.parse(day)) / (Date.parse(end) - Date.parse(billed.startDate))
       items.push({
         itemType: "REPAIR_ADJ",
-        amount: -money(billed.amount * share),
+        amount: -money(this.netItemAmount(billed) * share),
         startDate: day,
         endDate: end,
         linkedInvoiceItemId: billed.invoiceItemId,
         subscriptionId: subscription.subscriptionId,
-        description: "Adjustment (subscription repair)",
+        description: "Adjustment (subscription change)",
       })
     }
     this.clearEntitlement(subscription.subscriptionId)
@@ -2284,10 +2364,10 @@ export class KillBillAPI {
           ? this.json(this.publicAccount(account))
           : this.accountKeyNotFound(external ?? "")
       }
-      const externalKey =
-        typeof body.externalKey === "string"
-          ? body.externalKey
-          : this.state.ids.next("account-key-", 24)
+      // Kill Bill 0.24.16 keys an unkeyed account by its own id (parity scenario
+      // auto-invoicing-off), as it does payments and subscriptions.
+      const accountId = this.state.ids.next("acc-", 32)
+      const externalKey = typeof body.externalKey === "string" ? body.externalKey : accountId
       // Kill Bill 0.24 maps ErrorCode.ACCOUNT_ALREADY_EXISTS (3000) to HTTP 409.
       const prior = this.byExternal(externalKey, tenantId)
       if (prior)
@@ -2304,7 +2384,6 @@ export class KillBillAPI {
         )
       if (typeof body.currency !== "string")
         return this.problem(400, "INVALID_ACCOUNT", "currency is required")
-      const accountId = this.state.ids.next("acc-", 32)
       const account: Account = {
         ...body,
         accountId,
@@ -2826,11 +2905,21 @@ export class KillBillAPI {
       const components = url.searchParams.get("includeInvoiceComponents") === "true"
       return this.json(
         this.state.invoices
-          .list({ order: "oldest", where: (i) => i.accountId === accountId })
-          .map(({ value }) => this.invoiceJson(value, components)),
+          .list({ where: (i) => i.accountId === accountId })
+          .map(({ value }) => value)
+          // Kill Bill lists invoices by number; an update must not move one to the end.
+          .sort((a, b) => Number(a.invoiceNumber) - Number(b.invoiceNumber))
+          .map((value) => this.invoiceJson(value, components)),
       )
     }
     if (accountId && parts[2] === "tags") {
+      if (request.method === "DELETE") {
+        const held = this.autoInvoicingOff(accountId)
+        for (const id of url.searchParams.getAll("tagDef"))
+          this.state.tags.delete(`${accountId}\0${id}`)
+        if (held && !this.autoInvoicingOff(accountId)) await this.billDue(tenantId, accountId)
+        return this.empty()
+      }
       if (request.method === "GET")
         return this.json(
           this.state.tags
@@ -3069,6 +3158,7 @@ export class KillBillAPI {
           creditAdj: money(invoice.creditAdj + Math.max(credit, 0)),
           items: [...invoice.items, adjustment, ...cba],
         })
+        if (credit > 0) this.useCreditOnOpenInvoices(invoice.accountId)
         return this.empty(201, {
           location: this.location(request, `/1.0/kb/invoices/${invoice.invoiceId}`),
         })
@@ -3078,8 +3168,10 @@ export class KillBillAPI {
       // Kill Bill 0.24.16: 204, and a committed credit becomes account credit (parity scenario
       // `account-credit-draft`).
       if (parts[2] === "commitInvoice" && request.method === "PUT") {
-        if (invoice.status === "DRAFT")
+        if (invoice.status === "DRAFT") {
           this.state.invoices.insert(invoice.invoiceId, { ...invoice, status: "COMMITTED" })
+          if (invoice.creditAdj > 0) this.useCreditOnOpenInvoices(invoice.accountId)
+        }
         return this.empty()
       }
       if (parts[2] === "payments") {

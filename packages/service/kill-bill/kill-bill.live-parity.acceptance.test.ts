@@ -542,6 +542,58 @@ describe("Kill Bill 0.24.16 push notifications", () => {
     }
   })
 
+  test("a payment the callback makes while handling a notification is notified at once", async () => {
+    const seen: Array<[string, number]> = []
+    let server: Awaited<ReturnType<typeof createServer>> | undefined
+    const call = (path: string, method = "GET", body?: unknown) =>
+      fetch(`${server?.url}/1.0/kb${path}`, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      })
+    const sink = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      async fetch(request) {
+        const event = (await request.json()) as {
+          eventType: string
+          objectId: string
+          accountId: string
+        }
+        seen.push([event.eventType, Date.now()])
+        // As a backend does: pay the new invoice from inside the INVOICE_CREATION callback.
+        if (event.eventType === "INVOICE_CREATION")
+          await call(`/invoices/${event.objectId}/payments?externalPayment=true`, "POST", {
+            accountId: event.accountId,
+            purchasedAmount: 100,
+            currency: "USD",
+          })
+        return new Response(null, { status: 204 })
+      },
+    })
+    server = await createServer({ notificationDelayMs: 500 })
+    try {
+      await call(
+        `/tenants/registerNotificationCallback?cb=${encodeURIComponent(sink.url.toString())}`,
+        "POST",
+      )
+      const accountId = (await call("/accounts", "POST", { currency: "USD" })).headers
+        .get("location")
+        ?.split("/")
+        .at(-1) as string
+      await call(`/accounts/${accountId}/tags`, "POST", ["00000000-0000-0000-0000-000000000001"])
+      await call("/subscriptions", "POST", { accountId, planName: "standard-monthly" })
+      await call("/test/queues?timeoutSec=10")
+      const at = (type: string) => seen.find(([eventType]) => eventType === type)?.[1] ?? NaN
+      const gap = at("INVOICE_PAYMENT_SUCCESS") - at("INVOICE_CREATION")
+      expect(gap).toBeGreaterThanOrEqual(0)
+      expect(gap).toBeLessThan(300)
+    } finally {
+      await server.close()
+      sink.stop(true)
+    }
+  })
+
   test("a refused notification is retried 15 minutes later, then 30 minutes after that", async () => {
     let failures = 2
     const s = await callback(() => failures-- > 0)
@@ -561,6 +613,90 @@ describe("Kill Bill 0.24.16 push notifications", () => {
       expect(await at("2030-01-02T12:00:00Z")).toBe(3)
     } finally {
       await s.close()
+    }
+  })
+})
+
+describe("Kill Bill 0.24.16 invoicing holds and account credit", () => {
+  const items = async (s: Awaited<ReturnType<typeof session>>) =>
+    ((await s.invoices()) as Array<{ items: Array<{ itemType: string; amount: number }> }>).map(
+      (invoice) => invoice.items.map((item) => `${item.itemType} ${item.amount}`),
+    )
+
+  test("AUTO_INVOICING_OFF holds invoicing until the tag is removed", async () => {
+    const s = await session()
+    try {
+      const tag = "00000000-0000-0000-0000-000000000002"
+      await s.request(`/accounts/${s.accountId}/tags`, "POST", [tag])
+      const id = await s.subscribe()
+      expect(await s.invoices()).toEqual([])
+      expect((await s.json(`/subscriptions/${id}`)).chargedThroughDate).toBeNull()
+      expect(
+        (await s.request(`/invoices?accountId=${s.accountId}&targetDate=2030-01-01`, "POST"))
+          .status,
+      ).toBe(201)
+      expect(await s.invoices()).toEqual([])
+      expect(
+        (await s.request(`/accounts/${s.accountId}/tags?tagDef=${tag}`, "DELETE")).status,
+      ).toBe(204)
+      expect(await items(s)).toEqual([["RECURRING 100"]])
+      expect((await s.json(`/subscriptions/${id}`)).chargedThroughDate).toBe("2030-02-01")
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("new account credit pays the open invoices first and keeps only the rest", async () => {
+    const s = await session()
+    try {
+      await s.request(`/accounts/${s.accountId}/tags`, "POST", [
+        "00000000-0000-0000-0000-000000000001",
+      ])
+      await s.subscribe()
+      const credit = (amount: number) =>
+        s.request("/credits?autoCommit=true", "POST", [
+          { accountId: s.accountId, amount, currency: "USD" },
+        ])
+      await credit(30)
+      expect((await s.invoices())[0]).toMatchObject({ balance: 70, creditAdj: -30 })
+      expect(await s.account()).toMatchObject({ accountBalance: 70, accountCBA: 0 })
+      await credit(100)
+      expect((await items(s))[0]).toEqual(["RECURRING 100", "CBA_ADJ -30", "CBA_ADJ -70"])
+      expect(await s.account()).toMatchObject({ accountBalance: -30, accountCBA: 30 })
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("a stop after an item adjustment repairs what the item is still worth", async () => {
+    const s = await session()
+    try {
+      const id = await s.subscribe()
+      const [invoice] = await s.invoices()
+      await s.request(`/invoices/${invoice.invoiceId}`, "POST", {
+        accountId: s.accountId,
+        invoiceItemId: invoice.items[0].invoiceItemId,
+        amount: 15,
+        currency: "USD",
+      })
+      await s.request(
+        `/subscriptions/${id}?entitlementPolicy=IMMEDIATE&billingPolicy=IMMEDIATE`,
+        "DELETE",
+      )
+      const repair = (await s.invoices()).at(-1)
+      expect(
+        repair.items.map((item: { itemType: string; amount: number; description: string }) => [
+          item.itemType,
+          item.amount,
+          item.description,
+        ]),
+      ).toEqual([
+        ["REPAIR_ADJ", -85, "Adjustment (subscription change)"],
+        ["CBA_ADJ", 85, "Adjustment (account credit)"],
+      ])
+      expect(await s.account()).toMatchObject({ accountCBA: 100 })
+    } finally {
+      await s.server.close()
     }
   })
 })
