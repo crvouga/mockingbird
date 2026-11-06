@@ -262,6 +262,46 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
       `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`,
     )
   },
+  /** Backend createSubscription with a later start (entitlementDate + billingDate), then a cancel. */
+  async "future-start"(kb) {
+    await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", PARITY_CATALOG_XML, "text/xml")
+    const accountId = kb.idFrom(
+      await kb.call("create account", "POST", "/1.0/kb/accounts", {
+        name: "Parity Member",
+        currency: "USD",
+      }),
+    )
+    await kb.call(
+      "add default external payment method",
+      "POST",
+      `/1.0/kb/accounts/${accountId}/paymentMethods?isDefault=true`,
+      {
+        pluginName: "__EXTERNAL_PAYMENT__",
+      },
+    )
+    const day = todayOf(new Date().toISOString(), 10)
+    const created = await kb.call(
+      "subscribe from a later day",
+      "POST",
+      `/1.0/kb/subscriptions?entitlementDate=${day}&billingDate=${day}`,
+      { accountId, planName: MONTHLY },
+    )
+    const subscriptionId = kb.idFrom(created)
+    await kb.call("read pending subscription", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
+    await kb.call(
+      "list invoices before start",
+      "GET",
+      `/1.0/kb/accounts/${accountId}/invoices?includeInvoiceComponents=true`,
+    )
+    await kb.call(
+      "cancel before it starts",
+      "DELETE",
+      `/1.0/kb/subscriptions/${subscriptionId}?billingPolicy=IMMEDIATE`,
+    )
+    if (kb.settles) await new Promise((resolve) => setTimeout(resolve, 3000))
+    await kb.drain()
+    await kb.call("read cancelled subscription", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
+  },
   /** Backend cancelSubscription: each cancel shape it sends, on its own member. */
   async "cancel-variants"(kb) {
     const today = todayOf(new Date().toISOString(), 0)

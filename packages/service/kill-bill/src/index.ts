@@ -641,7 +641,10 @@ export class KillBillAPI {
             : periodEnd
     const next: Subscription = {
       ...subscription,
-      state: entitlementStop <= today ? "CANCELLED" : subscription.state,
+      state:
+        entitlementStop <= today && subscription.startDate <= today
+          ? "CANCELLED"
+          : subscription.state,
       cancelledDate: entitlementStop,
       billingEndDate: billingStop,
       cancelledAt: new Date(now).toISOString(),
@@ -704,13 +707,18 @@ export class KillBillAPI {
       blockingStates: _blockingStates,
       bcdEffectiveFromDate: _bcd,
       createdAt: _createdAt,
+      cancelledAt: _cancelledAt,
+      billingStopFirst: _billingStopFirst,
       ...stored
     } = subscription
     const plan = this.plan(subscription.planName)
     const period = billingPeriod(plan?.intervalDays)
     const product = plan?.product ?? subscription.planName
     const phase = `${subscription.planName}-evergreen`
-    const startedAt = subscription.createdAt ?? `${subscription.startDate}T00:00:00.000Z`
+    const startedAt =
+      subscription.createdAt && subscription.createdAt.slice(0, 10) === subscription.startDate
+        ? subscription.createdAt
+        : `${subscription.startDate}T00:00:00.000Z`
     const event = (
       eventId: string,
       eventType: string,
@@ -803,7 +811,7 @@ export class KillBillAPI {
           this.stopInstant(subscription, subscription.cancelledDate) as string,
           "entitlement-service",
           "ENT_CANCELLED",
-          { billing: false, entitlement: false },
+          { billing: false, entitlement: true },
         ),
       ])
     if (subscription.billingEndDate !== undefined)
@@ -831,6 +839,7 @@ export class KillBillAPI {
       bundleExternalKey:
         this.state.bundles.get(subscription.bundleId)?.externalKey ?? subscription.bundleId,
       cancelledDate: this.stopInstant(subscription, subscription.cancelledDate),
+      chargedThroughDate: subscription.chargedThroughDate ?? null,
       events,
       priceList: "DEFAULT",
       priceOverrides: subscription.priceOverrides ?? null,
@@ -850,11 +859,13 @@ export class KillBillAPI {
       sourceType: "NATIVE",
       startDate: startedAt,
       state:
-        subscription.cancelledDate !== undefined && subscription.cancelledDate <= today
-          ? "CANCELLED"
-          : subscription.state === "ACTIVE" && entitlementBlocked
-            ? "BLOCKED"
-            : subscription.state,
+        subscription.startDate > today
+          ? "PENDING"
+          : subscription.cancelledDate !== undefined && subscription.cancelledDate <= today
+            ? "CANCELLED"
+            : subscription.state === "ACTIVE" && entitlementBlocked
+              ? "BLOCKED"
+              : subscription.state,
     }
   }
   /** Kill Bill 0.24.16 InvoiceItemJson: catalog fields on subscription items, null elsewhere. */
@@ -1587,7 +1598,9 @@ export class KillBillAPI {
   private async billDue(tenantId: string) {
     const today = isoDate(this.now())
     for (const { value: stored } of this.state.subscriptions.list({
-      where: (s) => s.state === "ACTIVE" && this.account(s.accountId, tenantId) !== undefined,
+      where: (s) =>
+        (s.state === "ACTIVE" || (s.state === "PENDING" && s.startDate <= today)) &&
+        this.account(s.accountId, tenantId) !== undefined,
     })) {
       // An end-of-term plan change takes effect on the renewal it was scheduled for.
       const planName = stored.pendingChangePlan ?? stored.planName
@@ -1603,7 +1616,7 @@ export class KillBillAPI {
         "Recurring charge",
         { system: true },
       )
-      const next = { ...subscription, chargedThroughDate }
+      const next = { ...subscription, chargedThroughDate, state: "ACTIVE" as const }
       delete next.pendingChangePlan
       this.clearEntitlement(subscription.subscriptionId)
       this.state.subscriptions.insert(subscription.subscriptionId, next)
@@ -2106,7 +2119,7 @@ export class KillBillAPI {
           phaseType: typeof input.phaseType === "string" ? input.phaseType : "EVERGREEN",
           state: date > isoDate(this.now()) ? "PENDING" : "ACTIVE",
           startDate: date,
-          chargedThroughDate: date,
+          // Kill Bill 0.24.16 reports chargedThroughDate null until the first invoice.
           createdAt: new Date(this.now()).toISOString(),
         }
         this.state.subscriptions.insert(subscriptionId, subscription)

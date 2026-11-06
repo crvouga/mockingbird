@@ -68,7 +68,7 @@ a new tenant it creates, and diffs the normalized transcripts (ids become placeh
 `<ts>`; dates, amounts and states compare as they are). It writes, so it refuses a non-loopback
 `KILL_BILL_URL` without `--allow-remote`. The scenarios cover not-found answers, the catalog errors, renewal
 invoicing (`POST /1.0/kb/invoices`), account credit and its use, seven cancel shapes, an
-item-adjusted external refund with its key lookup and audit logs, an entitlement pause and resume,
+item-adjusted external refund with its key lookup and audit logs, a future-dated subscription cancelled before it starts, an entitlement pause and resume,
 three BCD changes under the test clock, and an annual BCD change. All of them matched Kill Bill
 0.24.16 (the version Geviti runs in production) on 2026-11-06.
 
@@ -179,7 +179,8 @@ exact vendor errors, account-specific permissions, proration and billing transit
 - Subscription, bundle, invoice, invoice item, payment and account reads carry the same fields as
   Kill Bill 0.24.16 production responses: subscriptions add `prices`, `events`, `billingPeriod`,
   `productName` and the other `SubscriptionJson` fields, report `startDate` as the creation instant,
-  and key an unkeyed subscription and its bundle by their ids; the account invoice list carries
+  key an unkeyed subscription and its bundle by their ids, report `chargedThroughDate` null until
+  the first invoice, and read `PENDING` until a later start (also when cancelled before it); the account invoice list carries
   amounts and items only with `includeInvoiceComponents=true`. `pendingChangePlan` is an emulator
   extra that Kill Bill does not return.
 - `POST /1.0/kb/invoices/{invoiceId}` adjusts the specified `invoiceItemId` by a positive
