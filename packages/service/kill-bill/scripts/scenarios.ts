@@ -60,6 +60,45 @@ export const PARITY_CATALOG_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <priceLists><defaultPriceList name="DEFAULT"><plans><plan>${MONTHLY}</plan><plan>${ANNUAL}</plan></plans></defaultPriceList></priceLists>
 </catalog>`
 
+const LOW = "parity-low-annual"
+const HIGH = "parity-high-annual"
+const LOW_HALF = "parity-low-biannual"
+const HIGH_HALF = "parity-high-biannual"
+const plan = (name: string, product: string, period: string, price: string) => `
+    <plan name="${name}">
+      <product>${product}</product>
+      <finalPhase type="EVERGREEN">
+        <duration><unit>UNLIMITED</unit></duration>
+        <recurring>
+          <billingPeriod>${period}</billingPeriod>
+          <recurringPrice><price><currency>USD</currency><value>${price}</value></price></recurringPrice>
+        </recurring>
+      </finalPhase>
+    </plan>`
+
+/**
+ * Two tiers of annual and semiannual plans under the rules a generated catalog commonly carries:
+ * plan changes and cancellations END_OF_TERM, every alignment left to Kill Bill's defaults.
+ */
+export const TIERS_CATALOG_XML = `<?xml version="1.0" encoding="UTF-8"?>
+<catalog>
+  <effectiveDate>2024-01-01T00:00:00+00:00</effectiveDate>
+  <catalogName>parity-tiers</catalogName>
+  <recurringBillingMode>IN_ADVANCE</recurringBillingMode>
+  <currencies><currency>USD</currency></currencies>
+  <products>
+    <product name="Low"><category>BASE</category></product>
+    <product name="High"><category>BASE</category></product>
+  </products>
+  <rules>
+    <changePolicy><changePolicyCase><policy>END_OF_TERM</policy></changePolicyCase></changePolicy>
+    <cancelPolicy><cancelPolicyCase><policy>END_OF_TERM</policy></cancelPolicyCase></cancelPolicy>
+  </rules>
+  <plans>${plan(LOW, "Low", "ANNUAL", "1200.00")}${plan(HIGH, "High", "ANNUAL", "1800.00")}${plan(LOW_HALF, "Low", "BIANNUAL", "650.00")}${plan(HIGH_HALF, "High", "BIANNUAL", "950.00")}
+  </plans>
+  <priceLists><defaultPriceList name="DEFAULT"><plans><plan>${LOW}</plan><plan>${HIGH}</plan><plan>${LOW_HALF}</plan><plan>${HIGH_HALF}</plan></plans></defaultPriceList></priceLists>
+</catalog>`
+
 type Client = {
   /** True against a real Kill Bill, whose invoicing is asynchronous. */
   settles: boolean
@@ -146,8 +185,13 @@ async function client(target: Target, scenario: string): Promise<Client> {
   }
 }
 
-async function member(kb: Client, planName: string) {
-  await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", PARITY_CATALOG_XML, "text/xml")
+async function member(
+  kb: Client,
+  planName: string,
+  catalog = PARITY_CATALOG_XML,
+  createFields: Record<string, unknown> = {},
+) {
+  await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", catalog, "text/xml")
   const account = await kb.call("create account", "POST", "/1.0/kb/accounts", {
     name: "Parity Member",
     currency: "USD",
@@ -164,6 +208,7 @@ async function member(kb: Client, planName: string) {
   const subscription = await kb.call("create subscription", "POST", "/1.0/kb/subscriptions", {
     accountId,
     planName,
+    ...createFields,
   })
   return { accountId, paymentMethodId, subscriptionId: kb.idFrom(subscription) }
 }
@@ -597,6 +642,176 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
       "2030-04-01",
     ])
   },
+  /** Billing console upgrade now (billingPolicy=IMMEDIATE) a quarter into an annual period. */
+  "change-immediate-annual": (kb) =>
+    billingOverTime(
+      kb,
+      LOW,
+      [
+        "2030-04-01T12:00:00Z",
+        change(kb, HIGH, "billingPolicy=IMMEDIATE"),
+        { read: "after the upgrade" },
+        readSubscription(kb, "the upgraded subscription"),
+        "2031-01-02",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /** The same upgrade on a semiannual plan. */
+  "change-immediate-biannual": (kb) =>
+    billingOverTime(
+      kb,
+      LOW_HALF,
+      [
+        "2030-03-01T12:00:00Z",
+        change(kb, HIGH_HALF, "billingPolicy=IMMEDIATE"),
+        { read: "after the upgrade" },
+        "2030-07-02",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /** A move at the period end (billingPolicy=END_OF_TERM), then a cancellation at the period end. */
+  "change-end-of-term": (kb) =>
+    billingOverTime(
+      kb,
+      HIGH,
+      [
+        "2030-04-01T12:00:00Z",
+        change(kb, LOW, "billingPolicy=END_OF_TERM"),
+        { read: "after scheduling the downgrade" },
+        async ({ subscriptionId }) => {
+          await kb.call(
+            "cancel at the period end",
+            "DELETE",
+            `/1.0/kb/subscriptions/${subscriptionId}?entitlementPolicy=END_OF_TERM&billingPolicy=END_OF_TERM`,
+          )
+        },
+        { read: "after scheduling the cancellation" },
+        "2031-01-02",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /** A downgrade at the period end that renews on the lower plan. */
+  "change-end-of-term-renews": (kb) =>
+    billingOverTime(
+      kb,
+      HIGH,
+      [
+        "2030-04-01T12:00:00Z",
+        change(kb, LOW, "billingPolicy=END_OF_TERM"),
+        { read: "after scheduling the downgrade" },
+        readSubscription(kb, "the subscription with its scheduled downgrade"),
+        "2031-01-02",
+        readSubscription(kb, "the downgraded subscription"),
+      ],
+      undefined,
+      TIERS,
+    ),
+  /** A move on a requested day 10 days ahead (requestedDate only, as the billing console sends it). */
+  "change-requested-date": (kb) =>
+    billingOverTime(
+      kb,
+      LOW,
+      [
+        "2030-04-01T12:00:00Z",
+        change(kb, HIGH, "requestedDate=2030-04-11"),
+        { read: "after scheduling the move" },
+        readSubscription(kb, "the subscription with its scheduled change"),
+        "2030-04-10T12:00:00Z",
+        "2030-04-11T12:00:00Z",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /** A change to the current plan dated the charged-through date: the no-op a move's release writes. */
+  "change-same-plan-at-period-end": (kb) =>
+    billingOverTime(
+      kb,
+      LOW,
+      [
+        "2030-04-01T12:00:00Z",
+        change(kb, LOW, "requestedDate=2031-01-01"),
+        { read: "after the same-plan change" },
+        readSubscription(kb, "the subscription with its same-plan change"),
+        "2031-01-02",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /**
+   * Billing console "move the next renewal 10 days past the period end" on an annual plan: a hold
+   * from the period end, its release 10 days later, and the BCD on the release day, then the dry
+   * runs the console checks before the clock reaches them.
+   */
+  "move-renewal-day-annual": (kb) =>
+    billingOverTime(
+      kb,
+      LOW,
+      [
+        "2030-04-01T12:00:00Z",
+        async ({ subscriptionId }) => {
+          const block = (name: string, isBlockBilling: boolean, day: string) =>
+            kb.call(
+              name,
+              "POST",
+              `/1.0/kb/subscriptions/${subscriptionId}/block?requestedDate=${day}`,
+              {
+                stateName: isBlockBilling ? "move-date-hold" : "move-date-release",
+                service: "move-parity",
+                isBlockBilling,
+                isBlockEntitlement: false,
+                isBlockChange: false,
+              },
+            )
+          await block("release on 2031-01-11", false, "2031-01-11")
+          await block("hold from 2031-01-01", true, "2031-01-01")
+          await kb.call(
+            "billing day 11 from 2031-01-01",
+            "PUT",
+            `/1.0/kb/subscriptions/${subscriptionId}/bcd?effectiveFromDate=2031-01-01`,
+            { subscriptionId, billCycleDayLocal: 11 },
+          )
+        },
+        async ({ accountId }) => {
+          for (const day of ["2031-01-10", "2031-01-11"]) {
+            const preview = await kb.raw(
+              "POST",
+              `/1.0/kb/invoices/dryRun?accountId=${accountId}&targetDate=${day}`,
+              { dryRunType: "TARGET_DATE" },
+            )
+            const items = (
+              (preview.body as { items?: Array<Record<string, unknown>> } | null)?.items ?? []
+            ).map((item) => `${item.itemType} ${item.startDate}..${item.endDate} ${item.amount}`)
+            kb.steps.push({ name: `preview ${day}`, status: preview.status, body: items })
+          }
+        },
+        "2031-01-02",
+        "2031-01-11T12:00:00Z",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /** Two BCD changes on one subscription created with its start day as billCycleDayLocal. */
+  "bcd-twice": (kb) =>
+    billingOverTime(
+      kb,
+      MONTHLY,
+      [
+        "2030-01-15T12:00:00Z",
+        bcd(kb, 5, "2030-02-01"),
+        bcd(kb, 10, "2030-04-01"),
+        "2030-02-01",
+        "2030-02-05",
+        "2030-03-05",
+        "2030-04-05",
+        "2030-04-10",
+        "2030-05-10",
+      ],
+      undefined,
+      { createFields: { billCycleDayLocal: 1 } },
+    ),
   /** Monthly renewals and a BCD change under the test clock (calendar months, prorated stub). */
   "bcd-5-from-february": (kb) =>
     bcdClock(kb, 5, "2030-02-01", [
@@ -641,7 +856,13 @@ async function bcdClock(kb: Client, day: number, effective: string, days: string
 }
 
 type Member = Awaited<ReturnType<typeof member>>
-type Moment = string | ((member: Member) => Promise<void>)
+type Moment = string | { read: string } | ((member: Member) => Promise<void>)
+type OverTime = {
+  catalog?: string
+  details?: boolean
+  /** Extra subscription create fields, e.g. the start-day billCycleDayLocal a backend sends. */
+  createFields?: Record<string, unknown>
+}
 
 /**
  * Starts a member on 2030-01-01 under the test clock, runs `setup`, then walks `moments`: a date
@@ -653,10 +874,11 @@ async function billingOverTime(
   planName: string,
   moments: Moment[],
   setup: (member: Member) => Promise<void> = async () => {},
+  options: OverTime = {},
 ) {
   await kb.call("set the clock", "POST", "/1.0/kb/test/clock?requestedDate=2030-01-01")
   try {
-    const subject = await member(kb, planName)
+    const subject = await member(kb, planName, options.catalog, options.createFields)
     await setup(subject)
     const read = async () => {
       const invoices = (
@@ -665,13 +887,38 @@ async function billingOverTime(
           `/1.0/kb/accounts/${subject.accountId}/invoices?includeInvoiceComponents=true`,
         )
       ).body as Array<{
+        status?: string
+        amount?: number
+        balance?: number
+        creditAdj?: number
         items?: Array<{ itemType: string; startDate: string; endDate: string; amount: number }>
       }>
       const sub = (await kb.raw("GET", `/1.0/kb/subscriptions/${subject.subscriptionId}`)).body as {
         chargedThroughDate?: string
         billCycleDayLocal?: number
+        planName?: string
+        state?: string
+        events?: Array<{ eventType: string; effectiveDate: string; plan: string | null }>
       }
+      const details = options.details
+        ? {
+            planName: sub.planName,
+            state: sub.state,
+            events: (sub.events ?? []).map(
+              (event) => `${event.eventType} ${event.effectiveDate.slice(0, 10)} ${event.plan}`,
+            ),
+            invoices: invoices.map(
+              (invoice) =>
+                `${invoice.status} amount ${invoice.amount} balance ${invoice.balance} credit ${invoice.creditAdj}: ${(
+                  invoice.items ?? []
+                )
+                  .map((item) => item.itemType)
+                  .join(",")}`,
+            ),
+          }
+        : {}
       return {
+        ...details,
         periods: invoices
           .flatMap((invoice) =>
             (invoice.items ?? []).map(
@@ -684,13 +931,18 @@ async function billingOverTime(
       }
     }
     for (const moment of moments) {
-      if (typeof moment !== "string") {
+      if (typeof moment === "function") {
         await moment(subject)
         continue
       }
+      if (typeof moment === "object") {
+        kb.steps.push({ name: moment.read, status: 200, body: await read() })
+        continue
+      }
       await kb.call(`clock ${moment}`, "POST", `/1.0/kb/test/clock?requestedDate=${moment}`)
-      // Real Kill Bill can finish a clock move's invoicing just after its queues report idle: read
-      // until two reads a few seconds apart agree.
+      // Real Kill Bill can start a clock move's invoicing after its queues report idle: wait a
+      // few seconds, then read until two reads a few seconds apart agree.
+      if (kb.settles) await new Promise((resolve) => setTimeout(resolve, 5000))
       let state = await read()
       for (let attempt = 0; kb.settles && attempt < 5; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 3000))
@@ -702,6 +954,36 @@ async function billingOverTime(
     }
   } finally {
     await kb.call("reset the clock", "POST", "/1.0/kb/test/clock")
+  }
+}
+
+const TIERS: OverTime = { catalog: TIERS_CATALOG_XML, details: true }
+
+function bcd(kb: Client, day: number, effectiveFrom: string) {
+  return async ({ subscriptionId }: Member) => {
+    await kb.call(
+      `move the billing day to ${day} from ${effectiveFrom}`,
+      "PUT",
+      `/1.0/kb/subscriptions/${subscriptionId}/bcd?effectiveFromDate=${effectiveFrom}`,
+      { subscriptionId, billCycleDayLocal: day },
+    )
+  }
+}
+
+function readSubscription(kb: Client, name: string) {
+  return async ({ subscriptionId }: Member) => {
+    await kb.call(name, "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
+  }
+}
+
+function change(kb: Client, planName: string, query: string) {
+  return async ({ subscriptionId }: Member) => {
+    await kb.call(
+      `change to ${planName} (${query})`,
+      "PUT",
+      `/1.0/kb/subscriptions/${subscriptionId}?${query}`,
+      { planName },
+    )
   }
 }
 

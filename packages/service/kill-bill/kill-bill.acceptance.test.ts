@@ -3,6 +3,11 @@ import { createClock } from "@crvouga/mockingbird-service"
 import { createRuntime, KillBillAPI } from "./src/index.js"
 import { createServer } from "./src/server.js"
 
+type SubscriptionEvents = { events: Array<{ eventType: string; plan: string }> }
+/** The plans of the subscription's CHANGE events. */
+const changes = (subscription: SubscriptionEvents) =>
+  subscription.events.filter((event) => event.eventType === "CHANGE").map((event) => event.plan)
+
 const headers = {
   authorization: `Basic ${btoa("admin:password")}`,
   "content-type": "application/json",
@@ -108,14 +113,14 @@ describe("Kill Bill REST adapter", () => {
           })
         ).status,
       ).toBe(204)
-      expect(
-        (await json<{ pendingChangePlan: string }>(`/subscriptions/${subscriptionId}`))
-          .pendingChangePlan,
-      ).toBe("plus-monthly")
+      // Kill Bill 0.24.16 reports a scheduled change as a CHANGE event, not a field.
+      expect(changes(await json<SubscriptionEvents>(`/subscriptions/${subscriptionId}`))).toEqual([
+        "plus-monthly",
+      ])
       await request(`/subscriptions/${subscriptionId}/changePlan`, { method: "DELETE" })
-      expect(
-        (await json<Record<string, unknown>>(`/subscriptions/${subscriptionId}`)).pendingChangePlan,
-      ).toBeUndefined()
+      expect(changes(await json<SubscriptionEvents>(`/subscriptions/${subscriptionId}`))).toEqual(
+        [],
+      )
       await request(`/subscriptions/${subscriptionId}`, { method: "DELETE" })
       await request(`/subscriptions/${subscriptionId}/uncancel`, { method: "PUT", body: "{}" })
       expect((await json<{ state: string }>(`/subscriptions/${subscriptionId}`)).state).toBe(
@@ -925,10 +930,10 @@ describe("Kill Bill tenants and notification callbacks", () => {
       expect(await (await request(`/subscriptions/${subscriptionId}`)).json()).toMatchObject({
         planName: "example-monthly",
       })
-      const current = (await (await request(`/subscriptions/${subscriptionId}`)).json()) as {
-        pendingChangePlan?: string
-      }
-      expect(current.pendingChangePlan).toBeUndefined()
+      const current = (await (
+        await request(`/subscriptions/${subscriptionId}`)
+      ).json()) as SubscriptionEvents
+      expect(changes(current)).toEqual([])
     } finally {
       await server.close()
     }
@@ -967,10 +972,9 @@ describe("Kill Bill tenants and notification callbacks", () => {
       const current = (await (await request(`/subscriptions/${subscriptionId}`)).json()) as {
         planName: string
         state: string
-        pendingChangePlan?: string
-      }
+      } & SubscriptionEvents
       expect(current).toMatchObject({ planName: "example-monthly", state: "ACTIVE" })
-      expect(current.pendingChangePlan).toBeUndefined()
+      expect(changes(current)).toEqual([])
     } finally {
       await server.close()
     }
@@ -1359,10 +1363,10 @@ describe("GET /1.0/kb/test/queues", () => {
         ).status,
       ).toBe(204)
       expect(
-        (await (await request(`/subscriptions/${subscriptionId}`)).json()) as {
-          pendingChangePlan?: string
-        },
-      ).toMatchObject({ pendingChangePlan: "plus-monthly" })
+        changes(
+          (await (await request(`/subscriptions/${subscriptionId}`)).json()) as SubscriptionEvents,
+        ),
+      ).toEqual(["plus-monthly"])
       const queued = (await (
         await fetch(`${server.url}/__admin/state/kb_notifications`)
       ).json()) as { records: Array<{ value: { effectiveDate: string } }> }

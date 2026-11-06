@@ -318,3 +318,165 @@ describe("Kill Bill 0.24.16 behaviour", () => {
     expect(tokens[0]).toBe(tokens[1])
   })
 })
+
+async function tiers() {
+  const server = await createServer({
+    plans: [
+      { name: "low-annual", product: "Low", amount: 1200, currency: "USD", intervalDays: 365 },
+      { name: "high-annual", product: "High", amount: 1800, currency: "USD", intervalDays: 365 },
+    ],
+  })
+  const request = (path: string, method = "GET", body?: unknown) =>
+    fetch(`${server.url}/1.0/kb${path}`, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    })
+  const json = async (path: string) => (await request(path)).json()
+  const clock = (date: string) => request(`/test/clock?requestedDate=${date}`, "POST")
+  await clock("2030-01-01")
+  const accountId = (await request("/accounts", "POST", { currency: "USD" })).headers
+    .get("location")
+    ?.split("/")
+    .at(-1) as string
+  await request(`/accounts/${accountId}/paymentMethods?isDefault=true`, "POST", {
+    pluginName: "__EXTERNAL_PAYMENT__",
+  })
+  const id = (
+    await request("/subscriptions", "POST", { accountId, planName: "low-annual" })
+  ).headers
+    .get("location")
+    ?.split("/")
+    .at(-1) as string
+  const invoices = async () =>
+    (
+      (await json(`/accounts/${accountId}/invoices?includeInvoiceComponents=true`)) as Array<{
+        amount: number
+        items: Array<{ itemType: string; startDate: string; endDate: string; amount: number }>
+      }>
+    ).map((invoice) => ({
+      amount: invoice.amount,
+      items: invoice.items.map(
+        (item) => `${item.itemType} ${item.startDate}..${item.endDate} ${item.amount}`,
+      ),
+    }))
+  const subscription = () => json(`/subscriptions/${id}`)
+  const changes = async () =>
+    ((await subscription()).events as Array<{ eventType: string; plan: string }>)
+      .filter((event) => event.eventType === "CHANGE")
+      .map((event) => event.plan)
+  return { server, request, json, clock, accountId, id, invoices, subscription, changes }
+}
+
+describe("Kill Bill 0.24.16 plan changes and renewal-day moves", () => {
+  test("an immediate upgrade bills the new plan from today with a repair of the old one", async () => {
+    const s = await tiers()
+    try {
+      await s.clock("2030-04-01")
+      expect(
+        (
+          await s.request(`/subscriptions/${s.id}?billingPolicy=IMMEDIATE`, "PUT", {
+            planName: "high-annual",
+          })
+        ).status,
+      ).toBe(204)
+      expect((await s.invoices()).at(-1)).toEqual({
+        amount: 895.89,
+        items: [
+          "RECURRING 2030-04-01..2031-04-01 1800",
+          "REPAIR_ADJ 2030-04-01..2031-01-01 -904.11",
+        ],
+      })
+      expect(await s.subscription()).toMatchObject({
+        planName: "high-annual",
+        chargedThroughDate: "2031-04-01",
+      })
+      expect(await s.changes()).toEqual(["high-annual"])
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("a change on a requested day waits for it, then bills the stub to the next billing day", async () => {
+    const s = await tiers()
+    try {
+      await s.clock("2030-04-01")
+      await s.request(`/subscriptions/${s.id}?requestedDate=2030-04-11`, "PUT", {
+        planName: "high-annual",
+      })
+      expect(await s.changes()).toEqual(["high-annual"])
+      await s.clock("2030-04-10")
+      expect((await s.subscription()).planName).toBe("low-annual")
+      await s.clock("2030-04-11")
+      expect((await s.invoices()).at(-1)?.items).toEqual([
+        "RECURRING 2030-04-11..2031-04-01 1750.68",
+        "REPAIR_ADJ 2030-04-11..2031-01-01 -871.23",
+      ])
+      expect((await s.subscription()).planName).toBe("high-annual")
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("an end-of-term change renews on the new plan, and a cancellation drops it", async () => {
+    const renews = await tiers()
+    try {
+      await renews.request(`/subscriptions/${renews.id}?billingPolicy=END_OF_TERM`, "PUT", {
+        planName: "high-annual",
+      })
+      expect((await renews.subscription()).planName).toBe("low-annual")
+      await renews.clock("2031-01-02")
+      expect((await renews.invoices()).at(-1)?.items).toEqual([
+        "RECURRING 2031-01-01..2032-01-01 1800",
+      ])
+    } finally {
+      await renews.server.close()
+    }
+    const cancelled = await tiers()
+    try {
+      await cancelled.request(`/subscriptions/${cancelled.id}?billingPolicy=END_OF_TERM`, "PUT", {
+        planName: "high-annual",
+      })
+      await cancelled.request(
+        `/subscriptions/${cancelled.id}?entitlementPolicy=END_OF_TERM&billingPolicy=END_OF_TERM`,
+        "DELETE",
+      )
+      expect(await cancelled.changes()).toEqual([])
+    } finally {
+      await cancelled.server.close()
+    }
+  })
+
+  test("a renewal-day move (hold, release, BCD) renews a full year from the new day", async () => {
+    const s = await tiers()
+    try {
+      const block = (isBlockBilling: boolean, day: string) =>
+        s.request(`/subscriptions/${s.id}/block?requestedDate=${day}`, "POST", {
+          stateName: isBlockBilling ? "hold" : "release",
+          service: "move",
+          isBlockBilling,
+          isBlockEntitlement: false,
+        })
+      await block(false, "2031-01-11")
+      await block(true, "2031-01-01")
+      await s.request(`/subscriptions/${s.id}/bcd?effectiveFromDate=2031-01-01`, "PUT", {
+        billCycleDayLocal: 11,
+      })
+      const preview = (day: string) =>
+        s.request(`/invoices/dryRun?accountId=${s.accountId}&targetDate=${day}`, "POST", {
+          dryRunType: "TARGET_DATE",
+        })
+      expect((await preview("2031-01-10")).status).toBe(204)
+      expect((await (await preview("2031-01-11")).json()).items).toMatchObject([
+        { itemType: "RECURRING", startDate: "2031-01-11", endDate: "2032-01-11", amount: 1200 },
+      ])
+      await s.clock("2031-01-11")
+      expect(await s.subscription()).toMatchObject({
+        chargedThroughDate: "2032-01-11",
+        billCycleDayLocal: 11,
+      })
+    } finally {
+      await s.server.close()
+    }
+  })
+})
