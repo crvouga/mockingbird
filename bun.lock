@@ -3821,6 +3821,140 @@
         "typescript": "5.9.3",
       },
     },
+    "sites/fleet": {
+      "name": "@crvouga/mockingbird-fleet-cloud",
+      "dependencies": {
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-acm": "workspace:*",
+        "@crvouga/mockingbird-service-aha": "workspace:*",
+        "@crvouga/mockingbird-service-airtable": "workspace:*",
+        "@crvouga/mockingbird-service-apigateway": "workspace:*",
+        "@crvouga/mockingbird-service-app-store-connect": "workspace:*",
+        "@crvouga/mockingbird-service-apple": "workspace:*",
+        "@crvouga/mockingbird-service-aws": "workspace:*",
+        "@crvouga/mockingbird-service-aws-iot": "workspace:*",
+        "@crvouga/mockingbird-service-aws-secrets": "workspace:*",
+        "@crvouga/mockingbird-service-aws-speech": "workspace:*",
+        "@crvouga/mockingbird-service-bedrock": "workspace:*",
+        "@crvouga/mockingbird-service-brevo": "workspace:*",
+        "@crvouga/mockingbird-service-caretalk": "workspace:*",
+        "@crvouga/mockingbird-service-checkr": "workspace:*",
+        "@crvouga/mockingbird-service-clerk": "workspace:*",
+        "@crvouga/mockingbird-service-cloudcontrol": "workspace:*",
+        "@crvouga/mockingbird-service-cloudformation": "workspace:*",
+        "@crvouga/mockingbird-service-cloudwatch": "workspace:*",
+        "@crvouga/mockingbird-service-cloudwatch-logs": "workspace:*",
+        "@crvouga/mockingbird-service-cognito": "workspace:*",
+        "@crvouga/mockingbird-service-config": "workspace:*",
+        "@crvouga/mockingbird-service-customerio": "workspace:*",
+        "@crvouga/mockingbird-service-daily": "workspace:*",
+        "@crvouga/mockingbird-service-docker": "workspace:*",
+        "@crvouga/mockingbird-service-dynamodb": "workspace:*",
+        "@crvouga/mockingbird-service-dynamodb-streams": "workspace:*",
+        "@crvouga/mockingbird-service-easypost": "workspace:*",
+        "@crvouga/mockingbird-service-ec2": "workspace:*",
+        "@crvouga/mockingbird-service-ecs": "workspace:*",
+        "@crvouga/mockingbird-service-edamam": "workspace:*",
+        "@crvouga/mockingbird-service-elasticsearch": "workspace:*",
+        "@crvouga/mockingbird-service-elevenlabs": "workspace:*",
+        "@crvouga/mockingbird-service-emqx": "workspace:*",
+        "@crvouga/mockingbird-service-eventbridge": "workspace:*",
+        "@crvouga/mockingbird-service-fcm": "workspace:*",
+        "@crvouga/mockingbird-service-firehose": "workspace:*",
+        "@crvouga/mockingbird-service-firstpromoter": "workspace:*",
+        "@crvouga/mockingbird-service-fitbit": "workspace:*",
+        "@crvouga/mockingbird-service-flex": "workspace:*",
+        "@crvouga/mockingbird-service-formbricks": "workspace:*",
+        "@crvouga/mockingbird-service-fullscript": "workspace:*",
+        "@crvouga/mockingbird-service-garmin-health": "workspace:*",
+        "@crvouga/mockingbird-service-genebygene": "workspace:*",
+        "@crvouga/mockingbird-service-github": "workspace:*",
+        "@crvouga/mockingbird-service-google": "workspace:*",
+        "@crvouga/mockingbird-service-google-ads": "workspace:*",
+        "@crvouga/mockingbird-service-google-calendar": "workspace:*",
+        "@crvouga/mockingbird-service-google-maps": "workspace:*",
+        "@crvouga/mockingbird-service-healthie": "workspace:*",
+        "@crvouga/mockingbird-service-hermes": "workspace:*",
+        "@crvouga/mockingbird-service-iam": "workspace:*",
+        "@crvouga/mockingbird-service-infisical": "workspace:*",
+        "@crvouga/mockingbird-service-intercom": "workspace:*",
+        "@crvouga/mockingbird-service-junction": "workspace:*",
+        "@crvouga/mockingbird-service-kill-bill": "workspace:*",
+        "@crvouga/mockingbird-service-kinesis": "workspace:*",
+        "@crvouga/mockingbird-service-klaviyo": "workspace:*",
+        "@crvouga/mockingbird-service-kms": "workspace:*",
+        "@crvouga/mockingbird-service-lambda": "workspace:*",
+        "@crvouga/mockingbird-service-lifefile": "workspace:*",
+        "@crvouga/mockingbird-service-linear": "workspace:*",
+        "@crvouga/mockingbird-service-livekit": "workspace:*",
+        "@crvouga/mockingbird-service-llamacloud": "workspace:*",
+        "@crvouga/mockingbird-service-mailosaur": "workspace:*",
+        "@crvouga/mockingbird-service-mediaconvert": "workspace:*",
+        "@crvouga/mockingbird-service-medplum": "workspace:*",
+        "@crvouga/mockingbird-service-meta": "workspace:*",
+        "@crvouga/mockingbird-service-microsoft": "workspace:*",
+        "@crvouga/mockingbird-service-mongoatlas": "workspace:*",
+        "@crvouga/mockingbird-service-notion": "workspace:*",
+        "@crvouga/mockingbird-service-oauth": "workspace:*",
+        "@crvouga/mockingbird-service-odx": "workspace:*",
+        "@crvouga/mockingbird-service-okta": "workspace:*",
+        "@crvouga/mockingbird-service-openai": "workspace:*",
+        "@crvouga/mockingbird-service-opensearch": "workspace:*",
+        "@crvouga/mockingbird-service-otel": "workspace:*",
+        "@crvouga/mockingbird-service-oura": "workspace:*",
+        "@crvouga/mockingbird-service-paddle": "workspace:*",
+        "@crvouga/mockingbird-service-payload-cms": "workspace:*",
+        "@crvouga/mockingbird-service-persona": "workspace:*",
+        "@crvouga/mockingbird-service-pharmetika": "workspace:*",
+        "@crvouga/mockingbird-service-plane": "workspace:*",
+        "@crvouga/mockingbird-service-polar": "workspace:*",
+        "@crvouga/mockingbird-service-posthog": "workspace:*",
+        "@crvouga/mockingbird-service-prism": "workspace:*",
+        "@crvouga/mockingbird-service-recaptcha": "workspace:*",
+        "@crvouga/mockingbird-service-redshift": "workspace:*",
+        "@crvouga/mockingbird-service-resend": "workspace:*",
+        "@crvouga/mockingbird-service-resource-groups": "workspace:*",
+        "@crvouga/mockingbird-service-resource-groups-tagging-api": "workspace:*",
+        "@crvouga/mockingbird-service-route53": "workspace:*",
+        "@crvouga/mockingbird-service-route53resolver": "workspace:*",
+        "@crvouga/mockingbird-service-rxvortex": "workspace:*",
+        "@crvouga/mockingbird-service-s3": "workspace:*",
+        "@crvouga/mockingbird-service-s3-control": "workspace:*",
+        "@crvouga/mockingbird-service-scheduler": "workspace:*",
+        "@crvouga/mockingbird-service-sentry": "workspace:*",
+        "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-slack": "workspace:*",
+        "@crvouga/mockingbird-service-sns": "workspace:*",
+        "@crvouga/mockingbird-service-sqs": "workspace:*",
+        "@crvouga/mockingbird-service-ssm": "workspace:*",
+        "@crvouga/mockingbird-service-step-functions": "workspace:*",
+        "@crvouga/mockingbird-service-stripe": "workspace:*",
+        "@crvouga/mockingbird-service-sts": "workspace:*",
+        "@crvouga/mockingbird-service-support": "workspace:*",
+        "@crvouga/mockingbird-service-suunto": "workspace:*",
+        "@crvouga/mockingbird-service-swf": "workspace:*",
+        "@crvouga/mockingbird-service-tavily": "workspace:*",
+        "@crvouga/mockingbird-service-tempo": "workspace:*",
+        "@crvouga/mockingbird-service-textract": "workspace:*",
+        "@crvouga/mockingbird-service-turnstile": "workspace:*",
+        "@crvouga/mockingbird-service-twilio": "workspace:*",
+        "@crvouga/mockingbird-service-unsplash": "workspace:*",
+        "@crvouga/mockingbird-service-vanta": "workspace:*",
+        "@crvouga/mockingbird-service-vercel": "workspace:*",
+        "@crvouga/mockingbird-service-vercel-blob": "workspace:*",
+        "@crvouga/mockingbird-service-vibe": "workspace:*",
+        "@crvouga/mockingbird-service-vpi": "workspace:*",
+        "@crvouga/mockingbird-service-wholescripts": "workspace:*",
+        "@crvouga/mockingbird-service-whoop": "workspace:*",
+        "@crvouga/mockingbird-service-workos": "workspace:*",
+        "jose": "6.2.2",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.0",
+        "embedded-postgres": "18.3.0-beta.17",
+        "typescript": "5.9.3",
+      },
+    },
   },
   "trustedDependencies": [
     "@embedded-postgres/darwin-x64",
@@ -4253,6 +4387,8 @@
 
     "@crvouga/mockingbird-fleet": ["@crvouga/mockingbird-fleet@workspace:packages/adapters/fleet"],
 
+    "@crvouga/mockingbird-fleet-cloud": ["@crvouga/mockingbird-fleet-cloud@workspace:sites/fleet"],
+
     "@crvouga/mockingbird-http-codec": ["@crvouga/mockingbird-http-codec@workspace:packages/http/codec"],
 
     "@crvouga/mockingbird-http-provider": ["@crvouga/mockingbird-http-provider@workspace:packages/http/provider"],
@@ -4543,21 +4679,21 @@
 
     "@electric-sql/pglite": ["@electric-sql/pglite@0.5.8", "", {}, "sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q=="],
 
-    "@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-CB1DFZ08zfmNapx231rAJW74UZfs1jQmeGLwbQSaAIRVs2uqEdMhVNLwVlztFG3ZPSeuCsgTn/0yeYDmKF67og=="],
+    "@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Pvrej3Xz5flfyVc9mchVfekrKoTJyvPtM3U0vjuXamZkRKmi+inP2zRmnmzYecIVbr7Zhu82xbsCENMXrwMp9Q=="],
 
-    "@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-zikibpPYGWokfT/OFWNHCwerA3ZGat0ZyCIXOIbIucLBMDHztQ2WZQ9R5zil6oOxzElrMz2Q4aEOssGNrMDdyg=="],
+    "@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-MVWe+C47pPoMD9LlIWGQkvZ5Xsu3IBo54CYqnIps/Z1byMIUBNc7y/dZ3mfqEwiCbVDVqirG0CU462xnrSEfKA=="],
 
-    "@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-N+ktKhkTHuRe/mobk0+OBISje3M6ht4dloSm7zNwpy/hzkZTiB6m1fE0P2lllnob4jbFIbrA3nTvlY4yfe4E6w=="],
+    "@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-Y2vw7p80PO/Ko7CDm8CCpStnNfMe+oc11e0WZtqAVRjxO6H0oic/ehULhUsWU3mZm5jq7wQAv37VMzf4JN+SFQ=="],
 
-    "@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-LNT9TXoOGR/RSop1PewcMtpuf1Dtg6sKU7sFA1ODqInRA8NoP15HyLekUHW5aWnruu4yfs1pcy6DaV39T556mQ=="],
+    "@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-hXp7yHJHYWkdjkgF6As8whEHbdYxhBdmXeLpLTw0aiac0O6+0Cbqk3cOR9U+e49oyIpElHVwZUo6OewquSRhSg=="],
 
-    "@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@16.14.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-SC2hO6hlc8zlC1z2eOMNMACXAKV93QYyLq5JMrwRfjGkl3wbc4kUm3TmKl1SjWBX1x+qAZbMTt72yv+KED5Mvw=="],
+    "@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@18.3.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-hVUOM+7QxkzAIdN3gewfVwL1EpJIx+0qUiNTD8cMqRtaZyU87e4AFIvBS0UiDJ9xzMTVWr/X24wePtbvIbkopg=="],
 
-    "@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@16.14.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-paVxxVlr7g6AZxCISk9AGNB3zc3c6qKAEzlisrJXlt5Jw1qalxNyKpfkUahDR9qbk+zGnL54PjEQDSUuomHx/g=="],
+    "@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@18.3.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-p3/u4YUqSdE2CKUBlC84JGZCi6RnE1fyeLPIIVy2DJUiKtExR5rE3OpDJcVoN40uecYGL+nR4qFocGzDwG1TBw=="],
 
-    "@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@16.14.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8fr7hEiI7XlbPDPsLZJ4RU1NR6jTIDWpf81Sfiwk3T845V0yJJGxjawjkQZmIWVgPW/qY/dMSv0o08FRWJ/zsg=="],
+    "@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@18.3.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8orSD6NNopSLtjqir4dWQBrj+g8j1eJjWd9mB60A3xbWMzIBIPQpzT7XzbacW9YFSl/DejOLnRXfff+Wr13Tgw=="],
 
-    "@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@16.14.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-Wn4nuAT1H7SIJuLWPs+C1aSdZKpbTloCr0Xaozdfg956lUVvv3iHv6K8Lsc+xmtt1qQpTno3PJLqAgzJ/lg60Q=="],
+    "@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@18.3.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-kDC5aBsmhWDjeQjj2V4g+Bk+pMeDU27b7l0rBbaKgtt2gsNmCB34ULg/5cqs2kqUKSk/tiGMHKCNE+zQZ+s4rg=="],
 
     "@emnapi/core": ["@emnapi/core@1.11.1", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.2", "tslib": "^2.4.0" } }, "sha512-RSvbQmHzdKzNsLYa/wHrbc3KN4sYLKAdPZxqiM2HATqv/SBk2/ENSHpvXGaLOMcsAyz0poEGqkmmKYG3OWiJEQ=="],
 
@@ -5687,7 +5823,7 @@
 
     "electron-to-chromium": ["electron-to-chromium@1.5.433", "", {}, "sha512-5lCAbyZBjtmUt/RAGHRqrL2q0oEFRThDAsZHHDn9XHa89Qw7gMYOeSicBTy+AHfvo0r6vwsZvqNJTQIQy1BLzA=="],
 
-    "embedded-postgres": ["embedded-postgres@16.14.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^16.14.0-beta.17", "@embedded-postgres/darwin-x64": "^16.14.0-beta.17", "@embedded-postgres/linux-arm": "^16.14.0-beta.17", "@embedded-postgres/linux-arm64": "^16.14.0-beta.17", "@embedded-postgres/linux-ia32": "^16.14.0-beta.17", "@embedded-postgres/linux-ppc64": "^16.14.0-beta.17", "@embedded-postgres/linux-x64": "^16.14.0-beta.17", "@embedded-postgres/windows-x64": "^16.14.0-beta.17" } }, "sha512-nMz+FokxBkEDcK3XUxTR0Jo2SGBj5mgLm2/wmGV6iIu0+3z44pNCCr6PCdu+dS/JxTCjVVV4tYmgRf7jamJS7Q=="],
+    "embedded-postgres": ["embedded-postgres@18.3.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^18.3.0-beta.17", "@embedded-postgres/darwin-x64": "^18.3.0-beta.17", "@embedded-postgres/linux-arm": "^18.3.0-beta.17", "@embedded-postgres/linux-arm64": "^18.3.0-beta.17", "@embedded-postgres/linux-ia32": "^18.3.0-beta.17", "@embedded-postgres/linux-ppc64": "^18.3.0-beta.17", "@embedded-postgres/linux-x64": "^18.3.0-beta.17", "@embedded-postgres/windows-x64": "^18.3.0-beta.17" } }, "sha512-1biFWyuPVtAV5S9RBgcr4PGuAdNL9WhnNZVQ5Arp3gsB24Ci9X9s/8Z7RFYFSc6tJWcj9kzF55YcDAcr3jLUbQ=="],
 
     "emoji-regex": ["emoji-regex@8.0.0", "", {}, "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="],
 
@@ -7131,6 +7267,8 @@
 
     "@crvouga/mockingbird-service-healthie/graphql": ["graphql@16.11.0", "", {}, "sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw=="],
 
+    "@crvouga/mockingbird-service-medplum/embedded-postgres": ["embedded-postgres@16.14.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^16.14.0-beta.17", "@embedded-postgres/darwin-x64": "^16.14.0-beta.17", "@embedded-postgres/linux-arm": "^16.14.0-beta.17", "@embedded-postgres/linux-arm64": "^16.14.0-beta.17", "@embedded-postgres/linux-ia32": "^16.14.0-beta.17", "@embedded-postgres/linux-ppc64": "^16.14.0-beta.17", "@embedded-postgres/linux-x64": "^16.14.0-beta.17", "@embedded-postgres/windows-x64": "^16.14.0-beta.17" } }, "sha512-nMz+FokxBkEDcK3XUxTR0Jo2SGBj5mgLm2/wmGV6iIu0+3z44pNCCr6PCdu+dS/JxTCjVVV4tYmgRf7jamJS7Q=="],
+
     "@crvouga/mockingbird-service-medplum/graphql": ["graphql@17.0.2", "", {}, "sha512-FRWbddMxfkjiB7z+aQDWIR+E34xo9I8c9mtK2RPv8PmMzKRvrdsreHL/Ui/TmwHJfhHChEtsFPyMHKI+xuarQQ=="],
 
     "@crvouga/mockingbird-service-oauth/fast-check": ["fast-check@4.5.3", "", { "dependencies": { "pure-rand": "^7.0.0" } }, "sha512-IE9csY7lnhxBnA8g/WI5eg/hygA6MGWJMSNfFRrBlXUciADEhS1EDB0SIsMSvzubzIlOBbVITSsypCsW717poA=="],
@@ -7142,8 +7280,6 @@
     "@crvouga/mockingbird-service-postgres/@biomejs/biome": ["@biomejs/biome@2.5.15", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.5.15", "@biomejs/cli-darwin-x64": "2.5.15", "@biomejs/cli-linux-arm64": "2.5.15", "@biomejs/cli-linux-arm64-musl": "2.5.15", "@biomejs/cli-linux-x64": "2.5.15", "@biomejs/cli-linux-x64-musl": "2.5.15", "@biomejs/cli-win32-arm64": "2.5.15", "@biomejs/cli-win32-x64": "2.5.15" }, "bin": { "biome": "bin/biome" } }, "sha512-WZTW4slm/pdkh92K6t/3aEN++44JD1PQ7squ7RCMLI1flHGl43DVOIGXvCjHiZgBMO1V4uYxoFNtqrIA4qGuIQ=="],
 
     "@crvouga/mockingbird-service-postgres/@types/bun": ["@types/bun@1.4.3", "", { "dependencies": { "bun-types": "1.4.3" } }, "sha512-N67Pqy8JXbAY/j0tNraS3V5mubGvc6rrrNDmDCtZLlFzccbUJPDb0tvgUBC5q4m8ybkP93Jcn1QB+RYQ6PvBhw=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres": ["embedded-postgres@18.3.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^18.3.0-beta.17", "@embedded-postgres/darwin-x64": "^18.3.0-beta.17", "@embedded-postgres/linux-arm": "^18.3.0-beta.17", "@embedded-postgres/linux-arm64": "^18.3.0-beta.17", "@embedded-postgres/linux-ia32": "^18.3.0-beta.17", "@embedded-postgres/linux-ppc64": "^18.3.0-beta.17", "@embedded-postgres/linux-x64": "^18.3.0-beta.17", "@embedded-postgres/windows-x64": "^18.3.0-beta.17" } }, "sha512-1biFWyuPVtAV5S9RBgcr4PGuAdNL9WhnNZVQ5Arp3gsB24Ci9X9s/8Z7RFYFSc6tJWcj9kzF55YcDAcr3jLUbQ=="],
 
     "@crvouga/mockingbird-service-postgres/fast-check": ["fast-check@4.10.2", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw=="],
 
@@ -7509,6 +7645,22 @@
 
     "@crvouga/mockingbird-service-google-calendar/google-auth-library/gcp-metadata": ["gcp-metadata@6.1.1", "", { "dependencies": { "gaxios": "^6.1.1", "google-logging-utils": "^0.0.2", "json-bigint": "^1.0.0" } }, "sha512-a4tiq7E0/5fTjxPAaH4jpjkSv/uCaU2p5KC6HVGrvl0cDjA8iBZv4vv1gyzlmK0ZUKqwpOyQMKzZQe3lTit77A=="],
 
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-CB1DFZ08zfmNapx231rAJW74UZfs1jQmeGLwbQSaAIRVs2uqEdMhVNLwVlztFG3ZPSeuCsgTn/0yeYDmKF67og=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-zikibpPYGWokfT/OFWNHCwerA3ZGat0ZyCIXOIbIucLBMDHztQ2WZQ9R5zil6oOxzElrMz2Q4aEOssGNrMDdyg=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-N+ktKhkTHuRe/mobk0+OBISje3M6ht4dloSm7zNwpy/hzkZTiB6m1fE0P2lllnob4jbFIbrA3nTvlY4yfe4E6w=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-LNT9TXoOGR/RSop1PewcMtpuf1Dtg6sKU7sFA1ODqInRA8NoP15HyLekUHW5aWnruu4yfs1pcy6DaV39T556mQ=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@16.14.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-SC2hO6hlc8zlC1z2eOMNMACXAKV93QYyLq5JMrwRfjGkl3wbc4kUm3TmKl1SjWBX1x+qAZbMTt72yv+KED5Mvw=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@16.14.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-paVxxVlr7g6AZxCISk9AGNB3zc3c6qKAEzlisrJXlt5Jw1qalxNyKpfkUahDR9qbk+zGnL54PjEQDSUuomHx/g=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@16.14.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8fr7hEiI7XlbPDPsLZJ4RU1NR6jTIDWpf81Sfiwk3T845V0yJJGxjawjkQZmIWVgPW/qY/dMSv0o08FRWJ/zsg=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@16.14.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-Wn4nuAT1H7SIJuLWPs+C1aSdZKpbTloCr0Xaozdfg956lUVvv3iHv6K8Lsc+xmtt1qQpTno3PJLqAgzJ/lg60Q=="],
+
     "@crvouga/mockingbird-service-oauth/fast-check/pure-rand": ["pure-rand@7.0.1", "", {}, "sha512-oTUZM/NAZS8p7ANR3SHh30kXB+zK2r2BPcEn/awJIbOvq82WoMN4p62AWWp3Hhw50G0xMsw1mhIBLqHw64EcNQ=="],
 
     "@crvouga/mockingbird-service-openai/ai/@ai-sdk/gateway": ["@ai-sdk/gateway@4.0.103", "", { "dependencies": { "@ai-sdk/provider": "4.0.21", "@ai-sdk/provider-utils": "5.0.53", "@vercel/oidc": "3.2.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-nnGTUHzPRQ14jhv9CL4OQrzcRBIFTBMIPKGIi9Z9u/4GtwSRxa/nxUX6np2Iwp5phOzO0a0njj/j9Jolf5AEaA=="],
@@ -7534,22 +7686,6 @@
     "@crvouga/mockingbird-service-postgres/@biomejs/biome/@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.15", "", { "os": "win32", "cpu": "x64" }, "sha512-yAzh4UqEImV6Hcy0zjUqNfJAsUhoD64FBQCdTG8Md/Z2wQeVP/ZmJ3XRYAs1g8J9fjTFyl2fCtc5FB5til47+g=="],
 
     "@crvouga/mockingbird-service-postgres/@types/bun/bun-types": ["bun-types@1.4.3", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-tinRJNGOmUN+tEAsn2y2e942n9JHRHR42iUYzDH75NmhJqVBokGSQkkfSFdNWwsANIdrK6ACH9t01M452YyTwg=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Pvrej3Xz5flfyVc9mchVfekrKoTJyvPtM3U0vjuXamZkRKmi+inP2zRmnmzYecIVbr7Zhu82xbsCENMXrwMp9Q=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-MVWe+C47pPoMD9LlIWGQkvZ5Xsu3IBo54CYqnIps/Z1byMIUBNc7y/dZ3mfqEwiCbVDVqirG0CU462xnrSEfKA=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-Y2vw7p80PO/Ko7CDm8CCpStnNfMe+oc11e0WZtqAVRjxO6H0oic/ehULhUsWU3mZm5jq7wQAv37VMzf4JN+SFQ=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-hXp7yHJHYWkdjkgF6As8whEHbdYxhBdmXeLpLTw0aiac0O6+0Cbqk3cOR9U+e49oyIpElHVwZUo6OewquSRhSg=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@18.3.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-hVUOM+7QxkzAIdN3gewfVwL1EpJIx+0qUiNTD8cMqRtaZyU87e4AFIvBS0UiDJ9xzMTVWr/X24wePtbvIbkopg=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@18.3.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-p3/u4YUqSdE2CKUBlC84JGZCi6RnE1fyeLPIIVy2DJUiKtExR5rE3OpDJcVoN40uecYGL+nR4qFocGzDwG1TBw=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@18.3.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8orSD6NNopSLtjqir4dWQBrj+g8j1eJjWd9mB60A3xbWMzIBIPQpzT7XzbacW9YFSl/DejOLnRXfff+Wr13Tgw=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@18.3.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-kDC5aBsmhWDjeQjj2V4g+Bk+pMeDU27b7l0rBbaKgtt2gsNmCB34ULg/5cqs2kqUKSk/tiGMHKCNE+zQZ+s4rg=="],
 
     "@crvouga/mockingbird-service-slack/@slack/web-api/p-queue": ["p-queue@6.6.2", "", { "dependencies": { "eventemitter3": "^4.0.4", "p-timeout": "^3.2.0" } }, "sha512-RwFpb72c/BhQLEXIZ5K2e+AhgNVmIejGlTgiB9MzZ0e93GRvqZ7uSi0dvRF7/XIXDeNkra2fNHBxTyPDGySpjQ=="],
 

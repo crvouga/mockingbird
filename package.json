@@ -22,7 +22,8 @@
     "packages/examples/*",
     "packages/adapters/*",
     "packages/auth/*",
-    "sites/docs"
+    "sites/docs",
+    "sites/fleet"
   ],
   "overrides": {
     "postcss": "^8.5.30"
