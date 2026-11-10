@@ -144,6 +144,7 @@
     "jose": "6.2.2"
   },
   "devDependencies": {
+    "@crvouga/mockingbird-service-postgres": "workspace:*",
     "@playwright/test": "1.65.0",
     "@storybook/html-vite": "10.6.6",
     "@types/bun": "1.4.0",
