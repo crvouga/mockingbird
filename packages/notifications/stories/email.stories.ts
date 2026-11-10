@@ -181,3 +181,11 @@ export const SeveralMailboxesInPicker: Story = {
     }),
   ]),
 }
+
+// Local actions
+export const InboxStarred: Story = {
+  args: inbox(box, null, { initial: { local: { starred: box.slice(0, 2).map((n) => n.id) } } }),
+}
+export const ArchivedToast: Story = {
+  args: inbox(box.slice(1), null, { initial: { toast: "Conversation archived." } }),
+}

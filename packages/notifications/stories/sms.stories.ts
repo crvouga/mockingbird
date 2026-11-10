@@ -236,3 +236,23 @@ export const SeveralPhonesInPicker: Story = {
     { sms: { to: "+447700900123" } },
   ),
 }
+
+// Swipe actions and the long-press menu
+const senders = [...new Set(inbox.map((n) => n.from.address))]
+export const ThreadListPinnedAndMuted: Story = {
+  args: only(inbox, {
+    local: {
+      pinned: [`${PHONE}|${senders.at(-1)}`],
+      muted: [`${PHONE}|${senders[0]}`],
+    },
+  }),
+}
+export const ConversationLongPressTapbackMenu: Story = {
+  args: only(order, { sms: { to: PHONE, thread: "+18885550100", menu: order[2]?.id ?? null } }),
+}
+export const ConversationWithTapback: Story = {
+  args: only(order, {
+    sms: { to: PHONE, thread: "+18885550100" },
+    local: { tapbacks: { [order[2]?.id ?? ""]: "heart", [order[3]?.id ?? ""]: "like" } },
+  }),
+}

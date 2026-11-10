@@ -1,6 +1,7 @@
 import { Hono } from "hono"
-import { appendOrderEvent, audit } from "../../db/ordersRepo.js"
+import { appendOrderEvent, audit, findOrderById } from "../../db/ordersRepo.js"
 import { can } from "../../model.js"
+import { notifyReviewRecorded } from "../../notifications/patientNotifications.js"
 import { listOrders } from "../../orders/listOrders.js"
 import type { AppEnv } from "../appEnv.js"
 
@@ -37,6 +38,8 @@ ordersRoutes.post("/:id/review", async (c) => {
   )
   await appendOrderEvent(db, order.id, "reviewed", note.trim(), actor)
   await audit(db, actor, "Reviewed results", order.id)
+  const row = await findOrderById(db, order.id)
+  if (row) await notifyReviewRecorded(db, c.get("notifier"), row, actor)
   return c.json({ ok: true })
 })
 

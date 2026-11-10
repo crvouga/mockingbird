@@ -23,3 +23,4 @@ export {
   type SmsContent,
   type SourceStatus,
 } from "./model.js"
+export { selectors, TEST_IDS, type TestId } from "./testids.js"

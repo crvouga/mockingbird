@@ -101,6 +101,7 @@ const README_SDKS: Record<string, string> = {
   "@opentelemetry/sdk-trace-base": "2.0.1",
   "@paddle/paddle-node-sdk": "3.10.0",
   "@payloadcms/sdk": "3.90.2",
+  "@playwright/test": "1.65.0",
   "@sentry/node": "11.4.0",
   "@slack/web-api": "7.9.3",
   "@slack/webhook": "8.0.2",

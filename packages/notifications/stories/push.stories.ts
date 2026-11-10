@@ -149,3 +149,27 @@ export const AndroidTokenForcedToIos: Story = {
     android({ title: "Forced skin", body: "Shown on the iOS lock screen by choice." }),
   ]),
 }
+
+// Gestures and grouping
+const shopOnly = many((o) => ios({ ...o, app: "acme-shop" })).slice(0, 4)
+export const IosAppStackCollapsed: Story = { args: device("ios", shopOnly) }
+export const IosAppStackOpen: Story = {
+  args: base(shopOnly, {
+    initial: { only: "push", push: { skin: "ios", openGroups: [`${IOS_TOKEN}|acme-shop`] } },
+  }),
+}
+export const IosLongPressPreview: Story = {
+  args: base([iosRich], { initial: { only: "push", push: { skin: "ios", preview: iosRich.id } } }),
+}
+const shade = android({
+  title: "Flash sale ends tonight",
+  body: "Take 20% off rain jackets until midnight.",
+})
+export const AndroidLongPressSettings: Story = {
+  args: base([shade], { initial: { only: "push", push: { skin: "android", settings: shade.id } } }),
+}
+export const AndroidSilencedApp: Story = {
+  args: base([shade], {
+    initial: { only: "push", push: { skin: "android" }, local: { silent: ["acme-shop"] } },
+  }),
+}

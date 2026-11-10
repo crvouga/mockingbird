@@ -1,8 +1,8 @@
 import type { Preview } from "@storybook/html-vite"
-import { STYLES } from "../src/ui/styles.js"
+import { PAGE_STYLES, STYLES } from "../src/ui/styles.js"
 
 const style = document.createElement("style")
-style.textContent = STYLES
+style.textContent = PAGE_STYLES + STYLES
 document.head.append(style)
 
 const preview: Preview = {

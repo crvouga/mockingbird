@@ -2,6 +2,7 @@ import type { UserRow } from "../db/usersRepo.js"
 import type { Db } from "../ports/db.js"
 import type { IdentityProvider } from "../ports/identityProvider.js"
 import type { LabTestingClient } from "../ports/labTestingClient.js"
+import type { Notifier } from "../ports/notifier.js"
 import type { PaymentsClient } from "../ports/paymentsClient.js"
 
 export type AppDeps = {
@@ -9,6 +10,7 @@ export type AppDeps = {
   payments: PaymentsClient
   labTesting: LabTestingClient
   identity: IdentityProvider
+  notifier: Notifier
 }
 
 export type AppEnv = {

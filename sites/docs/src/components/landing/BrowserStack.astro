@@ -19,6 +19,9 @@ const ROLES: Record<string, { name?: string; role: string }> = {
   oauth: { name: "OAuth", role: "Google & Apple sign-in" },
   stripe: { role: "Payments" },
   junction: { role: "Lab results" },
+  twilio: { role: "SMS" },
+  resend: { role: "Email" },
+  fcm: { role: "Push" },
   postgres: { role: "Database" },
 }
 const vendors = example.servicesUsed.map((name) => {

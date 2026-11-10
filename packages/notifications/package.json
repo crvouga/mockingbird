@@ -22,6 +22,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "default": "./dist/ui.js"
     }
   },
   "bin": {
@@ -60,7 +64,8 @@
     "portability": "bun ../../scripts/portability.ts",
     "storybook": "storybook dev -p 6007 --no-open",
     "storybook:build": "storybook build -o storybook-static --quiet",
-    "catalog:screenshots": "bun scripts/catalog-screenshots.ts"
+    "catalog:screenshots": "bun scripts/catalog-screenshots.ts",
+    "e2e": "bun test ./e2e/ui.e2e.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-ses": "3.1001.0",
