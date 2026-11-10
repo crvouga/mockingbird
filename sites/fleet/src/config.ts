@@ -202,6 +202,19 @@ export function loadConfig(env: Env): Config {
       "it must be a lowercase PostgreSQL identifier (letters, digits, underscores)",
       "mockingbird_fleet",
     )
+  if (env.DATABASE_URL) {
+    // The driver throws on a URL it cannot parse and quotes it, password included: refuse it here.
+    let protocol = ""
+    try {
+      protocol = new URL(env.DATABASE_URL).protocol
+    } catch {}
+    if (protocol !== "postgres:" && protocol !== "postgresql:")
+      invalid(
+        "DATABASE_URL",
+        "it must be a postgres:// URL; special characters in the password must be percent-encoded (@ → %40, : → %3A, / → %2F)",
+        "postgres://<user>:<password>@<host>:5432/<database>",
+      )
+  }
   if (!env.DATABASE_URL && !local)
     problems.push({
       code: "missing_env",
@@ -330,6 +343,31 @@ export function loadConfig(env: Env): Config {
       )
   }
 
+  let otelHeaders: Record<string, string> = {}
+  try {
+    otelHeaders = headerList(env.OTEL_EXPORTER_OTLP_HEADERS)
+  } catch {
+    invalid(
+      "OTEL_EXPORTER_OTLP_HEADERS",
+      "it must be name=value pairs separated by commas, with values percent-encoded",
+      "authorization=Bearer%20<token>",
+    )
+  }
+
+  if (env.OTEL_EXPORTER_OTLP_ENDPOINT) {
+    let valid = false
+    try {
+      valid = ["http:", "https:"].includes(new URL(env.OTEL_EXPORTER_OTLP_ENDPOINT).protocol)
+    } catch {}
+    // A typo here would otherwise drop every trace silently, forever.
+    if (!valid)
+      invalid(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        "it must be an absolute http(s) URL of an OTLP/HTTP collector, without the /v1/traces suffix",
+        "https://<collector-host>/otlp",
+      )
+  }
+
   const config: Config = {
     port,
     publicUrl,
@@ -344,7 +382,7 @@ export function loadConfig(env: Env): Config {
     otel: env.OTEL_EXPORTER_OTLP_ENDPOINT
       ? {
           endpoint: env.OTEL_EXPORTER_OTLP_ENDPOINT.replace(/\/+$/, ""),
-          headers: headerList(env.OTEL_EXPORTER_OTLP_HEADERS),
+          headers: otelHeaders,
           serviceName: env.OTEL_SERVICE_NAME ?? "mockingbird-fleet",
         }
       : undefined,

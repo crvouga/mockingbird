@@ -451,7 +451,8 @@
               "viewer",
               "member",
               "admin",
-              "owner"
+              "owner",
+              null
             ]
           },
           "orgId": {

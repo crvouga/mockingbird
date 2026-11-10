@@ -43,6 +43,8 @@ type Runtime = {
     setTransportPolicy(policy: unknown): void
     clear(): void
     idle(namespace?: string): Promise<void>
+    /** Run every scheduled retry now, until no delivery is pending. */
+    flush?(): Promise<void>
   }
 }
 
@@ -497,9 +499,13 @@ export class Engine {
       "fleet.state.write",
       { "emulator.target": instance.spec.target, "emulator.durability": instance.spec.durability },
       async (span) => {
-        // In-flight webhook deliveries are part of the state; give them a moment to settle.
+        // Webhook deliveries are part of the state, and a snapshot cannot be taken while one is
+        // in flight or waiting for a retry. A failed delivery (always, when delivery is off)
+        // would otherwise wait hours for its retries and block every save until then, so the
+        // retries run now; then in-flight deliveries get a moment to settle.
+        const hub = instance.runtime.webhooks
         await Promise.race([
-          instance.runtime.webhooks?.idle().catch(() => {}),
+          (hub?.flush ? hub.flush() : (hub?.idle() ?? Promise.resolve())).catch(() => {}),
           new Promise((resolve) => setTimeout(resolve, 2000)),
         ])
         const text = JSON.stringify(this.capture(instance))

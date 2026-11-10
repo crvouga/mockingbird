@@ -121,7 +121,11 @@ export function createRoutes(): Route[] {
   /** Suspended organizations can still read and delete, never create or change. */
   const assertActive = (context: Context, row: Row<"orgs">, minimum: Role) => {
     context.orgId = row.id
-    if (row.suspended !== null && minimum !== "viewer" && context.request.method !== "DELETE")
+    if (
+      row.suspended !== null &&
+      minimum !== "viewer" &&
+      !["GET", "HEAD", "DELETE"].includes(context.request.method)
+    )
       throw new HttpError(
         403,
         "org_suspended",
@@ -793,6 +797,8 @@ export function createRoutes(): Route[] {
         // link, exactly one delete removes a row, and only that caller joins.
         if ((await deps.db.remove("invites", { id: invite.id })) !== 1)
           throw new HttpError(404, "not_found", "This invite is invalid, already used or expired")
+        // Someone joining is a change to the organization: record it in its audit log.
+        context.orgId = row.id
         const [existing] = await deps.db.find("memberships", { org_id: row.id, user_id: me.id })
         if (!existing)
           await deps.db.insert("memberships", {

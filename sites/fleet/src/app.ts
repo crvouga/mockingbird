@@ -265,7 +265,9 @@ export function createApp(input: AppDeps) {
       { "api.operation": route.operationId },
       async () => {
         const result = await route.handler(context)
-        if (request.method !== "GET" && context.orgId) await audit(context, route)
+        // Deleting an organization deletes its log too; an entry written afterwards would be orphaned.
+        if (request.method !== "GET" && context.orgId && route.operationId !== "deleteOrg")
+          await audit(context, route)
         return json(result, route.status ?? 200, rateHeaders(decision))
       },
     )

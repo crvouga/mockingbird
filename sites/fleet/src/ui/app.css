@@ -237,6 +237,11 @@ a.row:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Details that must stay readable on a narrow screen: wrap instead of cutting off. */
+.row .meta.wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .empty {
   padding: 28px 16px;
   text-align: center;
@@ -283,13 +288,21 @@ button,
 button:hover {
   background: var(--bg-subtle);
 }
-button.primary {
+a.button {
+  display: inline-block;
+}
+a.button:hover {
+  text-decoration: none;
+}
+button.primary,
+.button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-fg);
   font-weight: 550;
 }
-button.primary:hover {
+button.primary:hover,
+.button.primary:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
 }
@@ -333,6 +346,10 @@ form.inline {
 }
 form.inline input {
   flex: 1 1 180px;
+}
+form.inline + .list,
+form.inline + .empty {
+  margin-top: 16px;
 }
 label.field {
   display: grid;
@@ -384,6 +401,22 @@ label.field {
 }
 .notice + * {
   margin-top: 12px;
+}
+/* Where a failed action is reported (see flashSlot). */
+.flash:empty {
+  display: none;
+}
+.flash {
+  margin-bottom: 16px;
+}
+.unavailable {
+  max-width: 480px;
+  margin: 12vh auto 0;
+  padding: 0 20px;
+}
+.unavailable p {
+  color: var(--fg-muted);
+  margin: 8px 0 22px;
 }
 
 /* Emulator cards: durability is the headline choice */

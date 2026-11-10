@@ -9,8 +9,12 @@
     "dev": "bun scripts/dev.ts",
     "lint": "biome check .",
     "openapi": "bun scripts/openapi.ts",
+    "spec": "bddgen && playwright test",
     "start": "bun dist/main.js",
-    "test": "bun test",
+    "storybook": "storybook dev -p 6006 --no-open",
+    "storybook:build": "storybook build -o storybook-static",
+    "storybook:screenshots": "bun scripts/storybook-screenshots.ts",
+    "test": "bun test && bun run spec",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
@@ -140,8 +144,13 @@
     "jose": "6.2.2"
   },
   "devDependencies": {
+    "@playwright/test": "1.65.0",
+    "@storybook/html-vite": "10.6.6",
     "@types/bun": "1.4.0",
     "embedded-postgres": "18.3.0-beta.17",
-    "typescript": "5.9.3"
+    "playwright-bdd": "9.2.1",
+    "storybook": "10.6.6",
+    "typescript": "5.9.3",
+    "vite": "8.3.7"
   }
 }

@@ -25,7 +25,12 @@ export type Schema = {
 
 const ref = (name: string): Schema => ({ $ref: `#/components/schemas/${name}` })
 const timestamp: Schema = { type: "string", format: "date-time" }
-const nullable = (schema: Schema): Schema => ({ ...schema, type: [schema.type as string, "null"] })
+/** The schema, or null. An enum must list null itself, or validators reject it. */
+const nullable = (schema: Schema): Schema => ({
+  ...schema,
+  type: [schema.type as string, "null"],
+  ...(schema.enum ? { enum: [...schema.enum, null] } : {}),
+})
 const slug: Schema = {
   type: "string",
   pattern: "^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$",

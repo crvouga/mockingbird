@@ -14,7 +14,6 @@ organization ── members, invites, API keys
 ```sh
 bun run --cwd sites/fleet dev      # http://localhost:8080, in-memory storage, local sign-in
 bun test --cwd sites/fleet         # includes real PostgreSQL and the S3 / OTLP emulators
-docker compose -f sites/fleet/docker-compose.yml up --build   # image + PostgreSQL; bring S3_* vars
 ```
 
 ## Durability, per emulator
@@ -179,6 +178,36 @@ create or change. `GET /admin/orgs` lists every organization with its usage.
   Cookies are never accepted cross-origin.
 - **Idempotent setup:** fleet, project and organization slugs are unique and permanent, so
   creating with a chosen slug either succeeds or answers `409`.
+
+## Storybook: every screen of the dashboard
+
+The dashboard (`src/ui`) is plain TypeScript: `router.ts` draws the screen for the address,
+`screens/` holds one module per screen and `routes.ts` lists them. Storybook mounts that same code
+over a mocked `fetch`, one story per screen and state, so the whole product can be browsed without
+a server.
+
+```sh
+bun run --cwd sites/fleet storybook               # http://localhost:6006
+bun run --cwd sites/fleet storybook:build         # static site in storybook-static/
+bun run --cwd sites/fleet storybook:screenshots   # every story as a PNG in .tmp/screenshots/
+```
+
+A story is an address plus the API's answers (`src/ui/stories/*.stories.ts`, fixtures in
+`fixtures.ts`), and optionally what a person then does. `test/stories.test.ts` validates every
+answer against the OpenAPI document and fails when a route, an organization tab or a state the UI
+declares (durability mode, emulator tag, role, sign-in method) has no story. The screenshot run
+captures each story at desktop width, plus phone width and dark mode for the first story of each
+screen, writes `manifest.json` beside them, and fails when a story logs an error.
+
+## Specs: behaviour, in a real browser
+
+`specs/features` holds the behaviour of the service as Gherkin, run by Playwright
+(`bun run --cwd sites/fleet spec`) against the real server wired to Mockingbird's own PostgreSQL,
+S3 and OTLP emulators. `specs/features/dashboard` drives the built dashboard in Chromium (the run
+builds it first; `bunx playwright install chromium` once): every screen, what each role is
+offered, sign-in through a real OpenID Connect provider, and that the page requests nothing but
+its own files, `/api/v1`, `/api/openapi.json` and `/auth/*`. Steps find controls by role, label
+and text, and wait on the `aria-busy` the dashboard sets while it redraws.
 
 ## Configuration
 
