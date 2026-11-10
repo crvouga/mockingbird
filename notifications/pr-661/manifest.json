@@ -154,486 +154,556 @@
     "viewport": "vp-mail"
   },
   {
+    "id": "devices-email--inbox-starred",
+    "title": "Devices/Email",
+    "name": "Inbox Starred",
+    "file": "023-devices-email--inbox-starred.png",
+    "viewport": "vp-mail"
+  },
+  {
+    "id": "devices-email--archived-toast",
+    "title": "Devices/Email",
+    "name": "Archived Toast",
+    "file": "024-devices-email--archived-toast.png",
+    "viewport": "vp-mail"
+  },
+  {
     "id": "harness-page--all-devices",
     "title": "Harness/Page",
     "name": "All Devices",
-    "file": "023-harness-page--all-devices.png",
+    "file": "025-harness-page--all-devices.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--all-devices-everything-read",
     "title": "Harness/Page",
     "name": "All Devices Everything Read",
-    "file": "024-harness-page--all-devices-everything-read.png",
+    "file": "026-harness-page--all-devices-everything-read.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--open-on-each-device",
     "title": "Harness/Page",
     "name": "Open On Each Device",
-    "file": "025-harness-page--open-on-each-device.png",
+    "file": "027-harness-page--open-on-each-device.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--new-arrivals-animating",
     "title": "Harness/Page",
     "name": "New Arrivals Animating",
-    "file": "026-harness-page--new-arrivals-animating.png",
+    "file": "028-harness-page--new-arrivals-animating.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--no-emulators-found",
     "title": "Harness/Page",
     "name": "No Emulators Found",
-    "file": "027-harness-page--no-emulators-found.png",
+    "file": "029-harness-page--no-emulators-found.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--emulators-healthy-nothing-sent",
     "title": "Harness/Page",
     "name": "Emulators Healthy Nothing Sent",
-    "file": "028-harness-page--emulators-healthy-nothing-sent.png",
+    "file": "030-harness-page--emulators-healthy-nothing-sent.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--fleet-discovery-failed",
     "title": "Harness/Page",
     "name": "Fleet Discovery Failed",
-    "file": "029-harness-page--fleet-discovery-failed.png",
+    "file": "031-harness-page--fleet-discovery-failed.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--one-emulator-failing",
     "title": "Harness/Page",
     "name": "One Emulator Failing",
-    "file": "030-harness-page--one-emulator-failing.png",
+    "file": "032-harness-page--one-emulator-failing.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--stream-reconnecting",
     "title": "Harness/Page",
     "name": "Stream Reconnecting",
-    "file": "031-harness-page--stream-reconnecting.png",
+    "file": "033-harness-page--stream-reconnecting.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--source-aliases-in-fleet",
     "title": "Harness/Page",
     "name": "Source Aliases In Fleet",
-    "file": "032-harness-page--source-aliases-in-fleet.png",
+    "file": "034-harness-page--source-aliases-in-fleet.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--search-narrows-every-device",
     "title": "Harness/Page",
     "name": "Search Narrows Every Device",
-    "file": "033-harness-page--search-narrows-every-device.png",
+    "file": "035-harness-page--search-narrows-every-device.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--search-matches-nothing",
     "title": "Harness/Page",
     "name": "Search Matches Nothing",
-    "file": "034-harness-page--search-matches-nothing.png",
+    "file": "036-harness-page--search-matches-nothing.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--follow-new-off",
     "title": "Harness/Page",
     "name": "Follow New Off",
-    "file": "035-harness-page--follow-new-off.png",
+    "file": "037-harness-page--follow-new-off.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--many-namespaces",
     "title": "Harness/Page",
     "name": "Many Namespaces",
-    "file": "036-harness-page--many-namespaces.png",
+    "file": "038-harness-page--many-namespaces.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--deep-link-sms-device",
     "title": "Harness/Page",
     "name": "Deep Link Sms Device",
-    "file": "037-harness-page--deep-link-sms-device.png",
+    "file": "039-harness-page--deep-link-sms-device.png",
     "viewport": "vp-phone"
   },
   {
     "id": "harness-page--deep-link-push-device",
     "title": "Harness/Page",
     "name": "Deep Link Push Device",
-    "file": "038-harness-page--deep-link-push-device.png",
+    "file": "040-harness-page--deep-link-push-device.png",
     "viewport": "vp-phone"
   },
   {
     "id": "harness-page--deep-link-email-device",
     "title": "Harness/Page",
     "name": "Deep Link Email Device",
-    "file": "039-harness-page--deep-link-email-device.png",
+    "file": "041-harness-page--deep-link-email-device.png",
     "viewport": "vp-mail"
   },
   {
     "id": "harness-page--deep-link-one-notification",
     "title": "Harness/Page",
     "name": "Deep Link One Notification",
-    "file": "040-harness-page--deep-link-one-notification.png",
+    "file": "042-harness-page--deep-link-one-notification.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-page--laptop-width",
     "title": "Harness/Page",
     "name": "Laptop Width",
-    "file": "041-harness-page--laptop-width.png",
+    "file": "043-harness-page--laptop-width.png",
     "viewport": "vp-laptop"
   },
   {
     "id": "harness-page--phone-width",
     "title": "Harness/Page",
     "name": "Phone Width",
-    "file": "042-harness-page--phone-width.png",
+    "file": "044-harness-page--phone-width.png",
     "viewport": "vp-mobile"
   },
   {
     "id": "devices-push--ios-empty",
     "title": "Devices/Push",
     "name": "Ios Empty",
-    "file": "043-devices-push--ios-empty.png",
+    "file": "045-devices-push--ios-empty.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-single",
     "title": "Devices/Push",
     "name": "Ios Single",
-    "file": "044-devices-push--ios-single.png",
+    "file": "046-devices-push--ios-single.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-with-image-thumbnail",
     "title": "Devices/Push",
     "name": "Ios With Image Thumbnail",
-    "file": "045-devices-push--ios-with-image-thumbnail.png",
+    "file": "047-devices-push--ios-with-image-thumbnail.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-expanded-image-data-badge-sound",
     "title": "Devices/Push",
     "name": "Ios Expanded Image Data Badge Sound",
-    "file": "046-devices-push--ios-expanded-image-data-badge-sound.png",
+    "file": "048-devices-push--ios-expanded-image-data-badge-sound.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-no-title",
     "title": "Devices/Push",
     "name": "Ios No Title",
-    "file": "047-devices-push--ios-no-title.png",
+    "file": "049-devices-push--ios-no-title.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-long-body-clamped",
     "title": "Devices/Push",
     "name": "Ios Long Body Clamped",
-    "file": "048-devices-push--ios-long-body-clamped.png",
+    "file": "050-devices-push--ios-long-body-clamped.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-stack-of-many-with-more",
     "title": "Devices/Push",
     "name": "Ios Stack Of Many With More",
-    "file": "049-devices-push--ios-stack-of-many-with-more.png",
+    "file": "051-devices-push--ios-stack-of-many-with-more.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-expired-status-expanded",
     "title": "Devices/Push",
     "name": "Ios Expired Status Expanded",
-    "file": "050-devices-push--ios-expired-status-expanded.png",
+    "file": "052-devices-push--ios-expired-status-expanded.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--ios-relative-times",
     "title": "Devices/Push",
     "name": "Ios Relative Times",
-    "file": "051-devices-push--ios-relative-times.png",
+    "file": "053-devices-push--ios-relative-times.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-empty",
     "title": "Devices/Push",
     "name": "Android Empty",
-    "file": "052-devices-push--android-empty.png",
+    "file": "054-devices-push--android-empty.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-single",
     "title": "Devices/Push",
     "name": "Android Single",
-    "file": "053-devices-push--android-single.png",
+    "file": "055-devices-push--android-single.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-large-icon",
     "title": "Devices/Push",
     "name": "Android Large Icon",
-    "file": "054-devices-push--android-large-icon.png",
+    "file": "056-devices-push--android-large-icon.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-expanded-big-picture",
     "title": "Devices/Push",
     "name": "Android Expanded Big Picture",
-    "file": "055-devices-push--android-expanded-big-picture.png",
+    "file": "057-devices-push--android-expanded-big-picture.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-no-title",
     "title": "Devices/Push",
     "name": "Android No Title",
-    "file": "056-devices-push--android-no-title.png",
+    "file": "058-devices-push--android-no-title.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-stack-of-many",
     "title": "Devices/Push",
     "name": "Android Stack Of Many",
-    "file": "057-devices-push--android-stack-of-many.png",
+    "file": "059-devices-push--android-stack-of-many.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-dropped-status-expanded",
     "title": "Devices/Push",
     "name": "Android Dropped Status Expanded",
-    "file": "058-devices-push--android-dropped-status-expanded.png",
+    "file": "060-devices-push--android-dropped-status-expanded.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--auto-picks-android-from-token",
     "title": "Devices/Push",
     "name": "Auto Picks Android From Token",
-    "file": "059-devices-push--auto-picks-android-from-token.png",
+    "file": "061-devices-push--auto-picks-android-from-token.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--auto-picks-ios-from-token",
     "title": "Devices/Push",
     "name": "Auto Picks Ios From Token",
-    "file": "060-devices-push--auto-picks-ios-from-token.png",
+    "file": "062-devices-push--auto-picks-ios-from-token.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--web-token-defaults-to-ios",
     "title": "Devices/Push",
     "name": "Web Token Defaults To Ios",
-    "file": "061-devices-push--web-token-defaults-to-ios.png",
+    "file": "063-devices-push--web-token-defaults-to-ios.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-push--android-token-forced-to-ios",
     "title": "Devices/Push",
     "name": "Android Token Forced To Ios",
-    "file": "062-devices-push--android-token-forced-to-ios.png",
+    "file": "064-devices-push--android-token-forced-to-ios.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-push--ios-app-stack-collapsed",
+    "title": "Devices/Push",
+    "name": "Ios App Stack Collapsed",
+    "file": "065-devices-push--ios-app-stack-collapsed.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-push--ios-app-stack-open",
+    "title": "Devices/Push",
+    "name": "Ios App Stack Open",
+    "file": "066-devices-push--ios-app-stack-open.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-push--ios-long-press-preview",
+    "title": "Devices/Push",
+    "name": "Ios Long Press Preview",
+    "file": "067-devices-push--ios-long-press-preview.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-push--android-long-press-settings",
+    "title": "Devices/Push",
+    "name": "Android Long Press Settings",
+    "file": "068-devices-push--android-long-press-settings.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-push--android-silenced-app",
+    "title": "Devices/Push",
+    "name": "Android Silenced App",
+    "file": "069-devices-push--android-silenced-app.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--no-messages-yet",
     "title": "Devices/SMS",
     "name": "No Messages Yet",
-    "file": "063-devices-sms--no-messages-yet.png",
+    "file": "070-devices-sms--no-messages-yet.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--thread-list-unread",
     "title": "Devices/SMS",
     "name": "Thread List Unread",
-    "file": "064-devices-sms--thread-list-unread.png",
+    "file": "071-devices-sms--thread-list-unread.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--thread-list-all-read",
     "title": "Devices/SMS",
     "name": "Thread List All Read",
-    "file": "065-devices-sms--thread-list-all-read.png",
+    "file": "072-devices-sms--thread-list-all-read.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--thread-list-one-sender",
     "title": "Devices/SMS",
     "name": "Thread List One Sender",
-    "file": "066-devices-sms--thread-list-one-sender.png",
+    "file": "073-devices-sms--thread-list-one-sender.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--thread-list-dates",
     "title": "Devices/SMS",
     "name": "Thread List Dates",
-    "file": "067-devices-sms--thread-list-dates.png",
+    "file": "074-devices-sms--thread-list-dates.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--thread-list-scrolls",
     "title": "Devices/SMS",
     "name": "Thread List Scrolls",
-    "file": "068-devices-sms--thread-list-scrolls.png",
+    "file": "075-devices-sms--thread-list-scrolls.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--verify-code-with-suggestion",
     "title": "Devices/SMS",
     "name": "Verify Code With Suggestion",
-    "file": "069-devices-sms--verify-code-with-suggestion.png",
+    "file": "076-devices-sms--verify-code-with-suggestion.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--expired-code-no-suggestion",
     "title": "Devices/SMS",
     "name": "Expired Code No Suggestion",
-    "file": "070-devices-sms--expired-code-no-suggestion.png",
+    "file": "077-devices-sms--expired-code-no-suggestion.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-grouped-and-timestamps",
     "title": "Devices/SMS",
     "name": "Conversation Grouped And Timestamps",
-    "file": "071-devices-sms--conversation-grouped-and-timestamps.png",
+    "file": "078-devices-sms--conversation-grouped-and-timestamps.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-number-code-without-code-wording",
     "title": "Devices/SMS",
     "name": "Conversation Number Code Without Code Wording",
-    "file": "072-devices-sms--conversation-number-code-without-code-wording.png",
+    "file": "079-devices-sms--conversation-number-code-without-code-wording.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-otp-in-plain-text",
     "title": "Devices/SMS",
     "name": "Conversation Otp In Plain Text",
-    "file": "073-devices-sms--conversation-otp-in-plain-text.png",
+    "file": "080-devices-sms--conversation-otp-in-plain-text.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-alphanumeric-sender",
     "title": "Devices/SMS",
     "name": "Conversation Alphanumeric Sender",
-    "file": "074-devices-sms--conversation-alphanumeric-sender.png",
+    "file": "081-devices-sms--conversation-alphanumeric-sender.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-short-code",
     "title": "Devices/SMS",
     "name": "Conversation Short Code",
-    "file": "075-devices-sms--conversation-short-code.png",
+    "file": "082-devices-sms--conversation-short-code.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-sns-topic",
     "title": "Devices/SMS",
     "name": "Conversation Sns Topic",
-    "file": "076-devices-sms--conversation-sns-topic.png",
+    "file": "083-devices-sms--conversation-sns-topic.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-emoji-and-unicode",
     "title": "Devices/SMS",
     "name": "Conversation Emoji And Unicode",
-    "file": "077-devices-sms--conversation-emoji-and-unicode.png",
+    "file": "084-devices-sms--conversation-emoji-and-unicode.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-long-message",
     "title": "Devices/SMS",
     "name": "Conversation Long Message",
-    "file": "078-devices-sms--conversation-long-message.png",
+    "file": "085-devices-sms--conversation-long-message.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-picture-message",
     "title": "Devices/SMS",
     "name": "Conversation Picture Message",
-    "file": "079-devices-sms--conversation-picture-message.png",
+    "file": "086-devices-sms--conversation-picture-message.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--conversation-many-messages-scrolled-to-newest",
     "title": "Devices/SMS",
     "name": "Conversation Many Messages Scrolled To Newest",
-    "file": "080-devices-sms--conversation-many-messages-scrolled-to-newest.png",
+    "file": "087-devices-sms--conversation-many-messages-scrolled-to-newest.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--back-button-unread-badge",
     "title": "Devices/SMS",
     "name": "Back Button Unread Badge",
-    "file": "081-devices-sms--back-button-unread-badge.png",
+    "file": "088-devices-sms--back-button-unread-badge.png",
     "viewport": "vp-phone"
   },
   {
     "id": "devices-sms--several-phones-in-picker",
     "title": "Devices/SMS",
     "name": "Several Phones In Picker",
-    "file": "082-devices-sms--several-phones-in-picker.png",
+    "file": "089-devices-sms--several-phones-in-picker.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-sms--thread-list-pinned-and-muted",
+    "title": "Devices/SMS",
+    "name": "Thread List Pinned And Muted",
+    "file": "090-devices-sms--thread-list-pinned-and-muted.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-sms--conversation-long-press-tapback-menu",
+    "title": "Devices/SMS",
+    "name": "Conversation Long Press Tapback Menu",
+    "file": "091-devices-sms--conversation-long-press-tapback-menu.png",
+    "viewport": "vp-phone"
+  },
+  {
+    "id": "devices-sms--conversation-with-tapback",
+    "title": "Devices/SMS",
+    "name": "Conversation With Tapback",
+    "file": "092-devices-sms--conversation-with-tapback.png",
     "viewport": "vp-phone"
   },
   {
     "id": "harness-timeline-inspector--timeline-everything",
     "title": "Harness/Timeline & Inspector",
     "name": "Timeline Everything",
-    "file": "083-harness-timeline-inspector--timeline-everything.png",
+    "file": "093-harness-timeline-inspector--timeline-everything.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-timeline-inspector--timeline-empty",
     "title": "Harness/Timeline & Inspector",
     "name": "Timeline Empty",
-    "file": "084-harness-timeline-inspector--timeline-empty.png",
+    "file": "094-harness-timeline-inspector--timeline-empty.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-timeline-inspector--timeline-filtered",
     "title": "Harness/Timeline & Inspector",
     "name": "Timeline Filtered",
-    "file": "085-harness-timeline-inspector--timeline-filtered.png",
+    "file": "095-harness-timeline-inspector--timeline-filtered.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-timeline-inspector--inspect-sms",
     "title": "Harness/Timeline & Inspector",
     "name": "Inspect Sms",
-    "file": "086-harness-timeline-inspector--inspect-sms.png",
+    "file": "096-harness-timeline-inspector--inspect-sms.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-timeline-inspector--inspect-email",
     "title": "Harness/Timeline & Inspector",
     "name": "Inspect Email",
-    "file": "087-harness-timeline-inspector--inspect-email.png",
+    "file": "097-harness-timeline-inspector--inspect-email.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-timeline-inspector--inspect-push",
     "title": "Harness/Timeline & Inspector",
     "name": "Inspect Push",
-    "file": "088-harness-timeline-inspector--inspect-push.png",
+    "file": "098-harness-timeline-inspector--inspect-push.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-timeline-inspector--inspect-over-devices",
     "title": "Harness/Timeline & Inspector",
     "name": "Inspect Over Devices",
-    "file": "089-harness-timeline-inspector--inspect-over-devices.png",
+    "file": "099-harness-timeline-inspector--inspect-over-devices.png",
     "viewport": "vp-desktop"
   },
   {
     "id": "harness-timeline-inspector--inspector-on-phone",
     "title": "Harness/Timeline & Inspector",
     "name": "Inspector On Phone",
-    "file": "090-harness-timeline-inspector--inspector-on-phone.png",
+    "file": "100-harness-timeline-inspector--inspector-on-phone.png",
     "viewport": "vp-mobile"
   },
   {
     "id": "harness-timeline-inspector--timeline-on-phone",
     "title": "Harness/Timeline & Inspector",
     "name": "Timeline On Phone",
-    "file": "091-harness-timeline-inspector--timeline-on-phone.png",
+    "file": "101-harness-timeline-inspector--timeline-on-phone.png",
     "viewport": "vp-mobile"
   }
 ]
