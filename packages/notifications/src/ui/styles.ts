@@ -252,7 +252,8 @@ button { cursor: pointer; }
 .reply-row span { display: inline-flex; align-items: center; gap: 8px; padding: 0 22px 0 16px; height: 36px; border: 1px solid #747775; border-radius: 18px; font: 500 14px var(--mail); color: #444746; }
 
 /* ── Timeline + inspector ───────────────────────────────────── */
-.timeline { padding: 18px; }
+.timeline { padding: 18px; overflow-x: auto; }
+.tl td.mono:first-child { white-space: nowrap; }
 .tl { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
 .tl th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; padding: 10px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); }
 .tl td { padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -282,6 +283,6 @@ button { cursor: pointer; }
 @keyframes fade { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 @keyframes rowflash { from { background: #fef7e0; } to { background: #fff; } }
 @container (max-width: 980px) { .mail-nav { width: 72px; } .mail-nav .lbl, .mail-nav .n, .compose .lbl { display: none; } .mail-logo { width: auto; } .compose { padding: 0 16px; } .mrow .svc { display: none; } }
-@container (max-width: 640px) { .mail-nav, .mail-search, .cat-tabs, .mail-logo .lbl { display: none; } .mail-main { margin-left: 8px; } .mrow .from { width: 110px; } .reader .subject-row, .sender-row { padding-left: 16px; } .mail-frame, .mail-text, .attachments, .reply-row, .details { margin-left: 16px; } .mail-frame { width: calc(100% - 32px); } }
+@container (max-width: 640px) { .mail-nav, .mail-search, .cat-tabs, .mail-logo .lbl, .mail-toolbar .range { display: none; } .mail-main { margin-left: 8px; } .mrow .from { width: 110px; } .reader .subject-row, .sender-row { padding-left: 16px; } .mail-frame, .mail-text, .attachments, .reply-row, .details { margin-left: 16px; } .mail-frame { width: calc(100% - 32px); } .sender-row { flex-wrap: wrap; } .sender-row .who { flex-basis: calc(100% - 54px); } .sender-row .meta { flex-basis: 100%; padding-left: 54px; white-space: normal; } .reader h1 { font-size: 19px; line-height: 24px; } }
 @media (max-width: 760px) { .devices { padding: 16px 8px; } .device-col.wide { flex-basis: 100%; } }
 `

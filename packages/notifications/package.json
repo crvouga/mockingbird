@@ -57,7 +57,10 @@
     "test": "bun test",
     "dev": "bun scripts/dev.ts",
     "pack:check": "bun ../../scripts/pack-check.ts",
-    "portability": "bun ../../scripts/portability.ts"
+    "portability": "bun ../../scripts/portability.ts",
+    "storybook": "storybook dev -p 6007 --no-open",
+    "storybook:build": "storybook build -o storybook-static --quiet",
+    "catalog:screenshots": "bun scripts/catalog-screenshots.ts"
   },
   "devDependencies": {
     "@aws-sdk/client-ses": "3.1001.0",
@@ -71,8 +74,12 @@
     "@crvouga/mockingbird-service-ses": "workspace:*",
     "@crvouga/mockingbird-service-sns": "workspace:*",
     "@crvouga/mockingbird-service-twilio": "workspace:*",
+    "@playwright/test": "1.65.0",
+    "@storybook/html-vite": "10.6.6",
     "@types/bun": "1.4.0",
     "@types/node": "22.20.1",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "storybook": "10.6.6",
+    "vite": "8.3.7"
   }
 }
