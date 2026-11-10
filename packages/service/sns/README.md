@@ -33,6 +33,10 @@ reset, timeline, clock, journal, metrics and fault controls. No AWS account is n
 
 Implemented AWS operations: `CreateTopic`, `DeleteTopic`, `ListTopics`, `GetTopicAttributes`, `SetTopicAttributes`, `Subscribe`, `Unsubscribe`, `ListSubscriptions`, `ListSubscriptionsByTopic`, `GetSubscriptionAttributes`, `SetSubscriptionAttributes`, `ConfirmSubscription`, `Publish`, `PublishBatch`, `TagResource`, `UntagResource`, `ListTagsForResource`.
 
+`Publish` with `PhoneNumber` (and no `TopicArn`) sends a direct SMS: the number must be E.164, otherwise
+`InvalidParameter`. The message is stored in `sns_messages` like a topic publish, readable through
+`GET /__admin/state/sns_messages`.
+
 Operations outside this list fail explicitly. This package emulates API state, not AWS infrastructure,
 production quotas, billing, IAM enforcement, or provider consoles. Service-specific omissions and
 oracle evidence are recorded in [the AWS coverage ledger](../../../docs/AWS_COVERAGE.md).

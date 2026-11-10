@@ -50,3 +50,30 @@ test("AWS writes are observable, namespace isolated, and cleared by reset", asyn
   await runtime.reset()
   expect((await call("ListIdentities", {}))["Identities"]).toEqual(before["Identities"])
 })
+
+test("SendEmail accepts a verified Source written with a display name", async () => {
+  const runtime = createRuntime()
+  const call = (operation: string, input: unknown) =>
+    runtime.fetch(
+      new Request("http://mock/", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-amz-json-1.1",
+          "x-amz-target": `SimpleEmailService.${operation}`,
+        },
+        body: JSON.stringify(input),
+      }),
+    )
+  await call("VerifyEmailIdentity", { EmailAddress: "billing@example.com" })
+  const message = {
+    Destination: { ToAddresses: ["ada@example.com"] },
+    Message: { Subject: { Data: "Receipt" }, Body: { Text: { Data: "Thanks" } } },
+  }
+  const named = await call("SendEmail", { ...message, Source: '"Billing" <billing@example.com>' })
+  expect(named.status).toBe(200)
+  const unverified = await call("SendEmail", {
+    ...message,
+    Source: "Other <other@elsewhere.example>",
+  })
+  expect(unverified.status).toBe(400)
+})

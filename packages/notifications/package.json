@@ -1,0 +1,78 @@
+{
+  "name": "@crvouga/mockingbird-notifications",
+  "version": "0.0.0-development",
+  "description": "Notification test harness for Mockingbird fleets: every SMS, email and push your app sends through the Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators, on lifelike phone and mail screens and a JSON API for tests.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-notifications": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/notifications"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/notifications#readme",
+  "keywords": [
+    "mockingbird",
+    "notifications",
+    "sms",
+    "email",
+    "push",
+    "testing"
+  ],
+  "mockingbird": {
+    "runtime": "node",
+    "layer": "tool"
+  },
+  "scripts": {
+    "generate": "bun scripts/build-ui.ts",
+    "build": "bun scripts/build-ui.ts && bun ../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "dev": "bun scripts/dev.ts",
+    "pack:check": "bun ../../scripts/pack-check.ts",
+    "portability": "bun ../../scripts/portability.ts"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-ses": "3.1001.0",
+    "@aws-sdk/client-sns": "3.1001.0",
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-fleet": "workspace:*",
+    "@crvouga/mockingbird-service-customerio": "workspace:*",
+    "@crvouga/mockingbird-service-fcm": "workspace:*",
+    "@crvouga/mockingbird-service-mailosaur": "workspace:*",
+    "@crvouga/mockingbird-service-resend": "workspace:*",
+    "@crvouga/mockingbird-service-ses": "workspace:*",
+    "@crvouga/mockingbird-service-sns": "workspace:*",
+    "@crvouga/mockingbird-service-twilio": "workspace:*",
+    "@types/bun": "1.4.0",
+    "@types/node": "22.20.1",
+    "esbuild": "0.28.2"
+  }
+}
