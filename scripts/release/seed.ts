@@ -29,6 +29,9 @@
  *   bun run release:seed               (reconcile)
  *   bun run release:seed -- --dry-run  (plan + pack, print what would change)
  *   bun run release:seed -- --trust-only (repair existing packages' publishers without a build)
+ *   bun run release:seed -- --reserve    (from a pull-request branch: claim every new package's
+ *                                         npm name with a code-free placeholder and attach its
+ *                                         Trusted Publisher, so CI publishes its first release)
  */
 import {
   cpSync,
@@ -59,7 +62,8 @@ function enter(dir: string) {
 }
 
 const dryRun = process.argv.includes("--dry-run")
-const trustOnly = process.argv.includes("--trust-only")
+const reserve = process.argv.includes("--reserve")
+const trustOnly = reserve || process.argv.includes("--trust-only")
 const refreshRejected = process.argv.includes("--refresh-rejected")
 if (refreshRejected && !trustOnly) throw new Error("--refresh-rejected requires --trust-only")
 const MIN_NPM = [11, 15] as const
@@ -159,6 +163,7 @@ try {
         "--local",
         "--trust-only",
         ...(refreshRejected ? ["--refresh-rejected"] : []),
+        ...(reserve ? ["--reserve"] : []),
         ...(dryRun ? ["--dry-run"] : []),
       ],
       root,
