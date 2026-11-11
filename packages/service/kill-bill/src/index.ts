@@ -1,5 +1,7 @@
 import { type APIOptions, bootSqlite } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
+import { dayOfMonth, withBillingAlignment } from "./billing.js"
+import { refundAdjustments, resolvePlanSpec } from "./catalog-spec.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 import {
   type Account,
@@ -780,6 +782,7 @@ export class KillBillAPI {
     if (subscription.pendingChangePlan !== undefined && billingStop <= periodEnd)
       delete next.pendingChangePlan
     this.state.subscriptions.insert(subscription.subscriptionId, next)
+    await this.notifySubscriptionCancel(subscription, tenantId)
     if (billingStop < periodEnd) await this.repairUnusedPeriod(subscription, billingStop, tenantId)
     return undefined
   }
@@ -1313,7 +1316,11 @@ export class KillBillAPI {
     }
     this.state.invoices.insert(invoiceId, invoice)
     await this.emit("INVOICE_CREATION", "INVOICE", invoiceId, accountId, tenantId)
-    if (invoice.status === "COMMITTED" && creditAdj > 0) this.useCreditOnOpenInvoices(accountId)
+    if (invoice.status === "COMMITTED" && creditAdj > 0)
+      // An existing invoice the new credit pays changed: INVOICE_ADJUSTMENT (issue #647 acceptance
+      // criteria; best guess, not oracle-verified).
+      for (const adjusted of this.useCreditOnOpenInvoices(accountId))
+        await this.emit("INVOICE_ADJUSTMENT", "INVOICE", adjusted, accountId, tenantId)
     return this.state.invoices.get(invoiceId) ?? invoice
   }
   /**
@@ -1321,7 +1328,8 @@ export class KillBillAPI {
    * first: each gets a CBA_ADJ "Adjustment (use of account credit)" up to its balance, and only the
    * rest stays as account credit (parity scenario credit-pays-open-invoice).
    */
-  private useCreditOnOpenInvoices(accountId: string) {
+  private useCreditOnOpenInvoices(accountId: string): string[] {
+    const adjusted: string[] = []
     let available = this.accountCredit(accountId)
     const today = isoDate(this.now())
     const open = this.state.invoices
@@ -1353,7 +1361,9 @@ export class KillBillAPI {
         ],
       })
       available = money(available - used)
+      adjusted.push(invoice.invoiceId)
     }
+    return adjusted
   }
 
   /** Net successful purchase minus refund. Kill Bill 0.24.10 voids only when this is zero. */
@@ -1533,6 +1543,31 @@ export class KillBillAPI {
       )
     return payment
   }
+  /**
+   * INVOICE_ADJUSTMENT (objectType INVOICE): Kill Bill 0.24.10 sends it when an invoice gains an
+   * adjustment item (an adjusted refund's ITEM_ADJ, #652). Every writer of ITEM_ADJ / REPAIR_ADJ
+   * items calls this one helper.
+   */
+  async notifyInvoiceAdjustment(invoiceId: string, tenantId: string) {
+    const invoice = this.state.invoices.get(invoiceId)
+    if (!invoice) return
+    await this.emit("INVOICE_ADJUSTMENT", "INVOICE", invoiceId, invoice.accountId, tenantId)
+  }
+  /**
+   * Kill Bill 0.24.10 (#652, immediate cancel): SUBSCRIPTION_CANCEL (entitlement),
+   * ENTITLEMENT_CANCEL, SUBSCRIPTION_CANCEL (billing), ahead of any repair invoice. Sent when the
+   * cancel is requested for every policy (best guess, not oracle-verified, for a future-dated stop).
+   */
+  private async notifySubscriptionCancel(subscription: Subscription, tenantId: string) {
+    for (const eventType of ["SUBSCRIPTION_CANCEL", "ENTITLEMENT_CANCEL", "SUBSCRIPTION_CANCEL"])
+      await this.emit(
+        eventType,
+        "SUBSCRIPTION",
+        subscription.subscriptionId,
+        subscription.accountId,
+        tenantId,
+      )
+  }
   async notifyInvoicePaymentSuccess(payment: Payment) {
     const account = this.state.accounts.get(payment.accountId)
     if (!account) return
@@ -1603,20 +1638,22 @@ export class KillBillAPI {
    * An invoice-payment refund on the invoice it paid (Kill Bill 0.24.16, probed): refundAdj drops by
    * the refund either way. With isAdjusted, ITEM_ADJ items ("Invoice item adjustment", linked to the
    * requested items, else the first item) lower the amount and the balance stays; without it the
-   * refund reopens the balance.
+   * refund reopens the balance. Kill Bill 0.24.10 (#648): an external refund marked isAdjusted with
+   * no adjustments list leaves the invoice alone (only the CREDIT payment is recorded). Answers
+   * whether it wrote ITEM_ADJ items, for the INVOICE_ADJUSTMENT notification.
    */
   private reopenInvoice(
     payment: Payment,
     amount: number,
     adjust: boolean,
     adjustments: unknown = [],
+    external = false,
   ) {
-    if (!payment.invoiceId) return
+    if (!payment.invoiceId) return false
     const invoice = this.state.invoices.get(payment.invoiceId)
-    if (!invoice) return
-    const requested = Array.isArray(adjustments)
-      ? adjustments.map(object).filter((entry) => typeof entry.invoiceItemId === "string")
-      : []
+    if (!invoice) return false
+    const requested = refundAdjustments(adjustments)
+    if (external && adjust && requested.length === 0) return false
     // An adjustment without an amount adjusts its whole item, never more than the refund left.
     let left = amount
     const targets = !adjust
@@ -1651,6 +1688,7 @@ export class KillBillAPI {
       refundAdj: money(invoice.refundAdj - amount),
       items: [...invoice.items, ...items],
     })
+    return items.length > 0
   }
   /** Kill Bill 0.24.16 `InvoicePaymentResource.createRefundWithAdjustments`. */
   private async refundInvoicePayment(
@@ -1672,11 +1710,25 @@ export class KillBillAPI {
       body.amount === undefined || body.amount === null
         ? this.refundableRemaining(payment)
         : money(body.amount)
-    if (!Number.isFinite(amount) || amount <= 0 || amount > this.refundableRemaining(payment))
+    const external = url.searchParams.get("externalPayment") === "true"
+    // Kill Bill 0.24.10 (#648) accepts an external refund above the payment (it records a CREDIT).
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      (!external && amount > this.refundableRemaining(payment))
+    )
       return this.problem(400, "REFUND_AMOUNT_TOO_HIGH", "Refund amount exceeds purchased amount")
     const adjust = body.isAdjusted === true
+    // Kill Bill 0.24.10 (#648): a non-external isAdjusted refund needs its item adjustments.
+    if (!external && adjust && refundAdjustments(body.adjustments).length === 0)
+      return this.javaException(
+        400,
+        "org.killbill.billing.payment.api.PaymentApiException",
+        7199,
+        "Plugin exception Missing invoice item adjustements during payment refund",
+      )
     // externalPayment records a credit on a new payment. It does not add a REFUND to this one.
-    if (url.searchParams.get("externalPayment") === "true") {
+    if (external) {
       const requestedMethod = url.searchParams.get("paymentMethodId") ?? undefined
       if (requestedMethod) {
         const method = this.state.methods.get(requestedMethod)
@@ -1715,8 +1767,19 @@ export class KillBillAPI {
       }
       credit.transactions = [this.transaction(credit, "CREDIT", amount, "SUCCESS", externalKey)]
       this.state.payments.insert(paymentId, credit)
-      this.reopenInvoice(payment, amount, adjust, body.adjustments)
+      const adjusted = this.reopenInvoice(payment, amount, adjust, body.adjustments, true)
       await this.emit("PAYMENT_SUCCESS", "PAYMENT", paymentId, payment.accountId, tenantId)
+      // Kill Bill 0.24.10 (#652): the item adjustment, then the invoice payment it changed.
+      if (adjusted && payment.invoiceId) {
+        await this.notifyInvoiceAdjustment(payment.invoiceId, tenantId)
+        await this.emit(
+          "INVOICE_PAYMENT_SUCCESS",
+          "INVOICE",
+          payment.invoiceId,
+          payment.accountId,
+          tenantId,
+        )
+      }
       return this.empty(201, {
         location: this.location(request, `/1.0/kb/invoicePayments/${paymentId}`),
       })
@@ -1727,8 +1790,10 @@ export class KillBillAPI {
       refundedAmount: money(payment.refundedAmount + amount),
       transactions: [...payment.transactions, transaction],
     })
-    this.reopenInvoice(payment, amount, adjust, body.adjustments)
+    const adjusted = this.reopenInvoice(payment, amount, adjust, body.adjustments)
     await this.emit("PAYMENT_REFUND", "PAYMENT", payment.paymentId, payment.accountId, tenantId)
+    if (adjusted && payment.invoiceId)
+      await this.notifyInvoiceAdjustment(payment.invoiceId, tenantId)
     return this.empty(201, {
       location: this.location(request, `/1.0/kb/invoicePayments/${payment.paymentId}`),
     })
@@ -1752,8 +1817,35 @@ export class KillBillAPI {
     }
     return plan.amount
   }
+  /**
+   * ACCOUNT billing alignment (Kill Bill's default; issue #643, Kill Bill 0.24.10): a month-based
+   * plan bills to the account's bill-cycle day. An account without one (0) takes the start day of
+   * its first such subscription (`accountChanged`, reported as ACCOUNT_CHANGE); a later
+   * subscription started on another day, with no subscription-level billCycleDayLocal, is billed
+   * to the account's day (`day`): its first period is a prorated stub up to the next one. The
+   * account BCD is recorded when the subscription is created, also for a future start (best
+   * guess, not oracle-verified: Kill Bill records it on the first invoicing run).
+   */
+  private accountAlignedBcd(
+    accountId: string,
+    planName: string,
+    start: string,
+    subscriptionBcd: boolean,
+  ): { day?: number; accountChanged: boolean } {
+    const plan = this.plan(planName)
+    const account = this.state.accounts.get(accountId)
+    if (!plan || !account || periodMonths(plan.intervalDays) === 0) return { accountChanged: false }
+    if ((plan.billingAlignment ?? "ACCOUNT") !== "ACCOUNT") return { accountChanged: false }
+    const current = Number(account.billCycleDayLocal)
+    if (!Number.isInteger(current) || current < 1 || current > 31) {
+      this.state.accounts.insert(accountId, { ...account, billCycleDayLocal: dayOfMonth(start) })
+      return { accountChanged: true }
+    }
+    if (subscriptionBcd || current === dayOfMonth(start)) return { accountChanged: false }
+    return { day: current, accountChanged: false }
+  }
   /** The subscription's BCD changes in effective-date order (older state kept only the latest). */
-  private bcdSchedule(subscription: Subscription) {
+  private bcdSchedule(subscription: Subscription): NonNullable<Subscription["bcdChanges"]> {
     if (subscription.bcdChanges) return subscription.bcdChanges
     return subscription.billCycleDayLocal !== undefined &&
       subscription.bcdEffectiveFromDate !== undefined
@@ -1774,7 +1866,12 @@ export class KillBillAPI {
   private reportedBillingDay(subscription: Subscription) {
     const today = isoDate(this.now())
     let reported = Number(subscription.startDate.slice(8, 10))
-    for (const { day, effectiveFrom } of this.bcdSchedule(subscription)) {
+    for (const { day, effectiveFrom, fromAccount } of this.bcdSchedule(subscription)) {
+      // The account's BCD is the subscription's from its start (issue #643: 20 on day one).
+      if (fromAccount) {
+        reported = day
+        continue
+      }
       const [year, month] = effectiveFrom.split("-").map(Number) as [number, number]
       const onDay = (monthIndex: number) => {
         const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
@@ -1821,9 +1918,12 @@ export class KillBillAPI {
     // Billed on a new billing day, the stub is prorated over that new period (BCD 5 from 01-01:
     // 02-01..02-05 is 4/31 of 01-05..02-05); otherwise over the period from its start (4/28).
     const realigned = previous > effective
-    const whole = realigned
-      ? Date.parse(end) - Date.parse(previous)
-      : Date.parse(addPeriod(start, days)) - Date.parse(start)
+    // A stub to the account's BCD is prorated over the period that ends on it (issue #643: 15/365
+    // of an annual plan; for shorter plans this is a best guess, not oracle-verified).
+    const whole =
+      realigned || this.bcdChangeAt(subscription, start)?.fromAccount === true
+        ? Date.parse(end) - Date.parse(previous)
+        : Date.parse(addPeriod(start, days)) - Date.parse(start)
     return {
       end,
       fraction: (Date.parse(end) - Date.parse(start)) / whole,
@@ -2352,7 +2452,10 @@ export class KillBillAPI {
             )
           this.state.catalogVersions.insert(tenantId, { effectiveDates: [...versions, effective] })
         }
-        for (const plan of catalogPlans(body.raw)) this.state.plans.insert(plan.name, plan)
+        for (const plan of withBillingAlignment(body.raw, catalogPlans(body.raw), (row) =>
+          billingPeriod(row.intervalDays),
+        ))
+          this.state.plans.insert(plan.name, plan)
       }
       return this.empty(201)
     }
@@ -2554,14 +2657,27 @@ export class KillBillAPI {
             subscriptions: [],
           })
         if (!createdSubscriptionId) createdSubscriptionId = subscriptionId
-        const date = url.searchParams.get("entitlementDate") ?? isoDate(this.now())
+        // The emulator keeps one start day for entitlement and billing: a billingDate alone (no
+        // entitlementDate) starts both on it (issue #645; best guess when the two differ).
+        const date =
+          url.searchParams.get("entitlementDate") ??
+          url.searchParams.get("billingDate") ??
+          isoDate(this.now())
         // A billCycleDayLocal sent on create is the BCD from the start: no change when it is the
         // start day, otherwise a change effective from the start.
         const { billCycleDayLocal: requestedBcd, ...fields } = input
+        const aligned = this.accountAlignedBcd(
+          input.accountId,
+          input.planName,
+          date,
+          typeof requestedBcd === "number",
+        )
         const startBcd =
-          typeof requestedBcd === "number" && requestedBcd !== Number(date.slice(8, 10))
+          typeof requestedBcd === "number" && requestedBcd !== dayOfMonth(date)
             ? { bcdChanges: [{ day: requestedBcd, effectiveFrom: date }] }
-            : {}
+            : aligned.day !== undefined
+              ? { bcdChanges: [{ day: aligned.day, effectiveFrom: date, fromAccount: true }] }
+              : {}
         const subscription: Subscription = {
           ...fields,
           ...startBcd,
@@ -2584,6 +2700,25 @@ export class KillBillAPI {
             subscriptions: [...bundle.subscriptions, subscriptionId],
           })
         this.audit(request, "SUBSCRIPTION", subscriptionId)
+        await this.emit(
+          "SUBSCRIPTION_CREATION",
+          "SUBSCRIPTION",
+          subscriptionId,
+          input.accountId,
+          tenantId,
+        )
+        // Kill Bill 0.24.10 (#652): SUBSCRIPTION_CREATION (entitlement), ENTITLEMENT_CREATION,
+        // ACCOUNT_CHANGE when the account BCD is set, then SUBSCRIPTION_CREATION (billing).
+        await this.emit(
+          "ENTITLEMENT_CREATION",
+          "SUBSCRIPTION",
+          subscriptionId,
+          input.accountId,
+          tenantId,
+        )
+        // Kill Bill records the account BCD a first ACCOUNT-aligned subscription sets (issue #643).
+        if (aligned.accountChanged)
+          await this.emit("ACCOUNT_CHANGE", "ACCOUNT", input.accountId, input.accountId, tenantId)
         await this.emit(
           "SUBSCRIPTION_CREATION",
           "SUBSCRIPTION",
@@ -2756,20 +2891,27 @@ export class KillBillAPI {
       }
       if (request.method === "GET") return this.json(this.subscriptionJson(subscription))
       if (request.method === "DELETE") {
+        // cancelSubscription sends the cancel notifications (before any repair invoice's).
         const rejected = await this.cancelSubscription(subscription, url, tenantId)
         if (rejected) return rejected
-        await this.emit(
-          "SUBSCRIPTION_CANCEL",
-          "SUBSCRIPTION",
-          subscription.subscriptionId,
-          subscription.accountId,
-          tenantId,
-        )
         return this.empty()
       }
       if (request.method === "PUT") {
-        const planName = typeof body.planName === "string" ? body.planName : ""
-        if (!this.plan(planName)) return this.problem(400, "INVALID_PLAN", "Unknown plan")
+        // Kill Bill 0.24.10 (#651): a plan by name or product spec, else a CatalogApiException.
+        const spec = resolvePlanSpec(
+          body,
+          this.state.plans.list().map(({ value }) => value),
+          (plan) => billingPeriod(plan.intervalDays),
+        )
+        if (!spec) return this.problem(400, "INVALID_PLAN", "Unknown plan")
+        if ("miss" in spec)
+          return this.javaException(
+            400,
+            "org.killbill.billing.catalog.api.CatalogApiException",
+            spec.miss.code,
+            spec.miss.message,
+          )
+        const planName = spec.plan.name
         const today = isoDate(this.now())
         const requested = url.searchParams.get("requestedDate")
         const requestedDay = requested?.slice(0, 10)
@@ -2932,11 +3074,16 @@ export class KillBillAPI {
           ? body.tagDefinitionIds
           : []
       for (const id of ids)
-        if (typeof id === "string")
+        if (typeof id === "string") {
+          const tagId = this.state.ids.next("tag-", 32)
           this.state.tags.insert(`${accountId}\0${id}`, {
+            tagId,
             objectId: accountId,
             tagDefinitionId: id,
           })
+          // Kill Bill 0.24.10 (#652): TAG_CREATION, objectType TAG, for each tag added.
+          await this.emit("TAG_CREATION", "TAG", tagId, accountId, tenantId)
+        }
       return this.empty(201)
     }
     if (
@@ -3159,6 +3306,8 @@ export class KillBillAPI {
           items: [...invoice.items, adjustment, ...cba],
         })
         if (credit > 0) this.useCreditOnOpenInvoices(invoice.accountId)
+        // Best guess, not oracle-verified: an item adjustment notifies as an adjusted refund does.
+        await this.notifyInvoiceAdjustment(invoice.invoiceId, tenantId)
         return this.empty(201, {
           location: this.location(request, `/1.0/kb/invoices/${invoice.invoiceId}`),
         })

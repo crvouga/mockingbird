@@ -37,7 +37,7 @@ await emulator.close()
 
 The default credentials are Basic auth `admin:password` plus tenant headers `X-Killbill-ApiKey: bob` and `X-Killbill-ApiSecret: lazar`. Mutations also require `X-Killbill-CreatedBy`; optional reason and comment headers are recorded in the audit journal.
 
-`POST /1.0/kb/tenants` creates another tenant with Basic auth and `X-Killbill-CreatedBy` only. Accounts created with that tenant's api key stay hidden from other tenants. `POST /1.0/kb/tenants/registerNotificationCallback?cb=` stores one push-notification URL for the tenant; invoice and payment events are POSTed there as Kill Bill notification JSON. As in Kill Bill 0.24.16 (measured with a callback against a real server), delivery happens after the request has answered, in order per account: an event raised while the bus is idle waits `notificationDelayMs` (2000 by default; Kill Bill's bus took 2–3 s), and one raised during or right after a delivery, such as a payment the callback makes, goes out at once (Kill Bill's bus polls again after delivering; ~70 ms measured). `GET /1.0/kb/test/queues` waits for pending deliveries. A delivery the callback refuses (non-2xx or no answer) is retried 15 minutes, 30 minutes, 2 hours, 12 hours and a day after each failed attempt, when the clock reaches it (a clock move or the next request), then dropped. The in-process `onEvent` hook still receives events during the request.
+`POST /1.0/kb/tenants` creates another tenant with Basic auth and `X-Killbill-CreatedBy` only. Accounts created with that tenant's api key stay hidden from other tenants. `POST /1.0/kb/tenants/registerNotificationCallback?cb=` stores one push-notification URL for the tenant; invoice and payment events are POSTed there as Kill Bill notification JSON. As in Kill Bill 0.24.16 (measured with a callback against a real server), delivery happens after the request has answered, in order per account. As in Kill Bill 0.24.10 (issue #652), adding a tag sends `TAG_CREATION` (objectType TAG, the new `tagId`); creating a subscription sends `SUBSCRIPTION_CREATION`, `ENTITLEMENT_CREATION`, `ACCOUNT_CHANGE` when it sets the account BCD, a second `SUBSCRIPTION_CREATION` (billing), then `INVOICE_CREATION`; cancelling sends `SUBSCRIPTION_CANCEL`, `ENTITLEMENT_CANCEL` and a second `SUBSCRIPTION_CANCEL` ahead of any repair invoice's `INVOICE_CREATION` (sent at the request for every policy: best guess, not oracle-verified, for a stop still ahead). `TENANT_CONFIG_CHANGE` and `TAG_DELETION` are not sent. Timing: an event raised while the bus is idle waits `notificationDelayMs` (2000 by default; Kill Bill's bus took 2–3 s), and one raised during or right after a delivery, such as a payment the callback makes, goes out at once (Kill Bill's bus polls again after delivering; ~70 ms measured). `GET /1.0/kb/test/queues` waits for pending deliveries. A delivery the callback refuses (non-2xx or no answer) is retried 15 minutes, 30 minutes, 2 hours, 12 hours and a day after each failed attempt, when the clock reaches it (a clock move or the next request), then dropped. The in-process `onEvent` hook still receives events during the request.
 
 `GET /1.0/kb/accounts/pagination` and `GET /1.0/kb/invoices/pagination` enumerate the authenticated
 tenant's existing billing records as bare arrays. `offset` defaults to 0 and `limit` to 100;
@@ -147,6 +147,20 @@ exact vendor errors, account-specific permissions, proration and billing transit
   subscription is created is its BCD from the start. A billing hold from the period end, released
   on a later day with the BCD moved to that day, renews a full period from it (parity scenario
   `move-renewal-day-annual`). Retroactive changes return `UNSUPPORTED_BCD`.
+- Account bill-cycle day (Kill Bill 0.24.10, issues #643–#645): month-based plans follow the
+  catalog's `<billingAlignment>` rule (the first matching `billingAlignmentCase`), ACCOUNT when the
+  catalog has none. With ACCOUNT alignment an account created with `billCycleDayLocal` keeps it;
+  one without (0) takes the start day of its first subscription and sends `ACCOUNT_CHANGE`. A
+  later subscription started on another day, sent without a subscription-level
+  `billCycleDayLocal`, reports the account's day at once and bills a stub to the next one (an
+  annual $1,500 plan started 2026-11-05 on BCD 20 bills 61.64 for 11-05..11-20, then full years
+  from 11-20); a subscription-level `billCycleDayLocal` overrides it. `entitlementDate` (or
+  `billingDate` alone) in the past starts both entitlement and billing on that day: the first
+  period is that day plus one period. Best guesses, not oracle-verified: a stub on a monthly or
+  other sub-annual plan is prorated over the period that ends on the account's day; the account
+  BCD is recorded when the subscription is created, also for a future start; the first
+  subscription's own `billCycleDayLocal` does not become the account's; and an `entitlementDate`
+  that differs from `billingDate` starts billing on the `entitlementDate`.
 - `PUT /1.0/kb/subscriptions/{subscriptionId}` changes the plan (Kill Bill 0.24.16, parity
   scenarios `change-*`). With `billingPolicy=IMMEDIATE` (the default) the change takes effect today;
   with only a `requestedDate`, on that day; with `billingPolicy=END_OF_TERM`, on the
@@ -159,7 +173,14 @@ exact vendor errors, account-specific permissions, proration and billing transit
   every plan the subscription has had or is changing to, and events report the plan in effect
   when they happen. Cancelling drops a change scheduled on or after the cancellation;
   `undoChangePlan` and `DELETE …/changePlan` drop any change not yet in effect. The catalog's own
-  change-policy rules are not read: no policy and no date means `IMMEDIATE`.
+  change-policy rules are not read: no policy and no date means `IMMEDIATE`. The new plan is named
+  by `planName` or by `productName` + `billingPeriod` (+ `priceList`); a plan the catalog lacks is
+  400 `CatalogApiException` as in Kill Bill 0.24.10 (issue #651): 2021 "Could not find any plans
+  named '…'", 2030 "Could not find any product named '…'", 2020 "Could not find a plan matching
+  spec: (plan: 'undefined', product: '…', billing period: '…', pricelist '…')". The emulator
+  keeps one price list, so `priceList` is only echoed in that message (best guess, not
+  oracle-verified: a plan of another price list matches). A body with neither name is still 400
+  `INVALID_PLAN`.
 - `POST /1.0/kb/invoices/dryRun?accountId=...&targetDate=YYYY-MM-DD` previews the recurring
   periods due through `targetDate` per active, unblocked subscription without creating invoices,
   consuming IDs, emitting events, charging payments or advancing billing state. It supports
@@ -181,7 +202,19 @@ exact vendor errors, account-specific permissions, proration and billing transit
   adds `ITEM_ADJ` items ("Invoice item adjustment", linked to the requested `adjustments`) that
   lower the amount and leave the balance; without it the refund reopens the balance. An unkeyed
   payment or transaction is keyed by its own id, except the credit payment of an external refund,
-  which gets a generated key (Kill Bill 0.24.16, parity scenario `refund-adjusted`).
+  which gets a generated key (Kill Bill 0.24.16, parity scenario `refund-adjusted`). As in Kill
+  Bill 0.24.10 (issue #648): an external refund (`externalPayment=true`) may exceed the payment (a
+  150 CREDIT of a 100 payment is accepted); an external `isAdjusted` refund with no `adjustments`
+  list records only the CREDIT payment and leaves the invoice (amount, balance, `refundAdj`) alone;
+  a non-external `isAdjusted` refund without the list is 400 `PaymentApiException` 7199 "Missing
+  invoice item adjustements during payment refund" and records nothing (the "Plugin exception "
+  message prefix is a best guess from the plugin's other 7199 answer). Rows one request writes
+  (the CREDIT transaction and its `ITEM_ADJ`) share the INSERT `userToken` under `audit=FULL`.
+  An adjusted external refund sends `PAYMENT_SUCCESS`, `INVOICE_ADJUSTMENT` and
+  `INVOICE_PAYMENT_SUCCESS` (objectType INVOICE, the invoice id) (issue #652). Best guesses, not
+  oracle-verified: a non-external adjusted refund sends `PAYMENT_REFUND` then
+  `INVOICE_ADJUSTMENT`, and `POST /1.0/kb/invoices/{invoiceId}` (item adjustment) sends
+  `INVOICE_ADJUSTMENT`.
 - `POST /1.0/kb/credits` adds, per credit, a `CREDIT_ADJ` (−amount, the given description) and a
   `CBA_ADJ` (+amount, "Adjustment (account credit)") on a new invoice, `COMMITTED` with
   `autoCommit=true` and `DRAFT` otherwise, and answers 200 with the `CREDIT_ADJ` items (amounts
@@ -190,7 +223,10 @@ exact vendor errors, account-specific permissions, proration and billing transit
   committed invoices and its `accountBalance` the open balance minus that credit. A new invoice uses
   the credit first ("Adjustment (use of account credit)"), and new credit pays the account's open
   invoices at once, oldest first, keeping only the rest (parity scenario
-  `credit-pays-open-invoice`).
+  `credit-pays-open-invoice`; Kill Bill 0.24.10, issues #646–#647). A fully covered invoice has
+  balance 0 and is not paid, so it sends `INVOICE_CREATION` and no `PAYMENT_*` event. An existing
+  invoice that new credit pays (a credit or a repair) sends `INVOICE_ADJUSTMENT` (best guess, not
+  oracle-verified).
 - `DELETE /1.0/kb/subscriptions/{id}`: entitlement stops at the period end with
   `entitlementPolicy=END_OF_TERM`, now with `IMMEDIATE`, else on `requestedDate` (a day or an
   instant) or now; billing stops at the period end with `billingPolicy=END_OF_TERM` and by default,
@@ -199,7 +235,9 @@ exact vendor errors, account-specific permissions, proration and billing transit
   `STOP_BILLING` events, and bills nothing from the billing stop. Billing that stops inside a
   billed period credits its unused share of what the item is still worth after its item
   adjustments ("Adjustment (subscription change)"; parity scenario `cancel-after-item-adjust`): a
-  `REPAIR_ADJ` invoice whose `CBA_ADJ` becomes account credit. A requested instant before the subscription started is `EntitlementApiException` 1001.
+  `REPAIR_ADJ` invoice (linked to the repaired `RECURRING` item) whose `CBA_ADJ` becomes account
+  credit and first pays what the account's open invoices still owe (Kill Bill 0.24.10, issue
+  #647: a $100 invoice $40 paid by credit ends at balance 0 and the $40 comes back). A requested instant before the subscription started is `EntitlementApiException` 1001.
 - An unknown account, subscription or invoice id is 404 `ObjectDoesNotExist` ("Object id=…
   type=ACCOUNT doesn't exist!"); an unknown account external key is 404 `AccountApiException`
   3003. Kill Bill answers a malformed (non-UUID) id with Tomcat's 404 page; emulator ids are not

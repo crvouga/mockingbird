@@ -443,3 +443,54 @@ paths:
         "204": { description: No outstanding invoices }
         "400": { description: Invalid payment method, date, or unsupported payment options }
         "404": { description: Account not found }
+  /1.0/kb/subscriptions/{subscriptionId}:
+    parameters: [{ name: subscriptionId, in: path, required: true, schema: { type: string } }]
+    put:
+      operationId: ChangeSubscriptionPlan
+      description: Plan change by planName, or by productName + billingPeriod (+ priceList). The emulator keeps one price list, so priceList only appears in the 2020 message (best guess, not oracle-verified).
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: billingPolicy, in: query, schema: { type: string, enum: [IMMEDIATE, END_OF_TERM] } }
+        - { name: requestedDate, in: query, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                planName: { type: string }
+                productName: { type: string }
+                billingPeriod: { type: string }
+                priceList: { type: string }
+                priceOverrides: { type: array, items: { type: object } }
+              additionalProperties: true
+      responses:
+        "204": { description: Plan changed or scheduled }
+        "400": { description: "CatalogApiException (Kill Bill 0.24.10): 2021 no plan by that name, 2020 no plan for that product, billing period and price list, 2030 no such product" }
+        "404": { description: Subscription not found }
+  /1.0/kb/invoicePayments/{paymentId}/refunds:
+    parameters: [{ name: paymentId, in: path, required: true, schema: { type: string } }]
+    post:
+      operationId: RefundInvoicePayment
+      description: "Kill Bill 0.24.10: with externalPayment=true a CREDIT payment is recorded (any amount, also above the payment); isAdjusted with an adjustments list writes ITEM_ADJ items that lower the invoice amount (balance unchanged, refundAdj negative), isAdjusted without one leaves the invoice alone. Without externalPayment, isAdjusted needs an adjustments list."
+      x-mockingbird: { supported: true, parity: { enabled: true, safe: false } }
+      parameters:
+        - { name: externalPayment, in: query, schema: { type: boolean } }
+        - { name: paymentMethodId, in: query, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: number }
+                currency: { type: string }
+                transactionExternalKey: { type: string }
+                paymentExternalKey: { type: string }
+                isAdjusted: { type: boolean }
+                adjustments: { type: array, items: { type: object } }
+              additionalProperties: true
+      responses:
+        "201": { description: Refund (or external CREDIT) recorded; Location points to the payment }
+        "400": { description: "REFUND_AMOUNT_TOO_HIGH (not external), PaymentApiException 7199 (isAdjusted without adjustments, not external), or a reused transaction key" }
+        "404": { description: Payment not found }
