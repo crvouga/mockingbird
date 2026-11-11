@@ -1,6 +1,15 @@
 export { NotificationClient, type NotificationClientOptions } from "./client.js"
-export type { Endpoint, FetchLike, FleetManifest, ServiceInput } from "./discovery.js"
+export type {
+  AdminTarget,
+  Endpoint,
+  FetchLike,
+  FleetManifest,
+  ServiceInput,
+} from "./discovery.js"
 export {
+  type AdminGateway,
+  type AdminGatewayContext,
+  type AdminGatewayFactory,
   createNotificationHarness,
   type HarnessOptions,
   type NotificationHarness,
@@ -9,7 +18,10 @@ export {
 export { parseMime } from "./mime.js"
 export {
   type Address,
+  CHANNELS,
   type Channel,
+  type ChatContent,
+  type ChatReaction,
   type EmailAttachment,
   type EmailContent,
   matches,

@@ -85,8 +85,52 @@ export const endpointsFromManifest = (
     ]
   })
 
+/**
+ * An emulator whose admin API the dashboard fronts. Unlike {@link Endpoint} this is every HTTP
+ * emulator, messaging or not (stripe, cognito, …).
+ */
+export type AdminTarget = {
+  /** The fleet entry name, e.g. `stripe`, or an alias such as `push`. */
+  name: string
+  /** The emulator it runs, e.g. `fcm` for the alias `push`. The name when nobody said. */
+  target: string
+  /** Absolute admin prefix, e.g. `http://127.0.0.1:8798/__admin`. */
+  adminUrl: string
+  fetch: FetchLike
+}
+
+export const adminTargetsFromServices = (
+  services: Record<string, ServiceInput>,
+  fetchImpl: FetchLike,
+): AdminTarget[] =>
+  endpointsFromServices(services, fetchImpl).map((endpoint) => ({
+    name: endpoint.name,
+    target: endpoint.service ?? endpoint.name,
+    adminUrl: endpoint.adminUrl,
+    fetch: endpoint.fetch,
+  }))
+
+/** Every HTTP entry of a manifest. Protocol entries (postgres, redis) have no admin API of their own. */
+export const adminTargetsFromManifest = (
+  manifest: FleetManifest,
+  fetchImpl: FetchLike,
+  targets: Record<string, string | undefined> = {},
+): AdminTarget[] =>
+  Object.entries(manifest.services ?? {}).flatMap(([name, entry]): AdminTarget[] => {
+    if (!entry || (entry.protocol && entry.protocol !== "http") || !entry.url) return []
+    return [
+      {
+        name,
+        target: targets[name] ?? entry.target ?? name,
+        adminUrl: entry.adminUrl ? trimSlash(entry.adminUrl) : `${trimSlash(entry.url)}/__admin`,
+        fetch: fetchImpl,
+      },
+    ]
+  })
+
 export type FleetDiscovery = {
   endpoints: Endpoint[]
+  admins: AdminTarget[]
   namespaces: string[]
 }
 
@@ -117,5 +161,9 @@ export const discoverFleet = async (
         .map((n) => n.namespace)
         .filter((n): n is string => typeof n === "string")
     : []
-  return { endpoints: endpointsFromManifest(manifest, fetchImpl, targets), namespaces: names }
+  return {
+    endpoints: endpointsFromManifest(manifest, fetchImpl, targets),
+    admins: adminTargetsFromManifest(manifest, fetchImpl, targets),
+    namespaces: names,
+  }
 }

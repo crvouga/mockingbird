@@ -2,18 +2,58 @@
 
 > Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
-Vendor-neutral Node.js fleet management. Requires Node.js 22 or newer. Install
-`@crvouga/mockingbird-fleet` and the emulator packages your application uses; Stripe is optional.
-The private `@crvouga/mockingbird-adapter-node` implementation is bundled, never installed separately.
-Existing `@crvouga/mockingbird-service-stripe/fleet` imports remain supported with the same API.
+The recommended way to run Mockingbird: one `mockingbird.json`, one process, every emulator your
+application calls on its own port, one controller to reset and snapshot them together, and one
+dashboard for their admin UIs and the notifications your app sent. Requires Node.js 22 or newer.
 
 ## Install
 
 ```sh
-npm install @crvouga/mockingbird-fleet @crvouga/mockingbird-service-postgres @crvouga/mockingbird-service-redis @crvouga/mockingbird-service-cognito
+npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-stripe @crvouga/mockingbird-service-twilio @crvouga/mockingbird-service-resend
 ```
 
+## Quick start
+
+`mockingbird.json`:
+
+```json
+{
+  "control": { "port": 9000 },
+  "services": {
+    "stripe": { "port": 9001 },
+    "twilio": { "port": 9002 },
+    "resend": { "port": 9003 }
+  }
+}
+```
+
+```sh
+npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+# fleet ready: http://127.0.0.1:9000/__admin/fleet
+# dashboard:   http://127.0.0.1:8790
+```
+
+- **Point your app at it.** `ready.json` lists every emulator's URL as `services.<name>.url`. Use
+  `"port": 0` for a free port per emulator, so parallel fleets never collide.
+- **Open the dashboard.** The **Emulators** tab is every emulator's admin UI; the
+  **Notifications** tab is every SMS, WhatsApp message, email, push and chat message your app sent.
+- **Control every emulator at once.** `curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset`
+  puts them all back to their boot state; snapshots, restore and the clock work the same way.
+
+A service is named by its package suffix (`stripe` loads `@crvouga/mockingbird-service-stripe`).
+Install only the emulator packages your application uses; none is required, Stripe included.
+The private `@crvouga/mockingbird-adapter-node` implementation is bundled, never installed separately.
+Existing `@crvouga/mockingbird-service-stripe/fleet` imports remain supported with the same API.
+The [Fleets guide](https://mockingbird.chrisvouga.dev/docs/fleets) covers the configuration, the
+controller's routes and archives.
+
 ## Usage
+
+A test runner's global setup can own the fleet instead of the CLI:
+
+```sh
+npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-postgres @crvouga/mockingbird-service-redis @crvouga/mockingbird-service-cognito
+```
 
 ```ts
 import { createInstalledServiceLoader, FleetClient, startFleet } from '@crvouga/mockingbird-fleet'
@@ -37,10 +77,35 @@ The resolver only loads allowlisted installed service suffixes from their `/serv
 relative to the explicit consumer project root (including pnpm symlinks). It never installs
 packages. Distinct instance names use `target`. A custom `load` callback remains supported.
 
+## CLI
+
 ```sh
-mockingbird-fleet serve --config mockingbird.json --ready-json
-mockingbird-fleet fleet doctor --config mockingbird.json --json
+mockingbird-fleet serve --config mockingbird.json --ready-json     # readiness JSON on standard output
+mockingbird-fleet fleet doctor --config mockingbird.json --json    # validate without starting anything
 ```
+
+`serve` takes `--config` (required), `--ready-json`, `--ready-file <path>`,
+`--connections-file <path>` (credential-bearing URLs, mode 0600), `--dashboard`,
+`--dashboard-port <n>`, `--project-root <dir>` and `--fleet <slug>`. The directory of a ready or
+connections file must already exist. `MOCKINGBIRD_ADMIN_KEY` sets the admin key when the
+configuration has none. `fleet control`, `fleet render` and `fleet rehearse` are the other
+management commands; `mockingbird-fleet <command> --help` lists each one's options.
+
+`--dashboard` also serves one page with every emulator's admin UI and the
+[notifications](https://github.com/crvouga/mockingbird/tree/main/packages/notifications#readme)
+they sent, on port 8790 (`--dashboard-port <n>`; `0` picks a free one):
+
+```sh
+mockingbird-fleet serve --config mockingbird.json --dashboard
+# fleet ready: http://127.0.0.1:9000/__admin/fleet
+# dashboard:   http://127.0.0.1:8790
+```
+
+`"dashboard": true` or `"dashboard": { "port": 8790 }` in the configuration does the same, and so
+does `startFleet(config, { load, dashboard: { port: 0 } })`; the URL is `manifest.dashboard`, in the
+ready file too, and it closes with the fleet. `@crvouga/mockingbird-notifications` is a dependency
+of this package, so there is nothing more to install. The dashboard sends the fleet's admin key to
+the emulators itself: keep it on loopback (the default) or another private address.
 
 The package exports typed lifecycle, client, archives, repositories, discovery, migrations,
 participants, connection rendering and extension contracts. Public discovery omits credentials;
@@ -75,7 +140,7 @@ fleet's `access` and `requestsPerMinute`) are dropped before a local fleet start
 
 ## API
 
-`FleetClient`, `FleetClientError`, `FleetClientResponseError`, `FleetInstrumentation`, `FleetObservations`, `FleetRunError`, `NamespacePool`, `RepositoryWriter`, `advertisedHttpBase`, `archiveCompatibility`, `archiveProtector`, `archiveReachability`, `assertArchiveCompatibility`, `assertFleetConfig`, `compactArchive`, `composeFleetSchema`, `createFleetIngress`, `createInstalledServiceLoader`, `diffArchives`, `doctorFleet`, `fileParticipant`, `filesystemConditionalStore`, `filesystemOperationJournal`, `filesystemRepository`, `fleetCommands`, `fleetConfigSchema`, `incrementalArchive`, `ingressSupport`, `inspectArchive`, `launchFleet`, `listen`, `materializeArchive`, `migrateAndVerify`, `migrateApplicationArchive`, `migrateArchive`, `ownedTransport`, `participantConformance`, `planRestoreBindings`, `providerServeOptions`, `providerServeValues`, `publishIncremental`, `readJsonOption`, `rebaseArchiveNamespace`, `reconcileOperation`, `rehearseFleet`, `renderConnections`, `replayFleetTrace`, `resolveServeControls`, `resolveServeIdBase`, `resolveServeSettings`, `runCli`, `s3ConditionalStore`, `s3Repository`, `serve`, `serveCommand`, `startFleet`, `validateArchive`, `validateFleetConfig`, `withFleetRun`, `writeConnections`.
+`DASHBOARD_PORT`, `FleetClient`, `FleetClientError`, `FleetClientResponseError`, `FleetInstrumentation`, `FleetObservations`, `FleetRunError`, `NamespacePool`, `RepositoryWriter`, `advertisedHttpBase`, `archiveCompatibility`, `archiveProtector`, `archiveReachability`, `assertArchiveCompatibility`, `assertFleetConfig`, `compactArchive`, `composeFleetSchema`, `createFleetIngress`, `createInstalledServiceLoader`, `diffArchives`, `doctorFleet`, `fileParticipant`, `filesystemConditionalStore`, `filesystemOperationJournal`, `filesystemRepository`, `fleetCommands`, `fleetDashboard`, `fleetConfigSchema`, `incrementalArchive`, `ingressSupport`, `inspectArchive`, `launchFleet`, `listen`, `materializeArchive`, `migrateAndVerify`, `migrateApplicationArchive`, `migrateArchive`, `ownedTransport`, `participantConformance`, `planRestoreBindings`, `providerServeOptions`, `providerServeValues`, `publishIncremental`, `readJsonOption`, `rebaseArchiveNamespace`, `reconcileOperation`, `rehearseFleet`, `renderConnections`, `replayFleetTrace`, `resolveServeControls`, `resolveServeIdBase`, `resolveServeSettings`, `runCli`, `s3ConditionalStore`, `s3Repository`, `serve`, `serveCommand`, `startFleet`, `validateArchive`, `validateFleetConfig`, `withFleetRun`, `writeConnections`.
 
 `mockingbird.yaml` declarations: `parseDeclaration`, `checkDeclaration`, `DeclarationError`, `isDeclaration`, `declaredFleets`, `localFleetConfig`, `DURABILITY_MODES`, `ACCESS_MODES`, `CLOUD_SERVICE_KEYS`.
 

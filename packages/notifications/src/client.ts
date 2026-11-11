@@ -1,4 +1,5 @@
 import {
+  type Channel,
   filterToSearch,
   type Notification,
   type NotificationFilter,
@@ -92,7 +93,7 @@ export class NotificationClient {
   }
 
   /** A UI link that opens one device (or one notification) for a screenshot. */
-  link(view: { channel?: "sms" | "email" | "push"; to?: string; id?: string } = {}): string {
+  link(view: { channel?: Channel; to?: string; id?: string } = {}): string {
     const params = new URLSearchParams()
     if (this.namespace) params.set("namespace", this.namespace)
     if (view.channel) params.set("view", view.channel)

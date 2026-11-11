@@ -11,8 +11,29 @@ const STATEMENTS = [
     picture text,
     role text NOT NULL DEFAULT 'patient',
     notifications boolean NOT NULL DEFAULT true,
+    phone text,
+    phone_channel text NOT NULL DEFAULT 'sms',
+    notify_email boolean NOT NULL DEFAULT true,
+    notify_text boolean NOT NULL DEFAULT true,
+    notify_push boolean NOT NULL DEFAULT true,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (provider, subject)
+  )`,
+  `CREATE TABLE sign_in_codes (
+    id uuid PRIMARY KEY,
+    email text NOT NULL,
+    code_hash text NOT NULL,
+    link_hash text NOT NULL,
+    attempts integer NOT NULL DEFAULT 0,
+    expires_at timestamptz NOT NULL,
+    consumed_at timestamptz,
+    created_at timestamptz NOT NULL
+  )`,
+  `CREATE TABLE push_devices (
+    token text PRIMARY KEY,
+    user_id uuid NOT NULL REFERENCES users (id),
+    platform text NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
   )`,
   `CREATE TABLE lab_tests (
     id uuid PRIMARY KEY,

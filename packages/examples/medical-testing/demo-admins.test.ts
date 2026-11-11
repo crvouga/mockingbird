@@ -12,6 +12,7 @@ describe("live demo admins", () => {
       "Twilio",
       "Resend",
       "FCM",
+      "Slack",
       "Postgres",
     ])
 
@@ -25,11 +26,12 @@ describe("live demo admins", () => {
       expect(await ui.text()).toContain("data-mockingbird-admin")
     }
 
+    // The shared UI is mounted from bundled code with this config; no document is composed.
+    expect(demo.admin.config.apis?.map((api) => [api.id, api.adminPrefix])).toEqual(
+      demo.admins.map((admin) => [admin.id, `/__admin/apis/${admin.id}`]),
+    )
     const combinedUi = await demo.admin.fetch(new Request("https://mock.local/__admin/ui"))
-    expect(combinedUi.status).toBe(200)
-    const combinedHtml = await combinedUi.text()
-    expect(combinedHtml).toContain('"id":"google"')
-    expect(combinedHtml).toContain('"id":"postgres"')
+    expect(combinedUi.status).toBe(404)
     const composedState = await demo.admin.fetch(
       new Request("https://mock.local/__admin/apis/junction/state"),
     )
@@ -49,6 +51,8 @@ describe("live demo admins", () => {
       "order_events",
       "order_items",
       "orders",
+      "push_devices",
+      "sign_in_codes",
       "users",
     ])
     const tests = await demo.db.query("SELECT * FROM lab_tests ORDER BY 1 LIMIT 50")
@@ -64,7 +68,7 @@ describe("live demo admins", () => {
       }
       expect(state.collections.some((collection) => collection.count > 0)).toBe(true)
       expect(state.collections.reduce((total, collection) => total + collection.count, 0)).toBe(
-        id === "junction" ? 33 : 24,
+        id === "junction" ? 33 : 26,
       )
     }
   })

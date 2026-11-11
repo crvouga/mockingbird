@@ -1,4 +1,4 @@
-import { type ComposableAdminApi, composeAdminApis } from "@crvouga/mockingbird-admin-ui"
+import { type ComposableAdminApi, composeAdminRoutes } from "@crvouga/mockingbird-admin-ui/compose"
 
 const ADMIN_BRANDS_URL = "https://mockingbird.chrisvouga.dev/brands.json"
 
@@ -9,9 +9,13 @@ export type MockAdmin = {
   fetch: (request: Request) => Promise<Response>
 }
 
-/** Compose independent APIs without merging their state or control planes. */
+/**
+ * Compose independent APIs without merging their state or control planes. This is the routing
+ * and the UI's config only: the browser mounts the shared UI as bundled code, so no document
+ * (and no copy of the UI as a string) is built here.
+ */
 export const composeMockAdmins = (admins: readonly MockAdmin[]) =>
-  composeAdminApis(
+  composeAdminRoutes(
     admins.map(
       (admin): ComposableAdminApi => ({
         ...admin,
@@ -21,5 +25,5 @@ export const composeMockAdmins = (admins: readonly MockAdmin[]) =>
         standardRoutes: [],
       }),
     ),
-    { brandsUrl: ADMIN_BRANDS_URL, title: "Lab testing emulators" },
+    { brandsUrl: ADMIN_BRANDS_URL },
   )

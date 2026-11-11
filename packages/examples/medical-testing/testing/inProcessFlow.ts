@@ -92,8 +92,14 @@ export const signInWithGoogle = async (account = "ada"): Promise<User> => {
   return done.user
 }
 
+/** Stripe's test card that is always declined. */
+export const DECLINED_CARD = "4000000000000002"
+
 /** Drives a real hosted-checkout payment through `client/api.ts`'s public surface — the exact calls `CheckoutModal` makes. */
-export const payWithHostedCheckout = async (checkoutSessionId: string): Promise<void> => {
+export const payWithHostedCheckout = async (
+  checkoutSessionId: string,
+  card = "4242424242424242",
+): Promise<void> => {
   const start = await api.hostedCheckoutStart(checkoutSessionId)
   if (!("flowId" in start) || !start.html) throw new Error("Expected the hosted checkout page HTML")
 
@@ -110,9 +116,11 @@ export const payWithHostedCheckout = async (checkoutSessionId: string): Promise<
     new URLSearchParams({
       ...payForm.fields,
       [paySubmitter.name]: paySubmitter.value,
-      card: "4242424242424242",
+      card,
     }).toString(),
   )
+  // A declined card re-renders the payment page instead of finishing.
+  if (card === DECLINED_CARD) return
   if (!done.done) throw new Error("Expected the hosted checkout flow to finish")
 }
 

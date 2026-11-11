@@ -10,6 +10,7 @@ import ServiceExamples from "../../components/ServiceExamples.astro"
 import SqlConsole from "../../components/SqlConsole.astro"
 import Base from "../../layouts/Base.astro"
 import { CATEGORIES, type CategorySlug } from "../../lib/categories.ts"
+import { FLEET } from "../../lib/content.ts"
 import { percent } from "../../lib/format.ts"
 import type { Service } from "../../lib/types.ts"
 import "../../styles/playground.css"
@@ -89,6 +90,11 @@ const RECENT_SCRIPT = `try {
         {s.surfaces.server && <span class="badge">Node server</span>}
         {s.surfaces.cli && <span class="badge"><code>{s.surfaces.cli}</code></span>}
       </div>
+      {s.surfaces.server && (
+        <p class="head-fleet">
+          <Icon name="layers" /> Recommended: run it in a <a href="/docs/fleets">fleet</a>. Install <code>{FLEET.package}</code> next to this package, add <code>{s.name}</code> to the <code>services</code> of your <code>{FLEET.configFile}</code>, and start every emulator with <code>npx mockingbird-fleet serve --config {FLEET.configFile} --dashboard</code>.
+        </p>
+      )}
       <div class="head-row">
         <div class="head-install"><Install pkg={s.packageName} /></div>
         <div class="head-links">
@@ -317,6 +323,20 @@ const RECENT_SCRIPT = `try {
     align-items: flex-end;
     gap: 12px;
     margin-top: 24px;
+  }
+
+  .head-fleet {
+    margin: 20px 0 0;
+    max-width: 78ch;
+    color: var(--fg-muted);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .head-fleet :global(svg) {
+    width: 14px;
+    height: 14px;
+    vertical-align: -2px;
   }
 
   .head-install {

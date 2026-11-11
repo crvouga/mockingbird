@@ -1,12 +1,13 @@
 # Getting started
 
-Install a Mockingbird emulator, create a runtime, and send vendor-compatible requests. Each
-service is a self-contained TypeScript package with its own coverage matrix and integration guide.
+Run the emulators your application depends on as a fleet: one `mockingbird.json`, one command, each emulator on its own port, and one dashboard for their admin UIs and the notifications your app sends. A fleet is the recommended way to use Mockingbird; a single emulator and in-process use come after it on this page.
 
-## Choose an emulator
+<!-- search: quick start install fleet mockingbird.json mockingbird-fleet serve dashboard ready file ports base url sdk in-process createRuntime serve one emulator -->
 
-Browse the [emulator catalog](https://mockingbird.chrisvouga.dev/services) for your vendor or
-database. Read its package README and coverage matrix before choosing an operation. HTTP
+## Choose your emulators
+
+Browse the [emulator catalog](https://mockingbird.chrisvouga.dev/services) for your vendors and
+databases. Read each package README and coverage matrix before relying on an operation. HTTP
 emulators expose a Fetch handler; database emulators expose their documented SQL or protocol
 interfaces. Each package declares the vendor surface it implements and its parity evidence.
 
@@ -21,7 +22,120 @@ The docs star four featured emulators as starting points for common integrations
 
 Use the [Featured filter](https://mockingbird.chrisvouga.dev/services?featured=1) to find them in the catalog. Stars mark editorial selections; check each emulator's coverage and parity separately.
 
-## Install the packages
+## Run a fleet
+
+This fleet runs Stripe for payments, Twilio for SMS and WhatsApp, and Resend for email. Swap in
+the emulators your app calls: a service is named by its package suffix
+(`@crvouga/mockingbird-service-stripe` is `stripe`). Node 22 or newer.
+
+1. **Install** the fleet tool and one package per emulator:
+
+   ```bash
+   npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-stripe @crvouga/mockingbird-service-twilio @crvouga/mockingbird-service-resend
+   ```
+
+2. **Declare** the fleet in `mockingbird.json`, next to your `package.json`:
+
+   ```json
+   {
+     "control": { "port": 9000 },
+     "services": {
+       "stripe": { "port": 9001 },
+       "twilio": { "port": 9002 },
+       "resend": { "port": 9003 }
+     }
+   }
+   ```
+
+3. **Start** it. One process runs every emulator, the controller and the dashboard; Ctrl+C stops them all:
+
+   ```bash
+   npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+   # fleet ready: http://127.0.0.1:9000/__admin/fleet
+   # dashboard:   http://127.0.0.1:8790
+   ```
+
+4. **Point your app at it.** `ready.json` has every emulator's URL as `services.<name>.url`. Set
+   each SDK's base URL to it, with any synthetic key; no vendor account is needed:
+
+   ```bash
+   STRIPE_API_HOST=127.0.0.1 STRIPE_API_PORT=9001 STRIPE_API_PROTOCOL=http   # new Stripe(key, { host, port, protocol })
+   TWILIO_API_BASE_URL=http://127.0.0.1:9002                                 # twilioMockUrl(uri, base)
+   RESEND_BASE_URL=http://127.0.0.1:9003                                     # read by the resend SDK itself
+   ```
+
+   The variable names are your application's own, except `RESEND_BASE_URL`. Each
+   [package README](https://mockingbird.chrisvouga.dev/services) shows the SDK option to set.
+
+5. **Open the dashboard** at `http://127.0.0.1:8790`. The **Emulators** tab is every emulator's
+   admin UI: state, clock, faults, request journal and snapshots. The **Notifications** tab shows
+   every SMS, WhatsApp message, email, push and chat message your app sent, on a phone, a webmail
+   inbox and a chat window.
+
+Send a text through the Twilio emulator and watch it arrive in the Notifications tab:
+
+```bash
+curl http://127.0.0.1:9002/api/2010-04-01/Accounts/AC00000000000000000000000000000000/Messages.json \
+  -u AC00000000000000000000000000000000:fixture-token \
+  --data-urlencode "To=+12025550123" --data-urlencode "From=+12025550100" \
+  --data-urlencode "Body=Your code is 123456"
+```
+
+### What the fleet gives you
+
+- **One config, one process.** `mockingbird.json` is the whole stack: HTTP emulators, PostgreSQL
+  and Redis. A failed boot names the service and closes the listeners that already started.
+- **A port per emulator.** Each emulator has its own listener. Give it a fixed port, or
+  `"port": 0` for a free one so parallel fleets never collide; `ready.json` (`--ready-file`, or
+  `--ready-json` on standard output) lists the URLs that were actually bound.
+- **One controller.** `http://127.0.0.1:9000/__admin/fleet` resets, snapshots and restores a
+  namespace across every emulator in one call, and moves their clocks together.
+- **One dashboard.** `--dashboard` serves every emulator's admin UI from one origin, with no
+  further install. `--dashboard-port <n>` moves it; `"dashboard": true` in the config turns it on
+  without a flag.
+- **Notifications, with the same flag.** The Notifications tab reads the Twilio, Resend, FCM, SES,
+  SNS, Customer.io, Mailosaur and Slack emulators in the fleet. Tests read the same messages from
+  the dashboard's JSON API: `GET http://127.0.0.1:8790/api/wait?to=%2B12025550123`. See
+  [Notifications](NOTIFICATIONS.md).
+
+### Control the fleet
+
+The controller applies one operation to every emulator. Between tests:
+
+```bash
+# Every emulator back to its boot state
+curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset
+
+# Save the whole fleet, then put it back
+curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/snapshots
+curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/snapshots/<id>/restore
+```
+
+Each emulator also answers its own [admin controls](ADMIN_CONTROLS.md) on its own port
+(`http://127.0.0.1:9001/__admin/...`), and a request can pick a
+[namespace](admin-controls/NAMESPACES.md) with `x-mockingbird-namespace`, so parallel test workers
+share one fleet without sharing state. [Fleets](FLEETS.md) covers the configuration, discovery,
+the controller's routes, archives and the dashboard.
+
+## Other ways to run it
+
+A fleet is the default. Use one of these when it is more than the job needs:
+
+| Way | Use it when | Where |
+| --- | --- | --- |
+| In-process, in a test | The test can hand the SDK a `fetch`; no port, no server | [Run in-process](#run-in-process-in-a-test) |
+| One emulator on a port | The app talks to one vendor | [Serve one emulator](#serve-an-emulator-on-a-local-port) |
+| Mounted in your app | The emulator should share your app's origin | [Mount an emulator](#mount-an-emulator-inside-your-app) |
+| A fleet from code | A test runner's global setup should own the fleet | [`startFleet`](FLEETS.md#dashboard) |
+| Hosted | A shared environment needs stable URLs | [Fleet Cloud](../sites/fleet/README.md) |
+| In a container | The fleet ships as one image | [Single-container reference](../packages/examples/fleet-reference/README.md) |
+
+## Run in-process, in a test
+
+Every HTTP emulator is also a Fetch handler: `createRuntime().fetch(request)` answers the SDK
+inside the test process. Use it for unit and integration tests that can inject a `fetch`.
+
+### Install the packages
 
 This checkout example uses PostgreSQL for products and orders, and Stripe for payments. Install both emulators alongside your development dependencies:
 
@@ -33,11 +147,11 @@ The portable entry runs in Node 22+, Bun 1.2+, browsers, and Workers. Listening 
 the separate `./server` entry or CLI. Follow the service guide for SDK configuration and
 synthetic credentials; local emulation needs no vendor account.
 
-## Build a checkout
+### Build a checkout
 
 Save these three files in the same directory. The Data → API → Client flow reads a product, confirms a payment, and stores the order. The PostgreSQL engine, Stripe emulator, and application API all run locally.
 
-### Data · `data.ts`
+#### Data · `data.ts`
 
 Seed a product catalog and an orders table in the PostgreSQL emulator.
 
@@ -58,7 +172,7 @@ console.log(db.query("SELECT name, price FROM products"))
 // [{ name: "Developer starter kit", price: 2900 }]
 ```
 
-### API · `api.ts`
+#### API · `api.ts`
 
 Read a product, charge it with the Stripe SDK, and persist the order. The emulator answers the SDK in this process.
 
@@ -102,7 +216,7 @@ export const api = {
 }
 ```
 
-### Client · `client.ts`
+#### Client · `client.ts`
 
 Place an order through the application's Fetch handler. The whole flow stays local.
 
@@ -124,7 +238,7 @@ console.log(order.paymentStatus)   // "succeeded"
 // PostgreSQL + Stripe + your API, without a single network request.
 ```
 
-### Run the client
+#### Run the client
 
 ```bash
 bun client.ts
@@ -133,9 +247,11 @@ bun client.ts
 
 The client prints `201` and `succeeded`. The paid order remains in PostgreSQL, and the payment remains in the Stripe emulator. The Stripe SDK builds the same request it sends to `api.stripe.com`; its HTTP client hands that request to the emulator in this process, so the application code calling the SDK does not change. Use fresh emulators or reset their state between independent tests.
 
-When your SDK accepts a Fetch implementation, inject the emulator's handler as documented in the service guide. When the SDK requires a base URL, start a listening server.
+When your SDK accepts a Fetch implementation, inject the emulator's handler as documented in the service guide. When the SDK requires a base URL, [run a fleet](#run-a-fleet) or start a single listening server.
 
 ## Serve an emulator on a local port
+
+When the app talks to one vendor, serve that emulator alone. Every service package has a CLI:
 
 ```bash
 npx mockingbird-stripe serve --port 8787

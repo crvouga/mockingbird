@@ -1,4 +1,4 @@
-import { StyleProvider } from "@ant-design/cssinjs"
+import { createCache, StyleProvider } from "@ant-design/cssinjs"
 import {
   ApiOutlined,
   AppstoreOutlined,
@@ -17,6 +17,7 @@ import {
 } from "@ant-design/icons"
 import type { ThemeConfig } from "antd"
 import {
+  Alert,
   App,
   Avatar,
   Badge,
@@ -52,6 +53,12 @@ import {
   SnapshotsView,
   TimelineView,
 } from "./controls.js"
+import {
+  type AdminEnvironment,
+  RuntimeProvider,
+  resolveEnvironment,
+  useRuntime,
+} from "./environment.js"
 import { ManualView } from "./manual.js"
 import { Members } from "./members.js"
 import type { AdminApiConfig, AdminConfig, Api, Manifest, MembersConfig, Panel } from "./model.js"
@@ -179,19 +186,21 @@ const shellTheme = (dark: boolean): ThemeConfig => {
 }
 
 function Vendor({ config, service }: { config: AdminConfig; service: string }) {
+  const runtime = useRuntime()
   const [brand, setBrand] = useState<ReturnType<typeof brandFor>>(null)
   useEffect(() => {
     const controller = new AbortController()
-    fetch(brandCatalogUrl(config.brandsUrl, location.href), {
-      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
-    })
+    runtime
+      .fetch(brandCatalogUrl(config.brandsUrl, runtime.href()), {
+        signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]),
+      })
       .then((response) => (response.ok ? (response.json() as Promise<unknown>) : null))
       .then((catalog: unknown) => {
         if (!controller.signal.aborted) setBrand(brandFor(service, catalog))
       })
       .catch(() => {})
     return () => controller.abort()
-  }, [config.brandsUrl, service])
+  }, [config.brandsUrl, service, runtime])
   if (!brand) return null
   return (
     <Space wrap size="small">
@@ -216,28 +225,62 @@ function Vendor({ config, service }: { config: AdminConfig; service: string }) {
   )
 }
 
-function CustomPanel({ panel, api }: { panel: Panel; api: Api }) {
+function CustomPanel({
+  panel,
+  api,
+  apiConfig,
+}: {
+  panel: Panel
+  api: Api
+  apiConfig: AdminApiConfig
+}) {
+  const runtime = useRuntime()
   const host = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
+  const [inactive, setInactive] = useState(false)
   useEffect(() => {
     const root = host.current
     if (!root) return
     root.innerHTML = panel.html
+    setError(null)
+    setInactive(false)
     let dispose: unknown
-    try {
-      if (panel.script) dispose = new Function("root", "api", panel.script)(root, api) as unknown
-    } catch (error) {
-      setError(errorMessage(error))
+    if (panel.script) {
+      let run: ReturnType<typeof runtime.panelScript>
+      let compiled = true
+      try {
+        run = runtime.panelScript(panel, apiConfig)
+      } catch (error) {
+        compiled = false
+        // A Content Security Policy without 'unsafe-eval' refuses to compile a string.
+        if (error instanceof EvalError) setInactive(true)
+        else setError(errorMessage(error))
+      }
+      if (compiled && !run) setInactive(true)
+      try {
+        if (run) dispose = run(root, api)
+      } catch (error) {
+        setError(errorMessage(error))
+      }
     }
     return () => {
       if (typeof dispose === "function") dispose()
       root.replaceChildren()
     }
-  }, [panel, api])
+  }, [panel, api, apiConfig, runtime])
   return (
     <Card title={panel.title}>
       <Flex vertical gap="middle">
         {panel.description && <Typography.Paragraph>{panel.description}</Typography.Paragraph>}
+        {inactive && (
+          <Alert
+            type="info"
+            showIcon
+            data-testid="admin-panel-inactive"
+            message="This panel works on the emulator's own admin page"
+            description={`${panel.title} is driven by a script the emulator supplies, and this page does not run scripts supplied as text. Open the emulator's own admin page (${apiConfig.service} at /__admin/ui) to use its controls. Every built-in screen works here.`}
+          />
+        )}
         <ErrorNotice error={error} />
         <div ref={host} />
       </Flex>
@@ -254,7 +297,8 @@ function Workspace({
   config: AdminConfig
   popupHost: HTMLElement
 }) {
-  const params = useMemo(() => new URL(location.href).searchParams, [])
+  const runtime = useRuntime()
+  const params = useMemo(() => new URL(runtime.href()).searchParams, [runtime])
   const apiConfigs = useMemo<readonly AdminApiConfig[]>(
     () =>
       config.apis?.length
@@ -270,11 +314,13 @@ function Workspace({
   const [namespace, setNamespace] = useState(params.get("namespace") || "default")
   const [key, setKey] = useState(params.get("admin_key") ?? remember("mockingbird-admin-key") ?? "")
   const [draftKey, setDraftKey] = useState(key)
-  const [view, setView] = useState(location.hash.slice(1) || "overview")
+  const [view, setView] = useState(new URL(runtime.href()).hash.slice(1) || "overview")
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [revision, setRevision] = useState(0)
   const [narrow, setNarrow] = useState(host.clientWidth < 760)
-  const [viewportHeight, setViewportHeight] = useState(window.innerHeight)
+  const [viewportHeight, setViewportHeight] = useState(
+    runtime.viewport?.clientHeight || window.innerHeight,
+  )
   const [collapsed, setCollapsed] = useState(false)
   const [dark, setDark] = useState(
     remember("mockingbird-admin-theme") === "dark" ||
@@ -285,37 +331,38 @@ function Workspace({
   const shellBorder = dark ? "#252d38" : "#e4e8ee"
   const shellSurface = dark ? "#11161d" : "#ffffff"
   const api = useMemo(
-    () => createApi(apiConfig, fetch, namespace, key),
-    [apiConfig, namespace, key],
+    () => createApi(apiConfig, runtime.fetch, namespace, key),
+    [apiConfig, namespace, key, runtime],
   )
   const manifest = useResource<Manifest>(api, "/ui/manifest", 0, false)
   const namespaces = useResource<{ namespaces: string[] }>(api, "/namespaces", revision)
   useEffect(() => {
     const root = host.getRootNode()
-    const viewport = root instanceof ShadowRoot ? root.host : host
+    // The box the shell fills: an embedder's frame, a shadow host, or else the window.
+    const frame = runtime.viewport ?? (root instanceof ShadowRoot ? root.host : undefined)
     const observer = new ResizeObserver(([entry]) => {
       if (!entry || entry.contentRect.width === 0) return
       setNarrow(entry.contentRect.width < 760)
-      setViewportHeight(root instanceof ShadowRoot ? entry.contentRect.height : window.innerHeight)
+      setViewportHeight(frame ? entry.contentRect.height : window.innerHeight)
     })
-    observer.observe(viewport)
+    observer.observe(frame ?? host)
     const resize = () => {
-      if (!(root instanceof ShadowRoot)) setViewportHeight(window.innerHeight)
+      if (!frame) setViewportHeight(window.innerHeight)
     }
     window.addEventListener("resize", resize)
     return () => {
       observer.disconnect()
       window.removeEventListener("resize", resize)
     }
-  }, [host])
+  }, [host, runtime])
   useEffect(() => {
     remember("mockingbird-admin-key", key)
     if (params.has("admin_key")) {
-      const url = new URL(location.href)
+      const url = new URL(runtime.href())
       url.searchParams.delete("admin_key")
-      history.replaceState(null, "", url.href)
+      runtime.replaceUrl(url.href)
     }
-  }, [key, params])
+  }, [key, params, runtime])
   useEffect(() => {
     const open = (event: KeyboardEvent) => {
       if (!(event.metaKey || event.ctrlKey) || event.key.toLocaleLowerCase() !== "k") return
@@ -326,9 +373,10 @@ function Workspace({
       event.stopImmediatePropagation()
       setPaletteOpen(true)
     }
-    document.addEventListener("keydown", open)
-    return () => document.removeEventListener("keydown", open)
-  }, [])
+    const target = runtime.shortcutTarget()
+    target.addEventListener("keydown", open as EventListener)
+    return () => target.removeEventListener("keydown", open as EventListener)
+  }, [runtime])
   const panelList = [...(manifest.data?.panels ?? []), ...(manifest.data?.extensions ?? [])]
   const standardRoutes = manifest.data?.standardRoutes ?? apiConfig.standardRoutes
   const hasSql = panelList.some((panel) => panel.kind === "sql")
@@ -370,9 +418,9 @@ function Workspace({
   const goTo = (nextApi: string, nextView: string) => {
     setApiId(nextApi)
     setView(nextView)
-    const url = new URL(location.href)
+    const url = new URL(runtime.href())
     url.hash = nextView
-    history.replaceState(null, "", url.href)
+    runtime.replaceUrl(url.href)
   }
   const paletteCommands: PaletteCommand[] = [
     ...apiConfigs.flatMap((candidate) =>
@@ -450,7 +498,7 @@ function Workspace({
             {...(panel.description ? { description: panel.description } : {})}
           />
         ) : (
-          panel && <CustomPanel panel={panel} api={api} />
+          panel && <CustomPanel panel={panel} api={api} apiConfig={apiConfig} />
         )
     }
   }
@@ -626,15 +674,28 @@ function Workspace({
   )
 }
 
-/** Bundled once at build time, then executed inside the admin document's scoped environment. */
-export function mount(host: HTMLElement | null, config: AdminConfig): void {
-  mountRoot(host, (popupHost) => (
+/**
+ * Mount the admin shell into `host` and return its dispose function. The prebuilt document
+ * calls this as `MockingbirdAdmin.mount(host, config)`; a page that bundles
+ * `@crvouga/mockingbird-admin-ui/browser` calls it directly and can pass an `env` to answer
+ * requests in-process and keep the shell off the page's own URL.
+ */
+export function mount(
+  host: HTMLElement | null,
+  config: AdminConfig,
+  env?: AdminEnvironment,
+): () => void {
+  return mountRoot(host, env, (popupHost) => (
     <Workspace host={host as HTMLElement} config={config} popupHost={popupHost} />
   ))
 }
 
-export function mountMembers(host: HTMLElement | null, config: MembersConfig): void {
-  mountRoot(host, (popupHost) => (
+export function mountMembers(
+  host: HTMLElement | null,
+  config: MembersConfig,
+  env?: AdminEnvironment,
+): () => void {
+  return mountRoot(host, env, (popupHost) => (
     <ConfigProvider
       getPopupContainer={() => popupHost}
       theme={{
@@ -649,7 +710,11 @@ export function mountMembers(host: HTMLElement | null, config: MembersConfig): v
   ))
 }
 
-function mountRoot(host: HTMLElement | null, render: (popupHost: HTMLElement) => ReactNode): void {
+function mountRoot(
+  host: HTMLElement | null,
+  env: AdminEnvironment | undefined,
+  render: (popupHost: HTMLElement) => ReactNode,
+): () => void {
   if (!host) throw new Error("Admin root is missing")
   const styleRoot = host.getRootNode()
   const mountPoint = document.createElement("div")
@@ -658,12 +723,40 @@ function mountRoot(host: HTMLElement | null, render: (popupHost: HTMLElement) =>
   const root = createRoot(mountPoint)
   root.render(
     <Boundary>
-      <StyleProvider container={styleRoot instanceof ShadowRoot ? styleRoot : document.head}>
-        {render(popupHost)}
-      </StyleProvider>
+      <RuntimeProvider value={resolveEnvironment(env)}>
+        <StyleProvider
+          // One cache per mount: a second mount must write its own styles, not trust the first's.
+          cache={createCache()}
+          container={
+            env?.styleContainer ?? (styleRoot instanceof ShadowRoot ? styleRoot : document.head)
+          }
+        >
+          {render(popupHost)}
+        </StyleProvider>
+      </RuntimeProvider>
     </Boundary>,
   )
-  const dispose = () => root.unmount()
+  let disposed = false
+  const dispose = () => {
+    if (disposed) return
+    disposed = true
+    document.removeEventListener("mockingbird:unmount", dispose)
+    window.removeEventListener("pagehide", dispose)
+    root.unmount()
+    mountPoint.remove()
+    popupHost.remove()
+  }
   document.addEventListener("mockingbird:unmount", dispose, { once: true })
   window.addEventListener("pagehide", dispose, { once: true })
+  return dispose
 }
+
+export type { AdminEnvironment, PanelScript } from "./environment.js"
+export type {
+  AdminApiConfig,
+  AdminConfig,
+  AdminFetch,
+  Api,
+  MembersConfig,
+  Panel,
+} from "./model.js"

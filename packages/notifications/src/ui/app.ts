@@ -10,11 +10,25 @@
  * that shows a notification carries its id, channel, service, recipient, sender and status as
  * `data-*` attributes. Every gesture (swipe, long press) also has a click or key equivalent.
  */
-import type { Channel, Notification, SourceStatus } from "../model.js"
+import { CHANNELS, type Channel, type Notification, type SourceStatus } from "../model.js"
 import { TEST_IDS, type TestId } from "../testids.js"
+import { emoji, mrkdwn, renderAttachments, renderBlocks } from "./chat.js"
 import { icons } from "./icons.js"
 import { createSoundPlayer, type SoundKind } from "./sounds.js"
 import { ROOT_CLASS } from "./styles.js"
+import {
+  activeTab,
+  type ChannelTab,
+  type DeviceLayout,
+  deviceScale,
+  isCompact,
+  moveTab,
+  phoneFit,
+  TAB_LABELS,
+  tabsFor,
+} from "./tabs.js"
+
+export type { ChannelTab, DeviceLayout } from "./tabs.js"
 
 export type MotionPreference = "auto" | "full" | "reduce"
 
@@ -38,10 +52,23 @@ export type AppOptions = {
   motion?: MotionPreference
   /** Fill the host element and scroll inside it, for a tab or panel in another app. */
   embedded?: boolean
-  /** Which devices to show. Default all three. */
+  /** Which devices to show. Default all of them: `sms`, `push`, `email` and `chat`. */
   channels?: Channel[]
+  /**
+   * How the devices share the space. `auto` (default) lays them side by side and switches to one
+   * device at a time, picked with the channel tabs, when the host element is narrower than 800px.
+   * `tabs` always shows one device; `grid` never collapses.
+   */
+  layout?: DeviceLayout
+  /** Show the channel tabs (`All | Text | Push | Email | Chat`). Default true; with `false`, `auto` never collapses. */
+  tabs?: boolean
   /** Show the top bar (namespace, filter, view tabs, sound, emulator status). Default true. */
   chrome?: boolean
+  /**
+   * Draw the devices at this fraction of their full size (a phone is 362 by 760px), from 0.5 to 1,
+   * for a host with less room than the full-size devices need. Default 1.
+   */
+  scale?: number
   /** Called with each batch of new notifications. */
   onArrive?: (added: Notification[]) => void
 
@@ -79,6 +106,7 @@ export type AppOptions = {
       openGroups?: string[]
     }
     email?: { to?: string | null; open?: string | null }
+    chat?: { to?: string | null }
     toast?: string | null
     local?: {
       dismissed?: string[]
@@ -100,6 +128,8 @@ export type AppHandle = {
   show(target: { id?: string; channel?: Channel; to?: string }): void
   setNamespace(namespace: string): void
   setSound(on: boolean): void
+  /** Change the `scale` the devices are drawn at. */
+  setScale(scale: number): void
   /** Stop streams and timers, remove listeners and empty the host. */
   destroy(): void
 }
@@ -116,8 +146,6 @@ const TAPBACKS: { id: Tapback; glyph: string; label: string }[] = [
   { id: "emphasize", glyph: "‼", label: "Emphasize" },
   { id: "question", glyph: "?", label: "Question" },
 ]
-
-const CHANNELS: Channel[] = ["sms", "push", "email"]
 
 export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandle {
   const live = options.live ?? true
@@ -162,7 +190,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     discoveryError: null as string | null,
     version: 0,
     view: (initialView === "timeline" ? "timeline" : "devices") as View,
-    only: (initialView === "sms" || initialView === "email" || initialView === "push"
+    only: ((CHANNELS as readonly string[]).includes(initialView ?? "")
       ? initialView
       : null) as Channel | null,
     search: "",
@@ -183,6 +211,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       wake: false,
     },
     email: { to: null as string | null, open: null as string | null, transition: false },
+    chat: { to: null as string | null },
     inspect: null as string | null,
     toast: null as { text: string; undo?: () => void } | null,
     arrived: new Set<string>(options.arrived ?? []),
@@ -192,6 +221,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     sms: { ...state.sms, ...init.sms },
     push: { ...state.push, ...init.push },
     email: { ...state.email, ...init.email },
+    chat: { ...state.chat, ...init.chat },
     toast: init.toast ? { text: init.toast } : null,
   })
   // A view named in the link wins over `initial`.
@@ -218,6 +248,33 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
   /** A deep link to one recipient keeps that recipient, whatever else arrives. */
   const pinned = pinnedTo && state.only ? { channel: state.only, to: pinnedTo } : null
   if (params.get("follow") === null && pinned) state.follow = false
+
+  // ── Layout: side by side, or one device at a time behind the channel tabs ────
+
+  const enabled = CHANNELS.filter(
+    (channel) => options.channels === undefined || options.channels.includes(channel),
+  )
+  const layout: DeviceLayout = options.layout ?? "auto"
+  let scale = deviceScale(options.scale)
+  let compact = layout === "tabs"
+  /** The channel last picked, which a narrow layout falls back to when nothing is selected. */
+  let lastTab: Channel | null = state.only
+  const tab = (): ChannelTab => activeTab(enabled, compact, state.only, lastTab)
+
+  /** Measure the host: whether the devices collapse to tabs, and how far a phone must shrink to fit. */
+  const fit = (): boolean => {
+    const width = root.clientWidth
+    root.style.setProperty("--mbn-scale", String(scale))
+    if (width > 0) root.style.setProperty("--mbn-fit", String(phoneFit(width, scale)))
+    const next = isCompact(
+      options.tabs === false && layout === "auto" ? "grid" : layout,
+      width,
+      scale,
+    )
+    if (next === compact) return false
+    compact = next
+    return true
+  }
 
   const reducedMotion = () =>
     typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -286,7 +343,10 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
 
   /** The attributes every element showing one notification carries. */
   const nAttrs = (n: Notification) =>
-    `data-notification-id="${esc(n.id)}" data-channel="${n.channel}" data-service="${esc(n.service)}" data-source="${esc(n.source)}" data-to="${esc(n.to)}" data-from="${esc(n.from.address)}" data-status="${esc(n.status ?? "")}" data-created-at="${esc(n.createdAt)}" data-unread="${!seen.has(n.id)}"`
+    `data-notification-id="${esc(n.id)}" data-channel="${n.channel}" data-service="${esc(n.service)}" data-source="${esc(n.source)}" data-to="${esc(n.to)}" data-from="${esc(n.from.address)}" data-status="${esc(n.status ?? "")}" data-created-at="${esc(n.createdAt)}" data-unread="${!seen.has(n.id)}"${isWhatsApp(n) ? ' data-via="whatsapp"' : ""}`
+
+  /** Sent to a `whatsapp:` address: drawn as a WhatsApp chat instead of a text thread. */
+  const isWhatsApp = (n: Notification | undefined) => n?.sms?.via === "whatsapp"
 
   const linkify = (escaped: string): string =>
     escaped.replace(
@@ -302,8 +362,13 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
 
   const isPhone = (value: string) => /^\+?\d[\d\s()-]{5,}$/.test(value)
 
-  const displaySender = (n: Notification): string =>
-    n.from.name ?? (isPhone(n.from.address) ? formatPhone(n.from.address) : n.from.address)
+  /** A sender address without its `whatsapp:` channel prefix. */
+  const bareAddress = (address: string) => address.replace(/^whatsapp:/i, "")
+
+  const displaySender = (n: Notification): string => {
+    const address = bareAddress(n.from.address)
+    return n.from.name ?? (isPhone(address) ? formatPhone(address) : address)
+  }
 
   const initials = (value: string): string => {
     const words = value
@@ -425,6 +490,14 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     sns: "SNS",
     customerio: "Customer.io",
     mailosaur: "Mailosaur",
+    slack: "Slack",
+  }
+
+  const CHANNEL_LABEL: Record<Channel, string> = {
+    sms: "SMS",
+    push: "Push",
+    email: "Email",
+    chat: "Chat",
   }
 
   // ── Data ─────────────────────────────────────────────────────────────────────
@@ -517,11 +590,14 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
   // ── Arrivals ─────────────────────────────────────────────────────────────────
 
   const threadKey = (to: string, from: string) => `${to}|${from}`
+  /** The recipient `show({ channel: "sms", to })` named while they had no conversation yet. */
+  let awaitedSms: string | null = null
   const groupKey = (to: string, app: string) => `${to}|${app}`
 
   const alertFor = (n: Notification): SoundKind | null => {
     if (n.channel === "sms") return local.muted.has(threadKey(n.to, n.from.address)) ? null : "sms"
     if (n.channel === "email") return "email"
+    if (n.channel === "chat") return "chat"
     const platform =
       state.push.skin === "auto"
         ? n.push?.platform === "android"
@@ -546,6 +622,12 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
         if (channel === "sms" && state.sms.thread !== null) state.sms.thread = latest.from.address
       }
       if (channel === "push" && state.push.to === latest.to) state.push.wake = true
+    }
+    const awaited = awaitedSms && newest.find((n) => n.channel === "sms" && n.to === awaitedSms)
+    if (awaited) {
+      state.sms.to = awaited.to
+      state.sms.thread = awaited.from.address
+      awaitedSms = null
     }
     const kinds = new Set(added.map(alertFor).filter((k): k is SoundKind => k !== null))
     for (const kind of kinds) sound.play(kind)
@@ -617,6 +699,8 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
 
   // ── Chrome ───────────────────────────────────────────────────────────────────
 
+  /** Ties each tab to its device column; unique per mount so two harnesses can share a page. */
+  const uid = `mbn-${Math.random().toString(36).slice(2, 8)}`
   root.classList.add(ROOT_CLASS)
   if (options.embedded) root.classList.add("embedded")
   root.dataset.testid = TEST_IDS.app
@@ -624,11 +708,13 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
   root.innerHTML = `
 <header class="topbar" data-region="topbar" ${tid(TEST_IDS.topbar)}></header>
 <div data-region="notice"></div>
+<div class="channel-tabs" data-region="tabs" role="tablist" aria-label="Notification channels" ${tid(TEST_IDS.channelTabs)} hidden></div>
 <div class="mbn-scroll" data-region="scroll">
 <section class="devices" data-region="devices">
-  <div class="device-col" data-region="col-sms"></div>
-  <div class="device-col" data-region="col-push"></div>
-  <div class="device-col wide" data-region="col-email"></div>
+  <div class="device-col" data-region="col-sms" id="${uid}-panel-sms"></div>
+  <div class="device-col" data-region="col-push" id="${uid}-panel-push"></div>
+  <div class="device-col wide" data-region="col-email" id="${uid}-panel-email"></div>
+  <div class="device-col wide chat-col" data-region="col-chat" id="${uid}-panel-chat"></div>
 </section>
 <section class="timeline" data-region="timeline" hidden></section>
 </div>
@@ -649,6 +735,8 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       connected: String(state.connected),
       sound: String(sound.enabled),
       motion: motion(),
+      layout: compact ? "tabs" : "grid",
+      tab: tab(),
     })
   }
 
@@ -694,7 +782,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
             .map((s) => `<b>${esc(s.name)}</b>: ${esc(s.error)}`)
             .join(" · ")}</div>`
         : !state.sources.length
-          ? `<div class="notice" ${tid(TEST_IDS.notice)} data-kind="empty" style="border-color:#3a3f4b;background:#171a21;color:#9aa1b1">No messaging emulators found yet. Start the fleet with twilio, resend, fcm, ses, sns, customerio or mailosaur.</div>`
+          ? `<div class="notice" ${tid(TEST_IDS.notice)} data-kind="empty" style="border-color:#3a3f4b;background:#171a21;color:#9aa1b1">No messaging emulators found yet. Start the fleet with twilio, resend, fcm, ses, sns, customerio, mailosaur or slack.</div>`
           : ""
   }
 
@@ -721,9 +809,20 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
   const countBadge = (n: number, testId: TestId) =>
     n ? `<span class="count" ${tid(testId)} data-count="${n}">${n}</span>` : ""
 
+  /**
+   * The strip above a device. Every device gets the same two fixed rows (title, then recipient),
+   * so the frames below start at the same height whatever controls a device adds.
+   */
+  const deviceHead = (heading: string, badge: string, select: string, controls = "") =>
+    `<div class="device-head"><div class="head-row"><h2>${heading} ${badge}</h2>${controls}</div>${select}</div>`
+
   const statusBar = (light = false) => `
   <div class="statusbar ${light ? "light" : ""}"><span>${clock(new Date(nowMs())).replace(/\s?[AP]M$/i, "")}</span>
   <span class="icons">${icons.signal()}${icons.wifi()}${icons.battery()}</span></div>`
+
+  /** The CSS zoom on an element (`scale`, the narrow fit): its own lengths are that much smaller on screen. */
+  const zoomOf = (el: Element): number =>
+    (el as Element & { currentCSSZoom?: number }).currentCSSZoom || 1
 
   /** Animate elements with a stable `data-flip` key from where they were to where they are now. */
   const flip = (container: HTMLElement, mutate: () => void) => {
@@ -735,7 +834,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     for (const el of container.querySelectorAll<HTMLElement>("[data-flip]")) {
       const top = before.get(el.dataset.flip ?? "")
       if (top === undefined) continue
-      const dy = top - el.getBoundingClientRect().top
+      const dy = (top - el.getBoundingClientRect().top) / zoomOf(el)
       if (Math.abs(dy) < 1) continue
       el.animate([{ transform: `translateY(${dy}px)` }, { transform: "none" }], {
         duration: 380,
@@ -771,7 +870,9 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
 
   const avatarFor = (n: Notification | undefined) => {
     const name = n ? displaySender(n) : ""
-    return isPhone(n?.from.address ?? "") && !n?.from.name ? icons.person() : esc(initials(name))
+    return isPhone(bareAddress(n?.from.address ?? "")) && !n?.from.name
+      ? icons.person()
+      : esc(initials(name))
   }
 
   /** The one-time code iOS would offer above the keyboard: Verify's, or a 4–8 digit run in a code-like text. */
@@ -813,6 +914,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     if (thread && to) {
       markSeen(thread.items.map((n) => n.id))
       const first = thread.items[0]
+      const whatsapp = isWhatsApp(first)
       const otherUnread = threads
         .filter((t) => t !== thread)
         .reduce((s, t) => s + t.items.filter((n) => !seen.has(n.id)).length, 0)
@@ -823,7 +925,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
           const at = Date.parse(n.createdAt)
           const stamp =
             i === 0 || at - last > 15 * 60_000
-              ? `<div class="stamp" ${tid(TEST_IDS.smsTimestamp)}>${i === 0 ? "Text Message<br>" : ""}${iosStamp(n.createdAt)}</div>`
+              ? `<div class="stamp" ${tid(TEST_IDS.smsTimestamp)}>${i === 0 ? (whatsapp ? "WhatsApp<br>" : "Text Message<br>") : ""}${iosStamp(n.createdAt)}</div>`
               : ""
           const next = thread.items[i + 1]
           const tail = !next || Date.parse(next.createdAt) - at > 60_000
@@ -831,22 +933,22 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
           last = at
           prevTail = tail
           const code = otpOf(n)
-          return `${stamp}<div class="bubble-row ${gap ? "gap" : ""}"><div class="bubble ${tail ? "tail" : ""} ${state.arrived.has(n.id) ? "arrive" : ""}" ${nAttrs(n)} ${tid(TEST_IDS.smsBubble)} ${code ? `data-code="${esc(code)}"` : ""} data-longpress="sms-bubble" tabindex="0" aria-haspopup="menu">${bubbleBody(n)}${tapbackBadge(n.id)}</div><span class="bubble-time" ${tid(TEST_IDS.smsBubbleTime)} aria-hidden="true">${esc(clock(new Date(at)))}</span></div>`
+          return `${stamp}<div class="bubble-row ${gap ? "gap" : ""}"><div class="bubble ${tail ? "tail" : ""} ${state.arrived.has(n.id) ? "arrive" : ""}" ${nAttrs(n)} ${tid(TEST_IDS.smsBubble)} ${code ? `data-code="${esc(code)}"` : ""} data-longpress="sms-bubble" tabindex="0" aria-haspopup="menu">${bubbleBody(n)}${whatsapp ? `<span class="wa-time">${esc(clock(new Date(at)))}</span>` : ""}${tapbackBadge(n.id)}</div><span class="bubble-time" ${tid(TEST_IDS.smsBubbleTime)} aria-hidden="true">${esc(clock(new Date(at)))}</span></div>`
         })
         .join("")
       const latest = thread.items.at(-1)
       const code = latest ? otpOf(latest) : null
       const menuFor = state.sms.menu ? thread.items.find((n) => n.id === state.sms.menu) : null
       const muted = local.muted.has(threadKey(to, thread.from))
-      screen = `<div class="convo ${transition === "push" && animate() ? "enter" : ""}" ${tid(TEST_IDS.smsConversation)} data-from="${esc(thread.from)}">
+      screen = `<div class="convo ${whatsapp ? "wa" : ""} ${transition === "push" && animate() ? "enter" : ""}" ${tid(TEST_IDS.smsConversation)} data-from="${esc(thread.from)}" data-via="${whatsapp ? "whatsapp" : "sms"}">
       <div class="convo-nav"><div class="bar">
         <button class="back" data-action="sms-back" ${tid(TEST_IDS.smsBack)} aria-label="Back to Messages">${icons.chevronBack()}${otherUnread ? `<span class="badge">${otherUnread}</span>` : ""}</button>
         <div class="avatar">${avatarFor(first)}</div>
-        <div class="who" ${tid(TEST_IDS.smsConversationTitle)}>${esc(first ? displaySender(first) : thread.from)}${muted ? ` <span class="flag">${icons.bellSlash(12)}</span>` : ""} ${icons.chevronRight("#8e8e93")}</div>
+        <div class="who"><span ${tid(TEST_IDS.smsConversationTitle)}>${esc(first ? displaySender(first) : thread.from)}</span>${muted ? ` <span class="flag">${icons.bellSlash(12)}</span>` : ""} ${whatsapp ? '<small class="wa-sub">WhatsApp</small>' : icons.chevronRight("#8e8e93")}</div>
       </div></div>
       <div class="convo-body" data-swipe="sms-convo">${rows}</div>
-      ${code && latest && nowMs() - Date.parse(latest.createdAt) < 10 * 60_000 ? `<button class="qt" data-action="sms-copy-code" data-code="${esc(code)}" ${tid(TEST_IDS.smsCode)}><small>From Messages</small>${esc(code)}</button>` : ""}
-      <div class="convo-input"><span class="plus">${icons.plus()}</span><span class="field-ios">Text Message<span>${icons.mic()}</span></span></div>
+      ${code && latest && nowMs() - Date.parse(latest.createdAt) < 10 * 60_000 ? `<button class="qt" data-action="sms-copy-code" data-code="${esc(code)}" ${tid(TEST_IDS.smsCode)}><small>From ${whatsapp ? "WhatsApp" : "Messages"}</small>${esc(code)}</button>` : ""}
+      <div class="convo-input"><span class="plus">${icons.plus()}</span><span class="field-ios">${whatsapp ? "Message" : "Text Message"}<span>${icons.mic()}</span></span></div>
       ${menuFor ? smsMenu(menuFor) : ""}
     </div>`
     } else {
@@ -864,26 +966,27 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
                 const key = threadKey(to, t.from)
                 const muted = local.muted.has(key)
                 const name = latest ? displaySender(latest) : t.from
+                const whatsapp = isWhatsApp(latest)
                 return `<div class="swipe thread-swipe" data-swipe="sms-thread" data-from="${esc(t.from)}" data-flip="thread:${esc(t.from)}" role="listitem">
             <div class="swipe-actions">
               <div class="side"><button class="act-unread" data-action="thread-unread" data-from="${esc(t.from)}" ${tid(TEST_IDS.smsThreadToggleUnread)}>${unread ? icons.markRead(22) : icons.markUnread(22)}${unread ? "Read" : "Unread"}</button><button class="act-pin" data-action="thread-pin" data-from="${esc(t.from)}" ${tid(TEST_IDS.smsThreadPin)}>${icons.pin(22)}${t.pinned ? "Unpin" : "Pin"}</button></div>
               <div class="side"><button class="act-mute" data-action="thread-mute" data-from="${esc(t.from)}" ${tid(TEST_IDS.smsThreadMute)}>${icons.bellSlash(22)}${muted ? "Show Alerts" : "Hide Alerts"}</button><button class="act-delete" data-action="thread-delete" data-from="${esc(t.from)}" ${tid(TEST_IDS.smsThreadDelete)}>${icons.trash()}Delete</button></div>
             </div>
-            <div class="thread swipe-card" data-action="sms-open" data-from="${esc(t.from)}" ${tid(TEST_IDS.smsThread)} ${latest ? nAttrs(latest) : ""} data-unread="${unread}" data-pinned="${t.pinned}" data-muted="${muted}" role="button" tabindex="0" aria-label="${esc(name)}${unread ? ", unread" : ""}">
-            ${unread ? `<span class="unread" ${tid(TEST_IDS.smsThreadUnread)}></span>` : ""}<div class="avatar">${avatarFor(latest)}</div>
-            <div class="text"><div class="top"><span class="name-line"><span class="name" ${tid(TEST_IDS.smsThreadName)}>${esc(name)}</span>${t.pinned ? `<span class="flag">${icons.pin(13)}</span>` : ""}${muted ? `<span class="flag">${icons.bellSlash(13)}</span>` : ""}</span><span class="when" ${tid(TEST_IDS.smsThreadTime)}>${esc(iosListTime(latest?.createdAt ?? ""))} ${icons.chevronRight()}</span></div>
+            <div class="thread swipe-card" data-action="sms-open" data-from="${esc(t.from)}" ${tid(TEST_IDS.smsThread)} ${latest ? nAttrs(latest) : ""} data-unread="${unread}" data-pinned="${t.pinned}" data-muted="${muted}" role="button" tabindex="0" aria-label="${esc(name)}${whatsapp ? ", WhatsApp" : ""}${unread ? ", unread" : ""}">
+            ${unread ? `<span class="unread" ${tid(TEST_IDS.smsThreadUnread)}></span>` : ""}<div class="avatar ${whatsapp ? "wa" : ""}">${avatarFor(latest)}</div>
+            <div class="text"><div class="top"><span class="name-line"><span class="name" ${tid(TEST_IDS.smsThreadName)}>${esc(name)}</span>${whatsapp ? `<span class="via-wa" ${tid(TEST_IDS.smsThreadVia)}>WhatsApp</span>` : ""}${t.pinned ? `<span class="flag">${icons.pin(13)}</span>` : ""}${muted ? `<span class="flag">${icons.bellSlash(13)}</span>` : ""}</span><span class="when" ${tid(TEST_IDS.smsThreadTime)}>${esc(iosListTime(latest?.createdAt ?? ""))} ${icons.chevronRight()}</span></div>
             <div class="preview" ${tid(TEST_IDS.smsThreadPreview)}>${esc(latest?.sms?.body ?? "")}</div></div></div></div>`
               })
               .join("")}</div>`
-          : `<div class="empty-ios" ${tid(TEST_IDS.smsEmpty)}>${to ? "No Messages" : "No text messages yet.<br><br>SMS sent through Twilio, SNS, Customer.io or Mailosaur shows up here."}</div>`
+          : `<div class="empty-ios" ${tid(TEST_IDS.smsEmpty)}>${to ? "No Messages" : "No text messages yet.<br><br>SMS sent through Twilio, SNS, Customer.io or Mailosaur, and WhatsApp sent through Twilio, show up here."}</div>`
       }
     </div>`
     }
     const col = $("col-sms")
     flip(col, () => {
       col.innerHTML = `
-    <div class="device-head"><h2>Text messages ${countBadge(unreadTotal, TEST_IDS.smsUnreadCount)}</h2>${recipientSelect("sms", "Phone", TEST_IDS.smsRecipient, formatPhone)}</div>
-    <div class="iphone" ${tid(TEST_IDS.smsDevice)} data-screen="${thread ? "conversation" : "threads"}" data-recipient="${esc(to ?? "")}" data-thread="${esc(thread?.from ?? "")}"><div class="screen"><div class="island"></div>${statusBar()}${screen}<div class="home-indicator"></div></div></div>`
+    ${deviceHead("Text messages", countBadge(unreadTotal, TEST_IDS.smsUnreadCount), recipientSelect("sms", "Phone", TEST_IDS.smsRecipient, formatPhone))}
+    <div class="iphone" ${tid(TEST_IDS.smsDevice)} data-screen="${thread ? "conversation" : "threads"}" data-recipient="${esc(to ?? "")}" data-thread="${esc(thread?.from ?? "")}"${thread && isWhatsApp(thread.items[0]) ? ' data-via="whatsapp"' : ""}><div class="screen"><div class="island"></div>${statusBar()}${screen}<div class="home-indicator"></div></div></div>`
     })
     const body = col.querySelector<HTMLElement>(".convo-body")
     // Scroll to the newest message, again once the element is attached and laid out.
@@ -892,6 +995,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     }
     toBottom()
     requestAnimationFrame(toBottom)
+    renderTabs()
   }
 
   const smsMenu = (n: Notification) => {
@@ -1070,15 +1174,19 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     const col = $("col-push")
     flip(col, () => {
       col.innerHTML = `
-    <div class="device-head"><h2>Push ${countBadge(unread, TEST_IDS.pushUnreadCount)}</h2>
-      <div class="controls">${recipientSelect("push", "Device", TEST_IDS.pushRecipient, tokenLabel)}
-      <div class="seg" role="group" aria-label="Phone">${(["auto", "ios", "android"] as const)
+    ${deviceHead(
+      "Push",
+      countBadge(unread, TEST_IDS.pushUnreadCount),
+      recipientSelect("push", "Device", TEST_IDS.pushRecipient, tokenLabel),
+      `<div class="seg" role="group" aria-label="Phone">${(["auto", "ios", "android"] as const)
         .map(
           (s) =>
             `<button data-action="skin" data-value="${s}" ${tid(TEST_IDS.pushSkin)} aria-pressed="${state.push.skin === s}">${s === "auto" ? "Auto" : s === "ios" ? "iOS" : "Android"}</button>`,
         )
-        .join("")}</div></div></div>${device}`
+        .join("")}</div>`,
+    )}${device}`
     })
+    renderTabs()
   }
 
   // ── Email: web mail ──────────────────────────────────────────────────────────
@@ -1200,7 +1308,11 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     const col = $("col-email")
     flip(col, () => {
       col.innerHTML = `
-    <div class="device-head"><h2>Email ${countBadge(unreadAll, TEST_IDS.emailUnreadCount)}</h2>${recipientSelect("email", "Mailbox", TEST_IDS.emailRecipient, (t) => t)}</div>
+    ${deviceHead(
+      "Email",
+      countBadge(unreadAll, TEST_IDS.emailUnreadCount),
+      recipientSelect("email", "Mailbox", TEST_IDS.emailRecipient, (t) => t),
+    )}
     <div class="window" ${tid(TEST_IDS.emailDevice)} data-screen="${open ? "message" : "inbox"}" data-recipient="${esc(to ?? "")}">
       <div class="chrome"><span class="lights"><i></i><i></i><i></i></span><span class="omnibox">${icons.lock()} mail.example.test/#inbox${open ? `/${esc(open.providerId)}` : ""}</span></div>
       <div class="mail-top"><span class="icon-btn">${icons.menu()}</span><span class="mail-logo">${icons.envelope()}<span class="lbl">Mail</span></span>
@@ -1228,13 +1340,119 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       })
       frame.srcdoc = mailHtml(open)
     }
-    if (syncUrl && live) {
-      const total = CHANNELS.reduce(
-        (sum, c) => sum + byChannel(c).filter((n) => !seen.has(n.id)).length,
-        0,
-      )
-      document.title = `${total ? `(${total}) ` : ""}${title()} · Mockingbird`
+    updateTitle()
+    renderTabs()
+  }
+
+  const unreadIn = (channel: Channel) => byChannel(channel).filter((n) => !seen.has(n.id)).length
+
+  /** The standalone page's tab title carries the unread total, as a mail tab does. */
+  const updateTitle = () => {
+    if (!syncUrl || !live) return
+    const total = CHANNELS.reduce((sum, c) => sum + unreadIn(c), 0)
+    document.title = `${total ? `(${total}) ` : ""}${title()} · Mockingbird`
+  }
+
+  // ── Chat: team chat window ───────────────────────────────────────────────────
+
+  /** `#alerts` as it is; an incoming webhook by the end of its path. */
+  const chatLabel = (to: string): string =>
+    to.startsWith("/services/") ? `Webhook …${to.slice(-6)}` : to
+
+  const chatDay = (iso: string): string => {
+    const d = new Date(iso)
+    const now = new Date(nowMs())
+    if (sameDay(d, now)) return "Today"
+    const y = new Date(now)
+    y.setDate(now.getDate() - 1)
+    if (sameDay(d, y)) return "Yesterday"
+    return d.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric" })
+  }
+
+  const chatMessage = (n: Notification) => {
+    const c = n.chat
+    const author = n.from.name ?? n.from.address
+    const names = { name: (id: string) => c?.names?.[id] }
+    // A client shows `text` only when there are no blocks; with blocks it is the fallback.
+    const text =
+      c?.text && !c.blocks.length
+        ? `<div class="chat-text" ${tid(TEST_IDS.chatMessageText)}>${mrkdwn(c.text, names)}</div>`
+        : ""
+    const blocks = c?.blocks.length
+      ? `<div class="chat-blocks" ${tid(TEST_IDS.chatMessageBlocks)}>${renderBlocks(c.blocks, names)}</div>`
+      : ""
+    const attachments = c?.attachments.length
+      ? `<div class="chat-attachments" ${tid(TEST_IDS.chatMessageAttachments)}>${renderAttachments(c.attachments, names)}</div>`
+      : ""
+    const reactions = c?.reactions.length
+      ? `<div class="chat-reactions">${c.reactions
+          .map(
+            (r) =>
+              `<span class="chat-reaction" ${tid(TEST_IDS.chatMessageReaction)} data-name="${esc(r.name)}" data-count="${r.count}">${esc(emoji(r.name))} ${r.count}</span>`,
+          )
+          .join("")}</div>`
+      : ""
+    return `<div class="chat-msg ${state.arrived.has(n.id) ? "arrive" : ""}" ${nAttrs(n)} ${tid(TEST_IDS.chatMessage)} data-method="${esc(c?.method ?? "")}" data-ephemeral="${c?.ephemeral ?? false}" data-thread="${esc(c?.threadTs ?? "")}" role="listitem" tabindex="0">
+      <span class="chat-avatar" style="background:${colorFor(n.from.address, APP)}" aria-hidden="true">${esc(initials(author))}</span>
+      <div class="chat-msg-main">
+        <div class="chat-meta"><b ${tid(TEST_IDS.chatMessageAuthor)}>${esc(author)}</b><span class="chat-app">APP</span><span class="chat-time" ${tid(TEST_IDS.chatMessageTime)}>${esc(clock(new Date(n.createdAt)))}</span>${c?.edited ? '<span class="chat-edited">(edited)</span>' : ""}</div>
+        ${c?.ephemeral ? '<div class="chat-note">Only visible to you</div>' : ""}${c?.threadTs ? '<div class="chat-note">replied to a thread</div>' : ""}
+        ${text}${blocks}${attachments}${reactions}
+      </div></div>`
+  }
+
+  const renderChat = () => {
+    const to = state.chat.to
+    const all = byChannel("chat")
+    const items = to
+      ? all.filter((n) => n.to === to).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1))
+      : []
+    markSeen(items.map((n) => n.id))
+    const channels = recipients("chat")
+    const workspace = all[0]?.chat?.workspace ?? "Workspace"
+    let day = ""
+    const list = items
+      .map((n) => {
+        const label = chatDay(n.createdAt)
+        const divider =
+          label === day ? "" : `<div class="chat-day"><span>${esc(label)}</span></div>`
+        day = label
+        return divider + chatMessage(n)
+      })
+      .join("")
+    const col = $("col-chat")
+    col.innerHTML = `
+    ${deviceHead("Chat", countBadge(unreadIn("chat"), TEST_IDS.chatUnreadCount), recipientSelect("chat", "Channel", TEST_IDS.chatRecipient, chatLabel))}
+    <div class="window chat" ${tid(TEST_IDS.chatDevice)} data-recipient="${esc(to ?? "")}" data-workspace="${esc(workspace)}">
+      <div class="chrome"><span class="lights"><i></i><i></i><i></i></span><span class="omnibox">${icons.lock()} chat.example.test/${esc(to ? chatLabel(to).replace(/^#/, "") : "")}</span></div>
+      <div class="chat-body">
+        <nav class="chat-side" aria-label="Channels">
+          <div class="chat-team" ${tid(TEST_IDS.chatWorkspace)}>${esc(workspace)} ${icons.dropdown()}</div>
+          <div class="chat-side-label">Channels</div>
+          ${channels
+            .map(
+              (r) =>
+                `<button class="chat-chan ${r.to === to ? "on" : ""} ${r.unread ? "unread" : ""}" data-action="chat-channel" data-value="${esc(r.to)}" ${tid(TEST_IDS.chatChannel)} data-to="${esc(r.to)}" data-unread="${r.unread}" aria-current="${r.to === to}"><span class="hash">${r.to.startsWith("#") ? "#" : "~"}</span><span class="lbl">${esc(chatLabel(r.to).replace(/^#/, ""))}</span>${r.unread ? `<span class="n">${r.unread}</span>` : ""}</button>`,
+            )
+            .join("")}
+        </nav>
+        <main class="chat-main">
+          <header class="chat-head"><b ${tid(TEST_IDS.chatTitle)}>${esc(to ? chatLabel(to) : "Chat")}</b><span>${items.length ? `${items.length} message${items.length === 1 ? "" : "s"}` : ""}</span></header>
+          <div class="chat-list" role="list">${
+            list ||
+            `<div class="chat-empty" ${tid(TEST_IDS.chatEmpty)}><b>${to ? "No messages in this channel" : "No chat messages yet"}</b>${to ? "" : "Messages posted to the Slack emulator, with chat.postMessage or an incoming webhook, land here."}</div>`
+          }</div>
+          <div class="chat-compose"><span>Message ${esc(to ? chatLabel(to) : "channel")}</span><span class="send">${icons.send()}</span></div>
+        </main>
+      </div>
+    </div>`
+    const log = col.querySelector<HTMLElement>(".chat-list")
+    const toBottom = () => {
+      if (log) log.scrollTop = log.scrollHeight
     }
+    toBottom()
+    requestAnimationFrame(toBottom)
+    renderTabs()
   }
 
   // ── Timeline + inspector ─────────────────────────────────────────────────────
@@ -1248,11 +1466,11 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
               n,
             ) => `<tr data-action="inspect" data-id="${esc(n.id)}" ${nAttrs(n)} ${tid(TEST_IDS.timelineRow)} tabindex="0">
             <td class="mono" data-col="time">${esc(timelineTime(n.createdAt))}</td>
-            <td data-col="channel"><span class="chan ${n.channel}">${n.channel === "sms" ? "SMS" : n.channel === "email" ? "Email" : "Push"}</span></td>
+            <td data-col="channel"><span class="chan ${n.channel} ${isWhatsApp(n) ? "wa" : ""}">${isWhatsApp(n) ? "WhatsApp" : CHANNEL_LABEL[n.channel]}</span></td>
             <td data-col="source"><span class="svc-tag">${esc(SERVICE_LABEL[n.service] ?? n.service)}${n.source !== n.service ? ` · ${esc(n.source)}` : ""}</span></td>
-            <td class="mono" data-col="to">${esc(n.channel === "sms" ? formatPhone(n.to) : n.to.length > 28 ? `${n.to.slice(0, 26)}…` : n.to)}</td>
+            <td class="mono" data-col="to">${esc(n.channel === "sms" ? formatPhone(n.to) : n.channel === "chat" ? chatLabel(n.to) : n.to.length > 28 ? `${n.to.slice(0, 26)}…` : n.to)}</td>
             <td data-col="from">${esc(displaySender(n))}</td>
-            <td class="content" data-col="content">${n.email ? `<b>${esc(n.email.subject)}</b> — ` : n.push?.title ? `<b>${esc(n.push.title)}</b> — ` : ""}${esc(n.channel === "email" ? n.preview.slice(0, 120) : (n.sms?.body ?? n.push?.body ?? n.preview))}</td>
+            <td class="content" data-col="content">${n.email ? `<b>${esc(n.email.subject)}</b> — ` : n.push?.title ? `<b>${esc(n.push.title)}</b> — ` : ""}${esc(n.channel === "email" || n.channel === "chat" ? n.preview.slice(0, 120) : (n.sms?.body ?? n.push?.body ?? n.preview))}</td>
             <td class="svc-tag" data-col="status">${esc(n.status ?? "")}</td></tr>`,
           )
           .join("")}</tbody></table>`
@@ -1283,7 +1501,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     const { raw, ...normalized } = n
     const field = (key: string, label: string, value: string) =>
       `<span>${label}</span><span ${tid(TEST_IDS.inspectorField)} data-field="${key}">${esc(value)}</span>`
-    el.innerHTML = `<header><h3 ${tid(TEST_IDS.inspectorTitle)}>${esc(n.channel.toUpperCase())} · ${esc(n.email?.subject ?? n.push?.title ?? n.preview.slice(0, 60))}</h3>
+    el.innerHTML = `<header><h3 ${tid(TEST_IDS.inspectorTitle)}>${esc(isWhatsApp(n) ? "WHATSAPP" : n.channel.toUpperCase())} · ${esc(n.email?.subject ?? n.push?.title ?? n.preview.slice(0, 60))}</h3>
       <button class="btn" data-action="show-on-device" data-id="${esc(n.id)}" ${tid(TEST_IDS.inspectorShowOnDevice)}>Show on device</button><button class="btn" data-action="close-inspector" ${tid(TEST_IDS.inspectorClose)}>Close</button></header>
     <div class="kv">${field("id", "Id", n.id)}${field("providerId", "Provider id", n.providerId)}${field("service", "Service", `${n.service} (${n.source})`)}
       ${field("namespace", "Namespace", n.namespace)}${field("to", "To", n.to)}${field("from", "From", n.from.name ? `${n.from.name} <${n.from.address}>` : n.from.address)}
@@ -1293,9 +1511,70 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
-  const shown = (channel: Channel) =>
-    (state.only === null || state.only === channel) &&
-    (options.channels === undefined || options.channels.includes(channel))
+  const shown = (channel: Channel) => {
+    const current = tab()
+    return enabled.includes(channel) && (current === "all" || current === channel)
+  }
+
+  /** Select a channel tab ("all" = every device side by side). */
+  const selectTab = (value: ChannelTab) => {
+    state.only = value === "all" ? null : value
+    if (value !== "all") lastTab = value
+    if (syncUrl) {
+      const url = new URL(location.href)
+      if (value === "all") url.searchParams.delete("view")
+      else url.searchParams.set("view", value)
+      // A `?to=` deep link belongs to the channel it opened; it must not follow to another tab.
+      for (const key of ["to", "from", "id"]) url.searchParams.delete(key)
+      if (pinned?.channel === value) url.searchParams.set("to", pinned.to)
+      history.replaceState(null, "", url)
+    }
+    render()
+  }
+
+  const tabButton = (value: ChannelTab) =>
+    root.querySelector<HTMLElement>(`[data-action="tab"][data-value="${value}"]`)
+
+  /**
+   * The channel tabs. A tab whose device is not on screen keeps a count of what arrived there, so
+   * nothing is missed while another device is open.
+   */
+  const renderTabs = () => {
+    const el = $("tabs")
+    const tabs = options.tabs === false ? [] : tabsFor(enabled, compact)
+    el.hidden = !tabs.length || state.view !== "devices"
+    for (const channel of CHANNELS) {
+      const col = $(`col-${channel}`)
+      if (tabs.length) {
+        col.setAttribute("role", "tabpanel")
+        col.setAttribute("aria-labelledby", `${uid}-tab-${channel}`)
+      } else {
+        col.removeAttribute("role")
+        col.removeAttribute("aria-labelledby")
+      }
+    }
+    if (el.hidden) {
+      el.innerHTML = ""
+      return
+    }
+    const current = tab()
+    const focused = el.contains(document.activeElement)
+      ? ((document.activeElement as HTMLElement).dataset.value as ChannelTab | undefined)
+      : undefined
+    el.dataset.layout = compact ? "tabs" : "grid"
+    el.innerHTML = tabs
+      .map((value) => {
+        const selected = value === current
+        const unread = value === "all" ? 0 : unreadIn(value)
+        const controls =
+          value === "all"
+            ? enabled.map((c) => `${uid}-panel-${c}`).join(" ")
+            : `${uid}-panel-${value}`
+        return `<button role="tab" id="${uid}-tab-${value}" aria-selected="${selected}" aria-controls="${controls}" tabindex="${selected ? 0 : -1}" data-action="tab" data-value="${value}" ${tid(TEST_IDS.channelTab)} data-unread="${unread}">${TAB_LABELS[value]}${unread && !selected ? `<span class="tab-unread" ${tid(TEST_IDS.channelTabUnread)} aria-label="${unread} unread">${unread}</span>` : ""}</button>`
+      })
+      .join("")
+    if (focused) tabButton(focused)?.focus()
+  }
 
   const render = () => {
     if (destroyed) return
@@ -1308,12 +1587,26 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       if (shown("sms")) renderSms()
       if (shown("push")) renderPush()
       if (shown("email")) renderEmail()
+      if (shown("chat")) renderChat()
     } else renderTimeline()
+    renderTabs()
     renderInspector()
+    updateTitle()
+  }
+
+  /** Bring a channel's device on screen when another tab has it hidden. */
+  const reveal = (channel: Channel) => {
+    if (!enabled.includes(channel)) return
+    // Remembered even when every device is on screen: a host that was hidden (zero width) and
+    // turns out to be narrow falls back to this tab once it is measured.
+    lastTab = channel
+    if (shown(channel)) return
+    state.only = channel
   }
 
   const showOnDevice = (n: Notification) => {
     state.view = "devices"
+    reveal(n.channel)
     state[n.channel].to = n.to
     if (n.channel === "sms") state.sms.thread = n.from.address
     if (n.channel === "email") state.email.open = n.id
@@ -1487,8 +1780,9 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
 
   on("pointermove", (event) => {
     if (!drag || event.pointerId !== drag.pointerId) return
-    const dx = event.clientX - drag.x0
-    const dy = event.clientY - drag.y0
+    const zoom = zoomOf(drag.swipe ?? root)
+    const dx = (event.clientX - drag.x0) / zoom
+    const dy = (event.clientY - drag.y0) / zoom
     if (!drag.axis) {
       if (Math.hypot(dx, dy) < 8) return
       drag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y"
@@ -1617,6 +1911,13 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       case "view":
         state.view = target.dataset.value === "timeline" ? "timeline" : "devices"
         render()
+        break
+      case "tab":
+        selectTab((target.dataset.value as ChannelTab) ?? "all")
+        break
+      case "chat-channel":
+        state.chat.to = target.dataset.value ?? null
+        renderChat()
         break
       case "sound":
         handle.setSound(!sound.enabled)
@@ -1850,6 +2151,15 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       return
     }
     if (target.matches("input, select, textarea")) return
+    if (target.matches('[role="tab"]')) {
+      const next = moveTab(tabsFor(enabled, compact), tab(), event.key)
+      if (next) {
+        event.preventDefault()
+        selectTab(next)
+        tabButton(next)?.focus()
+      }
+      return
+    }
     // Keyboard equivalents of the gestures.
     if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
       const press = target.closest<HTMLElement>("[data-longpress]")
@@ -1919,9 +2229,15 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       if (n) return showOnDevice(n)
       if (target.channel) {
         state.view = "devices"
+        reveal(target.channel)
         if (target.to) state[target.channel].to = target.to
-        if (target.channel === "sms" && target.to)
+        if (target.channel === "sms" && target.to) {
           state.sms.thread = smsThreads(target.to)[0]?.from ?? null
+          // Asked for before the text was read from the emulator: open it when it lands.
+          awaitedSms = state.sms.thread === null ? target.to : null
+        }
+        // A mailbox was asked for, not a message: land on its list, not on whatever was open.
+        if (target.channel === "email") state.email.open = null
         render()
       }
     },
@@ -1932,6 +2248,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       state.sms = { ...state.sms, to: null, thread: null, menu: null }
       state.email = { ...state.email, to: null, open: null }
       state.push.to = null
+      state.chat.to = null
       loadSeen()
       if (syncUrl) {
         const url = new URL(location.href)
@@ -1952,6 +2269,12 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
         } catch {}
       renderTopbar()
     },
+    setScale(next) {
+      if (deviceScale(next) === scale) return
+      scale = deviceScale(next)
+      fit()
+      render()
+    },
     destroy() {
       destroyed = true
       listeners.abort()
@@ -1959,13 +2282,27 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       for (const t of timers) clearTimeout(t)
       timers.clear()
       for (const t of intervals) clearInterval(t)
+      resizes?.disconnect()
       sound.close()
       root.innerHTML = ""
       root.classList.remove(ROOT_CLASS, "embedded")
+      root.style.removeProperty("--mbn-fit")
+      root.style.removeProperty("--mbn-scale")
     },
   }
 
   const intervals: ReturnType<typeof setInterval>[] = []
+
+  // Follow the host element, not the window: embedded in a side panel the harness is narrow on a
+  // wide screen.
+  fit()
+  const refit = () => {
+    if (fit()) render()
+  }
+  const resizes = typeof ResizeObserver === "function" ? new ResizeObserver(refit) : null
+  if (resizes) resizes.observe(root)
+  else if (typeof window !== "undefined")
+    window.addEventListener("resize", refit, { signal: listeners.signal })
 
   if (!live) {
     state.items = [...(options.items ?? [])].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))

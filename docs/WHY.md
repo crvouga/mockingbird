@@ -8,8 +8,11 @@ exactly which vendor operations each emulator supports.
 
 Each HTTP emulator accepts the vendor's request paths, headers, and payload shapes through
 `fetch(Request) → Response`. It returns vendor-compatible responses and error envelopes,
-and stores records in an in-memory SQL engine. Inject its Fetch handler into your client or
-point an official SDK at its local server.
+and stores records in an in-memory SQL engine. Run the ones your application calls as a [fleet](FLEETS.md): one `mockingbird.json`, one
+`mockingbird-fleet serve --dashboard`, each emulator on its own port, and one dashboard for their
+admin UIs and the notifications your app sent. Then point each official SDK at its emulator's URL.
+In a test that can inject a `fetch`, hand the client the emulator's Fetch handler instead and no
+port is opened at all.
 
 The runtime gives development and CI the same controls: isolated namespaces, reproducible
 randomness, reset, snapshots, faults, and request journals. Exercise payment declines, rate
@@ -64,7 +67,7 @@ every SQL snippet against the real packages, so an example that stops working fa
 
 ## For coding agents
 
-Agents integrate an emulator the same way people do, so the same sources are published in forms they
+Agents integrate an emulator the same way people do, starting with a [fleet](FLEETS.md#quick-start), so the same sources are published in forms they
 read well: [`llms.txt`](../llms.txt) indexes every service with the parity it declares, each package README is the
 integration guide (also at `node_modules/<package>/README.md`), and the docs site serves every
 README as markdown at `/services/<name>.md`, all of them in `/llms-full.txt`, and a machine-readable

@@ -6,11 +6,12 @@ import { api, onUnauthorized, type User } from "./api.js"
 import { IconGrid, IconList, IconOrders, IconPlus, IconSettings } from "./components/Icons.js"
 import { Logo } from "./components/Logo.js"
 import { ErrorState, Loading, message } from "./components/States.js"
+import { type InboxTarget, openInbox } from "./inbox.js"
 import { Account } from "./pages/Account.js"
 import { Admin } from "./pages/Admin.js"
 import { Checkout } from "./pages/Checkout.js"
 import { Dashboard } from "./pages/Dashboard.js"
-import { Landing } from "./pages/Landing.js"
+import { Landing, signInLinkToken } from "./pages/Landing.js"
 import { Orders } from "./pages/Orders.js"
 import { Shop } from "./pages/Shop.js"
 import { configureRouter, navigate, type Route, useRoute } from "./router.js"
@@ -21,17 +22,32 @@ const LINKS: { route: Route; label: string; icon: FunctionComponent }[] = [
   { route: "orders", label: "Orders", icon: IconOrders },
   { route: "results", label: "Results", icon: IconList },
 ]
-const App = () => {
+type Notice = { text: string; inbox?: InboxTarget }
+
+/**
+ * The emailed sign-in link lands on the standalone server as `/?sign-in=…`.
+ * Redeem it once, then drop it from the address so a reload does not retry a
+ * used link. Embedded, the app has no address of its own and never looks.
+ */
+const redeemSignInLink = async (): Promise<User | null> => {
+  const token = signInLinkToken(window.location.search)
+  if (!token) return null
+  window.history.replaceState(null, "", window.location.pathname + window.location.hash)
+  return (await api.emailLink(token)).user
+}
+
+const App = ({ embedded }: { embedded: boolean }) => {
   const route = useRoute()
   const [user, setUser] = useState<User | null | undefined>(undefined)
   const [error, setError] = useState<string | null>(null)
   const [checkoutId, setCheckoutId] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const load = async () => {
     setError(null)
     try {
-      setUser((await api.me()).user)
+      const viaLink = embedded ? null : await redeemSignInLink()
+      setUser(viaLink ?? (await api.me()).user)
     } catch (error) {
       setError(message(error))
     }
@@ -91,7 +107,7 @@ const App = () => {
       <div class="cove-workspace">
         <header class="cove-topbar"><span>${route === "account" ? "Account settings" : route === "checkout" ? "Secure checkout" : route === "admin" ? "Administration" : LINKS.find((link) => link.route === route)?.label}</span><span class="cove-topbar-right"><span class="cove-role">${user.role}</span><button class="cove-btn cove-btn-ghost cove-btn-sm" onClick=${() => navigate("account")}>Account</button></span></header>
         <main class="cove-main" id="cove-content"><div class="cove-container">
-          ${notice && html`<div class="cove-alert cove-alert-success cove-notice" role="status"><span>${notice}</span><button class="cove-btn cove-btn-ghost cove-btn-sm" aria-label="Dismiss notification" onClick=${() => setNotice(null)}>Dismiss</button></div>`}
+          ${notice && html`<div class="cove-alert cove-alert-success cove-notice" role="status"><span>${notice.text}</span><span class="cove-notice-actions">${notice.inbox && html`<button class="cove-btn cove-btn-ghost cove-btn-sm" data-testid="open-inbox" onClick=${() => openInbox(notice.inbox)}>Open Notifications</button>`}<button class="cove-btn cove-btn-ghost cove-btn-sm" aria-label="Dismiss notification" onClick=${() => setNotice(null)}>Dismiss</button></span></div>`}
           ${error && html`<${ErrorState} error=${error} retry=${() => setError(null)}/>`}
           ${route === "dashboard" && html`<${Dashboard} user=${user}/>`}
           ${route === "shop" && html`<${Shop} onCheckout=${startCheckout}/>`}
@@ -99,7 +115,12 @@ const App = () => {
             route === "checkout" &&
             html`<${Checkout} checkoutSessionId=${checkoutId} onPaid=${() => {
               setCheckoutId(null)
-              setNotice("Payment successful. Your order is being prepared.")
+              setNotice({
+                text: user.email
+                  ? `Payment successful. We emailed your receipt to ${user.email}.`
+                  : "Payment successful. Your order is being prepared.",
+                ...(user.email ? { inbox: { channel: "email", to: user.email } } : {}),
+              })
               navigate("orders")
             }}/>`
           }
@@ -114,7 +135,7 @@ const App = () => {
 export const mountApp = (root: HTMLElement, embedded = false): (() => void) => {
   configureRouter(embedded)
   root.classList.add("cove-app")
-  render(html`<${App}/>`, root)
+  render(html`<${App} embedded=${embedded}/>`, root)
   return () => render(null, root)
 }
 if (typeof document !== "undefined") {

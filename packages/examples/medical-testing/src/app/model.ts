@@ -32,8 +32,22 @@ export type User = {
   name: string | null
   picture: string | null
   role: Role
+  /** Highlight new reports and next steps on the overview. */
   notifications: boolean
+  /** The verified number texts go to, in E.164. Null until the member verifies one. */
+  phone: string | null
+  /** How that number wants its texts. */
+  phoneChannel: TextChannel
+  /** Order updates per channel. Security messages (codes, sign-in alerts) always send. */
+  notify: NotificationPreferences
 }
+export type TextChannel = "sms" | "whatsapp"
+export const isTextChannel = (value: unknown): value is TextChannel =>
+  value === "sms" || value === "whatsapp"
+export type NotificationPreferences = { email: boolean; text: boolean; push: boolean }
+/** What "Send a test" in Account can fire. `chat` is the staff channel. */
+export const TEST_NOTIFICATIONS = ["email", "text", "push", "chat"] as const
+export type TestNotification = (typeof TEST_NOTIFICATIONS)[number]
 export type Marker = {
   name: string
   value: number

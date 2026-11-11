@@ -10,9 +10,14 @@
  *
  * Every rule of the stylesheet is scoped to the UI root (`.mb-notifications`), so it can sit next
  * to the host app's own styles.
+ *
+ * `mountDashboard` puts that UI and the emulator admin dashboard behind one tab bar:
+ *
+ *   const dashboard = mountDashboard(host, {
+ *     emulators: { mount: (panel) => mountAdmin(panel) },
+ *     notifications: { harness },
+ *   })
  */
-import type { NotificationHarness } from "./harness.js"
-import { type AppHandle, type AppOptions, createApp } from "./ui/app.js"
 import { ROOT_CLASS, STYLES } from "./ui/styles.js"
 
 export { selectors, TEST_IDS, type TestId } from "./testids.js"
@@ -24,36 +29,12 @@ export {
   type PushSkin,
   type View,
 } from "./ui/app.js"
+export {
+  type DashboardHandle,
+  type DashboardOptions,
+  type DashboardTab,
+  mountDashboard,
+} from "./ui/dashboard.js"
+export { DASHBOARD_ROOT_CLASS, DASHBOARD_STYLES } from "./ui/dashboard-styles.js"
+export { type MountOptions, mountNotifications } from "./ui/mount.js"
 export { ROOT_CLASS, STYLES }
-
-export type MountOptions = Omit<AppOptions, "fetch"> & {
-  /** An in-process harness (anything with a Fetch handler). Omit it to read `baseUrl` over HTTP. */
-  harness?: Pick<NotificationHarness, "fetch">
-  /** Any Fetch-compatible transport to the harness API. Ignored when `harness` is given. */
-  fetch?: NonNullable<AppOptions["fetch"]>
-  /** Add the stylesheet to the host's document or shadow root. Default true. */
-  injectStyles?: boolean
-}
-
-const STYLE_ID = "mockingbird-notifications-styles"
-
-const installStyles = (host: HTMLElement) => {
-  const rootNode = host.getRootNode() as Document | ShadowRoot
-  const target = rootNode instanceof ShadowRoot ? rootNode : document.head
-  if (target.querySelector(`#${STYLE_ID}`)) return
-  const style = document.createElement("style")
-  style.id = STYLE_ID
-  style.textContent = STYLES
-  target.append(style)
-}
-
-/**
- * Mount the live harness UI inside `host`. It fills the element and scrolls inside it
- * (`embedded`), and leaves the page URL alone unless `syncUrl` is set.
- */
-export const mountNotifications = (host: HTMLElement, options: MountOptions = {}): AppHandle => {
-  const { harness, injectStyles = true, ...rest } = options
-  if (injectStyles) installStyles(host)
-  if (harness) rest.fetch = (request) => harness.fetch(request)
-  return createApp(host, { embedded: true, syncUrl: false, ...rest })
-}

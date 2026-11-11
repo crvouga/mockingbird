@@ -12,6 +12,9 @@ const SECRET_KEY = "sk_test_cove_demo"
 const WEBHOOK_SECRET = "whsec_cove_demo"
 const BASE_URL = "https://api.stripe.mock"
 
+/** The events this app subscribed its webhook endpoint to. */
+const FORWARDED_EVENTS = ["checkout.session.completed", "payment_intent.payment_failed"]
+
 const hmacSha256Hex = async (secret: string, message: string): Promise<string> => {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -61,7 +64,7 @@ export const createStripeMockPayments = (params: {
   const stripe = createRuntime({
     accounts: [{ id: ACCOUNT_ID, keys: [SECRET_KEY] }],
     onWebhook: (event: StripeWebhookEvent) => {
-      if (event.type !== "checkout.session.completed") return
+      if (!FORWARDED_EVENTS.includes(event.type)) return
       void deliverWebhook(event.body)
     },
   })
@@ -106,6 +109,17 @@ export const createStripeMockPayments = (params: {
     return { id: session.id, hostedPageUrl: session.url }
   }
 
+  const sessionForPaymentIntent = async (paymentIntentId: string): Promise<string | undefined> => {
+    const response = await stripe.fetch(
+      new Request(
+        `${BASE_URL}/v1/checkout/sessions?payment_intent=${encodeURIComponent(paymentIntentId)}`,
+        { headers: { authorization: `Bearer ${SECRET_KEY}` } },
+      ),
+    )
+    if (!response.ok) return undefined
+    return ((await response.json()) as { data?: { id: string }[] }).data?.[0]?.id
+  }
+
   const constructWebhookEvent = async (
     payload: string,
     signatureHeader: string | null,
@@ -114,7 +128,23 @@ export const createStripeMockPayments = (params: {
     if (!valid) throw new Error("Invalid payments webhook signature")
     const body = JSON.parse(payload) as {
       type: string
-      data: { object: { id: string; metadata: Record<string, string> } }
+      data: {
+        object: {
+          id: string
+          metadata: Record<string, string>
+          last_payment_error?: { message?: string } | null
+        }
+      }
+    }
+    if (body.type === "payment_intent.payment_failed") {
+      // The event is about a PaymentIntent; the app keys orders by Checkout Session.
+      const checkoutSessionId = await sessionForPaymentIntent(body.data.object.id)
+      if (!checkoutSessionId) return { type: "unhandled" }
+      return {
+        type: "payment.failed",
+        checkoutSessionId,
+        reason: body.data.object.last_payment_error?.message ?? "Your card was declined.",
+      }
     }
     if (body.type !== "checkout.session.completed") return { type: "unhandled" }
     return {

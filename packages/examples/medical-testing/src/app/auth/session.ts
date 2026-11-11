@@ -14,14 +14,19 @@ export const SESSION_HEADER = "x-cove-session"
 
 const sessions = new Map<string, string>() // token -> user id
 
+/** One session per sign-in, whichever way the member proved who they are. */
+export const startSession = (user: Pick<UserRow, "id">): string => {
+  const token = crypto.randomUUID()
+  sessions.set(token, user.id)
+  return token
+}
+
 export const startSessionForProfile = async (
   db: Db,
   profile: IdentityProfile,
-): Promise<{ token: string; user: UserRow }> => {
-  const user = await upsertUserFromIdentity(db, profile)
-  const token = crypto.randomUUID()
-  sessions.set(token, user.id)
-  return { token, user }
+): Promise<{ token: string; user: UserRow; created: boolean }> => {
+  const { user, created } = await upsertUserFromIdentity(db, profile)
+  return { token: startSession(user), user, created }
 }
 
 export const signOut = (token: string): void => {

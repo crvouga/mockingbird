@@ -1,17 +1,26 @@
 /**
  * Local demo: boot a fleet with every messaging emulator, serve the harness against it, and send
- * a realistic burst of SMS, email and push so there is something to look at.
+ * a realistic burst of SMS, WhatsApp, email, push and chat so there is something to look at.
  *
  *   bun run --cwd packages/notifications dev            # harness on http://127.0.0.1:8790
  *   bun run --cwd packages/notifications dev --quiet    # no sample traffic
  */
-import { createInstalledServiceLoader, startFleet } from "@crvouga/mockingbird-fleet"
+import { createInstalledServiceLoader, startFleet } from "@crvouga/mockingbird-adapter-node"
 import { createServer } from "../src/server.js"
 import * as send from "../test/send.js"
 
 const quiet = process.argv.includes("--quiet")
 const port = Number(process.env.PORT ?? 8790)
-const services = ["twilio", "resend", "fcm", "ses", "sns", "customerio", "mailosaur"] as const
+const services = [
+  "twilio",
+  "resend",
+  "fcm",
+  "ses",
+  "sns",
+  "customerio",
+  "mailosaur",
+  "slack",
+] as const
 
 const fleet = await startFleet(
   { log: "off", services: Object.fromEntries(services.map((s) => [s, { port: 0 }])) } as never,
@@ -106,7 +115,54 @@ if (!quiet) {
     subject: "Reset your password",
     html: "<p>Someone asked to reset your password.</p><p><a href='https://acme.example/reset?token=9f2'>Reset password</a></p>",
   })
-  console.log("Sent sample SMS, email and push. Open the harness URL above.")
+  await send.twilioWhatsApp(target("twilio"), {
+    to: phone,
+    body: "Hi Ada, your Acme order #1042 is out for delivery. Reply STOP to opt out.",
+  })
+  await send.twilioVerify(target("twilio"), phone, "default", "whatsapp")
+  await send.slackPost(target("slack"), {
+    channel: "#alerts",
+    text: "Order #1042 shipped",
+    blocks: [
+      { type: "header", text: { type: "plain_text", text: "Order #1042 shipped" } },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: "*Trail running shoes* left the warehouse :package:" },
+        fields: [
+          { type: "mrkdwn", text: "*Carrier*\nExample Post" },
+          { type: "mrkdwn", text: "*Arrives*\nTuesday" },
+        ],
+      },
+      {
+        type: "actions",
+        elements: [
+          { type: "button", style: "primary", text: { type: "plain_text", text: "View order" } },
+          { type: "button", text: { type: "plain_text", text: "Snooze" } },
+        ],
+      },
+      { type: "context", elements: [{ type: "mrkdwn", text: "Sent by the fulfilment worker" }] },
+    ],
+  })
+  await send.slackPost(target("slack"), {
+    channel: "#general",
+    text: "Deploy `web@4f2c1a9` finished in *3m 12s*. <https://acme.example/deploys/918|View the deploy>",
+  })
+  await send.slackWebhook(target("slack"), {
+    text: "Checkout error rate is above 2%",
+    attachments: [
+      {
+        color: "danger",
+        title: "checkout-api",
+        text: "5xx responses: 2.4% over the last 5 minutes",
+        fields: [
+          { title: "Region", value: "us-east-1", short: true },
+          { title: "Since", value: "14:02", short: true },
+        ],
+        footer: "Example Monitoring",
+      },
+    ],
+  })
+  console.log("Sent sample SMS, WhatsApp, email, push and chat. Open the harness URL above.")
 }
 
 const stop = async () => {

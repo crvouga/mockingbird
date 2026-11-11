@@ -3,12 +3,13 @@
  * Alert sounds, synthesized with Web Audio so no audio files ship with the package. Each is a
  * generic tone in the style of its platform: a bright three-note chime for an iPhone text, a
  * glassy two-note chime for an iPhone notification, a soft marimba pluck for Android and a short
- * two-tone ding for new mail. Phones also vibrate where the browser supports it.
+ * two-tone ding for new mail and a woody double knock for team chat. Phones also vibrate where the
+ * browser supports it.
  *
  * Browsers only start audio after a user gesture, so `unlock()` runs on the first pointer or key
  * press inside the UI.
  */
-export type SoundKind = "sms" | "push-ios" | "push-android" | "email"
+export type SoundKind = "sms" | "push-ios" | "push-android" | "email" | "chat"
 
 export type SoundPlayer = {
   play(kind: SoundKind): void
@@ -75,6 +76,10 @@ const VOICES: Record<SoundKind, (ctx: Ctx, out: AudioNode, t: number) => void> =
   email: (ctx, out, t) => {
     bell(ctx, out, t, 987.8, 0.45, 0.7)
     bell(ctx, out, t + 0.16, 1318.5, 0.9, 0.7)
+  },
+  chat: (ctx, out, t) => {
+    mallet(ctx, out, t, 587.3, 0.12)
+    mallet(ctx, out, t + 0.11, 880, 0.2)
   },
 }
 

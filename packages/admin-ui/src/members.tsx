@@ -2,6 +2,7 @@ import { App, Card, Flex, Select, Tabs, Typography } from "antd"
 import { useMemo } from "react"
 import { createApi } from "./api.js"
 import { DataTable, ErrorNotice, Refresh, useAction, useResource } from "./components.js"
+import { useRuntime } from "./environment.js"
 import type { MembersConfig } from "./model.js"
 import { auditTime } from "./model.js"
 
@@ -16,6 +17,7 @@ type AdminData = { users: Member[]; audit: Record<string, unknown>[] }
 
 /** Role administration uses the same component system without imposing a service shell. */
 export function Members({ config }: { config: MembersConfig }) {
+  const runtime = useRuntime()
   const api = useMemo(
     () =>
       createApi(
@@ -23,11 +25,11 @@ export function Members({ config }: { config: MembersConfig }) {
           adminPrefix: config.apiPrefix,
           adminKeyHeader: "x-mockingbird-admin-key",
         },
-        fetch,
+        runtime.fetch,
         "default",
         "",
       ),
-    [config],
+    [config, runtime],
   )
   const resource = useResource<AdminData>(api, "/admin")
   const { message, modal } = App.useApp()

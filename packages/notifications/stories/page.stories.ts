@@ -3,7 +3,7 @@ import type { AppOptions } from "../src/ui/app.js"
 import { allSources, base, everything, MAILBOX, PHONE, sms } from "./fixtures.js"
 import { mount } from "./mount.js"
 
-/** The whole harness page: chrome, source health, and all three devices together. */
+/** The whole harness page: chrome, source health, the channel tabs and every device together. */
 const meta: Meta<AppOptions> = {
   title: "Harness/Page",
   tags: ["vp-desktop"],
@@ -100,5 +100,26 @@ export const DeepLinkOneNotification: Story = {
   }),
 }
 
+export const DeepLinkChatDevice: Story = {
+  args: base(all, { search: `?view=chat&to=${encodeURIComponent("#alerts")}` }),
+  tags: ["vp-mail"],
+}
+
+export const OneChannelTab: Story = { args: base(all, { initial: { only: "chat" } }) }
+export const TabsLayoutForced: Story = { args: base(all, { layout: "tabs" }) }
+export const GridLayoutForced: Story = { args: base(all, { layout: "grid" }), tags: ["vp-mobile"] }
+export const WithoutTabs: Story = { args: base(all, { tabs: false }) }
+export const TwoChannelsOnly: Story = { args: base(all, { channels: ["sms", "chat"] }) }
+
 export const LaptopWidth: Story = { args: base(all), tags: ["vp-laptop"] }
+/** Narrow: the devices become tabs, one at a time; unread counts sit on the other tabs. */
+export const NarrowLaptopWidth: Story = { args: base(all), tags: ["vp-laptop-narrow"] }
 export const PhoneWidth: Story = { args: base(all), tags: ["vp-mobile"] }
+export const PhoneWidthChatTab: Story = {
+  args: base(all, { initial: { only: "chat" } }),
+  tags: ["vp-mobile"],
+}
+export const PhoneWidthEmailTab: Story = {
+  args: base(all, { initial: { only: "email" } }),
+  tags: ["vp-mobile"],
+}

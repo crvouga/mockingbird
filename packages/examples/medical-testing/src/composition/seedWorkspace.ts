@@ -7,21 +7,44 @@ import type { Db } from "../app/ports/db.js"
 
 /** Explicit fictional workspace fixtures, identical in browser and server mode. */
 export const DEMO_ACCOUNTS = [
-  { id: "ada", name: "Ada Lovelace", email: "ada@example.test", role: "patient" },
-  { id: "clinician", name: "Morgan Chen", email: "clinician@example.test", role: "clinician" },
-  { id: "admin", name: "Alex Morgan", email: "admin@example.test", role: "admin" },
-] satisfies { id: string; name: string; email: string; role: Role }[]
+  {
+    id: "ada",
+    name: "Ada Lovelace",
+    email: "ada@example.test",
+    role: "patient",
+    phone: "+14155550100",
+  },
+  {
+    id: "clinician",
+    name: "Morgan Chen",
+    email: "clinician@example.test",
+    role: "clinician",
+    phone: "+14155550101",
+  },
+  {
+    id: "admin",
+    name: "Alex Morgan",
+    email: "admin@example.test",
+    role: "admin",
+    phone: "+14155550102",
+  },
+] satisfies { id: string; name: string; email: string; role: Role; phone: string }[]
 
 export const seedWorkspace = async (db: Db): Promise<void> => {
   for (const account of DEMO_ACCOUNTS) {
-    const user = await upsertUserFromIdentity(db, {
+    const { user } = await upsertUserFromIdentity(db, {
       provider: "google",
       subject: account.id,
       name: account.name,
       email: account.email,
       picture: null,
     })
-    await db.query("UPDATE users SET role = $2 WHERE id = $1", [user.id, account.role])
+    // Seeded members already verified a (fictional, 555) number; new accounts start without one.
+    await db.query("UPDATE users SET role = $2, phone = $3 WHERE id = $1", [
+      user.id,
+      account.role,
+      account.phone,
+    ])
     if (account.role !== "patient") continue
     const tests = await listLabTests(db)
     for (const [index, daysAgo] of [65, 5].entries()) {
@@ -65,6 +88,7 @@ export const seedWorkspace = async (db: Db): Promise<void> => {
       ])
       for (const [step, status, detail] of [
         [1, "fulfilled", "Payment confirmed. Collection kit requested."],
+        [2, "shipped", "Collection kit shipped. USPS tracking 9400 1000 0000 0000 0000."],
         [3, "processing", "Sample received. Laboratory processing started."],
         [4, "results_ready", "Report available. Awaiting clinical review."],
       ] as const) {

@@ -31,5 +31,7 @@ export const runStandaloneServer = async (): Promise<void> => {
   // The harness streams server-sent events; keep those connections open.
   Bun.serve({ port: PORT, idleTimeout: 0, fetch: createServerFetch(demo) })
   console.log(`Example app is running at http://localhost:${PORT}`)
-  console.log(`Notifications (email, SMS, push) at http://localhost:${PORT}${NOTIFICATIONS_PATH}/`)
+  console.log(
+    `Notifications (email, text, push, chat) at http://localhost:${PORT}${NOTIFICATIONS_PATH}/`,
+  )
 }

@@ -31,7 +31,7 @@ const url = notifications.link({ id: invite?.id })
 | `sources()` | Each emulator the harness reads, with its count and last error. |
 | `link({ channel, to, id })` | A URL to the [devices](DEVICES.md) page, opened on one device, recipient or notification, in the client's namespace. |
 
-A filter takes `channel` (`sms`, `email`, `push`), `service`, `source`, `namespace`, `to`, `contains` and `since`, as the [HTTP API](HTTP_API.md) does.
+A filter takes `channel` (`sms`, `email`, `push`, `chat`), `service`, `source`, `namespace`, `to`, `contains` and `since`, as the [HTTP API](HTTP_API.md) does.
 
 ## In the test process
 

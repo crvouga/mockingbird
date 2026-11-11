@@ -21,6 +21,8 @@ Options:
                        or every fleet namespace with --fleet)
   --poll <ms>          Background poll interval (default 750; 0 reads only on demand)
   --admin-key-env <V>  Environment variable holding the admin key (default MOCKINGBIRD_ADMIN_KEY)
+  --tab <name>         Tab the page opens on: notifications (default) or emulators
+  --no-emulators       Serve the notifications UI alone, without the Emulators tab
   --ready-json         Print {"url": …} as one JSON line once listening
   -h, --help           Show this help
 `
@@ -38,6 +40,8 @@ const main = async (argv: string[]): Promise<number> => {
       namespace: { type: "string", multiple: true },
       poll: { type: "string" },
       "admin-key-env": { type: "string" },
+      tab: { type: "string" },
+      "no-emulators": { type: "boolean" },
       "ready-json": { type: "boolean" },
       help: { type: "boolean", short: "h" },
     },
@@ -63,6 +67,8 @@ const main = async (argv: string[]): Promise<number> => {
   const poll = values.poll === undefined ? undefined : Number(values.poll)
   if (poll !== undefined && (!Number.isFinite(poll) || poll < 0))
     throw new Error("--poll: expected milliseconds")
+  if (values.tab !== undefined && values.tab !== "emulators" && values.tab !== "notifications")
+    throw new Error("--tab: expected emulators or notifications")
   const adminKey = process.env[values["admin-key-env"] ?? "MOCKINGBIRD_ADMIN_KEY"]
   const server = await createServer({
     port,
@@ -73,6 +79,8 @@ const main = async (argv: string[]): Promise<number> => {
     ...(values.namespace?.length ? { namespaces: values.namespace } : {}),
     ...(poll !== undefined ? { pollIntervalMs: poll } : {}),
     ...(adminKey ? { adminKey } : {}),
+    ...(values.tab ? { defaultTab: values.tab } : {}),
+    ...(values["no-emulators"] ? { admin: false as const } : {}),
   })
   if (values["ready-json"]) process.stdout.write(`${JSON.stringify({ url: server.url })}\n`)
   else process.stdout.write(`Notifications harness: ${server.url}\n`)

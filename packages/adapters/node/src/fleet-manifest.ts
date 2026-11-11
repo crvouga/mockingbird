@@ -8,6 +8,8 @@ export type EndpointManifest = {
   startedAt: string
   adminBase: string
   healthUrl: string
+  /** The dashboard's URL, when the fleet serves one. */
+  dashboard?: string
   services: Record<
     string,
     {

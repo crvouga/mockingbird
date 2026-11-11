@@ -98,7 +98,113 @@ export const FEATURES = [
   },
 ] as const
 
-/** The site and generated README share an executable Data → API → Client checkout. */
+/**
+ * The recommended way to run Mockingbird, and the quick start every doc leads with: one fleet.
+ * `docs/FLEETS.md` is the guide. The same five steps open `docs/GETTING_STARTED.md`, `llms.txt`,
+ * the fleet package README and each service's `DISCOVERY.md`; keep them in step with this.
+ */
+export const FLEET = {
+  title: "One config. Every emulator on its own port. One dashboard.",
+  intro:
+    "A fleet is the recommended way to run Mockingbird. One `mockingbird.json` names the emulators your app needs, and one command starts each of them on its own isolated port, with one controller to reset, snapshot and namespace them together and one dashboard for every emulator's admin UI and every notification your app sent.",
+  guide: "docs/FLEETS.md",
+  package: "@crvouga/mockingbird-fleet",
+  /** The fleet tool, then one package per emulator the config names. */
+  packages: [
+    "@crvouga/mockingbird-fleet",
+    "@crvouga/mockingbird-service-stripe",
+    "@crvouga/mockingbird-service-twilio",
+    "@crvouga/mockingbird-service-resend",
+  ],
+  configFile: "mockingbird.json",
+  config: `{
+  "control": { "port": 9000 },
+  "services": {
+    "stripe": { "port": 9001 },
+    "twilio": { "port": 9002 },
+    "resend": { "port": 9003 }
+  }
+}`,
+  serve: `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+# fleet ready: http://127.0.0.1:9000/__admin/fleet
+# dashboard:   http://127.0.0.1:8790`,
+  control: `# Every emulator back to its boot state, in one call
+curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset`,
+  steps: [
+    {
+      title: "Install",
+      body: "The fleet tool and one package per emulator, as development dependencies.",
+    },
+    {
+      title: "Declare",
+      body: '`mockingbird.json` names each emulator by its package suffix and gives it a port. `"port": 0` takes a free one.',
+    },
+    {
+      title: "Start",
+      body: "One process starts every emulator, the controller, and with `--dashboard` the dashboard. Ctrl+C stops them all.",
+    },
+    {
+      title: "Point your app at it",
+      body: "Set each SDK's base URL to that emulator's `services.<name>.url` in `ready.json` (here `http://127.0.0.1:9001/` for Stripe). Each package README shows the SDK option to set.",
+    },
+    {
+      title: "Open the dashboard",
+      body: "`http://127.0.0.1:8790` has an **Emulators** tab, with every emulator's state, clock, faults and request journal, and a **Notifications** tab, with every SMS, WhatsApp message, email, push and chat message your app sent, on a phone, an inbox and a chat window.",
+    },
+  ],
+  benefits: [
+    {
+      icon: "layers",
+      title: "One config, one process",
+      body: "`mockingbird.json` is the whole stack: HTTP emulators, PostgreSQL and Redis. One command starts it and Ctrl+C stops it; a failed boot names the service and closes the rest.",
+    },
+    {
+      icon: "plug",
+      title: "A port per emulator",
+      body: 'Every emulator listens on its own port. Give it a fixed one, or `"port": 0` for a free one so two fleets never collide; `ready.json` lists the URLs that were actually bound.',
+    },
+    {
+      icon: "terminal",
+      title: "One controller",
+      body: "`/__admin/fleet` resets, snapshots and restores a namespace across every emulator in one call, moves their clocks together, and waits until they are idle.",
+    },
+    {
+      icon: "grid",
+      title: "One dashboard",
+      body: "`--dashboard` serves every emulator's admin UI from one origin, under an **Emulators** tab. Nothing else to install.",
+    },
+    {
+      icon: "bell",
+      title: "Notifications, with the same flag",
+      body: "The **Notifications** tab shows what Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack accepted, and tests read the same messages from the dashboard's JSON API.",
+    },
+  ],
+  /** Everything else that works, for when a fleet is more than the job needs. */
+  alternatives: [
+    {
+      title: "One emulator",
+      body: "`npx mockingbird-stripe serve --port 8787` serves a single emulator with the same admin controls. Use it when the app talks to one vendor.",
+    },
+    {
+      title: "In-process, in a test",
+      body: "`createRuntime().fetch(request)` answers the SDK inside the test process, with no port and no server. See the checkout below.",
+    },
+    {
+      title: "Mounted in your app",
+      body: '`createRuntime().mount("/api/mock/google")` serves an emulator under your own origin. See [Getting started](docs/GETTING_STARTED.md#mount-an-emulator-inside-your-app).',
+    },
+    {
+      title: "From code",
+      body: "`startFleet(config, { load, dashboard: true })` from `@crvouga/mockingbird-fleet` starts the same fleet inside a test runner's global setup. See [Fleets](docs/FLEETS.md#dashboard).",
+    },
+    {
+      title: "Hosted",
+      body: `[Fleet Cloud](${HOME}/blob/main/sites/fleet/README.md) hosts fleets at stable URLs. \`mockingbird-fleet plan\` and \`apply\` send it a \`mockingbird.yaml\` declaration, and \`serve --config mockingbird.yaml\` runs the same file locally.`,
+    },
+  ],
+} as const
+
+/** The in-process alternative: the site and generated README share an executable Data → API → Client checkout. */
 export const QUICK_START = {
   package: "@crvouga/mockingbird-service-stripe",
   ...CHECKOUT,
@@ -198,14 +304,14 @@ x-mockingbird-fault: status=503; delay=2s`,
 } as const
 
 /**
- * The notifications harness: every SMS, email and push an application sends through the
+ * The notifications harness: every SMS, email, push and chat message an application sends through the
  * messaging emulators, on lifelike devices. `docs/NOTIFICATIONS.md` is the hub and each topic
  * is a file in `docs/notifications/`.
  */
 export const NOTIFICATIONS = {
-  title: "See every text, email and push your app sends.",
+  title: "See every text, email, push and chat message your app sends.",
   intro:
-    "The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app, on a lock screen or notification shade, and in a webmail inbox. Tests read the same messages through a JSON API, and every element carries a test id.",
+    "The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app or a WhatsApp chat, on a lock screen or notification shade, in a webmail inbox, and in a team chat window. Tests read the same messages through a JSON API, and every element carries a test id.",
   guide: "docs/NOTIFICATIONS.md",
   /** Where each topic's page lives: `<pages>/<page>.md`, served at `/docs/notifications/<page>`. */
   pages: "docs/notifications",
@@ -215,7 +321,7 @@ export const NOTIFICATIONS = {
       icon: "message",
       title: "Text messages",
       services: "Twilio · SNS · Customer.io · Mailosaur",
-      body: "Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included.",
+      body: "Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included, and WhatsApp messages open as a WhatsApp chat.",
     },
     {
       icon: "bell",
@@ -229,19 +335,25 @@ export const NOTIFICATIONS = {
       services: "Resend · SES · SNS · Customer.io · Mailosaur",
       body: "An inbox per recipient, to, cc and bcc, with the rendered HTML, attachments and headers. SES raw MIME is parsed.",
     },
+    {
+      icon: "message",
+      title: "Chat",
+      services: "Slack",
+      body: "A team chat window: channels, bot messages with mrkdwn, Block Kit blocks, attachments and reactions, from chat.postMessage and incoming webhooks.",
+    },
   ],
   topics: [
     {
       icon: "terminal",
       title: "Run against a fleet",
       page: "RUN_AGAINST_A_FLEET",
-      body: "`mockingbird-notifications serve --manifest .mockingbird/ready.json` finds the messaging emulators in a fleet, follows every namespace, and skips the rest.",
+      body: "`mockingbird-fleet serve --config mockingbird.json --dashboard` starts the harness with the fleet. It finds the messaging emulators, follows every namespace, and skips the rest.",
     },
     {
       icon: "grid",
       title: "Devices",
       page: "DEVICES",
-      body: "Three devices side by side, a timeline of everything, and links that open one recipient or one message for a screenshot.",
+      body: "Four devices side by side, or one at a time behind channel tabs on a narrow screen, a timeline of everything, and links that open one recipient or one message for a screenshot.",
     },
     {
       icon: "check",
@@ -270,15 +382,14 @@ export const NOTIFICATIONS = {
   ],
   carriers: [
     {
-      label: "Next to a fleet",
+      label: "With a fleet",
       file: "terminal",
       lang: "bash",
       code: `npx mockingbird-fleet serve \\
   --config mockingbird.json \\
-  --ready-file .mockingbird/ready.json
-npx mockingbird-notifications serve \\
-  --manifest .mockingbird/ready.json
-# http://127.0.0.1:8790`,
+  --dashboard
+# dashboard: http://127.0.0.1:8790
+# Emulators tab · Notifications tab`,
     },
     {
       label: "In a test",
@@ -312,9 +423,9 @@ mountNotifications(panel, {
 
 export const CONTRACT = {
   intro:
-    "Every HTTP service ships an in-process `fetch`, a Node server and a CLI, and all answer the same control surface, so a stack learns it once. Every internal path is under `/__admin` by default. Set `adminPrefix` or `serve --admin-prefix` (`MOCKINGBIRD_ADMIN_PREFIX`) to relocate the entire tree; `/health` and `/ns` aliases are removed.",
-  serve: `npx mockingbird-junction serve --port 8787                # one service
-npx mockingbird-junction serve --config mockingbird.json  # every service in the config`,
+    "Every HTTP service ships an in-process `fetch`, a Node server and a CLI, runs in a fleet, and answers the same control surface in each, so a stack learns it once. Every internal path is under `/__admin` by default. Set `adminPrefix` or `serve --admin-prefix` (`MOCKINGBIRD_ADMIN_PREFIX`) to relocate the entire tree; `/health` and `/ns` aliases are removed.",
+  serve: `npx mockingbird-fleet serve --config mockingbird.json --dashboard  # recommended: every service in the config
+npx mockingbird-junction serve --port 8787                           # one service`,
   rows: [
     [
       "`createRuntime()` · `createServer()` (`./server`) · `mockingbird-<service> serve`",
@@ -359,11 +470,11 @@ npx mockingbird-junction serve --config mockingbird.json  # every service in the
   }
 }`,
   configNote:
-    "`mockingbird.json` names services by their package suffix. HTTP services, PostgreSQL and Redis share a supervisor with ephemeral ports, readiness discovery and namespace controls. Use `--ready-file` or `--ready-json` to discover endpoints; see [Fleets](docs/FLEETS.md). SQLite remains an in-process engine.",
+    "`mockingbird.json` names services by their package suffix. HTTP services, PostgreSQL and Redis share a supervisor that gives each its own port (`0` picks a free one), readiness discovery and namespace controls. Use `--ready-file` or `--ready-json` to discover endpoints and `--dashboard` for the combined admin and notifications page; see [Fleets](docs/FLEETS.md). SQLite remains an in-process engine.",
 }
 
 export const AGENTS =
-  "Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests."
+  "Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests."
 
 /**
  * The pages of a guide that has them: `docs/ADMIN_CONTROLS.md` is the hub, and each control is
@@ -445,6 +556,7 @@ export const CONTROL_GROUPS = [
 /** Guides in `docs/`, in the order the README and the site list them. Others follow by name. */
 export const GUIDE_ORDER = [
   "GETTING_STARTED",
+  "FLEETS",
   "ADMIN_CONTROLS",
   "NOTIFICATIONS",
   "WHY",

@@ -52,7 +52,28 @@ export const twilioSms = (
     ),
   )
 
-export const twilioVerify = (t: Target, to: string, namespace = "default") =>
+/** A WhatsApp message: the same Messages API, with `whatsapp:` addresses. */
+export const twilioWhatsApp = (
+  t: Target,
+  input: { to: string; from?: string; body: string },
+  namespace = "default",
+) =>
+  twilioSms(
+    t,
+    {
+      to: `whatsapp:${input.to}`,
+      from: `whatsapp:${input.from ?? "+14155238886"}`,
+      body: input.body,
+    },
+    namespace,
+  )
+
+export const twilioVerify = (
+  t: Target,
+  to: string,
+  namespace = "default",
+  channel: "sms" | "whatsapp" = "sms",
+) =>
   ok(
     t.fetch(
       new Request(`${t.url}/verify/v2/Services/VA00000000000000000000000000000000/Verifications`, {
@@ -62,7 +83,7 @@ export const twilioVerify = (t: Target, to: string, namespace = "default") =>
           "content-type": "application/x-www-form-urlencoded",
           ...nsHeaders(namespace),
         },
-        body: new URLSearchParams({ To: to, Channel: "sms" }),
+        body: new URLSearchParams({ To: to, Channel: channel }),
       }),
     ),
   )
@@ -223,3 +244,35 @@ export const mailosaurIngest = (t: Target, body: Record<string, unknown>) =>
       }),
     ),
   )
+
+/** `chat.postMessage`, as a bot token would call it. */
+export const slackPost = (t: Target, body: Record<string, unknown>, namespace = "default") =>
+  ok(
+    t.fetch(
+      new Request(`${t.url}/api/chat.postMessage`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer xoxb-test",
+          "content-type": "application/json",
+          ...nsHeaders(namespace),
+        },
+        body: JSON.stringify(body),
+      }),
+    ),
+  )
+
+/** An incoming webhook, which answers with the plain text `ok`. */
+export const slackWebhook = async (
+  t: Target,
+  body: Record<string, unknown>,
+  path = "/services/T000/B000/XXXX",
+) => {
+  const response = await t.fetch(
+    new Request(`${t.url}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  )
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`)
+}

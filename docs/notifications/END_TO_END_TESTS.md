@@ -1,6 +1,6 @@
 # End-to-end tests
 
-Assert on a text, email or push the way the user would see it. The harness UI is built to be driven by Playwright, Cypress or any WebDriver client: it says when it is ready, gives everything a test id, and puts the notification's fields on each element that shows it.
+Assert on a text, WhatsApp message, email, push or chat message the way the user would see it. The harness UI is built to be driven by Playwright, Cypress or any WebDriver client: it says when it is ready, gives everything a test id, and puts the notification's fields on each element that shows it.
 
 <!-- search: e2e end to end playwright cypress webdriver test id data-testid selectors TEST_IDS ready data-ready screenshot assert one-time code otp -->
 
@@ -47,15 +47,21 @@ test("the sign-in code is offered above the keyboard", async ({ page }) => {
 
 ## Selectors
 
-`selectors` builds the common CSS selectors: `ready()`, `testId(id)`, `notification(id)`, `smsBubble({from, id})`, `smsThread(from)`, `pushNotification(id)`, `emailRow(id)` and `timelineRow(id)`.
+`selectors` builds the common CSS selectors: `ready()`, `testId(id)`, `notification(id)`, `smsBubble({from, id})`, `smsThread(from)`, `pushNotification(id)`, `emailRow(id)`, `chatMessage(id)`, `chatChannel(to)`, `channelTab(value)` and `timelineRow(id)`.
 
 | Device | Main test ids | State attributes |
 | --- | --- | --- |
 | Top bar | `namespace`, `search`, `view-devices`, `view-timeline`, `follow`, `sound-toggle`, `connection`, `source`, `notice`, `toast`, `toast-undo` | `source`: `data-name`, `data-service`, `data-ok`, `data-count`. `connection`: `data-state`. |
+| Channel tabs | `channel-tabs`, `channel-tab`, `channel-tab-unread` | Root: `data-layout` (`grid` or `tabs`), `data-tab` (`all`, `sms`, `push`, `email`, `chat`). `channel-tab`: `data-value`, `aria-selected`, `data-unread`. |
 | Messages | `sms-device`, `sms-recipient`, `sms-thread` (`-name`, `-preview`, `-time`, `-unread`), `sms-conversation`, `sms-back`, `sms-bubble`, `sms-code`, `sms-menu`, `sms-menu-tapback`, `sms-tapback`, `sms-empty` | `sms-device`: `data-screen` (`threads` or `conversation`), `data-recipient`, `data-thread`. `sms-thread`: `data-pinned`, `data-muted`. |
 | Push | `push-device`, `push-recipient`, `push-skin`, `push-group`, `push-group-more`, `push-notification` (`-title`, `-body`, `-app`, `-time`, `-image`, `-data`, `-meta`), `push-clear`, `push-options`, `push-preview`, `push-settings`, `push-clear-all`, `push-empty` | `push-device`: `data-skin` (`ios` or `android`), `data-platform`. `push-notification`: `data-expanded`, `data-app`, `data-stacked`. |
 | Mail | `email-device`, `email-recipient`, `email-row` (`-from`, `-subject`, `-snippet`, `-date`, `-star`, `-archive`, `-delete`), `email-open`, `email-subject`, `email-from-name`, `email-from-address`, `email-to`, `email-details`, `email-detail`, `email-body`, `email-text`, `email-attachment`, `email-empty` | `email-device`: `data-screen` (`inbox` or `message`). `email-detail`: `data-field`. `email-attachment`: `data-filename`, `data-content-type`, `data-size`. |
+| Chat | `chat-device`, `chat-recipient`, `chat-workspace`, `chat-channel`, `chat-title`, `chat-message` (`-author`, `-time`, `-text`, `-blocks`, `-attachments`, `-reaction`), `chat-unread-count`, `chat-empty` | `chat-device`: `data-recipient`, `data-workspace`. `chat-channel`: `data-to`, `data-unread`, `aria-current`. `chat-message`: `data-method`, `data-ephemeral`, `data-thread`. |
 | Timeline | `timeline`, `timeline-row`, `inspector`, `inspector-json`, `inspector-field`, `inspector-close`, `inspector-show-on-device` | `inspector-json` holds the whole record, `raw` included, as JSON. |
+
+A WhatsApp message carries `data-via="whatsapp"` on its thread, bubble and timeline row; `sms-thread-via` is the label in the thread list, and `sms-device` and `sms-conversation` report `data-via` while a WhatsApp chat is open.
+
+A narrow page shows one device at a time, so a test that opens `/` on a phone-sized viewport clicks `selectors.channelTab("email")` first. A link with `?view=` or `?id=` already opens the right tab.
 
 Controls are real buttons, selects and inputs with accessible names, so `getByRole` works as well.
 

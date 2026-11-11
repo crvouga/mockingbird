@@ -21,7 +21,7 @@ labels: agent-reported, new-service
 
 - Client: <official SDK name@exact version | raw fetch>
 - Pointing it at the emulator: <SDK option or env var, e.g. `ACME_BASE_URL`>
-- Mode: <in-process createRuntime().fetch | served over HTTP>
+- Mode: <in a fleet (mockingbird-fleet serve) | served alone over HTTP | in-process createRuntime().fetch>
 - Why you need an emulator: <e.g. the sandbox is paid, rate-limited, cannot force failures, sends real messages>
 
 ## Auth

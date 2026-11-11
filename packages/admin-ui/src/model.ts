@@ -8,6 +8,8 @@ export type AdminApiConfig = {
   adminKeyHeader: string
   standardRoutes: readonly string[]
 }
+/** The part of `fetch` the admin UI uses, so an embedder can answer requests in-process. */
+export type AdminFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
 export type AdminConfig = {
   standardRoutes: readonly string[]
   adminPrefix: string

@@ -526,7 +526,48 @@ ${scopeReset(".cove-app")}
 .cove-signin-card { width: 100%; padding: 28px; }
 .cove-signin-box { margin: 24px 0; }
 .cove-demo-accounts { border-top: 1px solid var(--cove-border); padding-top: 20px; }
-.cove-demo-account { margin-top: 16px; }
+.cove-demo-account { display: block; width: 100%; margin-top: 8px; padding: 10px 12px; text-align: left; background: transparent; border: 1px solid var(--cove-border); border-radius: 6px; }
+.cove-demo-account:hover { background: var(--cove-panel); }
+.cove-email-form { margin-top: 20px; }
+.cove-email-form .cove-btn { margin-bottom: 10px; }
+.cove-email-form p { margin: 0; }
+.cove-divider { display: flex; align-items: center; gap: 12px; margin: 20px 0 0; font-size: 11px; color: var(--cove-muted); }
+.cove-divider::before, .cove-divider::after { content: ""; flex: 1; border-top: 1px solid var(--cove-border); }
+.cove-signin-box { margin: 16px 0 24px; }
+.cove-code-input { font-size: 20px; letter-spacing: .3em; font-variant-numeric: tabular-nums; text-align: center; min-height: 46px; }
+.cove-code-input::placeholder { color: var(--cove-border); }
+.cove-code-actions { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin: 14px 0 4px; font-size: 12px; }
+.cove-code-actions .cove-btn-link { font-size: 12px; font-weight: 500; }
+.cove-btn-link:disabled { color: var(--cove-muted); text-decoration: none; }
+.cove-inbox-hint { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 16px 0; padding: 12px 14px; border: 1px solid var(--cove-border); border-left: 3px solid var(--cove-primary); border-radius: 6px; background: var(--cove-panel); font-size: 12px; }
+.cove-inbox-hint p { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.cove-inbox-hint .cove-btn { flex: none; background: var(--cove-surface); }
+.cove-signin-card .cove-inbox-hint { flex-direction: column; align-items: stretch; }
+.cove-notice { flex-wrap: wrap; }
+.cove-notice-actions { display: flex; gap: 8px; flex: none; margin-left: auto; }
+.cove-stack { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.cove-card > h2 + .cove-text-sm { margin-top: 4px; }
+.cove-pref-list { margin: 12px 0; border-top: 1px solid var(--cove-border); }
+.cove-pref { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--cove-border); font-size: 13px; cursor: pointer; }
+.cove-pref strong { font-weight: 550; }
+.cove-pref small { display: block; margin-top: 2px; font-size: 11px; color: var(--cove-muted); }
+.cove-switch { appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 36px; height: 20px; margin: 0; border-radius: 999px; background: var(--cove-border); cursor: pointer; transition: background .15s; }
+.cove-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--cove-surface); transition: transform .15s; }
+.cove-switch:checked { background: var(--cove-success); }
+.cove-switch:checked::after { transform: translateX(16px); }
+.cove-switch:disabled { opacity: .6; cursor: default; }
+.cove-phone-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
+.cove-phone-row > div { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; font-size: 14px; }
+.cove-phone-row small { flex-basis: 100%; font-size: 11px; }
+.cove-phone-actions { display: flex; gap: 8px; }
+.cove-choice { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 16px; padding: 0; border: 0; font-size: 13px; }
+.cove-choice legend { padding: 0; margin-bottom: 8px; font-size: 12px; font-weight: 500; }
+.cove-choice label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.cove-choice input { margin: 0; accent-color: var(--cove-primary); }
+.cove-form-actions, .cove-test-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.cove-test-buttons { margin: 14px 0 0; }
+.cove-test-buttons + .cove-alert { margin-top: 14px; }
+.cove-badge-shipped { background: var(--cove-panel); color: var(--cove-ink); }
 .cove-demo-account > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
 .cove-demo-account small { display: block; font-size: 11px; color: var(--cove-muted); margin-top: 5px; }
 .cove-disclaimer { font-size: 11px; line-height: 1.6; }
@@ -574,11 +615,12 @@ ${scopeReset(".cove-app")}
   .cove-tabs button { font-size: 12px; }
   .cove-progress { padding: 14px; }
   .cove-progress li { flex-direction: column; align-items: center; text-align: center; font-size: 10px; }
+  .cove-inbox-hint { flex-direction: column; align-items: stretch; }
   .cove-section-head { flex-wrap: wrap; }
   .cove-file-row { gap: 10px; flex-wrap: wrap; }
   .cove-file-icon { display: none; }
   .cove-footer { font-size: 9px; }
 }
-@media (prefers-reduced-motion: reduce) { .cove-spinner { animation: none; } .cove-btn { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .cove-spinner { animation: none; } .cove-btn, .cove-switch, .cove-switch::after { transition: none; } }
 
 `

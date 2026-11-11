@@ -24,6 +24,8 @@ export type {
   EndpointManifest,
   Fleet,
   FleetChild,
+  FleetDashboard,
+  FleetDashboardStarter,
   FleetDiagnostics,
   FleetOptions,
   FleetTarget,

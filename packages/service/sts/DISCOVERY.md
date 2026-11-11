@@ -4,6 +4,35 @@ This is the installed-package index for coding agents and tooling. All relative 
 inside `node_modules/@crvouga/mockingbird-service-sts/`; no repository checkout is needed to discover the emulator's
 supported surface or documented behavior.
 
+## Run it in a fleet
+
+The recommended way to run this emulator is in a fleet, next to the other emulators the
+application calls: one `mockingbird.json`, one process, each emulator on its own port.
+
+```sh
+npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-sts
+```
+
+`mockingbird.json` (add one entry per installed emulator; `"port": 0` picks a free port):
+
+```json
+{
+  "services": {
+    "sts": { "port": 0 }
+  }
+}
+```
+
+```sh
+npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+```
+
+Read this emulator's URL from `services.<name>.url` in `ready.json` and point the client at it.
+`adminBase` in the same file is the fleet controller, which resets, snapshots and restores every
+emulator in one call, and `dashboard` is one page with every HTTP emulator's admin UI and the
+notifications the application sent. The guide: <https://mockingbird.chrisvouga.dev/docs/fleets>. The README covers running this
+emulator alone or in-process.
+
 ## Capability and behavior sources
 
 | Question | Authoritative file | What it contains |

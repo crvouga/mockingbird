@@ -91,6 +91,7 @@ describe("workspace permissions and records", () => {
     expect(report.timeline.map((event) => event.status)).toEqual([
       "pending_payment",
       "fulfilled",
+      "shipped",
       "processing",
       "results_ready",
     ])

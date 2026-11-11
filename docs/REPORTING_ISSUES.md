@@ -123,8 +123,9 @@ agent needs and cannot guess.
 
 **How you will use it.** Say whether your code calls the API through the vendor's official SDK
 (name and exact version) or through raw `fetch`, how you point it at a different base URL (an SDK
-option or environment variable), and whether you will run the emulator in-process (`createRuntime().fetch`)
-or as a server (`npx mockingbird-<service> serve`). The SDK version decides the wire format the
+option or environment variable), and whether you will run the emulator in a fleet (`npx mockingbird-fleet serve --config mockingbird.json`,
+the recommended way), as a single server (`npx mockingbird-<service> serve`) or in-process
+(`createRuntime().fetch`). The SDK version decides the wire format the
 emulator must speak.
 
 **Surface.** List only the operations you call. For each one, give the method and path, what
