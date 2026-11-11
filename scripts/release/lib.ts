@@ -608,3 +608,58 @@ export async function changelog(pkg: WorkspacePackage, upcoming?: Release): Prom
   }
   return `${lines.join("\n").trimEnd()}\n`
 }
+
+// ── Name reservation ───────────────────────────────────────────────
+
+/**
+ * A new public package is reserved on npm before it merges: a placeholder version under its
+ * own dist-tag lets OIDC publish the real first release from CI (OIDC cannot create packages).
+ * Versions come from git tags, so the placeholder never affects the release plan.
+ */
+export const RESERVED_VERSION = "0.0.0-reserved"
+export const RESERVED_DIST_TAG = "reserved"
+
+export function reserveCommand(): string {
+  return "bun run release:seed -- --reserve"
+}
+
+/** The placeholder's package.json: no code, no bin, nothing a consumer could run. */
+export function reservationManifest(name: string): string {
+  return `${JSON.stringify(
+    {
+      name,
+      version: RESERVED_VERSION,
+      description: `Placeholder reserving ${name} for its first release from ${REPO}. Install a release version instead.`,
+      license: "MIT",
+      repository: { type: "git", url: `git+https://github.com/${REPO}.git` },
+      files: ["README.md"],
+    },
+    null,
+    2,
+  )}\n`
+}
+
+export function reservationReadme(name: string): string {
+  return `# ${name}\n\nThis version only reserves the package name. Releases are published from https://github.com/${REPO}.\n`
+}
+
+/** Public packages npm has never seen, and packages npm could not be asked about. */
+export async function unreservedPackages(
+  names: string[],
+  versions: (name: string) => Promise<string[] | { error: string }> = npmVersions,
+): Promise<{ missing: string[]; errors: { name: string; error: string }[] }> {
+  const missing: string[] = []
+  const errors: { name: string; error: string }[] = []
+  const queue = [...names]
+  const worker = async () => {
+    for (let name = queue.shift(); name; name = queue.shift()) {
+      let result = await versions(name)
+      // One retry: a registry blip should not fail a pull request.
+      if (!Array.isArray(result)) result = await versions(name)
+      if (!Array.isArray(result)) errors.push({ name, error: result.error })
+      else if (result.length === 0) missing.push(name)
+    }
+  }
+  await Promise.all(Array.from({ length: 8 }, worker))
+  return { missing: missing.sort(), errors: errors.sort((a, b) => a.name.localeCompare(b.name)) }
+}

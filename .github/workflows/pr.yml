@@ -197,6 +197,23 @@ jobs:
           path: .smoke-passed
           key: ${{ steps.smoke-key.outputs.key }}
 
+  # Trusted Publishing (OIDC) cannot create an npm package, so a never-published public package
+  # would turn the Release workflow on main red after merge. Catch it here, while a maintainer can
+  # still reserve the name from the branch (bun run release:seed -- --reserve).
+  npm-names:
+    name: npm names
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - name: Every public package exists on npm
+        run: bun run release:npm-names
+
   fleet-container:
     name: Fleet container (${{ matrix.arch }})
     strategy:
@@ -220,7 +237,7 @@ jobs:
   check:
     name: Check
     if: always()
-    needs: [changes, static, shard, smoke, fleet-container]
+    needs: [changes, static, shard, smoke, fleet-container, npm-names]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -236,6 +253,7 @@ jobs:
             .changes.result == "success"
             and .static.result == "success"
             and .["fleet-container"].result == "success"
+            and .["npm-names"].result == "success"
             and ran_or_not_needed("shard"; "shards")
             and ran_or_not_needed("smoke"; "smoke")
           ' > /dev/null

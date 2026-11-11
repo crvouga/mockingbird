@@ -14,10 +14,14 @@ The plan artifact records the commit, versions, and notes before any job pushes 
 
 OIDC cannot create a package that does not exist on npm yet. A maintainer runs `bun run release:seed` once with an interactive npm login; it first-publishes missing packages from `origin/main`, attaches `ci.yml` as each package's Trusted Publisher (`npm trust github`), and reconciles deprecations. The seed spaces bulk trust changes at npm's recommended interval and fails with the exact packages it could not configure; rerunning resumes safely. CI never receives or falls back to a long-lived npm token. Until the seed runs, a never-published package fails the release (as do its dependents), while every independent package still releases. See [docs/SECRETS.md](SECRETS.md).
 
+A new public package is caught before it merges: the pull-request gate's **npm names** job (`bun run release:npm-names`) fails while any public package is missing from npm. A maintainer then runs `bun run release:seed -- --reserve` from the branch. It publishes a code-free placeholder (`0.0.0-reserved`, dist-tag `reserved`) for each missing name and attaches the Trusted Publisher, so CI publishes the real first release (`0.1.0`) through OIDC after merge. Versions come from git tags, so the placeholder never changes the release plan.
+
 ```bash
 bun run release:plan                   # what the next push to main would release
 bun run release:publish -- --dry-run   # plan + pack every tarball, no side effects
 bun run release:seed                   # reconcile npm with origin/main using your npm login
+bun run release:seed -- --reserve      # from a PR branch: claim new packages' npm names + attach trust
+bun run release:npm-names              # fail if any public package is not on npm yet (PR gate)
 bun run release:seed -- --trust-only   # repair existing packages' publishers; no build or publish
 bun run release:seed -- --trust-only --refresh-rejected # refresh publishers rejected by the latest Release
 bun run health                         # unified release, deployment, and infrastructure health
