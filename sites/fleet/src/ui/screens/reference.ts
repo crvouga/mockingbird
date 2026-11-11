@@ -1,5 +1,5 @@
 import { h } from "../dom.js"
-import { ApiError, copyable, ui } from "../runtime.js"
+import { ApiError, copyable, head, properties, ui } from "../runtime.js"
 
 export async function reference() {
   const response = await fetch("/api/openapi.json")
@@ -24,28 +24,18 @@ export async function reference() {
       ])
     }
   return [
-    h(
-      ".head",
-      {},
-      h(
-        "div",
-        {},
-        h("h1", {}, "API reference"),
-        h(
-          "p.sub",
-          {},
-          "Everything this dashboard does is one of these calls. Send ",
-          h("code", {}, "Authorization: Bearer <token or key>"),
-          ".",
-        ),
-      ),
-    ),
-    h(
-      "section.stack",
-      {},
-      copyable(spec.servers[0]?.url ?? "", "Copy base URL"),
-      copyable(`${ui.address.origin()}/api/openapi.json`, "Copy OpenAPI URL"),
-    ),
+    head("API reference", [
+      "Everything this dashboard does is one of these calls. Send ",
+      h("code", {}, "Authorization: Bearer <token or key>"),
+      ".",
+    ]),
+    properties("Where the API lives", [
+      { name: "Base URL", value: copyable(spec.servers[0]?.url ?? "", "Copy") },
+      {
+        name: "OpenAPI document",
+        value: copyable(`${ui.address.origin()}/api/openapi.json`, "Copy"),
+      },
+    ]),
     [...groups].map(([tag, operations]) =>
       h("section", {}, h("h2", {}, tag), h(".list", {}, operations)),
     ),

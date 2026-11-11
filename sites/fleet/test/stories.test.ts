@@ -8,29 +8,19 @@ import { join } from "node:path"
 import { storyNameFromExport, toId } from "storybook/internal/csf"
 import openapi from "../openapi.json" with { type: "json" }
 import { SCHEMAS, type Schema, validate } from "../src/openapi.js"
-import {
-  matchRoute,
-  ORG_TABS,
-  orgTab,
-  type Route,
-  SCREENS,
-  SHELL_STATES,
-} from "../src/ui/routes.js"
-import {
-  DURABILITY,
-  EMULATOR_STATES,
-  emulatorState,
-  FLEET_ACCESS,
-} from "../src/ui/screens/fleet.js"
-import { LIMIT_LABELS } from "../src/ui/screens/usage.js"
-import type * as Api from "../src/ui/stories/fixtures.js"
+import { matchRoute, ROUTES, type RouteDef, type RouteId } from "../src/ui/routes.js"
 import { type MockResponse, type MockRoutes, PENDING } from "../src/ui/stories/mock.js"
-import { BOOT_MARKUP, INTERACTIONS, type Scenario, type Story } from "../src/ui/stories/story.js"
-import { ROLES, SIGN_IN_METHODS } from "../src/ui/types.js"
+import {
+  BOOT_MARKUP,
+  INTERACTIONS,
+  type Interaction,
+  type Scenario,
+  type Story,
+} from "../src/ui/stories/story.js"
 
 const ui = join(import.meta.dir, "../src/ui")
 
-type Loaded = { id: string; title: string; name: string; scenario: Scenario }
+type Loaded = { id: string; title: string; name: string; kind: string; scenario: Scenario }
 
 const stories: Loaded[] = []
 for (const file of [...new Bun.Glob("*.stories.ts").scanSync(join(ui, "stories"))].sort()) {
@@ -42,6 +32,7 @@ for (const file of [...new Bun.Glob("*.stories.ts").scanSync(join(ui, "stories")
       id: toId(meta.title, storyNameFromExport(key)),
       title: meta.title,
       name: storyNameFromExport(key),
+      kind: story.parameters.kind,
       scenario: story.parameters.scenario,
     })
 }
@@ -89,7 +80,7 @@ function contractProblems(key: string, response: MockResponse): string[] {
 
 describe("story fixtures", () => {
   test("there are stories, with unique ids", () => {
-    expect(stories.length).toBeGreaterThan(40)
+    expect(stories.length).toBeGreaterThan(ROUTES.length)
     expect(new Set(stories.map((story) => story.id)).size).toBe(stories.length)
   })
 
@@ -110,256 +101,102 @@ describe("story fixtures", () => {
 })
 
 // ---- coverage ----------------------------------------------------------------------------
+//
+// The rendered side of these rules (that a story really draws the route and state it claims, that
+// every route and shell state is drawn by some story, and that every surface passes `auditSurface`)
+// is checked in a real browser by `scripts/storybook-screenshots.ts`.
 
-class Failure extends Error {
-  constructor(readonly status: number) {
-    super(`HTTP ${status}`)
-  }
+/** The route a story opens on. */
+const routeOf = (scenario: Scenario): RouteDef | undefined =>
+  matchRoute(scenario.path.split("?")[0] ?? "")?.route
+
+/** What a mutation route must be shown doing, each in at least one story. */
+export function requiredStates(route: RouteDef): (Interaction | "idle")[] {
+  if (route.kind !== "mutation") return []
+  return [
+    "idle",
+    "pending",
+    "form-error",
+    ...(route.fields && route.fields.length > 0 ? (["field-error"] as const) : []),
+    route.result ? "secret" : "landed",
+  ]
 }
 
-/**
- * The states a scenario puts on screen, worked out from its address and responses the way the
- * dashboard does: the same route table, the same tab table, the same state function.
- */
-function statesOf({ path, routes, shows = [] }: Scenario): Set<string> {
-  const states = new Set<string>(shows)
-  const read = <T>(key: string): T => {
-    const route = routes[key]
-    if (!route || route === PENDING) throw new Failure(501)
-    if (route.status >= 400) throw new Failure(route.status)
-    return route.body as T
+/** Routes without a story, and mutation states without one; empty when coverage is complete. */
+export function coverageGaps(loaded: readonly Pick<Loaded, "kind" | "scenario">[]): string[] {
+  const shown = new Map<RouteId, Set<string>>()
+  for (const { kind, scenario } of loaded) {
+    const route = routeOf(scenario)
+    if (!route) continue
+    const states = shown.get(route.id) ?? new Set<string>()
+    shown.set(route.id, states)
+    states.add("any")
+    // Idle: opened on its form, as a mutation, with nothing done to it yet.
+    if (kind === "mutation" && !scenario.steps) states.add("idle")
+    for (const state of scenario.shows ?? []) states.add(state)
   }
-  const list = <T>(name: string, key: string): T[] => {
-    const { data } = read<{ data: T[] }>(key)
-    states.add(`${name}:${data.length > 0 ? "populated" : "empty"}`)
-    return data
+  const gaps: string[] = []
+  for (const route of ROUTES as readonly RouteDef[]) {
+    const states = shown.get(route.id)
+    if (!states) {
+      gaps.push(`${route.id} (${route.path}) has no story`)
+      continue
+    }
+    for (const state of requiredStates(route))
+      if (!states.has(state)) gaps.push(`${route.id} has no story showing it ${state}`)
   }
-
-  const org = (id: string, tabName: string) => {
-    const current = read<Api.Org>(`GET /orgs/${id}`)
-    const admin = current.role === "admin" || current.role === "owner"
-    const tab = orgTab(tabName)
-    states.add("screen:org")
-    if (current.suspended) {
-      states.add("org:suspended")
-      if (shows.includes("flash")) states.add("org:suspended:action-refused")
-    }
-    // A tab for admins tells anyone else so, without asking the API for it.
-    if (ORG_TABS.find((entry) => entry.id === tab)?.admin && !admin) {
-      states.add(`org-tab:${tab}:${current.role}:no-access`)
-      return
-    }
-    if (tab === "projects") list("projects", `GET /orgs/${id}/projects`)
-    if (tab === "members") {
-      list("members", `GET /orgs/${id}/members`)
-      if (admin) list("invites", `GET /orgs/${id}/invites`)
-    }
-    if (tab === "usage") {
-      const report = read<Api.Usage>(`GET /orgs/${id}/usage`)
-      const limits = report.limits as Record<string, number>
-      const used = report.usage as Record<string, number>
-      for (const [limit, , counted] of LIMIT_LABELS) {
-        const max = limits[limit] ?? 0
-        if (max === 0) states.add("usage:unlimited")
-        else if (counted && (used[counted] ?? 0) >= max) states.add("usage:at-limit")
-        else states.add("usage:within-limit")
-      }
-      states.add(report.daily.length > 0 ? "usage:requests" : "usage:no-requests")
-    }
-    if (tab === "keys") {
-      const keys = list<Api.ApiKey>("keys", `GET /orgs/${id}/api-keys`)
-      read(`GET /orgs/${id}/projects`)
-      if (keys.some((key) => key.projectId)) states.add("keys:project-scoped")
-      if (keys.some((key) => key.expiresAt)) states.add("keys:expiring")
-      if (keys.some((key) => !key.lastUsedAt)) states.add("keys:never-used")
-    }
-    if (tab === "audit") list("audit", `GET /orgs/${id}/audit`)
-    states.add(`org-tab:${tab}`).add(`org-tab:${tab}:${current.role}`)
-  }
-
-  const screens: Record<Route["screen"], (route: Route, me: Api.Me) => void> = {
-    home: (_route, me) => {
-      if (me.orgs[0] && path === "/") {
-        org(me.orgs[0].id, "projects")
-        states.add("screen:home:opens-first-organization")
-        return
-      }
-      states.add("screen:home").add(`orgs:${me.orgs.length > 0 ? "populated" : "empty"}`)
-      if (me.orgs.some((entry) => entry.suspended)) states.add("orgs:suspended")
-    },
-    org: (route) => org(route.id, route.tab),
-    project: (route) => {
-      const project = read<Api.Project>(`GET /projects/${route.id}`)
-      let role = "no-organization"
-      try {
-        role = read<Api.Org>(`GET /orgs/${project.orgId}`).role ?? role
-      } catch {}
-      list("fleets", `GET /projects/${route.id}/fleets`)
-      states.add("screen:project").add(`project:${role}`)
-    },
-    fleet: (route) => {
-      const fleet = read<Api.Fleet>(`GET /fleets/${route.id}`)
-      read(`GET /projects/${fleet.projectId}`)
-      let role = "no-organization"
-      try {
-        role = read<Api.Org>(`GET /orgs/${fleet.orgId}`).role ?? role
-      } catch {}
-      read("GET /catalog")
-      states.add("screen:fleet").add(`fleet:${role}`).add(`access:${fleet.access}`)
-      states.add(fleet.requestsPerMinute ? "rate:custom" : "rate:organization-ceiling")
-      const emulators = Object.entries(fleet.emulators)
-      if (emulators.length === 0) states.add("emulators:empty")
-      for (const [name, emulator] of emulators) {
-        states.add(`durability:${emulator.durability}`).add(`emulator:${emulatorState(emulator)}`)
-        if (name !== emulator.target) states.add("emulator:second-instance")
-      }
-    },
-    account: () => {
-      list("tokens", "GET /tokens")
-      states.add("screen:account")
-    },
-    "api-reference": () => {
-      read("GET /api/openapi.json")
-      states.add("screen:api-reference")
-    },
-    invite: () => {
-      read("POST /invites/accept")
-      states.add("screen:invite")
-    },
-  }
-
-  let me: Api.Me
-  try {
-    me = read<Api.Me>("GET /me")
-  } catch (error) {
-    if (routes["GET /me"] === PENDING) return states.add("shell:boot")
-    if ((error as Failure).status !== 401) return states.add("shell:unavailable")
-    let auth: Api.Config["auth"]
-    try {
-      auth = read<Api.Config>("GET /config").auth
-    } catch {
-      return states.add("shell:unavailable")
-    }
-    states.add("shell:sign-in")
-    for (const method of SIGN_IN_METHODS) if (auth[method]) states.add(`sign-in:${method}`)
-    if (shows.includes("flash")) states.add("sign-in:refused")
-    return states
-  }
-  try {
-    const route = matchRoute(path)
-    screens[route.screen](route, me)
-  } catch (error) {
-    const { status } = error as Failure
-    states.add(
-      status === 404 ? "shell:not-found" : status === 403 ? "shell:forbidden" : "shell:error",
-    )
-  }
-  return states
+  return gaps
 }
-
-/** Everything that must have a story. The tables are the UI's own, so a new entry needs one. */
-const required = [
-  ...SHELL_STATES.map((state) => `shell:${state}`),
-  ...SCREENS.map((screen) => `screen:${screen}`),
-  ...ORG_TABS.map((tab) => `org-tab:${tab.id}`),
-  // Each tab as each role that is shown it.
-  ...ORG_TABS.flatMap((tab) =>
-    ROLES.filter((role) => !tab.admin || role === "admin" || role === "owner").map(
-      (role) => `org-tab:${tab.id}:${role}`,
-    ),
-  ),
-  // Each admin tab as each role that is refused it.
-  ...ORG_TABS.filter((tab) => tab.admin).flatMap((tab) =>
-    ROLES.filter((role) => role !== "admin" && role !== "owner").map(
-      (role) => `org-tab:${tab.id}:${role}:no-access`,
-    ),
-  ),
-  ...SIGN_IN_METHODS.map((method) => `sign-in:${method}`),
-  "sign-in:refused",
-  ...ROLES.map((role) => `project:${role}`),
-  ...ROLES.map((role) => `fleet:${role}`),
-  "fleet:no-organization",
-  ...Object.keys(DURABILITY).map((mode) => `durability:${mode}`),
-  ...EMULATOR_STATES.map((state) => `emulator:${state}`),
-  ...FLEET_ACCESS.map(([access]) => `access:${access}`),
-  ...INTERACTIONS,
-  "members:populated",
-  ...["orgs", "projects", "invites", "keys", "audit", "fleets", "tokens"].flatMap((name) => [
-    `${name}:empty`,
-    `${name}:populated`,
-  ]),
-  "screen:home:opens-first-organization",
-  "orgs:suspended",
-  "org:suspended",
-  "org:suspended:action-refused",
-  "usage:within-limit",
-  "usage:at-limit",
-  "usage:unlimited",
-  "usage:requests",
-  "usage:no-requests",
-  "keys:project-scoped",
-  "keys:expiring",
-  "keys:never-used",
-  "project:no-organization",
-  "rate:custom",
-  "rate:organization-ceiling",
-  "emulators:empty",
-  "emulator:second-instance",
-]
 
 describe("story coverage", () => {
-  const shown = new Map<string, string[]>()
-  for (const story of stories)
-    for (const state of statesOf(story.scenario))
-      shown.set(state, [...(shown.get(state) ?? []), story.id])
-
-  test("every screen, tab and state has a story", () => {
-    expect(required.filter((state) => !shown.has(state))).toEqual([])
+  test("every route has a story, and every mutation is shown idle, pending, refused and done", () => {
+    expect(coverageGaps(stories)).toEqual([])
   })
 
-  test("every story shows a state that is accounted for", () => {
-    const unknown = [...shown.keys()].filter((state) => !required.includes(state))
-    expect(unknown).toEqual([])
-    expect(stories.filter((story) => statesOf(story.scenario).size === 0)).toEqual([])
+  test("every route declares its kind", () => {
+    for (const route of ROUTES as readonly RouteDef[])
+      expect(["query", "mutation"]).toContain(route.kind)
   })
 
-  test("a story that claims an interaction performs one the API answers for", () => {
-    for (const { id, scenario } of stories) {
-      const shows = scenario.shows ?? []
-      const served = responses(scenario.routes).filter(([key]) => !key.startsWith("GET "))
-      if (shows.length > 0) expect(scenario.steps, id).toBeDefined()
-      if (shows.includes("flash"))
-        expect(
-          served.some(([, response]) => response.status >= 400),
-          id,
-        ).toBe(true)
-      if (shows.some((state) => state.startsWith("secret:")))
-        expect(
-          served.some(([, response]) => response.status === 201),
-          id,
-        ).toBe(true)
+  test("a missing route or state would fail", () => {
+    const without = (id: string) => stories.filter((story) => routeOf(story.scenario)?.id !== id)
+    expect(coverageGaps(without("fleet.rename"))).toContain(
+      "fleet.rename (/fleets/:fleet/rename) has no story",
+    )
+    const noPending = stories.filter(
+      (story) =>
+        !(routeOf(story.scenario)?.id === "org.new" && story.scenario.shows?.includes("pending")),
+    )
+    expect(coverageGaps(noPending)).toContain("org.new has no story showing it pending")
+  })
+
+  test("a story that claims a state acts to reach it", () => {
+    for (const story of stories)
+      if ((story.scenario.shows ?? []).length > 0)
+        expect(story.scenario.steps, `${story.id} claims a state without steps`).toBeDefined()
+  })
+
+  test("claimed states are ones the stories know", () => {
+    for (const story of stories)
+      for (const state of story.scenario.shows ?? []) expect(INTERACTIONS).toContain(state)
+  })
+
+  test("the address of every story is one the router knows, or a deliberate miss", () => {
+    const unknown = stories.filter((story) => !routeOf(story.scenario)).map((story) => story.id)
+    // A page-not-found story opens on an address no route answers; that is its point.
+    for (const id of unknown) expect(id).toMatch(/not-found/)
+  })
+
+  test("a story opened on a mutation route as a mutation is one the route declares", () => {
+    for (const story of stories) {
+      const route = routeOf(story.scenario)
+      if (story.kind === "mutation")
+        expect(route?.kind, `${story.id} is a mutation story on a ${route?.kind}`).toBe("mutation")
     }
-  })
-
-  test("a route or tab without a story would fail", () => {
-    const without = (title: string) =>
-      new Set(
-        stories
-          .filter((story) => story.title !== title)
-          .flatMap((story) => [...statesOf(story.scenario)]),
-      )
-    expect(without("Account").has("screen:account")).toBe(false)
-    expect(without("Organization/Audit log").has("org-tab:audit")).toBe(false)
-    expect(required).toContain("screen:account")
-    expect(required).toContain("org-tab:audit")
-  })
-
-  test("the address of every story is one the router knows", () => {
-    for (const { scenario } of stories) expect(SCREENS).toContain(matchRoute(scenario.path).screen)
   })
 
   test("stories start from the markup index.html ships", async () => {
-    const page = await Bun.file(join(ui, "index.html")).text()
-    expect(page).toContain(`<div id="app">${BOOT_MARKUP}</div>`)
+    const index = await Bun.file(join(ui, "index.html")).text()
+    expect(index).toContain(BOOT_MARKUP)
   })
 })

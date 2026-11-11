@@ -422,6 +422,10 @@ export const suspended = (reason: string) =>
     "org_suspended",
     `This organization is suspended: ${reason}. Contact the operator of this service.`,
   )
+/** A body the API's schema refuses: one `body.<field>: <problem>` per invalid field. */
+export const invalid = (...details: string[]) =>
+  failure(400, "invalid_request", details[0] ?? "Invalid body", details)
+export const conflict = (message: string) => failure(409, "conflict", message)
 export const rateLimited = failure(429, "rate_limited", "Too many API requests.")
 export const tooManySignIns = failure(
   429,
@@ -450,6 +454,14 @@ export const inOrg = (role: Role, overrides: Partial<Org> = {}): MockRoutes => {
   const current = org(role, overrides)
   return { ...signedIn([current]), [`GET /orgs/${current.id}`]: ok(current) }
 }
+
+/** The Web app project's screen, as someone with `role` in its organization. */
+export const inProject = (role: Role, shown: Fleet[] = fleets): MockRoutes => ({
+  ...signedIn([org(role)]),
+  [`GET /projects/${project.id}`]: ok(project),
+  [`GET /orgs/${project.orgId}`]: ok(org(role)),
+  [`GET /projects/${project.id}/fleets`]: ok({ data: shown }),
+})
 
 /** A fleet's screen, in the Web app project, as someone with `role` in its organization. */
 export const inFleet = (shown: Fleet, role: Role = "owner"): MockRoutes => ({

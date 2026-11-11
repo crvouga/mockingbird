@@ -1,19 +1,28 @@
-import { h } from "../dom.js"
+import { type Child, h } from "../dom.js"
+import { mutation } from "../form.js"
+import type { Context } from "../router.js"
+import { titleOf, to } from "../routes.js"
 import {
-  act,
+  action,
   api,
+  aRole,
   atLeast,
-  confirmThen,
   copyable,
-  crumbs,
-  field,
-  flashSlot,
-  form,
+  count,
+  deny,
+  head,
+  justNow,
+  land,
   link,
+  properties,
+  removed,
+  section,
   ui,
 } from "../runtime.js"
-import type { CatalogEntry, Emulator, Fleet, Org, Project } from "../types.js"
+import type { CatalogEntry, Emulator, Fleet, Org, Project, UsageReport } from "../types.js"
+import { projectCrumbs, projectFor } from "./project.js"
 
+/** Durability mode → its name, what it costs, and what a crash loses. */
 export const DURABILITY: Record<string, [string, string]> = {
   strict: [
     "Strict",
@@ -26,10 +35,18 @@ export const DURABILITY: Record<string, [string, string]> = {
   ephemeral: ["Ephemeral", "Memory only. Fastest; state is gone when the service restarts."],
 }
 
-/** Who may call a fleet → how the choice reads. */
-export const FLEET_ACCESS: [string, string][] = [
-  ["open", "Anyone with the URL"],
-  ["key", "Only requests with an API key (x-mockingbird-api-key)"],
+/** Who may call a fleet → how the choice reads, and what it means. */
+export const FLEET_ACCESS: [string, string, string][] = [
+  [
+    "open",
+    "Anyone with the URL",
+    "No Mockingbird credential is needed: vendor SDKs work with only the vendor's own auth. Anyone who learns the URL can call the emulators.",
+  ],
+  [
+    "key",
+    "Only requests with an API key",
+    "Every request must carry x-mockingbird-api-key with a key of this organization or project. Requests without one are refused.",
+  ],
 ]
 
 /** What an emulator's tag can say about its stored state. */
@@ -51,47 +68,79 @@ export function emulatorState(emulator: Emulator): (typeof EMULATOR_STATES)[numb
   return status.loaded ? "no changes yet" : "idle"
 }
 
-/** How many catalog entries a search lists. */
-export const CATALOG_PAGE = 40
-
-export const searchCatalog = (catalog: CatalogEntry[], search: string) => {
-  const query = search.trim().toLowerCase()
-  return catalog
-    .filter(
-      (entry) =>
-        !query ||
-        `${entry.target} ${entry.displayName} ${entry.category}`.toLowerCase().includes(query),
-    )
-    .slice(0, CATALOG_PAGE)
-}
-
 function stateTag(emulator: Emulator) {
   const { status } = emulator
   const state = emulatorState(emulator)
-  if (state === "save failing")
-    return h("span.tag.warn", { title: status.lastError ?? "" }, "save failing")
-  if (state === "unsaved changes") return h("span.tag.warn", {}, "unsaved changes")
+  if (state === "save failing" || state === "unsaved changes") return h("span.tag.warn", {}, state)
   if (state === "saved")
     return h("span.tag.ok", {}, `saved ${new Date(status.lastSavedAt ?? "").toLocaleTimeString()}`)
   return h("span.tag", {}, state)
 }
 
-export async function fleetScreen(fleetId: string) {
+export type FleetContext = {
+  fleet: Fleet
+  project: Project
+  org: Org | undefined
+  role: string | undefined
+}
+
+/** Read a fleet, its project and the caller's role. An unknown role is left to the API to judge. */
+export async function fleetFor(fleetId: string, minimum?: string, what = "This") {
   const fleet = await api<Fleet>("GET", `/fleets/${fleetId}`)
-  const [project, org] = await Promise.all([
-    api<Project>("GET", `/projects/${fleet.projectId}`),
-    api<Org>("GET", `/orgs/${fleet.orgId}`).catch(() => undefined),
-  ])
-  // Everything a fleet lets you change needs the member role. Without the organization the role
-  // is unknown: offer the controls and let the API decide.
-  const canChange = !org || atLeast(org.role, "member")
+  const { project, org, role } = await projectFor(fleet.projectId)
+  if (minimum && org && !atLeast(role, minimum))
+    deny(`${what} is for ${minimum}s and above of ${org.name}. You are ${aRole(role)}.`)
+  return { fleet, project, org, role }
+}
+
+export const fleetCrumbs = ({ fleet, project, org }: FleetContext, ...rest: Child[]) =>
+  projectCrumbs(
+    { project, org, role: org?.role },
+    rest.length > 0 ? link(to("fleet", { fleet: fleet.id }), {}, fleet.name) : fleet.name,
+    ...rest,
+  )
+
+export const loadCatalog = async () => {
   ui.catalog ??= (await api<{ data: CatalogEntry[] }>("GET", "/catalog")).data
-  const catalog = ui.catalog
+  return ui.catalog
+}
+
+export const accessLabel = (access: string) =>
+  FLEET_ACCESS.find(([value]) => value === access)?.[1] ?? access
+
+export async function fleetScreen({ params }: Context) {
+  const context = await fleetFor(params.fleet ?? "")
+  const { fleet, org } = context
+  const catalog = await loadCatalog()
+  // Everything a fleet lets you change needs the member role.
+  const canChange = !org || atLeast(org.role, "member")
+  const at = { fleet: fleet.id }
   const names = Object.keys(fleet.emulators).sort()
-  const emulatorPath = (name: string) => `/fleets/${fleetId}/emulators/${name}`
+  const change = (route: Parameters<typeof to>[0], label: string, what: string) =>
+    canChange && link(to(route, at), { "aria-label": what }, label)
 
   const card = (name: string, emulator: Emulator) => {
     const entry = catalog.find((item) => item.target === emulator.target)
+    const [mode, consequence] = DURABILITY[emulator.durability] ?? [emulator.durability, ""]
+    const here = { fleet: fleet.id, name }
+    const problem = h("p.field-error", { hidden: true })
+    const download = h(
+      "button.linklike",
+      { type: "button", "data-local": "download", "aria-label": `Download the state of ${name}` },
+      "Download state",
+    )
+    download.addEventListener("click", async () => {
+      problem.hidden = true
+      try {
+        save(
+          `${fleet.slug}-${name}-state.json`,
+          await api("GET", `/fleets/${fleet.id}/emulators/${name}/state`),
+        )
+      } catch (error) {
+        problem.textContent = `The state was not downloaded: ${(error as Error).message}`
+        problem.hidden = false
+      }
+    })
     return h(
       "article.emulator",
       { "aria-label": name },
@@ -99,228 +148,321 @@ export async function fleetScreen(fleetId: string) {
         "header",
         {},
         h(
-          "h2.grow",
+          ".grow",
           {},
-          name,
-          name !== emulator.target &&
-            h("span.sub", {}, ` · ${entry?.displayName ?? emulator.target}`),
+          h("h3", {}, name),
+          h(".meta", {}, entry?.displayName ?? emulator.target, entry && ` · ${entry.category}`),
         ),
+        justNow(`emulator:${name}`),
         stateTag(emulator),
       ),
+      emulator.status.lastError &&
+        h("p.notice.warn", {}, h("strong", {}, "Saving is failing. "), emulator.status.lastError),
+      copyable(emulator.url, "Copy URL"),
+      properties(`Settings of ${name}`, [
+        {
+          name: "Durability",
+          value: [h("strong", {}, mode), h("span.prop-about", {}, consequence)],
+          about: `emulator-durability:${name}`,
+          change:
+            canChange &&
+            link(
+              to("emulator.durability", here),
+              { "aria-label": `Change the durability of ${name}` },
+              "Change",
+            ),
+        },
+      ]),
       h(
-        ".body",
+        "footer.row-links",
         {},
-        entry && h("p.sub", {}, entry.description),
-        copyable(emulator.url, "Copy URL"),
-        h(
-          ".durability",
-          { role: "group", "aria-label": `Durability of ${name}` },
-          Object.entries(DURABILITY).map(([mode, [label, consequence]]) =>
-            h(
-              "button",
-              {
-                type: "button",
-                "aria-pressed": String(emulator.durability === mode),
-                disabled: !canChange,
-                onclick: act(() =>
-                  emulator.durability === mode
-                    ? Promise.resolve()
-                    : api("PATCH", emulatorPath(name), { durability: mode }),
-                ),
-              },
-              h("b", {}, label),
-              h("span", {}, consequence),
-            ),
-          ),
-        ),
         canChange &&
-          h(
-            ".actions",
-            {},
-            emulator.durability === "buffered" &&
-              h(
-                "button.small",
-                { type: "button", onclick: act(() => api("POST", `${emulatorPath(name)}/flush`)) },
-                "Save now",
-              ),
-            h(
-              "button.small",
-              {
-                type: "button",
-                onclick: async () =>
-                  download(
-                    `${fleet.slug}-${name}-state.json`,
-                    await api("GET", `${emulatorPath(name)}/state`),
-                  ),
-              },
-              "Download state",
-            ),
-            h(
-              "button.small.danger",
-              {
-                type: "button",
-                onclick: confirmThen(`Reset ${name}? Its state is erased.`, () =>
-                  api("POST", `${emulatorPath(name)}/reset`),
-                ),
-              },
-              "Reset state",
-            ),
-            h(
-              "button.small.danger",
-              {
-                type: "button",
-                onclick: confirmThen(`Remove ${name} from this fleet? Its state is erased.`, () =>
-                  api("DELETE", emulatorPath(name)),
-                ),
-              },
-              "Remove",
-            ),
+          emulator.durability === "buffered" &&
+          link(to("emulator.save", here), { "aria-label": `Save ${name} now` }, "Save now"),
+        download,
+        canChange &&
+          link(
+            to("emulator.reset", here),
+            { "aria-label": `Reset the state of ${name}` },
+            "Reset state",
+          ),
+        canChange &&
+          link(
+            to("emulator.remove", here),
+            { class: "danger", "aria-label": `Remove ${name}` },
+            "Remove",
           ),
       ),
+      problem,
     )
   }
-
-  const results = h(".catalog", { hidden: true, role: "region", "aria-label": "Catalog" })
-  const search = h("input", {
-    type: "search",
-    placeholder: `Search ${catalog.length} emulators: stripe, s3, twilio…`,
-    "aria-label": "Search emulators",
-  }) as HTMLInputElement
-  const showResults = () => {
-    const matches = searchCatalog(catalog, search.value)
-    results.hidden = false
-    results.replaceChildren(
-      ...(matches.length > 0
-        ? matches.map((entry) => {
-            // A second instance of the same emulator gets a numbered name.
-            let name = entry.target
-            for (let n = 2; fleet.emulators[name]; n++) name = `${entry.target}-${n}`
-            return h(
-              "button",
-              {
-                type: "button",
-                onclick: act(() =>
-                  api("PUT", emulatorPath(name), { target: entry.target, durability: "buffered" }),
-                ),
-              },
-              h("b", {}, entry.displayName),
-              h("small", {}, `${entry.category} · ${entry.description}`),
-            )
-          })
-        : [h("p.row.meta", {}, "No emulator matches that search.")]),
-    )
-  }
-  search.addEventListener("input", showResults)
-  search.addEventListener("focus", showResults)
 
   return [
-    crumbs(
-      link(`/orgs/${fleet.orgId}`, {}, "Organization"),
-      link(`/projects/${project.id}`, {}, project.name),
+    fleetCrumbs(context),
+    head(
       fleet.name,
+      [
+        canChange
+          ? "Point each vendor SDK's base URL at its emulator below."
+          : "You are a viewer: you can look at this fleet and use its URLs, not change it.",
+        justNow(`fleet:${fleet.id}`),
+      ],
+      canChange && action(to("emulator.add", at), "Add an emulator", "primary"),
     ),
-    h(
-      ".head",
-      {},
-      h(
-        "div",
-        {},
-        h("h1", {}, fleet.name),
-        h("p.sub", {}, "Point each vendor SDK's base URL at its emulator below."),
-        !canChange &&
-          h("p.sub", {}, "You are a viewer: you can look at this fleet, not change it."),
-      ),
-      canChange &&
-        h(
-          "button.danger",
-          {
-            type: "button",
-            onclick: confirmThen(
-              `Delete ${fleet.name}? Its URL stops working and all emulator state is erased.`,
-              () => api("DELETE", `/fleets/${fleetId}`),
-              () => ui.address.replace(`/projects/${project.id}`),
-            ),
-          },
-          "Delete fleet",
-        ),
-    ),
-    flashSlot(),
-    h(
-      "section.stack",
-      {},
-      copyable(fleet.url, "Copy fleet URL"),
-      h(
-        "label.field",
-        {},
-        "Who can call this fleet",
-        h(
-          "select",
-          {
-            // The label's own text would otherwise run on into the options'.
-            "aria-label": "Who can call this fleet",
-            disabled: !canChange,
-            onchange: (event) =>
-              void act(() =>
-                api("PATCH", `/fleets/${fleetId}`, {
-                  access: (event.target as HTMLSelectElement).value,
-                }),
-              )(event),
-          },
-          FLEET_ACCESS.map(([access, label]) =>
-            h("option", { value: access, selected: fleet.access === access }, label),
-          ),
-        ),
-      ),
-      h(
-        "form.inline.rate",
-        {
-          onsubmit: act(() =>
-            api("PATCH", `/fleets/${fleetId}`, {
-              requestsPerMinute: Number(field(form("form.rate"), "rpm")),
-            }),
-          ),
-        },
-        h(
-          "label.field",
-          {},
-          "Requests per minute this fleet accepts (blank: the organization's ceiling)",
-          h("input", {
-            name: "rpm",
-            type: "number",
-            min: "1",
-            required: true,
-            disabled: !canChange,
-            value: fleet.requestsPerMinute ? String(fleet.requestsPerMinute) : "",
-            placeholder: "organization ceiling",
-          }),
-        ),
-        canChange && h("button", {}, "Set rate limit"),
-      ),
-    ),
-    h(
-      "section",
-      {},
-      h("h2", {}, "Emulators"),
+    properties("Fleet settings", [
+      { name: "URL", value: copyable(fleet.url, "Copy URL") },
+      {
+        name: "Name",
+        value: fleet.name,
+        about: `fleet-name:${fleet.id}`,
+        change: change("fleet.rename", "Rename", "Rename the fleet"),
+      },
+      {
+        name: "Who can call it",
+        value: accessLabel(fleet.access),
+        about: `fleet-access:${fleet.id}`,
+        change: change("fleet.access", "Change", "Change who can call the fleet"),
+      },
+      {
+        name: "Requests per minute",
+        value: fleet.requestsPerMinute
+          ? fleet.requestsPerMinute.toLocaleString()
+          : "The organization's ceiling",
+        about: `fleet-rate:${fleet.id}`,
+        change: change("fleet.rate-limit", "Change", "Change the requests per minute"),
+      },
+    ]),
+    section(
+      "Emulators",
+      null,
+      removed(`emulators:${fleet.id}`),
       names.length > 0
         ? names.map((name) => card(name, fleet.emulators[name] as Emulator))
         : h(
             ".empty",
             {},
-            h("strong", {}, "This fleet is empty"),
+            h("strong", {}, "This fleet has no emulators"),
             canChange
-              ? "Add an emulator below."
+              ? "Add one to get its URL."
               : "A member of the organization can add emulators.",
           ),
     ),
-    canChange && h("section", {}, h("h2", {}, "Add an emulator"), search, results),
+    canChange &&
+      section(
+        "Delete this fleet",
+        null,
+        h("p.sub", {}, "Its URL stops answering and all emulator state is erased."),
+        h("p", {}, action(to("fleet.delete", at), "Delete fleet…", "danger")),
+      ),
   ]
 }
 
-function download(name: string, data: unknown) {
+function save(name: string, data: unknown) {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }),
   )
-  const anchor = h("a", { href: url, download: name })
-  anchor.click()
+  h("a", { href: url, download: name }).click()
   URL.revokeObjectURL(url)
+}
+
+const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/
+export const slugProblem =
+  "Use lowercase letters, digits and hyphens, 1 to 40 characters, not starting or ending with a hyphen."
+
+export async function fleetNew({ route, params }: Context) {
+  const context = await projectFor(params.project ?? "", "member", "Creating fleets")
+  const { project } = context
+  const back = to("project", { project: project.id })
+  return mutation({
+    title: route.title,
+    crumbs: projectCrumbs(context, "New fleet"),
+    lead: `A fleet in ${project.name} is a set of emulators behind one stable URL. You add the emulators next.`,
+    fields: [
+      {
+        kind: "text",
+        name: "name",
+        label: "Name",
+        hint: "The environment it serves, for example Staging. Up to 80 characters.",
+        required: "Enter a name for the fleet.",
+        attrs: { maxlength: "80" },
+      },
+      {
+        kind: "text",
+        name: "slug",
+        label: "URL slug (optional)",
+        hint: [
+          "The fleet is served at ",
+          h("code", {}, `${ui.address.origin()}/f/<slug>`),
+          ". It is permanent and unique across this server. Leave it empty to get one made from the name.",
+        ],
+        attrs: { autocapitalize: "none", spellcheck: "false", maxlength: "40" },
+      },
+    ],
+    check: ({ slug }) => (slug && !SLUG.test(slug) ? { slug: slugProblem } : {}),
+    place: (error) => (error.status === 409 ? "slug" : undefined),
+    submit: "Create fleet",
+    pending: "Creating…",
+    cancel: back,
+    failed: "The fleet was not created.",
+    run: async ({ name, slug }) => {
+      const fleet = await api<Fleet>("POST", `/projects/${project.id}/fleets`, {
+        name,
+        ...(slug ? { slug } : {}),
+      })
+      await land(to("fleet", { fleet: fleet.id }), {
+        note: { about: `fleet:${fleet.id}`, text: "Created just now" },
+      })
+    },
+  })
+}
+
+export async function fleetRename({ route, params }: Context) {
+  const context = await fleetFor(params.fleet ?? "", "member", "Renaming a fleet")
+  const { fleet } = context
+  const back = to("fleet", { fleet: fleet.id })
+  return mutation({
+    title: titleOf(route, { fleet: fleet.name }),
+    crumbs: fleetCrumbs(context, "Rename"),
+    lead: "Only the name changes. The fleet's URL stays the same.",
+    fields: [
+      {
+        kind: "text",
+        name: "name",
+        label: "Name",
+        value: fleet.name,
+        hint: "Up to 80 characters.",
+        required: "Enter a name for the fleet.",
+        attrs: { maxlength: "80" },
+      },
+    ],
+    submit: "Rename fleet",
+    pending: "Renaming…",
+    cancel: back,
+    failed: "The fleet was not renamed.",
+    run: async ({ name }) => {
+      await api("PATCH", `/fleets/${fleet.id}`, { name })
+      await land(back, { note: { about: `fleet-name:${fleet.id}`, text: "Renamed just now" } })
+    },
+  })
+}
+
+export async function fleetAccess({ route, params }: Context) {
+  const context = await fleetFor(params.fleet ?? "", "member", "Changing a fleet's access")
+  const { fleet } = context
+  const back = to("fleet", { fleet: fleet.id })
+  return mutation({
+    title: titleOf(route, { fleet: fleet.name }),
+    crumbs: fleetCrumbs(context, "Access"),
+    lead: "This applies to every emulator in the fleet within a few seconds. Each emulator's /__admin routes always need a member key, whichever you choose.",
+    fields: [
+      {
+        kind: "choice",
+        name: "access",
+        label: "Who can call this fleet",
+        value: fleet.access,
+        options: FLEET_ACCESS.map(([value, label, description]) => ({
+          value,
+          label,
+          description,
+          ...(value === fleet.access ? { note: "Current" } : {}),
+        })),
+      },
+    ],
+    check: ({ access }) =>
+      access === fleet.access
+        ? { access: "This is who can call the fleet now. Choose the other option, or cancel." }
+        : {},
+    submit: "Save access",
+    pending: "Saving…",
+    cancel: back,
+    failed: "Access was not changed.",
+    run: async ({ access }) => {
+      await api("PATCH", `/fleets/${fleet.id}`, { access })
+      await land(back, { note: { about: `fleet-access:${fleet.id}`, text: "Changed just now" } })
+    },
+  })
+}
+
+export async function fleetRateLimit({ route, params }: Context) {
+  const context = await fleetFor(params.fleet ?? "", "member", "Changing a fleet's rate limit")
+  const { fleet } = context
+  const ceiling = await api<UsageReport>("GET", `/orgs/${fleet.orgId}/usage`)
+    .then((report) => report.limits.fleetRequestsPerMinute ?? 0)
+    .catch(() => 0)
+  const back = to("fleet", { fleet: fleet.id })
+  return mutation({
+    title: titleOf(route, { fleet: fleet.name }),
+    crumbs: fleetCrumbs(context, "Requests per minute"),
+    lead: [
+      "Requests beyond this number in a minute are answered 429. ",
+      fleet.requestsPerMinute
+        ? `The fleet accepts ${fleet.requestsPerMinute.toLocaleString()} a minute now.`
+        : "The fleet has no limit of its own now, so the organization's ceiling applies.",
+    ],
+    fields: [
+      {
+        kind: "text",
+        type: "number",
+        name: "requestsPerMinute",
+        label: "Requests per minute",
+        value: fleet.requestsPerMinute ? String(fleet.requestsPerMinute) : "",
+        hint:
+          ceiling > 0
+            ? `A whole number from 1 to ${ceiling.toLocaleString()}, the organization's ceiling.`
+            : "A whole number, 1 or more.",
+        required: "Enter how many requests a minute the fleet accepts.",
+        attrs: { min: "1", step: "1", inputmode: "numeric" },
+      },
+    ],
+    check: ({ requestsPerMinute }) => {
+      if (!requestsPerMinute) return {}
+      const value = Number(requestsPerMinute)
+      if (!Number.isInteger(value) || value < 1)
+        return { requestsPerMinute: "Enter a whole number, 1 or more." }
+      if (ceiling > 0 && value > ceiling)
+        return {
+          requestsPerMinute: `Enter ${ceiling.toLocaleString()} or less: that is the organization's ceiling.`,
+        }
+      return {}
+    },
+    place: (error) => (error.status === 400 ? "requestsPerMinute" : undefined),
+    submit: "Save rate limit",
+    pending: "Saving…",
+    cancel: back,
+    failed: "The rate limit was not changed.",
+    run: async ({ requestsPerMinute }) => {
+      await api("PATCH", `/fleets/${fleet.id}`, { requestsPerMinute: Number(requestsPerMinute) })
+      await land(back, { note: { about: `fleet-rate:${fleet.id}`, text: "Changed just now" } })
+    },
+  })
+}
+
+export async function fleetDelete({ route, params }: Context) {
+  const context = await fleetFor(params.fleet ?? "", "member", "Deleting a fleet")
+  const { fleet, project } = context
+  const names = Object.keys(fleet.emulators).sort()
+  const back = to("fleet", { fleet: fleet.id })
+  return mutation({
+    title: titleOf(route, { fleet: fleet.name }),
+    crumbs: fleetCrumbs(context, "Delete"),
+    danger: true,
+    lead: [
+      h("code", {}, fleet.url),
+      " stops answering at once",
+      names.length > 0
+        ? `, and the stored state of its ${count(names.length, "emulator")} (${names.join(", ")}) is erased.`
+        : ". It has no emulators.",
+      " It cannot be undone.",
+    ],
+    submit: "Delete fleet",
+    pending: "Deleting…",
+    cancel: back,
+    failed: "The fleet was not deleted.",
+    run: async () => {
+      await api("DELETE", `/fleets/${fleet.id}`)
+      await land(to("project", { project: project.id }), {
+        note: { about: `fleets:${project.id}`, text: `${fleet.name} was deleted just now.` },
+      })
+    },
+  })
 }

@@ -194,10 +194,31 @@ bun run --cwd sites/fleet storybook:screenshots   # every story as a PNG in .tmp
 
 A story is an address plus the API's answers (`src/ui/stories/*.stories.ts`, fixtures in
 `fixtures.ts`), and optionally what a person then does. `test/stories.test.ts` validates every
-answer against the OpenAPI document and fails when a route, an organization tab or a state the UI
-declares (durability mode, emulator tag, role, sign-in method) has no story. The screenshot run
-captures each story at desktop width, plus phone width and dark mode for the first story of each
-screen, writes `manifest.json` beside them, and fails when a story logs an error.
+answer against the OpenAPI document and fails when a route has no story, or a mutation route has
+no story showing it idle, pending, refused at a field, refused as a whole, and succeeded. The
+screenshot run captures each story at desktop width, plus phone width and dark mode for the first
+story of each screen, writes `manifest.json` beside them, and fails when a story logs an error,
+does not draw the state it claims, or breaks a design rule, or when some route or shell state is
+drawn by no story.
+
+## Dashboard design rules
+
+1. **A screen is a query or a mutation, never both.** A query shows data and links: no form, no
+   control that saves. Each value that can change has a link to its own screen ("Rename",
+   "Change", "Remove…").
+2. **One mutation per screen.** A mutation screen has its own address, exactly one form, one
+   submit button and a Cancel link. There are no modals and no confirmation dialogs; deleting is a
+   screen that says what will be lost.
+3. **Feedback is inline; there are no toasts.** A problem with a field is written under it
+   (`aria-describedby`, `aria-invalid`); a refusal that belongs to no field is summarised inside
+   the form (`role="alert"`). While a request is in flight the submit button is disabled and says
+   what it is doing. After success the dashboard goes where the result lives and marks it there
+   ("Renamed just now"). A secret is shown once, on its own screen.
+
+`routes.ts` declares each route's kind, and `auditSurface` (`src/ui/audit.ts`) checks a drawn
+screen against it. Three places run that check: every Storybook story in the screenshot run,
+every route against the real server in `specs/features/dashboard/design-rules.feature`, and the
+coverage test above for which states must exist.
 
 ## Specs: behaviour, in a real browser
 

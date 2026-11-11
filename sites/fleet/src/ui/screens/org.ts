@@ -1,18 +1,21 @@
 import { type Child, h } from "../dom.js"
-import { ORG_TABS, type OrgTabId, orgTab } from "../routes.js"
+import { mutation } from "../form.js"
+import type { Context } from "../router.js"
+import { ORG_TABS, type OrgTabId, titleOf, to } from "../routes.js"
 import {
-  act,
+  action,
   api,
-  confirmThen,
+  aRole,
+  atLeast,
   crumbs,
-  field,
-  flash,
-  flashSlot,
-  form,
+  deny,
+  head,
+  justNow,
+  land,
   link,
-  navigate,
-  noAccess,
-  ui,
+  properties,
+  removed,
+  section,
 } from "../runtime.js"
 import type { Me, Org, Project } from "../types.js"
 import { auditLog } from "./audit.js"
@@ -20,164 +23,196 @@ import { keys } from "./keys.js"
 import { members } from "./members.js"
 import { usage } from "./usage.js"
 
-type TabContext = { me: Me; org: Org; orgId: string; admin: boolean }
+export type TabContext = { me: Me; org: Org; admin: boolean }
+/** A tab's content and the one action the organization's header offers while it is shown. */
+type Tab = { action?: Child; body: Child }
 
-/** What each tab shows under the organization's header. */
-const TAB_BODY: Record<OrgTabId, (context: TabContext) => Promise<Child>> = {
-  projects: ({ org, orgId }) => projects(org, orgId),
-  members: ({ me, org, admin }) => members(me, org, admin),
-  usage: ({ org }) => usage(org),
-  keys: ({ org }) => keys(org),
-  audit: ({ org }) => auditLog(org),
-  settings: async ({ org, orgId }) => settings(org, orgId),
+const TAB_BODY: Record<OrgTabId, (context: TabContext) => Promise<Tab> | Tab> = {
+  projects,
+  members,
+  usage: async ({ org }) => ({ body: await usage(org) }),
+  keys,
+  audit: async ({ org }) => ({ body: await auditLog(org) }),
+  settings,
 }
 
-export async function orgScreen(me: Me, orgId: string, tab: string) {
+/** The organization's breadcrumb, for its own screens and the mutations opened from them. */
+export const orgCrumbs = (org: Org, ...rest: Child[]) =>
+  crumbs(
+    link(to("orgs"), {}, "Organizations"),
+    rest.length > 0 ? link(to("org", { org: org.id }), {}, org.name) : org.name,
+    ...rest,
+  )
+
+/** Read the organization a mutation acts on, refusing anyone below `minimum`. */
+export async function orgFor(orgId: string, minimum: string, what: string): Promise<Org> {
   const org = await api<Org>("GET", `/orgs/${orgId}`)
-  const admin = ["admin", "owner"].includes(org.role ?? "")
-  const current = orgTab(tab)
-  const header = [
-    crumbs(link("/orgs", {}, "Organizations"), org.name),
-    h(
-      ".head",
-      {},
-      h(
-        "div",
-        {},
-        h("h1", {}, org.name),
-        h(
-          "p.sub",
-          {},
-          `You are ${org.role === "owner" || org.role === "admin" ? "an" : "a"} ${org.role} of this organization.`,
-        ),
-      ),
+  if (!atLeast(org.role, minimum))
+    deny(
+      `${what} is for ${minimum === "owner" ? "owners" : `${minimum}s and above`} of ${org.name}. You are ${aRole(org.role)}.`,
+    )
+  return org
+}
+
+export async function orgScreen({ me, route, params }: Context) {
+  const org = await api<Org>("GET", `/orgs/${params.org}`)
+  const admin = atLeast(org.role, "admin")
+  const shown = ORG_TABS.find((tab) => tab.route === route.id) ?? ORG_TABS[0]
+  // The API refuses these tabs' calls for anyone below admin; say so instead of asking.
+  if (shown.admin && !admin)
+    deny(`${shown.label} is for admins and owners of ${org.name}. You are ${aRole(org.role)}.`)
+  const tab = await TAB_BODY[shown.id]({ me, org, admin })
+  return [
+    orgCrumbs(org),
+    head(
+      org.name,
+      [`You are ${aRole(org.role)} of this organization.`, justNow(`org:${org.id}`)],
+      tab.action,
     ),
+    org.suspended &&
+      h(
+        "p.notice.warn",
+        {},
+        h("strong", {}, `This organization is suspended: ${org.suspended}.`),
+        " Its fleets do not serve requests, and nothing can be created or changed until the operator of this server lifts the suspension. You can still look and delete.",
+      ),
     h(
       "nav.tabs",
       { "aria-label": "Organization" },
-      ORG_TABS.filter((entry) => admin || !entry.admin).map(({ id, label }) =>
+      ORG_TABS.filter((entry) => admin || !entry.admin).map((entry) =>
         link(
-          `/orgs/${orgId}${id === "projects" ? "" : `/${id}`}`,
-          current === id ? { "aria-current": "page" } : {},
-          label,
+          to(entry.route, { org: org.id }),
+          shown.id === entry.id ? { "aria-current": "page" } : {},
+          entry.label,
         ),
       ),
     ),
+    tab.body,
   ]
-  if (org.suspended)
-    header.push(
-      h(
-        "p.notice.error",
-        { role: "alert" },
-        `This organization is suspended: ${org.suspended}. Its fleets do not serve requests and nothing can be created or changed.`,
-      ),
-    )
-  header.push(flashSlot())
-  const shown = ORG_TABS.find((entry) => entry.id === current)
-  // The API refuses these tabs' calls for anyone below admin; say so instead of asking.
-  if (shown?.admin && !admin)
-    return [
-      header,
-      noAccess(
-        `${shown.label} is for admins and owners of this organization. You are a ${org.role}.`,
-      ),
-    ]
-  return [header, await TAB_BODY[current]({ me, org, orgId, admin })]
 }
 
-function settings(org: Org, orgId: string) {
-  return [
-    h(
-      "section",
-      {},
-      h("h2", {}, "Name"),
-      h(
-        "form.inline",
-        { onsubmit: act(() => api("PATCH", `/orgs/${orgId}`, { name: field(form(), "name") })) },
-        h("input", {
-          name: "name",
-          required: true,
-          value: org.name,
-          "aria-label": "Organization name",
-        }),
-        h("button", {}, "Rename"),
-      ),
-    ),
-    org.role === "owner" &&
-      h(
-        "section",
-        {},
-        h("h2", {}, "Delete organization"),
-        h(
-          "p.sub",
-          {},
-          "Deletes every project, fleet, API key and all stored emulator state. This cannot be undone.",
-        ),
-        h(
-          "form.inline",
-          {},
-          h(
-            "button.danger",
-            {
-              type: "button",
-              onclick: confirmThen(
-                `Delete ${org.name} and everything in it?`,
-                () => api("DELETE", `/orgs/${orgId}`),
-                () => ui.address.replace("/orgs"),
+async function projects({ org }: TabContext): Promise<Tab> {
+  const list = (await api<{ data: Project[] }>("GET", `/orgs/${org.id}/projects`)).data
+  const canCreate = atLeast(org.role, "member")
+  return {
+    action: canCreate && action(to("project.new", { org: org.id }), "New project", "primary"),
+    body: [
+      removed(`projects:${org.id}`),
+      list.length > 0
+        ? h(
+            "nav.list",
+            { "aria-label": "Projects" },
+            list.map((project) =>
+              link(
+                to("project", { project: project.id }),
+                { class: "row" },
+                h(".grow", {}, h(".title", {}, project.name), h(".meta", {}, project.slug)),
+                h("span.chevron", { "aria-hidden": "true" }, "›"),
               ),
-            },
-            "Delete organization",
+            ),
+          )
+        : h(
+            ".empty",
+            {},
+            h("strong", {}, "No projects yet"),
+            canCreate
+              ? "A project groups the fleets of one application. Create the first one."
+              : "A project groups the fleets of one application. A member of the organization can create one.",
           ),
-        ),
-      ),
-  ]
+    ],
+  }
 }
 
-async function projects(org: Org, orgId: string) {
-  const list = (await api<{ data: Project[] }>("GET", `/orgs/${orgId}/projects`)).data
-  return [
-    list.length > 0
-      ? h(
-          "nav.list",
-          { "aria-label": "Projects" },
-          list.map((project) =>
-            link(
-              `/projects/${project.id}`,
-              { class: "row" },
-              h(".grow", {}, h(".title", {}, project.name), h(".meta", {}, project.slug)),
-            ),
-          ),
-        )
-      : h(
-          ".empty",
-          {},
-          h("strong", {}, "No projects yet"),
-          "A project groups the fleets of one application.",
-        ),
-    org.role !== "viewer" &&
-      h(
-        "form.inline",
+function settings({ org }: TabContext): Tab {
+  return {
+    body: [
+      properties("Organization settings", [
         {
-          onsubmit: async (event) => {
-            event.preventDefault()
-            try {
-              const project = await api<Project>("POST", `/orgs/${orgId}/projects`, {
-                name: field(event.target as HTMLFormElement, "name"),
-              })
-              navigate(undefined, `/projects/${project.id}`)
-            } catch (error) {
-              flash((error as Error).message)
-            }
-          },
+          name: "Name",
+          value: org.name,
+          about: `org-name:${org.id}`,
+          change: link(
+            to("org.rename", { org: org.id }),
+            { "aria-label": "Rename the organization" },
+            "Rename",
+          ),
         },
-        h("input", {
-          name: "name",
-          required: true,
-          maxlength: "80",
-          placeholder: "Project name",
-          "aria-label": "Project name",
-        }),
-        h("button.primary", {}, "Create project"),
-      ),
-  ]
+        { name: "Slug", value: [h("code", {}, org.slug), h("span.aside", {}, "Permanent")] },
+        { name: "ID", value: h("code", {}, org.id) },
+      ]),
+      org.role === "owner" &&
+        section(
+          "Delete this organization",
+          null,
+          h(
+            "p.sub",
+            {},
+            "Deletes every project, fleet, API key and all stored emulator state. This cannot be undone.",
+          ),
+          h("p", {}, action(to("org.delete", { org: org.id }), "Delete organization…", "danger")),
+        ),
+    ],
+  }
+}
+
+export async function orgRename({ route, params }: Context) {
+  const org = await orgFor(params.org ?? "", "admin", "Renaming the organization")
+  const back = to("org.settings", { org: org.id })
+  return mutation({
+    title: titleOf(route, { organization: org.name }),
+    crumbs: orgCrumbs(org, link(back, {}, "Settings"), "Rename"),
+    lead: "The name is what members see. The slug and every fleet URL stay the same.",
+    fields: [
+      {
+        kind: "text",
+        name: "name",
+        label: "Name",
+        value: org.name,
+        hint: "Up to 80 characters.",
+        required: "Enter a name for the organization.",
+        attrs: { maxlength: "80" },
+      },
+    ],
+    submit: "Rename organization",
+    pending: "Renaming…",
+    cancel: back,
+    failed: "The organization was not renamed.",
+    run: async ({ name }) => {
+      await api("PATCH", `/orgs/${org.id}`, { name })
+      await land(back, { note: { about: `org-name:${org.id}`, text: "Renamed just now" } })
+    },
+  })
+}
+
+export async function orgDelete({ route, params }: Context) {
+  const org = await orgFor(params.org ?? "", "owner", "Deleting the organization")
+  const back = to("org.settings", { org: org.id })
+  return mutation({
+    title: titleOf(route, { organization: org.name }),
+    crumbs: orgCrumbs(org, link(back, {}, "Settings"), "Delete"),
+    danger: true,
+    lead: "This deletes the organization with every project, fleet, API key, invite and all stored emulator state. Fleet URLs stop answering at once. It cannot be undone.",
+    fields: [
+      {
+        kind: "text",
+        name: "confirm",
+        label: `Type ${org.slug} to confirm`,
+        hint: "This is the organization's slug.",
+        required: `Type ${org.slug} to confirm that you want to delete it.`,
+        attrs: { autocapitalize: "none", spellcheck: "false" },
+      },
+    ],
+    check: ({ confirm }) =>
+      confirm && confirm !== org.slug
+        ? { confirm: `That does not match. Type ${org.slug} exactly.` }
+        : {},
+    submit: "Delete organization",
+    pending: "Deleting…",
+    cancel: back,
+    failed: "The organization was not deleted.",
+    run: async () => {
+      await api("DELETE", `/orgs/${org.id}`)
+      await land(to("orgs"), { note: { about: "orgs", text: `${org.name} was deleted just now.` } })
+    },
+  })
 }

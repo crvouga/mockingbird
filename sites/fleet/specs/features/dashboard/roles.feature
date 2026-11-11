@@ -1,8 +1,9 @@
 @dashboard
 Feature: What each role is offered in the dashboard
   The dashboard offers a person only what the API will let their role do: a viewer reads, a
-  member builds, an admin administers, an owner owns. A control the API would refuse is absent or
-  disabled, and a page a role may not see says so plainly.
+  member builds, an admin administers, an owner owns. Every change is a screen of its own, so
+  what a role may do shows as the links it is offered; a link the API would refuse is absent.
+  Opening the address of a screen the role may not use says so plainly instead of a form.
 
   Background:
     Given Ada owns an organization "Acme"
@@ -32,10 +33,9 @@ Feature: What each role is offered in the dashboard
       Given Grace has joined "Acme" with the <role> role
       And Grace is signed in to the dashboard
       When they open the "<tab>" tab of "Acme"
-      Then they see "You do not have access"
-      And they see "<tab> is for admins and owners of this organization. You are a <role>."
-      And they do not see "Something went wrong"
-      And they see the page "Acme"
+      Then they are told they have no access
+      And they see "<tab> is for admins and owners of Acme. You are a <role>."
+      And there is a link "Go to your organizations"
 
       Examples:
         | role   | tab       |
@@ -46,49 +46,108 @@ Feature: What each role is offered in the dashboard
         | member | Audit log |
         | member | Settings  |
 
-    Scenario Outline: A <role> who opens the address of the <tab> tab sees it
+  Rule: Each screen offers a role the links to the changes it may make
+
+    Scenario Outline: On the organization, a <role> is offered <a> link "<link>"
       Given Grace has joined "Acme" with the <role> role
       And Grace is signed in to the dashboard
       When they open the "<tab>" tab of "Acme"
-      Then the "<tab>" tab is the current one
-      And they do not see "You do not have access"
+      Then there is <a> link "<link>"
 
       Examples:
-        | role  | tab       |
-        | admin | API keys  |
-        | admin | Audit log |
-        | admin | Settings  |
-        | owner | API keys  |
-        | owner | Audit log |
-        | owner | Settings  |
+        | role   | tab      | link                    | a  |
+        | viewer | Projects | New project             | no |
+        | member | Projects | New project             | a  |
+        | admin  | Projects | New project             | a  |
+        | owner  | Projects | New project             | a  |
+        | viewer | Members  | Invite someone          | no |
+        | member | Members  | Invite someone          | no |
+        | admin  | Members  | Invite someone          | a  |
+        | owner  | Members  | Invite someone          | a  |
+        | admin  | API keys | New API key             | a  |
+        | admin  | Settings | Rename the organization | a  |
+        | admin  | Settings | Delete organization…    | no |
+        | owner  | Settings | Rename the organization | a  |
+        | owner  | Settings | Delete organization…    | a  |
 
-  Rule: Creating projects needs a member
-
-    Scenario Outline: A <role> is offered <a> way to create a project
+    Scenario Outline: On a project, a <role> is offered <a> link "<link>"
       Given Grace has joined "Acme" with the <role> role
       And Grace is signed in to the dashboard
-      When they open the organization "Acme"
-      Then they see "Web app"
-      And there is <a> button "Create project"
+      When they open the project "Web app"
+      Then they see "Staging"
+      And there is <a> link "<link>"
 
       Examples:
-        | role   | a  |
-        | viewer | no |
-        | member | a  |
-        | admin  | a  |
-        | owner  | a  |
+        | role   | link               | a  |
+        | viewer | New fleet          | no |
+        | viewer | Rename the project | no |
+        | viewer | Delete project…    | no |
+        | member | New fleet          | a  |
+        | member | Rename the project | a  |
+        | member | Delete project…    | no |
+        | admin  | New fleet          | a  |
+        | admin  | Rename the project | a  |
+        | admin  | Delete project…    | a  |
+        | owner  | Delete project…    | a  |
+
+    Scenario Outline: On a fleet, a <role> is offered <a> link "<link>"
+      Given Grace has joined "Acme" with the <role> role
+      And Grace is signed in to the dashboard
+      When they open the fleet "Staging"
+      Then there is an emulator "resend"
+      And there is <a> link "<link>"
+
+      Examples:
+        | role   | link                             | a  |
+        | viewer | Add an emulator                  | no |
+        | viewer | Rename the fleet                 | no |
+        | viewer | Change who can call the fleet    | no |
+        | viewer | Change the requests per minute   | no |
+        | viewer | Change the durability of resend  | no |
+        | viewer | Save resend now                  | no |
+        | viewer | Reset the state of resend        | no |
+        | viewer | Remove resend                    | no |
+        | viewer | Delete fleet…                    | no |
+        | member | Add an emulator                  | a  |
+        | member | Rename the fleet                 | a  |
+        | member | Change who can call the fleet    | a  |
+        | member | Change the requests per minute   | a  |
+        | member | Change the durability of resend  | a  |
+        | member | Save resend now                  | a  |
+        | member | Reset the state of resend        | a  |
+        | member | Remove resend                    | a  |
+        | member | Delete fleet…                    | a  |
+        | admin  | Delete fleet…                    | a  |
+        | owner  | Delete fleet…                    | a  |
+
+    Scenario: A viewer is told why a project offers nothing to change
+      Given Grace has joined "Acme" with the viewer role
+      And Grace is signed in to the dashboard
+      When they open the project "Web app"
+      Then they see "You are a viewer: you can look at this project and its fleets, not change them."
+
+    Scenario: A viewer sees a fleet's addresses and settings, and may still download its state
+      Given Grace has joined "Acme" with the viewer role
+      And Grace is signed in to the dashboard
+      When they open the fleet "Staging"
+      Then they see "You are a viewer: you can look at this fleet and use its URLs, not change it."
+      And the address of the fleet "Staging" is on screen with a "Copy URL" button
+      And the address of the "resend" emulator of "Staging" is on its card with a "Copy URL" button
+      And "Buffered" is the durability of "resend"
+      And the setting "Who can call it" reads "Anyone with the URL"
+      And there is a button "Download the state of resend"
 
   Rule: Managing members needs an admin, and owners answer only to owners
 
-    Scenario Outline: A <role> can see the members and leave, and nothing else
+    Scenario Outline: A <role> sees the members and can leave, and nothing else
       Given Grace has joined "Acme" with the <role> role
       And Grace is signed in to the dashboard
       When they open the "Members" tab of "Acme"
       Then the role of Ada is "owner"
       And the role of Linus is "member"
       And nobody's role can be changed
-      And the only button among the members is "Leave"
-      And they do not see "Invite someone"
+      And the only link among the members is "Leave"
+      And they do not see "Pending invites"
 
       Examples:
         | role   |
@@ -99,96 +158,86 @@ Feature: What each role is offered in the dashboard
       Given Grace has joined "Acme" with the admin role
       And Grace is signed in to the dashboard
       When they open the "Members" tab of "Acme"
-      Then the role of Linus can be changed to "viewer, member, admin"
+      Then the role of Linus can be changed
+      And Linus can be removed
       And the role of Ada cannot be changed
       And Ada cannot be removed
-      And Linus can be removed
-      And they see "Invite someone"
+      When they follow "Change role" beside Linus
+      Then the choices for "Role" are "Viewer, Member, Admin"
 
     Scenario: An owner manages everyone, owners included
       Given Grace has joined "Acme" with the owner role
       And Grace is signed in to the dashboard
       When they open the "Members" tab of "Acme"
-      Then the role of Linus can be changed to "viewer, member, admin, owner"
-      And the role of Ada can be changed to "viewer, member, admin, owner"
+      Then the role of Ada can be changed
       And Ada can be removed
-      And they see "Invite someone"
+      When they follow "Change role" beside Linus
+      Then the choices for "Role" are "Viewer, Member, Admin, Owner"
 
-  Rule: Creating fleets needs a member; deleting a project needs an admin
+  Rule: The address of a change a role may not make says so instead of showing a form
 
-    Scenario Outline: On a project, a <role> is offered <create> way to create a fleet and <delete> way to delete the project
+    Scenario Outline: A <role> who opens <rest> of the <kind> "<name>" has no access
       Given Grace has joined "Acme" with the <role> role
       And Grace is signed in to the dashboard
-      When they open the project "Web app"
-      Then they see "Staging"
-      And there is <create> button "Create fleet"
-      And there is <delete> button "Delete project"
+      When they open the address of the <kind> "<name>" followed by "<rest>"
+      Then they are told they have no access
+      And they see "You are a <role>."
 
       Examples:
-        | role   | create | delete |
-        | viewer | no     | no     |
-        | member | a      | no     |
-        | admin  | a      | a      |
-        | owner  | a      | a      |
+        | role   | kind         | name    | rest                         |
+        | viewer | organization | Acme    | /projects/new                |
+        | member | organization | Acme    | /rename                      |
+        | member | organization | Acme    | /invites/new                 |
+        | member | organization | Acme    | /keys/new                    |
+        | viewer | project      | Web app | /rename                      |
+        | viewer | project      | Web app | /fleets/new                  |
+        | member | project      | Web app | /delete                      |
+        | viewer | fleet        | Staging | /rename                      |
+        | viewer | fleet        | Staging | /access                      |
+        | viewer | fleet        | Staging | /rate-limit                  |
+        | viewer | fleet        | Staging | /delete                      |
+        | viewer | fleet        | Staging | /add-emulator                |
+        | viewer | fleet        | Staging | /add-emulator/stripe         |
+        | viewer | fleet        | Staging | /emulators/resend/durability |
+        | viewer | fleet        | Staging | /emulators/resend/save       |
+        | viewer | fleet        | Staging | /emulators/resend/reset      |
+        | viewer | fleet        | Staging | /emulators/resend/remove     |
 
-    Scenario: A viewer is told why a project offers nothing to change
-      Given Grace has joined "Acme" with the viewer role
-      And Grace is signed in to the dashboard
-      When they open the project "Web app"
-      Then they see "You are a viewer: you can look at fleets, not change them."
-
-  Rule: Changing a fleet needs a member
-
-    Scenario Outline: On a fleet, a <role> is offered <a> way to <change>
+    Scenario Outline: Deleting the organization is for owners only; a <role> has no access
       Given Grace has joined "Acme" with the <role> role
       And Grace is signed in to the dashboard
-      When they open the fleet "Staging"
-      Then there is an emulator "resend"
-      And there is <a> button "<button>"
+      When they open the address of the organization "Acme" followed by "/delete"
+      Then they are told they have no access
+      And they see "Deleting the organization is for owners of Acme. You are <article> <role>."
 
       Examples:
-        | role   | a  | change               | button         |
-        | viewer | no | delete the fleet     | Delete fleet   |
-        | viewer | no | set its rate limit   | Set rate limit |
-        | viewer | no | save an emulator     | Save now       |
-        | viewer | no | download state       | Download state |
-        | viewer | no | reset an emulator    | Reset state    |
-        | viewer | no | remove an emulator   | Remove         |
-        | member | a  | delete the fleet     | Delete fleet   |
-        | member | a  | set its rate limit   | Set rate limit |
-        | member | a  | save an emulator     | Save now       |
-        | member | a  | download state       | Download state |
-        | member | a  | reset an emulator    | Reset state    |
-        | member | a  | remove an emulator   | Remove         |
-        | admin  | a  | delete the fleet     | Delete fleet   |
-        | admin  | a  | remove an emulator   | Remove         |
-        | owner  | a  | delete the fleet     | Delete fleet   |
-        | owner  | a  | remove an emulator   | Remove         |
+        | role   | article |
+        | member | a       |
+        | admin  | an      |
 
-    Scenario: A viewer sees a fleet's addresses and settings but cannot change them
-      Given Grace has joined "Acme" with the viewer role
+    Scenario: An admin who opens the address for changing an owner's role has no access
+      Given Grace has joined "Acme" with the admin role
       And Grace is signed in to the dashboard
-      When they open the fleet "Staging"
-      Then they see "You are a viewer: you can look at this fleet, not change it."
-      And the address of the fleet "Staging" is on screen with a "Copy fleet URL" button
-      And the address of the "resend" emulator of "Staging" is on its card with a "Copy URL" button
-      And "Buffered" is the durability of "resend"
-      And the durability of "resend" cannot be switched
-      And who can call the fleet cannot be changed
-      And the requests per minute cannot be changed
-      And they do not see "Add an emulator"
+      When they open the address of the member Ada of "Acme" followed by "/role"
+      Then they are told they have no access
+      And they see "Only an owner can change or remove an owner of Acme."
 
-    Scenario Outline: A <role> can change everything about a fleet
+    Scenario: A member who opens the address for removing someone has no access
+      Given Grace has joined "Acme" with the member role
+      And Grace is signed in to the dashboard
+      When they open the address of the member Linus of "Acme" followed by "/remove"
+      Then they are told they have no access
+
+  Rule: A member can make every change to a fleet
+
+    Scenario Outline: A <role> renames a fleet
       Given Grace has joined "Acme" with the <role> role
       And Grace is signed in to the dashboard
       When they open the fleet "Staging"
-      And they switch the durability of "resend" to "Strict"
-      And they choose "Only requests with an API key (x-mockingbird-api-key)" as the "Who can call this fleet"
-      And they type "stripe" into "Search emulators"
-      And they add "Stripe" from the catalog
-      Then "Strict" is the durability of "resend"
-      And there is an emulator "stripe"
-      And no error is shown
+      And they follow "Rename the fleet"
+      And they type "Preview" into "Name"
+      And they press "Rename fleet"
+      Then the setting "Name" is noted "Renamed just now"
 
       Examples:
         | role   |

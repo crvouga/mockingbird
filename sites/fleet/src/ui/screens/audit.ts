@@ -25,9 +25,9 @@ export async function auditLog(org: Org) {
                 {},
                 h(".title.mono", {}, entry.action),
                 h(
-                  ".meta",
+                  ".meta.wrap",
                   {},
-                  `${entry.actor.split(":").slice(2).join(":") || entry.actor} · ${entry.target}`,
+                  `${entry.actor.split(":").slice(2).join(":") || entry.actor} on ${entry.target}`,
                 ),
               ),
               h("span.meta", {}, new Date(entry.at).toLocaleString()),

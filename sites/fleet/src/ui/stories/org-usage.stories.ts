@@ -1,68 +1,51 @@
 import type { Meta } from "@storybook/html-vite"
-import { inOrg, limits, usage } from "./fixtures.js"
-import { ok } from "./mock.js"
-import { story } from "./story.js"
+import { inOrg, limits, type Role, usage } from "./fixtures.js"
+import { type MockRoutes, ok } from "./mock.js"
+import { query } from "./story.js"
 
 export default { title: "Organization/Usage" } satisfies Meta
 
 const path = "/orgs/org_acme/usage"
-
-export const Normal = story({
-  path,
-  routes: { ...inOrg("owner"), "GET /orgs/org_acme/usage": ok(usage()) },
+const tab = (role: Role, report = usage()): MockRoutes => ({
+  ...inOrg(role),
+  "GET /orgs/org_acme/usage": ok(report),
 })
 
+export const AsOwner = query({ path, routes: tab("owner") })
+export const AsAdmin = query({ path, routes: tab("admin") })
+export const AsMember = query({ path, routes: tab("member") })
+/** Everyone in the organization can read its usage. */
+export const AsViewer = query({ path, routes: tab("viewer") })
+
 /** Quotas that are used up are marked: here projects and the month's requests. */
-export const QuotaAtItsLimit = story({
+export const AtTheLimit = query({
   path,
-  routes: {
-    ...inOrg("owner"),
-    "GET /orgs/org_acme/usage": ok(
-      usage({
-        usage: { projects: 20, fleets: 49, members: 7, apiKeys: 5, requestsThisMonth: 1_000_000 },
-      }),
-    ),
-  },
+  routes: tab(
+    "owner",
+    usage({
+      usage: { projects: 20, fleets: 49, members: 7, apiKeys: 5, requestsThisMonth: 1_000_000 },
+    }),
+  ),
 })
 
 /** The operator set every limit to 0, which means unlimited. */
-export const Unlimited = story({
+export const Unlimited = query({
   path,
-  routes: {
-    ...inOrg("owner"),
-    "GET /orgs/org_acme/usage": ok(
-      usage({
-        limits: Object.fromEntries(Object.keys(limits).map((name) => [name, 0])) as typeof limits,
-      }),
-    ),
-  },
+  routes: tab(
+    "owner",
+    usage({
+      limits: Object.fromEntries(Object.keys(limits).map((name) => [name, 0])) as typeof limits,
+    }),
+  ),
 })
 
-export const NoRequestsYet = story({
+export const NoRequestsYet = query({
   path,
-  routes: {
-    ...inOrg("owner"),
-    "GET /orgs/org_acme/usage": ok(
-      usage({
-        usage: { projects: 1, fleets: 0, members: 1, apiKeys: 0, requestsThisMonth: 0 },
-        daily: [],
-      }),
-    ),
-  },
-})
-
-export const AsAdmin = story({
-  path,
-  routes: { ...inOrg("admin"), "GET /orgs/org_acme/usage": ok(usage()) },
-})
-
-export const AsMember = story({
-  path,
-  routes: { ...inOrg("member"), "GET /orgs/org_acme/usage": ok(usage()) },
-})
-
-/** Everyone in the organization can read its usage. */
-export const AsViewer = story({
-  path,
-  routes: { ...inOrg("viewer"), "GET /orgs/org_acme/usage": ok(usage()) },
+  routes: tab(
+    "owner",
+    usage({
+      usage: { projects: 1, fleets: 0, members: 1, apiKeys: 0, requestsThisMonth: 0 },
+      daily: [],
+    }),
+  ),
 })

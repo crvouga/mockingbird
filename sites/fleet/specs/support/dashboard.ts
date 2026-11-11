@@ -4,6 +4,7 @@
  * specifies happens here, in the browser, found the way a person finds it (role, label, text).
  */
 import type { Browser, BrowserContext, Download, Locator, Page } from "@playwright/test"
+import { auditSurface } from "../../src/ui/audit.js"
 import type { World } from "./world.js"
 
 export const PHONE = { width: 390, height: 844 }
@@ -18,6 +19,9 @@ export const TAB_PATHS: Record<string, string> = {
   Settings: "/settings",
 }
 
+/** Text to match exactly inside a regular expression. */
+export const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
 export class Dashboard {
   private readonly pages = new Map<string, Page>()
   private readonly contexts: BrowserContext[] = []
@@ -28,10 +32,11 @@ export class Dashboard {
   readonly errors: string[] = []
   /** What the browser refused to load or run under the page's content security policy. */
   readonly blocked: string[] = []
-  /** The questions the browser asked (confirm dialogs), in order. */
-  readonly questions: string[] = []
-  /** Secrets read off the screen, by the name the scenario gave them. */
-  readonly secrets = new Map<string, string>()
+  /**
+   * Dialogs the browser opened (`confirm`, `alert`, …). The dashboard asks on a screen of its
+   * own and answers inline, never in a dialog: a scenario fails if there are any when it ends.
+   */
+  readonly dialogs: string[] = []
   download: Download | undefined
   /** Things to stop when the scenario ends. */
   readonly cleanups: (() => Promise<unknown>)[] = []
@@ -65,6 +70,10 @@ export class Dashboard {
       }),
     )
     page.on("pageerror", (error) => this.errors.push(`${name}: ${error.message}`))
+    page.on("dialog", (dialog) => {
+      this.dialogs.push(`${name}: ${dialog.type()} "${dialog.message()}"`)
+      void dialog.dismiss()
+    })
     page.on("console", (message) => {
       if (message.text().includes("Content Security Policy")) this.blocked.push(message.text())
     })
@@ -127,17 +136,44 @@ export class Dashboard {
     )
   }
 
-  /** Answer the next confirmation the dashboard asks, and remember the question. */
-  answerNext(accept: boolean): void {
-    this.page.once("dialog", (dialog) => {
-      this.questions.push(dialog.message())
-      void (accept ? dialog.accept() : dialog.dismiss())
-    })
-  }
-
-  /** A text field, select or checkbox by its label. */
+  /** A text field or select by its label. */
   field(label: string): Locator {
     return this.page.getByLabel(label, { exact: true })
+  }
+
+  /** A set of choices (radio buttons) by its legend. */
+  choices(legend: string): Locator {
+    return this.page.getByRole("group", { name: legend, exact: true })
+  }
+
+  /** One of a set of choices, by the start of its label ("Admin" of "Admin: Everything an …"). */
+  choice(legend: string, option: string): Locator {
+    return this.choices(legend).getByRole("radio", { name: new RegExp(`^${literal(option)}`) })
+  }
+
+  /**
+   * The control a field's problem is announced on: the text field or select labelled so, or the
+   * first of the choices under that legend.
+   */
+  async control(label: string): Promise<Locator> {
+    const field = this.field(label)
+    if ((await field.count()) > 0) return field
+    return this.choices(label).getByRole("radio").first()
+  }
+
+  /** The one form of a mutation screen. */
+  get form(): Locator {
+    return this.page.getByRole("main").locator("form")
+  }
+
+  /** What the form says went wrong as a whole: its summary, inside the form. */
+  get formError(): Locator {
+    return this.form.getByRole("alert")
+  }
+
+  /** Every problem the screen points out: under fields, and in the form's summary. */
+  get problems(): Locator {
+    return this.page.locator(".field-error:visible, .form-error")
   }
 
   button(name: string, within: Locator | Page = this.page): Locator {
@@ -157,14 +193,71 @@ export class Dashboard {
     return this.page.getByRole("article", { name, exact: true })
   }
 
-  /** The notice that shows a secret once. */
-  get secretNotice(): Locator {
-    return this.page.getByRole("status")
+  /** A setting of the screen's properties ("Name", "Who can call it"), found by its name. */
+  setting(name: string, within: Locator | Page = this.page): Locator {
+    return within
+      .locator(".prop")
+      .filter({ has: this.page.getByRole("term").getByText(name, { exact: true }) })
+  }
+
+  /** A value shown with a button that copies it, found by the value. */
+  copyable(value: string, within: Locator | Page = this.page): Locator {
+    return within.locator(".copy").filter({ has: this.page.getByText(value, { exact: true }) })
+  }
+
+  /** The secret a result screen shows, once. */
+  get secret(): Locator {
+    return this.page.getByRole("main").locator(".secret").getByRole("code")
   }
 
   /** The secret value currently on screen. */
   async revealed(): Promise<string> {
-    return (await this.secretNotice.getByRole("code").innerText()).trim()
+    return (await this.secret.innerText()).trim()
+  }
+
+  /** What the drawn `<main>` says it is: a query or a mutation, and which route or state. */
+  surface(): Promise<{ kind: string | null; route: string | null }> {
+    return this.page.evaluate(() => {
+      const main = document.querySelector("#app main[data-surface]")
+      return {
+        kind: main?.getAttribute("data-surface") ?? null,
+        route: main?.getAttribute("data-route") ?? null,
+      }
+    })
+  }
+
+  /**
+   * The dashboard's design rules (`src/ui/audit.ts`), checked in the page: what breaks them.
+   * `kind` is what the screen must be; by default, what it says it is.
+   */
+  audit(kind?: "query" | "mutation"): Promise<string[]> {
+    return this.page.evaluate(
+      `(${auditSurface})(document.querySelector("#app"), ${JSON.stringify(kind)})`,
+    )
+  }
+
+  /**
+   * Anything on the page that announces itself apart from the place it is about: a toast,
+   * snackbar or flash message, feedback outside the screen's `<main>`, or anything floating.
+   */
+  toasts(): Promise<string[]> {
+    return this.page.evaluate(() => {
+      const found: string[] = []
+      const name = (element: Element) =>
+        `<${element.tagName.toLowerCase()} class="${element.getAttribute("class") ?? ""}"> "${(element.textContent ?? "").trim().slice(0, 40)}"`
+      for (const element of document.querySelectorAll("body *")) {
+        if (/toast|snackbar|flash|banner/i.test(element.getAttribute("class") ?? ""))
+          found.push(`named like a toast: ${name(element)}`)
+        const position = getComputedStyle(element).position
+        if (position === "fixed" || position === "sticky")
+          found.push(`floating (${position}): ${name(element)}`)
+      }
+      for (const live of document.querySelectorAll(
+        "[role=alert], [role=status], [role=log], [aria-live]",
+      ))
+        if (!live.closest("main")) found.push(`feedback outside the screen: ${name(live)}`)
+      return found
+    })
   }
 
   /** The widest the page's content is, against the width of the window. */

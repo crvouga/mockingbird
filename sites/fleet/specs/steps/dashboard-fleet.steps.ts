@@ -2,7 +2,7 @@
 import { readFile } from "node:fs/promises"
 import { expect } from "@playwright/test"
 import type { DataTable } from "playwright-bdd"
-import type { Dashboard } from "../support/dashboard.js"
+import { type Dashboard, literal } from "../support/dashboard.js"
 import { idOf } from "../support/tenancy.js"
 import type { Reply, World } from "../support/world.js"
 import { Given, Then, When } from "./common.steps.js"
@@ -151,19 +151,26 @@ Then(
 Then(
   "the address of the fleet {string} is on screen with a {string} button",
   async ({ dash, world }, name: string, button: string) => {
-    await expect(dash.page.getByText(fleetOf(world, name).url, { exact: true })).toBeVisible()
-    await expect(dash.button(button)).toBeVisible()
+    const copy = dash.copyable(fleetOf(world, name).url, dash.setting("URL"))
+    await expect(copy).toBeVisible()
+    await expect(dash.button(button, copy)).toBeVisible()
   },
 )
 
 Then(
   "the address of the {string} emulator of {string} is on its card with a {string} button",
   async ({ dash, world }, emulator: string, fleet: string, button: string) => {
-    const card = dash.emulator(emulator)
-    await expect(
-      card.getByText(`${fleetOf(world, fleet).url}/${emulator}`, { exact: true }),
-    ).toBeVisible()
-    await expect(dash.button(button, card)).toBeVisible()
+    const copy = dash.copyable(`${fleetOf(world, fleet).url}/${emulator}`, dash.emulator(emulator))
+    await expect(copy).toBeVisible()
+    await expect(dash.button(button, copy)).toBeVisible()
+  },
+)
+
+When(
+  "they press {string} beside the address of the fleet {string}",
+  async ({ dash, world }, button: string, name: string) => {
+    await dash.idle()
+    await dash.button(button, dash.copyable(fleetOf(world, name).url)).click()
   },
 )
 
@@ -183,10 +190,6 @@ Then("the address of the fleet {string} no longer answers", async ({ world }, na
 
 // ---- who can call, and how often -----------------------------------------------------------
 
-Then("{string} is chosen for {string}", async ({ dash }, option: string, label: string) => {
-  await expect(dash.field(label).getByRole("option", { selected: true })).toHaveText(option)
-})
-
 Then(
   "a caller without a key can use the {string} emulator of {string}",
   async ({ world }, emulator: string, fleet: string) => {
@@ -201,26 +204,6 @@ Then(
   },
 )
 
-const rate = (dash: Dashboard) => dash.page.getByLabel("Requests per minute this fleet accepts")
-
-Then("the requests per minute field is empty", async ({ dash }) => {
-  await expect(rate(dash)).toHaveValue("")
-})
-
-Then("the requests per minute field holds {string}", async ({ dash }, value: string) => {
-  await expect(rate(dash)).toHaveValue(value)
-})
-
-When("they set the fleet's requests per minute to {string}", async ({ dash }, value: string) => {
-  await dash.idle()
-  await rate(dash).fill(value)
-  const answered = dash.page.waitForResponse(
-    (response) => response.request().method() === "PATCH" && response.url().includes("/fleets/"),
-  )
-  await dash.button("Set rate limit").click()
-  await answered
-})
-
 Then(
   "after {int} requests in a row the {string} emulator of {string} refuses the next as too many",
   async ({ world }, allowed: number, emulator: string, fleet: string) => {
@@ -231,43 +214,49 @@ Then(
   },
 )
 
-Then("who can call the fleet cannot be changed", async ({ dash }) => {
-  await expect(dash.field("Who can call this fleet")).toBeDisabled()
-})
-
-Then("the requests per minute cannot be changed", async ({ dash }) => {
-  await expect(rate(dash)).toBeDisabled()
-})
+Then(
+  "the API reports no requests per minute of its own for {string}",
+  async ({ world }, fleet: string) => {
+    expect(
+      ((await current(world, fleet)) as { requestsPerMinute?: number | null }).requestsPerMinute ??
+        null,
+    ).toBeNull()
+  },
+)
 
 // ---- the catalog ---------------------------------------------------------------------------
 
-/** A catalog entry is a button that starts with the emulator's display name. */
+const catalog = (dash: Dashboard) =>
+  dash.page.getByRole("navigation", { name: "Catalog", exact: true }).getByRole("link")
+
+/** A catalog entry is a link whose text starts with the emulator's display name. */
 const offer = (dash: Dashboard, name: string) =>
-  dash.page.getByRole("button", { name: new RegExp(`^${name}\\b`) })
+  catalog(dash).filter({ has: dash.page.getByText(name, { exact: true }) })
 
 Then("the search offers {string}", async ({ dash }, name: string) => {
   await expect(offer(dash, name).first()).toBeVisible()
 })
 
-Then("the search offers {int} emulators to choose from", async ({ dash }, count: number) => {
-  await expect(
-    dash.page.getByRole("region", { name: "Catalog", exact: true }).getByRole("button"),
-  ).toHaveCount(count)
+Then("the search offers every emulator of the catalog", async ({ dash, world }) => {
+  const { data } = await world.must<{ data: unknown[] }>("anonymous", "GET", "/catalog")
+  expect(data.length).toBeGreaterThan(30)
+  await expect(catalog(dash)).toHaveCount(data.length)
+  await expect(dash.page.getByText(`${data.length} emulators, all HTTP APIs.`)).toBeVisible()
 })
 
 Then("the search does not offer {string}", async ({ dash }, name: string) => {
+  await expect(dash.page.getByRole("heading", { level: 1 })).toBeVisible()
   await expect(offer(dash, name)).toHaveCount(0)
 })
 
-When("they add {string} from the catalog", async ({ dash }, name: string) => {
+When("they follow the offer {string}", async ({ dash }, name: string) => {
   await dash.idle()
-  const answered = dash.page.waitForResponse(
-    (response) => response.request().method() === "PUT" && response.url().includes("/emulators/"),
-  )
   await offer(dash, name).first().click()
-  await answered
-  // The screen is drawn again with the new emulator, and the search starts over.
-  await expect(dash.field("Search emulators")).toHaveValue("")
+  await dash.idle()
+})
+
+Then("the offer {string} says {string}", async ({ dash }, name: string, text: string) => {
+  await expect(offer(dash, name).first().getByText(text, { exact: true })).toBeVisible()
 })
 
 // ---- emulator cards ------------------------------------------------------------------------
@@ -284,42 +273,52 @@ Then("there is no emulator {string}", async ({ dash }, name: string) => {
 Then(
   "the {string} emulator is labelled as {string}",
   async ({ dash }, name: string, label: string) => {
-    await expect(dash.emulator(name).getByRole("heading")).toHaveText(`${name} · ${label}`)
+    const header = dash.emulator(name).locator("header")
+    await expect(header.getByRole("heading")).toHaveText(name)
+    await expect(header).toContainText(label)
   },
 )
 
-const durability = (dash: Dashboard, emulator: string) =>
-  dash.page.getByRole("group", { name: `Durability of ${emulator}`, exact: true })
-
-Then("{string} is the durability of {string}", async ({ dash }, mode: string, emulator: string) => {
-  await expect(durability(dash, emulator).getByRole("button", { pressed: true })).toHaveText(
-    new RegExp(`^${mode}`),
-  )
+Then("the emulator {string} is noted {string}", async ({ dash }, name: string, note: string) => {
+  await expect(dash.emulator(name).getByRole("status")).toHaveText(note)
 })
 
-When(
-  "they switch the durability of {string} to {string}",
-  async ({ dash }, emulator: string, mode: string) => {
-    await dash.idle()
-    await durability(dash, emulator)
-      .getByRole("button", { name: new RegExp(`^${mode}\\b`) })
-      .click()
-  },
-)
+Then("{string} is the durability of {string}", async ({ dash }, mode: string, emulator: string) => {
+  await expect(
+    dash.setting("Durability", dash.emulator(emulator)).getByRole("definition").first(),
+  ).toContainText(mode)
+})
 
 Then(
-  "the durability choices of {string} are:",
-  async ({ dash }, emulator: string, table: DataTable) => {
-    await expect(durability(dash, emulator).getByRole("button")).toHaveText(
-      table.raw().map(([mode, consequence]) => `${mode}${consequence}`),
-    )
+  "the durability of {string} is noted {string}",
+  async ({ dash }, emulator: string, note: string) => {
+    await expect(
+      dash.setting("Durability", dash.emulator(emulator)).getByRole("status"),
+    ).toHaveText(note)
   },
 )
 
-Then("the durability of {string} cannot be switched", async ({ dash }, emulator: string) => {
-  const choices = durability(dash, emulator).getByRole("button")
-  await expect(choices).toHaveCount(3)
-  for (const choice of await choices.all()) await expect(choice).toBeDisabled()
+When(
+  "the emulator {string} is removed from {string} through the API",
+  async ({ world }, emulator: string, fleet: string) => {
+    const { id } = fleetOf(world, fleet)
+    for (const [person, credential] of world.people)
+      if (credential.kind === "session") {
+        const reply = await world.api(person, "DELETE", `/fleets/${id}/emulators/${emulator}`)
+        if (reply.status < 300) return
+      }
+    throw new Error(`Nobody in this scenario could remove "${emulator}"`)
+  },
+)
+
+Then("the durability choices are:", async ({ dash }, table: DataTable) => {
+  const radios = dash.choices("Durability").getByRole("radio")
+  const rows = table.raw()
+  await expect(radios).toHaveCount(rows.length)
+  for (const [index, [mode = "", consequence = ""]] of rows.entries())
+    await expect(radios.nth(index)).toHaveAccessibleName(
+      new RegExp(`^${literal(mode)}.*${literal(consequence)}$`),
+    )
 })
 
 Then(
@@ -333,25 +332,12 @@ Then("the state of {string} reads {string}", async ({ dash }, emulator: string, 
   await expect(dash.emulator(emulator).getByText(state).first()).toBeVisible()
 })
 
-for (const [answer, accept] of [
-  ["confirm", true],
-  ["decline", false],
-] as const)
-  When(
-    `they press {string} on {string} and ${answer}`,
-    async ({ dash }, button: string, emulator: string) => {
-      await dash.idle()
-      dash.answerNext(accept)
-      await dash.button(button, dash.emulator(emulator)).click()
-    },
-  )
-
 // ---- an emulator's state -------------------------------------------------------------------
 
 When("they download the state of {string}", async ({ dash }, emulator: string) => {
   await dash.idle()
   const download = dash.page.waitForEvent("download")
-  await dash.button("Download state", dash.emulator(emulator)).click()
+  await dash.button(`Download the state of ${emulator}`, dash.emulator(emulator)).click()
   dash.download = await download
 })
 

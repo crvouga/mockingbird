@@ -43,5 +43,7 @@ export const test = base.extend<ScenarioFixtures, WorkerFixtures>({
     await dash.close()
     if (dash.errors.length > 0)
       throw new Error(`The dashboard threw in the browser:\n${dash.errors.join("\n")}`)
+    if (dash.dialogs.length > 0)
+      throw new Error(`The dashboard opened a dialog:\n${dash.dialogs.join("\n")}`)
   },
 })

@@ -1,12 +1,19 @@
-import { h } from "../dom.js"
-import { act, api, confirmThen, day, field, form, secretNotice, ui } from "../runtime.js"
+import { type Child, h } from "../dom.js"
+import { mutation } from "../form.js"
+import type { Context } from "../router.js"
+import { titleOf, to } from "../routes.js"
+import { ApiError, action, api, day, justNow, land, link, removed } from "../runtime.js"
 import type { Key, Org, Project } from "../types.js"
+import { secretScreen } from "./members.js"
+import { orgCrumbs, orgFor, type TabContext } from "./org.js"
 
+/** Keys or tokens as a list; each row links to the screen that revokes it. */
 export function keyList(
   label: string,
   list: Key[],
-  revoke: (key: Key) => Promise<unknown>,
-  empty: string,
+  revoke: (key: Key) => string,
+  scope: (key: Key) => Child,
+  empty: Child,
 ) {
   return list.length > 0
     ? h(
@@ -21,21 +28,19 @@ export function keyList(
               {},
               h(".title", {}, key.name),
               h(
-                ".meta.mono.wrap",
+                ".meta.wrap",
                 {},
-                `${key.prefix}… · last used ${day(key.lastUsedAt)}${key.expiresAt ? ` · expires ${day(key.expiresAt)}` : ""}`,
+                h("code", {}, `${key.prefix}…`),
+                `Last used ${day(key.lastUsedAt)}`,
+                key.expiresAt && `, expires ${day(key.expiresAt)}`,
               ),
             ),
-            key.role && h("span.tag", {}, key.projectId ? `project ${key.role}` : key.role),
+            justNow(`key:${key.id}`),
+            scope(key),
             h(
-              "button.small.danger",
-              {
-                type: "button",
-                onclick: confirmThen(`Revoke ${key.name}? Anything using it stops working.`, () =>
-                  revoke(key),
-                ),
-              },
-              "Revoke",
+              ".row-links",
+              {},
+              link(revoke(key), { class: "danger", "aria-label": `Revoke ${key.name}` }, "Revoke"),
             ),
           ),
         ),
@@ -43,60 +48,154 @@ export function keyList(
     : h(".empty", {}, empty)
 }
 
-export async function keys(org: Org) {
-  const [list, projects] = await Promise.all([
-    api<{ data: Key[] }>("GET", `/orgs/${org.id}/api-keys`),
-    api<{ data: Project[] }>("GET", `/orgs/${org.id}/projects`),
-  ])
-  return h(
-    "section",
-    {},
-    h(
-      "p.sub",
+const listKeys = async (org: Org) =>
+  (await api<{ data: Key[] }>("GET", `/orgs/${org.id}/api-keys`)).data
+const listProjects = async (org: Org) =>
+  (await api<{ data: Project[] }>("GET", `/orgs/${org.id}/projects`)).data
+
+export async function keys({ org }: TabContext) {
+  const [list, projects] = await Promise.all([listKeys(org), listProjects(org)])
+  const projectName = (id: string) => projects.find((project) => project.id === id)?.name ?? id
+  return {
+    action: action(to("key.new", { org: org.id }), "New API key", "primary"),
+    body: h(
+      "section",
       {},
-      "Keys let CI and agents call the API and protected fleets. An organization key reaches every project; a project key reaches one.",
+      h(
+        "p.sub",
+        {},
+        "Keys let CI and agents call the API and fleets that require a key. An organization key reaches every project; a project key reaches one.",
+      ),
+      removed(`keys:${org.id}`),
+      keyList(
+        "API keys",
+        list,
+        (key) => to("key.revoke", { org: org.id, key: key.id }),
+        (key) =>
+          h(
+            "span.tag",
+            {},
+            key.projectId
+              ? `${projectName(key.projectId)}: ${key.role}`
+              : `organization: ${key.role}`,
+          ),
+        [h("strong", {}, "No API keys yet"), "Create one for CI or an agent."],
+      ),
     ),
-    secretNotice(),
-    h(
-      "form.inline.newkey",
+  }
+}
+
+export async function keyNew({ route, params }: Context) {
+  const org = await orgFor(params.org ?? "", "admin", "Creating API keys")
+  const projects = await listProjects(org)
+  const back = to("org.keys", { org: org.id })
+  return mutation({
+    title: route.title,
+    crumbs: orgCrumbs(org, link(back, {}, "API keys"), "New"),
+    lead: "The key is shown once, on the next screen. Only its first characters are kept to recognise it by.",
+    fields: [
       {
-        onsubmit: act(async () => {
-          const projectId = field(form("form.newkey"), "projectId")
-          const key = await api<Key>("POST", `/orgs/${org.id}/api-keys`, {
-            name: field(form("form.newkey"), "name"),
-            role: field(form("form.newkey"), "role"),
-            ...(projectId ? { projectId } : {}),
-          })
-          ui.revealed = { label: "API key created.", value: key.key ?? "" }
-        }),
-      },
-      h("input", {
+        kind: "text",
         name: "name",
-        required: true,
-        maxlength: "80",
-        placeholder: "Key name, e.g. ci",
-        "aria-label": "Key name",
-      }),
-      h(
-        "select",
-        { name: "projectId", "aria-label": "Scope" },
-        h("option", { value: "" }, "Whole organization"),
-        projects.data.map((project) =>
-          h("option", { value: project.id }, `Project: ${project.name}`),
-        ),
-      ),
-      h(
-        "select",
-        { name: "role", "aria-label": "Role" },
-        ["member", "viewer", "admin"].map((role) => h("option", { value: role }, role)),
-      ),
-      h("button.primary", {}, "Create key"),
-    ),
-    keyList(
-      "API keys",
-      list.data,
-      (key) => api("DELETE", `/orgs/${org.id}/api-keys/${key.id}`),
-      "No API keys yet.",
-    ),
-  )
+        label: "Name",
+        hint: "What will use it, for example ci or staging-deploy. Up to 80 characters.",
+        required: "Enter a name for the key.",
+        attrs: { maxlength: "80" },
+      },
+      {
+        kind: "select",
+        name: "projectId",
+        label: "Scope",
+        hint: "A project key can read and change one project only.",
+        value: "",
+        options: [
+          { value: "", label: `All of ${org.name}` },
+          ...projects.map((project) => ({ value: project.id, label: `Project: ${project.name}` })),
+        ],
+      },
+      {
+        kind: "choice",
+        name: "role",
+        label: "Role",
+        value: "member",
+        options: [
+          {
+            value: "viewer",
+            label: "Viewer",
+            description: "Can read. Cannot change anything or control emulators.",
+          },
+          {
+            value: "member",
+            label: "Member",
+            description:
+              "Can create and change fleets and emulators, and call fleets that require a key.",
+          },
+          {
+            value: "admin",
+            label: "Admin",
+            description: "Can also manage members, invites and keys. Organization keys only.",
+          },
+        ],
+      },
+    ],
+    check: ({ projectId, role }) =>
+      projectId && role === "admin"
+        ? {
+            role: "A project key is at most a member. Choose Member or Viewer, or widen the scope.",
+          }
+        : {},
+    place: (error) => (/project key/i.test(error.message) ? "role" : undefined),
+    submit: "Create API key",
+    pending: "Creating…",
+    cancel: back,
+    failed: "The API key was not created.",
+    run: async ({ name, projectId, role }) => {
+      const key = await api<Key>("POST", `/orgs/${org.id}/api-keys`, {
+        name,
+        role,
+        ...(projectId ? { projectId } : {}),
+      })
+      await land(to("key.created", { org: org.id, key: key.id }), {
+        secret: { id: key.id, value: key.key ?? "", for: key.name },
+      })
+    },
+  })
+}
+
+export async function keyCreated({ route, params }: Context) {
+  const org = await orgFor(params.org ?? "", "admin", "Creating API keys")
+  return secretScreen({
+    id: params.key ?? "",
+    title: route.title,
+    what: "This API key",
+    body: "Send it as Authorization: Bearer <key> to the API, or as x-mockingbird-api-key to a fleet that requires a key.",
+    done: to("org.keys", { org: org.id }),
+  })
+}
+
+export async function keyRevoke({ route, params }: Context) {
+  const org = await orgFor(params.org ?? "", "admin", "Revoking API keys")
+  const key = (await listKeys(org)).find((entry) => entry.id === params.key)
+  if (!key) throw new ApiError(404, "This API key does not exist, or was already revoked.")
+  const back = to("org.keys", { org: org.id })
+  return mutation({
+    title: titleOf(route, { key: key.name }),
+    crumbs: orgCrumbs(org, link(back, {}, "API keys"), "Revoke"),
+    danger: true,
+    lead: [
+      "Anything still using ",
+      h("code", {}, `${key.prefix}…`),
+      ` is refused from its next request (last used ${day(key.lastUsedAt)}). A revoked key cannot be restored.`,
+    ],
+    submit: "Revoke API key",
+    pending: "Revoking…",
+    cancel: back,
+    failed: "The API key was not revoked.",
+    run: async () => {
+      await api("DELETE", `/orgs/${org.id}/api-keys/${key.id}`)
+      await land(back, {
+        note: { about: `keys:${org.id}`, text: `${key.name} was revoked just now.` },
+      })
+    },
+  })
 }

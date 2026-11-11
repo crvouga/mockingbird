@@ -11,7 +11,7 @@ export const ROLES = ["viewer", "member", "admin", "owner"] as const
 
 export type Me = {
   kind: string
-  user?: { email: string | null; name: string | null }
+  user?: { id: string; email: string | null; name: string | null }
   orgs: Org[]
 }
 export type Org = {
@@ -62,4 +62,17 @@ export type CatalogEntry = {
   displayName: string
   category: string
   description: string
+}
+export type Member = { userId: string; email: string | null; name: string | null; role: string }
+export type Invite = {
+  id: string
+  email: string
+  role: string
+  expiresAt: string
+  acceptUrl?: string
+}
+export type UsageReport = {
+  limits: Record<string, number>
+  usage: Record<string, number>
+  daily: { day: string; requests: number }[]
 }

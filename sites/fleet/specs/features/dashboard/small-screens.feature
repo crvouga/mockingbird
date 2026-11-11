@@ -1,12 +1,20 @@
 @dashboard
 Feature: The dashboard on a small screen
   On a phone 390 points wide every screen fits: nothing has to be scrolled sideways, and the
-  details of a row wrap instead of being cut off.
+  details of a row wrap instead of being cut off. That holds for the screens that show things,
+  the screens that change them, and the screens that show a secret once.
 
   Scenario: The sign-in screen fits a phone
     Given a visitor on a phone who is not signed in
     When they open the dashboard
     Then they are asked to sign in
+    And nothing reaches past the edge of the screen
+
+  Scenario: A sign-in form fits a phone
+    Given a visitor on a phone who is not signed in
+    When they open the dashboard at "/sign-in/local"
+    And they press "Sign in"
+    Then the field "Email" says "Enter an email address."
     And nothing reaches past the edge of the screen
 
   Rule: Every screen of a busy organization fits
@@ -39,46 +47,44 @@ Feature: The dashboard on a small screen
         | Audit log |
         | Settings  |
 
-    Scenario: The list of organizations fits a phone
-      When they open the dashboard at "/orgs"
-      Then they see the page "Organizations"
+    Scenario Outline: The <screen> fits a phone
+      When they open the <screen>
+      Then they see the page "<page>"
       And nothing reaches past the edge of the screen
 
-    Scenario: A project fits a phone
-      When they open the project "Web application for customers"
-      Then they see the page "Web application for customers"
-      And nothing reaches past the edge of the screen
+      Examples:
+        | screen                                                                 | page                                      |
+        | dashboard at "/orgs"                                                   | Organizations                             |
+        | project "Web application for customers"                               | Web application for customers             |
+        | fleet "Staging"                                                        | Staging                                   |
+        | dashboard at "/account"                                                | Account                                   |
+        | dashboard at "/api-reference"                                          | API reference                             |
+        | address of the fleet "Staging" followed by "/add-emulator"             | Add an emulator to Staging                |
+        | address of the fleet "Staging" followed by "/add-emulator/stripe"      | Add Stripe to Staging                     |
+        | address of the fleet "Staging" followed by "/emulators/resend/durability" | Change the durability of resend        |
+        | address of the fleet "Staging" followed by "/access"                   | Change who can call Staging               |
+        | address of the fleet "Staging" followed by "/delete"                   | Delete Staging                            |
+        | address of the organization "Acme Research and Development" followed by "/delete" | Delete Acme Research and Development |
 
-    Scenario: A fleet fits a phone
-      When they open the fleet "Staging"
-      Then there is an emulator "stripe-2"
-      And nothing reaches past the edge of the screen
-
-    Scenario: A fleet with the catalog open fits a phone
-      When they open the fleet "Staging"
-      And they put the cursor in "Search emulators"
-      Then the search offers "Airtable"
-      And nothing reaches past the edge of the screen
-
-    Scenario: The account page fits a phone
-      Given Ada has a personal token "laptop"
-      When they open the dashboard at "/account"
-      Then the token "laptop" is listed
-      And nothing reaches past the edge of the screen
-
-    Scenario: The API reference fits a phone
-      When they open the dashboard at "/api-reference"
-      Then they see the page "API reference"
+    Scenario: A form with problems pointed out fits a phone
+      When they open the "API keys" tab of "Acme Research and Development"
+      And they follow "New API key"
+      And they choose "Project: Web application for customers" as the "Scope"
+      And they choose "Admin" as the "Role"
+      And they press "Create API key"
+      Then the field "Name" says "Enter a name for the key."
+      And the field "Role" says "A project key is at most a member."
       And nothing reaches past the edge of the screen
 
     Scenario: A key's details wrap instead of being cut off
       When they open the "API keys" tab of "Acme Research and Development"
-      Then the key "continuous integration for the web app" says "last used never"
+      Then the key "continuous integration for the web app" says "Last used never"
       And the details of the key "continuous integration for the web app" are shown in full
 
     Scenario: A secret that was just created fits a phone
       When they open the "API keys" tab of "Acme Research and Development"
-      And they type "deploy" into "Key name"
-      And they press "Create key"
+      And they follow "New API key"
+      And they type "deploy" into "Name"
+      And they press "Create API key"
       Then a secret starting with "mbf_o_" is shown
       And nothing reaches past the edge of the screen

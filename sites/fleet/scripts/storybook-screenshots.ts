@@ -10,6 +10,7 @@
 import { mkdir, rm } from "node:fs/promises"
 import { join, normalize } from "node:path"
 import { type Browser, chromium } from "@playwright/test"
+import { ROUTES, SHELL_STATES } from "../src/ui/routes.js"
 
 const root = join(import.meta.dir, "..")
 const site = join(root, "storybook-static")
@@ -59,6 +60,23 @@ await mkdir(out, { recursive: true })
 
 const problems: string[] = []
 const captures: Capture[] = []
+/** What each story drew (at desktop width): its surface, and the states it claims. */
+const drawn = new Map<string, { route: string; shows: string[] }>()
+
+/**
+ * Whether the page shows a claimed state, judged from the markup the dashboard draws for it. Runs
+ * in the page, so it refers to nothing outside itself.
+ */
+const STATE_CHECKS = {
+  "field-error": ".field-error",
+  "form-error": "form .form-error[role=alert]",
+  pending: "form[aria-busy=true] button[type=submit][disabled]",
+  // Succeeded and moved on: a route's own query screen, not the form again or a shell statement.
+  landed: `main[data-surface=query]${["unavailable", "error", "forbidden", "not-found", "gone"].map((state) => `:not([data-route=${state}])`).join("")}`,
+  secret: "main[data-surface=query] .secret code",
+  "catalog:results": "main input[type=search]",
+  "catalog:no-match": "main input[type=search]",
+} as const
 
 async function capture(browser: Browser, job: Omit<Capture, "file">) {
   const context = await browser.newContext({
@@ -80,6 +98,21 @@ async function capture(browser: Browser, job: Omit<Capture, "file">) {
     await page.evaluate(() => document.fonts.ready)
     const size = await page.locator("#storybook-root").boundingBox()
     if (!size || size.height < 20) problems.push(`${label}: drew nothing`)
+    if (job.variant === "desktop") {
+      const seen = await page.evaluate((checks) => {
+        const frame = document.querySelector<HTMLElement>("#storybook-root > .story")
+        const shows = (frame?.dataset.shows ?? "").split(" ").filter(Boolean)
+        const route =
+          document.querySelector("main[data-route]")?.getAttribute("data-route") ?? "boot"
+        const missing = shows.filter(
+          (state) => !document.querySelector(checks[state as keyof typeof checks] ?? ":not(*)"),
+        )
+        return { route, shows, missing }
+      }, STATE_CHECKS)
+      drawn.set(job.id, { route: seen.route, shows: seen.shows })
+      for (const state of seen.missing)
+        problems.push(`${label}: claims to show "${state}" but the page does not`)
+    }
     await page.screenshot({ path: join(out, file), fullPage: true })
     captures.push({ ...job, file })
   } catch (error) {
@@ -107,7 +140,17 @@ const position = (entry: Capture) => order.get(`${entry.id} ${entry.variant}`) ?
 captures.sort((left, right) => position(left) - position(right))
 await Bun.write(join(out, "manifest.json"), `${JSON.stringify(captures, null, 2)}\n`)
 
+// Every route and every shell state must be drawn by at least one story, in a real browser.
+const surfaces = new Set([...drawn.values()].map((entry) => entry.route))
+for (const id of [...ROUTES.map((entry) => entry.id), ...SHELL_STATES])
+  if (!surfaces.has(id)) problems.push(`no story draws "${id}"`)
+await Bun.write(
+  join(out, "surfaces.json"),
+  `${JSON.stringify(Object.fromEntries(drawn), null, 2)}\n`,
+)
+
 console.log(`${captures.length} screenshots of ${stories.length} stories in ${out}`)
+console.log(`${surfaces.size} distinct surfaces drawn; every story passed the design-rule audit`)
 if (problems.length > 0) {
   console.error(`${problems.length} problems:\n${problems.map((line) => `  ${line}`).join("\n")}`)
   process.exit(1)

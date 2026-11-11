@@ -1,6 +1,6 @@
 /** The dashboard as a client of the API: what it requests, how it is served, what it lists. */
 import { expect } from "@playwright/test"
-import { Then } from "./common.steps.js"
+import { Then, When } from "./common.steps.js"
 
 type Operation = { summary: string; tags: string[] }
 type OpenApi = { servers: { url: string }[]; paths: Record<string, Record<string, Operation>> }
@@ -75,19 +75,18 @@ Then("the browser reported no blocked resources", async ({ dash }) => {
 Then(
   "the server's API address is on screen with a {string} button",
   async ({ dash, world }, button: string) => {
-    const { servers } = await openapi(world.url)
-    await expect(dash.page.getByText(servers[0]?.url ?? "", { exact: true })).toBeVisible()
-    await expect(dash.button(button)).toBeVisible()
+    const copy = dash.copyable((await openapi(world.url)).servers[0]?.url ?? "")
+    await expect(copy).toBeVisible()
+    await expect(dash.button(button, copy)).toBeVisible()
   },
 )
 
 Then(
   "the address of the OpenAPI document is on screen with a {string} button",
   async ({ dash, world }, button: string) => {
-    await expect(
-      dash.page.getByText(`${world.url}/api/openapi.json`, { exact: true }),
-    ).toBeVisible()
-    await expect(dash.button(button)).toBeVisible()
+    const copy = dash.copyable(`${world.url}/api/openapi.json`)
+    await expect(copy).toBeVisible()
+    await expect(dash.button(button, copy)).toBeVisible()
   },
 )
 
@@ -115,4 +114,19 @@ Then("there is a section for every tag of the OpenAPI document", async ({ dash, 
     ),
   )
   await expect(dash.page.getByRole("heading", { level: 2 })).toHaveText([...tags])
+})
+
+const apiAddress = async (url: string) => (await openapi(url)).servers[0]?.url ?? ""
+
+When(
+  "they press {string} beside the server's API address",
+  async ({ dash, world }, button: string) => {
+    await dash.idle()
+    await dash.button(button, dash.copyable(await apiAddress(world.url))).click()
+  },
+)
+
+Then("the clipboard holds the server's API address", async ({ dash, world }) => {
+  const address = await apiAddress(world.url)
+  await expect.poll(() => dash.page.evaluate(() => navigator.clipboard.readText())).toBe(address)
 })

@@ -1,5 +1,6 @@
 /** Signing in to the dashboard in a browser: locally, with a token, and through a real provider. */
 import { expect } from "@playwright/test"
+import type { Dashboard } from "../support/dashboard.js"
 import { startOidcProvider } from "../support/hosting.js"
 import { startStack } from "../support/stack.js"
 import { keyOf } from "../support/tenancy.js"
@@ -12,26 +13,62 @@ const providers = new WeakMap<World, Provider>()
 
 Then("they are asked to sign in", async ({ dash }) => {
   await expect(
-    dash.page.getByRole("heading", { level: 1, name: "Mockingbird Fleet", exact: true }),
+    dash.page.getByRole("heading", {
+      level: 1,
+      name: "Sign in to Mockingbird Fleet",
+      exact: true,
+    }),
   ).toBeVisible()
-  await expect(dash.button("Sign in with a token")).toBeVisible()
-  await expect(dash.button("Sign out")).toHaveCount(0)
+  await expect(ways(dash)).toBeVisible()
+  await expect(dash.page.getByRole("link", { name: "Sign out", exact: true })).toHaveCount(0)
 })
+
+const ways = (dash: Dashboard) =>
+  dash.page.getByRole("navigation", { name: "Ways to sign in", exact: true })
+/** A way to sign in on the chooser, by its title ("Sign in locally"). */
+const way = (dash: Dashboard, title: string) =>
+  ways(dash).getByRole("link").filter({ hasText: title })
+
+Then("they are offered to {string}", async ({ dash }, title: string) => {
+  await expect(way(dash, title)).toBeVisible()
+})
+
+Then("they are offered the ways to sign in {string}", async ({ dash }, titles: string) => {
+  await expect(ways(dash).getByRole("link")).toHaveCount(titles.split(", ").length)
+  for (const title of titles.split(", ")) await expect(way(dash, title)).toBeVisible()
+})
+
+When("they choose to {string}", async ({ dash }, title: string) => {
+  await dash.idle()
+  await way(dash, title).click()
+  await dash.idle()
+})
+
+/** Be on the screen of one way to sign in, going there from the chooser when not on it yet. */
+async function onScreen(dash: Dashboard, title: string) {
+  await dash.idle()
+  const heading = dash.page.getByRole("heading", { level: 1, name: title, exact: true })
+  if (await heading.isVisible()) return
+  await way(dash, title).click()
+  await expect(heading).toBeVisible()
+}
 
 When("they sign in locally as {word}", async ({ dash, world }, person: string) => {
-  await dash.idle()
+  await onScreen(dash, "Sign in locally")
   await dash.field("Email").fill(world.email(person))
-  await dash.button("Sign in locally").click()
+  await dash.button("Sign in").click()
+  await dash.idle()
 })
 
-const withToken = async (dash: import("../support/dashboard.js").Dashboard, token: string) => {
-  await dash.idle()
+const withToken = async (dash: Dashboard, token: string) => {
+  await onScreen(dash, "Sign in with a token")
   await dash.field("Personal token").fill(token)
   const answered = dash.page.waitForResponse((response) =>
     response.url().endsWith("/auth/token-login"),
   )
-  await dash.button("Sign in with a token").click()
+  await dash.button("Sign in").click()
   await answered
+  await dash.idle()
 }
 
 When("they sign in with the personal token {string}", async ({ dash, world }, name: string) => {
