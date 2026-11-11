@@ -18,6 +18,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-service-acm": "workspace:*",
     "@crvouga/mockingbird-service-aha": "workspace:*",
@@ -144,6 +145,7 @@
     "jose": "6.2.2"
   },
   "devDependencies": {
+    "@crvouga/mockingbird-fleet": "workspace:*",
     "@crvouga/mockingbird-service-postgres": "workspace:*",
     "@playwright/test": "1.65.0",
     "@storybook/html-vite": "10.6.6",

@@ -5,6 +5,8 @@ import {
   fleets,
   forbidden,
   inFleet,
+  managed,
+  managedByDeclaration,
   quotaExceeded,
   suspended,
 } from "./fixtures.js"
@@ -257,4 +259,34 @@ export const Removing = mutation({
   routes: { ...base, "DELETE /fleets/flt_staging/emulators/resend": PENDING },
   steps: (page) => page.submit(),
   shows: ["pending"],
+})
+
+// ---- configured by mockingbird.yaml
+
+const declared = inFleet(typical, "member", { managed })
+
+/** Which emulators a fleet runs, and how durable each is, are the file's: a statement, not the form. */
+export const CatalogWhenManaged = query({ path: add, routes: declared })
+export const ConfigureWhenManaged = query({ path: configure, routes: declared })
+export const DurabilityWhenManaged = query({ path: `${resend}/durability`, routes: declared })
+export const RemoveWhenManaged = query({ path: `${resend}/remove`, routes: declared })
+
+/** Operating an emulator is not the file's: saving and resetting its state stay. */
+export const SaveWhenManaged = mutation({ path: `${resend}/save`, routes: declared })
+export const ResetWhenManaged = mutation({ path: `${resend}/reset`, routes: declared })
+
+/** A file was applied while the form was open: the API's refusal is shown in the form. */
+export const DurabilityBecameManaged = mutation({
+  path: `${resend}/durability`,
+  routes: { ...base, "PATCH /fleets/flt_staging/emulators/resend": managedByDeclaration },
+  steps: (page) => page.submit({ Durability: "strict" }),
+  shows: ["form-error"],
+})
+
+/** The refusal belongs to no field, not to the name. */
+export const ConfigureBecameManaged = mutation({
+  path: configure,
+  routes: { ...base, "PUT /fleets/flt_staging/emulators/twilio": managedByDeclaration },
+  steps: (page) => page.submit(),
+  shows: ["form-error"],
 })

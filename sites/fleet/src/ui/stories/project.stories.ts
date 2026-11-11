@@ -7,6 +7,8 @@ import {
   forbidden,
   inProject,
   invalid,
+  managed,
+  managedByDeclaration,
   project,
   projects,
   quotaExceeded,
@@ -213,4 +215,36 @@ export const Deleting = mutation({
   routes: { ...inProject("admin"), "DELETE /projects/prj_web": PENDING },
   steps: (page) => page.submit(),
   shows: ["pending"],
+})
+
+// ---- configured by mockingbird.yaml
+
+const declared = { managed }
+
+/** The file declares the project and its fleets: no link creates, renames or deletes. */
+export const ManagedAsOwner = query({ path, routes: inProject("owner", fleets, declared) })
+export const ManagedAsMember = query({ path, routes: inProject("member", fleets, declared) })
+export const ManagedAsViewer = query({ path, routes: inProject("viewer", fleets, declared) })
+export const ManagedNoFleets = query({ path, routes: inProject("owner", [], declared) })
+
+/** The address of a form the file controls: a statement, not the form. */
+export const RenameWhenManaged = query({
+  path: rename,
+  routes: inProject("member", fleets, declared),
+})
+export const DeleteWhenManaged = query({
+  path: remove,
+  routes: inProject("admin", fleets, declared),
+})
+export const NewFleetWhenManaged = query({
+  path: create,
+  routes: inProject("member", fleets, declared),
+})
+
+/** A file was applied while the form was open: the refusal belongs to no field, not to the slug. */
+export const NewFleetBecameManaged = mutation({
+  path: create,
+  routes: { ...inProject("member"), "POST /projects/prj_web/fleets": managedByDeclaration },
+  steps: (page) => page.submit({ Name: "QA", "URL slug (optional)": "acme-qa" }),
+  shows: ["form-error"],
 })

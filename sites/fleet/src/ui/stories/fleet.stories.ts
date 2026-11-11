@@ -7,6 +7,8 @@ import {
   inFleet,
   invalid,
   limits,
+  managed,
+  managedByDeclaration,
   project,
   rateLimited,
   suspended,
@@ -278,5 +280,42 @@ export const RateLimitThrottled = mutation({
   path: rate,
   routes: { ...withCeiling(inFleet(typical, "member")), "PATCH /fleets/flt_staging": rateLimited },
   steps: (page) => page.submit({ "Requests per minute": "600" }),
+  shows: ["form-error"],
+})
+
+// ---- configured by mockingbird.yaml
+
+const declared = { managed }
+
+/** The file declares the fleet: its settings and emulators are shown, with only the links that operate them. */
+export const ManagedAsOwner = query({ path, routes: inFleet(typical, "owner", declared) })
+/** A member can still save, reset and download emulator state. */
+export const ManagedAsMember = query({ path, routes: inFleet(typical, "member", declared) })
+export const ManagedAsViewer = query({ path, routes: inFleet(typical, "viewer", declared) })
+export const ManagedNoEmulators = query({ path, routes: inFleet(fleet(), "owner", declared) })
+
+/** The address of a form the file controls: a statement, not the form. */
+export const RenameWhenManaged = query({
+  path: rename,
+  routes: inFleet(typical, "member", declared),
+})
+export const AccessWhenManaged = query({
+  path: access,
+  routes: inFleet(typical, "member", declared),
+})
+export const RateLimitWhenManaged = query({
+  path: rate,
+  routes: withCeiling(inFleet(typical, "member", declared)),
+})
+export const DeleteWhenManaged = query({
+  path: remove,
+  routes: inFleet(typical, "member", declared),
+})
+
+/** A file was applied while the form was open: the API's refusal is shown in the form. */
+export const RenameBecameManaged = mutation({
+  path: rename,
+  routes: { ...inFleet(typical, "member"), "PATCH /fleets/flt_staging": managedByDeclaration },
+  steps: (page) => page.submit({ Name: "Staging (old)" }),
   shows: ["form-error"],
 })

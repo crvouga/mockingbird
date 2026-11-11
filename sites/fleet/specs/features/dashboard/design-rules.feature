@@ -23,7 +23,35 @@ Feature: The dashboard's design rules
 
     Scenario: Every screen an owner can reach keeps the design rules
       When they open every screen of the dashboard in turn
-      Then each one is drawn as the kind of screen its route declares
+      Then each one is drawn as the kind of screen its route declares, except:
+        | route                     | drawn as          | because                                      |
+        | invite.created            | gone              | a secret is shown once, after its form       |
+        | key.created               | gone              | a secret is shown once, after its form       |
+        | token.created             | gone              | a secret is shown once, after its form       |
+        | org.configuration.release | org.configuration | no file controls the organization to release |
+      And none of them breaks a design rule
+
+    Scenario: Every screen of an organization managed by mockingbird.yaml keeps the design rules
+      Given the organization "Acme" has come under a mockingbird.yaml that declares it as it is
+      When they open every screen of the dashboard in turn
+      Then each one is drawn as the kind of screen its route declares, except:
+        | route                  | drawn as | because                                |
+        | invite.created         | gone     | a secret is shown once, after its form |
+        | key.created            | gone     | a secret is shown once, after its form |
+        | token.created          | gone     | a secret is shown once, after its form |
+        | org.rename             | managed  | the file declares it                   |
+        | project.new            | managed  | the file declares it                   |
+        | project.rename         | managed  | the file declares it                   |
+        | project.delete         | managed  | the file declares it                   |
+        | fleet.new              | managed  | the file declares it                   |
+        | fleet.rename           | managed  | the file declares it                   |
+        | fleet.access           | managed  | the file declares it                   |
+        | fleet.rate-limit       | managed  | the file declares it                   |
+        | fleet.delete           | managed  | the file declares it                   |
+        | emulator.add           | managed  | the file declares it                   |
+        | emulator.add.configure | managed  | the file declares it                   |
+        | emulator.durability    | managed  | the file declares it                   |
+        | emulator.remove        | managed  | the file declares it                   |
       And none of them breaks a design rule
 
     Scenario: Every form keeps the design rules while it points out problems
@@ -69,6 +97,14 @@ Feature: The dashboard's design rules
       And Grace is signed in to the dashboard
       When they open the "Settings" tab of "Acme"
       Then the screen is the "forbidden" state
+      And the screen keeps the design rules
+
+    Scenario: A change that mockingbird.yaml controls
+      Given Ada is signed in to the dashboard
+      And Ada owns an organization "Acme"
+      And the organization "Acme" has come under a mockingbird.yaml that declares it as it is
+      When they open the address of the organization "Acme" followed by "/rename"
+      Then the screen is the "managed" state
       And the screen keeps the design rules
 
     Scenario: A secret asked for a second time
@@ -126,6 +162,17 @@ Feature: The dashboard's design rules
       And they press "Create project"
       Then the form says "The project was not created."
       And nothing on the page announces itself outside the screen
+      And the screen keeps the design rules
+
+    Scenario: A refused release of an organization from its file is summarised in the form too
+      Given the organization "Acme" has come under a mockingbird.yaml that declares it as it is
+      And Grace has joined "Acme" with the admin role
+      And Grace is signed in to the dashboard
+      When they open the address of the organization "Acme" followed by "/configuration/release"
+      And Ada makes Grace a member of "Acme" through the API
+      And they press "Release organization"
+      Then the form says "The organization was not released."
+      And the form's summary has the focus
       And the screen keeps the design rules
 
     Scenario: While a change is being sent, the form says so and cannot be sent twice

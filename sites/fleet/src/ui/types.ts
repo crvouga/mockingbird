@@ -14,12 +14,21 @@ export type Me = {
   user?: { id: string; email: string | null; name: string | null }
   orgs: Org[]
 }
+/** Set when a `mockingbird.yaml` was applied: the file then controls what the organization declares. */
+export type Managed = { appliedAt: string; appliedBy: string }
 export type Org = {
   id: string
   slug: string
   name: string
   role?: string
   suspended: string | null
+  managed: Managed | null
+}
+/** `GET /orgs/{id}/manifest`: the organization's configuration as a `mockingbird.yaml`. */
+export type DeclarationView = {
+  managed: Managed | null
+  declaration: { projects?: Record<string, unknown> }
+  yaml: string
 }
 export type Project = { id: string; orgId: string; slug: string; name: string }
 export type Emulator = {

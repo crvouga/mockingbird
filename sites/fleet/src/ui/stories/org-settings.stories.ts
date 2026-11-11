@@ -1,5 +1,16 @@
 import type { Meta } from "@storybook/html-vite"
-import { forbidden, globex, inOrg, invalid, me, org, type Role, suspended } from "./fixtures.js"
+import {
+  forbidden,
+  globex,
+  inOrg,
+  invalid,
+  managed,
+  managedByDeclaration,
+  me,
+  org,
+  type Role,
+  suspended,
+} from "./fixtures.js"
 import { type MockRoutes, ok, PENDING } from "./mock.js"
 import { mutation, query } from "./story.js"
 
@@ -116,3 +127,23 @@ export const Deleted = mutation({
 
 /** Only an owner may delete the organization. */
 export const DeleteAsAdmin = query({ path: remove, routes: tab("admin") })
+
+// ---- configured by mockingbird.yaml
+
+/** The name is the file's: it is shown without a link to rename it. Deleting stays. */
+export const ManagedAsOwner = query({ path, routes: tab("owner", { managed }) })
+export const ManagedAsAdmin = query({ path, routes: tab("admin", { managed }) })
+
+/** The address of the form, in an organization the file controls: a statement, not the form. */
+export const RenameWhenManaged = query({ path: rename, routes: tab("admin", { managed }) })
+
+/** A file was applied while the form was open: the API's refusal is shown in the form. */
+export const RenameBecameManaged = mutation({
+  path: rename,
+  routes: { ...tab("admin"), "PATCH /orgs/org_acme": managedByDeclaration },
+  steps: (page) => page.submit({ Name: "Acme Corp" }),
+  shows: ["form-error"],
+})
+
+/** Deleting the organization is not the file's to refuse. */
+export const DeleteWhenManaged = mutation({ path: remove, routes: tab("owner", { managed }) })

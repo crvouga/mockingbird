@@ -9,11 +9,15 @@ import {
   atLeast,
   count,
   crumbs,
+  declared,
+  declareIt,
   deny,
   head,
   justNow,
   land,
   link,
+  managedNotice,
+  preferFile,
   properties,
   removed,
   section,
@@ -34,6 +38,13 @@ export async function projectFor(projectId: string, minimum?: string, what = "Th
   return { project, org, role: org?.role }
 }
 
+/** Refuse the form for a hand edit of a project that the organization's file declares. */
+export const projectDeclared = ({ project, org }: ProjectContext, what: string) =>
+  declared(org, what, {
+    href: to("project", { project: project.id }),
+    label: `Back to ${project.name}`,
+  })
+
 export const projectCrumbs = ({ project, org }: ProjectContext, ...rest: Child[]) =>
   crumbs(
     link(to("orgs"), {}, "Organizations"),
@@ -46,8 +57,10 @@ export async function projectScreen({ params }: Context) {
   const context = await projectFor(params.project ?? "")
   const { project, org } = context
   const fleets = (await api<{ data: Fleet[] }>("GET", `/projects/${project.id}/fleets`)).data
+  // What the organization's mockingbird.yaml declares is shown without the links that change it.
+  const byHand = !org?.managed
   const canChange = !org || atLeast(org.role, "member")
-  const canDelete = org !== undefined && atLeast(org.role, "admin")
+  const canDelete = byHand && org !== undefined && atLeast(org.role, "admin")
   const at = { project: project.id }
   return [
     projectCrumbs(context),
@@ -59,7 +72,13 @@ export async function projectScreen({ params }: Context) {
           : "You are a viewer: you can look at this project and its fleets, not change them.",
         justNow(`project:${project.id}`),
       ],
-      canChange && action(to("fleet.new", at), "New fleet", "primary"),
+      byHand &&
+        canChange &&
+        action(to("fleet.new", at), "New fleet", fleets.length > 0 ? "primary" : "plain"),
+    ),
+    managedNotice(
+      org,
+      "This project and its fleets are declared in the file, so they are read-only here.",
     ),
     properties("Project settings", [
       {
@@ -67,6 +86,7 @@ export async function projectScreen({ params }: Context) {
         value: project.name,
         about: `project-name:${project.id}`,
         change:
+          byHand &&
           canChange &&
           link(to("project.rename", at), { "aria-label": "Rename the project" }, "Rename"),
       },
@@ -96,9 +116,14 @@ export async function projectScreen({ params }: Context) {
             ".empty",
             {},
             h("strong", {}, "No fleets yet"),
-            canChange
-              ? "Create one, then add the emulators it should run."
-              : "A member of the organization can create one.",
+            !byHand
+              ? "The file declares no fleets for this project. Add one to it and apply it."
+              : canChange
+                ? [
+                    declareIt(project.orgId, "this project's fleets and their emulators"),
+                    h("p.empty-aside", {}, "Create one, then add the emulators it should run."),
+                  ]
+                : "A member of the organization can create one.",
           ),
     ),
     canDelete &&
@@ -116,10 +141,12 @@ export async function projectNew({ route, params }: Context) {
   if (!atLeast(org.role, "member"))
     deny(`Creating projects is for members and above of ${org.name}. You are ${aRole(org.role)}.`)
   const back = to("org", { org: org.id })
+  declared(org, "Creating projects", { href: back, label: `Back to ${org.name}` })
   return mutation({
     title: route.title,
     crumbs: crumbs(link(to("orgs"), {}, "Organizations"), link(back, {}, org.name), "New project"),
     lead: `A project in ${org.name} groups the fleets of one application.`,
+    note: preferFile(org.id, "the project"),
     fields: [
       {
         kind: "text",
@@ -147,6 +174,7 @@ export async function projectRename({ route, params }: Context) {
   const context = await projectFor(params.project ?? "", "member", "Renaming a project")
   const { project } = context
   const back = to("project", { project: project.id })
+  projectDeclared(context, "Renaming a project")
   return mutation({
     title: titleOf(route, { project: project.name }),
     crumbs: projectCrumbs(context, "Rename"),
@@ -178,6 +206,7 @@ export async function projectRename({ route, params }: Context) {
 export async function projectDelete({ route, params }: Context) {
   const context = await projectFor(params.project ?? "", "admin", "Deleting a project")
   const { project } = context
+  projectDeclared(context, "Deleting a project")
   const fleets = (await api<{ data: Fleet[] }>("GET", `/projects/${project.id}/fleets`)).data
   const back = to("project", { project: project.id })
   return mutation({

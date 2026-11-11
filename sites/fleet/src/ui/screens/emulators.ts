@@ -3,12 +3,13 @@ import { h } from "../dom.js"
 import { mutation } from "../form.js"
 import type { Context } from "../router.js"
 import { titleOf, to } from "../routes.js"
-import { ApiError, api, head, land, link, ui } from "../runtime.js"
+import { ApiError, api, head, land, link, preferFile, ui } from "../runtime.js"
 import type { CatalogEntry, Emulator } from "../types.js"
 import {
   DURABILITY,
   type FleetContext,
   fleetCrumbs,
+  fleetDeclared,
   fleetFor,
   loadCatalog,
   slugProblem,
@@ -50,6 +51,7 @@ const durabilityOptions = (current?: string) =>
  */
 export async function emulatorAdd({ route, params }: Context) {
   const context = await fleetFor(params.fleet ?? "", "member", "Adding emulators")
+  fleetDeclared(context, "Adding emulators")
   const { fleet } = context
   const catalog = [...(await loadCatalog())].sort((left, right) =>
     left.displayName.localeCompare(right.displayName),
@@ -112,6 +114,7 @@ export async function emulatorAdd({ route, params }: Context) {
       titleOf(route, { fleet: fleet.name }),
       "Choose what to emulate. On the next screen you name it and choose how durable its state is.",
     ),
+    preferFile(fleet.orgId, "the emulator"),
     h(".search", {}, search),
     tally,
     results,
@@ -120,6 +123,7 @@ export async function emulatorAdd({ route, params }: Context) {
 
 export async function emulatorConfigure({ route, params }: Context) {
   const context = await fleetFor(params.fleet ?? "", "member", "Adding emulators")
+  fleetDeclared(context, "Adding emulators")
   const { fleet } = context
   const entry = (await loadCatalog()).find((item) => item.target === params.target)
   if (!entry) throw new ApiError(404, `The catalog has no emulator called ${params.target}.`)
@@ -129,6 +133,7 @@ export async function emulatorConfigure({ route, params }: Context) {
     title: titleOf(route, { emulator: entry.displayName, fleet: fleet.name }),
     crumbs: fleetCrumbs(context, link(back, {}, "Add an emulator"), entry.displayName),
     lead: entry.description,
+    note: preferFile(fleet.orgId, "the emulator"),
     fields: [
       {
         kind: "text",
@@ -179,8 +184,10 @@ export async function emulatorConfigure({ route, params }: Context) {
 }
 
 /** The emulator a mutation acts on, with the fleet it is in. */
-async function emulatorFor(params: Record<string, string>, what: string) {
+async function emulatorFor(params: Record<string, string>, what: string, isDeclared = false) {
   const context = await fleetFor(params.fleet ?? "", "member", what)
+  // Durability and membership of the fleet are the file's; saving and resetting state are not.
+  if (isDeclared) fleetDeclared(context, what)
   const name = params.name ?? ""
   const emulator = context.fleet.emulators[name]
   if (!emulator) throw new ApiError(404, `${context.fleet.name} has no emulator named ${name}.`)
@@ -196,7 +203,7 @@ const stored = (emulator: Emulator) =>
     : "its state"
 
 export async function emulatorDurability({ route, params }: Context) {
-  const { context, name, emulator } = await emulatorFor(params, "Changing durability")
+  const { context, name, emulator } = await emulatorFor(params, "Changing durability", true)
   const { fleet } = context
   const back = to("fleet", { fleet: fleet.id })
   return mutation({
@@ -274,7 +281,7 @@ export async function emulatorReset({ route, params }: Context) {
 }
 
 export async function emulatorRemove({ route, params }: Context) {
-  const { context, name, emulator } = await emulatorFor(params, "Removing an emulator")
+  const { context, name, emulator } = await emulatorFor(params, "Removing an emulator", true)
   const { fleet } = context
   const back = to("fleet", { fleet: fleet.id })
   return mutation({

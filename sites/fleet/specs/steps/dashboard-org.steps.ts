@@ -1,7 +1,7 @@
 /** An organization's tabs in the browser: its list, members, invites, usage, keys, audit log. */
 import { expect } from "@playwright/test"
 import type { Dashboard } from "../support/dashboard.js"
-import { idOf, keyOf } from "../support/tenancy.js"
+import { idOf, keyOf, userId } from "../support/tenancy.js"
 import type { World } from "../support/world.js"
 import { Given, Then, When } from "./common.steps.js"
 
@@ -48,6 +48,18 @@ Then("the confirmation says {string}", async ({ dash }, text: string) => {
 // ---- members -------------------------------------------------------------------------------
 
 const member = (dash: Dashboard, email: string) => dash.row("Members", email)
+
+When(
+  "{word} makes {word} a {word} of {string} through the API",
+  async ({ world }, admin: string, person: string, role: string, org: string) => {
+    await world.must(
+      admin,
+      "PATCH",
+      `/orgs/${idOf(world, org)}/members/${await userId(world, person)}`,
+      { role },
+    )
+  },
+)
 
 Then(
   "the member {word} is listed as {string}",

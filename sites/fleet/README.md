@@ -16,6 +16,73 @@ bun run --cwd sites/fleet dev      # http://localhost:8080, in-memory storage, l
 bun test --cwd sites/fleet         # includes real PostgreSQL and the S3 / OTLP emulators
 ```
 
+## Declare it: `mockingbird.yaml`
+
+The prescribed way to configure Fleet Cloud is one file, kept in your repository, that declares
+an organization's projects, fleets and emulators. The same file runs the fleet on your machine.
+
+```yaml
+# mockingbird.yaml
+version: 1
+organization: acme            # slug; created on the first apply
+name: Acme
+projects:
+  web:
+    name: Web app
+    fleets:
+      acme-staging:           # the fleet's URL: /f/acme-staging
+        access: open          # or: key
+        requestsPerMinute: 600
+        services:
+          stripe: { durability: strict }
+          resend: {}          # every default: target resend, durability buffered
+          billing: { target: stripe, seed: "42" }
+          db: { target: postgres, protocol: postgres, port: 5432, local: true }
+```
+
+```sh
+export MOCKINGBIRD_FLEET_URL=https://mockingbird-fleet.chrisvouga.dev
+export MOCKINGBIRD_FLEET_TOKEN=mbf_…       # a personal token, or an admin API key
+
+npx mockingbird-fleet plan                 # what would change; changes nothing
+npx mockingbird-fleet apply                # make Fleet Cloud match the file
+npx mockingbird-fleet apply --prune        # …including deleting what the file no longer declares
+npx mockingbird-fleet serve --config mockingbird.yaml   # the same fleet, on this machine
+```
+
+No CLI is needed for the cloud half; the API takes the file as it is:
+
+```sh
+curl -X PUT "$MOCKINGBIRD_FLEET_URL/api/v1/manifest?dryRun=true" \
+  -H "Authorization: Bearer $MOCKINGBIRD_FLEET_TOKEN" \
+  -H 'content-type: application/yaml' --data-binary @mockingbird.yaml
+```
+
+- **One format, two places.** A fleet's `services` are the entries of a local fleet configuration
+  ([Fleets](../../docs/FLEETS.md)), so `serve` runs them unchanged. Fleet Cloud adds `durability`,
+  `flushIntervalMs`, `webhookOrigins`, and the fleet's `access` and `requestsPerMinute`; a local
+  fleet ignores those. Local keys such as `port` are ignored by the cloud. A service marked
+  `local: true` runs only locally: use it for PostgreSQL and Redis, which a hosted fleet cannot
+  offer.
+- **The file is the whole truth.** Applying makes the organization's projects, fleets and
+  emulators match it. What it no longer declares is deleted, with its stored state, only when
+  you pass `--prune` (`?prune=true`); without it the apply is refused and lists what would go.
+  Applying the same file twice changes nothing, and emulator state is kept across applies unless
+  an emulator is removed or becomes a different emulator.
+- **A managed organization is read-only everywhere else.** Once a file has been applied, the
+  dashboard shows the configuration without controls to change it, and the API answers
+  `409 managed_by_declaration` to hand edits of projects, fleets and emulators. Operating a fleet
+  (resetting or saving state), and managing members and API keys, stay available.
+  `DELETE /orgs/{id}/manifest` releases the organization back to manual control without deleting
+  anything.
+- **Start from what you have.** `GET /orgs/{id}/manifest` (dashboard: the organization's
+  *Configuration* tab) returns any organization as a `mockingbird.yaml`. Applying that file
+  changes nothing and puts the organization under the file's control.
+- **Validated before anything changes.** Every problem is reported at once with the path of its
+  key (`projects.web.fleets.acme-staging.services.stripe.durability: must be one of …`).
+
+Members, invites and API keys are not declared in the file: they are people and secrets.
+
 ## Durability, per emulator
 
 Every emulator in a fleet chooses how much of its state survives. Change it at any time in the
@@ -36,7 +103,9 @@ of those objects, which is what makes the container stateless.
 The dashboard is a client of the API and nothing else. The contract is OpenAPI 3.1, served at
 `/api/openapi.json` and committed as [`openapi.json`](openapi.json) (a test fails when it is stale).
 
-A person creates a personal token once (dashboard → Account). From there an agent can do the rest:
+A person creates a personal token once (dashboard → Account). From there an agent commits a
+`mockingbird.yaml` and applies it (above). The same resources can also be driven one call at a
+time, in an organization that is not managed by a file:
 
 ```sh
 API=https://mockingbird-fleet.chrisvouga.dev/api/v1

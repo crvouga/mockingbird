@@ -1,5 +1,14 @@
 import type { Meta } from "@storybook/html-vite"
-import { inOrg, invalid, projects, quotaExceeded, type Role, suspended } from "./fixtures.js"
+import {
+  inOrg,
+  invalid,
+  managed,
+  managedByDeclaration,
+  projects,
+  quotaExceeded,
+  type Role,
+  suspended,
+} from "./fixtures.js"
 import { created, type MockRoutes, ok, PENDING } from "./mock.js"
 import { mutation, query } from "./story.js"
 
@@ -105,3 +114,28 @@ export const NewProjectCreated = mutation({
 
 /** A viewer opens the address of the form: the page says it is not for them. */
 export const NewProjectAsViewer = query({ path: create, routes: { ...tab("viewer") } })
+
+// ---- configured by mockingbird.yaml
+
+const declared = { managed }
+
+/** The file declares the projects: they are listed without a way to create one by hand. */
+export const ManagedAsOwner = query({ path, routes: tab("owner", projects, declared) })
+export const ManagedAsMember = query({ path, routes: tab("member", projects, declared) })
+export const ManagedAsViewer = query({ path, routes: tab("viewer", projects, declared) })
+/** The file declares no projects yet. */
+export const ManagedEmpty = query({ path, routes: tab("owner", [], declared) })
+
+/** The address of the form, in an organization the file controls: a statement, not the form. */
+export const NewProjectWhenManaged = query({
+  path: create,
+  routes: tab("member", projects, declared),
+})
+
+/** A file was applied while the form was open: the API's refusal is shown in the form. */
+export const NewProjectBecameManaged = mutation({
+  path: create,
+  routes: { ...tab("member"), "POST /orgs/org_acme/projects": managedByDeclaration },
+  steps: (page) => page.submit({ Name: "Analytics" }),
+  shows: ["form-error"],
+})

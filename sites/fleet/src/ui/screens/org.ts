@@ -8,17 +8,21 @@ import {
   aRole,
   atLeast,
   crumbs,
+  declared,
+  declareIt,
   deny,
   head,
   justNow,
   land,
   link,
+  managedNotice,
   properties,
   removed,
   section,
 } from "../runtime.js"
 import type { Me, Org, Project } from "../types.js"
 import { auditLog } from "./audit.js"
+import { configuration } from "./configuration.js"
 import { keys } from "./keys.js"
 import { members } from "./members.js"
 import { usage } from "./usage.js"
@@ -29,6 +33,7 @@ type Tab = { action?: Child; body: Child }
 
 const TAB_BODY: Record<OrgTabId, (context: TabContext) => Promise<Tab> | Tab> = {
   projects,
+  configuration,
   members,
   usage: async ({ org }) => ({ body: await usage(org) }),
   keys,
@@ -93,10 +98,21 @@ export async function orgScreen({ me, route, params }: Context) {
 
 async function projects({ org }: TabContext): Promise<Tab> {
   const list = (await api<{ data: Project[] }>("GET", `/orgs/${org.id}/projects`)).data
-  const canCreate = atLeast(org.role, "member")
+  const canCreate = !org.managed && atLeast(org.role, "member")
   return {
-    action: canCreate && action(to("project.new", { org: org.id }), "New project", "primary"),
+    // In an empty organization the file is the first step; creating by hand stays on offer.
+    action:
+      canCreate &&
+      action(
+        to("project.new", { org: org.id }),
+        "New project",
+        list.length > 0 ? "primary" : "plain",
+      ),
     body: [
+      managedNotice(
+        org,
+        "This organization's projects, fleets and emulators are declared in the file, so they are read-only here.",
+      ),
       removed(`projects:${org.id}`),
       list.length > 0
         ? h(
@@ -115,9 +131,18 @@ async function projects({ org }: TabContext): Promise<Tab> {
             ".empty",
             {},
             h("strong", {}, "No projects yet"),
-            canCreate
-              ? "A project groups the fleets of one application. Create the first one."
-              : "A project groups the fleets of one application. A member of the organization can create one.",
+            org.managed
+              ? "The file declares no projects. Add one to it and apply it."
+              : canCreate
+                ? [
+                    declareIt(org.id, "this organization's projects, fleets and emulators"),
+                    h(
+                      "p.empty-aside",
+                      {},
+                      "A project groups the fleets of one application. Create the first one.",
+                    ),
+                  ]
+                : "A project groups the fleets of one application. A member of the organization can create one.",
           ),
     ],
   }
@@ -126,16 +151,22 @@ async function projects({ org }: TabContext): Promise<Tab> {
 function settings({ org }: TabContext): Tab {
   return {
     body: [
+      managedNotice(
+        org,
+        "The organization's name is declared in the file, so it is read-only here.",
+      ),
       properties("Organization settings", [
         {
           name: "Name",
           value: org.name,
           about: `org-name:${org.id}`,
-          change: link(
-            to("org.rename", { org: org.id }),
-            { "aria-label": "Rename the organization" },
-            "Rename",
-          ),
+          change:
+            !org.managed &&
+            link(
+              to("org.rename", { org: org.id }),
+              { "aria-label": "Rename the organization" },
+              "Rename",
+            ),
         },
         { name: "Slug", value: [h("code", {}, org.slug), h("span.aside", {}, "Permanent")] },
         { name: "ID", value: h("code", {}, org.id) },
@@ -158,6 +189,7 @@ function settings({ org }: TabContext): Tab {
 export async function orgRename({ route, params }: Context) {
   const org = await orgFor(params.org ?? "", "admin", "Renaming the organization")
   const back = to("org.settings", { org: org.id })
+  declared(org, "Renaming the organization", { href: back, label: "Back to Settings" })
   return mutation({
     title: titleOf(route, { organization: org.name }),
     crumbs: orgCrumbs(org, link(back, {}, "Settings"), "Rename"),

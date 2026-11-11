@@ -12,13 +12,20 @@ export type Role = "viewer" | "member" | "admin" | "owner"
 export type Durability = "strict" | "buffered" | "ephemeral"
 
 export type User = { id: string; email: string | null; name: string | null }
+export type Managed = { appliedAt: string; appliedBy: string }
 export type Org = {
   id: string
   slug: string
   name: string
   createdAt: string
   suspended: string | null
+  managed: Managed | null
   role?: Role
+}
+export type DeclarationView = {
+  managed: Managed | null
+  declaration: Record<string, unknown>
+  yaml: string
 }
 export type Member = {
   userId: string
@@ -116,9 +123,15 @@ export const org = (role: Role, overrides: Partial<Org> = {}): Org => ({
   name: "Acme",
   createdAt: at("03-02"),
   suspended: null,
+  managed: null,
   role,
   ...overrides,
 })
+
+/** A `mockingbird.yaml` was applied: the organization's configuration is the file's. */
+export const managed: Managed = { appliedAt: at("11-09", "16:20:00"), appliedBy: "ada@example.com" }
+/** Applied from CI, with an organization API key. */
+export const managedByKey: Managed = { appliedAt: at("11-10", "08:12:44"), appliedBy: "API key ci" }
 export const globex = org("member", { id: "org_globex", slug: "globex", name: "Globex Research" })
 export const initech = org("viewer", {
   id: "org_initech",
@@ -290,6 +303,54 @@ export const fleets: Fleet[] = [
   fleet([], { id: "flt_ci", slug: "acme-ci", name: "CI" }),
 ]
 
+/** A value as block-style YAML, the way the API writes a declaration. */
+function yaml(value: unknown, indent = ""): string {
+  if (value === null || typeof value !== "object") return ` ${String(value)}\n`
+  const entries = Object.entries(value)
+  if (entries.length === 0) return " {}\n"
+  return `\n${entries.map(([key, entry]) => `${indent}${key}:${yaml(entry, `${indent}  `)}`).join("")}`
+}
+
+/**
+ * `GET /orgs/org_acme/manifest`: the organization as a `mockingbird.yaml`, declaring `shown` (by
+ * default every project, with the fleets above in Web app).
+ */
+export const manifest = (
+  by: Managed | null = null,
+  shown: Project[] = projects,
+  inWeb: Fleet[] = fleets,
+): DeclarationView => {
+  const declaration = {
+    version: 1,
+    organization: "acme",
+    name: "Acme",
+    projects: Object.fromEntries(
+      shown.map((entry) => [
+        entry.slug,
+        {
+          name: entry.name,
+          fleets: Object.fromEntries(
+            (entry.id === "prj_web" ? inWeb : []).map((item) => [
+              item.slug,
+              {
+                name: item.name,
+                access: item.access,
+                services: Object.fromEntries(
+                  Object.entries(item.emulators).map(([name, { target, durability }]) => [
+                    name,
+                    { ...(target === name ? {} : { target }), durability },
+                  ]),
+                ),
+              },
+            ]),
+          ),
+        },
+      ]),
+    ),
+  }
+  return { managed: by, declaration, yaml: `# mockingbird.yaml${yaml(declaration)}` }
+}
+
 /** The real catalog, as `GET /catalog` returns it. */
 export const catalog = { data: CATALOG }
 
@@ -426,6 +487,12 @@ export const suspended = (reason: string) =>
 export const invalid = (...details: string[]) =>
   failure(400, "invalid_request", details[0] ?? "Invalid body", details)
 export const conflict = (message: string) => failure(409, "conflict", message)
+/** A hand edit of what the organization's `mockingbird.yaml` declares. */
+export const managedByDeclaration = failure(
+  409,
+  "managed_by_declaration",
+  "This organization is configured by mockingbird.yaml, so this cannot be changed by hand. Change the file and apply it (PUT /api/v1/manifest), or release the organization (DELETE /api/v1/orgs/org_acme/manifest).",
+)
 export const rateLimited = failure(429, "rate_limited", "Too many API requests.")
 export const tooManySignIns = failure(
   429,
@@ -456,19 +523,27 @@ export const inOrg = (role: Role, overrides: Partial<Org> = {}): MockRoutes => {
 }
 
 /** The Web app project's screen, as someone with `role` in its organization. */
-export const inProject = (role: Role, shown: Fleet[] = fleets): MockRoutes => ({
-  ...signedIn([org(role)]),
+export const inProject = (
+  role: Role,
+  shown: Fleet[] = fleets,
+  overrides: Partial<Org> = {},
+): MockRoutes => ({
+  ...signedIn([org(role, overrides)]),
   [`GET /projects/${project.id}`]: ok(project),
-  [`GET /orgs/${project.orgId}`]: ok(org(role)),
+  [`GET /orgs/${project.orgId}`]: ok(org(role, overrides)),
   [`GET /projects/${project.id}/fleets`]: ok({ data: shown }),
 })
 
 /** A fleet's screen, in the Web app project, as someone with `role` in its organization. */
-export const inFleet = (shown: Fleet, role: Role = "owner"): MockRoutes => ({
-  ...signedIn([org(role)]),
+export const inFleet = (
+  shown: Fleet,
+  role: Role = "owner",
+  overrides: Partial<Org> = {},
+): MockRoutes => ({
+  ...signedIn([org(role, overrides)]),
   [`GET /fleets/${shown.id}`]: ok(shown),
   [`GET /projects/${shown.projectId}`]: ok(project),
-  [`GET /orgs/${shown.orgId}`]: ok(org(role)),
+  [`GET /orgs/${shown.orgId}`]: ok(org(role, overrides)),
   "GET /catalog": ok(catalog),
 })
 

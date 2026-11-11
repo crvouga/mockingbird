@@ -12,6 +12,7 @@ export const PHONE = { width: 390, height: 844 }
 /** Tabs of an organization as a person names them → the last segment of their address. */
 export const TAB_PATHS: Record<string, string> = {
   Projects: "",
+  Configuration: "/configuration",
   Members: "/members",
   Usage: "/usage",
   "API keys": "/keys",

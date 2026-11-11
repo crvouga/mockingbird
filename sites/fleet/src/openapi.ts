@@ -130,9 +130,14 @@ export const SCHEMAS: Record<string, Schema> = {
       name,
       createdAt: timestamp,
       suspended: nullable({ type: "string" }),
+      managed: {
+        ...ref("Managed"),
+        description:
+          "Set when the organization is configured by a mockingbird.yaml: its projects, fleets and emulators can then be changed only by applying that file.",
+      },
       role,
     },
-    ["id", "slug", "name", "createdAt", "suspended"],
+    ["id", "slug", "name", "createdAt", "suspended", "managed"],
   ),
   OrgList: list("Org"),
   OrgCreate: object({ name, slug }, ["name"]),
@@ -324,6 +329,7 @@ export const SCHEMAS: Record<string, Schema> = {
     slug,
     name,
     createdAt: timestamp,
+    managed: ref("Managed"),
     suspended: nullable({ type: "string" }),
     limitOverrides: { type: "object", additionalProperties: count },
     limits: ref("Limits"),
@@ -356,6 +362,40 @@ export const SCHEMAS: Record<string, Schema> = {
     ["email"],
   ),
   AdminUser: object({ user: ref("User"), token: ref("ApiKey"), signInUrl: { type: "string" } }),
+  Managed: {
+    type: ["object", "null"],
+    additionalProperties: false,
+    required: ["appliedAt", "appliedBy"],
+    properties: { appliedAt: timestamp, appliedBy: { type: "string" } },
+  },
+  Declaration: {
+    type: "object",
+    additionalProperties: true,
+    description:
+      "A mockingbird.yaml document: `version: 1`, `organization` (slug), optional `name`, and `projects` by slug, each with `fleets` by slug, each with `name`, `access`, `requestsPerMinute` and `services` (emulators by instance name: `target`, `durability`, `seed`, `settings`, `flushIntervalMs`, `webhookOrigins`, `local`). Send it as JSON, or as YAML with `content-type: application/yaml`.",
+  },
+  DeclarationChange: object(
+    {
+      action: { type: "string", enum: ["create", "update", "delete", "unchanged"] },
+      kind: { type: "string", enum: ["organization", "project", "fleet", "emulator"] },
+      name: { type: "string" },
+      detail: { type: "string" },
+    },
+    ["action", "kind", "name"],
+  ),
+  DeclarationResult: object({
+    organization: nullable({
+      type: "string",
+      description: "The organization's id, once it exists.",
+    }),
+    applied: { type: "boolean", description: "False for a dry run." },
+    changes: { type: "array", items: ref("DeclarationChange") },
+  }),
+  DeclarationView: object({
+    managed: ref("Managed"),
+    declaration: ref("Declaration"),
+    yaml: { type: "string", description: "The declaration as a mockingbird.yaml file." },
+  }),
   Ok: object({ ok: { type: "boolean" } }),
 }
 

@@ -7,7 +7,7 @@
  * (`role="alert"`). While the request is in flight the submit button is disabled and says so.
  */
 import { type Child, h, type Props } from "./dom.js"
-import { ApiError, busy, link } from "./runtime.js"
+import { ApiError, busy, link, MANAGED_BY_DECLARATION } from "./runtime.js"
 
 export type Values = Record<string, string>
 
@@ -37,6 +37,8 @@ export type MutationSpec = {
   crumbs?: Child
   /** What submitting does, where that is not obvious from the title. */
   lead?: Child
+  /** A better way to do this than the form, said once above it. */
+  note?: Child
   /** The action destroys something: the consequence and the button are marked. */
   danger?: boolean
   /** Facts about the thing acted on, shown read-only above the fields. */
@@ -85,7 +87,9 @@ export function sortProblems(error: unknown, fields: Field[], place?: MutationSp
     else rest.push(detail)
   }
   if (details.length === 0) {
-    const field = fields.find((entry) => entry.name === place?.(error))
+    // The organization came under a mockingbird.yaml meanwhile: no field's value is at fault.
+    const about = error.code === MANAGED_BY_DECLARATION ? undefined : place?.(error)
+    const field = fields.find((entry) => entry.name === about)
     // The API names the field by its JSON key ("requestsPerMinute cannot exceed…"): use its label.
     if (field)
       byField[field.name] = phrase(
@@ -287,6 +291,7 @@ export function mutation(spec: MutationSpec): Child {
       {},
       h("h1", { id: "surface-title", tabindex: "-1" }, spec.title),
       spec.lead && h("p.lead", {}, spec.lead),
+      spec.note,
       spec.facts,
       form,
     ),

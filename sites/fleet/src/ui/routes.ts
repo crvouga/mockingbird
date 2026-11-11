@@ -68,6 +68,19 @@ export const ROUTES = [
     fields: ["name"],
   },
   { id: "org", path: "/orgs/:org", kind: "query", title: "{organization}" },
+  {
+    id: "org.configuration",
+    path: "/orgs/:org/configuration",
+    kind: "query",
+    title: "{organization}",
+  },
+  {
+    id: "org.configuration.release",
+    path: "/orgs/:org/configuration/release",
+    kind: "mutation",
+    title: "Release {organization} from mockingbird.yaml",
+    role: "admin",
+  },
   { id: "org.members", path: "/orgs/:org/members", kind: "query", title: "{organization}" },
   { id: "org.usage", path: "/orgs/:org/usage", kind: "query", title: "{organization}" },
   {
@@ -329,6 +342,8 @@ export const SHELL_STATES = [
   "forbidden",
   "error",
   "gone",
+  /** The address of a hand edit that `mockingbird.yaml` controls in this organization. */
+  "managed",
 ] as const
 
 /** Every surface the page can show that is not a route is a query: text and links only. */
@@ -339,6 +354,7 @@ export const route = (id: RouteId): RouteDef => ROUTES.find((entry) => entry.id 
 /** Tabs of an organization, in display order. `admin` tabs are shown to admins and owners only. */
 export const ORG_TABS = [
   { id: "projects", label: "Projects", route: "org", admin: false },
+  { id: "configuration", label: "Configuration", route: "org.configuration", admin: false },
   { id: "members", label: "Members", route: "org.members", admin: false },
   { id: "usage", label: "Usage", route: "org.usage", admin: false },
   { id: "keys", label: "API keys", route: "org.keys", admin: true },

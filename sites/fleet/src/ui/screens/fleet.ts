@@ -9,18 +9,22 @@ import {
   atLeast,
   copyable,
   count,
+  declared,
+  declareIt,
   deny,
   head,
   justNow,
   land,
   link,
+  managedNotice,
+  preferFile,
   properties,
   removed,
   section,
   ui,
 } from "../runtime.js"
 import type { CatalogEntry, Emulator, Fleet, Org, Project, UsageReport } from "../types.js"
-import { projectCrumbs, projectFor } from "./project.js"
+import { projectCrumbs, projectDeclared, projectFor } from "./project.js"
 
 /** Durability mode → its name, what it costs, and what a crash loses. */
 export const DURABILITY: Record<string, [string, string]> = {
@@ -93,6 +97,10 @@ export async function fleetFor(fleetId: string, minimum?: string, what = "This")
   return { fleet, project, org, role }
 }
 
+/** Refuse the form for a hand edit of a fleet that the organization's file declares. */
+export const fleetDeclared = ({ fleet, org }: FleetContext, what: string) =>
+  declared(org, what, { href: to("fleet", { fleet: fleet.id }), label: `Back to ${fleet.name}` })
+
 export const fleetCrumbs = ({ fleet, project, org }: FleetContext, ...rest: Child[]) =>
   projectCrumbs(
     { project, org, role: org?.role },
@@ -114,10 +122,13 @@ export async function fleetScreen({ params }: Context) {
   const catalog = await loadCatalog()
   // Everything a fleet lets you change needs the member role.
   const canChange = !org || atLeast(org.role, "member")
+  // What the organization's mockingbird.yaml declares is shown without the links that change it;
+  // operating an emulator (saving, resetting, downloading its state) stays.
+  const canDeclare = canChange && !org?.managed
   const at = { fleet: fleet.id }
   const names = Object.keys(fleet.emulators).sort()
   const change = (route: Parameters<typeof to>[0], label: string, what: string) =>
-    canChange && link(to(route, at), { "aria-label": what }, label)
+    canDeclare && link(to(route, at), { "aria-label": what }, label)
 
   const card = (name: string, emulator: Emulator) => {
     const entry = catalog.find((item) => item.target === emulator.target)
@@ -165,7 +176,7 @@ export async function fleetScreen({ params }: Context) {
           value: [h("strong", {}, mode), h("span.prop-about", {}, consequence)],
           about: `emulator-durability:${name}`,
           change:
-            canChange &&
+            canDeclare &&
             link(
               to("emulator.durability", here),
               { "aria-label": `Change the durability of ${name}` },
@@ -186,7 +197,7 @@ export async function fleetScreen({ params }: Context) {
             { "aria-label": `Reset the state of ${name}` },
             "Reset state",
           ),
-        canChange &&
+        canDeclare &&
           link(
             to("emulator.remove", here),
             { class: "danger", "aria-label": `Remove ${name}` },
@@ -207,7 +218,14 @@ export async function fleetScreen({ params }: Context) {
           : "You are a viewer: you can look at this fleet and use its URLs, not change it.",
         justNow(`fleet:${fleet.id}`),
       ],
-      canChange && action(to("emulator.add", at), "Add an emulator", "primary"),
+      canDeclare &&
+        action(to("emulator.add", at), "Add an emulator", names.length > 0 ? "primary" : "plain"),
+    ),
+    managedNotice(
+      org,
+      canChange
+        ? "This fleet and its emulators are declared in the file, so they are read-only here. You can still save, reset and download emulator state."
+        : "This fleet and its emulators are declared in the file, so they are read-only here.",
     ),
     properties("Fleet settings", [
       { name: "URL", value: copyable(fleet.url, "Copy URL") },
@@ -242,12 +260,17 @@ export async function fleetScreen({ params }: Context) {
             ".empty",
             {},
             h("strong", {}, "This fleet has no emulators"),
-            canChange
-              ? "Add one to get its URL."
-              : "A member of the organization can add emulators.",
+            org?.managed
+              ? "The file declares no services for this fleet. Add one to it and apply it."
+              : canChange
+                ? [
+                    declareIt(fleet.orgId, "this fleet's emulators"),
+                    h("p.empty-aside", {}, "Add one to get its URL."),
+                  ]
+                : "A member of the organization can add emulators.",
           ),
     ),
-    canChange &&
+    canDeclare &&
       section(
         "Delete this fleet",
         null,
@@ -273,10 +296,12 @@ export async function fleetNew({ route, params }: Context) {
   const context = await projectFor(params.project ?? "", "member", "Creating fleets")
   const { project } = context
   const back = to("project", { project: project.id })
+  projectDeclared(context, "Creating fleets")
   return mutation({
     title: route.title,
     crumbs: projectCrumbs(context, "New fleet"),
     lead: `A fleet in ${project.name} is a set of emulators behind one stable URL. You add the emulators next.`,
+    note: preferFile(project.orgId, "the fleet and its emulators"),
     fields: [
       {
         kind: "text",
@@ -318,6 +343,7 @@ export async function fleetNew({ route, params }: Context) {
 
 export async function fleetRename({ route, params }: Context) {
   const context = await fleetFor(params.fleet ?? "", "member", "Renaming a fleet")
+  fleetDeclared(context, "Renaming a fleet")
   const { fleet } = context
   const back = to("fleet", { fleet: fleet.id })
   return mutation({
@@ -348,6 +374,7 @@ export async function fleetRename({ route, params }: Context) {
 
 export async function fleetAccess({ route, params }: Context) {
   const context = await fleetFor(params.fleet ?? "", "member", "Changing a fleet's access")
+  fleetDeclared(context, "Changing a fleet's access")
   const { fleet } = context
   const back = to("fleet", { fleet: fleet.id })
   return mutation({
@@ -385,6 +412,7 @@ export async function fleetAccess({ route, params }: Context) {
 
 export async function fleetRateLimit({ route, params }: Context) {
   const context = await fleetFor(params.fleet ?? "", "member", "Changing a fleet's rate limit")
+  fleetDeclared(context, "Changing a fleet's rate limit")
   const { fleet } = context
   const ceiling = await api<UsageReport>("GET", `/orgs/${fleet.orgId}/usage`)
     .then((report) => report.limits.fleetRequestsPerMinute ?? 0)
@@ -439,6 +467,7 @@ export async function fleetRateLimit({ route, params }: Context) {
 
 export async function fleetDelete({ route, params }: Context) {
   const context = await fleetFor(params.fleet ?? "", "member", "Deleting a fleet")
+  fleetDeclared(context, "Deleting a fleet")
   const { fleet, project } = context
   const names = Object.keys(fleet.emulators).sort()
   const back = to("fleet", { fleet: fleet.id })

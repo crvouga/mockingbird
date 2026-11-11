@@ -23,11 +23,11 @@ Feature: What each role is offered in the dashboard
       And the organization's tabs are "<tabs>"
 
       Examples:
-        | role   | article | tabs                                                    |
-        | viewer | a       | Projects, Members, Usage                                |
-        | member | a       | Projects, Members, Usage                                |
-        | admin  | an      | Projects, Members, Usage, API keys, Audit log, Settings |
-        | owner  | an      | Projects, Members, Usage, API keys, Audit log, Settings |
+        | role   | article | tabs                                                                   |
+        | viewer | a       | Projects, Configuration, Members, Usage                                |
+        | member | a       | Projects, Configuration, Members, Usage                                |
+        | admin  | an      | Projects, Configuration, Members, Usage, API keys, Audit log, Settings |
+        | owner  | an      | Projects, Configuration, Members, Usage, API keys, Audit log, Settings |
 
     Scenario Outline: A <role> who opens the address of the <tab> tab is told they have no access
       Given Grace has joined "Acme" with the <role> role

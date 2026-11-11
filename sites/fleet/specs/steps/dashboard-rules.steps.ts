@@ -4,6 +4,7 @@
  * the person needs to look.
  */
 import { expect, type Route } from "@playwright/test"
+import type { DataTable } from "playwright-bdd"
 import { ROUTES, to } from "../../src/ui/routes.js"
 import type { Dashboard } from "../support/dashboard.js"
 import { idOf, userId } from "../support/tenancy.js"
@@ -13,8 +14,8 @@ import { Given, Then, When } from "./common.steps.js"
 /** What one screen looked like when the scenario visited it. */
 type Visit = {
   path: string
-  /** What it should be drawn as: its route, or the state drawn in its place. */
-  expected: { kind: string; route: string }
+  /** The route whose address was opened. */
+  route: { id: string; kind: string }
   drawn: { kind: string | null; route: string | null }
   problems: string[]
   /** For a form sent wrong: how many problems it pointed out, and where the focus went. */
@@ -64,15 +65,12 @@ When("they open every screen of the dashboard in turn", async ({ dash, world }) 
   for (const route of ROUTES) {
     const path = to(route.id, params[route.id] ?? params.common)
     await open(dash, path, "public" in route)
-    // A secret is shown once, right after the form that made it: asked for again, it is gone.
-    const expected = route.id.endsWith(".created")
-      ? { kind: "query", route: "gone" }
-      : { kind: route.kind, route: route.id }
     found.push({
       path,
-      expected,
+      route,
       drawn: await dash.surface(),
-      problems: [...(await dash.audit(expected.kind as "query")), ...(await dash.toasts())],
+      // Checked as the kind of screen it says it is; whether that is the right one comes next.
+      problems: [...(await dash.audit()), ...(await dash.toasts())],
     })
   }
   visits.set(world, found)
@@ -96,7 +94,7 @@ When(
       await dash.idle()
       found.push({
         path,
-        expected: { kind: "mutation", route: route.id },
+        route,
         drawn: await dash.surface(),
         problems: [...(await dash.audit("mutation")), ...(await dash.toasts())],
         pointed: await dash.problems.count(),
@@ -117,13 +115,29 @@ When(
   },
 )
 
-Then("each one is drawn as the kind of screen its route declares", async ({ world }) => {
-  const wrong = visited(world)
-    .filter((visit) => JSON.stringify(visit.drawn) !== JSON.stringify(visit.expected))
-    .map((visit) => `${visit.path}: drawn ${JSON.stringify(visit.drawn)}`)
-  expect(wrong).toEqual([])
-  expect(visited(world).length).toBe(ROUTES.length)
-})
+/**
+ * A route's address draws that route's screen, as the kind the route declares. The table names
+ * the routes whose address draws something else here, each a query: a shell state such as
+ * `gone` or `managed`, or another route's screen.
+ */
+Then(
+  "each one is drawn as the kind of screen its route declares, except:",
+  async ({ world }, table: DataTable) => {
+    const instead = new Map(table.hashes().map((row) => [row.route, row["drawn as"]]))
+    for (const id of instead.keys()) expect(ROUTES.map((route) => route.id as string)).toContain(id)
+    const wrong = visited(world)
+      .filter(({ route, drawn }) => {
+        const other = instead.get(route.id)
+        const expected = other
+          ? { kind: "query", route: other }
+          : { kind: route.kind, route: route.id }
+        return JSON.stringify(drawn) !== JSON.stringify(expected)
+      })
+      .map((visit) => `${visit.path}: drawn ${JSON.stringify(visit.drawn)}`)
+    expect(wrong).toEqual([])
+    expect(visited(world).length).toBe(ROUTES.length)
+  },
+)
 
 Then("none of them breaks a design rule", async ({ world }) => {
   const broken = visited(world).flatMap((visit) =>
@@ -140,7 +154,10 @@ Then("each one points out at least one problem, in the form", async ({ world }) 
   expect(forms.filter((visit) => !visit.pointed).map((visit) => visit.path)).toEqual([])
   expect(
     forms
-      .filter((visit) => JSON.stringify(visit.drawn) !== JSON.stringify(visit.expected))
+      .filter(
+        ({ route, drawn }) =>
+          JSON.stringify(drawn) !== JSON.stringify({ kind: "mutation", route: route.id }),
+      )
       .map((visit) => visit.path),
   ).toEqual([])
 })

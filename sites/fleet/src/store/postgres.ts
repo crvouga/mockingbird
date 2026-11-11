@@ -38,7 +38,15 @@ function initialSchema(schema: string): string[] {
   return statements
 }
 
-const MIGRATIONS: readonly ((schema: string) => string[])[] = [initialSchema]
+/**
+ * Version 2: organizations can be configured declaratively. `if not exists` because a database
+ * created after this column joined {@link TABLES} already has it from version 1.
+ */
+const declarativeOrgs = (schema: string) => [
+  `alter table ${schema}.orgs add column if not exists manifest jsonb not null default 'null'::jsonb`,
+]
+
+const MIGRATIONS: readonly ((schema: string) => string[])[] = [initialSchema, declarativeOrgs]
 
 type AnyRow = Record<string, unknown>
 

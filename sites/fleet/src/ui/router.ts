@@ -15,11 +15,14 @@ import {
   browserAddress,
   busy,
   link,
+  ManagedError,
+  moment,
   returnTo,
   statement,
   ui,
 } from "./runtime.js"
 import { account, tokenCreated, tokenNew, tokenRevoke } from "./screens/account.js"
+import { configurationRelease } from "./screens/configuration.js"
 import {
   emulatorAdd,
   emulatorConfigure,
@@ -72,6 +75,8 @@ const SCREENS: Record<RouteId, Screen> = {
   orgs: home,
   "org.new": orgNew,
   org: orgScreen,
+  "org.configuration": orgScreen,
+  "org.configuration.release": configurationRelease,
   "org.members": orgScreen,
   "org.usage": orgScreen,
   "org.keys": orgScreen,
@@ -125,8 +130,25 @@ const unavailable = (error: unknown) =>
     link(ui.address.path() + ui.address.search(), { class: "button primary" }, "Try again"),
   )
 
+/** The address of a hand edit in an organization its `mockingbird.yaml` controls: read-only. */
+const managed = ({ org, what, back }: ManagedError) =>
+  statement(
+    "This is configured by mockingbird.yaml",
+    [
+      `${what} is not available by hand in ${org.name}. Its projects, fleets and emulators are declared in `,
+      h("code", {}, "mockingbird.yaml"),
+      org.managed
+        ? `, last applied ${moment(org.managed.appliedAt)} by ${org.managed.appliedBy}. `
+        : ". ",
+      "Change the file and apply it instead.",
+    ],
+    link(to("org.configuration", { org: org.id }), { class: "button primary" }, "How to change it"),
+    link(back.href, { class: "button" }, back.label),
+  )
+
 /** A screen could not be drawn: say what happened in its place. */
 function failed(error: unknown): { state: string; body: Child } {
+  if (error instanceof ManagedError) return { state: "managed", body: managed(error) }
   const status = (error as ApiError).status
   const message = (error as Error).message
   const back = link(to("orgs"), { class: "button" }, "Go to your organizations")

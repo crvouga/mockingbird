@@ -32,7 +32,38 @@ Send \`Authorization: Bearer <credential>\`.
 - Personal token \`mbf_u_…\`: acts as a user. A person creates one in the dashboard (Account → Personal tokens).${config.operatorTokenHash ? " The operator can also issue one with POST /admin/users." : ""}
 - Organization key \`mbf_o_…\` / project key \`mbf_p_…\`: created with POST /orgs/{orgId}/api-keys. Use these in CI.
 
-## Quickstart
+## Configure it with one file (the prescribed way)
+
+Commit a \`mockingbird.yaml\` and apply it. The same file runs the fleet locally.
+
+\`\`\`yaml
+version: 1
+organization: acme
+projects:
+  web:
+    fleets:
+      acme-staging:
+        access: open
+        services:
+          stripe: { durability: strict }
+          resend: {}
+          db: { target: postgres, protocol: postgres, local: true }   # local fleets only
+\`\`\`
+
+\`\`\`sh
+# Plan (changes nothing), then apply. Add &prune=true to delete what the file no longer declares.
+curl -X PUT "${api}/manifest?dryRun=true" -H "Authorization: Bearer $MOCKINGBIRD_FLEET_TOKEN" -H 'content-type: application/yaml' --data-binary @mockingbird.yaml
+curl -X PUT "${api}/manifest" -H "Authorization: Bearer $MOCKINGBIRD_FLEET_TOKEN" -H 'content-type: application/yaml' --data-binary @mockingbird.yaml
+# Or: npx mockingbird-fleet plan | apply   (MOCKINGBIRD_FLEET_URL=${config.publicUrl})
+# Locally, same file: npx mockingbird-fleet serve --config mockingbird.yaml
+\`\`\`
+
+- The first apply needs a personal token (it creates the organization); later ones can use an admin API key.
+- The file is the whole truth for projects, fleets and emulators. Once applied, hand edits of them answer 409 managed_by_declaration.
+- GET /orgs/{orgId}/manifest returns any organization as a mockingbird.yaml to start from.
+- Errors name the path of the key: \`projects.web.fleets.acme-staging.services.stripe.durability: must be one of strict, buffered, ephemeral\`.
+
+## Quickstart, one call at a time
 
 \`\`\`sh
 API=${api}
@@ -70,7 +101,7 @@ Every error is \`{"error": {"code", "message", "details"?}}\`; \`message\` says 
 - 401 unauthorized — missing, malformed, expired or revoked credential.
 - 403 forbidden — the credential's role is too low. 403 quota_exceeded — \`details.limit\` names the quota. 403 org_suspended.
 - 404 not_found — also returned for resources the credential cannot see.
-- 409 conflict — slug taken, or a concurrent change; re-read and retry.
+- 409 conflict — slug taken, or a concurrent change; re-read and retry. 409 managed_by_declaration — change mockingbird.yaml and apply it. 409 prune_required — the apply would delete something; pass prune=true.
 - 429 rate_limited / fleet_rate_limited / auth_rate_limited / too_many_concurrent_requests — wait \`Retry-After\` seconds. 429 quota_exceeded — the monthly request quota is used up.
 - 504 emulator_timeout. 507 state_too_large — reset the emulator or remove data.
 

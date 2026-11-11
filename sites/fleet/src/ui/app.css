@@ -554,6 +554,121 @@ input[type="radio"]:focus-visible {
   border-color: var(--warn);
   background: var(--warn-soft);
 }
+/* What mockingbird.yaml controls: a fact about the screen, not a warning. */
+.notice.managed,
+.notice.prefer {
+  border-left: 3px solid var(--accent);
+  color: var(--fg-muted);
+}
+.notice strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.notice a {
+  white-space: nowrap;
+}
+.mutation-surface > .notice {
+  margin: 16px 0 0;
+}
+.mutation-surface > .props {
+  margin: 20px 0 0;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.head + .notice.prefer {
+  margin-top: -8px;
+}
+.empty span {
+  display: block;
+  max-width: 52ch;
+  margin: 0 auto;
+}
+.empty-action {
+  margin-top: 14px;
+}
+.empty-aside {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+/* Text to read or copy whole: a file, or commands. */
+.code {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 5px 6px 5px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.code-label {
+  color: var(--fg-subtle);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+.code-actions {
+  display: flex;
+  gap: 6px;
+}
+.code pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.code pre:focus-visible {
+  outline-offset: -2px;
+}
+.intro {
+  margin: 0 0 16px;
+}
+section > .sub.after {
+  margin: 12px 0;
+}
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: 24px;
+}
+.steps li {
+  counter-increment: step;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 34px;
+  position: relative;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-muted);
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+}
+.steps p {
+  color: var(--fg-muted);
+  max-width: 68ch;
+}
 
 /* A screen-sized statement: not found, no access, not responding. */
 .statement h1 {
@@ -573,6 +688,7 @@ main[data-route="unavailable"],
 main[data-route="not-found"],
 main[data-route="forbidden"],
 main[data-route="gone"],
+main[data-route="managed"],
 main[data-route="error"] {
   padding-top: 10vh;
 }
@@ -875,6 +991,13 @@ button[data-pending]::before {
   .form-actions .cancel {
     flex: 1 1 100%;
     text-align: center;
+  }
+  .steps li {
+    padding-left: 0;
+  }
+  .steps li::before {
+    position: static;
+    justify-self: start;
   }
   .op {
     flex-wrap: wrap;

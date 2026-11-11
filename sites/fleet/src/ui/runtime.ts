@@ -3,7 +3,8 @@
  * pieces of markup that mean the same thing everywhere.
  */
 import { type Child, h, type Props } from "./dom.js"
-import type { CatalogEntry, Json } from "./types.js"
+import { to } from "./routes.js"
+import type { CatalogEntry, Json, Managed, Org } from "./types.js"
 
 export class ApiError extends Error {
   constructor(
@@ -43,6 +44,30 @@ export async function api<T = Json>(method: string, path: string, body?: unknown
 /** Refuse to draw a screen the caller's role may not use; the router shows the no-access state. */
 export function deny(why: string): never {
   throw new ApiError(403, why, "forbidden")
+}
+
+/** The API's code for a hand edit of something the organization's `mockingbird.yaml` declares. */
+export const MANAGED_BY_DECLARATION = "managed_by_declaration"
+
+/** The address of a hand edit that the organization's `mockingbird.yaml` controls. */
+export class ManagedError extends Error {
+  constructor(
+    readonly org: Org,
+    /** What was asked for: "Renaming a fleet". */
+    readonly what: string,
+    /** The screen that shows the thing, read-only. */
+    readonly back: { href: string; label: string },
+  ) {
+    super(`${what} is controlled by mockingbird.yaml in ${org.name}.`)
+  }
+}
+
+/**
+ * Refuse to draw the form for something the organization's `mockingbird.yaml` declares; the router
+ * says so in its place. An organization that cannot be read is left to the API to judge.
+ */
+export function declared(org: Org | undefined, what: string, back: ManagedError["back"]): void {
+  if (org?.managed) throw new ManagedError(org, what, back)
 }
 
 /** Where the dashboard is: the browser's address bar, or a stand-in when mounted elsewhere. */
@@ -251,6 +276,50 @@ export const statement = (title: string, body: Child, ...links: Child[]) =>
     h("p", {}, body),
     links.some(Boolean) && h(".statement-links", {}, links),
   )
+
+/** "Nov 10, 2026, 9:30 AM". */
+export const moment = (value: string) =>
+  new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
+
+/** "Last applied Nov 10, 2026, 9:30 AM by ada@example.com." */
+export const lastApplied = (managed: Managed) =>
+  `Last applied ${moment(managed.appliedAt)} by ${managed.appliedBy}.`
+
+const file = () => h("code", {}, "mockingbird.yaml")
+
+/**
+ * Said once on a screen that shows what the organization's `mockingbird.yaml` declares: it is
+ * read-only here, and where to change it. Nothing when the organization is configured by hand.
+ */
+export const managedNotice = (org: Org | undefined, readOnly: string) =>
+  org?.managed &&
+  h(
+    "p.notice.managed",
+    {},
+    h("strong", {}, "Configured by ", file(), "."),
+    ` ${readOnly} ${lastApplied(org.managed)} `,
+    link(to("org.configuration", { org: org.id }), {}, "How to change it"),
+  )
+
+/** Above a form that creates something by hand: the file is the prescribed way. */
+export const preferFile = (orgId: string, what: string) =>
+  h(
+    "p.notice.prefer",
+    {},
+    h("strong", {}, "Prefer ", file(), ":"),
+    ` declare ${what} in the file and apply it, and your repository holds the configuration. `,
+    link(to("org.configuration", { org: orgId }), {}, "Use mockingbird.yaml instead"),
+  )
+
+/** In an empty list: the prescribed way to fill it, ahead of doing it by hand. */
+export const declareIt = (orgId: string, what: string) => [
+  h("span", {}, "Declare ", what, " in ", file(), " and apply it."),
+  h(
+    "p.empty-action",
+    {},
+    action(to("org.configuration", { org: orgId }), "Start from mockingbird.yaml", "primary"),
+  ),
+]
 
 export const day = (value: unknown) =>
   typeof value === "string"

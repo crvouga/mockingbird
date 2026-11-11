@@ -55,6 +55,11 @@ export const TABLES = {
       name: text,
       /** Per-organization overrides of the default quotas, set by the operator. */
       limits: json,
+      /**
+       * The `mockingbird.yaml` last applied (`{ declaration, appliedAt, appliedBy }`), or JSON
+       * null when the organization is configured by hand.
+       */
+      manifest: json,
       /** Why the organization is suspended; null when it is not. */
       suspended: optionalText,
       created_at: timestamp,

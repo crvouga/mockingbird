@@ -186,6 +186,10 @@
               "null"
             ]
           },
+          "managed": {
+            "$ref": "#/components/schemas/Managed",
+            "description": "Set when the organization is configured by a mockingbird.yaml: its projects, fleets and emulators can then be changed only by applying that file."
+          },
           "role": {
             "type": "string",
             "enum": [
@@ -201,7 +205,8 @@
           "slug",
           "name",
           "createdAt",
-          "suspended"
+          "suspended",
+          "managed"
         ],
         "additionalProperties": false
       },
@@ -1257,6 +1262,9 @@
             "type": "string",
             "format": "date-time"
           },
+          "managed": {
+            "$ref": "#/components/schemas/Managed"
+          },
           "suspended": {
             "type": [
               "string",
@@ -1283,6 +1291,7 @@
           "slug",
           "name",
           "createdAt",
+          "managed",
           "suspended",
           "limitOverrides",
           "limits",
@@ -1421,6 +1430,115 @@
           "user",
           "token",
           "signInUrl"
+        ],
+        "additionalProperties": false
+      },
+      "Managed": {
+        "type": [
+          "object",
+          "null"
+        ],
+        "additionalProperties": false,
+        "required": [
+          "appliedAt",
+          "appliedBy"
+        ],
+        "properties": {
+          "appliedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "appliedBy": {
+            "type": "string"
+          }
+        }
+      },
+      "Declaration": {
+        "type": "object",
+        "additionalProperties": true,
+        "description": "A mockingbird.yaml document: `version: 1`, `organization` (slug), optional `name`, and `projects` by slug, each with `fleets` by slug, each with `name`, `access`, `requestsPerMinute` and `services` (emulators by instance name: `target`, `durability`, `seed`, `settings`, `flushIntervalMs`, `webhookOrigins`, `local`). Send it as JSON, or as YAML with `content-type: application/yaml`."
+      },
+      "DeclarationChange": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "create",
+              "update",
+              "delete",
+              "unchanged"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "organization",
+              "project",
+              "fleet",
+              "emulator"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "kind",
+          "name"
+        ],
+        "additionalProperties": false
+      },
+      "DeclarationResult": {
+        "type": "object",
+        "properties": {
+          "organization": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The organization's id, once it exists."
+          },
+          "applied": {
+            "type": "boolean",
+            "description": "False for a dry run."
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DeclarationChange"
+            }
+          }
+        },
+        "required": [
+          "organization",
+          "applied",
+          "changes"
+        ],
+        "additionalProperties": false
+      },
+      "DeclarationView": {
+        "type": "object",
+        "properties": {
+          "managed": {
+            "$ref": "#/components/schemas/Managed"
+          },
+          "declaration": {
+            "$ref": "#/components/schemas/Declaration"
+          },
+          "yaml": {
+            "type": "string",
+            "description": "The declaration as a mockingbird.yaml file."
+          }
+        },
+        "required": [
+          "managed",
+          "declaration",
+          "yaml"
         ],
         "additionalProperties": false
       },
@@ -2883,6 +3001,227 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; see Retry-After",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/manifest": {
+      "put": {
+        "operationId": "applyDeclaration",
+        "summary": "Make an organization match a mockingbird.yaml (?dryRun=true to plan, ?prune=true to delete what it no longer declares)",
+        "tags": [
+          "Declarative configuration"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Declaration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclarationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is invalid",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; see Retry-After",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/orgs/{orgId}/manifest": {
+      "get": {
+        "operationId": "getDeclaration",
+        "summary": "An organization's configuration as a mockingbird.yaml",
+        "tags": [
+          "Declarative configuration"
+        ],
+        "parameters": [
+          {
+            "name": "orgId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeclarationView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid credential",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The credential lacks access",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such resource",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit reached; see Retry-After",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "releaseDeclaration",
+        "summary": "Stop managing an organization with mockingbird.yaml; nothing is deleted",
+        "tags": [
+          "Declarative configuration"
+        ],
+        "parameters": [
+          {
+            "name": "orgId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Org"
                 }
               }
             }

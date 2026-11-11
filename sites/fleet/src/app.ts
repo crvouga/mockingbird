@@ -158,10 +158,16 @@ export function createApp(input: AppDeps) {
     const text = await request.text()
     if (text.length > MAX_JSON_BYTES) throw new HttpError(413, "body_too_large", "Body too large")
     let parsed: unknown
+    // A mockingbird.yaml can be sent as it is: `--data-binary @mockingbird.yaml`.
+    const yaml = /\byaml\b/i.test(request.headers.get("content-type") ?? "")
     try {
-      parsed = text === "" ? {} : JSON.parse(text)
-    } catch {
-      throw badRequest("The request body is not valid JSON")
+      parsed = text === "" ? {} : yaml ? Bun.YAML.parse(text) : JSON.parse(text)
+    } catch (error) {
+      throw badRequest(
+        yaml
+          ? `The request body is not valid YAML: ${(error as Error).message}`
+          : "The request body is not valid JSON",
+      )
     }
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
       throw badRequest("The request body must be a JSON object")
@@ -259,7 +265,15 @@ export function createApp(input: AppDeps) {
       const problems = validate(SCHEMAS[route.body] ?? {}, body)
       if (problems.length > 0) throw badRequest(problems[0] ?? "Invalid body", problems)
     }
-    const context: Context = { deps, principal, operator, params, body, request }
+    const context: Context = {
+      deps,
+      principal,
+      operator,
+      params,
+      body,
+      request,
+      operationId: route.operationId,
+    }
     return telemetry.span(
       `api ${route.operationId}`,
       { "api.operation": route.operationId },

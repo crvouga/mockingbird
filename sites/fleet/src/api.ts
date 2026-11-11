@@ -1,3 +1,9 @@
+import {
+  type Declaration,
+  DeclarationError,
+  declaredFleets,
+  parseDeclaration,
+} from "@crvouga/mockingbird-adapter-node"
 import type { Auth, Principal } from "./auth.js"
 import type { Config, Limits } from "./config.js"
 import { DURABILITY, type EmulatorSpec, type Engine } from "./engine.js"
@@ -56,7 +62,32 @@ export type Context = {
   params: Record<string, string>
   body: Record<string, unknown>
   request: Request
+  /** The `operationId` of the route being handled. */
+  operationId: string
 }
+
+/**
+ * Operations that change what a `mockingbird.yaml` declares. In an organization managed by one
+ * they are refused: the file is the only way to change them, so the file and the fleet agree.
+ * Operating a fleet (resetting or saving state) and managing people and keys stay available.
+ */
+export const DECLARED_OPERATIONS: ReadonlySet<string> = new Set([
+  "updateOrg",
+  "createProject",
+  "updateProject",
+  "deleteProject",
+  "createFleet",
+  "updateFleet",
+  "deleteFleet",
+  "putEmulator",
+  "updateEmulator",
+  "deleteEmulator",
+])
+
+export type Managed = { declaration: Declaration; appliedAt: string; appliedBy: string }
+/** How an organization is managed, or null when it is configured by hand. */
+export const managedBy = (row: Row<"orgs">): Managed | null =>
+  (row.manifest as Managed | null | undefined) ?? null
 
 export type Route = RouteDoc & { handler(context: Context): Promise<unknown> }
 
@@ -121,6 +152,12 @@ export function createRoutes(): Route[] {
   /** Suspended organizations can still read and delete, never create or change. */
   const assertActive = (context: Context, row: Row<"orgs">, minimum: Role) => {
     context.orgId = row.id
+    if (managedBy(row) && DECLARED_OPERATIONS.has(context.operationId))
+      throw new HttpError(
+        409,
+        "managed_by_declaration",
+        `This organization is configured by mockingbird.yaml, so this cannot be changed by hand. Change the file and apply it (PUT /api/v1/manifest), or release the organization (DELETE /api/v1/orgs/${row.id}/manifest).`,
+      )
     if (
       row.suspended !== null &&
       minimum !== "viewer" &&
@@ -192,6 +229,9 @@ export function createRoutes(): Route[] {
     name: row.name,
     createdAt: row.created_at,
     suspended: row.suspended,
+    managed: managedBy(row)
+      ? { appliedAt: managedBy(row)?.appliedAt, appliedBy: managedBy(row)?.appliedBy }
+      : null,
     ...(role ? { role } : {}),
   })
   const viewProject = (row: Row<"projects">) => ({
@@ -371,6 +411,370 @@ export function createRoutes(): Route[] {
       await deleteFleet(deps, child)
     await deps.db.remove("api_keys", { project_id: row.id })
     await deps.db.remove("projects", { id: row.id })
+  }
+
+  // ---- mockingbird.yaml -----------------------------------------------------------------
+
+  type Change = {
+    action: "create" | "update" | "delete" | "unchanged"
+    kind: string
+    name: string
+    detail?: string
+  }
+
+  const actorName = (context: Context) =>
+    context.principal?.kind === "user"
+      ? (context.principal.user.email ?? context.principal.user.id)
+      : `API key ${context.principal?.key.name ?? ""}`.trim()
+
+  /** The emulators Fleet Cloud runs for a declared fleet: its services, minus the local-only ones. */
+  const declaredEmulators = async (
+    deps: Deps,
+    path: string,
+    services: Declaration["projects"][string]["fleets"][string]["services"],
+  ) => {
+    const emulators: Emulators = {}
+    for (const [name, service] of Object.entries(services)) {
+      if (service.local) continue
+      try {
+        emulators[name] = await emulatorSpec(deps, {
+          target: service.target ?? name,
+          ...(service.durability !== undefined ? { durability: service.durability } : {}),
+          ...(service.seed !== undefined ? { seed: service.seed } : {}),
+          ...(service.settings !== undefined ? { settings: service.settings } : {}),
+          ...(service.flushIntervalMs !== undefined
+            ? { flushIntervalMs: service.flushIntervalMs }
+            : {}),
+          ...(service.webhookOrigins !== undefined
+            ? { webhookOrigins: service.webhookOrigins }
+            : {}),
+        })
+      } catch (error) {
+        if (!(error instanceof HttpError) || error.status !== 400) throw error
+        const hint = ["unknown_emulator", "unsupported_emulator"].includes(error.code)
+          ? " Fleet Cloud runs HTTP emulators only; mark a service that should run only in a local fleet with `local: true`."
+          : ""
+        throw badRequest(`${path}.services.${name}: ${error.message}.${hint}`)
+      }
+    }
+    return emulators
+  }
+
+  /** What differs between two emulators, in words. */
+  const emulatorDiff = (before: EmulatorSpec, after: EmulatorSpec) =>
+    (["target", "durability", "seed", "settings", "flushIntervalMs", "webhookOrigins"] as const)
+      .filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]))
+      .map((key) =>
+        key === "settings" || key === "webhookOrigins"
+          ? key
+          : `${key} ${before[key] ?? "default"} → ${after[key] ?? "default"}`,
+      )
+      .join(", ")
+
+  /**
+   * Make an organization match a declaration, or (dry run) say what that would take. The
+   * declaration is the whole truth for the organization's projects, fleets and emulators:
+   * anything it does not declare is deleted, which is done only when `prune` is given.
+   */
+  const applyDeclaration = async (context: Context) => {
+    const { deps, principal } = context
+    if (!principal) throw unauthorized()
+    const query = new URL(context.request.url).searchParams
+    const dryRun = query.get("dryRun") === "true"
+    const prune = query.get("prune") === "true"
+    let declaration: Declaration
+    try {
+      declaration = parseDeclaration(context.body)
+    } catch (error) {
+      if (!(error instanceof DeclarationError)) throw error
+      const details = error.issues.map(
+        (issue) => `${issue.path || "(top level)"}: ${issue.message}`,
+      )
+      throw badRequest(`mockingbird.yaml is invalid: ${details[0]}`, details)
+    }
+
+    const [existing] = await deps.db.find("orgs", { slug: declaration.organization })
+    if (existing) {
+      // 404 for an organization the caller cannot see, as everywhere else.
+      const role = await requireRole(context, "admin", existing.id, "Organization")
+      void role
+      context.orgId = existing.id
+      if (existing.suspended !== null)
+        throw new HttpError(
+          403,
+          "org_suspended",
+          `This organization is suspended: ${existing.suspended}. Contact the operator of this service.`,
+        )
+    } else if (principal.kind !== "user")
+      throw notFound(
+        `Organization "${declaration.organization}" (an API key cannot create one; apply once with a personal token)`,
+      )
+    else
+      quota(
+        deps.config.orgsPerUser,
+        (await deps.db.find("memberships", { user_id: principal.user.id })).length,
+        "orgsPerUser",
+        "You belong to the maximum number of organizations",
+      )
+
+    const limits = existing ? limitsOf(deps, existing) : deps.config.limits
+    const changes: Change[] = []
+    const orgName = declaration.name ?? existing?.name ?? declaration.organization
+    changes.push({
+      action: !existing ? "create" : existing.name !== orgName ? "update" : "unchanged",
+      kind: "organization",
+      name: declaration.organization,
+      ...(existing && existing.name !== orgName
+        ? { detail: `name ${existing.name} → ${orgName}` }
+        : {}),
+    })
+
+    const projects = existing ? await deps.db.find("projects", { org_id: existing.id }) : []
+    const fleets = existing ? await deps.db.find("fleets", { org_id: existing.id }) : []
+    const projectBySlug = new Map(projects.map((row) => [row.slug, row]))
+    const fleetBySlug = new Map(fleets.map((row) => [row.slug, row]))
+
+    for (const [slug, project] of Object.entries(declaration.projects)) {
+      const current = projectBySlug.get(slug)
+      const name = project.name ?? current?.name ?? slug
+      changes.push({
+        action: !current ? "create" : current.name !== name ? "update" : "unchanged",
+        kind: "project",
+        name: slug,
+        ...(current && current.name !== name ? { detail: `name ${current.name} → ${name}` } : {}),
+      })
+    }
+    quota(
+      limits.projectsPerOrg,
+      Object.keys(declaration.projects).length - 1,
+      "projectsPerOrg",
+      "mockingbird.yaml declares more projects than this organization may have",
+    )
+
+    const declared = declaredFleets(declaration)
+    quota(
+      limits.fleetsPerOrg,
+      declared.length - 1,
+      "fleetsPerOrg",
+      "mockingbird.yaml declares more fleets than this organization may have",
+    )
+    const desired = new Map<
+      string,
+      {
+        project: string
+        name: string
+        access: string
+        options: Record<string, unknown>
+        emulators: Emulators
+      }
+    >()
+    for (const { project, slug, fleet } of declared) {
+      const path = `projects.${project}.fleets.${slug}`
+      const current = fleetBySlug.get(slug)
+      if (!current) {
+        const [taken] = await deps.db.find("fleets", { slug })
+        if (taken)
+          throw conflict(
+            `${path}: the fleet slug "${slug}" is already used by another organization; fleet slugs are unique across Fleet Cloud`,
+          )
+      }
+      const emulators = await declaredEmulators(deps, path, fleet.services)
+      quota(
+        limits.emulatorsPerFleet,
+        Object.keys(emulators).length - 1,
+        "emulatorsPerFleet",
+        `${path} declares more emulators than a fleet may have`,
+      )
+      const options = fleetOptions({ requestsPerMinute: fleet.requestsPerMinute }, limits)
+      const next = {
+        project,
+        name: fleet.name ?? current?.name ?? slug,
+        access: fleet.access ?? "open",
+        options,
+        emulators,
+      }
+      desired.set(slug, next)
+
+      const before = (current?.emulators ?? {}) as Emulators
+      const settings: string[] = []
+      if (current) {
+        if (current.name !== next.name) settings.push(`name ${current.name} → ${next.name}`)
+        if (current.access !== next.access)
+          settings.push(`access ${current.access} → ${next.access}`)
+        const rate = (current.options as { requestsPerMinute?: number }).requestsPerMinute
+        if (rate !== fleet.requestsPerMinute)
+          settings.push(
+            `requestsPerMinute ${rate ?? "ceiling"} → ${fleet.requestsPerMinute ?? "ceiling"}`,
+          )
+        if (projectBySlug.get(project)?.id !== current.project_id)
+          settings.push(`project → ${project}`)
+      }
+      changes.push({
+        action: !current ? "create" : settings.length > 0 ? "update" : "unchanged",
+        kind: "fleet",
+        name: slug,
+        ...(settings.length > 0 ? { detail: settings.join(", ") } : {}),
+      })
+      for (const [name, spec] of Object.entries(emulators)) {
+        const was = before[name]
+        const detail = was
+          ? emulatorDiff(was, spec)
+          : spec.target === name
+            ? spec.durability
+            : `${spec.target}, ${spec.durability}`
+        changes.push({
+          action: !was ? "create" : detail ? "update" : "unchanged",
+          kind: "emulator",
+          name: `${slug}/${name}`,
+          ...(detail
+            ? {
+                detail:
+                  was && was.target !== spec.target ? `${detail}; its state is reset` : detail,
+              }
+            : {}),
+        })
+      }
+      for (const name of Object.keys(before))
+        if (!emulators[name])
+          changes.push({
+            action: "delete",
+            kind: "emulator",
+            name: `${slug}/${name}`,
+            detail: "its stored state is erased",
+          })
+    }
+    for (const row of fleets)
+      if (!desired.has(row.slug))
+        changes.push({
+          action: "delete",
+          kind: "fleet",
+          name: row.slug,
+          detail: "its URL stops answering and its stored state is erased",
+        })
+    for (const row of projects)
+      if (!declaration.projects[row.slug])
+        changes.push({ action: "delete", kind: "project", name: row.slug })
+
+    const deletions = changes.filter((change) => change.action === "delete")
+    if (dryRun) return { organization: existing?.id ?? null, applied: false, changes }
+    if (deletions.length > 0 && !prune)
+      throw new HttpError(
+        409,
+        "prune_required",
+        `Applying this file would delete ${deletions.map((change) => `${change.kind} ${change.name}`).join(", ")}. Declare them in mockingbird.yaml to keep them, or apply with prune=true to delete them.`,
+        changes,
+      )
+
+    // ---- make it so
+    const now = iso(deps)
+    let org = existing
+    if (!org) {
+      org = {
+        id: newId("org"),
+        slug: declaration.organization,
+        name: orgName,
+        limits: {},
+        manifest: null,
+        suspended: null,
+        created_at: now,
+      }
+      try {
+        await deps.db.insert("orgs", org)
+      } catch (error) {
+        if (error instanceof UniqueViolation)
+          throw conflict(`Organization slug "${org.slug}" was just taken`)
+        throw error
+      }
+      await deps.db.insert("memberships", {
+        id: newId("mem"),
+        org_id: org.id,
+        user_id: (principal as { user: Row<"users"> }).user.id,
+        role: "owner",
+        created_at: now,
+      })
+      context.orgId = org.id
+    }
+    const projectIds = new Map<string, string>()
+    for (const [slug, project] of Object.entries(declaration.projects)) {
+      const current = projectBySlug.get(slug)
+      const name = project.name ?? current?.name ?? slug
+      if (current) {
+        if (current.name !== name) await deps.db.update("projects", current.id, { name })
+        projectIds.set(slug, current.id)
+      } else {
+        const id = newId("prj")
+        await deps.db.insert("projects", { id, org_id: org.id, slug, name, created_at: now })
+        projectIds.set(slug, id)
+      }
+    }
+    for (const [slug, next] of desired) {
+      const current = fleetBySlug.get(slug)
+      const projectId = projectIds.get(next.project) as string
+      if (!current) {
+        await deps.db.insert("fleets", {
+          id: newId("flt"),
+          org_id: org.id,
+          project_id: projectId,
+          slug,
+          name: next.name,
+          access: next.access,
+          emulators: next.emulators,
+          options: next.options,
+          revision: newSecret(),
+          created_at: now,
+          updated_at: now,
+        })
+        continue
+      }
+      const before = current.emulators as Emulators
+      await deps.db.update("fleets", current.id, {
+        project_id: projectId,
+        name: next.name,
+        access: next.access,
+        emulators: next.emulators,
+        options: next.options,
+        updated_at: now,
+        revision: newSecret(),
+      })
+      deps.fleetChanged(slug)
+      // An emulator that is gone, or is now a different emulator, cannot keep its old state.
+      for (const [name, was] of Object.entries(before))
+        if (next.emulators[name]?.target !== was.target) await deps.engine.reset(current.id, name)
+    }
+    for (const row of fleets) if (!desired.has(row.slug)) await deleteFleet(deps, row)
+    for (const row of projects) if (!declaration.projects[row.slug]) await deleteProject(deps, row)
+    const managed: Managed = { declaration, appliedAt: now, appliedBy: actorName(context) }
+    await deps.db.update("orgs", org.id, { name: orgName, manifest: managed })
+    for (const slug of desired.keys()) deps.fleetChanged(slug)
+    return { organization: org.id, applied: true, changes }
+  }
+
+  /** An organization's current configuration as a declaration: what applying would reproduce. */
+  const currentDeclaration = async (deps: Deps, row: Row<"orgs">): Promise<Declaration> => {
+    const managed = managedBy(row)
+    // A managed organization's file may also declare local-only services; hand back the file.
+    if (managed) return managed.declaration
+    const projects: Declaration["projects"] = {}
+    const fleets = await deps.db.find("fleets", { org_id: row.id })
+    for (const project of await deps.db.find("projects", { org_id: row.id })) {
+      const declared: Declaration["projects"][string]["fleets"] = {}
+      for (const fleet of fleets.filter((entry) => entry.project_id === project.id)) {
+        const rate = (fleet.options as { requestsPerMinute?: number }).requestsPerMinute
+        declared[fleet.slug] = {
+          name: fleet.name,
+          access: fleet.access as "open" | "key",
+          ...(rate ? { requestsPerMinute: rate } : {}),
+          services: Object.fromEntries(
+            Object.entries(fleet.emulators as Emulators).map(([name, spec]) => {
+              const { target, ...rest } = spec
+              return [name, { ...(target === name ? {} : { target }), ...rest }]
+            }),
+          ),
+        }
+      }
+      projects[project.slug] = { name: project.name, fleets: declared }
+    }
+    return { version: 1, organization: row.slug, name: row.name, projects }
   }
 
   const route = (
@@ -559,6 +963,7 @@ export function createRoutes(): Route[] {
             slug,
             name: body.name as string,
             limits: {},
+            manifest: null,
             suspended: null,
             created_at: iso(deps),
           }
@@ -880,6 +1285,49 @@ export function createRoutes(): Route[] {
         if (!key || key.org_id !== row.id) throw notFound("API key")
         await context.deps.db.remove("api_keys", { id: key.id })
         return { ok: true }
+      },
+    ),
+
+    // ---- mockingbird.yaml ----------------------------------------------------------------
+    route(
+      "PUT",
+      "/manifest",
+      "applyDeclaration",
+      "Make an organization match a mockingbird.yaml (?dryRun=true to plan, ?prune=true to delete what it no longer declares)",
+      "Declarative configuration",
+      "DeclarationResult",
+      applyDeclaration,
+      { body: "Declaration" },
+    ),
+    route(
+      "GET",
+      "/orgs/{orgId}/manifest",
+      "getDeclaration",
+      "An organization's configuration as a mockingbird.yaml",
+      "Declarative configuration",
+      "DeclarationView",
+      async (context) => {
+        const { row } = await org(context, "viewer")
+        const declaration = await currentDeclaration(context.deps, row)
+        const managed = managedBy(row)
+        return {
+          managed: managed ? { appliedAt: managed.appliedAt, appliedBy: managed.appliedBy } : null,
+          declaration,
+          yaml: `# mockingbird.yaml\n${Bun.YAML.stringify(declaration, null, 2)}\n`,
+        }
+      },
+    ),
+    route(
+      "DELETE",
+      "/orgs/{orgId}/manifest",
+      "releaseDeclaration",
+      "Stop managing an organization with mockingbird.yaml; nothing is deleted",
+      "Declarative configuration",
+      "Org",
+      async (context) => {
+        const { row, role } = await org(context, "admin")
+        const updated = await context.deps.db.update("orgs", row.id, { manifest: null })
+        return viewOrg(updated ?? row, role)
       },
     ),
 
