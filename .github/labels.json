@@ -33,5 +33,10 @@
     "name": "needs-oracle-check",
     "color": "c5def5",
     "description": "The claim could not be confirmed against the oracle yet"
+  },
+  {
+    "name": "ci-failure",
+    "color": "b60205",
+    "description": "An important workflow is failing on main; opened and closed by ci-alerts.yml"
   }
 ]

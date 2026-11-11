@@ -169,6 +169,15 @@ bun run pr:ready ruleset                         # verify the `Protect main` rul
 bun run pr:ready ruleset --apply
 ```
 
+### Failure issues
+
+When an important workflow fails on `main` (CI, Release, Publish image, Verify, Parity, Cache
+cleanup), [`ci-alerts.yml`](../.github/workflows/ci-alerts.yml) opens a
+`[ci-failure] <workflow> is failing on main` issue labelled `ci-failure`, with the failed jobs and
+their error annotations ([`scripts/ci-alert.ts`](../scripts/ci-alert.ts)). Each later failure of that
+workflow comments on the same issue, and its next successful run closes it. Pull-request runs never
+open one. A new workflow that guards or ships `main` belongs in that workflow's `workflows:` list.
+
 ### Agent commands
 
 Agent commands are written once in [`.agents/commands/`](../.agents/commands) and symlinked into every
