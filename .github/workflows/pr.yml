@@ -4,8 +4,7 @@
 # Required status checks on main (scripts/pr-ready.ts REQUIRED_CHECKS): Commitlint, and Check,
 # which passes only when every job it needs passed or was not needed. The jobs in between (Static,
 # Shard i, Consumer smoke) can be renamed or split freely; rename Commitlint or Check and update that
-# list in the same change. GitGuardian Security Checks is the other required check; it is reported
-# by the GitGuardian app, not by a job in this file.
+# list in the same change.
 #
 # Together the Static and Shard jobs run exactly `bun run check` (scripts/ci-plan.ts splits it and
 # fails on drift), spread over parallel runners. Changes decides what a change needs from

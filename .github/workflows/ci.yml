@@ -1,7 +1,7 @@
 # Publish. npm Trusted Publishing is pinned to this filename — keep it `ci.yml`.
 #
 # This workflow does not decide whether a commit is releasable. A pull request
-# whose checks passed (pr.yml: Commitlint, Check, plus GitGuardian) is releasable
+# whose checks passed (pr.yml: Commitlint and Check) is releasable
 # by definition; merging it to main is what starts a publish. Each job builds
 # (replaying the turbo caches pr.yml keeps warm on main; it saves none of its own)
 # and publishes. It does not re-run those checks.

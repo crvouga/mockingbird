@@ -11,10 +11,9 @@
  * `logs` prints a plain-text excerpt. Human/child noise never reaches stdout.
  *
  * The required status checks are the only merge requirement: Commitlint and Check from
- * .github/workflows/pr.yml (rename either and REQUIRED_CHECKS must follow) plus the GitGuardian
- * app's check; each is pinned to the app that reports it. pr.yml's other jobs (Static, Shard i,
- * Consumer smoke, …) are rolled up by Check, so they gate the merge without being required
- * themselves. .github/workflows/advisory.yml's checks never gate: they are reported, not waited on.
+ * .github/workflows/pr.yml (rename either and REQUIRED_CHECKS must follow), each pinned to the
+ * app that reports it. pr.yml's other jobs (Static, Shard i, Consumer smoke, …) are rolled up by
+ * Check, so they gate the merge without being required themselves. .github/workflows/advisory.yml's checks never gate: they are reported, not waited on.
  * Any other check that runs on a PR must be required. Release (.github/workflows/ci.yml) is not a
  * PR check: a green PR merged to main is the release.
  */
@@ -31,12 +30,10 @@ const TRUNK_BRANCH = "main"
 const RULESET_NAME = "Protect main"
 const LEGACY_RULESET_NAMES = ["Require CI on main"]
 const ACTIONS_INTEGRATION_ID = 15368
-const GITGUARDIAN_INTEGRATION_ID = 46505
 /** Release is not here: it runs on main after merge, never as a PR check. */
 const REQUIRED_CHECKS: RequiredStatusCheck[] = [
   { context: "Commitlint", integration_id: ACTIONS_INTEGRATION_ID },
   { context: "Check", integration_id: ACTIONS_INTEGRATION_ID },
-  { context: "GitGuardian Security Checks", integration_id: GITGUARDIAN_INTEGRATION_ID },
 ]
 const REQUIRED_CHECK_CONTEXTS = REQUIRED_CHECKS.map((check) => check.context)
 /** pr.yml's workflow name: its jobs gate through the required Check job, which needs them all. */
@@ -63,10 +60,8 @@ commands:
   resolve   mark an addressed thread resolved (--thread)
   checks    poll PR checks to terminal  (--interval, --timeout, --once)
   logs      print a failing check's log (<check|run-url>, --name, --tail); third-party
-            checks (GitGuardian, …) print their check-run report
+            checks print their check-run report
   rerun     re-run a failed check       (<check>, --name)
-  guardian  GitGuardian incidents on the PR head   (list | ignore --incident <id>
-            --reason test_credential|false_positive|low_risk; needs GITGUARDIAN_API_KEY)
   ruleset   verify/apply merge gate     (--apply)
   repo      verify/apply repo settings  (--apply)
   ready     verify the PR is pushed, synced, every check green and mergeable (never merges)
@@ -599,7 +594,7 @@ function pendingList(checks: Check[]): { name: string; bucket: string; link: str
     .map((check) => ({ name: check.name, bucket: check.bucket, link: check.link }))
 }
 
-/** A GitHub check run, as reported by any app (Actions or third-party, e.g. GitGuardian). */
+/** A GitHub check run, as reported by any app (Actions or third-party). */
 type CheckRun = {
   id: number
   name: string
@@ -1285,7 +1280,7 @@ async function cmdLogs(): Promise<void> {
       die(EXIT.usage, { error: "unknown check", available: checks.map((c) => c.name) })
     }
     runId = match.link.match(/\/actions\/runs\/(\d+)/)?.[1] ?? null
-    // A third-party app's check (GitGuardian, …) has no Actions log: its findings are the
+    // A third-party app's check has no Actions log: its findings are the
     // check run's own report.
     if (!runId) return printCheckRunReport(branch, target)
   }
@@ -1366,114 +1361,6 @@ async function cmdRerun(): Promise<void> {
     })
   }
   emit({ ok: true, name, via: "check-suite", app: runs[0]?.app?.slug ?? null, suiteId })
-}
-
-// ---------------------------------------------------------------------------
-// GitGuardian
-// ---------------------------------------------------------------------------
-
-const GITGUARDIAN_CHECK = "GitGuardian Security Checks"
-const GITGUARDIAN_KEY_ENV = "GITGUARDIAN_API_KEY"
-const GITGUARDIAN_IGNORE_REASONS = ["test_credential", "false_positive", "low_risk"]
-
-type GuardianIncident = {
-  id: string
-  url: string
-  status: string
-  detector: string
-  commit: string
-  file: string
-  line: number | null
-}
-
-/**
- * Incidents from the GitGuardian check run's report: one Markdown table row per finding,
- * `| [id](incident url) | status | detector | commit | file | [View secret](…#diff-…R<line>) |`.
- */
-function parseGuardianIncidents(text: string): GuardianIncident[] {
-  const incidents: GuardianIncident[] = []
-  for (const line of text.split("\n")) {
-    const row = line.match(
-      /^\|\s*\[(\d+)\]\((https?:\/\/[^)\s]+)\)\s*\|\s*([^|]*?)\s*\|\s*([^|]*?)\s*\|\s*([0-9a-f]{7,40})\s*\|\s*([^|]*?)\s*\|\s*(.*)$/,
-    )
-    if (!row) continue
-    const [, id, url, status, detector, commit, file, rest] = row
-    const lineNumber = rest?.match(/#diff-[0-9a-f]+R(\d+)/)?.[1]
-    incidents.push({
-      id: id as string,
-      url: url as string,
-      status: status as string,
-      detector: detector as string,
-      commit: commit as string,
-      file: file as string,
-      line: lineNumber ? Number(lineNumber) : null,
-    })
-  }
-  return incidents
-}
-
-async function cmdGuardian(): Promise<void> {
-  if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
-  const sub = argv[1] && !argv[1].startsWith("-") ? argv[1] : "list"
-  if (sub === "ignore") return guardianIgnore()
-  if (sub !== "list") die(EXIT.usage, { error: `unknown guardian command: ${sub}`, usage: USAGE })
-
-  const branch = await currentBranch()
-  const slug = await repoSlug()
-  const runs = await checkRunsByName(slug, await prHeadSha(branch), GITGUARDIAN_CHECK)
-  const run = runs[0]
-  if (!run) {
-    emit({ ok: true, check: null, incidents: [] })
-    return
-  }
-  const incidents = parseGuardianIncidents(run.output?.text ?? "")
-  // Whether each flagged commit is already on the remote: a pushed commit cannot be scrubbed
-  // without a force-push, so its incident must be resolved in GitGuardian instead.
-  const withPushed = await Promise.all(
-    incidents.map(async (incident) => {
-      const contains = await git(["branch", "-r", "--contains", incident.commit])
-      return { ...incident, pushed: contains.code === 0 && contains.stdout.length > 0 }
-    }),
-  )
-  emit({
-    ok: run.conclusion !== "failure",
-    check: { conclusion: run.conclusion ?? run.status, details: run.details_url },
-    incidents: withPushed,
-    canIgnore: Boolean(process.env[GITGUARDIAN_KEY_ENV]),
-  })
-  process.exit(run.conclusion === "failure" ? EXIT.fail : EXIT.ok)
-}
-
-/** Resolve one incident as not a leak, through GitGuardian's public API. */
-async function guardianIgnore(): Promise<void> {
-  const id = opt("--incident")
-  const reason = opt("--reason")
-  if (!id || !/^\d+$/.test(id) || !reason || !GITGUARDIAN_IGNORE_REASONS.includes(reason)) {
-    die(EXIT.usage, {
-      error: `guardian ignore needs --incident <id> and --reason <${GITGUARDIAN_IGNORE_REASONS.join("|")}>`,
-      usage: USAGE,
-    })
-  }
-  const key = process.env[GITGUARDIAN_KEY_ENV]
-  if (!key) {
-    die(EXIT.fail, {
-      step: "guardian-auth",
-      error: `${GITGUARDIAN_KEY_ENV} is not set`,
-      fix: `add ${GITGUARDIAN_KEY_ENV} (a GitGuardian API token with incidents:write) to .env.local`,
-      run: "bun run pr:ready guardian ignore --incident <id> --reason <reason>",
-    })
-  }
-  const api = "https://api.gitguardian.com"
-  const response = await fetch(`${api}/v1/incidents/secrets/${id}/ignore`, {
-    method: "POST",
-    headers: { authorization: `Token ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ ignore_reason: reason }),
-  })
-  const body = await response.text()
-  if (!response.ok) {
-    die(EXIT.fail, { step: "guardian-ignore", status: response.status, output: body.slice(0, 500) })
-  }
-  emit({ ok: true, incident: id, reason, status: response.status })
 }
 
 async function cmdRuleset(): Promise<void> {
@@ -1634,8 +1521,6 @@ async function main(): Promise<void> {
       return cmdLogs()
     case "rerun":
       return cmdRerun()
-    case "guardian":
-      return cmdGuardian()
     case "ruleset":
       return cmdRuleset()
     case "repo":
