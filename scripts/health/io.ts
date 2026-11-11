@@ -124,7 +124,7 @@ export async function workflowRuns(file: string, repo = REPO): Promise<WorkflowR
 }
 
 export const MAIN_RAW = `https://raw.githubusercontent.com/${REPO}/main`
-export const INFRA_REPO = "crvouga/workspace"
+export const INFRA_REPO = "crvouga/personal"
 export const INFRA_RAW = `https://raw.githubusercontent.com/${INFRA_REPO}/main`
-export const HOSTING_CONTRACT = `${INFRA_RAW}/llms.txt`
+export const HOSTING_CONTRACT = `${INFRA_RAW}/llms-cloud.txt`
 export const INVENTORY_URL = `${INFRA_RAW}/packages/infra/tofu/modules/inventory/inventory.tf.json`

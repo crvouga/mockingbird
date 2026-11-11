@@ -215,12 +215,12 @@ ordering example's browser dependencies are optimized before its first launch. T
 boundary, keep the dev server running, run `bun run docs:build`, then reload
 `/examples/medical-testing` and open the Example, Notifications and Emulators tabs.
 
-The docs site (`sites/docs`) is hosted on the shared `crvouga/workspace` fleet as the service
-`mockingbird-docs` ([shared-infra contract §4](https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt)).
+The docs site (`sites/docs`) is hosted by `crvouga/personal` as the service
+`mockingbird-docs` ([cloud infrastructure guide §4](https://www.chrisvouga.dev/llms-cloud.txt)).
 [`sites/docs/Dockerfile`](../sites/docs/Dockerfile) builds the static Astro site and serves it
 with nginx on port 80. Its build context is the repo root, because the site renders every service
 package. On every push to `main`, [`.github/workflows/publish.yml`](../.github/workflows/publish.yml)
-calls the workspace's reusable workflow. That workflow pushes `ghcr.io/crvouga/chrisvouga-mockingbird-docs:<sha>`,
-and then `crvouga/workspace` deploys that exact image and health-checks it. Railway never builds this repo.
+calls `crvouga/personal`'s reusable publish workflow. That workflow pushes `ghcr.io/crvouga/chrisvouga-mockingbird-docs:<sha>`,
+and then `crvouga/personal` deploys that exact image and health-checks it. Railway never builds this repo.
 
 To check the image locally, run `docker build -f sites/docs/Dockerfile -t mockingbird-docs . && docker run --rm -p 8080:80 mockingbird-docs`.
