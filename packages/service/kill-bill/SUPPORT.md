@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **26**
-- supported by the emulator: **26**
-- parity enabled: **26**
+- operations in spec: **28**
+- supported by the emulator: **28**
+- parity enabled: **28**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -34,3 +34,5 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GenerateDryRunInvoice` | `POST /1.0/kb/invoices/dryRun` | ✅ supported | ✅ | Best guess, not oracle-verified; see README for contract and limits |
 | `AdjustInvoiceItem` | `POST /1.0/kb/invoices/{invoiceId}` | ✅ supported | ⚠️ unsafe (opt-in) | Best guess, not oracle-verified; see README for contract and limits |
 | `PayAccountInvoices` | `POST /1.0/kb/accounts/{accountId}/invoicePayments` | ✅ supported | ⚠️ unsafe (opt-in) | Best guess, not oracle-verified; full balances only; paymentAmount and pluginProperty explicitly unsupported |
+| `ChangeSubscriptionPlan` | `PUT /1.0/kb/subscriptions/{subscriptionId}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `RefundInvoicePayment` | `POST /1.0/kb/invoicePayments/{paymentId}/refunds` | ✅ supported | ⚠️ unsafe (opt-in) |  |

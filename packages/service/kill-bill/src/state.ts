@@ -75,7 +75,12 @@ export type Subscription = Record<string, unknown> & {
   billCycleDayLocal?: number
   bcdEffectiveFromDate?: string
   /** Every BCD change, in effective-date order; each takes over from its effective date. */
-  bcdChanges?: { day: number; effectiveFrom: string }[]
+  bcdChanges?: {
+    day: number
+    effectiveFrom: string
+    /** The account's BCD (ACCOUNT billing alignment), in force and reported from the start. */
+    fromAccount?: boolean
+  }[]
   blockingStates?: {
     stateName: string
     service: string
@@ -167,6 +172,11 @@ export type CatalogPlan = {
   intervalDays?: number
   /** Catalog product of the plan (`<product>` in catalog XML); the plan name when not given. */
   product?: string
+  /**
+   * The catalog's `<billingAlignment>` for this plan. ACCOUNT (the default) bills month-based
+   * plans to the account's bill-cycle day.
+   */
+  billingAlignment?: "ACCOUNT" | "SUBSCRIPTION" | "BUNDLE"
 }
 export type QueuedNotification = {
   id: string
@@ -198,7 +208,7 @@ export class KillBillState {
   readonly bundles: Collection<Bundle>
   readonly invoices: Collection<Invoice>
   readonly payments: Collection<Payment>
-  readonly tags: Collection<{ objectId: string; tagDefinitionId: string }>
+  readonly tags: Collection<{ tagId?: string; objectId: string; tagDefinitionId: string }>
   readonly plans: Collection<CatalogPlan>
   /** Effective dates of the catalog versions each tenant uploaded, keyed by tenantId. */
   readonly catalogVersions: Collection<{ effectiveDates: string[] }>
