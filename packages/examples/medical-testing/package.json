@@ -2,7 +2,7 @@
   "name": "@crvouga/mockingbird-example-medical-testing",
   "version": "0.0.0-development",
   "private": true,
-  "description": "A plain full-stack example. Sign in with a Google or Apple OAuth emulator, shop lab tests, pay with a Stripe Checkout emulator, and the paid order is fulfilled as a Junction lab order, all persisted to an in-process Postgres engine, in one process.",
+  "description": "A plain full-stack example. Sign in with a Google or Apple OAuth emulator, shop lab tests, pay with a Stripe Checkout emulator, and the paid order is fulfilled as a Junction lab order, and patients get email, SMS and push updates through Resend, Twilio and FCM emulators, all persisted to an in-process Postgres engine, in one process.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -28,10 +28,14 @@
     "build": "bun ../../../scripts/bundle-service.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-notifications": "workspace:*",
+    "@crvouga/mockingbird-service-fcm": "workspace:*",
     "@crvouga/mockingbird-service-junction": "workspace:*",
     "@crvouga/mockingbird-service-oauth": "workspace:*",
     "@crvouga/mockingbird-service-postgres": "workspace:*",
+    "@crvouga/mockingbird-service-resend": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",
+    "@crvouga/mockingbird-service-twilio": "workspace:*",
     "hono": "4.13.11",
     "htm": "3.1.1",
     "oauth4webapi": "3.8.8",

@@ -1,4 +1,4 @@
-export type LabPatient = { firstName: string; lastName: string; email: string }
+export type LabPatient = { firstName: string; lastName: string; email: string; phone: string }
 
 export type CreateLabOrderInput = {
   patientUserId: string

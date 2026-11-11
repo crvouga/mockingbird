@@ -40,6 +40,7 @@ Do not work around an emulator in your own project: file a GitHub issue on crvou
 ## Fleet management
 
 - [@crvouga/mockingbird-fleet](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/adapters/fleet/README.md): Vendor-neutral Node.js fleet lifecycle, installed-service loading, control client, discovery and archives. This is tooling, not a vendor emulator.
+- [@crvouga/mockingbird-notifications](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/notifications/README.md): Notification test harness that reads a fleet's Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators and shows every SMS, email and push on phone and mail screens, with a JSON API for tests. This is tooling, not a vendor emulator.
 
 ## Services
 

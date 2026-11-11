@@ -9,6 +9,9 @@ describe("live demo admins", () => {
       "Apple",
       "Stripe",
       "Junction",
+      "Twilio",
+      "Resend",
+      "FCM",
       "Postgres",
     ])
 
