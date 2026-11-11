@@ -420,6 +420,48 @@
     "file": "organization-projects--new-project-as-viewer.png"
   },
   {
+    "id": "organization-projects--managed-as-owner",
+    "title": "Organization/Projects",
+    "name": "Managed As Owner",
+    "variant": "desktop",
+    "file": "organization-projects--managed-as-owner.png"
+  },
+  {
+    "id": "organization-projects--managed-as-member",
+    "title": "Organization/Projects",
+    "name": "Managed As Member",
+    "variant": "desktop",
+    "file": "organization-projects--managed-as-member.png"
+  },
+  {
+    "id": "organization-projects--managed-as-viewer",
+    "title": "Organization/Projects",
+    "name": "Managed As Viewer",
+    "variant": "desktop",
+    "file": "organization-projects--managed-as-viewer.png"
+  },
+  {
+    "id": "organization-projects--managed-empty",
+    "title": "Organization/Projects",
+    "name": "Managed Empty",
+    "variant": "desktop",
+    "file": "organization-projects--managed-empty.png"
+  },
+  {
+    "id": "organization-projects--new-project-when-managed",
+    "title": "Organization/Projects",
+    "name": "New Project When Managed",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-when-managed.png"
+  },
+  {
+    "id": "organization-projects--new-project-became-managed",
+    "title": "Organization/Projects",
+    "name": "New Project Became Managed",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-became-managed.png"
+  },
+  {
     "id": "organization-members--as-owner",
     "title": "Organization/Members",
     "name": "As Owner",
@@ -1029,6 +1071,181 @@
     "file": "organization-settings--delete-as-admin.png"
   },
   {
+    "id": "organization-settings--managed-as-owner",
+    "title": "Organization/Settings",
+    "name": "Managed As Owner",
+    "variant": "desktop",
+    "file": "organization-settings--managed-as-owner.png"
+  },
+  {
+    "id": "organization-settings--managed-as-admin",
+    "title": "Organization/Settings",
+    "name": "Managed As Admin",
+    "variant": "desktop",
+    "file": "organization-settings--managed-as-admin.png"
+  },
+  {
+    "id": "organization-settings--rename-when-managed",
+    "title": "Organization/Settings",
+    "name": "Rename When Managed",
+    "variant": "desktop",
+    "file": "organization-settings--rename-when-managed.png"
+  },
+  {
+    "id": "organization-settings--rename-became-managed",
+    "title": "Organization/Settings",
+    "name": "Rename Became Managed",
+    "variant": "desktop",
+    "file": "organization-settings--rename-became-managed.png"
+  },
+  {
+    "id": "organization-settings--delete-when-managed",
+    "title": "Organization/Settings",
+    "name": "Delete When Managed",
+    "variant": "desktop",
+    "file": "organization-settings--delete-when-managed.png"
+  },
+  {
+    "id": "organization-configuration--managed-as-owner",
+    "title": "Organization/Configuration",
+    "name": "Managed As Owner",
+    "variant": "desktop",
+    "file": "organization-configuration--managed-as-owner.png"
+  },
+  {
+    "id": "organization-configuration--managed-as-owner",
+    "title": "Organization/Configuration",
+    "name": "Managed As Owner",
+    "variant": "mobile",
+    "file": "organization-configuration--managed-as-owner--mobile.png"
+  },
+  {
+    "id": "organization-configuration--managed-as-owner",
+    "title": "Organization/Configuration",
+    "name": "Managed As Owner",
+    "variant": "dark",
+    "file": "organization-configuration--managed-as-owner--dark.png"
+  },
+  {
+    "id": "organization-configuration--managed-as-admin",
+    "title": "Organization/Configuration",
+    "name": "Managed As Admin",
+    "variant": "desktop",
+    "file": "organization-configuration--managed-as-admin.png"
+  },
+  {
+    "id": "organization-configuration--managed-as-member",
+    "title": "Organization/Configuration",
+    "name": "Managed As Member",
+    "variant": "desktop",
+    "file": "organization-configuration--managed-as-member.png"
+  },
+  {
+    "id": "organization-configuration--managed-as-viewer",
+    "title": "Organization/Configuration",
+    "name": "Managed As Viewer",
+    "variant": "desktop",
+    "file": "organization-configuration--managed-as-viewer.png"
+  },
+  {
+    "id": "organization-configuration--managed-by-an-api-key",
+    "title": "Organization/Configuration",
+    "name": "Managed By An Api Key",
+    "variant": "desktop",
+    "file": "organization-configuration--managed-by-an-api-key.png"
+  },
+  {
+    "id": "organization-configuration--by-hand-as-owner",
+    "title": "Organization/Configuration",
+    "name": "By Hand As Owner",
+    "variant": "desktop",
+    "file": "organization-configuration--by-hand-as-owner.png"
+  },
+  {
+    "id": "organization-configuration--by-hand-as-admin",
+    "title": "Organization/Configuration",
+    "name": "By Hand As Admin",
+    "variant": "desktop",
+    "file": "organization-configuration--by-hand-as-admin.png"
+  },
+  {
+    "id": "organization-configuration--by-hand-as-member",
+    "title": "Organization/Configuration",
+    "name": "By Hand As Member",
+    "variant": "desktop",
+    "file": "organization-configuration--by-hand-as-member.png"
+  },
+  {
+    "id": "organization-configuration--by-hand-as-viewer",
+    "title": "Organization/Configuration",
+    "name": "By Hand As Viewer",
+    "variant": "desktop",
+    "file": "organization-configuration--by-hand-as-viewer.png"
+  },
+  {
+    "id": "organization-configuration--empty-organization",
+    "title": "Organization/Configuration",
+    "name": "Empty Organization",
+    "variant": "desktop",
+    "file": "organization-configuration--empty-organization.png"
+  },
+  {
+    "id": "organization-configuration--managed-with-empty-projects",
+    "title": "Organization/Configuration",
+    "name": "Managed With Empty Projects",
+    "variant": "desktop",
+    "file": "organization-configuration--managed-with-empty-projects.png"
+  },
+  {
+    "id": "organization-configuration--release",
+    "title": "Organization/Configuration",
+    "name": "Release",
+    "variant": "desktop",
+    "file": "organization-configuration--release.png"
+  },
+  {
+    "id": "organization-configuration--release-refused",
+    "title": "Organization/Configuration",
+    "name": "Release Refused",
+    "variant": "desktop",
+    "file": "organization-configuration--release-refused.png"
+  },
+  {
+    "id": "organization-configuration--release-while-suspended",
+    "title": "Organization/Configuration",
+    "name": "Release While Suspended",
+    "variant": "desktop",
+    "file": "organization-configuration--release-while-suspended.png"
+  },
+  {
+    "id": "organization-configuration--releasing",
+    "title": "Organization/Configuration",
+    "name": "Releasing",
+    "variant": "desktop",
+    "file": "organization-configuration--releasing.png"
+  },
+  {
+    "id": "organization-configuration--released",
+    "title": "Organization/Configuration",
+    "name": "Released",
+    "variant": "desktop",
+    "file": "organization-configuration--released.png"
+  },
+  {
+    "id": "organization-configuration--release-as-member",
+    "title": "Organization/Configuration",
+    "name": "Release As Member",
+    "variant": "desktop",
+    "file": "organization-configuration--release-as-member.png"
+  },
+  {
+    "id": "organization-configuration--release-when-by-hand",
+    "title": "Organization/Configuration",
+    "name": "Release When By Hand",
+    "variant": "desktop",
+    "file": "organization-configuration--release-when-by-hand.png"
+  },
+  {
     "id": "project--as-owner",
     "title": "Project",
     "name": "As Owner",
@@ -1244,6 +1461,62 @@
     "name": "Deleting",
     "variant": "desktop",
     "file": "project--deleting.png"
+  },
+  {
+    "id": "project--managed-as-owner",
+    "title": "Project",
+    "name": "Managed As Owner",
+    "variant": "desktop",
+    "file": "project--managed-as-owner.png"
+  },
+  {
+    "id": "project--managed-as-member",
+    "title": "Project",
+    "name": "Managed As Member",
+    "variant": "desktop",
+    "file": "project--managed-as-member.png"
+  },
+  {
+    "id": "project--managed-as-viewer",
+    "title": "Project",
+    "name": "Managed As Viewer",
+    "variant": "desktop",
+    "file": "project--managed-as-viewer.png"
+  },
+  {
+    "id": "project--managed-no-fleets",
+    "title": "Project",
+    "name": "Managed No Fleets",
+    "variant": "desktop",
+    "file": "project--managed-no-fleets.png"
+  },
+  {
+    "id": "project--rename-when-managed",
+    "title": "Project",
+    "name": "Rename When Managed",
+    "variant": "desktop",
+    "file": "project--rename-when-managed.png"
+  },
+  {
+    "id": "project--delete-when-managed",
+    "title": "Project",
+    "name": "Delete When Managed",
+    "variant": "desktop",
+    "file": "project--delete-when-managed.png"
+  },
+  {
+    "id": "project--new-fleet-when-managed",
+    "title": "Project",
+    "name": "New Fleet When Managed",
+    "variant": "desktop",
+    "file": "project--new-fleet-when-managed.png"
+  },
+  {
+    "id": "project--new-fleet-became-managed",
+    "title": "Project",
+    "name": "New Fleet Became Managed",
+    "variant": "desktop",
+    "file": "project--new-fleet-became-managed.png"
   },
   {
     "id": "fleet--as-owner",
@@ -1512,6 +1785,69 @@
     "file": "fleet--rate-limit-throttled.png"
   },
   {
+    "id": "fleet--managed-as-owner",
+    "title": "Fleet",
+    "name": "Managed As Owner",
+    "variant": "desktop",
+    "file": "fleet--managed-as-owner.png"
+  },
+  {
+    "id": "fleet--managed-as-member",
+    "title": "Fleet",
+    "name": "Managed As Member",
+    "variant": "desktop",
+    "file": "fleet--managed-as-member.png"
+  },
+  {
+    "id": "fleet--managed-as-viewer",
+    "title": "Fleet",
+    "name": "Managed As Viewer",
+    "variant": "desktop",
+    "file": "fleet--managed-as-viewer.png"
+  },
+  {
+    "id": "fleet--managed-no-emulators",
+    "title": "Fleet",
+    "name": "Managed No Emulators",
+    "variant": "desktop",
+    "file": "fleet--managed-no-emulators.png"
+  },
+  {
+    "id": "fleet--rename-when-managed",
+    "title": "Fleet",
+    "name": "Rename When Managed",
+    "variant": "desktop",
+    "file": "fleet--rename-when-managed.png"
+  },
+  {
+    "id": "fleet--access-when-managed",
+    "title": "Fleet",
+    "name": "Access When Managed",
+    "variant": "desktop",
+    "file": "fleet--access-when-managed.png"
+  },
+  {
+    "id": "fleet--rate-limit-when-managed",
+    "title": "Fleet",
+    "name": "Rate Limit When Managed",
+    "variant": "desktop",
+    "file": "fleet--rate-limit-when-managed.png"
+  },
+  {
+    "id": "fleet--delete-when-managed",
+    "title": "Fleet",
+    "name": "Delete When Managed",
+    "variant": "desktop",
+    "file": "fleet--delete-when-managed.png"
+  },
+  {
+    "id": "fleet--rename-became-managed",
+    "title": "Fleet",
+    "name": "Rename Became Managed",
+    "variant": "desktop",
+    "file": "fleet--rename-became-managed.png"
+  },
+  {
     "id": "fleet-emulators--catalog",
     "title": "Fleet/Emulators",
     "name": "Catalog",
@@ -1748,6 +2084,62 @@
     "name": "Removing",
     "variant": "desktop",
     "file": "fleet-emulators--removing.png"
+  },
+  {
+    "id": "fleet-emulators--catalog-when-managed",
+    "title": "Fleet/Emulators",
+    "name": "Catalog When Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--catalog-when-managed.png"
+  },
+  {
+    "id": "fleet-emulators--configure-when-managed",
+    "title": "Fleet/Emulators",
+    "name": "Configure When Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-when-managed.png"
+  },
+  {
+    "id": "fleet-emulators--durability-when-managed",
+    "title": "Fleet/Emulators",
+    "name": "Durability When Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability-when-managed.png"
+  },
+  {
+    "id": "fleet-emulators--remove-when-managed",
+    "title": "Fleet/Emulators",
+    "name": "Remove When Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--remove-when-managed.png"
+  },
+  {
+    "id": "fleet-emulators--save-when-managed",
+    "title": "Fleet/Emulators",
+    "name": "Save When Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--save-when-managed.png"
+  },
+  {
+    "id": "fleet-emulators--reset-when-managed",
+    "title": "Fleet/Emulators",
+    "name": "Reset When Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--reset-when-managed.png"
+  },
+  {
+    "id": "fleet-emulators--durability-became-managed",
+    "title": "Fleet/Emulators",
+    "name": "Durability Became Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability-became-managed.png"
+  },
+  {
+    "id": "fleet-emulators--configure-became-managed",
+    "title": "Fleet/Emulators",
+    "name": "Configure Became Managed",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-became-managed.png"
   },
   {
     "id": "account--with-tokens",
