@@ -235,11 +235,19 @@ mounts it as its Notifications tab.
 `mountDashboard` puts a tab bar over that UI and an emulators panel you draw:
 
 ```ts
+import { createNotificationHarness } from "@crvouga/mockingbird-notifications"
 import { mountDashboard } from "@crvouga/mockingbird-notifications/ui"
+import { createRuntime as twilio } from "@crvouga/mockingbird-service-twilio"
 
+const harness = createNotificationHarness({ services: { twilio: twilio() } })
 const dashboard = mountDashboard(document.getElementById("lab") as HTMLElement, {
   title: "Acme lab",
-  emulators: { mount: (panel) => mountMyAdmin(panel) }, // may be async; may return a dispose function
+  emulators: {
+    // may be async; may return a dispose function
+    mount: (panel) => {
+      panel.textContent = "Your emulators' admin UI goes here"
+    },
+  },
   notifications: { harness },                           // what mountNotifications takes
   syncUrl: true,                                        // read and write ?tab=
 })
