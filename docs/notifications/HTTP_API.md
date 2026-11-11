@@ -1,6 +1,8 @@
 # HTTP API
 
-Every route of a running harness, its filters, and the shape of a notification. The [client](CLIENT.md) and the [devices](DEVICES.md) page use the same API.
+Every route of a running harness, its filters, and the shape of a notification. The client and the devices page use the same API.
+
+See [Client](CLIENT.md) for the typed wrapper and [Devices](DEVICES.md) for the page.
 
 <!-- search: http api routes notifications latest wait events server-sent events sse sources namespaces filter json shape record raw -->
 

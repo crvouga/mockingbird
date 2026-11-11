@@ -253,7 +253,7 @@ export const NOTIFICATIONS = {
       icon: "zap",
       title: "Client",
       page: "CLIENT",
-      body: "`waitForCode(\"+12025550123\")` returns the code the app just texted. Run the harness in the test process, with no server.",
+      body: '`waitForCode("+12025550123")` returns the code the app just texted. Run the harness in the test process, with no server.',
     },
     {
       icon: "layers",

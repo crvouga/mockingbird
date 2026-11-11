@@ -13,6 +13,10 @@ Automated tests get the same data from a JSON API and a small client.
 | Email | Resend, Amazon SES (`SendEmail` and MIME `SendRawEmail`), Amazon SNS (`email` / `email-json` subscribers), Customer.io, Mailosaur, Twilio Verify email | Webmail: inbox per recipient (to, cc, bcc), rendered HTML, attachments, headers |
 | Push | Firebase Cloud Messaging | iOS lock screen or Android shade, chosen from the device token's platform; title, body, image, data, badge, sound |
 
+The [Notifications guide](https://mockingbird.chrisvouga.dev/docs/notifications) on the docs site
+splits this README into pages, and the
+[lab ordering example](https://mockingbird.chrisvouga.dev/examples/medical-testing) runs it live.
+
 The harness only reads. It sends `GET` requests to each emulator's admin routes (`/__admin/outbox`
 or `/__admin/state/...`) and never changes emulator state. The device art is generic: no vendor
 logos.
