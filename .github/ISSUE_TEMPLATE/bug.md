@@ -11,7 +11,7 @@ labels: agent-reported, bug
 
 - Package: `@crvouga/mockingbird-service-<service>@<exact installed version>`
 - Runtime: Node <version> / Bun <version>, OS <os>
-- Mode: <in-process createRuntime | createServer | mockingbird-<service> serve>
+- Mode: <fleet: mockingbird-fleet serve --config mockingbird.json | mockingbird-<service> serve | createServer | in-process createRuntime>
 
 ## What breaks
 

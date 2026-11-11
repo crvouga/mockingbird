@@ -6,10 +6,12 @@
  *
  *   data-notification-id  data-channel  data-service  data-source  data-to  data-from
  *   data-status  data-created-at  data-unread ("true" | "false")
+ *   data-via ("whatsapp", only on WhatsApp messages)
  *
  * The UI root (`TEST_IDS.app`) reports its state the same way: `data-ready` ("true" once the first
  * read finished), `data-view`, `data-namespace`, `data-count`, `data-version`, `data-connected`,
- * `data-sound` and `data-motion`.
+ * `data-sound`, `data-motion`, `data-layout` ("grid" = devices side by side, "tabs" = one device at
+ * a time) and `data-tab` (the selected channel tab: "all", "sms", "push", "email" or "chat").
  *
  * This module has no dependencies, so Playwright, Cypress or WebdriverIO specs can import it.
  */
@@ -40,19 +42,29 @@ export const TEST_IDS = {
   toast: "toast",
   toastUndo: "toast-undo",
 
+  // ── Channel tabs ─────────────────────────────────────────────────────────────
+  /** The `role="tablist"` that switches between devices; `data-layout="grid" | "tabs"`. */
+  channelTabs: "channel-tabs",
+  /** One `role="tab"`; `data-value="all" | "sms" | "push" | "email" | "chat"`, `aria-selected`, `data-unread` (a count). */
+  channelTab: "channel-tab",
+  /** Unread badge on a tab whose device is not showing its newest arrivals (absent when 0). */
+  channelTabUnread: "channel-tab-unread",
+
   // ── SMS: Messages ────────────────────────────────────────────────────────────
-  /** The phone; `data-screen="threads" | "conversation"`, `data-recipient`, `data-thread`. */
+  /** The phone; `data-screen="threads" | "conversation"`, `data-recipient`, `data-thread`, and `data-via="whatsapp"` while a WhatsApp chat is open. */
   smsDevice: "sms-device",
   /** Phone number `<select>`; option values are E.164 numbers. */
   smsRecipient: "sms-recipient",
   /** Unread SMS badge next to the column title (absent when 0). */
   smsUnreadCount: "sms-unread-count",
-  /** One conversation in the list; `data-from` (the sender address), `data-unread`, `data-pinned`, `data-muted`. */
+  /** One conversation in the list; `data-from` (the sender address), `data-unread`, `data-pinned`, `data-muted`, `data-via`. */
   smsThread: "sms-thread",
   smsThreadName: "sms-thread-name",
   smsThreadPreview: "sms-thread-preview",
   smsThreadTime: "sms-thread-time",
   smsThreadUnread: "sms-thread-unread",
+  /** "WhatsApp" label on a WhatsApp conversation in the list. */
+  smsThreadVia: "sms-thread-via",
   /** Swipe actions behind a thread (also reachable with the keyboard: focus the thread, press Delete). */
   smsThreadDelete: "sms-thread-delete",
   smsThreadMute: "sms-thread-mute",
@@ -60,7 +72,7 @@ export const TEST_IDS = {
   smsThreadToggleUnread: "sms-thread-toggle-unread",
   /** Shown when the phone has no messages. */
   smsEmpty: "sms-empty",
-  /** An open conversation; `data-from`. */
+  /** An open conversation; `data-from`, `data-via="sms" | "whatsapp"`. */
   smsConversation: "sms-conversation",
   smsConversationTitle: "sms-conversation-title",
   smsBack: "sms-back",
@@ -160,6 +172,31 @@ export const TEST_IDS = {
   /** One attachment; `data-filename`, `data-content-type`, `data-size`. */
   emailAttachment: "email-attachment",
 
+  // ── Chat: team chat window ──────────────────────────────────────────────────
+  /** The chat window; `data-recipient` (the open channel), `data-workspace`. */
+  chatDevice: "chat-device",
+  /** Channel `<select>`; option values are channel names (`#alerts`) or webhook paths. */
+  chatRecipient: "chat-recipient",
+  chatUnreadCount: "chat-unread-count",
+  chatWorkspace: "chat-workspace",
+  /** One channel in the sidebar; `data-to`, `data-unread` (a count), `aria-current`. */
+  chatChannel: "chat-channel",
+  /** The open channel's name in the header. */
+  chatTitle: "chat-title",
+  /** One message; notification attributes plus `data-method`, `data-ephemeral`, `data-thread`. */
+  chatMessage: "chat-message",
+  chatMessageAuthor: "chat-message-author",
+  chatMessageTime: "chat-message-time",
+  /** The message text, with mrkdwn formatting applied. */
+  chatMessageText: "chat-message-text",
+  /** Block Kit blocks; each block inside carries `data-block="<type>"`. */
+  chatMessageBlocks: "chat-message-blocks",
+  /** Legacy attachments; each one inside carries `data-color`. */
+  chatMessageAttachments: "chat-message-attachments",
+  /** One reaction; `data-name`, `data-count`. */
+  chatMessageReaction: "chat-message-reaction",
+  chatEmpty: "chat-empty",
+
   // ── Timeline + inspector ────────────────────────────────────────────────────
   timeline: "timeline",
   /** One row; notification attributes. Click it to inspect. */
@@ -174,6 +211,16 @@ export const TEST_IDS = {
   inspectorField: "inspector-field",
   /** The full record, normalized fields plus `raw`, as JSON text. */
   inspectorJson: "inspector-json",
+
+  // ── Dashboard (mountDashboard) ───────────────────────────────────────────────
+  /** The dashboard root; `data-tab` is the open tab's id. */
+  dashboard: "dashboard",
+  /** One tab button; `data-tab` (`emulators`, `notifications`, or an embedder's id), `aria-selected`. */
+  dashboardTab: "dashboard-tab",
+  /** One tab's panel; `data-tab`. Hidden unless its tab is open. */
+  dashboardPanel: "dashboard-panel",
+  /** Notifications that arrived while another tab was open; `data-count`. Hidden at 0. */
+  dashboardBadge: "dashboard-badge",
 } as const
 
 export type TestId = (typeof TEST_IDS)[keyof typeof TEST_IDS]
@@ -193,6 +240,14 @@ export const selectors = {
     `[data-testid=${attr(TEST_IDS.smsBubble)}]${filter.from ? `[data-from=${attr(filter.from)}]` : ""}${filter.id ? `[data-notification-id=${attr(filter.id)}]` : ""}`,
   /** A conversation in the Messages list. */
   smsThread: (from: string) => `[data-testid=${attr(TEST_IDS.smsThread)}][data-from=${attr(from)}]`,
+  /** A channel tab: `"all"`, `"sms"`, `"push"`, `"email"` or `"chat"`. */
+  channelTab: (value: "all" | "sms" | "push" | "email" | "chat") =>
+    `[data-testid=${attr(TEST_IDS.channelTab)}][data-value=${attr(value)}]`,
+  /** A chat message, optionally by id. */
+  chatMessage: (id?: string) =>
+    `[data-testid=${attr(TEST_IDS.chatMessage)}]${id ? `[data-notification-id=${attr(id)}]` : ""}`,
+  /** A channel in the chat sidebar. */
+  chatChannel: (to: string) => `[data-testid=${attr(TEST_IDS.chatChannel)}][data-to=${attr(to)}]`,
   /** A push notification card, optionally by id. */
   pushNotification: (id?: string) =>
     `[data-testid=${attr(TEST_IDS.pushNotification)}]${id ? `[data-notification-id=${attr(id)}]` : ""}`,
@@ -202,4 +257,10 @@ export const selectors = {
   /** A timeline row, optionally by id. */
   timelineRow: (id?: string) =>
     `[data-testid=${attr(TEST_IDS.timelineRow)}]${id ? `[data-notification-id=${attr(id)}]` : ""}`,
+  /** A dashboard tab button by tab id (`emulators`, `notifications`, …). */
+  dashboardTab: (id: string) =>
+    `[data-testid=${attr(TEST_IDS.dashboardTab)}][data-tab=${attr(id)}]`,
+  /** A dashboard tab's panel by tab id. */
+  dashboardPanel: (id: string) =>
+    `[data-testid=${attr(TEST_IDS.dashboardPanel)}][data-tab=${attr(id)}]`,
 }

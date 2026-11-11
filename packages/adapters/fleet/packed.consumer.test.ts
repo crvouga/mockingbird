@@ -19,9 +19,14 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
   try {
     const tarballs: string[] = []
     let sqliteTarball = ""
-    for (const name of ["sqlite", "postgres", "redis", "cognito", "fleet"]) {
+    let notificationsTarball = ""
+    for (const name of ["sqlite", "postgres", "redis", "cognito", "notifications", "fleet"]) {
       const source =
-        name === "fleet" ? import.meta.dir : resolve(import.meta.dir, "../../service", name)
+        name === "fleet"
+          ? import.meta.dir
+          : name === "notifications"
+            ? resolve(import.meta.dir, "../../notifications")
+            : resolve(import.meta.dir, "../../service", name)
       const stage = join(work, "pack", name)
       await mkdir(stage, { recursive: true })
       await cp(join(source, "dist"), join(stage, "dist"), { recursive: true })
@@ -31,6 +36,9 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       manifest.version = "0.0.0-smoke"
       if (manifest.dependencies?.["@crvouga/mockingbird-service-sqlite"])
         manifest.dependencies["@crvouga/mockingbird-service-sqlite"] = `file:${sqliteTarball}`
+      // The dashboard (`serve --dashboard`) comes with the fleet: no second install.
+      if (manifest.dependencies?.["@crvouga/mockingbird-notifications"])
+        manifest.dependencies["@crvouga/mockingbird-notifications"] = `file:${notificationsTarball}`
       await writeFile(join(stage, "package.json"), JSON.stringify(manifest))
       const packed = JSON.parse(
         await run(["npm", "pack", "--json", "--ignore-scripts", "--pack-destination", work], stage),
@@ -38,6 +46,7 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       const tarball = join(work, packed[0]?.filename ?? "missing")
       tarballs.push(tarball)
       if (name === "sqlite") sqliteTarball = tarball
+      if (name === "notifications") notificationsTarball = tarball
     }
     const app = join(work, "app")
     await mkdir(app)
@@ -72,7 +81,10 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
     expect(help).toContain("fleet doctor")
     await writeFile(
       join(app, "mockingbird.json"),
-      JSON.stringify({ services: { cache: { target: "redis", port: 0 } } }),
+      JSON.stringify({
+        dashboard: { port: 0 },
+        services: { cache: { target: "redis", port: 0 }, identity: { target: "cognito", port: 0 } },
+      }),
     )
     const report = JSON.parse(
       await run(
@@ -114,8 +126,13 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       if (next.done) throw new Error("neutral CLI exited before readiness")
       const manifest = JSON.parse(new TextDecoder().decode(next.value).trim()) as {
         healthUrl: string
+        dashboard: string
       }
       expect((await fetch(manifest.healthUrl)).ok).toBe(true)
+      // The dashboard runs from the installed packages alone, and fronts the fleet's emulators.
+      const dashboard = manifest.dashboard.replace(/\/+$/, "")
+      expect((await fetch(`${dashboard}/`)).ok).toBe(true)
+      expect((await fetch(`${dashboard}/admin/apis/identity/health`)).ok).toBe(true)
     } finally {
       clearTimeout(timer)
       reader.releaseLock()

@@ -66,6 +66,8 @@ export const statusLabel = (value: string): string =>
   ({
     pending_payment: "Awaiting payment",
     fulfilled: "Kit requested",
+    shipped: "Kit shipped",
+    payment_failed: "Payment declined",
     processing: "Processing",
     results_ready: "Results ready",
     reviewed: "Reviewed",

@@ -1,8 +1,19 @@
-/** The three kinds of device a notification lands on. */
-export type Channel = "sms" | "email" | "push"
+/** The kinds of device a notification lands on. */
+export type Channel = "sms" | "email" | "push" | "chat"
+
+/** Every channel, in the order the devices are laid out. */
+export const CHANNELS: readonly Channel[] = ["sms", "push", "email", "chat"]
 
 /** Emulators the harness knows how to read. */
-export type ServiceKind = "twilio" | "resend" | "fcm" | "ses" | "sns" | "customerio" | "mailosaur"
+export type ServiceKind =
+  | "twilio"
+  | "resend"
+  | "fcm"
+  | "ses"
+  | "sns"
+  | "customerio"
+  | "mailosaur"
+  | "slack"
 
 export const SERVICE_KINDS: readonly ServiceKind[] = [
   "twilio",
@@ -12,6 +23,7 @@ export const SERVICE_KINDS: readonly ServiceKind[] = [
   "sns",
   "customerio",
   "mailosaur",
+  "slack",
 ]
 
 export const SERVICE_LABELS: Record<ServiceKind, string> = {
@@ -22,6 +34,7 @@ export const SERVICE_LABELS: Record<ServiceKind, string> = {
   sns: "Amazon SNS",
   customerio: "Customer.io",
   mailosaur: "Mailosaur",
+  slack: "Slack",
 }
 
 export type Address = { name: string | null; address: string }
@@ -31,6 +44,8 @@ export type SmsContent = {
   /** One-time code the sender included (Twilio Verify), when known. */
   code: string | null
   media: string[]
+  /** `whatsapp` when the message went to a `whatsapp:` address; plain text messages omit it. */
+  via?: "sms" | "whatsapp"
 }
 
 export type EmailAttachment = { filename: string; contentType: string | null; size: number | null }
@@ -60,6 +75,30 @@ export type PushContent = {
   sound: string | null
 }
 
+export type ChatReaction = { name: string; count: number }
+
+/** A message posted into a team chat channel (Slack). */
+export type ChatContent = {
+  /** The message text, in the provider's own markup (Slack mrkdwn). */
+  text: string
+  /** Workspace the message was posted in. */
+  workspace: string | null
+  /** How it arrived: `chat.postMessage`, `chat.postEphemeral` or `incoming-webhook`. */
+  method: string
+  /** Block Kit blocks, exactly as sent. */
+  blocks: unknown[]
+  /** Legacy attachments, exactly as sent. */
+  attachments: unknown[]
+  /** Parent message timestamp when this is a threaded reply. */
+  threadTs: string | null
+  /** Shown to one member only. */
+  ephemeral: boolean
+  edited: boolean
+  reactions: ChatReaction[]
+  /** Display names of the users and channels the message mentions by id (`U…` → `ada`). */
+  names?: Record<string, string>
+}
+
 /** One message as a recipient would receive it, normalized across emulators. */
 export type Notification = {
   /** Stable across polls: `<service entry>:<namespace>:<provider id>`. */
@@ -71,7 +110,7 @@ export type Notification = {
   source: string
   service: ServiceKind
   namespace: string
-  /** Phone number, email address, or push registration token. */
+  /** Phone number, email address, push registration token, or chat channel (`#alerts`). */
   to: string
   from: Address
   /** ISO-8601, on the emulator's clock. */
@@ -83,6 +122,8 @@ export type Notification = {
   sms: SmsContent | null
   email: EmailContent | null
   push: PushContent | null
+  /** Set on `chat` notifications; absent or null on every other channel. */
+  chat?: ChatContent | null
   /** The record exactly as the emulator reported it. */
   raw: unknown
 }
@@ -124,6 +165,7 @@ const searchable = (n: Notification): string =>
     n.email?.text ?? "",
     n.push?.title ?? "",
     n.push?.body ?? "",
+    n.chat?.text ?? "",
   ]
     .join("\n")
     .toLowerCase()
@@ -144,9 +186,9 @@ export const filterFromSearch = (params: URLSearchParams): NotificationFilter =>
   const filter: NotificationFilter = {}
   const channel = params.get("channel")
   if (channel) {
-    if (channel !== "sms" && channel !== "email" && channel !== "push")
-      throw new Error(`channel: expected sms, email or push, got ${JSON.stringify(channel)}`)
-    filter.channel = channel
+    if (!(CHANNELS as readonly string[]).includes(channel))
+      throw new Error(`channel: expected sms, email, push or chat, got ${JSON.stringify(channel)}`)
+    filter.channel = channel as Channel
   }
   const service = params.get("service")
   if (service) {

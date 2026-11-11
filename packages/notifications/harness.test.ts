@@ -4,6 +4,7 @@ import { createServer as fcm } from "@crvouga/mockingbird-service-fcm/server"
 import { createServer as mailosaur } from "@crvouga/mockingbird-service-mailosaur/server"
 import { createServer as resend } from "@crvouga/mockingbird-service-resend/server"
 import { createServer as ses } from "@crvouga/mockingbird-service-ses/server"
+import { createServer as slack } from "@crvouga/mockingbird-service-slack/server"
 import { createServer as sns } from "@crvouga/mockingbird-service-sns/server"
 import { createServer as twilio } from "@crvouga/mockingbird-service-twilio/server"
 import { createNotificationHarness, type NotificationHarness, parseMime } from "./src/index.js"
@@ -27,6 +28,7 @@ beforeAll(async () => {
     sns(),
     customerio(),
     mailosaur(),
+    slack(),
   ])
   for (const [i, name] of [
     "twilio",
@@ -36,6 +38,7 @@ beforeAll(async () => {
     "sns",
     "customerio",
     "mailosaur",
+    "slack",
   ].entries())
     servers[name] = started[i] as Server
   harness = createNotificationHarness({
@@ -67,6 +70,62 @@ describe("each emulator shows up as the recipient would see it", () => {
     })
     expect(sms[1]?.sms?.code).toMatch(/^\d{6}$/)
     expect(sms[1]?.from).toEqual({ name: "Verify", address: "Verify" })
+  })
+
+  test("Twilio WhatsApp messages keep the recipient's bare number and say how they went", async () => {
+    await send.twilioWhatsApp(target("twilio"), {
+      to: "+12025550166",
+      body: "Your table is booked",
+    })
+    await send.twilioVerify(target("twilio"), "+12025550166", "default", "whatsapp")
+    await send.twilioSms(target("twilio"), { to: "+12025550166", body: "A plain text" })
+    const all = await harness.list({ service: "twilio", to: "+12025550166" })
+    expect(all.map((n) => [n.channel, n.sms?.via ?? "sms", n.from.address])).toEqual([
+      ["sms", "whatsapp", "whatsapp:+14155238886"],
+      ["sms", "whatsapp", "whatsapp:Verify"],
+      ["sms", "sms", "+15005550006"],
+    ])
+    expect(all[0]?.sms?.body).toBe("Your table is booked")
+    expect(all[1]?.sms?.code).toMatch(/^\d{6}$/)
+  })
+
+  test("Slack chat.postMessage and incoming webhooks land in their channel", async () => {
+    await send.slackPost(target("slack"), {
+      channel: "#alerts",
+      text: "Deploy *finished* for <@U0MOCKBOT> in <#C0GENERAL>",
+      blocks: [{ type: "section", text: { type: "mrkdwn", text: "Deploy *finished*" } }],
+    })
+    await send.slackWebhook(target("slack"), {
+      attachments: [{ color: "danger", title: "checkout-api", text: "Error rate is high" }],
+    })
+    const [posted] = await harness.list({ channel: "chat", to: "#alerts" })
+    expect(posted).toMatchObject({
+      service: "slack",
+      source: "slack",
+      from: { name: "Mockingbird Bot", address: "U0MOCKBOT" },
+      status: null,
+      sms: null,
+      email: null,
+      push: null,
+      chat: {
+        text: "Deploy *finished* for <@U0MOCKBOT> in <#C0GENERAL>",
+        workspace: "Mockingbird",
+        method: "chat.postMessage",
+        blocks: [{ type: "section" }],
+        threadTs: null,
+        ephemeral: false,
+        edited: false,
+        names: { U0MOCKBOT: "mockingbird", C0GENERAL: "general" },
+      },
+    })
+    expect(posted?.preview).toBe("Deploy *finished* for @mockingbird in #general")
+    const [hooked] = await harness.list({ channel: "chat", to: "/services/T000/B000/XXXX" })
+    expect(hooked).toMatchObject({
+      from: { name: "Incoming Webhook", address: "incoming-webhook" },
+      preview: "checkout-api Error rate is high",
+      chat: { text: "", attachments: [{ color: "danger" }] },
+    })
+    expect(await harness.list({ contains: "deploy *finished*" })).toHaveLength(1)
   })
 
   test("Resend email lands in every recipient's mailbox", async () => {
@@ -245,10 +304,15 @@ test("the HTTP API filters, reports sources, and serves the UI", async () => {
   const one = await (await get(`/api/notifications/${encodeURIComponent(latest.id)}`)).json()
   expect(one.id).toBe(latest.id)
   expect((await get("/api/notifications?channel=fax")).status).toBe(400)
+  const chat = await (await get("/api/notifications?channel=chat")).json()
+  expect(chat.notifications.map((n: { service: string }) => n.service)).toEqual(["slack", "slack"])
   expect((await get("/api/wait?to=%2B19999999999&timeoutMs=50")).status).toBe(408)
   const sources = await (await get("/api/sources")).json()
   expect(sources.sources.map((s: { name: string; ok: boolean }) => [s.name, s.ok]).sort()).toEqual(
-    ["customerio", "fcm", "mailosaur", "resend", "ses", "sns", "twilio"].map((n) => [n, true]),
+    ["customerio", "fcm", "mailosaur", "resend", "ses", "slack", "sns", "twilio"].map((n) => [
+      n,
+      true,
+    ]),
   )
   const page = await get("/")
   expect(page.headers.get("content-type")).toContain("text/html")

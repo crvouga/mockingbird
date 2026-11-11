@@ -6,6 +6,10 @@
  * the surrounding app. Keeping the elements in light DOM lets browser and IDE
  * inspection tools select and annotate them normally.
  *
+ * The document's `<script>` elements are dropped and never run. Running one means evaluating
+ * its text, which a Content Security Policy without `'unsafe-eval'` refuses (the docs site
+ * sends one). `hostedPages.ts` implements what those scripts do as ordinary code.
+ *
  * Width breakpoints are rewritten onto that `.page` as container queries.
  * A viewport query would still see the browser window, so a desktop-width
  * window would keep a two-column layout inside a narrow popup.
@@ -13,31 +17,9 @@
 
 export type HostedSubmit = (action: string, method: string, body: string) => void
 
-export type PastedLocation = {
-  href: string
-  origin: string
-  pathname: string
-  search: string
-  hash: string
-}
-
-export type PasteFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
-
 export type PasteOptions = {
-  /** Fetch implementation inline scripts see. Defaults to the page's fetch. */
-  fetch?: PasteFetch
-  /** `location` inline scripts read. Defaults to the host page. */
-  location?: PastedLocation
   /** Intercept form submits and same-document link clicks. */
   onSubmit?: HostedSubmit
-  /** Run inline scripts. Default true. */
-  scripts?: boolean
-}
-
-type TrackedListener = {
-  type: string
-  listener: EventListener
-  options?: boolean | AddEventListenerOptions
 }
 
 let pasteSequence = 0
@@ -130,10 +112,7 @@ const isWidthOnlyMedia = (condition: string): boolean => {
   return !/[a-z]/i.test(stripped)
 }
 
-/**
- * Paste `html` into `host`. Returns a cleanup that drops the tree and any
- * window listeners the pasted scripts attached.
- */
+/** Paste `html` into `host`. Returns a cleanup that drops the tree. */
 export const pasteHtml = (
   host: HTMLElement,
   html: string,
@@ -141,7 +120,6 @@ export const pasteHtml = (
 ): (() => void) => {
   const owner = host.ownerDocument
   const parsed = new DOMParser().parseFromString(html, "text/html")
-  const sources = [...parsed.querySelectorAll("script")].map((script) => script.textContent ?? "")
   for (const script of parsed.querySelectorAll("script")) script.remove()
   const css = [...parsed.querySelectorAll("style")]
     .map((style) => style.textContent ?? "")
@@ -160,97 +138,8 @@ export const pasteHtml = (
   for (const node of [...parsed.body.childNodes]) page.append(owner.adoptNode(node))
 
   const detach = options.onSubmit ? attachFormInterceptor(host, options.onSubmit) : () => {}
-  // Hosted pages call form.submit() to auto-post (Apple's form_post callback).
-  // That navigates the surrounding document. Fire a cancelable submit instead,
-  // which the interceptor above keeps in-process.
-  for (const form of host.querySelectorAll("form")) {
-    Object.defineProperty(form, "submit", {
-      configurable: true,
-      value: () => form.requestSubmit(),
-    })
-  }
-
-  const windowListeners: TrackedListener[] = []
-  const hostListeners: TrackedListener[] = []
-  if (options.scripts !== false) {
-    const scopedWindow = new Proxy(window, {
-      get(target, prop) {
-        if (prop === "addEventListener") {
-          return (
-            type: string,
-            listener: EventListener,
-            opts?: boolean | AddEventListenerOptions,
-          ) => {
-            windowListeners.push({
-              type,
-              listener,
-              ...(opts !== undefined ? { options: opts } : {}),
-            })
-            window.addEventListener(type, listener, opts)
-          }
-        }
-        if (prop === "removeEventListener") {
-          return (
-            type: string,
-            listener: EventListener,
-            opts?: boolean | AddEventListenerOptions,
-          ) => {
-            window.removeEventListener(type, listener, opts)
-          }
-        }
-        // Native Window getters require their real Window as the receiver.
-        const value: unknown = Reflect.get(target, prop, target)
-        return typeof value === "function" ? value.bind(target) : value
-      },
-    })
-    const documentProxy = scopedDocument(owner, host, page, hostListeners)
-    const fetchImpl: PasteFetch = options.fetch ?? ((input, init) => fetch(input, init))
-    const locationStub = options.location ?? window.location
-    const historyStub = { replaceState() {} }
-    for (const source of sources) {
-      if (source.trim() === "") continue
-      const run = new Function(
-        "document",
-        "fetch",
-        "location",
-        "history",
-        "sessionStorage",
-        "localStorage",
-        "window",
-        source,
-      ) as (
-        document: Document,
-        fetch: PasteFetch,
-        location: PastedLocation | Location,
-        history: { replaceState: () => void },
-        sessionStorage: Storage,
-        localStorage: Storage,
-        window: Window,
-      ) => void
-      try {
-        run(
-          documentProxy,
-          fetchImpl,
-          locationStub,
-          historyStub,
-          sessionStorage,
-          localStorage,
-          scopedWindow,
-        )
-      } catch (error) {
-        console.error(error instanceof Error ? (error.stack ?? error.message) : String(error))
-      }
-    }
-  }
-
   return () => {
-    // Framework clients unmount their roots before their document is detached.
-    host.dispatchEvent(new Event("mockingbird:unmount"))
     detach()
-    for (const item of windowListeners)
-      window.removeEventListener(item.type, item.listener, item.options)
-    for (const item of hostListeners)
-      host.removeEventListener(item.type, item.listener, item.options)
     host.replaceChildren()
     delete host.dataset.mockingbirdPaste
   }
@@ -295,40 +184,6 @@ const attachFormInterceptor = (
     root.removeEventListener("click", click, { capture: true })
   }
 }
-
-const scopedDocument = (
-  owner: Document,
-  host: HTMLElement,
-  page: HTMLElement,
-  listeners: TrackedListener[],
-): Document =>
-  new Proxy(owner, {
-    get(target, prop) {
-      if (prop === "getElementById") return (id: string) => host.querySelector(`#${CSS.escape(id)}`)
-      if (prop === "querySelector") return (selector: string) => host.querySelector(selector)
-      if (prop === "querySelectorAll") return (selector: string) => host.querySelectorAll(selector)
-      if (prop === "createElement")
-        return (tag: string, options?: ElementCreationOptions) =>
-          options === undefined ? owner.createElement(tag) : owner.createElement(tag, options)
-      if (prop === "createElementNS")
-        return (namespace: string, tag: string) => owner.createElementNS(namespace, tag)
-      if (prop === "documentElement" || prop === "body" || prop === "head") return page
-      if (prop === "addEventListener")
-        return (
-          type: string,
-          listener: EventListener,
-          opts?: boolean | AddEventListenerOptions,
-        ) => {
-          listeners.push({ type, listener, ...(opts !== undefined ? { options: opts } : {}) })
-          host.addEventListener(type, listener, opts)
-        }
-      if (prop === "removeEventListener")
-        return (type: string, listener: EventListener, opts?: boolean | AddEventListenerOptions) =>
-          host.removeEventListener(type, listener, opts)
-      const value: unknown = Reflect.get(target, prop, target)
-      return typeof value === "function" ? value.bind(target) : value
-    },
-  }) as Document
 
 /** Comments are not selectors. A comma inside one must not split the list. */
 const stripComments = (value: string): string => value.replace(/\/\*[\s\S]*?\*\//g, "")

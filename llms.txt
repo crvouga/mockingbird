@@ -2,7 +2,56 @@
 
 > Local emulators. Real API contracts. Mockingbird provides stateful emulators for third-party APIs and SQL databases. Use vendor-compatible request and response shapes, persistent in-memory state, and deterministic controls in Node, Bun, browsers, and Workers. Every HTTP emulator is a Fetch handler (`createRuntime().fetch(request) → Promise<Response>`) published to npm as `@crvouga/mockingbird-service-<name>`. Every emulator is isomorphic and runs in Node >= 22, Bun >= 1.2, browsers, and Workers.
 
-Install emulators as devDependencies; each package is self-contained. Prefer injecting the emulator's `fetch` in-process; when a URL is required, run `npx mockingbird-<service> serve` (or `createServer` from `./server`); every HTTP service answers `GET /__admin/health`, `/__admin/*` (including `GET /__admin/state` and `GET /__admin/ui`) and `x-mockingbird-namespace`. All internal paths use the configurable `adminPrefix` (CLI `--admin-prefix`, env `MOCKINGBIRD_ADMIN_PREFIX`), including namespace URLs `/__admin/ns/<name>/…`; there are no unprefixed health or namespace aliases. Read the README of each package you use — it is the integration guide for coding agents (also shipped in `node_modules/<package>/README.md`).
+## Quick start: run a fleet
+
+A fleet is the recommended way to run Mockingbird. One `mockingbird.json` names the emulators your app needs, and one command starts each of them on its own isolated port, with one controller to reset, snapshot and namespace them together and one dashboard for every emulator's admin UI and every notification your app sent. Agents should set an application up this way too. Node >= 22.
+
+1. Install the fleet tool and one package per emulator the application calls:
+
+   ```sh
+   npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-stripe @crvouga/mockingbird-service-twilio @crvouga/mockingbird-service-resend
+   ```
+
+2. Write `mockingbird.json` next to `package.json`. A service is named by its package suffix (`stripe` loads `@crvouga/mockingbird-service-stripe`); `"port": 0` picks a free port:
+
+   ```json
+   {
+     "control": { "port": 9000 },
+     "services": {
+       "stripe": { "port": 9001 },
+       "twilio": { "port": 9002 },
+       "resend": { "port": 9003 }
+     }
+   }
+   ```
+
+3. Start it. One process runs every emulator, the controller and the dashboard:
+
+   ```sh
+   npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+   # fleet ready: http://127.0.0.1:9000/__admin/fleet
+   # dashboard:   http://127.0.0.1:8790
+   ```
+
+4. Point each SDK's base URL at `services.<name>.url` from `ready.json` (the same JSON is printed by `--ready-json`); `adminBase` and `dashboard` are in it too. Any synthetic key works. Each package README shows the SDK option to set.
+5. Open the dashboard: the **Emulators** tab is every emulator's admin UI, the **Notifications** tab is every SMS, WhatsApp message, email, push and chat message the app sent. Tests read the same messages from `GET <dashboard>/api/notifications` and `GET <dashboard>/api/wait?to=<recipient>`.
+
+The controller applies one operation to every emulator:
+
+```sh
+# Every emulator back to its boot state, in one call
+curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset
+```
+
+- [Getting started](https://raw.githubusercontent.com/crvouga/mockingbird/main/docs/GETTING_STARTED.md): the same steps, then the other ways to run an emulator.
+- [Fleets](https://raw.githubusercontent.com/crvouga/mockingbird/main/docs/FLEETS.md): configuration, discovery, the controller's routes, archives and the dashboard.
+- [Notifications](https://raw.githubusercontent.com/crvouga/mockingbird/main/docs/NOTIFICATIONS.md): the devices, the JSON API and the test client.
+- [@crvouga/mockingbird-fleet](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/adapters/fleet/README.md): The `mockingbird-fleet` CLI and its Node API: start every installed emulator from one `mockingbird.json`, each on its own port, with one controller, a ready file, a control client, archives and the `--dashboard`. Start here. This is tooling, not a vendor emulator.
+- [@crvouga/mockingbird-notifications](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/notifications/README.md): Notification test harness that reads a fleet's Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators and shows every SMS, WhatsApp message, email, push and chat message on phone, mail and chat screens, with a JSON API for tests. `mockingbird-fleet serve --dashboard` already serves it; install it separately only to run it on its own. This is tooling, not a vendor emulator.
+
+## Other ways to run an emulator
+
+Each package is self-contained and installs as a devDependency. In a test that can inject a `fetch`, use the emulator in-process (`createRuntime().fetch`), with no port. For one emulator on a port, run `npx mockingbird-<service> serve` (or `createServer` from `./server`). Every HTTP service answers `GET /__admin/health`, `/__admin/*` (including `GET /__admin/state` and `GET /__admin/ui`) and `x-mockingbird-namespace`. All internal paths use the configurable `adminPrefix` (config key `adminPrefix`; on a service CLI `--admin-prefix`, env `MOCKINGBIRD_ADMIN_PREFIX`), including namespace URLs `/__admin/ns/<name>/…`; there are no unprefixed health or namespace aliases. Read the README of each package you use — it is the integration guide for coding agents (also shipped in `node_modules/<package>/README.md`).
 
 The sentence above is the product's identity. The rules for the mark, the colors, and where that sentence has to appear: [Design](https://raw.githubusercontent.com/crvouga/mockingbird/main/docs/DESIGN.md).
 
@@ -36,11 +85,6 @@ Do not work around an emulator in your own project: file a GitHub issue on crvou
 - [Missing feature](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/feature.md): title `[<service>] feature: <what is missing>`. An emulator lacks an operation, parameter, event, behavior or test control you use.
 - [Bug](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/bug.md): title `[<service>] bug: <what breaks>`. An emulator crashes, leaks state, contradicts its README, or does not build.
 - [New service](https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/new-service.md): title `[new-service] <Vendor>: <API surface>`. No package emulates a vendor you depend on; describe the surface, auth, state, behaviors, webhooks and test controls you need.
-
-## Fleet management
-
-- [@crvouga/mockingbird-fleet](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/adapters/fleet/README.md): Vendor-neutral Node.js fleet lifecycle, installed-service loading, control client, discovery and archives. This is tooling, not a vendor emulator.
-- [@crvouga/mockingbird-notifications](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/notifications/README.md): Notification test harness that reads a fleet's Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators and shows every SMS, email and push on phone and mail screens, with a JSON API for tests. This is tooling, not a vendor emulator.
 
 ## Services
 

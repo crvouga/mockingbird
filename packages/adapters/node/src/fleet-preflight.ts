@@ -49,6 +49,7 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
     )
   resolveAdminPrefix(config.adminPrefix)
   normalizeBootControls(config.adminControls)
+  validateDashboard(config.dashboard)
   if (config.idBase !== undefined) normalizeIdBase(config.idBase, "idBase")
   const targets = new Map<string, FleetTarget>()
   const ports = new Set<string>()
@@ -249,4 +250,19 @@ export function validateFleetPolicies(options: FleetOptions) {
   ])
     if (duration !== undefined && (!Number.isSafeInteger(duration) || duration < 1))
       throw new Error("hook deadlines must be positive integer milliseconds")
+}
+
+/** `dashboard` in a fleet configuration: `true`, `false`, or `{ port, host }`. */
+export function validateDashboard(value: unknown): void {
+  if (value === undefined || typeof value === "boolean") return
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("dashboard: expected true, false or { port, host }")
+  for (const [key, entry] of Object.entries(value)) {
+    if (key === "port") {
+      if (!Number.isInteger(entry) || (entry as number) < 0 || (entry as number) > 65535)
+        throw new Error("dashboard.port: expected an integer from 0 to 65535")
+    } else if (key === "host") {
+      if (typeof entry !== "string" || !entry) throw new Error("dashboard.host: expected a host")
+    } else throw new Error(`dashboard.${key}: unknown key; expected port or host`)
+  }
 }

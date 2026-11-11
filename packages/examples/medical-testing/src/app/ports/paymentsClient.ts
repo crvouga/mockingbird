@@ -16,7 +16,14 @@ export type CheckoutCompletedEvent = {
   checkoutSessionId: string
   metadata: Record<string, string>
 }
-export type PaymentsEvent = CheckoutCompletedEvent | { type: "unhandled" }
+/** A card was declined on the hosted page. The session stays open for another attempt. */
+export type PaymentFailedEvent = {
+  type: "payment.failed"
+  checkoutSessionId: string
+  /** The provider's own words, for example "Your card was declined." */
+  reason: string
+}
+export type PaymentsEvent = CheckoutCompletedEvent | PaymentFailedEvent | { type: "unhandled" }
 
 export type HostedCheckoutResult = { redirectedTo: string }
 

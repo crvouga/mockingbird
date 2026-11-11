@@ -1,0 +1,137 @@
+---
+/**
+ * Landing figure: the notifications harness's own UI, live. `client/notificationsIsland.ts` loads
+ * `client/notificationsDemo/mount.ts` when this nears the viewport; that boots the Twilio, Resend,
+ * FCM and Slack emulators in the tab and mounts the UI into `[data-demo-host]`. Until then, and
+ * without JavaScript, the stage shows a still outline of the four devices at the height the UI
+ * will take (`client/notificationsDemo/layout.ts` has the same numbers), so nothing moves.
+ */
+import Icon from "../Icon.astro"
+
+const actions = [
+  { action: "code", icon: "message", label: "Send sign-in code" },
+  { action: "email", icon: "mail", label: "Email a receipt" },
+  { action: "push", icon: "bell", label: "Send a push" },
+  { action: "chat", icon: "activity", label: "Post a Slack alert" },
+  { action: "whatsapp", icon: "message", label: "WhatsApp update" },
+]
+---
+
+<div class="notif-demo" data-notifications-demo data-state="idle" data-autoplay="off">
+  <div class="notif-panel">
+    <div class="notif-controls" role="group" aria-label="Send a notification through an emulator">
+      {actions.map((item) => (
+        <button type="button" class="btn btn-secondary btn-sm" data-demo-action={item.action} disabled>
+          <Icon name={item.icon} /> {item.label}
+        </button>
+      ))}
+      <span class="notif-controls-end">
+        <button type="button" class="btn btn-primary btn-sm" data-demo-action="checkout" disabled>
+          <Icon name="play" /> Run a checkout
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" data-demo-autoplay aria-pressed="true" disabled>
+          <span class="notif-pulse" aria-hidden="true"></span><span data-demo-autoplay-label>Pause autoplay</span>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" data-demo-action="reset" disabled>
+          <Icon name="reset" /> Reset
+        </button>
+      </span>
+    </div>
+    <div class="notif-call" data-demo-call role="status" aria-live="polite">
+      <span class="notif-call-hint">Each button makes one call to an emulator's vendor API. The request shows here.</span>
+    </div>
+    <div class="notif-stage" data-demo-stage>
+      <div class="notif-host" data-demo-host>
+        <div class="notif-skeleton">
+          <div class="notif-skeleton-devices" aria-hidden="true">
+            <span class="notif-skeleton-phone"></span>
+            <span class="notif-skeleton-phone"></span>
+            <span class="notif-skeleton-window"></span>
+            <span class="notif-skeleton-window notif-skeleton-chat"></span>
+          </div>
+          <p class="notif-skeleton-status">
+            <span data-when="idle">The live devices start when this section is on screen.</span>
+            <span data-when="manual">The live devices download about 2 MB of emulators. <button type="button" class="btn btn-secondary btn-sm" data-demo-start>Start the live demo</button></span>
+            <span data-when="loading">Starting the Twilio, Resend, FCM and Slack emulators in this tab…</span>
+            <span data-when="error">The live demo could not start in this browser. <a href="/examples/medical-testing">Open the example</a> or read the <a href="/docs/notifications">notifications guide</a>.</span>
+          </p>
+          <noscript>
+            <p class="notif-skeleton-status notif-skeleton-noscript">The live devices need JavaScript: the emulators run in your browser. The <a href="/docs/notifications">notifications guide</a> has screenshots.</p>
+          </noscript>
+        </div>
+      </div>
+    </div>
+    <div class="notif-foot">
+      <p><span class="notif-dot" aria-hidden="true"></span> The harness's own UI, reading four emulators that run in this tab. Nothing leaves the page.</p>
+      <p class="notif-foot-end">With a fleet it is one flag: <code>mockingbird-fleet serve --config mockingbird.json --dashboard</code> <a class="notif-link" href="/docs/notifications">Notifications guide <Icon name="arrow-right" /></a></p>
+    </div>
+  </div>
+</div>
+
+<style is:global>
+  /* Global on purpose: the caption's children and the UI are added at runtime, outside Astro's scope. */
+  .notif-demo { container-type: inline-size; margin-bottom: 14px; }
+  .notif-panel { border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); box-shadow: var(--shadow-md); overflow: hidden; }
+  .notif-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 14px; background: var(--bg-subtle); border-bottom: 1px solid var(--border); }
+  .notif-controls-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-left: auto; }
+  .notif-controls .btn .i { width: 14px; height: 14px; }
+  .notif-controls .btn-secondary .i { color: var(--highlight); }
+  .notif-controls [data-demo-autoplay][aria-pressed="false"] .notif-pulse { background: var(--fg-faint); animation: none; }
+  .notif-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); animation: notif-pulse 1.6s ease-in-out infinite; }
+  .notif-demo[data-autoplay="paused"] .notif-pulse { animation: none; opacity: 0.6; }
+  @keyframes notif-pulse { 50% { opacity: 0.35; } }
+
+  .notif-call { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 8px 14px; border-bottom: 1px solid var(--border); font-size: 12px; overflow: hidden; }
+  .notif-call code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: 12px; color: var(--fg); background: none; border: 0; padding: 0; }
+  .notif-call .method { min-width: 0; flex: none; }
+  .notif-call .badge { flex: none; }
+  .notif-call-hint, .notif-call-service { color: var(--fg-subtle); }
+  .notif-call-service { margin-left: auto; flex: none; white-space: nowrap; }
+  .notif-call.is-fresh { animation: notif-call 0.9s var(--ease); }
+  @keyframes notif-call { from { background: var(--accent-soft); } to { background: transparent; } }
+
+  /* The UI is dark in both themes, as the harness page is. Heights: client/notificationsDemo/layout.ts. */
+  .notif-stage { position: relative; height: calc(44px + 53.75cqw); background: #0e1015; color: #9aa1b1; overflow: hidden; }
+  .notif-host { height: 100%; }
+  .notif-skeleton { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; height: 100%; padding: 24px; }
+  .notif-skeleton-devices { display: flex; align-items: stretch; justify-content: center; gap: 1.7cqw; width: 100%; height: 62%; max-height: 520px; }
+  .notif-skeleton-devices span { border: 1px solid #2a2f3a; background: #161920; }
+  .notif-skeleton-phone { flex: 0 0 21.6cqw; border-radius: 2.8cqw; }
+  .notif-skeleton-window { flex: 3 1 0; border-radius: 10px; }
+  .notif-skeleton-chat { flex: 2 1 0; }
+  .notif-skeleton-status { max-width: 60ch; font-size: 13px; text-align: center; }
+  .notif-skeleton-status a { color: #6cb6ff; text-decoration: underline; }
+  .notif-skeleton-status [data-when] { display: none; }
+  .notif-skeleton-status .btn { margin-left: 8px; }
+  .notif-demo[data-state="idle"] [data-when="idle"],
+  .notif-demo[data-state="manual"] [data-when="manual"],
+  .notif-demo[data-state="loading"] [data-when="loading"],
+  .notif-demo[data-state="error"] [data-when="error"] { display: inline; }
+  .notif-demo[data-state="loading"] .notif-skeleton-devices span { animation: notif-skeleton 1.4s ease-in-out infinite; }
+  @keyframes notif-skeleton { 50% { background: #1d212a; } }
+
+  .notif-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 24px; padding: 12px 14px; border-top: 1px solid var(--border); color: var(--fg-subtle); font-size: 12.5px; }
+  .notif-foot p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .notif-foot code { font-size: 11.5px; }
+  .notif-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); flex: none; }
+  .notif-link { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; color: var(--highlight); white-space: nowrap; }
+
+  @container (max-width: 1039px) {
+    .notif-stage { height: 750px; }
+    .notif-skeleton-devices { max-width: 290px; height: 70%; max-height: none; }
+    .notif-skeleton-devices span:not(:first-child) { display: none; }
+    .notif-skeleton-phone { flex: 1 1 auto; border-radius: 38px; }
+    .notif-controls-end { margin-left: 0; }
+  }
+  @container (max-width: 519px) {
+    .notif-stage { height: 680px; }
+    .notif-controls .btn { flex: 1 1 auto; }
+    .notif-controls-end { flex: 1 1 100%; }
+    .notif-call-service { display: none; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .notif-pulse, .notif-call.is-fresh, .notif-demo[data-state="loading"] .notif-skeleton-devices span { animation: none; }
+    /* Nothing plays by itself, so there is nothing to pause. In CSS so the row never reflows. */
+    .notif-controls [data-demo-autoplay] { display: none; }
+  }
+</style>

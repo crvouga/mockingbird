@@ -1,6 +1,7 @@
 /// <reference types="node" />
 import { readFile } from "node:fs/promises"
 import { listen } from "@crvouga/mockingbird-adapter-node"
+import { adminGateway } from "./admin-gateway.js"
 import type { FleetManifest } from "./discovery.js"
 import {
   createNotificationHarness,
@@ -8,9 +9,15 @@ import {
   type NotificationHarness,
 } from "./harness.js"
 
+export { ADMIN_BRANDS_URL, type AdminGatewayOptions, adminGateway } from "./admin-gateway.js"
+
 /** Port `mockingbird-notifications serve` listens on when none is given. */
 export const DEFAULT_PORT = 8790
 
+/**
+ * `admin` defaults to `adminGateway()` here: the page gets an Emulators tab with every emulator's
+ * admin dashboard. Pass `admin: false` for the notifications UI alone.
+ */
 export type NotificationServerOptions = Omit<HarnessOptions, "manifest"> & {
   /** A fleet ready manifest object, or the path of the fleet's `--ready-file` (re-read every sync). */
   manifest?: HarnessOptions["manifest"] | string
@@ -36,6 +43,7 @@ export const createServer = async (
 ): Promise<NotificationServer> => {
   const { port, host, manifest, ...rest } = options
   const harness = createNotificationHarness({
+    admin: adminGateway(),
     ...rest,
     ...(manifest === undefined
       ? {}

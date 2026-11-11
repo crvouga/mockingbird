@@ -1,6 +1,7 @@
 import { html } from "htm/preact"
 import { useCallback, useEffect, useRef, useState } from "preact/hooks"
 import { api, type HostedCheckoutStepResponse } from "../api.js"
+import { attachCheckoutPage } from "../hostedPages.js"
 import { pasteHtml } from "../pasteHtml.js"
 import { useEscapeKey } from "./useEscapeKey.js"
 
@@ -82,9 +83,14 @@ export const CheckoutModal = ({ checkoutSessionId, onDone, onClose }: Props) => 
   useEffect(() => {
     const page = pageRef.current
     if (!page || pageHtml === null) return
-    return pasteHtml(page, pageHtml, {
+    const unpaste = pasteHtml(page, pageHtml, {
       onSubmit: (action, method, body) => stepRef.current(action, method, body),
     })
+    const detach = attachCheckoutPage(page)
+    return () => {
+      detach()
+      unpaste()
+    }
   }, [pageHtml, error])
 
   return html`

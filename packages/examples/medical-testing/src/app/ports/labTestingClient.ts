@@ -12,9 +12,14 @@ export type LabCatalogEntry = { catalogTestId: string }
 export type LabOrderStatusUpdatedEvent = {
   type: "order.status_updated"
   labOrderId: string
-  status: "processing" | "results_ready"
+  status: LabOrderStatus
   interpretation: string | null
+  /** Set when the collection kit shipped. */
+  tracking?: { carrier: string; number: string } | null
 }
+/** In the order a kit moves: out to the patient, back to the lab, reported. */
+export const LAB_ORDER_STATUSES = ["shipped", "processing", "results_ready"] as const
+export type LabOrderStatus = (typeof LAB_ORDER_STATUSES)[number]
 export type LabTestingEvent = LabOrderStatusUpdatedEvent | { type: "unhandled" }
 
 /**

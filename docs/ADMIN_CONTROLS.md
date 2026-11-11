@@ -127,4 +127,4 @@ In process, the runtime every emulator returns has the same controls as methods:
 - **Same seed, same requests, same bytes.** See [Seed and determinism](admin-controls/SEED_AND_DETERMINISM.md).
 - **A running emulator describes itself.** `GET /__admin` lists every route and header with a summary and a link to its page, so a script or an agent can discover the controls without these docs.
 
-The examples in this guide assume an emulator on `localhost:8787` (`npx mockingbird-stripe serve --port 8787`). Every `curl` to `/__admin` and every JSON document shown is run by the test suite.
+The examples in this guide assume an emulator on `localhost:8787` (`npx mockingbird-stripe serve --port 8787`). In a [fleet](FLEETS.md), each emulator answers the same routes on its own port, and the fleet controller applies reset, snapshot, restore and clock to all of them in one call. Every `curl` to `/__admin` and every JSON document shown is run by the test suite.

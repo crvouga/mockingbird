@@ -36,6 +36,7 @@ for (const name of readdirSync(servicesDir).sort()) {
     name?: string
     private?: boolean
     files?: string[]
+    exports?: Record<string, unknown>
     mockingbird?: Json & { layer?: string; parity?: string; parityTier?: string }
   }
   if (pkg.private || pkg.mockingbird?.layer !== "service" || !pkg.name) continue
@@ -94,6 +95,7 @@ for (const name of readdirSync(servicesDir).sort()) {
       pkg.mockingbird.parity ?? "",
       pkg.mockingbird.parityTier,
       discovery,
+      fleetEntry(name, http, pkg.exports),
     ),
   )
   count++
@@ -180,6 +182,54 @@ function oracleFor(name: string): Discovery["oracle"] {
   }
 }
 
+/**
+ * This service's entry in a fleet's `mockingbird.json`, or nothing when the package has no
+ * `./server` export for the fleet to load (an in-process engine such as SQLite).
+ */
+function fleetEntry(
+  name: string,
+  http: boolean,
+  exports: Record<string, unknown> | undefined,
+): string | undefined {
+  if (!exports?.["./server"]) return undefined
+  return http ? `"${name}": { "port": 0 }` : `"${name}": { "protocol": "${name}", "port": 0 }`
+}
+
+/** The recommended way to run the emulator, first in the file an agent reads. */
+function fleetSection(packageName: string, entry: string): string {
+  const GUIDE = "https://mockingbird.chrisvouga.dev/docs/fleets"
+  return `
+## Run it in a fleet
+
+The recommended way to run this emulator is in a fleet, next to the other emulators the
+application calls: one \`mockingbird.json\`, one process, each emulator on its own port.
+
+\`\`\`sh
+npm install -D @crvouga/mockingbird-fleet ${packageName}
+\`\`\`
+
+\`mockingbird.json\` (add one entry per installed emulator; \`"port": 0\` picks a free port):
+
+\`\`\`json
+{
+  "services": {
+    ${entry}
+  }
+}
+\`\`\`
+
+\`\`\`sh
+npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+\`\`\`
+
+Read this emulator's URL from \`services.<name>.url\` in \`ready.json\` and point the client at it.
+\`adminBase\` in the same file is the fleet controller, which resets, snapshots and restores every
+emulator in one call, and \`dashboard\` is one page with every HTTP emulator's admin UI and the
+notifications the application sent. The guide: <${GUIDE}>. The README covers running this
+emulator alone or in-process.
+`
+}
+
 /** The shared controls, in the one file an agent reads without leaving \`node_modules\`. */
 function adminControlsSection(): string {
   const GUIDE = "https://mockingbird.chrisvouga.dev/docs/admin-controls"
@@ -214,6 +264,7 @@ function renderGuide(
   parity: string,
   tier: string | undefined,
   discovery: Discovery,
+  fleet: string | undefined,
 ): string {
   const artifactRows = [
     [
@@ -251,7 +302,7 @@ function renderGuide(
 This is the installed-package index for coding agents and tooling. All relative links resolve
 inside \`node_modules/${packageName}/\`; no repository checkout is needed to discover the emulator's
 supported surface or documented behavior.
-
+${fleet ? fleetSection(packageName, fleet) : ""}
 ## Capability and behavior sources
 
 | Question | Authoritative file | What it contains |

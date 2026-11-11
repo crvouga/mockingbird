@@ -1,6 +1,58 @@
 # Fleets
 
-One service CLI can supervise installed HTTP emulators, PostgreSQL wire servers and Redis RESP
+A fleet is the recommended way to run Mockingbird: one `mockingbird.json`, one process, every
+emulator your application calls on its own port, one controller that resets and snapshots them
+together, and one dashboard for their admin UIs and the notifications your app sent.
+
+<!-- search: fleet mockingbird.json mockingbird-fleet serve dashboard ready file connections controller namespace reset snapshot ports -->
+
+## Quick start
+
+```sh
+npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-stripe @crvouga/mockingbird-service-twilio @crvouga/mockingbird-service-resend
+```
+
+`mockingbird.json`:
+
+```json
+{
+  "control": { "port": 9000 },
+  "services": {
+    "stripe": { "port": 9001 },
+    "twilio": { "port": 9002 },
+    "resend": { "port": 9003 }
+  }
+}
+```
+
+```sh
+npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+# fleet ready: http://127.0.0.1:9000/__admin/fleet
+# dashboard:   http://127.0.0.1:8790
+```
+
+Point each SDK's base URL at `services.<name>.url` from `ready.json`, and open the dashboard: the
+**Emulators** tab is every emulator's admin UI, the **Notifications** tab is every message your app
+sent. `curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset` puts every
+emulator back to its boot state. [Getting started](GETTING_STARTED.md#run-a-fleet) walks through
+the same steps.
+
+| You get | How |
+| --- | --- |
+| One config, one process | `services` lists every emulator; Ctrl+C stops them all |
+| A port per emulator | A fixed `port`, or `0` for a free one; the ready file lists what was bound |
+| One controller | `control.port`, then `/__admin/fleet`: reset, snapshot, restore, clock, namespaces |
+| One dashboard | `--dashboard`: every admin UI on one page |
+| Notifications | The same `--dashboard`: phone, inbox and chat views, and a JSON API for tests |
+
+A service is named by its package suffix: `stripe` loads `@crvouga/mockingbird-service-stripe`
+from the project's `node_modules`. To run two instances of one emulator, give each entry a name of
+its own and a `target` (`"billing": { "target": "stripe", "port": 0 }`). The fleet never installs
+packages. Node.js 22 or newer.
+
+## Configuration
+
+A fleet supervises installed HTTP emulators, PostgreSQL wire servers and Redis RESP
 servers. Every listener starts before readiness is published; a boot failure names the service,
 closes listeners that already started, and exits nonzero. SIGINT/SIGTERM closes the whole fleet.
 
@@ -23,18 +75,22 @@ closes listeners that already started, and exits nonzero. SIGINT/SIGTERM closes 
 ```
 
 ```sh
-mockingbird-stripe serve --config mockingbird.json --ready-file ready.json --ready-json
+mockingbird-fleet serve --config mockingbird.json --ready-file ready.json --ready-json
 ```
+
+Every service CLI starts the same fleet from the same file (`mockingbird-stripe serve --config
+mockingbird.json`), which suits a project that already installs that one package.
 
 Set top-level `adminControls` to boot HTTP services and protocol clocks with the same
 [admin controls](admin-controls/BOOT.md) (clock, latency, faults, a starting snapshot); a service
-entry's own `adminControls` replaces the keys it names. `--admin-controls`, `--clock`,
-`--freeze`, `--latency`, `--fault` and `MOCKINGBIRD_ADMIN_CONTROLS` apply on top of the file.
+entry's own `adminControls` replaces the keys it names. On a service CLI, `--admin-controls`,
+`--clock`, `--freeze`, `--latency`, `--fault` and `MOCKINGBIRD_ADMIN_CONTROLS` apply on top of the
+file; `mockingbird-fleet serve` takes them from the file only.
 A document that cannot be read stops the fleet before any listener opens, and names the service.
 
 Two more keys boot HTTP services apart from one run to the next. `idBase` (a non-negative integer
 or `"boot"`, top-level for every service or on one entry, which replaces the fleet's) starts
-generated ids at a base so a restart does not reissue the last boot's ids; `--id-base` and
+generated ids at a base so a restart does not reissue the last boot's ids; a service CLI's `--id-base` and
 `MOCKINGBIRD_ID_BASE` fill in a top-level one the file leaves out. A service entry's `settings`
 object is that emulator's own boot settings, the same document `serve --settings` takes, checked by
 the emulator's schema before any listener opens (see [Boot](admin-controls/BOOT.md#settings)).
@@ -50,7 +106,7 @@ the emulator's schema before any listener opens (see [Boot](admin-controls/BOOT.
 ```
 
 Set top-level `adminPrefix` (default `/__admin`) to move the aggregate API and all
-HTTP children together. A service entry may override `adminPrefix`. CLI
+HTTP children together. A service entry may override `adminPrefix`. A service CLI's
 `--admin-prefix` and `MOCKINGBIRD_ADMIN_PREFIX` also apply; ready manifests always
 report the actual URLs. Aggregate controls are under `<adminPrefix>/fleet`, and
 readiness is `<adminPrefix>/health`. Old `/__fleet` and `/health` routes are removed.
@@ -132,9 +188,9 @@ Redis accepts `password`. Protocol seeds are numeric. An admin key belongs in th
 
 ## Seeing notifications
 
-`@crvouga/mockingbird-notifications` reads the same fleet and shows every SMS, email and push the
-messaging emulators accepted (Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur) on phone and
-webmail screens, with a JSON API tests can wait on. Point it at the controller or the ready file:
+`@crvouga/mockingbird-notifications` reads the same fleet and shows every SMS, WhatsApp message, email, push and chat message the
+messaging emulators accepted (Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack) on phone,
+webmail and chat screens, with a JSON API tests can wait on. Point it at the controller or the ready file:
 
 ```sh
 mockingbird-notifications serve --fleet http://127.0.0.1:9000/__admin/fleet
@@ -142,6 +198,52 @@ mockingbird-notifications serve --manifest ready.json
 ```
 
 See [its README](../packages/notifications/README.md).
+
+## Dashboard
+
+`mockingbird-fleet serve --dashboard` starts one more listener next to the fleet: a page with every
+HTTP emulator's admin UI under an **Emulators** tab and the notifications above under a
+**Notifications** tab. It comes with `@crvouga/mockingbird-fleet`; there is nothing else to install.
+
+```sh
+mockingbird-fleet serve --config mockingbird.json --dashboard
+# fleet ready: http://127.0.0.1:9000/__admin/fleet
+# dashboard:   http://127.0.0.1:8790
+```
+
+`--dashboard-port <n>` chooses the port (default 8790; `0` picks a free one) and turns the dashboard
+on by itself. The configuration can ask for it too, with `true` or a `port` and `host`:
+
+```json
+{
+  "dashboard": { "port": 8790 },
+  "services": {
+    "stripe": { "port": 0 },
+    "twilio": { "port": 0 },
+    "resend": { "port": 0 }
+  }
+}
+```
+
+The ready record carries the URL as `dashboard`, the fleet console at `<adminPrefix>/ui` links to it,
+and it closes with the fleet. Emulators keep their own isolated ports; the dashboard reaches each
+one's admin API itself and serves them all from its one origin, sending the fleet's admin key, so
+keep it on loopback (the default) or another private address. A port already in use stops startup
+with a message that names it. Service CLIs (`mockingbird-stripe serve --config …`) start the same
+fleet without the dashboard.
+
+From code, `startFleet` from `@crvouga/mockingbird-fleet` takes the same option:
+
+```ts
+import { createInstalledServiceLoader, startFleet } from "@crvouga/mockingbird-fleet"
+
+const fleet = await startFleet(config, {
+  load: createInstalledServiceLoader({ projectRoot: process.cwd(), services: ["stripe", "twilio"] }),
+  dashboard: { port: 0 }, // or true; default: the configuration's `dashboard`
+})
+console.log(fleet.manifest.dashboard) // http://127.0.0.1:53124
+await fleet.close()                   // stops the dashboard too
+```
 
 ## Fleet controls
 
@@ -356,7 +458,7 @@ uploads leave the namespace present for a later retry. Default cleanup cadence i
 
 ## Client, configuration rendering and preflight tools
 
-The supported `@crvouga/mockingbird-service-stripe/fleet` entry point exports `FleetClient`, `FleetClientError`, `renderConnections`, `writeConnections`,
+`@crvouga/mockingbird-fleet` (and the older `@crvouga/mockingbird-service-stripe/fleet` entry point, with the same API) exports `FleetClient`, `FleetClientError`, `renderConnections`, `writeConnections`,
 `doctorFleet` and `rehearseFleet`. Use the discovered `adminBase`, including a custom prefix, and
 pass keys in client options/headers. Namespace-specific private URL mappings must come from actual
 discovery. Explicit variable mappings avoid guessing application variable names:
@@ -372,13 +474,13 @@ await writeConnections("app.env", values, "dotenv")
 
 Missing services/namespaces are refused; HTTP URLs include the namespace base path.
 `writeConnections` atomically publishes JSON/dotenv with mode 0600. Re-render after listener
-replacement. The common HTTP service CLIs offer:
+replacement. `mockingbird-fleet` and the common HTTP service CLIs offer:
 
 ```sh
-mockingbird-stripe fleet doctor --config mockingbird.json --json
-mockingbird-stripe fleet control --base http://127.0.0.1:9000/__admin/fleet --action namespaces
-mockingbird-stripe fleet render --manifest ready.json --connections private.json --mapping mapping.json --namespace synthetic-customer --output app.env --format dotenv
-mockingbird-stripe fleet rehearse --config mockingbird.json --archive saved-archive.json
+mockingbird-fleet fleet doctor --config mockingbird.json --json
+mockingbird-fleet fleet control --base http://127.0.0.1:9000/__admin/fleet --action namespaces
+mockingbird-fleet fleet render --manifest ready.json --connections private.json --mapping mapping.json --namespace synthetic-customer --output app.env --format dotenv
+mockingbird-fleet fleet rehearse --config mockingbird.json --archive saved-archive.json
 ```
 
 Control uses `MOCKINGBIRD_ADMIN_KEY` (or `--key-env NAME`); `--body FILE`, `--method` and

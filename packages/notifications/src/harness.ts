@@ -1,4 +1,7 @@
 import {
+  type AdminTarget,
+  adminTargetsFromManifest,
+  adminTargetsFromServices,
   asServiceKind,
   discoverFleet,
   type Endpoint,
@@ -37,11 +40,38 @@ export type HarnessOptions = {
   pollIntervalMs?: number
   /** Sent as `x-mockingbird-admin-key` to the fleet and every emulator. */
   adminKey?: string
+  /** Admin keys by emulator name, for emulators whose key is not `adminKey`. */
+  adminKeys?: Record<string, string>
+  /**
+   * Front every emulator's admin API on this origin, so the page shows an Emulators tab next to
+   * Notifications. `createServer` (the `./server` entry) turns it on; pass `adminGateway()` from
+   * that entry to turn it on for a harness you serve yourself.
+   */
+  admin?: AdminGatewayFactory | false
+  /** The tab the page opens on when it has both. Default `notifications`. */
+  defaultTab?: "emulators" | "notifications"
   /** Transport for URL endpoints. Default: global `fetch`. */
   fetch?: FetchLike
   /** Page title. */
   title?: string
 }
+
+export type AdminGatewayContext = {
+  /** Every HTTP emulator the harness knows, messaging or not, after a fresh discovery. */
+  targets(): Promise<AdminTarget[]>
+  /** The admin key header for one emulator: empty when the harness has no key for it. */
+  headers(name: string): Record<string, string>
+  title: string
+}
+
+export type AdminGateway = {
+  /** The admin UI's mount config for the current emulators; null when there are none. */
+  config(): Promise<Record<string, unknown> | null>
+  /** Everything under `/admin/`: the admin UI script and each emulator's admin API. */
+  fetch(request: Request): Promise<Response>
+}
+
+export type AdminGatewayFactory = (context: AdminGatewayContext) => AdminGateway
 
 export type WaitOptions = { timeoutMs?: number; count?: number }
 
@@ -112,6 +142,10 @@ export const createNotificationHarness = (options: HarnessOptions = {}): Notific
   const authHeaders: Record<string, string> = options.adminKey
     ? { "x-mockingbird-admin-key": options.adminKey }
     : {}
+  const headersFor = (name: string): Record<string, string> => {
+    const key = options.adminKeys?.[name]
+    return key ? { "x-mockingbird-admin-key": key } : authHeaders
+  }
   const followAll = (options.namespaces ?? (options.fleet ? "all" : undefined)) === "all"
   const watched = new Set<string>(
     Array.isArray(options.namespaces) ? options.namespaces : ["default"],
@@ -123,6 +157,10 @@ export const createNotificationHarness = (options: HarnessOptions = {}): Notific
   >()
   const explicit = options.services ? endpointsFromServices(options.services, fetchImpl) : []
   let endpoints: Endpoint[] = explicit
+  const explicitAdmins = options.services
+    ? adminTargetsFromServices(options.services, fetchImpl)
+    : []
+  let admins: AdminTarget[] = explicitAdmins
   let discoveredAt = 0
   let discoveryError: string | null = null
   let discovering: Promise<void> | null = null
@@ -135,15 +173,22 @@ export const createNotificationHarness = (options: HarnessOptions = {}): Notific
     discovering ??= (async () => {
       try {
         let found: Endpoint[] = []
+        let foundAdmins: AdminTarget[] = []
         if (options.fleet) {
           const fleet = await discoverFleet(options.fleet, fetchImpl, authHeaders)
           found = fleet.endpoints
+          foundAdmins = fleet.admins
           if (followAll) for (const ns of fleet.namespaces) watched.add(ns)
         } else if (options.manifest) {
           const manifest =
             typeof options.manifest === "function" ? await options.manifest() : options.manifest
           found = endpointsFromManifest(manifest, fetchImpl)
+          foundAdmins = adminTargetsFromManifest(manifest, fetchImpl)
         }
+        admins = [
+          ...explicitAdmins,
+          ...foundAdmins.filter((a) => !explicitAdmins.some((x) => x.name === a.name)),
+        ]
         // Keep what we learned from health probes across rediscovery.
         const known = new Map(endpoints.map((e) => [`${e.name}|${e.adminUrl}`, e.service]))
         endpoints = [
@@ -174,7 +219,7 @@ export const createNotificationHarness = (options: HarnessOptions = {}): Notific
     const response = await endpoint.fetch(
       new Request(`${endpoint.adminUrl}${path}`, {
         headers: {
-          ...authHeaders,
+          ...headersFor(endpoint.name),
           "x-mockingbird-namespace": namespace,
           accept: "application/json",
         },
@@ -370,15 +415,48 @@ export const createNotificationHarness = (options: HarnessOptions = {}): Notific
 
   const namespacesList = () => [...new Set([...watched, ...buckets.keys()])].sort()
 
+  const title = options.title ?? "Notifications"
+  const gateway = options.admin
+    ? options.admin({
+        targets: async () => {
+          await rediscover()
+          return admins
+        },
+        headers: headersFor,
+        title,
+      })
+    : null
+
   const handle = async (request: Request): Promise<Response> => {
     const url = new URL(request.url)
     const path = url.pathname.replace(/\/+$/, "") || "/"
+    // The admin gateway forwards writes too; everything else the harness serves is read-only.
+    if (path === "/admin" || path.startsWith("/admin/"))
+      return gateway ? gateway.fetch(request) : errorBody(404, `no route ${path}`)
     if (request.method !== "GET" && request.method !== "HEAD")
       return errorBody(405, "the notification harness is read-only")
     if (path === "/" || path === "/index.html")
-      return new Response(renderPage({ title: options.title ?? "Notifications" }), {
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+      return new Response(
+        renderPage({ title, defaultTab: options.defaultTab ?? "notifications" }),
+        {
+          headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
+        },
+      )
+    if (path === "/api/admin") {
+      await rediscover()
+      const fleet = options.fleet?.replace(/\/+$/, "")
+      return json(200, {
+        admin: gateway ? await gateway.config() : null,
+        emulators: admins.map((a) => ({ name: a.name, target: a.target, adminUrl: a.adminUrl })),
+        fleet: fleet
+          ? {
+              adminBase: fleet,
+              consoleUrl: fleet.replace(/\/fleet$/, "/ui"),
+              error: discoveryError,
+            }
+          : null,
       })
+    }
     if (path === "/ui.js")
       return new Response(BROWSER_JS, {
         headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" },

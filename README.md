@@ -20,13 +20,73 @@ Each emulator is its own npm package. The catalog — names, parity, and what ea
 
 ## Quick start
 
+A fleet is the recommended way to run Mockingbird. One `mockingbird.json` names the emulators your app needs, and one command starts each of them on its own isolated port, with one controller to reset, snapshot and namespace them together and one dashboard for every emulator's admin UI and every notification your app sent.
+
+1. **Install.** The fleet tool and one package per emulator, as development dependencies.
+
+   ```bash
+   npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-stripe @crvouga/mockingbird-service-twilio @crvouga/mockingbird-service-resend
+   ```
+
+2. **Declare.** `mockingbird.json` names each emulator by its package suffix and gives it a port. `"port": 0` takes a free one.
+
+   ```json
+   {
+     "control": { "port": 9000 },
+     "services": {
+       "stripe": { "port": 9001 },
+       "twilio": { "port": 9002 },
+       "resend": { "port": 9003 }
+     }
+   }
+   ```
+
+3. **Start.** One process starts every emulator, the controller, and with `--dashboard` the dashboard. Ctrl+C stops them all.
+
+   ```bash
+   npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
+   # fleet ready: http://127.0.0.1:9000/__admin/fleet
+   # dashboard:   http://127.0.0.1:8790
+   ```
+
+4. **Point your app at it.** Set each SDK's base URL to that emulator's `services.<name>.url` in `ready.json` (here `http://127.0.0.1:9001/` for Stripe). Each package README shows the SDK option to set.
+
+5. **Open the dashboard.** `http://127.0.0.1:8790` has an **Emulators** tab, with every emulator's state, clock, faults and request journal, and a **Notifications** tab, with every SMS, WhatsApp message, email, push and chat message your app sent, on a phone, an inbox and a chat window.
+
+The controller drives every emulator at once:
+
+```bash
+# Every emulator back to its boot state, in one call
+curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset
+```
+
+- **One config, one process.** `mockingbird.json` is the whole stack: HTTP emulators, PostgreSQL and Redis. One command starts it and Ctrl+C stops it; a failed boot names the service and closes the rest.
+- **A port per emulator.** Every emulator listens on its own port. Give it a fixed one, or `"port": 0` for a free one so two fleets never collide; `ready.json` lists the URLs that were actually bound.
+- **One controller.** `/__admin/fleet` resets, snapshots and restores a namespace across every emulator in one call, moves their clocks together, and waits until they are idle.
+- **One dashboard.** `--dashboard` serves every emulator's admin UI from one origin, under an **Emulators** tab. Nothing else to install.
+- **Notifications, with the same flag.** The **Notifications** tab shows what Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack accepted, and tests read the same messages from the dashboard's JSON API.
+
+The full guide: [docs/FLEETS.md](docs/FLEETS.md).
+
+## Other ways to run it
+
+A fleet is the default. These are for when it is more than the job needs:
+
+- **One emulator.** `npx mockingbird-stripe serve --port 8787` serves a single emulator with the same admin controls. Use it when the app talks to one vendor.
+- **In-process, in a test.** `createRuntime().fetch(request)` answers the SDK inside the test process, with no port and no server. See the checkout below.
+- **Mounted in your app.** `createRuntime().mount("/api/mock/google")` serves an emulator under your own origin. See [Getting started](docs/GETTING_STARTED.md#mount-an-emulator-inside-your-app).
+- **From code.** `startFleet(config, { load, dashboard: true })` from `@crvouga/mockingbird-fleet` starts the same fleet inside a test runner's global setup. See [Fleets](docs/FLEETS.md#dashboard).
+- **Hosted.** [Fleet Cloud](https://github.com/crvouga/mockingbird/blob/main/sites/fleet/README.md) hosts fleets at stable URLs. `mockingbird-fleet plan` and `apply` send it a `mockingbird.yaml` declaration, and `serve --config mockingbird.yaml` runs the same file locally.
+
+### In-process, in a test
+
 ```bash
 npm install -D @crvouga/mockingbird-service-postgres @crvouga/mockingbird-service-stripe
 ```
 
 Build a checkout with a PostgreSQL product catalog and a Stripe payment. Save these three files together, then run `bun client.ts` (or `npx tsx client.ts` with Node). The API calls the `stripe` SDK your application already depends on; in an empty project, install it first.
 
-### Data · `data.ts`
+#### Data · `data.ts`
 
 Seed a product catalog and an orders table in the PostgreSQL emulator.
 
@@ -47,7 +107,7 @@ console.log(db.query("SELECT name, price FROM products"))
 // [{ name: "Developer starter kit", price: 2900 }]
 ```
 
-### API · `api.ts`
+#### API · `api.ts`
 
 Read a product, charge it with the Stripe SDK, and persist the order. The emulator answers the SDK in this process.
 
@@ -91,7 +151,7 @@ export const api = {
 }
 ```
 
-### Client · `client.ts`
+#### Client · `client.ts`
 
 Place an order through the application's Fetch handler. The whole flow stays local.
 
@@ -198,23 +258,23 @@ Start at [docs/ADMIN_CONTROLS.md](docs/ADMIN_CONTROLS.md). Each control has its 
 
 ## Notifications
 
-**See every text, email and push your app sends.**
+**See every text, email, push and chat message your app sends.**
 
-The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app, on a lock screen or notification shade, and in a webmail inbox. Tests read the same messages through a JSON API, and every element carries a test id.
+The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app or a WhatsApp chat, on a lock screen or notification shade, in a webmail inbox, and in a team chat window. Tests read the same messages through a JSON API, and every element carries a test id.
 
-- **Text messages** (Twilio · SNS · Customer.io · Mailosaur). Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included.
+- **Text messages** (Twilio · SNS · Customer.io · Mailosaur). Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included, and WhatsApp messages open as a WhatsApp chat.
 - **Push** (Firebase Cloud Messaging). An iOS lock screen or an Android notification shade, picked from the device token, with title, body, image, data, badge and sound.
 - **Email** (Resend · SES · SNS · Customer.io · Mailosaur). An inbox per recipient, to, cc and bcc, with the rendered HTML, attachments and headers. SES raw MIME is parsed.
+- **Chat** (Slack). A team chat window: channels, bot messages with mrkdwn, Block Kit blocks, attachments and reactions, from chat.postMessage and incoming webhooks.
 
-Next to a fleet:
+With a fleet:
 
 ```bash
 npx mockingbird-fleet serve \
   --config mockingbird.json \
-  --ready-file .mockingbird/ready.json
-npx mockingbird-notifications serve \
-  --manifest .mockingbird/ready.json
-# http://127.0.0.1:8790
+  --dashboard
+# dashboard: http://127.0.0.1:8790
+# Emulators tab · Notifications tab
 ```
 
 In a test:
@@ -248,9 +308,9 @@ Start at [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md), or open the [lab orderi
 
 | Page | |
 | --- | --- |
-| [Run against a fleet](docs/notifications/RUN_AGAINST_A_FLEET.md) | Start the harness next to a running fleet, or next to emulators you started yourself. It finds the messaging emulators, skips everything else, and serves the devices and the API on one port. |
-| [Devices](docs/notifications/DEVICES.md) | The harness page shows three devices side by side: a phone's Messages app, a push lock screen or notification shade, and a webmail inbox. Each one behaves like the real app, in a generic style with no vendor marks. |
-| [End-to-end tests](docs/notifications/END_TO_END_TESTS.md) | Assert on a text, email or push the way the user would see it. The harness UI is built to be driven by Playwright, Cypress or any WebDriver client: it says when it is ready, gives everything a test id, and puts the notification's fields on each element that shows it. |
+| [Run against a fleet](docs/notifications/RUN_AGAINST_A_FLEET.md) | Start the harness with the fleet, with one flag: that is the recommended way. It can also run next to a fleet that is already running, or next to emulators you started yourself. It finds the messaging emulators, skips everything else, and serves the devices and the API on one port. |
+| [Devices](docs/notifications/DEVICES.md) | The harness page shows four devices side by side: a phone's Messages app, a push lock screen or notification shade, a webmail inbox, and a team chat window. Each one behaves like the real app, in a generic style with no vendor marks. |
+| [End-to-end tests](docs/notifications/END_TO_END_TESTS.md) | Assert on a text, WhatsApp message, email, push or chat message the way the user would see it. The harness UI is built to be driven by Playwright, Cypress or any WebDriver client: it says when it is ready, gives everything a test id, and puts the notification's fields on each element that shows it. |
 | [Client and in-process harness](docs/notifications/CLIENT.md) | Read what your application sent from a test, with no browser: wait for a text, pull the one-time code out of it, or check an email's HTML. Use `NotificationClient` against a running harness, or run the harness inside the test process. |
 | [Embed the UI](docs/notifications/EMBED.md) | Mount the devices inside your own page, for example as a tab of your development shell. With an in-process harness, the emulators, the harness and the UI all run in one browser tab, with no server. |
 | [HTTP API](docs/notifications/HTTP_API.md) | Every route of a running harness, its filters, and the shape of a notification. The client and the devices page use the same API. |
@@ -258,11 +318,11 @@ Start at [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md), or open the [lab orderi
 
 ## One contract for every HTTP service
 
-Every HTTP service ships an in-process `fetch`, a Node server and a CLI, and all answer the same control surface, so a stack learns it once. Every internal path is under `/__admin` by default. Set `adminPrefix` or `serve --admin-prefix` (`MOCKINGBIRD_ADMIN_PREFIX`) to relocate the entire tree; `/health` and `/ns` aliases are removed.
+Every HTTP service ships an in-process `fetch`, a Node server and a CLI, runs in a fleet, and answers the same control surface in each, so a stack learns it once. Every internal path is under `/__admin` by default. Set `adminPrefix` or `serve --admin-prefix` (`MOCKINGBIRD_ADMIN_PREFIX`) to relocate the entire tree; `/health` and `/ns` aliases are removed.
 
 ```bash
-npx mockingbird-junction serve --port 8787                # one service
-npx mockingbird-junction serve --config mockingbird.json  # every service in the config
+npx mockingbird-fleet serve --config mockingbird.json --dashboard  # recommended: every service in the config
+npx mockingbird-junction serve --port 8787                           # one service
 ```
 
 | Surface | What it gives you |
@@ -288,11 +348,11 @@ npx mockingbird-junction serve --config mockingbird.json  # every service in the
 }
 ```
 
-`mockingbird.json` names services by their package suffix. HTTP services, PostgreSQL and Redis share a supervisor with ephemeral ports, readiness discovery and namespace controls. Use `--ready-file` or `--ready-json` to discover endpoints; see [Fleets](docs/FLEETS.md). SQLite remains an in-process engine.
+`mockingbird.json` names services by their package suffix. HTTP services, PostgreSQL and Redis share a supervisor that gives each its own port (`0` picks a free one), readiness discovery and namespace controls. Use `--ready-file` or `--ready-json` to discover endpoints and `--dashboard` for the combined admin and notifications page; see [Fleets](docs/FLEETS.md). SQLite remains an in-process engine.
 
 ## For coding agents
 
-Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
+Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
 
 ## Contributing
 
@@ -308,9 +368,10 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 
 | Guide | |
 | --- | --- |
-| [Getting started](docs/GETTING_STARTED.md) | Install a Mockingbird emulator, create a runtime, and send vendor-compatible requests. Each service is a self-contained TypeScript package with its own coverage matrix and integration guide. |
+| [Getting started](docs/GETTING_STARTED.md) | Run the emulators your application depends on as a fleet: one `mockingbird.json`, one command, each emulator on its own port, and one dashboard for their admin UIs and the notifications your app sends. A fleet is the recommended way to use Mockingbird; a single emulator and in-process use come after it on this page. |
+| [Fleets](docs/FLEETS.md) | A fleet is the recommended way to run Mockingbird: one `mockingbird.json`, one process, every emulator your application calls on its own port, one controller that resets and snapshots them together, and one dashboard for their admin UIs and the notifications your app sent. |
 | [Admin controls](docs/ADMIN_CONTROLS.md) | Every Mockingbird HTTP emulator answers the same controls: isolate state by key, reset it, snapshot and restore it, move the clock, inject faults, latency and timeouts, and replay all of it from a seed. They are the same on every emulator, and the same whether you set them at boot, call the admin API, or send a request header. |
-| [Notifications](docs/NOTIFICATIONS.md) | See every SMS, email and push your application sends, the way the person receiving it would: on a phone's Messages app, an iOS lock screen or Android notification shade, and a webmail inbox. The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators your app already sends through, and gives tests the same messages through a JSON API and a small client. |
+| [Notifications](docs/NOTIFICATIONS.md) | See every SMS, WhatsApp message, email, push and chat message your application sends, the way the person receiving it would: on a phone's Messages app, an iOS lock screen or Android notification shade, a webmail inbox, and a team chat window. The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators your app already sends through, and gives tests the same messages through a JSON API and a small client. |
 | [Why Mockingbird](docs/WHY.md) | Mockingbird gives applications local, stateful emulators for the vendor APIs and databases they depend on. Run integrations inside your process, control the state and clock, and inspect exactly which vendor operations each emulator supports. |
 | [Testing and parity](docs/TESTING.md) | How every emulator is proven to behave like its vendor: differential contracts, property-based walks, and live parity against real sandboxes. |
 | [Authoring a Mockingbird service](docs/AUTHORING_A_SERVICE.md) | How to add a vendor emulator to this repo. The reference implementation is [`packages/service/rxvortex`](../packages/service/rxvortex): copy its layout and patterns. |
@@ -321,7 +382,6 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | [Secrets runbook](docs/SECRETS.md) | Where every credential lives, who needs it, and how to run live parity without ever holding a sandbox key: GitHub Actions repo secrets are the only secret store. |
 | [AWS implementation and oracle coverage](docs/AWS_COVERAGE.md) | The LocalStack expansion is work in progress. No new LocalStack or live AWS oracle run was performed during integration. Implemented services have local transport and state tests; scaffold packages explicitly reject vendor operations. `bun run parity` fails when no scenario exists or the local oracle is unavailable. |
 | [Emulate coverage audit](docs/EMULATE_COVERAGE.md) | Mockingbird covers the 14 public providers in [Emulate](https://emulate.dev/) and [vercel-labs/emulate](https://github.com/vercel-labs/emulate). The comparison target is the npm package `emulate@0.12.1`, pinned in `packages/parity/package-oracle/package.json` and `bun.lock`. Licensed handler sources are pinned to commit `c77cb73e7ab525c5260dd36c04c91a54a23e7e75`; `packages/http/provider/port.json` records every source path and SHA-256 digest. |
-| [Fleets](docs/FLEETS.md) | One service CLI can supervise installed HTTP emulators, PostgreSQL wire servers and Redis RESP servers. Every listener starts before readiness is published; a boot failure names the service, closes listeners that already started, and exits nonzero. SIGINT/SIGTERM closes the whole fleet. |
 | [Infrastructure and orchestration emulators](docs/INFRASTRUCTURE_EMULATORS.md) | This document defines the boundaries and planned evidence for the Docker Engine, Hermes peer-run, and GitHub REST packages. |
 
 ## License

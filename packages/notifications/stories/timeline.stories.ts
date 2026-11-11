@@ -13,7 +13,7 @@ export default meta
 type Story = StoryObj<AppOptions>
 
 const all = everything()
-const first = (channel: "sms" | "email" | "push") =>
+const first = (channel: "sms" | "email" | "push" | "chat") =>
   all.find((n) => n.channel === channel)?.id ?? null
 
 export const TimelineEverything: Story = { args: base(all, { initial: { view: "timeline" } }) }
@@ -26,6 +26,9 @@ export const InspectSms: Story = {
 }
 export const InspectEmail: Story = {
   args: base(all, { initial: { view: "timeline", inspect: first("email") } }),
+}
+export const InspectChat: Story = {
+  args: base(all, { initial: { view: "timeline", inspect: first("chat") } }),
 }
 export const InspectPush: Story = {
   args: base(all, { initial: { view: "timeline", inspect: first("push") } }),

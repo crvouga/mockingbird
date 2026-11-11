@@ -9,7 +9,13 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { ADMIN_CONTROLS, GUIDE_CHILDREN, IDENTITY, PITCH } from "../sites/docs/src/lib/content.ts"
+import {
+  ADMIN_CONTROLS,
+  FLEET,
+  GUIDE_CHILDREN,
+  IDENTITY,
+  PITCH,
+} from "../sites/docs/src/lib/content.ts"
 import { guideInfo } from "../sites/docs/src/lib/guides.ts"
 import { discoverPackages, REPO, root } from "./release/lib.ts"
 
@@ -30,13 +36,13 @@ for (const pkg of pkgs) {
   const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8")) as Manifest
   if (pkg.name === "@crvouga/mockingbird-fleet" && manifest.mockingbird?.layer === "adapter") {
     toolingLines.push(
-      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): Vendor-neutral Node.js fleet lifecycle, installed-service loading, control client, discovery and archives. This is tooling, not a vendor emulator.`,
+      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): The \`mockingbird-fleet\` CLI and its Node API: start every installed emulator from one \`mockingbird.json\`, each on its own port, with one controller, a ready file, a control client, archives and the \`--dashboard\`. Start here. This is tooling, not a vendor emulator.`,
     )
     continue
   }
   if (pkg.name === "@crvouga/mockingbird-notifications" && manifest.mockingbird?.layer === "tool") {
     toolingLines.push(
-      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): Notification test harness that reads a fleet's Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators and shows every SMS, email and push on phone and mail screens, with a JSON API for tests. This is tooling, not a vendor emulator.`,
+      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): Notification test harness that reads a fleet's Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators and shows every SMS, WhatsApp message, email, push and chat message on phone, mail and chat screens, with a JSON API for tests. \`mockingbird-fleet serve --dashboard\` already serves it; install it separately only to run it on its own. This is tooling, not a vendor emulator.`,
     )
     continue
   }
@@ -68,7 +74,45 @@ const body = [
   "",
   `> ${IDENTITY.tagline} ${PITCH} Every HTTP emulator is a Fetch handler (\`createRuntime().fetch(request) → Promise<Response>\`) published to npm as \`@crvouga/mockingbird-service-<name>\`. Every emulator is isomorphic and runs in Node >= 22, Bun >= 1.2, browsers, and Workers.`,
   "",
-  "Install emulators as devDependencies; each package is self-contained. Prefer injecting the emulator's `fetch` in-process; when a URL is required, run `npx mockingbird-<service> serve` (or `createServer` from `./server`); every HTTP service answers `GET /__admin/health`, `/__admin/*` (including `GET /__admin/state` and `GET /__admin/ui`) and `x-mockingbird-namespace`. All internal paths use the configurable `adminPrefix` (CLI `--admin-prefix`, env `MOCKINGBIRD_ADMIN_PREFIX`), including namespace URLs `/__admin/ns/<name>/…`; there are no unprefixed health or namespace aliases. Read the README of each package you use — it is the integration guide for coding agents (also shipped in `node_modules/<package>/README.md`).",
+  "## Quick start: run a fleet",
+  "",
+  `${FLEET.intro} Agents should set an application up this way too. Node >= 22.`,
+  "",
+  "1. Install the fleet tool and one package per emulator the application calls:",
+  "",
+  "   ```sh",
+  `   npm install -D ${FLEET.packages.join(" ")}`,
+  "   ```",
+  "",
+  `2. Write \`${FLEET.configFile}\` next to \`package.json\`. A service is named by its package suffix (\`stripe\` loads \`@crvouga/mockingbird-service-stripe\`); \`"port": 0\` picks a free port:`,
+  "",
+  "   ```json",
+  ...FLEET.config.split("\n").map((line) => `   ${line}`),
+  "   ```",
+  "",
+  "3. Start it. One process runs every emulator, the controller and the dashboard:",
+  "",
+  "   ```sh",
+  ...FLEET.serve.split("\n").map((line) => `   ${line}`),
+  "   ```",
+  "",
+  "4. Point each SDK's base URL at `services.<name>.url` from `ready.json` (the same JSON is printed by `--ready-json`); `adminBase` and `dashboard` are in it too. Any synthetic key works. Each package README shows the SDK option to set.",
+  "5. Open the dashboard: the **Emulators** tab is every emulator's admin UI, the **Notifications** tab is every SMS, WhatsApp message, email, push and chat message the app sent. Tests read the same messages from `GET <dashboard>/api/notifications` and `GET <dashboard>/api/wait?to=<recipient>`.",
+  "",
+  "The controller applies one operation to every emulator:",
+  "",
+  "```sh",
+  FLEET.control,
+  "```",
+  "",
+  `- [Getting started](${RAW}/docs/GETTING_STARTED.md): the same steps, then the other ways to run an emulator.`,
+  `- [Fleets](${RAW}/${FLEET.guide}): configuration, discovery, the controller's routes, archives and the dashboard.`,
+  `- [Notifications](${RAW}/docs/NOTIFICATIONS.md): the devices, the JSON API and the test client.`,
+  ...toolingLines,
+  "",
+  "## Other ways to run an emulator",
+  "",
+  "Each package is self-contained and installs as a devDependency. In a test that can inject a `fetch`, use the emulator in-process (`createRuntime().fetch`), with no port. For one emulator on a port, run `npx mockingbird-<service> serve` (or `createServer` from `./server`). Every HTTP service answers `GET /__admin/health`, `/__admin/*` (including `GET /__admin/state` and `GET /__admin/ui`) and `x-mockingbird-namespace`. All internal paths use the configurable `adminPrefix` (config key `adminPrefix`; on a service CLI `--admin-prefix`, env `MOCKINGBIRD_ADMIN_PREFIX`), including namespace URLs `/__admin/ns/<name>/…`; there are no unprefixed health or namespace aliases. Read the README of each package you use — it is the integration guide for coding agents (also shipped in `node_modules/<package>/README.md`).",
   "",
   `The sentence above is the product's identity. The rules for the mark, the colors, and where that sentence has to appear: [Design](${RAW}/docs/DESIGN.md).`,
   "",
@@ -94,10 +138,6 @@ const body = [
   `- [Missing feature](${RAW}/.github/ISSUE_TEMPLATE/feature.md): title \`[<service>] feature: <what is missing>\`. An emulator lacks an operation, parameter, event, behavior or test control you use.`,
   `- [Bug](${RAW}/.github/ISSUE_TEMPLATE/bug.md): title \`[<service>] bug: <what breaks>\`. An emulator crashes, leaks state, contradicts its README, or does not build.`,
   `- [New service](${RAW}/.github/ISSUE_TEMPLATE/new-service.md): title \`[new-service] <Vendor>: <API surface>\`. No package emulates a vendor you depend on; describe the surface, auth, state, behaviors, webhooks and test controls you need.`,
-  "",
-  "## Fleet management",
-  "",
-  ...toolingLines,
   "",
   "## Services",
   "",

@@ -54,6 +54,28 @@
         }
       }
     },
+    "dashboard": {
+      "description": "Serve the dashboard (every emulator's admin UI and the notifications UI) next to the fleet. Honored by mockingbird-fleet serve.",
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "port": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 65535
+            },
+            "host": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
     "cors": {
       "type": "object",
       "required": ["origins"],

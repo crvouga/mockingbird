@@ -106,6 +106,12 @@ export type FleetOptions = ManagementOptions & {
   readyFile?: string | undefined
   connectionsFile?: string | undefined
   onReady?(manifest: EndpointManifest): void
+  /**
+   * Start a dashboard once the fleet is up; its URL becomes `manifest.dashboard` and it closes
+   * with the fleet. `@crvouga/mockingbird-fleet` supplies one (`fleetDashboard`): this package
+   * only knows how to host it.
+   */
+  dashboard?: FleetDashboardStarter
   initialize?(context: {
     manifest: EndpointManifest
     connections: Record<string, unknown>
@@ -121,6 +127,13 @@ export type FleetOptions = ManagementOptions & {
   shutdownTimeoutMs?: number
   shutdownFailure?: "abort" | "close"
 }
+
+export type FleetDashboard = { url: string; close(): Promise<void> }
+export type FleetDashboardStarter = (context: {
+  /** The live manifest: `adminBase` is where the fleet controller answers. */
+  manifest: EndpointManifest
+  config: MockingbirdConfig
+}) => Promise<FleetDashboard>
 
 const EMPTY: FleetDiagnostics = {
   activeRequests: 0,
@@ -480,6 +493,7 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
   >()
   let supervisor: Listening | undefined
   let management: FleetManagement | undefined
+  let dashboard: FleetDashboard | undefined
   let manifest: EndpointManifest
   const privateConnections = () =>
     Object.fromEntries(
@@ -551,6 +565,7 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
         }
       }
       const cleanup = await Promise.allSettled([
+        dashboard?.close(),
         supervisor?.close(),
         removeOwned(options.readyFile, id),
         removeOwned(options.connectionsFile, id),
@@ -994,6 +1009,7 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
       clock,
       transaction,
       manifest: () => manifest,
+      dashboard: () => dashboard?.url,
       publish,
       recovery,
       controlling,
@@ -1066,6 +1082,10 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
       }
     }
     await management.startPolicies()
+    if (options.dashboard) {
+      dashboard = await options.dashboard({ manifest, config })
+      manifest.dashboard = dashboard.url
+    }
     await publish()
     if (manifest.state === "ready") options.onReady?.(manifest)
     return { manifest, children, fetch: api.fetch, close }

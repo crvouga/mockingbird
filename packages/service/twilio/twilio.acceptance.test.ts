@@ -447,6 +447,30 @@ describe("SMS delivery ambiguity", () => {
     expect(fetched.body).toBe(ORDER_BODY)
   })
 
+  test("a whatsapp: recipient is validated behind its prefix and stored as a WhatsApp message", async () => {
+    const { runtime, admin } = harness()
+    const response = await postMessage(runtime, {
+      To: `whatsapp:${PHONE}`,
+      From: "whatsapp:+14155238886",
+      Body: "Your table is ready",
+    })
+    expect(response.status).toBe(201)
+    expect(await response.json()).toMatchObject({
+      to: `whatsapp:${PHONE}`,
+      from: "whatsapp:+14155238886",
+    })
+    expect((await outboxOf(admin, `whatsapp:${PHONE}`))[0]).toMatchObject({
+      to: `whatsapp:${PHONE}`,
+      channel: "whatsapp",
+    })
+    const invalid = await postMessage(runtime, {
+      To: "whatsapp:+15550100",
+      From: "whatsapp:+14155238886",
+      Body: "hi",
+    })
+    expect(invalid.headers.get("x-twilio-error-code")).toBe("21211")
+  })
+
   test("missing or invalid create fields return the documented Twilio error and store nothing", async () => {
     const { runtime, admin } = harness()
     const cases: { form: Record<string, string>; code: number }[] = [

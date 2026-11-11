@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import type { AppOptions } from "../src/ui/app.js"
-import { art, base, PHONE, sms, smsInbox } from "./fixtures.js"
+import { art, base, PHONE, sms, smsInbox, whatsappInbox } from "./fixtures.js"
 import { mount } from "./mount.js"
 
 /** The Messages app: thread list and conversation, for every kind of SMS sender. */
@@ -255,4 +255,13 @@ export const ConversationWithTapback: Story = {
     sms: { to: PHONE, thread: "+18885550100" },
     local: { tapbacks: { [order[2]?.id ?? ""]: "heart", [order[3]?.id ?? ""]: "like" } },
   }),
+}
+
+// WhatsApp through Twilio: the same phone, drawn as a WhatsApp chat.
+export const WhatsAppInThreadList: Story = { args: only([...smsInbox(), ...whatsappInbox()]) }
+export const WhatsAppConversation: Story = {
+  args: only(whatsappInbox(), { sms: { to: PHONE, thread: "whatsapp:+14155238886" } }),
+}
+export const WhatsAppVerificationCode: Story = {
+  args: only(whatsappInbox(), { sms: { to: PHONE, thread: "whatsapp:Verify" } }),
 }

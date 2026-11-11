@@ -9,8 +9,20 @@ import type {
 const BASE_URL = "https://api.sandbox.tryvital.io"
 const API_KEY = "sk_us_mockingbird"
 
-/** How long a freshly placed order takes to reach "results ready" in this demo. */
+/** How long a freshly placed order takes to reach each step in this demo. */
+const KIT_SHIPPED_DELAY_MS = 700
+const SAMPLE_RECEIVED_DELAY_MS = 2_000
 const RESULTS_READY_DELAY_MS = 4_000
+
+/** A fictional tracking number, stable per order. */
+const trackingFor = (labOrderId: string) => ({
+  carrier: "USPS",
+  number: `9400 1000 0000 ${labOrderId
+    .replace(/\D/g, "")
+    .padEnd(8, "0")
+    .slice(0, 8)
+    .replace(/(\d{4})(\d{4})/, "$1 $2")}`,
+})
 
 type JunctionOrderResponse = { order: { id: string } }
 type JunctionCatalogResponse = { data: { id: string; method: string }[] }
@@ -80,24 +92,40 @@ export const createJunctionMockLabTesting = (params: {
    * a visitor sees the full order lifecycle without any manual control.
    */
   const scheduleAutomaticProgress = (labOrderId: string): void => {
-    setTimeout(() => {
+    const report = (event: LabTestingEvent): void => {
       void params
         .dispatch(
           new Request(params.webhookUrl, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({
-              type: "order.status_updated",
-              labOrderId,
-              status: "processing",
-              interpretation: null,
-            }),
+            body: JSON.stringify(event),
           }),
         )
         .catch(() => {
           /* The instance may have been disposed. */
         })
-    }, 1_500)
+    }
+    setTimeout(
+      () =>
+        report({
+          type: "order.status_updated",
+          labOrderId,
+          status: "shipped",
+          interpretation: null,
+          tracking: trackingFor(labOrderId),
+        }),
+      KIT_SHIPPED_DELAY_MS,
+    )
+    setTimeout(
+      () =>
+        report({
+          type: "order.status_updated",
+          labOrderId,
+          status: "processing",
+          interpretation: null,
+        }),
+      SAMPLE_RECEIVED_DELAY_MS,
+    )
     setTimeout(() => {
       void (async () => {
         const updated = junction.transitionOrder(labOrderId, "completed.completed", {

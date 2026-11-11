@@ -1,6 +1,25 @@
-import type { AdminData, LabTest, Order, Role, User } from "../app/model.js"
+import type {
+  AdminData,
+  LabTest,
+  NotificationPreferences,
+  Order,
+  Role,
+  TestNotification,
+  TextChannel,
+  User,
+} from "../app/model.js"
 
-export type { LabTest, Order, Role, User } from "../app/model.js"
+export type {
+  LabTest,
+  NotificationPreferences,
+  Order,
+  Role,
+  TestNotification,
+  TextChannel,
+  User,
+} from "../app/model.js"
+/** Where a message the app just sent can be read: a channel and its recipient. */
+export type SentTo = { channel: "email" | "sms" | "push" | "chat"; to: string }
 export type OAuthProvider = "google" | "apple"
 export type OAuthStepResponse =
   | { flowId: string; html: string; user?: undefined }
@@ -38,6 +57,17 @@ export const onUnauthorized = (listener: () => void): (() => void) => {
   return () => unauthorizedListeners.delete(listener)
 }
 
+/** A refused request, with the status and any wait the server asked for. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(message)
+  }
+}
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
   const response = await fetcher(path, {
     ...init,
@@ -48,10 +78,15 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     .json()
     .catch(() => ({ error: "The server returned an unreadable response. Try again." }))) as T & {
     error?: string
+    retryAfterSeconds?: number
   }
   if (!response.ok) {
     if (response.status === 401) for (const listener of unauthorizedListeners) listener()
-    throw new Error(body.error ?? `Request to ${path} failed with ${response.status}`)
+    throw new ApiError(
+      body.error ?? `Request to ${path} failed with ${response.status}`,
+      response.status,
+      body.retryAfterSeconds,
+    )
   }
   if (body.error) throw new Error(body.error)
   return body
@@ -71,6 +106,21 @@ export const api = {
     request<OAuthStepResponse>(`/api/auth/${provider}/step`, {
       method: "POST",
       body: JSON.stringify({ flowId, action, method, body }),
+    }),
+  emailStart: (email: string) =>
+    request<{ email: string; expiresInMinutes: number }>("/api/auth/email/start", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  emailVerify: (email: string, code: string) =>
+    request<{ user: User; created: boolean }>("/api/auth/email/verify", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    }),
+  emailLink: (token: string) =>
+    request<{ user: User; created: boolean }>("/api/auth/email/link", {
+      method: "POST",
+      body: JSON.stringify({ token }),
     }),
   signOut: () => request<{ ok: true }>("/api/auth/sign-out", { method: "POST" }),
   tests: () => request<{ tests: LabTest[] }>("/api/tests"),
@@ -94,10 +144,26 @@ export const api = {
     }),
   orders: (workspace = false) =>
     request<{ orders: Order[] }>(`/api/orders${workspace ? "?scope=workspace" : ""}`),
-  profile: (name: string, notifications: boolean) =>
+  profile: (name: string, notifications: boolean, notify?: NotificationPreferences) =>
     request<{ user: User }>("/api/auth/profile", {
       method: "PATCH",
-      body: JSON.stringify({ name, notifications }),
+      body: JSON.stringify({ name, notifications, ...(notify ? { notify } : {}) }),
+    }),
+  phoneStart: (phone: string, channel: TextChannel) =>
+    request<{ phone: string; channel: TextChannel }>("/api/account/phone/start", {
+      method: "POST",
+      body: JSON.stringify({ phone, channel }),
+    }),
+  phoneCheck: (phone: string, channel: TextChannel, code: string) =>
+    request<{ user: User }>("/api/account/phone/check", {
+      method: "POST",
+      body: JSON.stringify({ phone, channel, code }),
+    }),
+  phoneRemove: () => request<{ user: User }>("/api/account/phone", { method: "DELETE" }),
+  testNotification: (kind: TestNotification) =>
+    request<{ sent: SentTo }>("/api/account/notifications/test", {
+      method: "POST",
+      body: JSON.stringify({ kind }),
     }),
   admin: () => request<AdminData>("/api/admin"),
   changeRole: (id: string, role: Role) =>

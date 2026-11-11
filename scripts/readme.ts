@@ -14,6 +14,7 @@ import {
   AGENTS,
   CONTRACT,
   FEATURES,
+  FLEET,
   GUIDE_CHILDREN,
   HEADLINE,
   IDENTITY,
@@ -114,6 +115,37 @@ const body = [
   "",
   "## Quick start",
   "",
+  FLEET.intro,
+  "",
+  ...FLEET.steps.flatMap((step, i) => [
+    `${i + 1}. **${step.title}.** ${step.body}`,
+    "",
+    ...(i === 0
+      ? ["   ```bash", `   npm install -D ${FLEET.packages.join(" ")}`, "   ```", ""]
+      : i === 1
+        ? ["   ```json", ...FLEET.config.split("\n").map((line) => `   ${line}`), "   ```", ""]
+        : i === 2
+          ? ["   ```bash", ...FLEET.serve.split("\n").map((line) => `   ${line}`), "   ```", ""]
+          : []),
+  ]),
+  "The controller drives every emulator at once:",
+  "",
+  "```bash",
+  FLEET.control,
+  "```",
+  "",
+  ...FLEET.benefits.map((benefit) => `- **${benefit.title}.** ${benefit.body}`),
+  "",
+  `The full guide: [${FLEET.guide}](${FLEET.guide}).`,
+  "",
+  "## Other ways to run it",
+  "",
+  "A fleet is the default. These are for when it is more than the job needs:",
+  "",
+  ...FLEET.alternatives.map((way) => `- **${way.title}.** ${way.body}`),
+  "",
+  "### In-process, in a test",
+  "",
   "```bash",
   `npm install -D ${QUICK_START.packages.join(" ")}`,
   "```",
@@ -121,7 +153,7 @@ const body = [
   `Build a checkout with a PostgreSQL product catalog and a Stripe payment. Save these three files together, then run \`bun client.ts\` (or \`npx tsx client.ts\` with Node). The API calls the \`${QUICK_START.sdk}\` SDK your application already depends on; in an empty project, install it first.`,
   "",
   ...QUICK_START.steps.flatMap((step) => [
-    `### ${step.title} · \`${step.file}\``,
+    `#### ${step.title} · \`${step.file}\``,
     "",
     step.description,
     "",

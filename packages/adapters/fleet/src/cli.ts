@@ -9,9 +9,10 @@ import {
   type MockingbirdConfig,
   parseDeclaration,
   runCli,
-  startFleet,
 } from "@crvouga/mockingbird-adapter-node"
 import { parse as parseYaml } from "yaml"
+import { DASHBOARD_PORT } from "./dashboard.js"
+import { startFleet } from "./index.js"
 
 const projectRoot = process.cwd()
 
@@ -136,12 +137,34 @@ const main = () =>
             "ready-json": { type: "boolean", description: "Print public readiness JSON" },
             "ready-file": { type: "string", description: "Atomic public readiness file" },
             "connections-file": { type: "string", description: "Private connection file (0600)" },
+            dashboard: {
+              type: "boolean",
+              description:
+                "Also serve the dashboard: every emulator's admin UI and the notifications UI on one page",
+            },
+            "dashboard-port": {
+              type: "string",
+              description: `Dashboard port (default ${DASHBOARD_PORT}; 0 picks a free one). Implies --dashboard`,
+            },
           },
           async run(values) {
             if (typeof values.config !== "string") throw new Error("--config required")
             const config = await localConfig(values.config, values.fleet)
             if (!config.adminKey && process.env.MOCKINGBIRD_ADMIN_KEY)
               config.adminKey = process.env.MOCKINGBIRD_ADMIN_KEY
+            const dashboardPort =
+              values["dashboard-port"] === undefined ? undefined : Number(values["dashboard-port"])
+            if (
+              dashboardPort !== undefined &&
+              (!Number.isInteger(dashboardPort) || dashboardPort < 0 || dashboardPort > 65535)
+            )
+              throw new Error("--dashboard-port: expected 0-65535")
+            // Flags win over the file: the port alone turns the dashboard on.
+            if (values.dashboard || dashboardPort !== undefined)
+              config.dashboard = {
+                ...(typeof config.dashboard === "object" ? config.dashboard : {}),
+                ...(dashboardPort !== undefined ? { port: dashboardPort } : {}),
+              }
             const fleet = await startFleet(config, {
               load: createInstalledServiceLoader({
                 projectRoot:
@@ -158,7 +181,10 @@ const main = () =>
                 : {}),
               onReady(manifest) {
                 if (values["ready-json"]) console.log(JSON.stringify(manifest))
-                else console.log(`fleet ready: ${manifest.adminBase}`)
+                else {
+                  console.log(`fleet ready: ${manifest.adminBase}`)
+                  if (manifest.dashboard) console.log(`dashboard:   ${manifest.dashboard}`)
+                }
               },
             })
             return await new Promise<number>((resolve, reject) => {

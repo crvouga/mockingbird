@@ -52,10 +52,12 @@
     "portability": "bun ../../../scripts/portability.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-notifications": "workspace:*",
     "yaml": "2.9.0"
   },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-service-twilio": "workspace:*",
     "@types/node": "22.20.1",
     "@crvouga/mockingbird-service-postgres": "workspace:*",
     "@crvouga/mockingbird-service-redis": "workspace:*",

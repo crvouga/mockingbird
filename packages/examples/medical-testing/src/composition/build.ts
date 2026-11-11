@@ -25,11 +25,12 @@ export type Demo = {
   app: Hono<AppEnv>
   db: Db
   admins: readonly MockAdmin[]
-  admin: { fetch(request: Request): Promise<Response> }
+  /** Every admin API behind one fetch, with the config the shared admin UI mounts with. */
+  admin: ReturnType<typeof composeMockAdmins>
   /**
-   * Every email, SMS and push the app sent, read from the Resend, Twilio and
-   * FCM emulators: a Fetch handler for the harness UI and JSON API, plus
-   * `list`/`waitFor` for tests.
+   * Every email, text, push and staff chat message the app sent, read from
+   * the Resend, Twilio, FCM and Slack emulators: a Fetch handler for the
+   * harness UI and JSON API, plus `list`/`waitFor` for tests.
    */
   notifications: NotificationHarness
 }
@@ -79,6 +80,7 @@ export const buildDemo = async (assets: ClientAssets): Promise<Demo> => {
       labTesting: labTesting.client,
       identity: identity.client,
       notifier: notifier.client,
+      phoneVerifier: notifier.phoneVerifier,
     },
     assets,
   )

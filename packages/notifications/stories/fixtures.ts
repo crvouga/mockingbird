@@ -5,6 +5,7 @@
  */
 
 import type {
+  ChatContent,
   EmailAttachment,
   Notification,
   PushPlatform,
@@ -40,6 +41,8 @@ type SmsInput = {
   service?: ServiceKind
   status?: string | null
   namespace?: string
+  /** `whatsapp` for a message sent to a `whatsapp:` address. */
+  via?: "whatsapp"
 }
 
 export const sms = (o: SmsInput): Notification => {
@@ -58,7 +61,12 @@ export const sms = (o: SmsInput): Notification => {
     createdAt: at(o.minutesAgo ?? 0),
     preview: o.body.replace(/\s+/g, " ").slice(0, 240),
     status: o.status ?? "queued",
-    sms: { body: o.body, code: o.code ?? null, media: o.media ?? [] },
+    sms: {
+      body: o.body,
+      code: o.code ?? null,
+      media: o.media ?? [],
+      ...(o.via ? { via: o.via } : {}),
+    },
     email: null,
     push: null,
     raw: { sid: providerId, to, from: o.from, body: o.body },
@@ -316,16 +324,154 @@ export const mailbox = (): Notification[] => [
   }),
 ]
 
+type ChatInput = Partial<Omit<ChatContent, "text">> & {
+  to?: string
+  text?: string
+  fromName?: string | null
+  from?: string
+  minutesAgo?: number
+  namespace?: string
+}
+
+export const CHAT_CHANNEL = "#alerts"
+
+export const chat = (o: ChatInput): Notification => {
+  const providerId = nextId("C0ALERTS:")
+  const to = o.to ?? CHAT_CHANNEL
+  const webhook = to.startsWith("/services/")
+  const text = o.text ?? ""
+  return {
+    id: `slack:${o.namespace ?? "default"}:${providerId}`,
+    providerId,
+    channel: "chat",
+    source: "slack",
+    service: "slack",
+    namespace: o.namespace ?? "default",
+    to,
+    from: webhook
+      ? { name: "Incoming Webhook", address: "incoming-webhook" }
+      : { name: o.fromName ?? "Acme Bot", address: o.from ?? "U0ACMEBOT" },
+    createdAt: at(o.minutesAgo ?? 0),
+    preview: text.replace(/\s+/g, " ").slice(0, 240),
+    status: o.ephemeral ? "ephemeral" : null,
+    sms: null,
+    email: null,
+    push: null,
+    chat: {
+      text,
+      workspace: o.workspace ?? "Acme",
+      method: o.method ?? (webhook ? "incoming-webhook" : "chat.postMessage"),
+      blocks: o.blocks ?? [],
+      attachments: o.attachments ?? [],
+      threadTs: o.threadTs ?? null,
+      ephemeral: o.ephemeral ?? false,
+      edited: o.edited ?? false,
+      reactions: o.reactions ?? [],
+      names: o.names ?? { U0LIN: "lin", C0GENERAL: "general" },
+    },
+    raw: { channel: to, text, blocks: o.blocks ?? [], attachments: o.attachments ?? [] },
+  }
+}
+
+export const ORDER_BLOCKS: unknown[] = [
+  { type: "header", text: { type: "plain_text", text: "Order #1042 shipped" } },
+  {
+    type: "section",
+    text: { type: "mrkdwn", text: "*Trail running shoes* left the warehouse :package:" },
+    fields: [
+      { type: "mrkdwn", text: "*Carrier*\nExample Post" },
+      { type: "mrkdwn", text: "*Arrives*\nTuesday" },
+    ],
+  },
+  { type: "divider" },
+  {
+    type: "actions",
+    elements: [
+      { type: "button", style: "primary", text: { type: "plain_text", text: "View order" } },
+      { type: "button", text: { type: "plain_text", text: "Snooze" } },
+      { type: "button", style: "danger", text: { type: "plain_text", text: "Cancel" } },
+    ],
+  },
+  { type: "context", elements: [{ type: "mrkdwn", text: "Sent by the fulfilment worker" }] },
+]
+
+/** A workspace after a busy morning: two channels and an incoming webhook. */
+export const chatChannels = (): Notification[] => [
+  chat({
+    text: "Checkout error rate is above 2%",
+    to: "/services/T000/B000/XXXX",
+    attachments: [
+      {
+        color: "danger",
+        title: "checkout-api",
+        text: "5xx responses: *2.4%* over the last 5 minutes",
+        fields: [
+          { title: "Region", value: "us-east-1", short: true },
+          { title: "Since", value: "9:36 AM", short: true },
+        ],
+        footer: "Example Monitoring",
+      },
+    ],
+    minutesAgo: 1,
+  }),
+  chat({ text: "Order #1042 shipped", blocks: ORDER_BLOCKS, minutesAgo: 3 }),
+  chat({
+    text: "Deploy `web@4f2c1a9` finished in *3m 12s*. <https://acme.example/deploys/918|View the deploy>",
+    to: "#general",
+    reactions: [
+      { name: "tada", count: 3 },
+      { name: "rocket", count: 1 },
+    ],
+    minutesAgo: 9,
+  }),
+  chat({
+    text: "<@U0LIN> the nightly export is ready in <#C0GENERAL>:\n• 1,284 orders\n• 3 refunds\n> Totals match the ledger.",
+    minutesAgo: 34,
+  }),
+  chat({
+    text: "```\nexport finished\nrows: 1284\n```",
+    edited: true,
+    minutesAgo: 35,
+  }),
+  chat({ text: "New signup: lin@example.com on the *Trail Club* plan", minutesAgo: 60 * 26 }),
+]
+
+/** WhatsApp messages sent through Twilio, next to ordinary texts. */
+export const whatsappInbox = (): Notification[] => [
+  sms({
+    from: "whatsapp:+14155238886",
+    body: "Hi Ada, your Acme order #1042 is out for delivery. Reply STOP to opt out.",
+    via: "whatsapp",
+    minutesAgo: 2,
+  }),
+  sms({
+    from: "whatsapp:+14155238886",
+    body: "Your Acme order #1042 has shipped.",
+    via: "whatsapp",
+    minutesAgo: 190,
+  }),
+  sms({
+    from: "whatsapp:Verify",
+    fromName: "Verify",
+    body: "Your verification code is 739204",
+    code: "739204",
+    via: "whatsapp",
+    minutesAgo: 4,
+  }),
+]
+
 export const allSources = (counts: Partial<Record<ServiceKind, number>> = {}): SourceStatus[] =>
-  (["twilio", "resend", "fcm", "ses", "sns", "customerio", "mailosaur"] as const).map((name) => ({
-    name,
-    service: name,
-    url: `http://127.0.0.1:${8790 + name.length}/__admin`,
-    ok: true,
-    error: null,
-    count: counts[name] ?? 0,
-    lastSyncAt: new Date(NOW).toISOString(),
-  }))
+  (["twilio", "resend", "fcm", "ses", "sns", "customerio", "mailosaur", "slack"] as const).map(
+    (name) => ({
+      name,
+      service: name,
+      url: `http://127.0.0.1:${8790 + name.length}/__admin`,
+      ok: true,
+      error: null,
+      count: counts[name] ?? 0,
+      lastSyncAt: new Date(NOW).toISOString(),
+    }),
+  )
 
 export const countSources = (items: Notification[]): SourceStatus[] => {
   const counts: Partial<Record<ServiceKind, number>> = {}
@@ -336,6 +482,8 @@ export const countSources = (items: Notification[]): SourceStatus[] => {
 /** Everything at once: the harness after a realistic test run. */
 export const everything = (): Notification[] => [
   ...smsInbox(),
+  ...whatsappInbox(),
+  ...chatChannels(),
   ...mailbox(),
   push({
     title: "Order confirmed",

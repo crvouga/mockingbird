@@ -78,7 +78,7 @@ const OrderDetail = ({
       setReviewing(false)
     }
   }
-  const steps = ["pending_payment", "fulfilled", "processing", "results_ready"]
+  const steps = ["pending_payment", "fulfilled", "shipped", "processing", "results_ready"]
   const current = steps.indexOf(order.status)
   return html`
     <div class="cove-page">

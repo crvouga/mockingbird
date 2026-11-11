@@ -86,7 +86,8 @@ export function PaletteSearch({
         value={query}
         onChange={(event) => onQuery(event.target.value)}
         onKeyDown={(event) => {
-          event.stopPropagation()
+          // Escape still has to reach the dialog's own handler, which closes the palette.
+          if (event.key !== "Escape") event.stopPropagation()
           if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault()
             const delta = event.key === "ArrowDown" ? 1 : -1

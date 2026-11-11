@@ -3,10 +3,12 @@ import { getCookie } from "hono/cookie"
 import { HTTPException } from "hono/http-exception"
 import { SESSION_COOKIE, SESSION_HEADER, userForToken } from "../auth/session.js"
 import type { AppDeps, AppEnv } from "./appEnv.js"
+import { accountRoutes } from "./routes/account.js"
 import { adminRoutes } from "./routes/admin.js"
 import { authRoutes } from "./routes/auth.js"
 import { catalogRoutes } from "./routes/catalog.js"
 import { checkoutRoutes } from "./routes/checkout.js"
+import { emailAuthRoutes } from "./routes/emailAuth.js"
 import { ordersRoutes } from "./routes/orders.js"
 import { webhookRoutes } from "./routes/webhooks.js"
 
@@ -14,7 +16,7 @@ export type ClientAssets = { html: string; js: string }
 
 /**
  * The whole app, built purely from its ports — nothing here knows what's
- * actually backing `deps.db`/`deps.payments`/`deps.labTesting`/`deps.identity`/`deps.notifier`.
+ * actually backing `deps.db`/`deps.payments`/`deps.labTesting`/`deps.identity`/`deps.notifier`/`deps.phoneVerifier`.
  * See src/composition/*.ts for what wires those up.
  */
 export const createApp = (deps: AppDeps, assets: ClientAssets): Hono<AppEnv> => {
@@ -26,6 +28,7 @@ export const createApp = (deps: AppDeps, assets: ClientAssets): Hono<AppEnv> => 
     c.set("labTesting", deps.labTesting)
     c.set("identity", deps.identity)
     c.set("notifier", deps.notifier)
+    c.set("phoneVerifier", deps.phoneVerifier)
     // Real browsers block JS from *reading* the Set-Cookie/Cookie headers on
     // any Response/Headers object — not just ones from a real network fetch,
     // any object in a browser JS realm — so a real `Cookie` request header
@@ -49,6 +52,9 @@ export const createApp = (deps: AppDeps, assets: ClientAssets): Hono<AppEnv> => 
     await next()
   })
   app.route("/api/admin", adminRoutes)
+  app.route("/api/account", accountRoutes)
+  // Before the OAuth routes: `/api/auth/:provider/start` would otherwise claim `/email/start`.
+  app.route("/api/auth/email", emailAuthRoutes)
   app.route("/api/auth", authRoutes)
   app.route("/api", catalogRoutes)
   app.route("/api/checkout", checkoutRoutes)

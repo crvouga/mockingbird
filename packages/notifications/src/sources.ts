@@ -7,6 +7,7 @@ import { addressList, decodeRawMessage, parseMime } from "./mime.js"
 import type {
   Address,
   Channel,
+  ChatContent,
   EmailContent,
   Notification,
   PushContent,
@@ -105,9 +106,15 @@ const smsNotification = (
 ): Notification => ({
   ...base(input, "sms"),
   preview: preview(sms.body),
-  sms: { body: sms.body, code: sms.code ?? null, media: sms.media ?? [] },
+  sms: {
+    body: sms.body,
+    code: sms.code ?? null,
+    media: sms.media ?? [],
+    ...(sms.via === "whatsapp" ? { via: sms.via } : {}),
+  },
   email: null,
   push: null,
+  chat: null,
 })
 
 /** One notification per mailbox: every `to`, `cc` and `bcc` recipient gets its own copy. */
@@ -139,6 +146,7 @@ const emailNotifications = (
         sms: null,
         email: content,
         push: null,
+        chat: null,
       },
     ]
   })
@@ -150,16 +158,35 @@ const pushNotification = (input: Base, push: PushContent): Notification => ({
   sms: null,
   email: null,
   push,
+  chat: null,
 })
+
+const chatNotification = (input: Base, chat: ChatContent, summary: string): Notification => ({
+  ...base(input, "chat"),
+  preview: preview(summary),
+  sms: null,
+  email: null,
+  push: null,
+  chat,
+})
+
+const WHATSAPP = /^whatsapp:/i
 
 const twilio: Reader = async (context) => {
   const messages = list(await context.read("/outbox"), "messages")
   return messages.flatMap((m): Notification[] => {
     const providerId = str(m.id) ?? str(m.sid) ?? ""
     const body = str(m.body) ?? ""
-    const to = str(m.to) ?? ""
+    const recipient = str(m.to) ?? ""
     const verify = m.kind === "verify"
-    const sender = str(m.from) ?? str(m.messagingServiceSid) ?? (verify ? "Verify" : "Twilio")
+    // WhatsApp rides Twilio's messaging API with `whatsapp:` channel addresses (and Verify's
+    // `whatsapp` channel). The recipient is still a phone, so `to` drops the prefix; the sender
+    // keeps it, which is what separates the WhatsApp chat from the same number's text thread.
+    const whatsapp =
+      m.channel === "whatsapp" || WHATSAPP.test(recipient) || WHATSAPP.test(str(m.from) ?? "")
+    const to = recipient.replace(WHATSAPP, "")
+    const origin = str(m.from) ?? str(m.messagingServiceSid) ?? (verify ? "Verify" : "Twilio")
+    const sender = whatsapp ? `whatsapp:${origin.replace(WHATSAPP, "")}` : origin
     const common = {
       context,
       service: "twilio" as const,
@@ -174,7 +201,17 @@ const twilio: Reader = async (context) => {
         subject: "Your verification code",
         text: body,
       })
-    return [smsNotification({ ...common, to }, { body, code: str(m.code) })]
+    return [
+      smsNotification(
+        { ...common, to },
+        {
+          body,
+          code: str(m.code),
+          media: strings(m.mediaUrls),
+          ...(whatsapp ? { via: "whatsapp" as const } : {}),
+        },
+      ),
+    ]
   })
 }
 
@@ -522,6 +559,114 @@ const mailosaur: Reader = async (context) =>
     )
   })
 
+/** Slack mrkdwn as the plain text a notification preview shows. */
+const mrkdwnText = (text: string, names: Map<string, string>): string =>
+  text
+    .replace(/<@([A-Z0-9]+)(?:\|([^>]*))?>/g, (_, id: string, label?: string) => {
+      return `@${label || names.get(id) || id}`
+    })
+    .replace(/<#([A-Z0-9]+)(?:\|([^>]*))?>/g, (_, id: string, label?: string) => {
+      return `#${label || names.get(id) || id}`
+    })
+    .replace(/<!(here|channel|everyone)(?:\|[^>]*)?>/g, "@$1")
+    .replace(/<([^|>]+)\|([^>]*)>/g, "$2")
+    .replace(/<([^>]+)>/g, "$1")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+
+/** The readable text inside Block Kit blocks or attachments, in document order. */
+const blockText = (value: unknown, out: string[] = []): string[] => {
+  if (Array.isArray(value)) for (const item of value) blockText(item, out)
+  if (!isRow(value)) return out
+  for (const key of ["pretext", "title", "text", "alt_text", "footer"]) {
+    const text = value[key]
+    if (typeof text === "string" && text.trim() !== "") out.push(text)
+    else blockText(text, out)
+  }
+  for (const field of list(value.fields, "")) {
+    const pair = [str(field.title), str(field.value)].filter(Boolean).join(": ")
+    if (pair) out.push(pair)
+    else blockText(field, out)
+  }
+  blockText(value.elements, out)
+  blockText(value.blocks, out)
+  return out
+}
+
+/** A read that may fail (an older emulator without the route) without failing the outbox. */
+const optional = (read: AdminRead, path: string): Promise<unknown> => read(path).catch(() => null)
+
+const slack: Reader = async (context) => {
+  const [outbox, channelList, userList, settings] = await Promise.all([
+    context.read("/outbox"),
+    optional(context.read, "/channels"),
+    optional(context.read, "/users"),
+    optional(context.read, "/settings"),
+  ])
+  const team = row(settings)
+  const names = new Map<string, string>()
+  const people = new Map<string, Row>()
+  for (const channel of list(channelList, "channels"))
+    if (str(channel.id) && str(channel.name))
+      names.set(str(channel.id) ?? "", str(channel.name) ?? "")
+  for (const user of list(userList, "users")) {
+    const id = str(user.id) ?? ""
+    people.set(id, user)
+    names.set(id, str(user.name) ?? id)
+  }
+  const bot = str(team.botUserId)
+  return list(outbox, "messages").map((m): Notification => {
+    const webhook = str(m.webhook)
+    const channel = str(m.channel) ?? webhook ?? ""
+    const name = strings(m.to).find((entry) => entry.startsWith("#")) ?? names.get(channel)
+    const ephemeral = m.ephemeral === true
+    // An ephemeral message records the member it was shown to as `user`; the bot still wrote it.
+    const author = webhook ? null : ephemeral ? bot : (str(m.user) ?? bot)
+    const person = row(author ? people.get(author) : null)
+    const text = str(m.text) ?? ""
+    const blocks = Array.isArray(m.blocks) ? m.blocks : []
+    const attachments = Array.isArray(m.attachments) ? m.attachments : []
+    const summary = text || [...blockText(blocks), ...blockText(attachments)].join(" ")
+    // Only the ids this message mentions, so a client can draw `<@U…>` as a name.
+    const body = JSON.stringify([text, blocks, attachments])
+    const mentioned = Object.fromEntries([...names].filter(([id]) => id && body.includes(id)))
+    return chatNotification(
+      {
+        context,
+        service: "slack",
+        providerId: str(m.id) ?? `${channel}:${str(m.ts) ?? ""}`,
+        to: webhook ?? (name ? `#${name.replace(/^#/, "")}` : channel),
+        from: webhook
+          ? { name: "Incoming Webhook", address: "incoming-webhook" }
+          : {
+              name: str(person.real_name) ?? str(person.name) ?? null,
+              address: author ?? "bot",
+            },
+        createdAt: iso(m.createdAt),
+        status: ephemeral ? "ephemeral" : null,
+        raw: m,
+      },
+      {
+        text,
+        workspace: str(team.teamName) ?? str(m.workspace),
+        method: str(m.method) ?? (webhook ? "incoming-webhook" : "chat.postMessage"),
+        blocks,
+        attachments,
+        threadTs: str(m.thread_ts),
+        ephemeral,
+        edited: isRow(m.edited),
+        reactions: list(m.reactions, "").map((reaction) => ({
+          name: str(reaction.name) ?? "",
+          count: typeof reaction.count === "number" ? reaction.count : 1,
+        })),
+        names: mentioned,
+      },
+      mrkdwnText(summary, names),
+    )
+  })
+}
+
 export const READERS: Record<ServiceKind, Reader> = {
   twilio,
   resend,
@@ -530,4 +675,5 @@ export const READERS: Record<ServiceKind, Reader> = {
   sns,
   customerio,
   mailosaur,
+  slack,
 }

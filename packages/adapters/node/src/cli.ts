@@ -468,6 +468,12 @@ export type MockingbirdConfig = {
   adminControls?: MockControls
   namespace?: string
   control?: { host?: string; port?: number }
+  /**
+   * Serve the dashboard next to the fleet: every emulator's admin UI and the notifications UI on
+   * one page. `mockingbird-fleet serve` and `startFleet` from `@crvouga/mockingbird-fleet` honor
+   * it; the default port is 8790.
+   */
+  dashboard?: boolean | { host?: string; port?: number }
 }
 
 const loadTarget = (name: string, own: FleetTarget): Promise<FleetTarget> =>
@@ -559,6 +565,10 @@ export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand =
         const adminKey =
           config.adminKey ?? asString(values["admin-key"]) ?? process.env.MOCKINGBIRD_ADMIN_KEY
         if (adminKey !== undefined) config.adminKey = adminKey
+        if (config.dashboard)
+          console.error(
+            `${configPath}: "dashboard" is served by mockingbird-fleet (npx @crvouga/mockingbird-fleet serve --config ${configPath}); a service's own serve command starts the fleet without it`,
+          )
         // Flags and MOCKINGBIRD_ADMIN_CONTROLS apply on top of the config file's own controls.
         const adminControls = await resolveServeControls(values, process.env, config.adminControls)
         if (adminControls !== undefined) config.adminControls = adminControls

@@ -1,6 +1,7 @@
 import { html } from "htm/preact"
 import { useCallback, useEffect, useRef, useState } from "preact/hooks"
 import { api, type OAuthProvider, type OAuthStepResponse, type User } from "../api.js"
+import { attachOAuthPage } from "../hostedPages.js"
 import { pasteHtml } from "../pasteHtml.js"
 import { useEscapeKey } from "./useEscapeKey.js"
 
@@ -85,9 +86,14 @@ export const OAuthModal = ({ provider, onDone, onClose }: Props) => {
   useEffect(() => {
     const page = pageRef.current
     if (!page || pageHtml === null) return
-    return pasteHtml(page, pageHtml, {
+    const unpaste = pasteHtml(page, pageHtml, {
       onSubmit: (action, method, body) => stepRef.current(action, method, body),
     })
+    const detach = attachOAuthPage(page)
+    return () => {
+      detach()
+      unpaste()
+    }
   }, [pageHtml, error])
 
   return html`

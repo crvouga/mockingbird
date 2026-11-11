@@ -20,6 +20,8 @@ const read = (path: string) => readFileSync(join(root, path), "utf8")
 /** The guide: a hub that says where each control is, and one page per control. */
 const HUB = "docs/ADMIN_CONTROLS.md"
 const PAGES = "docs/admin-controls"
+/** The notifications guide keeps its pages in a directory of its own. */
+const NOTIFICATION_PAGES = "docs/notifications"
 const slugOf = (file: string) => file.replace(/\.md$/, "").toLowerCase().replaceAll("_", "-")
 const pages = readdirSync(join(root, PAGES))
   .filter((file) => file.endsWith(".md"))
@@ -144,16 +146,32 @@ describe("the admin controls guide is easy to find a control in", () => {
 
   test("everything that points into the guide points at a page that exists", () => {
     const slugs = new Set(pages.map((each) => each.slug))
+    // content.ts holds one object per guide; a card's `page` names a file in that guide's
+    // directory, so each object is checked against its own.
+    const content = read("sites/docs/src/lib/content.ts")
+    const cards = (guide: string) => {
+      const block = new RegExp(`^export const ${guide} = \\{$([\\s\\S]*?)^\\} as const$`, "m").exec(
+        content,
+      )
+      if (!block) throw new Error(`no ${guide} object in content.ts`)
+      return [...(block[1] as string).matchAll(/^ {6}page: "([A-Z_]+)",$/gm)]
+    }
     const pointers = [
       // Each emulator's DISCOVERY.md, the admin UI's views, and the landing page's cards.
       ...[...read("scripts/service-discovery.ts").matchAll(/\$\{GUIDE\}\/([a-z-]+)/g)],
       ...["components.tsx", "controls.tsx", "state.tsx"].flatMap((file) => [
         ...read(`packages/admin-ui/src/${file}`).matchAll(/<ViewTitle page="([a-z-]+)"/g),
       ]),
-      ...[...read("sites/docs/src/lib/content.ts").matchAll(/^ {6}page: "([A-Z_]+)",$/gm)],
+      ...cards("ADMIN_CONTROLS"),
     ].map(([, name]) => slugOf(name as string))
     expect(pointers.length).toBeGreaterThan(20)
     expect(pointers.filter((slug) => !slugs.has(slug))).toEqual([])
+    // The notifications cards on the same landing page point into their own guide.
+    const topics = cards("NOTIFICATIONS").map(([, name]) => name as string)
+    expect(topics.length).toBeGreaterThan(3)
+    expect(
+      topics.filter((name) => !existsSync(join(root, NOTIFICATION_PAGES, `${name}.md`))),
+    ).toEqual([])
     // The other guides link to a control's page by file.
     const broken: string[] = []
     for (const file of readdirSync(join(root, "docs")).filter((name) => name.endsWith(".md")))

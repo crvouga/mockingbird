@@ -614,8 +614,12 @@ export class TwilioAPI implements FetchAPI {
     if ([...body].length > 1600) {
       throw fail(400, 21617, "The concatenated message body exceeds the 1600 character limit.")
     }
-    const recipient = this.resolveLookup(to)
+    // WhatsApp senders and recipients are channel addresses: `whatsapp:+15551234567`. Twilio
+    // validates the number behind the prefix and echoes the address with the prefix kept.
+    const whatsapp = /^whatsapp:/i.test(to.trim())
+    const recipient = this.resolveLookup(whatsapp ? to.trim().slice("whatsapp:".length) : to)
     if (!recipient.valid) throw fail(400, 21211, `Invalid 'To' Phone Number: ${to}`)
+    const address = whatsapp ? `whatsapp:${recipient.phone_number}` : recipient.phone_number
     const now = this.now()
     const sid = this.state.sid(media.length > 0 ? "MM" : "SM")
     const base = `/2010-04-01/Accounts/${accountSid}/Messages/${sid}`
@@ -627,7 +631,7 @@ export class TwilioAPI implements FetchAPI {
       account_sid: accountSid,
       api_version: "2010-04-01",
       body,
-      to: recipient.phone_number,
+      to: address,
       from: from ?? null,
       messaging_service_sid: messagingServiceSid ?? null,
       status: selectingSender ? "accepted" : "queued",
@@ -649,11 +653,11 @@ export class TwilioAPI implements FetchAPI {
       id: sid,
       kind: "sms",
       sid,
-      to: recipient.phone_number,
+      to: address,
       from: from ?? null,
       messagingServiceSid: messagingServiceSid ?? null,
       body,
-      channel: "sms",
+      channel: whatsapp ? "whatsapp" : "sms",
       ...(media.length > 0 ? { mediaUrls: media } : {}),
       createdAt: new Date(now).toISOString(),
     })

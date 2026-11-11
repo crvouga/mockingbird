@@ -24,6 +24,7 @@
   "description": "The Mockingbird documentation site: a static Astro build generated from the service packages.",
   "devDependencies": {
     "@crvouga/mockingbird-example-medical-testing": "workspace:*",
+    "@crvouga/mockingbird-notifications": "workspace:*",
     "@crvouga/mockingbird-service-acm": "workspace:*",
     "@crvouga/mockingbird-service-aha": "workspace:*",
     "@crvouga/mockingbird-service-airtable": "workspace:*",
@@ -136,6 +137,7 @@
     "@crvouga/mockingbird-service-wholescripts": "workspace:*",
     "@crvouga/mockingbird-service-whoop": "workspace:*",
     "@crvouga/mockingbird-service-workos": "workspace:*",
+    "@playwright/test": "1.65.0",
     "@types/node": "22.20.1",
     "typescript": "5.9.3"
   },
@@ -147,7 +149,8 @@
     "preview": "astro preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "test": "bun test integrations"
+    "test": "bun test integrations",
+    "e2e": "bun test ./e2e/example-csp.e2e.ts ./e2e/landing-notifications.e2e.ts"
   },
   "type": "module"
 }

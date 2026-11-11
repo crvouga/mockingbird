@@ -9,12 +9,17 @@ on Bun, `@crvouga/mockingbird-adapter-bun` is lighter.
 
 ## Supported consumer entry points
 
-Install a published service and use its bundled CLI. Never install this private workspace package.
+Install the neutral fleet tool with the emulator packages the application uses, and run them as
+a fleet. Never install this private workspace package.
 
 ```bash
-npm install @crvouga/mockingbird-service-stripe
-npx mockingbird-stripe serve --config mockingbird.json --ready-file ready.json
+npm install -D @crvouga/mockingbird-fleet @crvouga/mockingbird-service-stripe
+npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json
 ```
+
+Each published service's own CLI bundles this code too: `npx mockingbird-stripe serve --port 8787`
+serves that one emulator, and `npx mockingbird-stripe serve --config mockingbird.json` starts the
+same fleet without the dashboard.
 
 The supported management client and contributor-independent harness APIs are exported from
 `@crvouga/mockingbird-fleet` (vendor-neutral; install with the selected emulator packages).

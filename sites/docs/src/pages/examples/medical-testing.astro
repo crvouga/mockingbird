@@ -35,17 +35,20 @@ const runHtml = await highlight(example.runCommand, "bash")
 
     <section class="live-app">
       <p class="live-note">
-        Everything in the app — the Google/Apple OAuth sign-in, the shop, the Stripe checkout, the Junction
-        fulfillment, the Resend, Twilio and FCM email, SMS and push updates, and the Postgres-backed order history — runs entirely in this browser tab. The fullscreen view opens
-        on the example app, with a Notifications tab that shows every message it sent and one live admin UI whose global selector switches between every emulator the app is talking to. No server to start,
-        and no real network call to Google, Apple, Stripe, or Junction.
+        Everything in the app runs in this browser tab: sign-in by emailed code or Google/Apple OAuth, the shop,
+        the Stripe checkout, the Junction fulfillment, the Postgres-backed order history, and every message it
+        sends through Resend (email), Twilio (SMS, WhatsApp and Verify codes), FCM (push to an iPhone and an
+        Android phone) and Slack (staff alerts). The fullscreen view is one dashboard with three tabs:
+        <strong>Example</strong> is the app, <strong>Emulators</strong> is one live admin UI for every emulator
+        it talks to, and <strong>Notifications</strong> shows every message on a phone, a mailbox and a chat
+        window. No server to start, and no real network call to any provider.
       </p>
       <div class="example-capabilities">
         <div><h2>Patient workspace</h2><p>Search the catalog, build an order, pay, track progress, explore biomarker reports, and download records.</p></div>
         <div><h2>Clinical review</h2><p>Inspect all patient reports, compare values and reference ranges, and add a signed, timestamped review.</p></div>
         <div><h2>Administration</h2><p>Manage patient, clinician, and administrator roles with server-enforced permissions and an audit log.</p></div>
       </div>
-      <p class="live-note">Choose Ada (patient), Morgan (clinician), or Alex (administrator) in the Google account chooser. Ada starts with two fictional reports. Sign out in Account to switch roles. Changes last until the example closes; reopening starts a fresh workspace.</p>
+      <p class="live-note">Pick Ada (patient), Morgan (clinician), or Alex (administrator) on the sign-in screen and ask for a code: the app says where it sent it, and "Open Notifications" takes you to that email. Then pay for a test and watch the receipt, shipping and result updates arrive. Account has the phone verification, the per-channel switches and a "send a test" button for each channel. Ada starts with two fictional reports. Changes last until the example closes; reopening starts a fresh workspace.</p>
       <ExampleLauncher element="app-example" example={example.slug} title={example.title} launchLabel="Launch the app" fit="app" />
     </section>
 
