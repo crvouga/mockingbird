@@ -3,6 +3,7 @@ import { createHash } from "node:crypto"
 import { existsSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import {
+  allowRuntimeStyles,
   FALLBACK_CSP,
   pageKey,
   pagePolicies,
@@ -57,6 +58,18 @@ describe("security headers", () => {
     setSecurityHeaders("/nope", bare.res as never, new Map())
     expect(bare.set.get("content-security-policy")).toBe(FALLBACK_CSP)
   })
+})
+
+test("style-src allows the <style> elements live examples add at runtime; scripts stay hashed", () => {
+  const astro =
+    "default-src 'self'; script-src 'self' 'sha256-a='; style-src 'self' 'sha256-b=' 'sha256-c='; style-src-attr 'unsafe-inline';"
+  expect(allowRuntimeStyles(astro)).toBe(
+    "default-src 'self'; script-src 'self' 'sha256-a='; style-src 'self' 'unsafe-inline'; style-src-attr 'unsafe-inline';",
+  )
+  const policies = pagePolicies([
+    { pathname: "/examples/x", headers: [{ key: "Content-Security-Policy", value: astro }] },
+  ])
+  expect(policies.get("/examples/x")).not.toContain("sha256-b=")
 })
 
 const dist = join(import.meta.dir, "../dist")

@@ -56,9 +56,10 @@ const nav = [
   { href: "/coverage", label: "Coverage" },
   { href: "/docs", label: "Guides" },
   { href: "/docs/admin-controls", label: "Controls" },
+  { href: "/docs/notifications", label: "Notifications" },
   { href: "/why", label: "Why" },
 ]
-// `/docs` is a prefix of `/docs/admin-controls`, so the longest match is the one that's current.
+// `/docs` is a prefix of `/docs/admin-controls` and `/docs/notifications`, so the longest match is the one that's current.
 const currentNav = nav
   .filter((item) => path === item.href || path.startsWith(`${item.href}/`))
   .sort((a, b) => b.href.length - a.href.length)[0]?.href

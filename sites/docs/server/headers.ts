@@ -26,12 +26,22 @@ export const PAGE_CSP_DIRECTIVES = [
 /** `dist/_headers.json`, which `astro build` writes with the adapter's `staticHeaders`. */
 export type StaticHeaders = { pathname: string; headers: { key: string; value: string }[] }[]
 
+/**
+ * Live examples (emulator UIs, the admin UI, the notifications harness, the example app) add
+ * their own `<style>` elements at runtime, which no build-time hash can cover, and a hash in
+ * `style-src` makes browsers ignore `'unsafe-inline'`. So `style-src` drops Astro's hashes and
+ * allows inline styles; `script-src` keeps its hashes.
+ */
+export function allowRuntimeStyles(csp: string): string {
+  return csp.replace(/(^|;)\s*style-src\s[^;]*/g, "$1 style-src 'self' 'unsafe-inline'")
+}
+
 /** Each prerendered page's own CSP, keyed by its pathname without a trailing slash. */
 export function pagePolicies(headers: StaticHeaders): Map<string, string> {
   const policies = new Map<string, string>()
   for (const page of headers) {
     const csp = page.headers.find((h) => h.key.toLowerCase() === "content-security-policy")
-    if (csp) policies.set(pageKey(page.pathname), csp.value)
+    if (csp) policies.set(pageKey(page.pathname), allowRuntimeStyles(csp.value))
   }
   return policies
 }
