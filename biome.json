@@ -11,6 +11,7 @@
       "!**/src/vendor",
       "!packages/parity/package-oracle/upstream",
       "!**/openapi.yaml",
+      "!sites/fleet/openapi.json",
       "!**/corpus",
       "!packages/service/medplum/test/fixtures",
       "!packages/service/postgres",

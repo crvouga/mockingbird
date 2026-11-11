@@ -64,6 +64,35 @@ semantics: keys are partitioned, but scripts, Pub/Sub and time belong to the ser
 The aggregate `/__admin/health` endpoint reports `processReady`, `protocolReady` and `status` per child.
 If any child stops, it returns 503. The control listener defaults to a loopback ephemeral port.
 
+## One file for local and hosted fleets
+
+`mockingbird-fleet serve --config` also accepts YAML, and a `mockingbird.yaml` declaration: the
+file [Fleet Cloud](../sites/fleet/README.md#declare-it-mockingbirdyaml) applies. A declaration
+names an organization, its projects and their fleets; each fleet's `services` are the entries
+described on this page.
+
+```yaml
+version: 1
+organization: acme
+projects:
+  web:
+    fleets:
+      acme-staging:
+        services:
+          stripe: { durability: strict }
+          db: { target: postgres, protocol: postgres, port: 5432, local: true }
+```
+
+```sh
+mockingbird-fleet serve --config mockingbird.yaml                  # the one declared fleet
+mockingbird-fleet serve --config mockingbird.yaml --fleet acme-staging
+mockingbird-fleet plan    # and `apply`: make Fleet Cloud match the same file
+```
+
+Locally, the keys only Fleet Cloud reads (`durability`, `flushIntervalMs`, `webhookOrigins`,
+`local`, and a fleet's `access` and `requestsPerMinute`) are dropped before the fleet starts.
+A problem in the file is reported with the path of its key before any listener opens.
+
 ## Endpoint discovery
 
 Provider entries can also carry their synthetic fixture object and advertised public URL:

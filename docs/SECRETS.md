@@ -223,7 +223,6 @@ what `main` already built and tested. No token, no server.
 | `<SERVICE>_*` sandbox keys | repo secrets (+ optionally your `.env.local`) | live parity only |
 | `CLAUDE_CODE_OAUTH_TOKEN` | your `.env.local` (never a repo secret) | `bun github:resolve-issues`: your Claude subscription |
 | Resolve issues GitHub App | its public client id in `.github/resolve-issues-app.json`; no private key or client secret is kept | `bun github:resolve-issues`: mints a token per run for this repo only (`setup` creates it) |
-| `GITGUARDIAN_API_KEY` | your `.env.local` | optional: `pr:ready guardian ignore` |
 
 Inventory: [`secrets.manifest.yaml`](../secrets.manifest.yaml) (non-parity secrets and the
 Trusted Publishing checklist) and [`.env.example`](../.env.example) (every local name).

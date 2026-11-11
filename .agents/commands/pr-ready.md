@@ -1,6 +1,6 @@
 ---
 name: pr-ready
-description: Take the current branch to a merge-ready PR (commit, publish, sync with main, resolve conflicts, open the PR, fix every failing check — CI and third-party like GitGuardian) and stop there; never merges.
+description: Take the current branch to a merge-ready PR (commit, publish, sync with main, resolve conflicts, open the PR, fix every failing check — CI and third-party) and stop there; never merges.
 ---
 
 # /pr-ready
@@ -93,7 +93,7 @@ commit — `bun run pr:ready commit --amend --message-file …` then
 
 **Before the first publish, review the unpushed diff for anything credential-shaped** — API keys,
 tokens, account SIDs, private keys, `user`/`password` pairs, connection strings — including test
-fixtures. GitHub push protection and GitGuardian scan every commit, and once a commit is pushed its
+fixtures. GitHub push protection scans every commit, and once a commit is pushed its
 contents cannot be scrubbed without a force-push. Unpushed commits can still be fixed locally: amend
 or fold the fix into the commit that introduced it (`git commit --fixup <sha>` then
 `GIT_SEQUENCE_EDITOR=: git rebase -i --autosquash origin/main`), then publish. Real secrets never go
@@ -161,9 +161,9 @@ bun run pr:ready pr --ready
 bun run pr:ready checks
 ```
 
-`checks` covers **every** check on the PR. The required ones are Commitlint, Check, and
-GitGuardian Security Checks. Check rolls up the other CI jobs (Static, Shard i, Consumer smoke),
-so a failing shard fails Check too; fix the shard. A check that ran outside the CI and Advisory
+`checks` covers **every** check on the PR. The required ones are Commitlint and Check. Check rolls
+up the other CI jobs (Static, Shard i, Consumer smoke), so a failing shard fails Check too; fix the
+shard. A check that ran outside the CI and Advisory
 workflows and is not in that list fails this command — add its name to `REQUIRED_CHECKS` in
 `scripts/pr-ready.ts` and run `bun run pr:ready ruleset --apply`. A skipped check is not a
 pull-request check (Release runs only after merge). A failing check blocks this command: fix it
@@ -197,46 +197,6 @@ report, unless the vendor sandbox itself failed.
 - Repeat until `checks` exits 0. If the same check fails twice after a fix attempt, stop guessing:
   read the full log and reproduce locally before the next push. If a failure is clearly not fixable
   in-repo, stop and report the check name, link, and log excerpt.
-
-### GitGuardian Security Checks
-
-GitGuardian scans **every commit in the PR**, not just the head, so removing a value in a later
-commit does not clear an incident raised on an earlier one. List what it found:
-
-```
-bun run pr:ready guardian
-```
-
-Each incident has its `id`, `detector`, `commit`, `file`, `line`, and whether the commit is already
-`pushed`. Open the file at that line and decide what the value is:
-
-1. **A real credential** (it works, or might, against a real service): remove it from the code and
-   read it from the environment instead (see `docs/SECRETS.md`). Then **stop and tell the
-   user** the incident link and that the credential must be rotated — rotation is theirs to do,
-   and a rotated secret is the only real fix once it has been pushed. Never mark a real
-   credential as ignored.
-2. **A test fixture or false positive** (a made-up value that only an emulator accepts):
-   - Change the fixture so it no longer looks like a credential, and commit that fix.
-   - If the flagged commit is **not pushed**, fold the fix into it (step 3) so the value never
-     reaches the remote.
-   - If it **is pushed**, the history still holds the value, so resolve the incident in
-     GitGuardian as not a leak, then re-run the check:
-
-     ```
-     bun run pr:ready guardian ignore --incident <id> --reason test_credential
-     bun run pr:ready rerun --name "GitGuardian Security Checks"
-     bun run pr:ready checks
-     ```
-
-     Use `--reason false_positive` when the value is not a secret at all (for example a hash or
-     an ID the detector mistook for one). `guardian ignore` needs `GITGUARDIAN_API_KEY` (a
-     GitGuardian API token with `incidents:write`) in `.env.local`. If it
-     reports `step: "guardian-auth"`, stop and tell the user either to add that key or to mark
-     the incident as a test credential themselves at its dashboard link. Then continue from the
-     `rerun`.
-
-Never force-push to scrub a pushed commit (see Rules), and never use a secret-scanning bypass for a
-real credential.
 
 ## Review feedback
 

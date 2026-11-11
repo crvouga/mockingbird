@@ -59,6 +59,18 @@ export {
 } from "./fleet-client.js"
 export type { ConformanceProbe, FleetSubject } from "./fleet-conformance.js"
 export { launchFleet, participantConformance } from "./fleet-conformance.js"
+export type { Declaration, DeclaredFleet, DeclaredService } from "./fleet-declaration.js"
+export {
+  ACCESS_MODES,
+  CLOUD_SERVICE_KEYS,
+  checkDeclaration,
+  DeclarationError,
+  DURABILITY_MODES,
+  declaredFleets,
+  isDeclaration,
+  localFleetConfig,
+  parseDeclaration,
+} from "./fleet-declaration.js"
 export type { FileParticipant } from "./fleet-files.js"
 export { fileParticipant } from "./fleet-files.js"
 export type { ArchiveChainEntry, IncrementalArchive } from "./fleet-incremental.js"

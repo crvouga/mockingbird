@@ -150,7 +150,6 @@ pull-request check has passed:
 | --- | --- |
 | Commitlint | Conventional Commits on the PR's commits, and a Conventional Commits title |
 | Check | `bun run check` plus the consumer smoke install (rolls up the Static, Shard and Consumer smoke jobs) |
-| GitGuardian Security Checks | Secret scanning |
 
 Advisory checks ([`advisory.yml`](../.github/workflows/advisory.yml)) are not required. There is no
 required review, no required approval, and an unresolved review thread does not block the merge. A green pull request is releasable: merging it to `main` publishes. The Release
@@ -179,8 +178,8 @@ canonical file; `bun run agents:sync` creates missing links and `bun run check:a
 `bun run check`) fails CI on drift.
 
 `/pr-ready` takes the current branch to a merge-ready PR: commit, push, merge `origin/main`,
-resolve conflicts, open the PR, and fix every failing check (CI and third-party checks such as
-GitGuardian). It never merges; a human lands the PR once `bun run pr:ready ready` reports it green.
+resolve conflicts, open the PR, and fix every failing check (CI and third-party checks).
+It never merges; a human lands the PR once `bun run pr:ready ready` reports it green.
 For a clean, committed branch, `bun run pr:ready advance` performs the mechanical steps in one call
 and returns JSON for the next blocker. `bun run pr:ready comments` lists review threads and recent
 comments when you want to read them.

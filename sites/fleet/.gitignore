@@ -1,0 +1,4 @@
+.tmp/
+.tmp-pg-*/
+.spec-run/
+storybook-static/

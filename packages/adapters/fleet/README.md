@@ -46,9 +46,38 @@ The package exports typed lifecycle, client, archives, repositories, discovery, 
 participants, connection rendering and extension contracts. Public discovery omits credentials;
 write connection files to private paths. Public ingress support is provider-specific.
 
+## One file: `mockingbird.yaml`
+
+`serve --config` takes a fleet configuration in JSON or YAML, or a `mockingbird.yaml`
+declaration: the file Fleet Cloud applies. The same file then runs the fleet on your machine.
+
+```yaml
+version: 1
+organization: acme
+projects:
+  web:
+    fleets:
+      acme-staging:
+        services:
+          stripe: { durability: strict }
+          db: { target: postgres, protocol: postgres, port: 5432, local: true }
+```
+
+```sh
+npx mockingbird-fleet serve --config mockingbird.yaml          # add --fleet <slug> when it declares several
+MOCKINGBIRD_FLEET_URL=https://… MOCKINGBIRD_FLEET_TOKEN=… npx mockingbird-fleet plan
+npx mockingbird-fleet apply            # --prune also deletes what the file no longer declares
+```
+
+Keys only Fleet Cloud reads (`durability`, `flushIntervalMs`, `webhookOrigins`, `local`, and a
+fleet's `access` and `requestsPerMinute`) are dropped before a local fleet starts. `plan` and
+`apply` take `--file` (default `mockingbird.yaml`), `--url`, `--token-env` and `--json`.
+
 ## API
 
 `FleetClient`, `FleetClientError`, `FleetClientResponseError`, `FleetInstrumentation`, `FleetObservations`, `FleetRunError`, `NamespacePool`, `RepositoryWriter`, `advertisedHttpBase`, `archiveCompatibility`, `archiveProtector`, `archiveReachability`, `assertArchiveCompatibility`, `assertFleetConfig`, `compactArchive`, `composeFleetSchema`, `createFleetIngress`, `createInstalledServiceLoader`, `diffArchives`, `doctorFleet`, `fileParticipant`, `filesystemConditionalStore`, `filesystemOperationJournal`, `filesystemRepository`, `fleetCommands`, `fleetConfigSchema`, `incrementalArchive`, `ingressSupport`, `inspectArchive`, `launchFleet`, `listen`, `materializeArchive`, `migrateAndVerify`, `migrateApplicationArchive`, `migrateArchive`, `ownedTransport`, `participantConformance`, `planRestoreBindings`, `providerServeOptions`, `providerServeValues`, `publishIncremental`, `readJsonOption`, `rebaseArchiveNamespace`, `reconcileOperation`, `rehearseFleet`, `renderConnections`, `replayFleetTrace`, `resolveServeControls`, `resolveServeIdBase`, `resolveServeSettings`, `runCli`, `s3ConditionalStore`, `s3Repository`, `serve`, `serveCommand`, `startFleet`, `validateArchive`, `validateFleetConfig`, `withFleetRun`, `writeConnections`.
+
+`mockingbird.yaml` declarations: `parseDeclaration`, `checkDeclaration`, `DeclarationError`, `isDeclaration`, `declaredFleets`, `localFleetConfig`, `DURABILITY_MODES`, `ACCESS_MODES`, `CLOUD_SERVICE_KEYS`.
 
 ## Client transport and private settings
 

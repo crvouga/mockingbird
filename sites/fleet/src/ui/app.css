@@ -1,0 +1,1030 @@
+:root {
+  --bg: #ffffff;
+  --bg-subtle: #f6f8fa;
+  --bg-muted: #eaeef2;
+  --border: #d8dee4;
+  --border-strong: #8c959f;
+  --fg: #1f2328;
+  --fg-muted: #424a53;
+  --fg-subtle: #59636e;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-fg: #ffffff;
+  --accent-soft: #eff6ff;
+  --accent-ring: rgb(37 99 235 / 0.22);
+  --ok: #15803d;
+  --ok-soft: #e7f6ec;
+  --warn: #b45309;
+  --warn-soft: #fdf3e2;
+  --err: #c2255c;
+  --err-hover: #a61e4d;
+  --err-fg: #ffffff;
+  --err-soft: #fdecf2;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --radius: 6px;
+  /* Query screens read across; a mutation is one column the width of a form. */
+  --wide: 920px;
+  --narrow: 600px;
+  --gutter: 20px;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1117;
+    --bg-subtle: #161b22;
+    --bg-muted: #21262d;
+    --border: #30363d;
+    --border-strong: #6e7681;
+    --fg: #f0f3f6;
+    --fg-muted: #c9d1d9;
+    --fg-subtle: #9198a1;
+    --accent: #4c8dff;
+    --accent-hover: #6ea1ff;
+    --accent-fg: #0d1117;
+    --accent-soft: #14233f;
+    --accent-ring: rgb(76 141 255 / 0.3);
+    --ok: #4ac26b;
+    --ok-soft: #12261b;
+    --warn: #e3a341;
+    --warn-soft: #2b2111;
+    --err: #ff7b9c;
+    --err-hover: #ff9db5;
+    --err-fg: #0d1117;
+    --err-soft: #2d1620;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px / 1.5 var(--font-sans);
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+h1 {
+  font-size: 24px;
+  line-height: 1.25;
+}
+h2 {
+  font-size: 16px;
+}
+h3 {
+  font-size: 15px;
+}
+p,
+dl,
+dd,
+fieldset {
+  margin: 0;
+}
+code,
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.boot {
+  padding: 48px var(--gutter);
+  color: var(--fg-subtle);
+}
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+/* A heading takes the focus when the screen changes; it is not a control, so it shows no ring. */
+h1:focus {
+  outline: 0;
+}
+
+/* Shell */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 52px;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--border);
+}
+.brand {
+  font-weight: 650;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.brand span {
+  color: var(--fg-subtle);
+  font-weight: 450;
+}
+.topnav {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  align-items: center;
+}
+.navlink {
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.navlink:hover {
+  background: var(--bg-subtle);
+  text-decoration: none;
+}
+main {
+  max-width: var(--wide);
+  margin: 0 auto;
+  padding: 28px var(--gutter) 96px;
+}
+main.narrow {
+  max-width: var(--narrow);
+  padding-top: 36px;
+}
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  color: var(--fg-subtle);
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+.crumbs a {
+  color: var(--fg-subtle);
+}
+.crumbs .sep {
+  color: var(--border-strong);
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 24px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.head-text {
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.head-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.sub {
+  color: var(--fg-subtle);
+  margin-top: 4px;
+  max-width: 68ch;
+}
+.aside {
+  color: var(--fg-subtle);
+  font-weight: 400;
+  font-size: 12.5px;
+  margin-left: 8px;
+}
+.tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+.tabs a {
+  padding: 8px 12px;
+  color: var(--fg-subtle);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  white-space: nowrap;
+}
+.tabs a:hover {
+  color: var(--fg);
+  text-decoration: none;
+}
+.tabs a[aria-current] {
+  color: var(--fg);
+  border-color: var(--accent);
+  font-weight: 550;
+}
+section {
+  margin-bottom: 36px;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+section > h2 {
+  margin-bottom: 10px;
+}
+section > .sub {
+  margin: 0 0 12px;
+}
+section > p + p {
+  margin-top: 12px;
+}
+
+/* Settings as labelled values: the label, what it is now, and the link that changes it. */
+.props {
+  margin-bottom: 36px;
+  border-top: 1px solid var(--border);
+}
+.prop {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) auto;
+  gap: 4px 20px;
+  align-items: baseline;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+}
+.prop dt {
+  color: var(--fg-subtle);
+}
+.prop dd {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+}
+.prop-value {
+  min-width: 0;
+  flex: 0 1 auto;
+  overflow-wrap: anywhere;
+}
+.prop-value:has(.copy) {
+  flex: 1 1 100%;
+}
+.prop-about {
+  display: block;
+  color: var(--fg-subtle);
+  font-size: 13px;
+}
+.prop-change {
+  grid-column: 3;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+/* Lists */
+.list {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+.row:last-child {
+  border-bottom: 0;
+}
+a.row {
+  color: inherit;
+}
+a.row:hover {
+  background: var(--bg-subtle);
+  text-decoration: none;
+}
+a.row:focus-visible {
+  outline-offset: -2px;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+.title {
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.title .tag {
+  margin-left: 8px;
+  font-weight: 400;
+}
+.meta {
+  color: var(--fg-subtle);
+  font-size: 12.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Details that must stay readable on a narrow screen: wrap instead of cutting off. */
+.meta.wrap {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.meta code {
+  margin-right: 10px;
+}
+.chevron {
+  color: var(--border-strong);
+  font-size: 18px;
+  line-height: 1;
+}
+.row-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  align-items: baseline;
+  font-size: 13px;
+  white-space: nowrap;
+}
+a.danger,
+.linklike.danger {
+  color: var(--err);
+}
+.empty {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--fg-subtle);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+.empty strong {
+  display: block;
+  color: var(--fg);
+  margin-bottom: 4px;
+  font-weight: 550;
+}
+.tag {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--bg-muted);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.tag.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.tag.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* What the last mutation did, beside the thing it did it to. */
+.just-now {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--ok);
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.just-now::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateY(-1px);
+}
+.sub .just-now {
+  margin-left: 10px;
+}
+.removed {
+  margin: 0 0 10px;
+}
+.removed .just-now {
+  white-space: normal;
+}
+
+/* Controls */
+button,
+.button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+button:hover,
+.button:hover {
+  background: var(--bg-subtle);
+}
+a.button {
+  display: inline-block;
+}
+a.button:hover {
+  text-decoration: none;
+}
+.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+  font-weight: 550;
+}
+.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+.button.danger {
+  color: var(--err);
+}
+.button.danger:hover {
+  background: var(--err-soft);
+  border-color: var(--err);
+}
+.danger-solid {
+  background: var(--err);
+  border-color: var(--err);
+  color: var(--err-fg);
+  font-weight: 550;
+}
+.danger-solid:hover {
+  background: var(--err-hover);
+  border-color: var(--err-hover);
+}
+button.small {
+  padding: 3px 8px;
+  font-size: 12.5px;
+}
+button.linklike {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--accent);
+  font-size: inherit;
+}
+button.linklike:hover {
+  background: none;
+  text-decoration: underline;
+}
+button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+input,
+select {
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  padding: 7px 10px;
+  min-width: 0;
+  width: 100%;
+}
+input[type="radio"] {
+  width: auto;
+  padding: 0;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+}
+input:focus-visible,
+select:focus-visible {
+  outline: 0;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-ring);
+}
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+.search {
+  margin-bottom: 8px;
+}
+.tally {
+  margin: 0 0 12px;
+}
+
+/* Copyable values */
+.copy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 5px 6px 5px 10px;
+}
+.copy code {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notice {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  margin-bottom: 20px;
+}
+.notice.warn {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+/* What mockingbird.yaml controls: a fact about the screen, not a warning. */
+.notice.managed,
+.notice.prefer {
+  border-left: 3px solid var(--accent);
+  color: var(--fg-muted);
+}
+.notice strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.notice a {
+  white-space: nowrap;
+}
+.mutation-surface > .notice {
+  margin: 16px 0 0;
+}
+.mutation-surface > .props {
+  margin: 20px 0 0;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.head + .notice.prefer {
+  margin-top: -8px;
+}
+.empty span {
+  display: block;
+  max-width: 52ch;
+  margin: 0 auto;
+}
+.empty-action {
+  margin-top: 14px;
+}
+.empty-aside {
+  margin-top: 14px;
+  font-size: 13px;
+}
+
+/* Text to read or copy whole: a file, or commands. */
+.code {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-subtle);
+  overflow: hidden;
+}
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 5px 6px 5px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.code-label {
+  color: var(--fg-subtle);
+  font-size: 12.5px;
+  font-weight: 550;
+}
+.code-actions {
+  display: flex;
+  gap: 6px;
+}
+.code pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  line-height: 1.6;
+  tab-size: 2;
+}
+.code pre:focus-visible {
+  outline-offset: -2px;
+}
+.intro {
+  margin: 0 0 16px;
+}
+section > .sub.after {
+  margin: 12px 0;
+}
+.steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: grid;
+  gap: 24px;
+}
+.steps li {
+  counter-increment: step;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-left: 34px;
+  position: relative;
+}
+.steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--bg-muted);
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 22px;
+  text-align: center;
+}
+.steps p {
+  color: var(--fg-muted);
+  max-width: 68ch;
+}
+
+/* A screen-sized statement: not found, no access, not responding. */
+.statement h1 {
+  margin-bottom: 8px;
+}
+.statement p {
+  color: var(--fg-muted);
+  max-width: 60ch;
+}
+.statement-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 24px;
+}
+main[data-route="unavailable"],
+main[data-route="not-found"],
+main[data-route="forbidden"],
+main[data-route="gone"],
+main[data-route="managed"],
+main[data-route="error"] {
+  padding-top: 10vh;
+}
+
+/* Mutation screens: one form, one submit. */
+.lead {
+  color: var(--fg-muted);
+  margin-top: 10px;
+  max-width: 62ch;
+  font-size: 15px;
+}
+.lead code {
+  overflow-wrap: anywhere;
+}
+.is-danger .lead {
+  border-left: 3px solid var(--err);
+  padding-left: 12px;
+}
+form.mutation {
+  margin-top: 28px;
+  display: grid;
+  gap: 22px;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}
+.field > label,
+.field > legend {
+  font-weight: 600;
+  padding: 0;
+}
+.field > legend {
+  margin-bottom: 6px;
+}
+.hint {
+  color: var(--fg-subtle);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.choices > .hint {
+  margin-bottom: 4px;
+}
+.field-error {
+  color: var(--err);
+  font-size: 13px;
+  font-weight: 500;
+}
+.field-error:not(.emulator > *)::before {
+  content: "";
+  display: inline-block;
+  width: 3px;
+  height: 0.9em;
+  margin-right: 8px;
+  background: var(--err);
+  vertical-align: -1px;
+}
+[aria-invalid="true"]:not([type="radio"]) {
+  border-color: var(--err);
+}
+.choices:has([aria-invalid="true"]) .choice-list {
+  border-color: var(--err);
+}
+.choice-list {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.choice {
+  display: flex;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+}
+.choice:last-child {
+  border-bottom: 0;
+}
+.choice:hover {
+  background: var(--bg-subtle);
+}
+.choice:has(input:checked) {
+  background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.choice-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.choice-title {
+  font-weight: 550;
+}
+.choice-title .tag {
+  margin-left: 8px;
+  font-weight: 400;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+.choice-about {
+  color: var(--fg-subtle);
+  font-size: 13px;
+}
+.form-error {
+  border: 1px solid var(--err);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--err-soft);
+  padding: 10px 12px;
+}
+.form-error strong {
+  display: block;
+  color: var(--err);
+}
+.form-error ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 20px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+p.form-actions {
+  margin-top: 24px;
+}
+.form-actions button,
+.form-actions .button {
+  padding: 8px 16px;
+}
+.cancel {
+  color: var(--fg-muted);
+  padding: 8px 0;
+}
+button[data-pending]::before {
+  content: "";
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 8px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+/* A secret, shown once. */
+.secret {
+  margin: 24px 0 14px;
+}
+.secret .copy {
+  padding: 10px 10px 10px 14px;
+  border-color: var(--border-strong);
+}
+.secret .copy code {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+}
+
+/* Emulators of a fleet */
+.emulator {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+.emulator header {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+}
+.emulator .notice {
+  margin: 0;
+}
+.emulator .props {
+  margin: 0;
+  border-top: 0;
+}
+.emulator .prop {
+  padding: 0;
+  border-bottom: 0;
+  grid-template-columns: 100px minmax(0, 1fr) auto;
+}
+.emulator footer {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* Sign-in */
+.signin .lead {
+  margin-bottom: 24px;
+}
+.signin .sub {
+  margin: 0 0 12px;
+}
+.methods .row {
+  padding: 14px;
+}
+
+/* API reference */
+.op {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.op:last-child {
+  border-bottom: 0;
+}
+.op code {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.op .method {
+  font: 600 11.5px var(--font-mono);
+  width: 52px;
+  flex: none;
+}
+.op .GET {
+  color: var(--ok);
+}
+.op .POST {
+  color: var(--accent);
+}
+.op .PUT,
+.op .PATCH {
+  color: var(--warn);
+}
+.op .DELETE {
+  color: var(--err);
+}
+.op .summary {
+  color: var(--fg-subtle);
+  margin-left: auto;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  :root {
+    --gutter: 16px;
+  }
+  h1 {
+    font-size: 21px;
+  }
+  main,
+  main.narrow {
+    padding-top: 20px;
+  }
+  /* Phones zoom into a field whose text is smaller than 16px. */
+  input,
+  select {
+    font-size: 16px;
+  }
+  .head-actions .button {
+    padding: 8px 14px;
+  }
+  .prop,
+  .emulator .prop {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .prop dt {
+    grid-column: 1;
+    font-size: 12.5px;
+  }
+  .prop dd:not(.prop-change) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  .prop-change {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  /* A row's links move under what they act on, each a comfortable target. */
+  .row:not(a) {
+    flex-wrap: wrap;
+  }
+  .row .row-links {
+    flex: 1 1 100%;
+    gap: 4px 20px;
+  }
+  .row-links a,
+  .row-links button {
+    padding: 6px 0;
+  }
+  .form-actions button {
+    flex: 1 1 100%;
+    padding: 11px 16px;
+  }
+  .form-actions .cancel {
+    flex: 1 1 100%;
+    text-align: center;
+  }
+  .steps li {
+    padding-left: 0;
+  }
+  .steps li::before {
+    position: static;
+    justify-self: start;
+  }
+  .op {
+    flex-wrap: wrap;
+  }
+  .op .summary {
+    margin-left: 62px;
+    text-align: left;
+    width: 100%;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  button,
+  .button,
+  a.row,
+  .tabs a,
+  .choice {
+    transition:
+      background-color 0.12s,
+      border-color 0.12s,
+      color 0.12s;
+  }
+  button[data-pending]::before {
+    animation: spin 0.8s linear infinite;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

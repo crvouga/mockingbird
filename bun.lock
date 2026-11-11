@@ -75,6 +75,9 @@
       "bin": {
         "mockingbird-fleet": "./dist/cli.js",
       },
+      "dependencies": {
+        "yaml": "2.9.0",
+      },
       "devDependencies": {
         "@crvouga/mockingbird-adapter-node": "workspace:*",
         "@crvouga/mockingbird-service-cognito": "workspace:*",
@@ -3852,6 +3855,148 @@
         "typescript": "5.9.3",
       },
     },
+    "sites/fleet": {
+      "name": "@crvouga/mockingbird-fleet-cloud",
+      "dependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-acm": "workspace:*",
+        "@crvouga/mockingbird-service-aha": "workspace:*",
+        "@crvouga/mockingbird-service-airtable": "workspace:*",
+        "@crvouga/mockingbird-service-apigateway": "workspace:*",
+        "@crvouga/mockingbird-service-app-store-connect": "workspace:*",
+        "@crvouga/mockingbird-service-apple": "workspace:*",
+        "@crvouga/mockingbird-service-aws": "workspace:*",
+        "@crvouga/mockingbird-service-aws-iot": "workspace:*",
+        "@crvouga/mockingbird-service-aws-secrets": "workspace:*",
+        "@crvouga/mockingbird-service-aws-speech": "workspace:*",
+        "@crvouga/mockingbird-service-bedrock": "workspace:*",
+        "@crvouga/mockingbird-service-brevo": "workspace:*",
+        "@crvouga/mockingbird-service-caretalk": "workspace:*",
+        "@crvouga/mockingbird-service-checkr": "workspace:*",
+        "@crvouga/mockingbird-service-clerk": "workspace:*",
+        "@crvouga/mockingbird-service-cloudcontrol": "workspace:*",
+        "@crvouga/mockingbird-service-cloudformation": "workspace:*",
+        "@crvouga/mockingbird-service-cloudwatch": "workspace:*",
+        "@crvouga/mockingbird-service-cloudwatch-logs": "workspace:*",
+        "@crvouga/mockingbird-service-cognito": "workspace:*",
+        "@crvouga/mockingbird-service-config": "workspace:*",
+        "@crvouga/mockingbird-service-customerio": "workspace:*",
+        "@crvouga/mockingbird-service-daily": "workspace:*",
+        "@crvouga/mockingbird-service-docker": "workspace:*",
+        "@crvouga/mockingbird-service-dynamodb": "workspace:*",
+        "@crvouga/mockingbird-service-dynamodb-streams": "workspace:*",
+        "@crvouga/mockingbird-service-easypost": "workspace:*",
+        "@crvouga/mockingbird-service-ec2": "workspace:*",
+        "@crvouga/mockingbird-service-ecs": "workspace:*",
+        "@crvouga/mockingbird-service-edamam": "workspace:*",
+        "@crvouga/mockingbird-service-elasticsearch": "workspace:*",
+        "@crvouga/mockingbird-service-elevenlabs": "workspace:*",
+        "@crvouga/mockingbird-service-emqx": "workspace:*",
+        "@crvouga/mockingbird-service-eventbridge": "workspace:*",
+        "@crvouga/mockingbird-service-fcm": "workspace:*",
+        "@crvouga/mockingbird-service-firehose": "workspace:*",
+        "@crvouga/mockingbird-service-firstpromoter": "workspace:*",
+        "@crvouga/mockingbird-service-fitbit": "workspace:*",
+        "@crvouga/mockingbird-service-flex": "workspace:*",
+        "@crvouga/mockingbird-service-formbricks": "workspace:*",
+        "@crvouga/mockingbird-service-fullscript": "workspace:*",
+        "@crvouga/mockingbird-service-garmin-health": "workspace:*",
+        "@crvouga/mockingbird-service-genebygene": "workspace:*",
+        "@crvouga/mockingbird-service-github": "workspace:*",
+        "@crvouga/mockingbird-service-google": "workspace:*",
+        "@crvouga/mockingbird-service-google-ads": "workspace:*",
+        "@crvouga/mockingbird-service-google-calendar": "workspace:*",
+        "@crvouga/mockingbird-service-google-maps": "workspace:*",
+        "@crvouga/mockingbird-service-healthie": "workspace:*",
+        "@crvouga/mockingbird-service-hermes": "workspace:*",
+        "@crvouga/mockingbird-service-iam": "workspace:*",
+        "@crvouga/mockingbird-service-infisical": "workspace:*",
+        "@crvouga/mockingbird-service-intercom": "workspace:*",
+        "@crvouga/mockingbird-service-junction": "workspace:*",
+        "@crvouga/mockingbird-service-kill-bill": "workspace:*",
+        "@crvouga/mockingbird-service-kinesis": "workspace:*",
+        "@crvouga/mockingbird-service-klaviyo": "workspace:*",
+        "@crvouga/mockingbird-service-kms": "workspace:*",
+        "@crvouga/mockingbird-service-lambda": "workspace:*",
+        "@crvouga/mockingbird-service-lifefile": "workspace:*",
+        "@crvouga/mockingbird-service-linear": "workspace:*",
+        "@crvouga/mockingbird-service-livekit": "workspace:*",
+        "@crvouga/mockingbird-service-llamacloud": "workspace:*",
+        "@crvouga/mockingbird-service-mailosaur": "workspace:*",
+        "@crvouga/mockingbird-service-mediaconvert": "workspace:*",
+        "@crvouga/mockingbird-service-medplum": "workspace:*",
+        "@crvouga/mockingbird-service-meta": "workspace:*",
+        "@crvouga/mockingbird-service-microsoft": "workspace:*",
+        "@crvouga/mockingbird-service-mongoatlas": "workspace:*",
+        "@crvouga/mockingbird-service-notion": "workspace:*",
+        "@crvouga/mockingbird-service-oauth": "workspace:*",
+        "@crvouga/mockingbird-service-odx": "workspace:*",
+        "@crvouga/mockingbird-service-okta": "workspace:*",
+        "@crvouga/mockingbird-service-openai": "workspace:*",
+        "@crvouga/mockingbird-service-opensearch": "workspace:*",
+        "@crvouga/mockingbird-service-otel": "workspace:*",
+        "@crvouga/mockingbird-service-oura": "workspace:*",
+        "@crvouga/mockingbird-service-paddle": "workspace:*",
+        "@crvouga/mockingbird-service-payload-cms": "workspace:*",
+        "@crvouga/mockingbird-service-persona": "workspace:*",
+        "@crvouga/mockingbird-service-pharmetika": "workspace:*",
+        "@crvouga/mockingbird-service-plane": "workspace:*",
+        "@crvouga/mockingbird-service-polar": "workspace:*",
+        "@crvouga/mockingbird-service-posthog": "workspace:*",
+        "@crvouga/mockingbird-service-prism": "workspace:*",
+        "@crvouga/mockingbird-service-recaptcha": "workspace:*",
+        "@crvouga/mockingbird-service-redshift": "workspace:*",
+        "@crvouga/mockingbird-service-resend": "workspace:*",
+        "@crvouga/mockingbird-service-resource-groups": "workspace:*",
+        "@crvouga/mockingbird-service-resource-groups-tagging-api": "workspace:*",
+        "@crvouga/mockingbird-service-route53": "workspace:*",
+        "@crvouga/mockingbird-service-route53resolver": "workspace:*",
+        "@crvouga/mockingbird-service-rxvortex": "workspace:*",
+        "@crvouga/mockingbird-service-s3": "workspace:*",
+        "@crvouga/mockingbird-service-s3-control": "workspace:*",
+        "@crvouga/mockingbird-service-scheduler": "workspace:*",
+        "@crvouga/mockingbird-service-sentry": "workspace:*",
+        "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-slack": "workspace:*",
+        "@crvouga/mockingbird-service-sns": "workspace:*",
+        "@crvouga/mockingbird-service-sqs": "workspace:*",
+        "@crvouga/mockingbird-service-ssm": "workspace:*",
+        "@crvouga/mockingbird-service-step-functions": "workspace:*",
+        "@crvouga/mockingbird-service-stripe": "workspace:*",
+        "@crvouga/mockingbird-service-sts": "workspace:*",
+        "@crvouga/mockingbird-service-support": "workspace:*",
+        "@crvouga/mockingbird-service-suunto": "workspace:*",
+        "@crvouga/mockingbird-service-swf": "workspace:*",
+        "@crvouga/mockingbird-service-tavily": "workspace:*",
+        "@crvouga/mockingbird-service-tempo": "workspace:*",
+        "@crvouga/mockingbird-service-textract": "workspace:*",
+        "@crvouga/mockingbird-service-turnstile": "workspace:*",
+        "@crvouga/mockingbird-service-twilio": "workspace:*",
+        "@crvouga/mockingbird-service-unsplash": "workspace:*",
+        "@crvouga/mockingbird-service-vanta": "workspace:*",
+        "@crvouga/mockingbird-service-vercel": "workspace:*",
+        "@crvouga/mockingbird-service-vercel-blob": "workspace:*",
+        "@crvouga/mockingbird-service-vibe": "workspace:*",
+        "@crvouga/mockingbird-service-vpi": "workspace:*",
+        "@crvouga/mockingbird-service-wholescripts": "workspace:*",
+        "@crvouga/mockingbird-service-whoop": "workspace:*",
+        "@crvouga/mockingbird-service-workos": "workspace:*",
+        "jose": "6.2.2",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-fleet": "workspace:*",
+        "@crvouga/mockingbird-service-postgres": "workspace:*",
+        "@playwright/test": "1.65.0",
+        "@storybook/html-vite": "10.6.6",
+        "@types/bun": "1.4.0",
+        "embedded-postgres": "18.3.0-beta.17",
+        "playwright-bdd": "9.2.1",
+        "storybook": "10.6.6",
+        "typescript": "5.9.3",
+        "vite": "8.3.7",
+      },
+    },
   },
   "trustedDependencies": [
     "@embedded-postgres/darwin-x64",
@@ -4286,6 +4431,8 @@
 
     "@crvouga/mockingbird-fleet": ["@crvouga/mockingbird-fleet@workspace:packages/adapters/fleet"],
 
+    "@crvouga/mockingbird-fleet-cloud": ["@crvouga/mockingbird-fleet-cloud@workspace:sites/fleet"],
+
     "@crvouga/mockingbird-http-codec": ["@crvouga/mockingbird-http-codec@workspace:packages/http/codec"],
 
     "@crvouga/mockingbird-http-provider": ["@crvouga/mockingbird-http-provider@workspace:packages/http/provider"],
@@ -4572,27 +4719,45 @@
 
     "@cspotcode/source-map-support": ["@cspotcode/source-map-support@0.8.1", "", { "dependencies": { "@jridgewell/trace-mapping": "0.3.9" } }, "sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw=="],
 
+    "@cucumber/ci-environment": ["@cucumber/ci-environment@13.0.0", "", {}, "sha512-cs+3NzfNkGbcmHPddjEv4TKFiBpZRQ6WJEEufB9mw+ExS22V/4R/zpDSEG+fsJ/iSNCd6A2sATdY8PFOyY3YnA=="],
+
+    "@cucumber/cucumber-expressions": ["@cucumber/cucumber-expressions@19.0.0", "", { "dependencies": { "regexp-match-indices": "1.0.2" } }, "sha512-4FKoOQh2Uf6F6/Ln+1OxuK8LkTg6PyAqekhf2Ix8zqV2M54sH+m7XNJNLhOFOAW/t9nxzRbw2CcvXbCLjcvHZg=="],
+
+    "@cucumber/gherkin": ["@cucumber/gherkin@39.1.0", "", { "dependencies": { "@cucumber/messages": ">=31.0.0 <33" } }, "sha512-pqmSO2bUWxJm3TbNrKXlDaHjL6c77+ez9kWmfCd9oRPeTRPEVH3spZvpAqdXYWOZYSNYwWFCAAeZ4RGpkauNoQ=="],
+
+    "@cucumber/gherkin-utils": ["@cucumber/gherkin-utils@11.0.0", "", { "dependencies": { "@cucumber/gherkin": "^38.0.0", "@cucumber/messages": "^32.0.0", "@teppeis/multimaps": "3.0.0", "commander": "14.0.2", "source-map-support": "^0.5.21" }, "bin": { "gherkin-utils": "bin/gherkin-utils" } }, "sha512-LJ+s4+TepHTgdKWDR4zbPyT7rQjmYIcukTwNbwNwgqr6i8Gjcmzf6NmtbYDA19m1ZFg6kWbFsmHnj37ZuX+kZA=="],
+
+    "@cucumber/html-formatter": ["@cucumber/html-formatter@23.1.0", "", { "peerDependencies": { "@cucumber/messages": ">=18" } }, "sha512-DcCSFoGs6jbwzXPgX1CwgJKEE+ZMcIEzq/0Memg0o24maNn9NJizBFHmoFWG4iv/OxHza+mvc+56cTHetfHndw=="],
+
+    "@cucumber/junit-xml-formatter": ["@cucumber/junit-xml-formatter@0.13.3", "", { "dependencies": { "@cucumber/query": "^15.0.1", "@teppeis/multimaps": "^3.0.0", "luxon": "^3.5.0", "xmlbuilder": "^15.1.1" }, "peerDependencies": { "@cucumber/messages": "*" } }, "sha512-w9ujOxiuKDtU6fLzJz+wp4Sgp5Xu6ba7ls00LHJccVmQU0Ba7zs+AHnv3iIgPjKZAQe1w8x93dr8Gaubh7Vqkg=="],
+
+    "@cucumber/messages": ["@cucumber/messages@32.3.1", "", { "dependencies": { "class-transformer": "0.5.1", "reflect-metadata": "0.2.2" } }, "sha512-yNQq1KoXRYaEKrWMFmpUQX7TdeQuU9jeGgJAZ3dArTsC/T4NpJ6DnqaJIIgwPnz/wtQIQTNX7/h0rOuF5xY4qQ=="],
+
+    "@cucumber/query": ["@cucumber/query@15.0.1", "", { "dependencies": { "@teppeis/multimaps": "3.0.0", "lodash.sortby": "^4.7.0" }, "peerDependencies": { "@cucumber/messages": "*" } }, "sha512-FMfT3orJblRsOxvU2doECBvQmauizYlj+5JsM8atAKKPbnQTj7v2/OrnuykvQpfZNBf19DYbRq1e832vllRP/g=="],
+
+    "@cucumber/tag-expressions": ["@cucumber/tag-expressions@9.1.0", "", {}, "sha512-bvHjcRFZ+J1TqIa9eFNO1wGHqwx4V9ZKV3hYgkuK/VahHx73uiP4rKV3JVrvWSMrwrFvJG6C8aEwnCWSvbyFdQ=="],
+
     "@customerio/cdp-analytics-core": ["@customerio/cdp-analytics-core@0.5.6", "", { "dependencies": { "@lukeed/uuid": "^2.0.0", "dset": "^3.1.2", "tslib": "^2.4.1" } }, "sha512-QhDMFIq8/980q31VeP2S8AT/cCw2paVDBirORoB3qn9kyCfTy6c/wh02xqLbaItsA9mv+yZPCP7NBr7ssptIIA=="],
 
     "@customerio/cdp-analytics-node": ["@customerio/cdp-analytics-node@0.5.6", "", { "dependencies": { "@customerio/cdp-analytics-core": "0.5.6", "@lukeed/uuid": "^2.0.0", "buffer": "^6.0.3", "node-fetch": "^2.6.7", "tslib": "^2.4.1", "uuid": "^9.0.0" } }, "sha512-ev0Dsx66zDpISEZPKM/zverIRFOjYbrt5oP6NRATu9HnqAnUvoVMdeuoTk1oI0kDHYiHs8rtnlGWFITOc0fDBg=="],
 
     "@electric-sql/pglite": ["@electric-sql/pglite@0.5.8", "", {}, "sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q=="],
 
-    "@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-CB1DFZ08zfmNapx231rAJW74UZfs1jQmeGLwbQSaAIRVs2uqEdMhVNLwVlztFG3ZPSeuCsgTn/0yeYDmKF67og=="],
+    "@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Pvrej3Xz5flfyVc9mchVfekrKoTJyvPtM3U0vjuXamZkRKmi+inP2zRmnmzYecIVbr7Zhu82xbsCENMXrwMp9Q=="],
 
-    "@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-zikibpPYGWokfT/OFWNHCwerA3ZGat0ZyCIXOIbIucLBMDHztQ2WZQ9R5zil6oOxzElrMz2Q4aEOssGNrMDdyg=="],
+    "@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-MVWe+C47pPoMD9LlIWGQkvZ5Xsu3IBo54CYqnIps/Z1byMIUBNc7y/dZ3mfqEwiCbVDVqirG0CU462xnrSEfKA=="],
 
-    "@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-N+ktKhkTHuRe/mobk0+OBISje3M6ht4dloSm7zNwpy/hzkZTiB6m1fE0P2lllnob4jbFIbrA3nTvlY4yfe4E6w=="],
+    "@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-Y2vw7p80PO/Ko7CDm8CCpStnNfMe+oc11e0WZtqAVRjxO6H0oic/ehULhUsWU3mZm5jq7wQAv37VMzf4JN+SFQ=="],
 
-    "@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-LNT9TXoOGR/RSop1PewcMtpuf1Dtg6sKU7sFA1ODqInRA8NoP15HyLekUHW5aWnruu4yfs1pcy6DaV39T556mQ=="],
+    "@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-hXp7yHJHYWkdjkgF6As8whEHbdYxhBdmXeLpLTw0aiac0O6+0Cbqk3cOR9U+e49oyIpElHVwZUo6OewquSRhSg=="],
 
-    "@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@16.14.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-SC2hO6hlc8zlC1z2eOMNMACXAKV93QYyLq5JMrwRfjGkl3wbc4kUm3TmKl1SjWBX1x+qAZbMTt72yv+KED5Mvw=="],
+    "@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@18.3.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-hVUOM+7QxkzAIdN3gewfVwL1EpJIx+0qUiNTD8cMqRtaZyU87e4AFIvBS0UiDJ9xzMTVWr/X24wePtbvIbkopg=="],
 
-    "@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@16.14.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-paVxxVlr7g6AZxCISk9AGNB3zc3c6qKAEzlisrJXlt5Jw1qalxNyKpfkUahDR9qbk+zGnL54PjEQDSUuomHx/g=="],
+    "@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@18.3.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-p3/u4YUqSdE2CKUBlC84JGZCi6RnE1fyeLPIIVy2DJUiKtExR5rE3OpDJcVoN40uecYGL+nR4qFocGzDwG1TBw=="],
 
-    "@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@16.14.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8fr7hEiI7XlbPDPsLZJ4RU1NR6jTIDWpf81Sfiwk3T845V0yJJGxjawjkQZmIWVgPW/qY/dMSv0o08FRWJ/zsg=="],
+    "@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@18.3.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8orSD6NNopSLtjqir4dWQBrj+g8j1eJjWd9mB60A3xbWMzIBIPQpzT7XzbacW9YFSl/DejOLnRXfff+Wr13Tgw=="],
 
-    "@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@16.14.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-Wn4nuAT1H7SIJuLWPs+C1aSdZKpbTloCr0Xaozdfg956lUVvv3iHv6K8Lsc+xmtt1qQpTno3PJLqAgzJ/lg60Q=="],
+    "@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@18.3.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-kDC5aBsmhWDjeQjj2V4g+Bk+pMeDU27b7l0rBbaKgtt2gsNmCB34ULg/5cqs2kqUKSk/tiGMHKCNE+zQZ+s4rg=="],
 
     "@emnapi/core": ["@emnapi/core@1.9.2", "", { "dependencies": { "@emnapi/wasi-threads": "1.2.1", "tslib": "^2.4.0" } }, "sha512-UC+ZhH3XtczQYfOlu3lNEkdW/p4dsJ1r/bP7H8+rhao3TTTMO1ATq/4DdIi23XuGoFY+Cz0JmCbdVl0hz9jZcA=="],
 
@@ -5340,6 +5505,8 @@
 
     "@swc/helpers": ["@swc/helpers@0.5.15", "", { "dependencies": { "tslib": "^2.8.0" } }, "sha512-JQ5TuMi45Owi4/BIMAJBoSQoOJu12oOk/gADqlcUL9JEdHB8vyjUSsxqeNXnmXHjYKMi2WcYtezGEEhqUI/E2g=="],
 
+    "@teppeis/multimaps": ["@teppeis/multimaps@3.0.0", "", {}, "sha512-ID7fosbc50TbT0MK0EG12O+gAP3W3Aa/Pz4DaTtQtEvlc9Odaqi0de+xuZ7Li2GtK4HzEX7IuRWS/JmZLksR3Q=="],
+
     "@testing-library/dom": ["@testing-library/dom@10.4.2", "", { "dependencies": { "@babel/code-frame": "^7.10.4", "@babel/runtime": "^7.12.5", "@types/aria-query": "^5.0.1", "aria-query": "5.3.0", "dom-accessibility-api": "^0.5.9", "lz-string": "^1.5.0", "picocolors": "1.1.1", "pretty-format": "^27.0.2" } }, "sha512-yzr2S9HyAIdhz2/6qHgbs665Q7PKVcDF05vsOlHPxG1mo36gKVesdYVeDLnXgfjJ03CrKRk08knc6+E/9m8v2Q=="],
 
     "@testing-library/jest-dom": ["@testing-library/jest-dom@6.9.1", "", { "dependencies": { "@adobe/css-tools": "^4.4.0", "aria-query": "^5.0.0", "css.escape": "^1.5.1", "dom-accessibility-api": "^0.6.3", "picocolors": "^1.1.1", "redent": "^3.0.0" } }, "sha512-zIcONa+hVtVSSep9UT3jZ5rizo2BsxgyDYU7WFD5eICBE7no3881HGeb/QkGfsJs6JTkY1aQhT7rIPC7e+0nnA=="],
@@ -5640,6 +5807,8 @@
 
     "cjs-module-lexer": ["cjs-module-lexer@1.4.3", "", {}, "sha512-9z8TZaGM1pfswYeXrUpzPrkx8UnWYdhJclsiYMm6x/w5+nN+8Tf/LnAgfLGQCm59qAOxU8WwHEq2vNwF6i4j+Q=="],
 
+    "class-transformer": ["class-transformer@0.5.1", "", {}, "sha512-SQa1Ws6hUbfC98vKGxZH3KFY0Y1lm5Zm0SY8XX9zbK7FJCyVEac3ATW0RIpwzW+oOfmHE5PMPufDG9hCfoEOMw=="],
+
     "cli-highlight": ["cli-highlight@2.1.11", "", { "dependencies": { "chalk": "^4.0.0", "highlight.js": "^10.7.1", "mz": "^2.4.0", "parse5": "^5.1.1", "parse5-htmlparser2-tree-adapter": "^6.0.0", "yargs": "^16.0.0" }, "bin": { "highlight": "bin/highlight" } }, "sha512-9KDcoEVwyUXrjcJNvHD0NFc/hiwe/WPVYIleQh2O1N2Zro5gWJZ/K+3DGn8w8P/F6FxOgzyC5bxDyHIgCSPhGg=="],
 
     "cli-table3": ["cli-table3@0.6.5", "", { "dependencies": { "string-width": "^4.2.0" }, "optionalDependencies": { "@colors/colors": "1.5.0" } }, "sha512-+W/5efTR7y5HRD7gACw9yQjqMVvEMLBHmboM/kPWam+H+Hmyrgjh6YncVKK122YZkXrLudzTuAukUw9FnMf7IQ=="],
@@ -5802,7 +5971,7 @@
 
     "electron-to-chromium": ["electron-to-chromium@1.5.433", "", {}, "sha512-5lCAbyZBjtmUt/RAGHRqrL2q0oEFRThDAsZHHDn9XHa89Qw7gMYOeSicBTy+AHfvo0r6vwsZvqNJTQIQy1BLzA=="],
 
-    "embedded-postgres": ["embedded-postgres@16.14.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^16.14.0-beta.17", "@embedded-postgres/darwin-x64": "^16.14.0-beta.17", "@embedded-postgres/linux-arm": "^16.14.0-beta.17", "@embedded-postgres/linux-arm64": "^16.14.0-beta.17", "@embedded-postgres/linux-ia32": "^16.14.0-beta.17", "@embedded-postgres/linux-ppc64": "^16.14.0-beta.17", "@embedded-postgres/linux-x64": "^16.14.0-beta.17", "@embedded-postgres/windows-x64": "^16.14.0-beta.17" } }, "sha512-nMz+FokxBkEDcK3XUxTR0Jo2SGBj5mgLm2/wmGV6iIu0+3z44pNCCr6PCdu+dS/JxTCjVVV4tYmgRf7jamJS7Q=="],
+    "embedded-postgres": ["embedded-postgres@18.3.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^18.3.0-beta.17", "@embedded-postgres/darwin-x64": "^18.3.0-beta.17", "@embedded-postgres/linux-arm": "^18.3.0-beta.17", "@embedded-postgres/linux-arm64": "^18.3.0-beta.17", "@embedded-postgres/linux-ia32": "^18.3.0-beta.17", "@embedded-postgres/linux-ppc64": "^18.3.0-beta.17", "@embedded-postgres/linux-x64": "^18.3.0-beta.17", "@embedded-postgres/windows-x64": "^18.3.0-beta.17" } }, "sha512-1biFWyuPVtAV5S9RBgcr4PGuAdNL9WhnNZVQ5Arp3gsB24Ci9X9s/8Z7RFYFSc6tJWcj9kzF55YcDAcr3jLUbQ=="],
 
     "emoji-regex": ["emoji-regex@8.0.0", "", {}, "sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A=="],
 
@@ -5993,8 +6162,6 @@
     "graceful-fs": ["graceful-fs@4.2.11", "", {}, "sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ=="],
 
     "graphql": ["graphql@17.0.0", "", {}, "sha512-RSEgqrRNqHVGa46w2pmL9uTFkYPJiJbD5kksOvOaPLrKvBIidX/ttQVlWsR3+Ee8l+mNroC6darpcPIZeElbNg=="],
-
-    "graphql-request": ["graphql-request@7.2.0", "", { "dependencies": { "@graphql-typed-document-node/core": "^3.2.0" }, "peerDependencies": { "graphql": "14 - 16" } }, "sha512-0GR7eQHBFYz372u9lxS16cOtEekFlZYB2qOyq8wDvzRmdRSJ0mgUVX1tzNcIzk3G+4NY+mGtSz411wZdeDF/+A=="],
 
     "gtoken": ["gtoken@7.1.0", "", { "dependencies": { "gaxios": "^6.0.0", "jws": "^4.0.0" } }, "sha512-pCcEwRi+TKpMlxAQObHDQ56KawURgyAf6jtIY046fJ5tIv3zDe/LEIubckAO8fj6JnAxLdmWkUfNyulQ2iKdEw=="],
 
@@ -6262,6 +6429,8 @@
 
     "lodash.snakecase": ["lodash.snakecase@4.1.1", "", {}, "sha512-QZ1d4xoBHYUeuouhEq3lk3Uq7ldgyFXGBhg04+oRLnIz8o9T65Eh+8YdroUwn846zchkA9yDsDl5CVVaV2nqYw=="],
 
+    "lodash.sortby": ["lodash.sortby@4.7.0", "", {}, "sha512-HDWXG8isMntAyRF5vZ7xKuEvOhT4AhlRt/3czTSjvGUxjYCBVRQY48ViDHyfYz9VIoBkW4TMGQNapx+l3RUwdA=="],
+
     "lodash.startcase": ["lodash.startcase@4.4.0", "", {}, "sha512-+WKqsK294HMSc2jEbNgpHpd0JfIBhp7rEV4aqXWqFr6AlXov+SlcgB1Fv01y2kGe3Gc8nMW7VA0SrGuSkRfIEg=="],
 
     "lodash.throttle": ["lodash.throttle@4.1.1", "", {}, "sha512-wIkUCfVKpVsWo3JSZlc+8MB5it+2AN5W8J7YVMST30UrvcQNZ1Okbj+rbVniijTWE6FGYy4XJq/rHkas8qJMLQ=="],
@@ -6291,8 +6460,6 @@
     "mailosaur": ["mailosaur@11.1.0", "", { "dependencies": { "https-proxy-agent": "^7.0.6" }, "peerDependencies": { "@types/node": ">=16" }, "optionalPeers": ["@types/node"] }, "sha512-6Yf9dohDbXddOBDLm5x1vcCjaUWMYQbqe0CSgWj2I2mhQppAqhbGxJ0v06QVCpP6oqh4hXSZCSWilY/bvsb8VA=="],
 
     "marked": ["marked@18.0.13", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-xTxVzZsBFwunP6HDmtBkabUQEYArnP7/rMDGmPj9SlrKlQ4i8MdYVow+nJL0eOqwpUqhzBoTBRADGN6uYwPyOw=="],
-
-    "marked-terminal": ["marked-terminal@7.3.0", "", { "dependencies": { "ansi-escapes": "^7.0.0", "ansi-regex": "^6.1.0", "chalk": "^5.4.1", "cli-highlight": "^2.1.11", "cli-table3": "^0.6.5", "node-emoji": "^2.2.0", "supports-hyperlinks": "^3.1.0" }, "peerDependencies": { "marked": ">=1 <16" } }, "sha512-t4rBvPsHc57uE/2nJOLmMbZCQ4tgAccAED3ngXQqW6g+TxA488JzJ+FK3lQkzBQOI1mRV/r/Kq+1ZlJ4D0owQw=="],
 
     "marky": ["marky@1.3.0", "", {}, "sha512-ocnPZQLNpvbedwTy9kNrQEsknEfgvcLMvOtz3sFeWApDq1MXH1TqkCIx58xlpESsfwQOnuBO9beyQuNGzVvuhQ=="],
 
@@ -6540,6 +6707,8 @@
 
     "playwright": ["playwright@1.65.0", "", { "dependencies": { "playwright-core": "1.65.0" }, "bin": { "playwright": "cli.js" } }, "sha512-F3AMWcR44qMBt4kq+6Kb6mX7bjGXshktKFOPULd7reED6ZJWevjbNRqysP7q+AATE9kdPEZBibex1BYsvpVoeA=="],
 
+    "playwright-bdd": ["playwright-bdd@9.2.1", "", { "dependencies": { "@cucumber/ci-environment": "^13.0.0", "@cucumber/cucumber-expressions": "19.0.0", "@cucumber/gherkin": "^39.1.0", "@cucumber/gherkin-utils": "^11.0.0", "@cucumber/html-formatter": "^23.1.0", "@cucumber/junit-xml-formatter": "^0.13.3", "@cucumber/messages": "^32.3.1", "@cucumber/query": "^15.0.1", "@cucumber/tag-expressions": "^9.1.0", "cli-table3": "0.6.5", "commander": "^13.1.0", "mime-types": "^3.0.2", "tinyglobby": "0.2.17" }, "peerDependencies": { "@playwright/test": ">=1.44" }, "bin": { "bddgen": "dist/cli/index.js" } }, "sha512-gi7LTeat3ar1mPO53UBqQIv0HYHaw+GXq7P3stxGLPVlRpbW1ZmWre/yQBV/mtInJgEmKwBrJ/V1zT8NmJOuzg=="],
+
     "playwright-core": ["playwright-core@1.65.0", "", { "bin": { "playwright-core": "cli.js" } }, "sha512-vNSKgH6YqtN7cdT/L334zo0a+YwkrpicyrHJlWWPIm/Q+Nn2SWInil01oT0mbu96U4GgoRtCYQD9CzJQgju+lA=="],
 
     "possible-typed-array-names": ["possible-typed-array-names@1.1.0", "", {}, "sha512-/+5VFTchJDoVj3bhoqi6UeymcD00DAwb1nJwamzPvHEszJ4FpF6SNNbUbOS8yI56qHzdV8eK0qEfOSiodkTdxg=="],
@@ -6636,6 +6805,8 @@
 
     "redis-parser": ["redis-parser@3.0.0", "", { "dependencies": { "redis-errors": "^1.0.0" } }, "sha512-DJnGAeenTdpMEH6uAJRK/uiyEIH9WVsUmoLwzudwGJUwZPp80PDBWPHXSAGNPwNvIXAbe7MSUB1zQFugFml66A=="],
 
+    "reflect-metadata": ["reflect-metadata@0.2.2", "", {}, "sha512-urBwgfrvVP/eAyXx4hluJivBKzuEbSQs9rKWCrCkbSxNv8mxPcUZKeuoF3Uy4mJl3Lwprp6yy5/39VWigZ4K6Q=="],
+
     "regenerator-runtime": ["regenerator-runtime@0.13.11", "", {}, "sha512-kY1AZVr2Ra+t+piVaJ4gxaFaReZVH40AKNo7UCX6W+dEwBo/2oZJzqfuN1qLq1oL45o56cPaTXELwrTh8Fpggg=="],
 
     "regex": ["regex@6.1.0", "", { "dependencies": { "regex-utilities": "^2.3.0" } }, "sha512-6VwtthbV4o/7+OaAF9I5L5V3llLEsoPyq9P1JVXkedTP33c7MfCG0/5NOPcSJn0TzXcG9YUrR0gQSWioew3LDg=="],
@@ -6643,6 +6814,10 @@
     "regex-recursion": ["regex-recursion@6.0.2", "", { "dependencies": { "regex-utilities": "^2.3.0" } }, "sha512-0YCaSCq2VRIebiaUviZNs0cBz1kg5kVS2UKUfNIx8YVs1cN3AV7NTctO5FOKBA+UT2BPJIWZauYHPqJODG50cg=="],
 
     "regex-utilities": ["regex-utilities@2.3.0", "", {}, "sha512-8VhliFJAWRaUiVvREIiW2NXXTmHs4vMNnSzuJVhscgmGav3g9VDxLrQndI3dZZVVdp0ZO/5v0xmX516/7M9cng=="],
+
+    "regexp-match-indices": ["regexp-match-indices@1.0.2", "", { "dependencies": { "regexp-tree": "^0.1.11" } }, "sha512-DwZuAkt8NF5mKwGGER1EGh2PRqyvhRhhLviH+R8y8dIuaQROlUfXjt4s9ZTXstIsSkptf06BSvwcEmmfheJJWQ=="],
+
+    "regexp-tree": ["regexp-tree@0.1.27", "", { "bin": { "regexp-tree": "bin/regexp-tree" } }, "sha512-iETxpjK6YoRWJG5o6hXLwvjYAoW+FEZn9os0PD/b6AP6xQwsa/Y7lCVgIixBbUPMfhu+i2LtdeAqVTgGlQarfA=="],
 
     "require-directory": ["require-directory@2.1.1", "", {}, "sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q=="],
 
@@ -7052,6 +7227,8 @@
 
     "@arethetypeswrong/cli/marked": ["marked@9.1.6", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-jcByLnIFkd5gSXZmjNvS1TlmRhCXZjIzHYlaGkPlLIekG55JDR2Z4va9tZwCiP+/RDERiNhMOFu01xd6O5ct1Q=="],
 
+    "@arethetypeswrong/cli/marked-terminal": ["marked-terminal@7.3.0", "", { "dependencies": { "ansi-escapes": "^7.0.0", "ansi-regex": "^6.1.0", "chalk": "^5.4.1", "cli-highlight": "^2.1.11", "cli-table3": "^0.6.5", "node-emoji": "^2.2.0", "supports-hyperlinks": "^3.1.0" }, "peerDependencies": { "marked": ">=1 <16" } }, "sha512-t4rBvPsHc57uE/2nJOLmMbZCQ4tgAccAED3ngXQqW6g+TxA488JzJ+FK3lQkzBQOI1mRV/r/Kq+1ZlJ4D0owQw=="],
+
     "@arethetypeswrong/core/fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "@arethetypeswrong/core/lru-cache": ["lru-cache@11.5.2", "", {}, "sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g=="],
@@ -7292,6 +7469,10 @@
 
     "@crvouga/mockingbird-service-healthie/graphql": ["graphql@16.11.0", "", {}, "sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw=="],
 
+    "@crvouga/mockingbird-service-healthie/graphql-request": ["graphql-request@7.2.0", "", { "dependencies": { "@graphql-typed-document-node/core": "^3.2.0" }, "peerDependencies": { "graphql": "14 - 16" } }, "sha512-0GR7eQHBFYz372u9lxS16cOtEekFlZYB2qOyq8wDvzRmdRSJ0mgUVX1tzNcIzk3G+4NY+mGtSz411wZdeDF/+A=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres": ["embedded-postgres@16.14.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^16.14.0-beta.17", "@embedded-postgres/darwin-x64": "^16.14.0-beta.17", "@embedded-postgres/linux-arm": "^16.14.0-beta.17", "@embedded-postgres/linux-arm64": "^16.14.0-beta.17", "@embedded-postgres/linux-ia32": "^16.14.0-beta.17", "@embedded-postgres/linux-ppc64": "^16.14.0-beta.17", "@embedded-postgres/linux-x64": "^16.14.0-beta.17", "@embedded-postgres/windows-x64": "^16.14.0-beta.17" } }, "sha512-nMz+FokxBkEDcK3XUxTR0Jo2SGBj5mgLm2/wmGV6iIu0+3z44pNCCr6PCdu+dS/JxTCjVVV4tYmgRf7jamJS7Q=="],
+
     "@crvouga/mockingbird-service-medplum/graphql": ["graphql@17.0.2", "", {}, "sha512-FRWbddMxfkjiB7z+aQDWIR+E34xo9I8c9mtK2RPv8PmMzKRvrdsreHL/Ui/TmwHJfhHChEtsFPyMHKI+xuarQQ=="],
 
     "@crvouga/mockingbird-service-oauth/fast-check": ["fast-check@4.5.3", "", { "dependencies": { "pure-rand": "^7.0.0" } }, "sha512-IE9csY7lnhxBnA8g/WI5eg/hygA6MGWJMSNfFRrBlXUciADEhS1EDB0SIsMSvzubzIlOBbVITSsypCsW717poA=="],
@@ -7303,8 +7484,6 @@
     "@crvouga/mockingbird-service-postgres/@biomejs/biome": ["@biomejs/biome@2.5.15", "", { "optionalDependencies": { "@biomejs/cli-darwin-arm64": "2.5.15", "@biomejs/cli-darwin-x64": "2.5.15", "@biomejs/cli-linux-arm64": "2.5.15", "@biomejs/cli-linux-arm64-musl": "2.5.15", "@biomejs/cli-linux-x64": "2.5.15", "@biomejs/cli-linux-x64-musl": "2.5.15", "@biomejs/cli-win32-arm64": "2.5.15", "@biomejs/cli-win32-x64": "2.5.15" }, "bin": { "biome": "bin/biome" } }, "sha512-WZTW4slm/pdkh92K6t/3aEN++44JD1PQ7squ7RCMLI1flHGl43DVOIGXvCjHiZgBMO1V4uYxoFNtqrIA4qGuIQ=="],
 
     "@crvouga/mockingbird-service-postgres/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres": ["embedded-postgres@18.3.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^18.3.0-beta.17", "@embedded-postgres/darwin-x64": "^18.3.0-beta.17", "@embedded-postgres/linux-arm": "^18.3.0-beta.17", "@embedded-postgres/linux-arm64": "^18.3.0-beta.17", "@embedded-postgres/linux-ia32": "^18.3.0-beta.17", "@embedded-postgres/linux-ppc64": "^18.3.0-beta.17", "@embedded-postgres/linux-x64": "^18.3.0-beta.17", "@embedded-postgres/windows-x64": "^18.3.0-beta.17" } }, "sha512-1biFWyuPVtAV5S9RBgcr4PGuAdNL9WhnNZVQ5Arp3gsB24Ci9X9s/8Z7RFYFSc6tJWcj9kzF55YcDAcr3jLUbQ=="],
 
     "@crvouga/mockingbird-service-postgres/fast-check": ["fast-check@4.10.2", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw=="],
 
@@ -7327,6 +7506,12 @@
     "@crvouga/mockingbird-service-workos/react-dom": ["react-dom@19.2.3", "", { "dependencies": { "scheduler": "^0.27.0" }, "peerDependencies": { "react": "^19.2.3" } }, "sha512-yELu4WmLPw5Mr/lmeEpox5rw3RETacE++JgHqQzd2dg+YbJuat3jH4ingc+WPZhxaoFzdv9y33G+F7Nl5O0GBg=="],
 
     "@cspotcode/source-map-support/@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.9", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.0.3", "@jridgewell/sourcemap-codec": "^1.4.10" } }, "sha512-3Belt6tdc8bPgAtbcmdtNJlirVoTmEb5e2gC94PnkwEW9jI6CAHUeoG85tjWP5WquqfavoMtMwiG4P926ZKKuQ=="],
+
+    "@cucumber/gherkin-utils/@cucumber/gherkin": ["@cucumber/gherkin@38.0.0", "", { "dependencies": { "@cucumber/messages": ">=31.0.0 <33" } }, "sha512-duEXK+KDfQUzu3vsSzXjkxQ2tirF5PRsc1Xrts6THKHJO6mjw4RjM8RV+vliuDasmhhrmdLcOcM7d9nurNTJKw=="],
+
+    "@cucumber/gherkin-utils/commander": ["commander@14.0.2", "", {}, "sha512-TywoWNNRbhoD0BXs1P3ZEScW8W5iKrnbithIl0YH+uCmBd0QpPOA8yc82DS3BIE5Ma6FnBVUsJ7wVUDz4dvOWQ=="],
+
+    "@cucumber/junit-xml-formatter/xmlbuilder": ["xmlbuilder@15.1.1", "", {}, "sha512-yMqGBqtXyeN1e3TGYvgNgDVZ3j84W4cwkOXQswghol6APgZWaff9lnbvN7MHYJOiXsvGPXtjTYJEiC9J2wv9Eg=="],
 
     "@google-cloud/storage/gaxios": ["gaxios@6.7.1", "", { "dependencies": { "extend": "^3.0.2", "https-proxy-agent": "^7.0.1", "is-stream": "^2.0.0", "node-fetch": "^2.6.9", "uuid": "^9.0.1" } }, "sha512-LDODD4TMYx7XXdpwxAVRAIAuB0bzv0s+ywFonY46k126qzQHT9ygyoa9tncmOiQmmDrik65UYsEkv3lbfqQ3yQ=="],
 
@@ -7518,8 +7703,6 @@
 
     "googleapis-common/google-auth-library": ["google-auth-library@9.15.0", "", { "dependencies": { "base64-js": "^1.3.0", "ecdsa-sig-formatter": "^1.0.11", "gaxios": "^6.1.1", "gcp-metadata": "^6.1.0", "gtoken": "^7.0.0", "jws": "^4.0.0" } }, "sha512-7ccSEJFDFO7exFbO6NRyC+xH8/mZ1GZGG2xxx9iHxZWcjUjJpjWxIMw3cofAKcueZ6DATiukmmprD7yavQHOyQ=="],
 
-    "graphql-request/graphql": ["graphql@16.11.0", "", {}, "sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw=="],
-
     "gtoken/gaxios": ["gaxios@6.7.1", "", { "dependencies": { "extend": "^3.0.2", "https-proxy-agent": "^7.0.1", "is-stream": "^2.0.0", "node-fetch": "^2.6.9", "uuid": "^9.0.1" } }, "sha512-LDODD4TMYx7XXdpwxAVRAIAuB0bzv0s+ywFonY46k126qzQHT9ygyoa9tncmOiQmmDrik65UYsEkv3lbfqQ3yQ=="],
 
     "import-fresh/resolve-from": ["resolve-from@4.0.0", "", {}, "sha512-pb/MYmXstAkysRFx8piNI1tGFNQIFA3vkE3Gq4EuA1dF6gHp/+vgZqsCGJapvy8N3Q+4o7FwvquPJcnZ7RYy4g=="],
@@ -7556,10 +7739,6 @@
 
     "mailosaur/https-proxy-agent": ["https-proxy-agent@7.0.6", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "4" } }, "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw=="],
 
-    "marked-terminal/chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
-
-    "marked-terminal/marked": ["marked@9.1.6", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-jcByLnIFkd5gSXZmjNvS1TlmRhCXZjIzHYlaGkPlLIekG55JDR2Z4va9tZwCiP+/RDERiNhMOFu01xd6O5ct1Q=="],
-
     "metro/@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 
     "metro/source-map": ["source-map@0.5.7", "", {}, "sha512-LbrmJOMUSdEVxIKvdcJzQC+nQhe8FUZQTXQy6+I75skNgn3OoQ0DZA8YnFa7gp8tqtL3KPf1kmo0R5DoApeSGQ=="],
@@ -7591,6 +7770,8 @@
     "parse5-htmlparser2-tree-adapter/parse5": ["parse5@6.0.1", "", {}, "sha512-Ofn/CTFzRGTTxwpNEs9PP93gXShHcTq255nzRYSKe8AkVpZY7e1fpmTfOyoIvjP5HG7Z2ZM7VS9PPhQGW2pOpw=="],
 
     "path-scurry/lru-cache": ["lru-cache@11.5.2", "", {}, "sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g=="],
+
+    "playwright-bdd/commander": ["commander@13.1.0", "", {}, "sha512-/rFeCpNJQbhSZjGVwO9RFV3xPqbnERS8MmIQzCtD/zl6gpJuV/bMLuN92oG3F7d8oDEHHRrujSXNUr8fpjntKw=="],
 
     "posthog-js/preact": ["preact@10.29.8", "", { "peerDependencies": { "preact-render-to-string": ">=5" }, "optionalPeers": ["preact-render-to-string"] }, "sha512-ej2aVZ+vZ8WO7tvlQWRM9N63A0KzF9q4mWJfDUHgYaIofWY9hu74QdnQrjoPMmZi2/nZ5gN0bJCQF49xQqx09Q=="],
 
@@ -7654,6 +7835,8 @@
 
     "@ai-sdk/openai/@ai-sdk/provider-utils/undici": ["undici@7.30.1", "", {}, "sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg=="],
 
+    "@arethetypeswrong/cli/marked-terminal/chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
+
     "@aws-crypto/sha256-browser/@aws-sdk/types/@smithy/types": ["@smithy/types@4.18.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-CgB6HHWer/vrKps24ulRIbpcpb7K4xAU7SkZ7YHzBPlwHsvsrCJFEXK421s+cJzX+ZrqtA/TuU5w1HzI7k9N8A=="],
 
     "@aws-crypto/sha256-js/@aws-sdk/types/@smithy/types": ["@smithy/types@4.18.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-CgB6HHWer/vrKps24ulRIbpcpb7K4xAU7SkZ7YHzBPlwHsvsrCJFEXK421s+cJzX+ZrqtA/TuU5w1HzI7k9N8A=="],
@@ -7716,6 +7899,22 @@
 
     "@crvouga/mockingbird-service-google-calendar/google-auth-library/gcp-metadata": ["gcp-metadata@6.1.1", "", { "dependencies": { "gaxios": "^6.1.1", "google-logging-utils": "^0.0.2", "json-bigint": "^1.0.0" } }, "sha512-a4tiq7E0/5fTjxPAaH4jpjkSv/uCaU2p5KC6HVGrvl0cDjA8iBZv4vv1gyzlmK0ZUKqwpOyQMKzZQe3lTit77A=="],
 
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-CB1DFZ08zfmNapx231rAJW74UZfs1jQmeGLwbQSaAIRVs2uqEdMhVNLwVlztFG3ZPSeuCsgTn/0yeYDmKF67og=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@16.14.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-zikibpPYGWokfT/OFWNHCwerA3ZGat0ZyCIXOIbIucLBMDHztQ2WZQ9R5zil6oOxzElrMz2Q4aEOssGNrMDdyg=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-N+ktKhkTHuRe/mobk0+OBISje3M6ht4dloSm7zNwpy/hzkZTiB6m1fE0P2lllnob4jbFIbrA3nTvlY4yfe4E6w=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@16.14.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-LNT9TXoOGR/RSop1PewcMtpuf1Dtg6sKU7sFA1ODqInRA8NoP15HyLekUHW5aWnruu4yfs1pcy6DaV39T556mQ=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@16.14.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-SC2hO6hlc8zlC1z2eOMNMACXAKV93QYyLq5JMrwRfjGkl3wbc4kUm3TmKl1SjWBX1x+qAZbMTt72yv+KED5Mvw=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@16.14.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-paVxxVlr7g6AZxCISk9AGNB3zc3c6qKAEzlisrJXlt5Jw1qalxNyKpfkUahDR9qbk+zGnL54PjEQDSUuomHx/g=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@16.14.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8fr7hEiI7XlbPDPsLZJ4RU1NR6jTIDWpf81Sfiwk3T845V0yJJGxjawjkQZmIWVgPW/qY/dMSv0o08FRWJ/zsg=="],
+
+    "@crvouga/mockingbird-service-medplum/embedded-postgres/@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@16.14.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-Wn4nuAT1H7SIJuLWPs+C1aSdZKpbTloCr0Xaozdfg956lUVvv3iHv6K8Lsc+xmtt1qQpTno3PJLqAgzJ/lg60Q=="],
+
     "@crvouga/mockingbird-service-oauth/fast-check/pure-rand": ["pure-rand@7.0.1", "", {}, "sha512-oTUZM/NAZS8p7ANR3SHh30kXB+zK2r2BPcEn/awJIbOvq82WoMN4p62AWWp3Hhw50G0xMsw1mhIBLqHw64EcNQ=="],
 
     "@crvouga/mockingbird-service-openai/ai/@ai-sdk/gateway": ["@ai-sdk/gateway@4.0.103", "", { "dependencies": { "@ai-sdk/provider": "4.0.21", "@ai-sdk/provider-utils": "5.0.53", "@vercel/oidc": "3.2.0" }, "peerDependencies": { "zod": "^3.25.76 || ^4.1.8" } }, "sha512-nnGTUHzPRQ14jhv9CL4OQrzcRBIFTBMIPKGIi9Z9u/4GtwSRxa/nxUX6np2Iwp5phOzO0a0njj/j9Jolf5AEaA=="],
@@ -7741,22 +7940,6 @@
     "@crvouga/mockingbird-service-postgres/@biomejs/biome/@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.5.15", "", { "os": "win32", "cpu": "x64" }, "sha512-yAzh4UqEImV6Hcy0zjUqNfJAsUhoD64FBQCdTG8Md/Z2wQeVP/ZmJ3XRYAs1g8J9fjTFyl2fCtc5FB5til47+g=="],
 
     "@crvouga/mockingbird-service-postgres/@types/bun/bun-types": ["bun-types@1.4.4", "", { "dependencies": { "@types/node": "*", "undici-types": "*" } }, "sha512-yjrJh5oGX7mMPKGd19YXyIjmEuj4G4zNC30bs7PM9Az7NQ3ndF3j6hbeRdvJTRQEhJ/FYQwW0a2moweEi2hMxQ=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Pvrej3Xz5flfyVc9mchVfekrKoTJyvPtM3U0vjuXamZkRKmi+inP2zRmnmzYecIVbr7Zhu82xbsCENMXrwMp9Q=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/darwin-x64": ["@embedded-postgres/darwin-x64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "x64" }, "sha512-MVWe+C47pPoMD9LlIWGQkvZ5Xsu3IBo54CYqnIps/Z1byMIUBNc7y/dZ3mfqEwiCbVDVqirG0CU462xnrSEfKA=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-arm": ["@embedded-postgres/linux-arm@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm" }, "sha512-Y2vw7p80PO/Ko7CDm8CCpStnNfMe+oc11e0WZtqAVRjxO6H0oic/ehULhUsWU3mZm5jq7wQAv37VMzf4JN+SFQ=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-arm64": ["@embedded-postgres/linux-arm64@18.3.0-beta.17", "", { "os": "linux", "cpu": "arm64" }, "sha512-hXp7yHJHYWkdjkgF6As8whEHbdYxhBdmXeLpLTw0aiac0O6+0Cbqk3cOR9U+e49oyIpElHVwZUo6OewquSRhSg=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-ia32": ["@embedded-postgres/linux-ia32@18.3.0-beta.17", "", { "os": "linux", "cpu": "ia32" }, "sha512-hVUOM+7QxkzAIdN3gewfVwL1EpJIx+0qUiNTD8cMqRtaZyU87e4AFIvBS0UiDJ9xzMTVWr/X24wePtbvIbkopg=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-ppc64": ["@embedded-postgres/linux-ppc64@18.3.0-beta.17", "", { "os": "linux", "cpu": "ppc64" }, "sha512-p3/u4YUqSdE2CKUBlC84JGZCi6RnE1fyeLPIIVy2DJUiKtExR5rE3OpDJcVoN40uecYGL+nR4qFocGzDwG1TBw=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/linux-x64": ["@embedded-postgres/linux-x64@18.3.0-beta.17", "", { "os": "linux", "cpu": "x64" }, "sha512-8orSD6NNopSLtjqir4dWQBrj+g8j1eJjWd9mB60A3xbWMzIBIPQpzT7XzbacW9YFSl/DejOLnRXfff+Wr13Tgw=="],
-
-    "@crvouga/mockingbird-service-postgres/embedded-postgres/@embedded-postgres/windows-x64": ["@embedded-postgres/windows-x64@18.3.0-beta.17", "", { "os": "win32", "cpu": "x64" }, "sha512-kDC5aBsmhWDjeQjj2V4g+Bk+pMeDU27b7l0rBbaKgtt2gsNmCB34ULg/5cqs2kqUKSk/tiGMHKCNE+zQZ+s4rg=="],
 
     "@crvouga/mockingbird-service-slack/@slack/web-api/p-queue": ["p-queue@6.6.2", "", { "dependencies": { "eventemitter3": "^4.0.4", "p-timeout": "^3.2.0" } }, "sha512-RwFpb72c/BhQLEXIZ5K2e+AhgNVmIejGlTgiB9MzZ0e93GRvqZ7uSi0dvRF7/XIXDeNkra2fNHBxTyPDGySpjQ=="],
 

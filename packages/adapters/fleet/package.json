@@ -51,6 +51,9 @@
     "pack:check": "bun ../../../scripts/pack-check.ts",
     "portability": "bun ../../../scripts/portability.ts"
   },
+  "dependencies": {
+    "yaml": "2.9.0"
+  },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@types/node": "22.20.1",
