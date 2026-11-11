@@ -1,45 +1,45 @@
 [
   {
-    "id": "shell-loading--loading",
-    "title": "Shell/Loading",
+    "id": "shell--loading",
+    "title": "Shell",
     "name": "Loading",
     "variant": "desktop",
-    "file": "shell-loading--loading.png"
+    "file": "shell--loading.png"
   },
   {
-    "id": "shell-loading--loading",
-    "title": "Shell/Loading",
+    "id": "shell--loading",
+    "title": "Shell",
     "name": "Loading",
     "variant": "mobile",
-    "file": "shell-loading--loading--mobile.png"
+    "file": "shell--loading--mobile.png"
   },
   {
-    "id": "shell-loading--loading",
-    "title": "Shell/Loading",
+    "id": "shell--loading",
+    "title": "Shell",
     "name": "Loading",
     "variant": "dark",
-    "file": "shell-loading--loading--dark.png"
+    "file": "shell--loading--dark.png"
   },
   {
-    "id": "shell-loading--server-unavailable",
-    "title": "Shell/Loading",
+    "id": "shell--server-unavailable",
+    "title": "Shell",
     "name": "Server Unavailable",
     "variant": "desktop",
-    "file": "shell-loading--server-unavailable.png"
+    "file": "shell--server-unavailable.png"
   },
   {
-    "id": "shell-loading--rate-limited",
-    "title": "Shell/Loading",
+    "id": "shell--rate-limited",
+    "title": "Shell",
     "name": "Rate Limited",
     "variant": "desktop",
-    "file": "shell-loading--rate-limited.png"
+    "file": "shell--rate-limited.png"
   },
   {
-    "id": "shell-loading--sign-in-unavailable",
-    "title": "Shell/Loading",
+    "id": "shell--sign-in-unavailable",
+    "title": "Shell",
     "name": "Sign In Unavailable",
     "variant": "desktop",
-    "file": "shell-loading--sign-in-unavailable.png"
+    "file": "shell--sign-in-unavailable.png"
   },
   {
     "id": "sign-in--single-sign-on",
@@ -63,32 +63,18 @@
     "file": "sign-in--single-sign-on--dark.png"
   },
   {
-    "id": "sign-in--local-sign-in",
+    "id": "sign-in--local-only",
     "title": "Sign in",
-    "name": "Local Sign In",
+    "name": "Local Only",
     "variant": "desktop",
-    "file": "sign-in--local-sign-in.png"
+    "file": "sign-in--local-only.png"
   },
   {
-    "id": "sign-in--token-sign-in",
+    "id": "sign-in--token-only",
     "title": "Sign in",
-    "name": "Token Sign In",
+    "name": "Token Only",
     "variant": "desktop",
-    "file": "sign-in--token-sign-in.png"
-  },
-  {
-    "id": "sign-in--single-sign-on-and-token",
-    "title": "Sign in",
-    "name": "Single Sign On And Token",
-    "variant": "desktop",
-    "file": "sign-in--single-sign-on-and-token.png"
-  },
-  {
-    "id": "sign-in--local-and-token",
-    "title": "Sign in",
-    "name": "Local And Token",
-    "variant": "desktop",
-    "file": "sign-in--local-and-token.png"
+    "file": "sign-in--token-only.png"
   },
   {
     "id": "sign-in--every-method",
@@ -98,11 +84,81 @@
     "file": "sign-in--every-method.png"
   },
   {
+    "id": "sign-in--no-way-to-sign-in",
+    "title": "Sign in",
+    "name": "No Way To Sign In",
+    "variant": "desktop",
+    "file": "sign-in--no-way-to-sign-in.png"
+  },
+  {
     "id": "sign-in--from-an-invite-link",
     "title": "Sign in",
     "name": "From An Invite Link",
     "variant": "desktop",
     "file": "sign-in--from-an-invite-link.png"
+  },
+  {
+    "id": "sign-in--local",
+    "title": "Sign in",
+    "name": "Local",
+    "variant": "desktop",
+    "file": "sign-in--local.png"
+  },
+  {
+    "id": "sign-in--local-not-an-email",
+    "title": "Sign in",
+    "name": "Local Not An Email",
+    "variant": "desktop",
+    "file": "sign-in--local-not-an-email.png"
+  },
+  {
+    "id": "sign-in--local-rejected-email",
+    "title": "Sign in",
+    "name": "Local Rejected Email",
+    "variant": "desktop",
+    "file": "sign-in--local-rejected-email.png"
+  },
+  {
+    "id": "sign-in--local-too-many-attempts",
+    "title": "Sign in",
+    "name": "Local Too Many Attempts",
+    "variant": "desktop",
+    "file": "sign-in--local-too-many-attempts.png"
+  },
+  {
+    "id": "sign-in--local-signing-in",
+    "title": "Sign in",
+    "name": "Local Signing In",
+    "variant": "desktop",
+    "file": "sign-in--local-signing-in.png"
+  },
+  {
+    "id": "sign-in--local-signed-in",
+    "title": "Sign in",
+    "name": "Local Signed In",
+    "variant": "desktop",
+    "file": "sign-in--local-signed-in.png"
+  },
+  {
+    "id": "sign-in--local-not-offered",
+    "title": "Sign in",
+    "name": "Local Not Offered",
+    "variant": "desktop",
+    "file": "sign-in--local-not-offered.png"
+  },
+  {
+    "id": "sign-in--token",
+    "title": "Sign in",
+    "name": "Token",
+    "variant": "desktop",
+    "file": "sign-in--token.png"
+  },
+  {
+    "id": "sign-in--token-missing",
+    "title": "Sign in",
+    "name": "Token Missing",
+    "variant": "desktop",
+    "file": "sign-in--token-missing.png"
   },
   {
     "id": "sign-in--token-rejected",
@@ -112,11 +168,53 @@
     "file": "sign-in--token-rejected.png"
   },
   {
-    "id": "sign-in--local-sign-in-refused",
+    "id": "sign-in--token-signed-in",
     "title": "Sign in",
-    "name": "Local Sign In Refused",
+    "name": "Token Signed In",
     "variant": "desktop",
-    "file": "sign-in--local-sign-in-refused.png"
+    "file": "sign-in--token-signed-in.png"
+  },
+  {
+    "id": "sign-in--sign-out",
+    "title": "Sign in",
+    "name": "Sign Out",
+    "variant": "desktop",
+    "file": "sign-in--sign-out.png"
+  },
+  {
+    "id": "sign-in--sign-out-failed",
+    "title": "Sign in",
+    "name": "Sign Out Failed",
+    "variant": "desktop",
+    "file": "sign-in--sign-out-failed.png"
+  },
+  {
+    "id": "sign-in--signed-out",
+    "title": "Sign in",
+    "name": "Signed Out",
+    "variant": "desktop",
+    "file": "sign-in--signed-out.png"
+  },
+  {
+    "id": "sign-in--token-too-many-attempts",
+    "title": "Sign in",
+    "name": "Token Too Many Attempts",
+    "variant": "desktop",
+    "file": "sign-in--token-too-many-attempts.png"
+  },
+  {
+    "id": "sign-in--token-signing-in",
+    "title": "Sign in",
+    "name": "Token Signing In",
+    "variant": "desktop",
+    "file": "sign-in--token-signing-in.png"
+  },
+  {
+    "id": "sign-in--signing-out",
+    "title": "Sign in",
+    "name": "Signing Out",
+    "variant": "desktop",
+    "file": "sign-in--signing-out.png"
   },
   {
     "id": "organizations--several",
@@ -161,39 +259,67 @@
     "file": "organizations--root-opens-the-first-organization.png"
   },
   {
-    "id": "organizations--create-refused",
+    "id": "organizations--new",
     "title": "Organizations",
-    "name": "Create Refused",
+    "name": "New",
     "variant": "desktop",
-    "file": "organizations--create-refused.png"
+    "file": "organizations--new.png"
   },
   {
-    "id": "organization-projects--populated",
-    "title": "Organization/Projects",
-    "name": "Populated",
+    "id": "organizations--new-without-a-name",
+    "title": "Organizations",
+    "name": "New Without A Name",
     "variant": "desktop",
-    "file": "organization-projects--populated.png"
+    "file": "organizations--new-without-a-name.png"
   },
   {
-    "id": "organization-projects--populated",
+    "id": "organizations--new-name-too-long",
+    "title": "Organizations",
+    "name": "New Name Too Long",
+    "variant": "desktop",
+    "file": "organizations--new-name-too-long.png"
+  },
+  {
+    "id": "organizations--new-over-quota",
+    "title": "Organizations",
+    "name": "New Over Quota",
+    "variant": "desktop",
+    "file": "organizations--new-over-quota.png"
+  },
+  {
+    "id": "organizations--new-creating",
+    "title": "Organizations",
+    "name": "New Creating",
+    "variant": "desktop",
+    "file": "organizations--new-creating.png"
+  },
+  {
+    "id": "organizations--new-created",
+    "title": "Organizations",
+    "name": "New Created",
+    "variant": "desktop",
+    "file": "organizations--new-created.png"
+  },
+  {
+    "id": "organization-projects--as-owner",
     "title": "Organization/Projects",
-    "name": "Populated",
+    "name": "As Owner",
+    "variant": "desktop",
+    "file": "organization-projects--as-owner.png"
+  },
+  {
+    "id": "organization-projects--as-owner",
+    "title": "Organization/Projects",
+    "name": "As Owner",
     "variant": "mobile",
-    "file": "organization-projects--populated--mobile.png"
+    "file": "organization-projects--as-owner--mobile.png"
   },
   {
-    "id": "organization-projects--populated",
+    "id": "organization-projects--as-owner",
     "title": "Organization/Projects",
-    "name": "Populated",
+    "name": "As Owner",
     "variant": "dark",
-    "file": "organization-projects--populated--dark.png"
-  },
-  {
-    "id": "organization-projects--empty",
-    "title": "Organization/Projects",
-    "name": "Empty",
-    "variant": "desktop",
-    "file": "organization-projects--empty.png"
+    "file": "organization-projects--as-owner--dark.png"
   },
   {
     "id": "organization-projects--as-admin",
@@ -217,6 +343,20 @@
     "file": "organization-projects--as-viewer.png"
   },
   {
+    "id": "organization-projects--empty",
+    "title": "Organization/Projects",
+    "name": "Empty",
+    "variant": "desktop",
+    "file": "organization-projects--empty.png"
+  },
+  {
+    "id": "organization-projects--empty-as-viewer",
+    "title": "Organization/Projects",
+    "name": "Empty As Viewer",
+    "variant": "desktop",
+    "file": "organization-projects--empty-as-viewer.png"
+  },
+  {
     "id": "organization-projects--suspended",
     "title": "Organization/Projects",
     "name": "Suspended",
@@ -224,11 +364,60 @@
     "file": "organization-projects--suspended.png"
   },
   {
-    "id": "organization-projects--suspended-create-refused",
+    "id": "organization-projects--new-project",
     "title": "Organization/Projects",
-    "name": "Suspended Create Refused",
+    "name": "New Project",
     "variant": "desktop",
-    "file": "organization-projects--suspended-create-refused.png"
+    "file": "organization-projects--new-project.png"
+  },
+  {
+    "id": "organization-projects--new-project-without-a-name",
+    "title": "Organization/Projects",
+    "name": "New Project Without A Name",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-without-a-name.png"
+  },
+  {
+    "id": "organization-projects--new-project-name-too-long",
+    "title": "Organization/Projects",
+    "name": "New Project Name Too Long",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-name-too-long.png"
+  },
+  {
+    "id": "organization-projects--new-project-over-quota",
+    "title": "Organization/Projects",
+    "name": "New Project Over Quota",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-over-quota.png"
+  },
+  {
+    "id": "organization-projects--new-project-in-a-suspended-organization",
+    "title": "Organization/Projects",
+    "name": "New Project In A Suspended Organization",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-in-a-suspended-organization.png"
+  },
+  {
+    "id": "organization-projects--new-project-creating",
+    "title": "Organization/Projects",
+    "name": "New Project Creating",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-creating.png"
+  },
+  {
+    "id": "organization-projects--new-project-created",
+    "title": "Organization/Projects",
+    "name": "New Project Created",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-created.png"
+  },
+  {
+    "id": "organization-projects--new-project-as-viewer",
+    "title": "Organization/Projects",
+    "name": "New Project As Viewer",
+    "variant": "desktop",
+    "file": "organization-projects--new-project-as-viewer.png"
   },
   {
     "id": "organization-members--as-owner",
@@ -273,11 +462,130 @@
     "file": "organization-members--as-viewer.png"
   },
   {
-    "id": "organization-members--pending-invites",
+    "id": "organization-members--no-pending-invites",
     "title": "Organization/Members",
-    "name": "Pending Invites",
+    "name": "No Pending Invites",
     "variant": "desktop",
-    "file": "organization-members--pending-invites.png"
+    "file": "organization-members--no-pending-invites.png"
+  },
+  {
+    "id": "organization-members--change-role",
+    "title": "Organization/Members",
+    "name": "Change Role",
+    "variant": "desktop",
+    "file": "organization-members--change-role.png"
+  },
+  {
+    "id": "organization-members--change-role-unchanged",
+    "title": "Organization/Members",
+    "name": "Change Role Unchanged",
+    "variant": "desktop",
+    "file": "organization-members--change-role-unchanged.png"
+  },
+  {
+    "id": "organization-members--change-role-of-the-last-owner",
+    "title": "Organization/Members",
+    "name": "Change Role Of The Last Owner",
+    "variant": "desktop",
+    "file": "organization-members--change-role-of-the-last-owner.png"
+  },
+  {
+    "id": "organization-members--change-role-saving",
+    "title": "Organization/Members",
+    "name": "Change Role Saving",
+    "variant": "desktop",
+    "file": "organization-members--change-role-saving.png"
+  },
+  {
+    "id": "organization-members--change-role-changed",
+    "title": "Organization/Members",
+    "name": "Change Role Changed",
+    "variant": "desktop",
+    "file": "organization-members--change-role-changed.png"
+  },
+  {
+    "id": "organization-members--change-role-of-an-owner-as-admin",
+    "title": "Organization/Members",
+    "name": "Change Role Of An Owner As Admin",
+    "variant": "desktop",
+    "file": "organization-members--change-role-of-an-owner-as-admin.png"
+  },
+  {
+    "id": "organization-members--remove",
+    "title": "Organization/Members",
+    "name": "Remove",
+    "variant": "desktop",
+    "file": "organization-members--remove.png"
+  },
+  {
+    "id": "organization-members--remove-refused",
+    "title": "Organization/Members",
+    "name": "Remove Refused",
+    "variant": "desktop",
+    "file": "organization-members--remove-refused.png"
+  },
+  {
+    "id": "organization-members--removed",
+    "title": "Organization/Members",
+    "name": "Removed",
+    "variant": "desktop",
+    "file": "organization-members--removed.png"
+  },
+  {
+    "id": "organization-members--leave",
+    "title": "Organization/Members",
+    "name": "Leave",
+    "variant": "desktop",
+    "file": "organization-members--leave.png"
+  },
+  {
+    "id": "organization-members--leave-as-the-last-owner",
+    "title": "Organization/Members",
+    "name": "Leave As The Last Owner",
+    "variant": "desktop",
+    "file": "organization-members--leave-as-the-last-owner.png"
+  },
+  {
+    "id": "organization-members--left",
+    "title": "Organization/Members",
+    "name": "Left",
+    "variant": "desktop",
+    "file": "organization-members--left.png"
+  },
+  {
+    "id": "organization-members--invite-someone",
+    "title": "Organization/Members",
+    "name": "Invite Someone",
+    "variant": "desktop",
+    "file": "organization-members--invite-someone.png"
+  },
+  {
+    "id": "organization-members--invite-not-an-email",
+    "title": "Organization/Members",
+    "name": "Invite Not An Email",
+    "variant": "desktop",
+    "file": "organization-members--invite-not-an-email.png"
+  },
+  {
+    "id": "organization-members--invite-rejected-email",
+    "title": "Organization/Members",
+    "name": "Invite Rejected Email",
+    "variant": "desktop",
+    "file": "organization-members--invite-rejected-email.png"
+  },
+  {
+    "id": "organization-members--invite-over-quota",
+    "title": "Organization/Members",
+    "name": "Invite Over Quota",
+    "variant": "desktop",
+    "file": "organization-members--invite-over-quota.png"
+  },
+  {
+    "id": "organization-members--invite-creating",
+    "title": "Organization/Members",
+    "name": "Invite Creating",
+    "variant": "desktop",
+    "file": "organization-members--invite-creating.png"
   },
   {
     "id": "organization-members--invite-link-created",
@@ -287,53 +595,81 @@
     "file": "organization-members--invite-link-created.png"
   },
   {
-    "id": "organization-members--role-change-refused",
+    "id": "organization-members--invite-link-shown-once",
     "title": "Organization/Members",
-    "name": "Role Change Refused",
+    "name": "Invite Link Shown Once",
     "variant": "desktop",
-    "file": "organization-members--role-change-refused.png"
+    "file": "organization-members--invite-link-shown-once.png"
   },
   {
-    "id": "organization-usage--normal",
-    "title": "Organization/Usage",
-    "name": "Normal",
+    "id": "organization-members--revoke-invite",
+    "title": "Organization/Members",
+    "name": "Revoke Invite",
     "variant": "desktop",
-    "file": "organization-usage--normal.png"
+    "file": "organization-members--revoke-invite.png"
   },
   {
-    "id": "organization-usage--normal",
+    "id": "organization-members--revoke-invite-already-used",
+    "title": "Organization/Members",
+    "name": "Revoke Invite Already Used",
+    "variant": "desktop",
+    "file": "organization-members--revoke-invite-already-used.png"
+  },
+  {
+    "id": "organization-members--invite-revoked",
+    "title": "Organization/Members",
+    "name": "Invite Revoked",
+    "variant": "desktop",
+    "file": "organization-members--invite-revoked.png"
+  },
+  {
+    "id": "organization-members--change-role-rate-limited",
+    "title": "Organization/Members",
+    "name": "Change Role Rate Limited",
+    "variant": "desktop",
+    "file": "organization-members--change-role-rate-limited.png"
+  },
+  {
+    "id": "organization-members--removing",
+    "title": "Organization/Members",
+    "name": "Removing",
+    "variant": "desktop",
+    "file": "organization-members--removing.png"
+  },
+  {
+    "id": "organization-members--leaving",
+    "title": "Organization/Members",
+    "name": "Leaving",
+    "variant": "desktop",
+    "file": "organization-members--leaving.png"
+  },
+  {
+    "id": "organization-members--revoking-invite",
+    "title": "Organization/Members",
+    "name": "Revoking Invite",
+    "variant": "desktop",
+    "file": "organization-members--revoking-invite.png"
+  },
+  {
+    "id": "organization-usage--as-owner",
     "title": "Organization/Usage",
-    "name": "Normal",
+    "name": "As Owner",
+    "variant": "desktop",
+    "file": "organization-usage--as-owner.png"
+  },
+  {
+    "id": "organization-usage--as-owner",
+    "title": "Organization/Usage",
+    "name": "As Owner",
     "variant": "mobile",
-    "file": "organization-usage--normal--mobile.png"
+    "file": "organization-usage--as-owner--mobile.png"
   },
   {
-    "id": "organization-usage--normal",
+    "id": "organization-usage--as-owner",
     "title": "Organization/Usage",
-    "name": "Normal",
+    "name": "As Owner",
     "variant": "dark",
-    "file": "organization-usage--normal--dark.png"
-  },
-  {
-    "id": "organization-usage--quota-at-its-limit",
-    "title": "Organization/Usage",
-    "name": "Quota At Its Limit",
-    "variant": "desktop",
-    "file": "organization-usage--quota-at-its-limit.png"
-  },
-  {
-    "id": "organization-usage--unlimited",
-    "title": "Organization/Usage",
-    "name": "Unlimited",
-    "variant": "desktop",
-    "file": "organization-usage--unlimited.png"
-  },
-  {
-    "id": "organization-usage--no-requests-yet",
-    "title": "Organization/Usage",
-    "name": "No Requests Yet",
-    "variant": "desktop",
-    "file": "organization-usage--no-requests-yet.png"
+    "file": "organization-usage--as-owner--dark.png"
   },
   {
     "id": "organization-usage--as-admin",
@@ -357,25 +693,46 @@
     "file": "organization-usage--as-viewer.png"
   },
   {
-    "id": "organization-api-keys--populated",
-    "title": "Organization/API keys",
-    "name": "Populated",
+    "id": "organization-usage--at-the-limit",
+    "title": "Organization/Usage",
+    "name": "At The Limit",
     "variant": "desktop",
-    "file": "organization-api-keys--populated.png"
+    "file": "organization-usage--at-the-limit.png"
   },
   {
-    "id": "organization-api-keys--populated",
+    "id": "organization-usage--unlimited",
+    "title": "Organization/Usage",
+    "name": "Unlimited",
+    "variant": "desktop",
+    "file": "organization-usage--unlimited.png"
+  },
+  {
+    "id": "organization-usage--no-requests-yet",
+    "title": "Organization/Usage",
+    "name": "No Requests Yet",
+    "variant": "desktop",
+    "file": "organization-usage--no-requests-yet.png"
+  },
+  {
+    "id": "organization-api-keys--as-owner",
     "title": "Organization/API keys",
-    "name": "Populated",
+    "name": "As Owner",
+    "variant": "desktop",
+    "file": "organization-api-keys--as-owner.png"
+  },
+  {
+    "id": "organization-api-keys--as-owner",
+    "title": "Organization/API keys",
+    "name": "As Owner",
     "variant": "mobile",
-    "file": "organization-api-keys--populated--mobile.png"
+    "file": "organization-api-keys--as-owner--mobile.png"
   },
   {
-    "id": "organization-api-keys--populated",
+    "id": "organization-api-keys--as-owner",
     "title": "Organization/API keys",
-    "name": "Populated",
+    "name": "As Owner",
     "variant": "dark",
-    "file": "organization-api-keys--populated--dark.png"
+    "file": "organization-api-keys--as-owner--dark.png"
   },
   {
     "id": "organization-api-keys--as-admin",
@@ -392,6 +749,62 @@
     "file": "organization-api-keys--empty.png"
   },
   {
+    "id": "organization-api-keys--as-member",
+    "title": "Organization/API keys",
+    "name": "As Member",
+    "variant": "desktop",
+    "file": "organization-api-keys--as-member.png"
+  },
+  {
+    "id": "organization-api-keys--as-viewer",
+    "title": "Organization/API keys",
+    "name": "As Viewer",
+    "variant": "desktop",
+    "file": "organization-api-keys--as-viewer.png"
+  },
+  {
+    "id": "organization-api-keys--new-key",
+    "title": "Organization/API keys",
+    "name": "New Key",
+    "variant": "desktop",
+    "file": "organization-api-keys--new-key.png"
+  },
+  {
+    "id": "organization-api-keys--new-key-without-a-name",
+    "title": "Organization/API keys",
+    "name": "New Key Without A Name",
+    "variant": "desktop",
+    "file": "organization-api-keys--new-key-without-a-name.png"
+  },
+  {
+    "id": "organization-api-keys--new-project-key-as-admin",
+    "title": "Organization/API keys",
+    "name": "New Project Key As Admin",
+    "variant": "desktop",
+    "file": "organization-api-keys--new-project-key-as-admin.png"
+  },
+  {
+    "id": "organization-api-keys--new-key-name-too-long",
+    "title": "Organization/API keys",
+    "name": "New Key Name Too Long",
+    "variant": "desktop",
+    "file": "organization-api-keys--new-key-name-too-long.png"
+  },
+  {
+    "id": "organization-api-keys--new-key-over-quota",
+    "title": "Organization/API keys",
+    "name": "New Key Over Quota",
+    "variant": "desktop",
+    "file": "organization-api-keys--new-key-over-quota.png"
+  },
+  {
+    "id": "organization-api-keys--new-key-creating",
+    "title": "Organization/API keys",
+    "name": "New Key Creating",
+    "variant": "desktop",
+    "file": "organization-api-keys--new-key-creating.png"
+  },
+  {
     "id": "organization-api-keys--key-created",
     "title": "Organization/API keys",
     "name": "Key Created",
@@ -399,32 +812,67 @@
     "file": "organization-api-keys--key-created.png"
   },
   {
-    "id": "organization-api-keys--create-refused",
+    "id": "organization-api-keys--key-shown-once",
     "title": "Organization/API keys",
-    "name": "Create Refused",
+    "name": "Key Shown Once",
     "variant": "desktop",
-    "file": "organization-api-keys--create-refused.png"
+    "file": "organization-api-keys--key-shown-once.png"
   },
   {
-    "id": "organization-audit-log--populated",
-    "title": "Organization/Audit log",
-    "name": "Populated",
+    "id": "organization-api-keys--revoke-key",
+    "title": "Organization/API keys",
+    "name": "Revoke Key",
     "variant": "desktop",
-    "file": "organization-audit-log--populated.png"
+    "file": "organization-api-keys--revoke-key.png"
   },
   {
-    "id": "organization-audit-log--populated",
+    "id": "organization-api-keys--revoke-key-already-revoked",
+    "title": "Organization/API keys",
+    "name": "Revoke Key Already Revoked",
+    "variant": "desktop",
+    "file": "organization-api-keys--revoke-key-already-revoked.png"
+  },
+  {
+    "id": "organization-api-keys--key-revoked",
+    "title": "Organization/API keys",
+    "name": "Key Revoked",
+    "variant": "desktop",
+    "file": "organization-api-keys--key-revoked.png"
+  },
+  {
+    "id": "organization-api-keys--revoking-key",
+    "title": "Organization/API keys",
+    "name": "Revoking Key",
+    "variant": "desktop",
+    "file": "organization-api-keys--revoking-key.png"
+  },
+  {
+    "id": "organization-audit-log--as-owner",
     "title": "Organization/Audit log",
-    "name": "Populated",
+    "name": "As Owner",
+    "variant": "desktop",
+    "file": "organization-audit-log--as-owner.png"
+  },
+  {
+    "id": "organization-audit-log--as-owner",
+    "title": "Organization/Audit log",
+    "name": "As Owner",
     "variant": "mobile",
-    "file": "organization-audit-log--populated--mobile.png"
+    "file": "organization-audit-log--as-owner--mobile.png"
   },
   {
-    "id": "organization-audit-log--populated",
+    "id": "organization-audit-log--as-owner",
     "title": "Organization/Audit log",
-    "name": "Populated",
+    "name": "As Owner",
     "variant": "dark",
-    "file": "organization-audit-log--populated--dark.png"
+    "file": "organization-audit-log--as-owner--dark.png"
+  },
+  {
+    "id": "organization-audit-log--as-admin",
+    "title": "Organization/Audit log",
+    "name": "As Admin",
+    "variant": "desktop",
+    "file": "organization-audit-log--as-admin.png"
   },
   {
     "id": "organization-audit-log--empty",
@@ -432,6 +880,20 @@
     "name": "Empty",
     "variant": "desktop",
     "file": "organization-audit-log--empty.png"
+  },
+  {
+    "id": "organization-audit-log--as-member",
+    "title": "Organization/Audit log",
+    "name": "As Member",
+    "variant": "desktop",
+    "file": "organization-audit-log--as-member.png"
+  },
+  {
+    "id": "organization-audit-log--as-viewer",
+    "title": "Organization/Audit log",
+    "name": "As Viewer",
+    "variant": "desktop",
+    "file": "organization-audit-log--as-viewer.png"
   },
   {
     "id": "organization-settings--as-owner",
@@ -462,39 +924,130 @@
     "file": "organization-settings--as-admin.png"
   },
   {
-    "id": "organization-settings--rename-refused",
+    "id": "organization-settings--as-member",
     "title": "Organization/Settings",
-    "name": "Rename Refused",
+    "name": "As Member",
     "variant": "desktop",
-    "file": "organization-settings--rename-refused.png"
+    "file": "organization-settings--as-member.png"
   },
   {
-    "id": "project--with-fleets",
-    "title": "Project",
-    "name": "With Fleets",
+    "id": "organization-settings--as-viewer",
+    "title": "Organization/Settings",
+    "name": "As Viewer",
     "variant": "desktop",
-    "file": "project--with-fleets.png"
+    "file": "organization-settings--as-viewer.png"
   },
   {
-    "id": "project--with-fleets",
+    "id": "organization-settings--rename",
+    "title": "Organization/Settings",
+    "name": "Rename",
+    "variant": "desktop",
+    "file": "organization-settings--rename.png"
+  },
+  {
+    "id": "organization-settings--rename-to-nothing",
+    "title": "Organization/Settings",
+    "name": "Rename To Nothing",
+    "variant": "desktop",
+    "file": "organization-settings--rename-to-nothing.png"
+  },
+  {
+    "id": "organization-settings--rename-name-too-long",
+    "title": "Organization/Settings",
+    "name": "Rename Name Too Long",
+    "variant": "desktop",
+    "file": "organization-settings--rename-name-too-long.png"
+  },
+  {
+    "id": "organization-settings--rename-while-suspended",
+    "title": "Organization/Settings",
+    "name": "Rename While Suspended",
+    "variant": "desktop",
+    "file": "organization-settings--rename-while-suspended.png"
+  },
+  {
+    "id": "organization-settings--rename-saving",
+    "title": "Organization/Settings",
+    "name": "Rename Saving",
+    "variant": "desktop",
+    "file": "organization-settings--rename-saving.png"
+  },
+  {
+    "id": "organization-settings--renamed",
+    "title": "Organization/Settings",
+    "name": "Renamed",
+    "variant": "desktop",
+    "file": "organization-settings--renamed.png"
+  },
+  {
+    "id": "organization-settings--rename-as-member",
+    "title": "Organization/Settings",
+    "name": "Rename As Member",
+    "variant": "desktop",
+    "file": "organization-settings--rename-as-member.png"
+  },
+  {
+    "id": "organization-settings--delete",
+    "title": "Organization/Settings",
+    "name": "Delete",
+    "variant": "desktop",
+    "file": "organization-settings--delete.png"
+  },
+  {
+    "id": "organization-settings--delete-wrong-confirmation",
+    "title": "Organization/Settings",
+    "name": "Delete Wrong Confirmation",
+    "variant": "desktop",
+    "file": "organization-settings--delete-wrong-confirmation.png"
+  },
+  {
+    "id": "organization-settings--delete-refused",
+    "title": "Organization/Settings",
+    "name": "Delete Refused",
+    "variant": "desktop",
+    "file": "organization-settings--delete-refused.png"
+  },
+  {
+    "id": "organization-settings--deleting",
+    "title": "Organization/Settings",
+    "name": "Deleting",
+    "variant": "desktop",
+    "file": "organization-settings--deleting.png"
+  },
+  {
+    "id": "organization-settings--deleted",
+    "title": "Organization/Settings",
+    "name": "Deleted",
+    "variant": "desktop",
+    "file": "organization-settings--deleted.png"
+  },
+  {
+    "id": "organization-settings--delete-as-admin",
+    "title": "Organization/Settings",
+    "name": "Delete As Admin",
+    "variant": "desktop",
+    "file": "organization-settings--delete-as-admin.png"
+  },
+  {
+    "id": "project--as-owner",
     "title": "Project",
-    "name": "With Fleets",
+    "name": "As Owner",
+    "variant": "desktop",
+    "file": "project--as-owner.png"
+  },
+  {
+    "id": "project--as-owner",
+    "title": "Project",
+    "name": "As Owner",
     "variant": "mobile",
-    "file": "project--with-fleets--mobile.png"
+    "file": "project--as-owner--mobile.png"
   },
   {
-    "id": "project--with-fleets",
+    "id": "project--as-owner",
     "title": "Project",
-    "name": "With Fleets",
+    "name": "As Owner",
     "variant": "dark",
-    "file": "project--with-fleets--dark.png"
-  },
-  {
-    "id": "project--empty",
-    "title": "Project",
-    "name": "Empty",
-    "variant": "desktop",
-    "file": "project--empty.png"
+    "file": "project--as-owner--dark.png"
   },
   {
     "id": "project--as-admin",
@@ -518,6 +1071,20 @@
     "file": "project--as-viewer.png"
   },
   {
+    "id": "project--no-fleets",
+    "title": "Project",
+    "name": "No Fleets",
+    "variant": "desktop",
+    "file": "project--no-fleets.png"
+  },
+  {
+    "id": "project--no-fleets-as-viewer",
+    "title": "Project",
+    "name": "No Fleets As Viewer",
+    "variant": "desktop",
+    "file": "project--no-fleets-as-viewer.png"
+  },
+  {
     "id": "project--organization-unavailable",
     "title": "Project",
     "name": "Organization Unavailable",
@@ -525,39 +1092,179 @@
     "file": "project--organization-unavailable.png"
   },
   {
-    "id": "project--create-fleet-refused",
+    "id": "project--rename",
     "title": "Project",
-    "name": "Create Fleet Refused",
+    "name": "Rename",
     "variant": "desktop",
-    "file": "project--create-fleet-refused.png"
+    "file": "project--rename.png"
   },
   {
-    "id": "fleet--access-open",
-    "title": "Fleet",
-    "name": "Access Open",
+    "id": "project--rename-to-nothing",
+    "title": "Project",
+    "name": "Rename To Nothing",
     "variant": "desktop",
-    "file": "fleet--access-open.png"
+    "file": "project--rename-to-nothing.png"
   },
   {
-    "id": "fleet--access-open",
+    "id": "project--rename-name-too-long",
+    "title": "Project",
+    "name": "Rename Name Too Long",
+    "variant": "desktop",
+    "file": "project--rename-name-too-long.png"
+  },
+  {
+    "id": "project--rename-saving",
+    "title": "Project",
+    "name": "Rename Saving",
+    "variant": "desktop",
+    "file": "project--rename-saving.png"
+  },
+  {
+    "id": "project--renamed",
+    "title": "Project",
+    "name": "Renamed",
+    "variant": "desktop",
+    "file": "project--renamed.png"
+  },
+  {
+    "id": "project--rename-as-viewer",
+    "title": "Project",
+    "name": "Rename As Viewer",
+    "variant": "desktop",
+    "file": "project--rename-as-viewer.png"
+  },
+  {
+    "id": "project--delete",
+    "title": "Project",
+    "name": "Delete",
+    "variant": "desktop",
+    "file": "project--delete.png"
+  },
+  {
+    "id": "project--delete-without-fleets",
+    "title": "Project",
+    "name": "Delete Without Fleets",
+    "variant": "desktop",
+    "file": "project--delete-without-fleets.png"
+  },
+  {
+    "id": "project--delete-refused",
+    "title": "Project",
+    "name": "Delete Refused",
+    "variant": "desktop",
+    "file": "project--delete-refused.png"
+  },
+  {
+    "id": "project--deleted",
+    "title": "Project",
+    "name": "Deleted",
+    "variant": "desktop",
+    "file": "project--deleted.png"
+  },
+  {
+    "id": "project--delete-as-member",
+    "title": "Project",
+    "name": "Delete As Member",
+    "variant": "desktop",
+    "file": "project--delete-as-member.png"
+  },
+  {
+    "id": "project--new-fleet",
+    "title": "Project",
+    "name": "New Fleet",
+    "variant": "desktop",
+    "file": "project--new-fleet.png"
+  },
+  {
+    "id": "project--new-fleet-without-a-name",
+    "title": "Project",
+    "name": "New Fleet Without A Name",
+    "variant": "desktop",
+    "file": "project--new-fleet-without-a-name.png"
+  },
+  {
+    "id": "project--new-fleet-bad-slug",
+    "title": "Project",
+    "name": "New Fleet Bad Slug",
+    "variant": "desktop",
+    "file": "project--new-fleet-bad-slug.png"
+  },
+  {
+    "id": "project--new-fleet-slug-taken",
+    "title": "Project",
+    "name": "New Fleet Slug Taken",
+    "variant": "desktop",
+    "file": "project--new-fleet-slug-taken.png"
+  },
+  {
+    "id": "project--new-fleet-invalid",
+    "title": "Project",
+    "name": "New Fleet Invalid",
+    "variant": "desktop",
+    "file": "project--new-fleet-invalid.png"
+  },
+  {
+    "id": "project--new-fleet-over-quota",
+    "title": "Project",
+    "name": "New Fleet Over Quota",
+    "variant": "desktop",
+    "file": "project--new-fleet-over-quota.png"
+  },
+  {
+    "id": "project--new-fleet-creating",
+    "title": "Project",
+    "name": "New Fleet Creating",
+    "variant": "desktop",
+    "file": "project--new-fleet-creating.png"
+  },
+  {
+    "id": "project--new-fleet-created",
+    "title": "Project",
+    "name": "New Fleet Created",
+    "variant": "desktop",
+    "file": "project--new-fleet-created.png"
+  },
+  {
+    "id": "project--new-fleet-as-viewer",
+    "title": "Project",
+    "name": "New Fleet As Viewer",
+    "variant": "desktop",
+    "file": "project--new-fleet-as-viewer.png"
+  },
+  {
+    "id": "project--rename-while-suspended",
+    "title": "Project",
+    "name": "Rename While Suspended",
+    "variant": "desktop",
+    "file": "project--rename-while-suspended.png"
+  },
+  {
+    "id": "project--deleting",
+    "title": "Project",
+    "name": "Deleting",
+    "variant": "desktop",
+    "file": "project--deleting.png"
+  },
+  {
+    "id": "fleet--as-owner",
     "title": "Fleet",
-    "name": "Access Open",
+    "name": "As Owner",
+    "variant": "desktop",
+    "file": "fleet--as-owner.png"
+  },
+  {
+    "id": "fleet--as-owner",
+    "title": "Fleet",
+    "name": "As Owner",
     "variant": "mobile",
-    "file": "fleet--access-open--mobile.png"
+    "file": "fleet--as-owner--mobile.png"
   },
   {
-    "id": "fleet--access-open",
+    "id": "fleet--as-owner",
     "title": "Fleet",
-    "name": "Access Open",
+    "name": "As Owner",
     "variant": "dark",
-    "file": "fleet--access-open--dark.png"
-  },
-  {
-    "id": "fleet--empty",
-    "title": "Fleet",
-    "name": "Empty",
-    "variant": "desktop",
-    "file": "fleet--empty.png"
+    "file": "fleet--as-owner--dark.png"
   },
   {
     "id": "fleet--as-admin",
@@ -581,11 +1288,18 @@
     "file": "fleet--as-viewer.png"
   },
   {
-    "id": "fleet--empty-as-viewer",
+    "id": "fleet--no-emulators",
     "title": "Fleet",
-    "name": "Empty As Viewer",
+    "name": "No Emulators",
     "variant": "desktop",
-    "file": "fleet--empty-as-viewer.png"
+    "file": "fleet--no-emulators.png"
+  },
+  {
+    "id": "fleet--no-emulators-as-viewer",
+    "title": "Fleet",
+    "name": "No Emulators As Viewer",
+    "variant": "desktop",
+    "file": "fleet--no-emulators-as-viewer.png"
   },
   {
     "id": "fleet--organization-unavailable",
@@ -595,18 +1309,18 @@
     "file": "fleet--organization-unavailable.png"
   },
   {
-    "id": "fleet--access-key",
+    "id": "fleet--only-with-a-key",
     "title": "Fleet",
-    "name": "Access Key",
+    "name": "Only With A Key",
     "variant": "desktop",
-    "file": "fleet--access-key.png"
+    "file": "fleet--only-with-a-key.png"
   },
   {
-    "id": "fleet--custom-requests-per-minute",
+    "id": "fleet--own-requests-per-minute",
     "title": "Fleet",
-    "name": "Custom Requests Per Minute",
+    "name": "Own Requests Per Minute",
     "variant": "desktop",
-    "file": "fleet--custom-requests-per-minute.png"
+    "file": "fleet--own-requests-per-minute.png"
   },
   {
     "id": "fleet--durability-modes",
@@ -616,11 +1330,11 @@
     "file": "fleet--durability-modes.png"
   },
   {
-    "id": "fleet--status-tags",
+    "id": "fleet--emulator-states",
     "title": "Fleet",
-    "name": "Status Tags",
+    "name": "Emulator States",
     "variant": "desktop",
-    "file": "fleet--status-tags.png"
+    "file": "fleet--emulator-states.png"
   },
   {
     "id": "fleet--second-instance",
@@ -630,60 +1344,466 @@
     "file": "fleet--second-instance.png"
   },
   {
-    "id": "fleet--catalog-open",
+    "id": "fleet--rename",
     "title": "Fleet",
-    "name": "Catalog Open",
+    "name": "Rename",
     "variant": "desktop",
-    "file": "fleet--catalog-open.png"
+    "file": "fleet--rename.png"
   },
   {
-    "id": "fleet--catalog-results",
+    "id": "fleet--rename-to-nothing",
     "title": "Fleet",
-    "name": "Catalog Results",
+    "name": "Rename To Nothing",
     "variant": "desktop",
-    "file": "fleet--catalog-results.png"
+    "file": "fleet--rename-to-nothing.png"
   },
   {
-    "id": "fleet--catalog-no-match",
+    "id": "fleet--rename-name-too-long",
     "title": "Fleet",
+    "name": "Rename Name Too Long",
+    "variant": "desktop",
+    "file": "fleet--rename-name-too-long.png"
+  },
+  {
+    "id": "fleet--rename-while-suspended",
+    "title": "Fleet",
+    "name": "Rename While Suspended",
+    "variant": "desktop",
+    "file": "fleet--rename-while-suspended.png"
+  },
+  {
+    "id": "fleet--rename-saving",
+    "title": "Fleet",
+    "name": "Rename Saving",
+    "variant": "desktop",
+    "file": "fleet--rename-saving.png"
+  },
+  {
+    "id": "fleet--renamed",
+    "title": "Fleet",
+    "name": "Renamed",
+    "variant": "desktop",
+    "file": "fleet--renamed.png"
+  },
+  {
+    "id": "fleet--rename-as-viewer",
+    "title": "Fleet",
+    "name": "Rename As Viewer",
+    "variant": "desktop",
+    "file": "fleet--rename-as-viewer.png"
+  },
+  {
+    "id": "fleet--access",
+    "title": "Fleet",
+    "name": "Access",
+    "variant": "desktop",
+    "file": "fleet--access.png"
+  },
+  {
+    "id": "fleet--access-unchanged",
+    "title": "Fleet",
+    "name": "Access Unchanged",
+    "variant": "desktop",
+    "file": "fleet--access-unchanged.png"
+  },
+  {
+    "id": "fleet--access-refused",
+    "title": "Fleet",
+    "name": "Access Refused",
+    "variant": "desktop",
+    "file": "fleet--access-refused.png"
+  },
+  {
+    "id": "fleet--access-changed",
+    "title": "Fleet",
+    "name": "Access Changed",
+    "variant": "desktop",
+    "file": "fleet--access-changed.png"
+  },
+  {
+    "id": "fleet--rate-limit",
+    "title": "Fleet",
+    "name": "Rate Limit",
+    "variant": "desktop",
+    "file": "fleet--rate-limit.png"
+  },
+  {
+    "id": "fleet--rate-limit-own",
+    "title": "Fleet",
+    "name": "Rate Limit Own",
+    "variant": "desktop",
+    "file": "fleet--rate-limit-own.png"
+  },
+  {
+    "id": "fleet--rate-limit-over-the-ceiling",
+    "title": "Fleet",
+    "name": "Rate Limit Over The Ceiling",
+    "variant": "desktop",
+    "file": "fleet--rate-limit-over-the-ceiling.png"
+  },
+  {
+    "id": "fleet--rate-limit-rejected",
+    "title": "Fleet",
+    "name": "Rate Limit Rejected",
+    "variant": "desktop",
+    "file": "fleet--rate-limit-rejected.png"
+  },
+  {
+    "id": "fleet--rate-limit-changed",
+    "title": "Fleet",
+    "name": "Rate Limit Changed",
+    "variant": "desktop",
+    "file": "fleet--rate-limit-changed.png"
+  },
+  {
+    "id": "fleet--delete",
+    "title": "Fleet",
+    "name": "Delete",
+    "variant": "desktop",
+    "file": "fleet--delete.png"
+  },
+  {
+    "id": "fleet--delete-without-emulators",
+    "title": "Fleet",
+    "name": "Delete Without Emulators",
+    "variant": "desktop",
+    "file": "fleet--delete-without-emulators.png"
+  },
+  {
+    "id": "fleet--delete-refused",
+    "title": "Fleet",
+    "name": "Delete Refused",
+    "variant": "desktop",
+    "file": "fleet--delete-refused.png"
+  },
+  {
+    "id": "fleet--deleting",
+    "title": "Fleet",
+    "name": "Deleting",
+    "variant": "desktop",
+    "file": "fleet--deleting.png"
+  },
+  {
+    "id": "fleet--deleted",
+    "title": "Fleet",
+    "name": "Deleted",
+    "variant": "desktop",
+    "file": "fleet--deleted.png"
+  },
+  {
+    "id": "fleet--access-saving",
+    "title": "Fleet",
+    "name": "Access Saving",
+    "variant": "desktop",
+    "file": "fleet--access-saving.png"
+  },
+  {
+    "id": "fleet--rate-limit-saving",
+    "title": "Fleet",
+    "name": "Rate Limit Saving",
+    "variant": "desktop",
+    "file": "fleet--rate-limit-saving.png"
+  },
+  {
+    "id": "fleet--rate-limit-throttled",
+    "title": "Fleet",
+    "name": "Rate Limit Throttled",
+    "variant": "desktop",
+    "file": "fleet--rate-limit-throttled.png"
+  },
+  {
+    "id": "fleet-emulators--catalog",
+    "title": "Fleet/Emulators",
+    "name": "Catalog",
+    "variant": "desktop",
+    "file": "fleet-emulators--catalog.png"
+  },
+  {
+    "id": "fleet-emulators--catalog",
+    "title": "Fleet/Emulators",
+    "name": "Catalog",
+    "variant": "mobile",
+    "file": "fleet-emulators--catalog--mobile.png"
+  },
+  {
+    "id": "fleet-emulators--catalog",
+    "title": "Fleet/Emulators",
+    "name": "Catalog",
+    "variant": "dark",
+    "file": "fleet-emulators--catalog--dark.png"
+  },
+  {
+    "id": "fleet-emulators--catalog-search",
+    "title": "Fleet/Emulators",
+    "name": "Catalog Search",
+    "variant": "desktop",
+    "file": "fleet-emulators--catalog-search.png"
+  },
+  {
+    "id": "fleet-emulators--catalog-no-match",
+    "title": "Fleet/Emulators",
     "name": "Catalog No Match",
     "variant": "desktop",
-    "file": "fleet--catalog-no-match.png"
+    "file": "fleet-emulators--catalog-no-match.png"
   },
   {
-    "id": "fleet--save-refused",
-    "title": "Fleet",
-    "name": "Save Refused",
+    "id": "fleet-emulators--catalog-search-from-the-address",
+    "title": "Fleet/Emulators",
+    "name": "Catalog Search From The Address",
     "variant": "desktop",
-    "file": "fleet--save-refused.png"
+    "file": "fleet-emulators--catalog-search-from-the-address.png"
   },
   {
-    "id": "account--populated",
-    "title": "Account",
-    "name": "Populated",
+    "id": "fleet-emulators--catalog-as-viewer",
+    "title": "Fleet/Emulators",
+    "name": "Catalog As Viewer",
     "variant": "desktop",
-    "file": "account--populated.png"
+    "file": "fleet-emulators--catalog-as-viewer.png"
   },
   {
-    "id": "account--populated",
+    "id": "fleet-emulators--configure",
+    "title": "Fleet/Emulators",
+    "name": "Configure",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure.png"
+  },
+  {
+    "id": "fleet-emulators--configure-second-instance",
+    "title": "Fleet/Emulators",
+    "name": "Configure Second Instance",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-second-instance.png"
+  },
+  {
+    "id": "fleet-emulators--configure-name-taken",
+    "title": "Fleet/Emulators",
+    "name": "Configure Name Taken",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-name-taken.png"
+  },
+  {
+    "id": "fleet-emulators--configure-bad-name",
+    "title": "Fleet/Emulators",
+    "name": "Configure Bad Name",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-bad-name.png"
+  },
+  {
+    "id": "fleet-emulators--configure-name-rejected",
+    "title": "Fleet/Emulators",
+    "name": "Configure Name Rejected",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-name-rejected.png"
+  },
+  {
+    "id": "fleet-emulators--configure-over-quota",
+    "title": "Fleet/Emulators",
+    "name": "Configure Over Quota",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-over-quota.png"
+  },
+  {
+    "id": "fleet-emulators--configure-adding",
+    "title": "Fleet/Emulators",
+    "name": "Configure Adding",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-adding.png"
+  },
+  {
+    "id": "fleet-emulators--configure-added",
+    "title": "Fleet/Emulators",
+    "name": "Configure Added",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-added.png"
+  },
+  {
+    "id": "fleet-emulators--configure-unknown-emulator",
+    "title": "Fleet/Emulators",
+    "name": "Configure Unknown Emulator",
+    "variant": "desktop",
+    "file": "fleet-emulators--configure-unknown-emulator.png"
+  },
+  {
+    "id": "fleet-emulators--durability",
+    "title": "Fleet/Emulators",
+    "name": "Durability",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability.png"
+  },
+  {
+    "id": "fleet-emulators--durability-unchanged",
+    "title": "Fleet/Emulators",
+    "name": "Durability Unchanged",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability-unchanged.png"
+  },
+  {
+    "id": "fleet-emulators--durability-while-suspended",
+    "title": "Fleet/Emulators",
+    "name": "Durability While Suspended",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability-while-suspended.png"
+  },
+  {
+    "id": "fleet-emulators--durability-saving",
+    "title": "Fleet/Emulators",
+    "name": "Durability Saving",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability-saving.png"
+  },
+  {
+    "id": "fleet-emulators--durability-changed",
+    "title": "Fleet/Emulators",
+    "name": "Durability Changed",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability-changed.png"
+  },
+  {
+    "id": "fleet-emulators--durability-of-a-missing-emulator",
+    "title": "Fleet/Emulators",
+    "name": "Durability Of A Missing Emulator",
+    "variant": "desktop",
+    "file": "fleet-emulators--durability-of-a-missing-emulator.png"
+  },
+  {
+    "id": "fleet-emulators--save",
+    "title": "Fleet/Emulators",
+    "name": "Save",
+    "variant": "desktop",
+    "file": "fleet-emulators--save.png"
+  },
+  {
+    "id": "fleet-emulators--save-failed",
+    "title": "Fleet/Emulators",
+    "name": "Save Failed",
+    "variant": "desktop",
+    "file": "fleet-emulators--save-failed.png"
+  },
+  {
+    "id": "fleet-emulators--saving",
+    "title": "Fleet/Emulators",
+    "name": "Saving",
+    "variant": "desktop",
+    "file": "fleet-emulators--saving.png"
+  },
+  {
+    "id": "fleet-emulators--saved",
+    "title": "Fleet/Emulators",
+    "name": "Saved",
+    "variant": "desktop",
+    "file": "fleet-emulators--saved.png"
+  },
+  {
+    "id": "fleet-emulators--reset",
+    "title": "Fleet/Emulators",
+    "name": "Reset",
+    "variant": "desktop",
+    "file": "fleet-emulators--reset.png"
+  },
+  {
+    "id": "fleet-emulators--reset-refused",
+    "title": "Fleet/Emulators",
+    "name": "Reset Refused",
+    "variant": "desktop",
+    "file": "fleet-emulators--reset-refused.png"
+  },
+  {
+    "id": "fleet-emulators--reset-done",
+    "title": "Fleet/Emulators",
+    "name": "Reset Done",
+    "variant": "desktop",
+    "file": "fleet-emulators--reset-done.png"
+  },
+  {
+    "id": "fleet-emulators--remove",
+    "title": "Fleet/Emulators",
+    "name": "Remove",
+    "variant": "desktop",
+    "file": "fleet-emulators--remove.png"
+  },
+  {
+    "id": "fleet-emulators--remove-refused",
+    "title": "Fleet/Emulators",
+    "name": "Remove Refused",
+    "variant": "desktop",
+    "file": "fleet-emulators--remove-refused.png"
+  },
+  {
+    "id": "fleet-emulators--removed",
+    "title": "Fleet/Emulators",
+    "name": "Removed",
+    "variant": "desktop",
+    "file": "fleet-emulators--removed.png"
+  },
+  {
+    "id": "fleet-emulators--resetting",
+    "title": "Fleet/Emulators",
+    "name": "Resetting",
+    "variant": "desktop",
+    "file": "fleet-emulators--resetting.png"
+  },
+  {
+    "id": "fleet-emulators--removing",
+    "title": "Fleet/Emulators",
+    "name": "Removing",
+    "variant": "desktop",
+    "file": "fleet-emulators--removing.png"
+  },
+  {
+    "id": "account--with-tokens",
     "title": "Account",
-    "name": "Populated",
+    "name": "With Tokens",
+    "variant": "desktop",
+    "file": "account--with-tokens.png"
+  },
+  {
+    "id": "account--with-tokens",
+    "title": "Account",
+    "name": "With Tokens",
     "variant": "mobile",
-    "file": "account--populated--mobile.png"
+    "file": "account--with-tokens--mobile.png"
   },
   {
-    "id": "account--populated",
+    "id": "account--with-tokens",
     "title": "Account",
-    "name": "Populated",
+    "name": "With Tokens",
     "variant": "dark",
-    "file": "account--populated--dark.png"
+    "file": "account--with-tokens--dark.png"
   },
   {
-    "id": "account--empty",
+    "id": "account--no-tokens",
     "title": "Account",
-    "name": "Empty",
+    "name": "No Tokens",
     "variant": "desktop",
-    "file": "account--empty.png"
+    "file": "account--no-tokens.png"
+  },
+  {
+    "id": "account--new-token",
+    "title": "Account",
+    "name": "New Token",
+    "variant": "desktop",
+    "file": "account--new-token.png"
+  },
+  {
+    "id": "account--new-token-without-a-name",
+    "title": "Account",
+    "name": "New Token Without A Name",
+    "variant": "desktop",
+    "file": "account--new-token-without-a-name.png"
+  },
+  {
+    "id": "account--new-token-name-too-long",
+    "title": "Account",
+    "name": "New Token Name Too Long",
+    "variant": "desktop",
+    "file": "account--new-token-name-too-long.png"
+  },
+  {
+    "id": "account--new-token-creating",
+    "title": "Account",
+    "name": "New Token Creating",
+    "variant": "desktop",
+    "file": "account--new-token-creating.png"
   },
   {
     "id": "account--token-created",
@@ -691,6 +1811,55 @@
     "name": "Token Created",
     "variant": "desktop",
     "file": "account--token-created.png"
+  },
+  {
+    "id": "account--token-shown-once",
+    "title": "Account",
+    "name": "Token Shown Once",
+    "variant": "desktop",
+    "file": "account--token-shown-once.png"
+  },
+  {
+    "id": "account--revoke-token",
+    "title": "Account",
+    "name": "Revoke Token",
+    "variant": "desktop",
+    "file": "account--revoke-token.png"
+  },
+  {
+    "id": "account--revoke-token-already-revoked",
+    "title": "Account",
+    "name": "Revoke Token Already Revoked",
+    "variant": "desktop",
+    "file": "account--revoke-token-already-revoked.png"
+  },
+  {
+    "id": "account--token-revoked",
+    "title": "Account",
+    "name": "Token Revoked",
+    "variant": "desktop",
+    "file": "account--token-revoked.png"
+  },
+  {
+    "id": "account--revoke-unknown-token",
+    "title": "Account",
+    "name": "Revoke Unknown Token",
+    "variant": "desktop",
+    "file": "account--revoke-unknown-token.png"
+  },
+  {
+    "id": "account--new-token-rate-limited",
+    "title": "Account",
+    "name": "New Token Rate Limited",
+    "variant": "desktop",
+    "file": "account--new-token-rate-limited.png"
+  },
+  {
+    "id": "account--revoking-token",
+    "title": "Account",
+    "name": "Revoking Token",
+    "variant": "desktop",
+    "file": "account--revoking-token.png"
   },
   {
     "id": "api-reference--reference",
@@ -714,25 +1883,25 @@
     "file": "api-reference--reference--dark.png"
   },
   {
-    "id": "invite--accepted",
+    "id": "invite--open",
     "title": "Invite",
-    "name": "Accepted",
+    "name": "Open",
     "variant": "desktop",
-    "file": "invite--accepted.png"
+    "file": "invite--open.png"
   },
   {
-    "id": "invite--accepted",
+    "id": "invite--open",
     "title": "Invite",
-    "name": "Accepted",
+    "name": "Open",
     "variant": "mobile",
-    "file": "invite--accepted--mobile.png"
+    "file": "invite--open--mobile.png"
   },
   {
-    "id": "invite--accepted",
+    "id": "invite--open",
     "title": "Invite",
-    "name": "Accepted",
+    "name": "Open",
     "variant": "dark",
-    "file": "invite--accepted--dark.png"
+    "file": "invite--open--dark.png"
   },
   {
     "id": "invite--invalid-or-expired",
@@ -742,32 +1911,53 @@
     "file": "invite--invalid-or-expired.png"
   },
   {
-    "id": "invite--refused",
+    "id": "invite--organization-full",
     "title": "Invite",
-    "name": "Refused",
+    "name": "Organization Full",
     "variant": "desktop",
-    "file": "invite--refused.png"
+    "file": "invite--organization-full.png"
   },
   {
-    "id": "errors--not-found",
-    "title": "Errors",
-    "name": "Not Found",
+    "id": "invite--joining",
+    "title": "Invite",
+    "name": "Joining",
     "variant": "desktop",
-    "file": "errors--not-found.png"
+    "file": "invite--joining.png"
   },
   {
-    "id": "errors--not-found",
+    "id": "invite--joined",
+    "title": "Invite",
+    "name": "Joined",
+    "variant": "desktop",
+    "file": "invite--joined.png"
+  },
+  {
+    "id": "errors--page-not-found",
     "title": "Errors",
-    "name": "Not Found",
+    "name": "Page Not Found",
+    "variant": "desktop",
+    "file": "errors--page-not-found.png"
+  },
+  {
+    "id": "errors--page-not-found",
+    "title": "Errors",
+    "name": "Page Not Found",
     "variant": "mobile",
-    "file": "errors--not-found--mobile.png"
+    "file": "errors--page-not-found--mobile.png"
   },
   {
-    "id": "errors--not-found",
+    "id": "errors--page-not-found",
     "title": "Errors",
-    "name": "Not Found",
+    "name": "Page Not Found",
     "variant": "dark",
-    "file": "errors--not-found--dark.png"
+    "file": "errors--page-not-found--dark.png"
+  },
+  {
+    "id": "errors--organization-not-found",
+    "title": "Errors",
+    "name": "Organization Not Found",
+    "variant": "desktop",
+    "file": "errors--organization-not-found.png"
   },
   {
     "id": "errors--project-not-found",
@@ -796,47 +1986,5 @@
     "name": "No Access",
     "variant": "desktop",
     "file": "errors--no-access.png"
-  },
-  {
-    "id": "errors--api-keys-as-viewer",
-    "title": "Errors",
-    "name": "Api Keys As Viewer",
-    "variant": "desktop",
-    "file": "errors--api-keys-as-viewer.png"
-  },
-  {
-    "id": "errors--api-keys-as-member",
-    "title": "Errors",
-    "name": "Api Keys As Member",
-    "variant": "desktop",
-    "file": "errors--api-keys-as-member.png"
-  },
-  {
-    "id": "errors--audit-log-as-viewer",
-    "title": "Errors",
-    "name": "Audit Log As Viewer",
-    "variant": "desktop",
-    "file": "errors--audit-log-as-viewer.png"
-  },
-  {
-    "id": "errors--audit-log-as-member",
-    "title": "Errors",
-    "name": "Audit Log As Member",
-    "variant": "desktop",
-    "file": "errors--audit-log-as-member.png"
-  },
-  {
-    "id": "errors--settings-as-viewer",
-    "title": "Errors",
-    "name": "Settings As Viewer",
-    "variant": "desktop",
-    "file": "errors--settings-as-viewer.png"
-  },
-  {
-    "id": "errors--settings-as-member",
-    "title": "Errors",
-    "name": "Settings As Member",
-    "variant": "desktop",
-    "file": "errors--settings-as-member.png"
   }
 ]

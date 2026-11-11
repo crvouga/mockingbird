@@ -1,0 +1,1262 @@
+{
+  "shell--sign-in-unavailable": {
+    "route": "unavailable",
+    "shows": []
+  },
+  "shell--rate-limited": {
+    "route": "unavailable",
+    "shows": []
+  },
+  "shell--server-unavailable": {
+    "route": "unavailable",
+    "shows": []
+  },
+  "shell--loading": {
+    "route": "boot",
+    "shows": []
+  },
+  "sign-in--single-sign-on": {
+    "route": "sign-in",
+    "shows": []
+  },
+  "sign-in--local-only": {
+    "route": "sign-in",
+    "shows": []
+  },
+  "sign-in--token-only": {
+    "route": "sign-in",
+    "shows": []
+  },
+  "sign-in--every-method": {
+    "route": "sign-in",
+    "shows": []
+  },
+  "sign-in--no-way-to-sign-in": {
+    "route": "sign-in",
+    "shows": []
+  },
+  "sign-in--from-an-invite-link": {
+    "route": "sign-in",
+    "shows": []
+  },
+  "sign-in--local": {
+    "route": "sign-in.local",
+    "shows": []
+  },
+  "sign-in--local-not-an-email": {
+    "route": "sign-in.local",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "sign-in--local-too-many-attempts": {
+    "route": "sign-in.local",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "sign-in--local-rejected-email": {
+    "route": "sign-in.local",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "sign-in--local-signed-in": {
+    "route": "org",
+    "shows": [
+      "landed"
+    ]
+  },
+  "sign-in--token": {
+    "route": "sign-in.token",
+    "shows": []
+  },
+  "sign-in--local-signing-in": {
+    "route": "sign-in.local",
+    "shows": [
+      "pending"
+    ]
+  },
+  "sign-in--local-not-offered": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "sign-in--token-missing": {
+    "route": "sign-in.token",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "sign-in--token-rejected": {
+    "route": "sign-in.token",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "sign-in--token-signed-in": {
+    "route": "account",
+    "shows": [
+      "landed"
+    ]
+  },
+  "sign-in--sign-out-failed": {
+    "route": "sign-out",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "sign-in--sign-out": {
+    "route": "sign-out",
+    "shows": []
+  },
+  "sign-in--token-too-many-attempts": {
+    "route": "sign-in.token",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "sign-in--signed-out": {
+    "route": "sign-in",
+    "shows": [
+      "landed"
+    ]
+  },
+  "sign-in--token-signing-in": {
+    "route": "sign-in.token",
+    "shows": [
+      "pending"
+    ]
+  },
+  "sign-in--signing-out": {
+    "route": "sign-out",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organizations--several": {
+    "route": "orgs",
+    "shows": []
+  },
+  "organizations--empty": {
+    "route": "orgs",
+    "shows": []
+  },
+  "organizations--with-a-suspended-one": {
+    "route": "orgs",
+    "shows": []
+  },
+  "organizations--new-without-a-name": {
+    "route": "org.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organizations--new": {
+    "route": "org.new",
+    "shows": []
+  },
+  "organizations--new-name-too-long": {
+    "route": "org.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organizations--new-over-quota": {
+    "route": "org.new",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organizations--root-opens-the-first-organization": {
+    "route": "org",
+    "shows": []
+  },
+  "organizations--new-creating": {
+    "route": "org.new",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-projects--as-owner": {
+    "route": "org",
+    "shows": []
+  },
+  "organization-projects--as-admin": {
+    "route": "org",
+    "shows": []
+  },
+  "organizations--new-created": {
+    "route": "org",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-projects--as-member": {
+    "route": "org",
+    "shows": []
+  },
+  "organization-projects--as-viewer": {
+    "route": "org",
+    "shows": []
+  },
+  "organization-projects--empty": {
+    "route": "org",
+    "shows": []
+  },
+  "organization-projects--empty-as-viewer": {
+    "route": "org",
+    "shows": []
+  },
+  "organization-projects--suspended": {
+    "route": "org",
+    "shows": []
+  },
+  "organization-projects--new-project-name-too-long": {
+    "route": "project.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-projects--new-project-in-a-suspended-organization": {
+    "route": "project.new",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-projects--new-project": {
+    "route": "project.new",
+    "shows": []
+  },
+  "organization-projects--new-project-without-a-name": {
+    "route": "project.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-projects--new-project-creating": {
+    "route": "project.new",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-projects--new-project-over-quota": {
+    "route": "project.new",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-projects--new-project-as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-members--as-owner": {
+    "route": "org.members",
+    "shows": []
+  },
+  "organization-projects--new-project-created": {
+    "route": "project",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-members--as-admin": {
+    "route": "org.members",
+    "shows": []
+  },
+  "organization-members--as-member": {
+    "route": "org.members",
+    "shows": []
+  },
+  "organization-members--as-viewer": {
+    "route": "org.members",
+    "shows": []
+  },
+  "organization-members--no-pending-invites": {
+    "route": "org.members",
+    "shows": []
+  },
+  "organization-members--change-role-unchanged": {
+    "route": "member.role",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-members--change-role-of-the-last-owner": {
+    "route": "member.role",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-members--change-role": {
+    "route": "member.role",
+    "shows": []
+  },
+  "organization-members--change-role-changed": {
+    "route": "org.members",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-members--change-role-of-an-owner-as-admin": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-members--change-role-saving": {
+    "route": "member.role",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-members--remove": {
+    "route": "member.remove",
+    "shows": []
+  },
+  "organization-members--remove-refused": {
+    "route": "member.remove",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-members--removed": {
+    "route": "org.members",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-members--leave": {
+    "route": "org.leave",
+    "shows": []
+  },
+  "organization-members--left": {
+    "route": "orgs",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-members--invite-someone": {
+    "route": "invite.new",
+    "shows": []
+  },
+  "organization-members--invite-rejected-email": {
+    "route": "invite.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-members--invite-over-quota": {
+    "route": "invite.new",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-members--invite-creating": {
+    "route": "invite.new",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-members--leave-as-the-last-owner": {
+    "route": "org.leave",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-members--invite-not-an-email": {
+    "route": "invite.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-members--invite-link-shown-once": {
+    "route": "gone",
+    "shows": []
+  },
+  "organization-members--revoke-invite": {
+    "route": "invite.revoke",
+    "shows": []
+  },
+  "organization-members--invite-link-created": {
+    "route": "invite.created",
+    "shows": [
+      "secret"
+    ]
+  },
+  "organization-members--revoke-invite-already-used": {
+    "route": "invite.revoke",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-members--removing": {
+    "route": "member.remove",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-members--leaving": {
+    "route": "org.leave",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-members--revoking-invite": {
+    "route": "invite.revoke",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-members--change-role-rate-limited": {
+    "route": "member.role",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-members--invite-revoked": {
+    "route": "org.members",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-usage--as-owner": {
+    "route": "org.usage",
+    "shows": []
+  },
+  "organization-usage--as-viewer": {
+    "route": "org.usage",
+    "shows": []
+  },
+  "organization-usage--as-admin": {
+    "route": "org.usage",
+    "shows": []
+  },
+  "organization-usage--as-member": {
+    "route": "org.usage",
+    "shows": []
+  },
+  "organization-usage--at-the-limit": {
+    "route": "org.usage",
+    "shows": []
+  },
+  "organization-usage--no-requests-yet": {
+    "route": "org.usage",
+    "shows": []
+  },
+  "organization-api-keys--as-owner": {
+    "route": "org.keys",
+    "shows": []
+  },
+  "organization-usage--unlimited": {
+    "route": "org.usage",
+    "shows": []
+  },
+  "organization-api-keys--as-member": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-api-keys--empty": {
+    "route": "org.keys",
+    "shows": []
+  },
+  "organization-api-keys--as-admin": {
+    "route": "org.keys",
+    "shows": []
+  },
+  "organization-api-keys--as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-api-keys--new-key": {
+    "route": "key.new",
+    "shows": []
+  },
+  "organization-api-keys--new-key-without-a-name": {
+    "route": "key.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-api-keys--new-key-name-too-long": {
+    "route": "key.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-api-keys--new-project-key-as-admin": {
+    "route": "key.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-api-keys--key-created": {
+    "route": "key.created",
+    "shows": [
+      "secret"
+    ]
+  },
+  "organization-api-keys--new-key-creating": {
+    "route": "key.new",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-api-keys--key-shown-once": {
+    "route": "gone",
+    "shows": []
+  },
+  "organization-api-keys--new-key-over-quota": {
+    "route": "key.new",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-api-keys--revoke-key-already-revoked": {
+    "route": "key.revoke",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-api-keys--revoke-key": {
+    "route": "key.revoke",
+    "shows": []
+  },
+  "organization-api-keys--key-revoked": {
+    "route": "org.keys",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-audit-log--as-owner": {
+    "route": "org.audit",
+    "shows": []
+  },
+  "organization-api-keys--revoking-key": {
+    "route": "key.revoke",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-audit-log--as-admin": {
+    "route": "org.audit",
+    "shows": []
+  },
+  "organization-audit-log--empty": {
+    "route": "org.audit",
+    "shows": []
+  },
+  "organization-audit-log--as-member": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-audit-log--as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-settings--as-owner": {
+    "route": "org.settings",
+    "shows": []
+  },
+  "organization-settings--as-admin": {
+    "route": "org.settings",
+    "shows": []
+  },
+  "organization-settings--as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-settings--as-member": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-settings--rename": {
+    "route": "org.rename",
+    "shows": []
+  },
+  "organization-settings--rename-to-nothing": {
+    "route": "org.rename",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-settings--rename-name-too-long": {
+    "route": "org.rename",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-settings--rename-saving": {
+    "route": "org.rename",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-settings--rename-while-suspended": {
+    "route": "org.rename",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-settings--renamed": {
+    "route": "org.settings",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-settings--rename-as-member": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "organization-settings--delete": {
+    "route": "org.delete",
+    "shows": []
+  },
+  "organization-settings--delete-refused": {
+    "route": "org.delete",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "organization-settings--deleted": {
+    "route": "orgs",
+    "shows": [
+      "landed"
+    ]
+  },
+  "organization-settings--deleting": {
+    "route": "org.delete",
+    "shows": [
+      "pending"
+    ]
+  },
+  "organization-settings--delete-wrong-confirmation": {
+    "route": "org.delete",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "organization-settings--delete-as-admin": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "project--as-owner": {
+    "route": "project",
+    "shows": []
+  },
+  "project--as-member": {
+    "route": "project",
+    "shows": []
+  },
+  "project--as-admin": {
+    "route": "project",
+    "shows": []
+  },
+  "project--as-viewer": {
+    "route": "project",
+    "shows": []
+  },
+  "project--no-fleets-as-viewer": {
+    "route": "project",
+    "shows": []
+  },
+  "project--rename-to-nothing": {
+    "route": "project.rename",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "project--rename": {
+    "route": "project.rename",
+    "shows": []
+  },
+  "project--organization-unavailable": {
+    "route": "project",
+    "shows": []
+  },
+  "project--rename-name-too-long": {
+    "route": "project.rename",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "project--no-fleets": {
+    "route": "project",
+    "shows": []
+  },
+  "project--rename-saving": {
+    "route": "project.rename",
+    "shows": [
+      "pending"
+    ]
+  },
+  "project--renamed": {
+    "route": "project",
+    "shows": [
+      "landed"
+    ]
+  },
+  "project--rename-as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "project--delete": {
+    "route": "project.delete",
+    "shows": []
+  },
+  "project--delete-without-fleets": {
+    "route": "project.delete",
+    "shows": []
+  },
+  "project--delete-refused": {
+    "route": "project.delete",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "project--delete-as-member": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "project--new-fleet": {
+    "route": "fleet.new",
+    "shows": []
+  },
+  "project--deleted": {
+    "route": "org",
+    "shows": [
+      "landed"
+    ]
+  },
+  "project--new-fleet-without-a-name": {
+    "route": "fleet.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "project--new-fleet-bad-slug": {
+    "route": "fleet.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "project--new-fleet-slug-taken": {
+    "route": "fleet.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "project--new-fleet-invalid": {
+    "route": "fleet.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "project--new-fleet-creating": {
+    "route": "fleet.new",
+    "shows": [
+      "pending"
+    ]
+  },
+  "project--new-fleet-over-quota": {
+    "route": "fleet.new",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "project--new-fleet-as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "project--rename-while-suspended": {
+    "route": "project.rename",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "project--new-fleet-created": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "project--deleting": {
+    "route": "project.delete",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet--as-owner": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--as-member": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--as-admin": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--as-viewer": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--no-emulators": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--no-emulators-as-viewer": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--organization-unavailable": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--own-requests-per-minute": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--emulator-states": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--only-with-a-key": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--durability-modes": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--second-instance": {
+    "route": "fleet",
+    "shows": []
+  },
+  "fleet--rename": {
+    "route": "fleet.rename",
+    "shows": []
+  },
+  "fleet--rename-to-nothing": {
+    "route": "fleet.rename",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet--rename-while-suspended": {
+    "route": "fleet.rename",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet--rename-saving": {
+    "route": "fleet.rename",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet--rename-name-too-long": {
+    "route": "fleet.rename",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet--access": {
+    "route": "fleet.access",
+    "shows": []
+  },
+  "fleet--rename-as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "fleet--access-unchanged": {
+    "route": "fleet.access",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet--renamed": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet--access-refused": {
+    "route": "fleet.access",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet--access-changed": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet--rate-limit": {
+    "route": "fleet.rate-limit",
+    "shows": []
+  },
+  "fleet--rate-limit-own": {
+    "route": "fleet.rate-limit",
+    "shows": []
+  },
+  "fleet--rate-limit-over-the-ceiling": {
+    "route": "fleet.rate-limit",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet--delete": {
+    "route": "fleet.delete",
+    "shows": []
+  },
+  "fleet--rate-limit-rejected": {
+    "route": "fleet.rate-limit",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet--rate-limit-changed": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet--delete-without-emulators": {
+    "route": "fleet.delete",
+    "shows": []
+  },
+  "fleet--deleting": {
+    "route": "fleet.delete",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet--delete-refused": {
+    "route": "fleet.delete",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet--access-saving": {
+    "route": "fleet.access",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet--rate-limit-saving": {
+    "route": "fleet.rate-limit",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet--rate-limit-throttled": {
+    "route": "fleet.rate-limit",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet-emulators--catalog": {
+    "route": "emulator.add",
+    "shows": []
+  },
+  "fleet--deleted": {
+    "route": "project",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet-emulators--catalog-search": {
+    "route": "emulator.add",
+    "shows": [
+      "catalog:results"
+    ]
+  },
+  "fleet-emulators--catalog-no-match": {
+    "route": "emulator.add",
+    "shows": [
+      "catalog:no-match"
+    ]
+  },
+  "fleet-emulators--catalog-search-from-the-address": {
+    "route": "emulator.add",
+    "shows": []
+  },
+  "fleet-emulators--configure": {
+    "route": "emulator.add.configure",
+    "shows": []
+  },
+  "fleet-emulators--catalog-as-viewer": {
+    "route": "forbidden",
+    "shows": []
+  },
+  "fleet-emulators--configure-second-instance": {
+    "route": "emulator.add.configure",
+    "shows": []
+  },
+  "fleet-emulators--configure-bad-name": {
+    "route": "emulator.add.configure",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet-emulators--configure-name-taken": {
+    "route": "emulator.add.configure",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet-emulators--configure-name-rejected": {
+    "route": "emulator.add.configure",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet-emulators--configure-over-quota": {
+    "route": "emulator.add.configure",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet-emulators--configure-adding": {
+    "route": "emulator.add.configure",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet-emulators--configure-added": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet-emulators--configure-unknown-emulator": {
+    "route": "not-found",
+    "shows": []
+  },
+  "fleet-emulators--durability": {
+    "route": "emulator.durability",
+    "shows": []
+  },
+  "fleet-emulators--durability-unchanged": {
+    "route": "emulator.durability",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "fleet-emulators--durability-while-suspended": {
+    "route": "emulator.durability",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet-emulators--durability-of-a-missing-emulator": {
+    "route": "not-found",
+    "shows": []
+  },
+  "fleet-emulators--save-failed": {
+    "route": "emulator.save",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet-emulators--durability-changed": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet-emulators--durability-saving": {
+    "route": "emulator.durability",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet-emulators--save": {
+    "route": "emulator.save",
+    "shows": []
+  },
+  "fleet-emulators--reset": {
+    "route": "emulator.reset",
+    "shows": []
+  },
+  "fleet-emulators--saving": {
+    "route": "emulator.save",
+    "shows": [
+      "pending"
+    ]
+  },
+  "fleet-emulators--saved": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet-emulators--reset-done": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet-emulators--remove": {
+    "route": "emulator.remove",
+    "shows": []
+  },
+  "fleet-emulators--reset-refused": {
+    "route": "emulator.reset",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet-emulators--remove-refused": {
+    "route": "emulator.remove",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "fleet-emulators--removed": {
+    "route": "fleet",
+    "shows": [
+      "landed"
+    ]
+  },
+  "fleet-emulators--resetting": {
+    "route": "emulator.reset",
+    "shows": [
+      "pending"
+    ]
+  },
+  "account--with-tokens": {
+    "route": "account",
+    "shows": []
+  },
+  "fleet-emulators--removing": {
+    "route": "emulator.remove",
+    "shows": [
+      "pending"
+    ]
+  },
+  "account--new-token": {
+    "route": "token.new",
+    "shows": []
+  },
+  "account--new-token-name-too-long": {
+    "route": "token.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "account--no-tokens": {
+    "route": "account",
+    "shows": []
+  },
+  "account--new-token-without-a-name": {
+    "route": "token.new",
+    "shows": [
+      "field-error"
+    ]
+  },
+  "account--new-token-creating": {
+    "route": "token.new",
+    "shows": [
+      "pending"
+    ]
+  },
+  "account--token-created": {
+    "route": "token.created",
+    "shows": [
+      "secret"
+    ]
+  },
+  "account--token-shown-once": {
+    "route": "gone",
+    "shows": []
+  },
+  "account--revoke-unknown-token": {
+    "route": "not-found",
+    "shows": []
+  },
+  "account--revoke-token-already-revoked": {
+    "route": "token.revoke",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "account--revoke-token": {
+    "route": "token.revoke",
+    "shows": []
+  },
+  "account--token-revoked": {
+    "route": "account",
+    "shows": [
+      "landed"
+    ]
+  },
+  "account--new-token-rate-limited": {
+    "route": "token.new",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "account--revoking-token": {
+    "route": "token.revoke",
+    "shows": [
+      "pending"
+    ]
+  },
+  "invite--open": {
+    "route": "invite.accept",
+    "shows": []
+  },
+  "api-reference--reference": {
+    "route": "api-reference",
+    "shows": []
+  },
+  "invite--invalid-or-expired": {
+    "route": "invite.accept",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "invite--organization-full": {
+    "route": "invite.accept",
+    "shows": [
+      "form-error"
+    ]
+  },
+  "invite--joining": {
+    "route": "invite.accept",
+    "shows": [
+      "pending"
+    ]
+  },
+  "invite--joined": {
+    "route": "org",
+    "shows": [
+      "landed"
+    ]
+  },
+  "errors--page-not-found": {
+    "route": "not-found",
+    "shows": []
+  },
+  "errors--project-not-found": {
+    "route": "not-found",
+    "shows": []
+  },
+  "errors--fleet-not-found": {
+    "route": "not-found",
+    "shows": []
+  },
+  "errors--something-went-wrong": {
+    "route": "error",
+    "shows": []
+  },
+  "errors--organization-not-found": {
+    "route": "not-found",
+    "shows": []
+  },
+  "errors--no-access": {
+    "route": "forbidden",
+    "shows": []
+  }
+}
