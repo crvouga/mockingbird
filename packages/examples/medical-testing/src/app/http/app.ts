@@ -14,7 +14,7 @@ export type ClientAssets = { html: string; js: string }
 
 /**
  * The whole app, built purely from its ports — nothing here knows what's
- * actually backing `deps.db`/`deps.payments`/`deps.labTesting`/`deps.identity`.
+ * actually backing `deps.db`/`deps.payments`/`deps.labTesting`/`deps.identity`/`deps.notifier`.
  * See src/composition/*.ts for what wires those up.
  */
 export const createApp = (deps: AppDeps, assets: ClientAssets): Hono<AppEnv> => {
@@ -25,6 +25,7 @@ export const createApp = (deps: AppDeps, assets: ClientAssets): Hono<AppEnv> => 
     c.set("payments", deps.payments)
     c.set("labTesting", deps.labTesting)
     c.set("identity", deps.identity)
+    c.set("notifier", deps.notifier)
     // Real browsers block JS from *reading* the Set-Cookie/Cookie headers on
     // any Response/Headers object — not just ones from a real network fetch,
     // any object in a browser JS realm — so a real `Cookie` request header

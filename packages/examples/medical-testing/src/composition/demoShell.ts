@@ -68,6 +68,23 @@ ${scopeReset(".demo-shell")}
   box-shadow: inset 0 -2px 0 var(--accent, #5b4fe0);
 }
 .demo-tabs button:focus-visible { outline: 2px solid var(--accent, #5b4fe0); outline-offset: 2px; }
+.demo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent, #5b4fe0);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.demo-badge[hidden] { display: none; }
+.demo-notifications { flex: 1; width: 100%; height: 100%; min-height: 0; overflow: auto; }
 .demo-stage { position: relative; flex: 1; min-height: 0; min-width: 0; }
 .demo-panel { position: absolute; inset: 0; display: flex; flex-direction: column; min-width: 0; }
 .demo-panel[hidden] { display: none !important; }
@@ -86,14 +103,22 @@ const installStyles = (): void => {
   document.head.appendChild(style)
 }
 
+const BADGE_POLL_MS = 1_500
+
 /**
- * One shared UI fronts every independent admin API used by the example.
+ * The fullscreen example: the app, the notifications it sent, and one shared
+ * UI that fronts every independent admin API it uses. Tabs and panels carry
+ * `data-testid="demo-tab-<id>"` / `"demo-panel-<id>"` for end-to-end tests.
  */
 export const mountDemoShell = (
   host: HTMLElement,
   options: {
     mountApp: (panel: HTMLElement) => () => void
     admin: Pick<MockAdmin, "fetch">
+    /** Mounts the notification harness UI into its panel the first time the tab opens. */
+    mountNotifications?: (panel: HTMLElement) => () => void
+    /** How many notifications exist now; drives the tab's unread badge. */
+    notificationCount?: () => Promise<number>
   },
 ): (() => void) => {
   installStyles()
@@ -118,6 +143,10 @@ export const mountDemoShell = (
   let adminTicket = 0
   let unpaste: (() => void) | undefined
   let adminLoading: Promise<void> | undefined
+  let unmountNotifications: (() => void) | undefined
+  let badgeTimer: ReturnType<typeof setInterval> | undefined
+  let seenCount = 0
+  let latestCount = 0
 
   const addTab = (id: string, label: string): HTMLElement => {
     const button = document.createElement("button")
@@ -126,6 +155,7 @@ export const mountDemoShell = (
     button.id = `${tabPrefix}-tab-${id}`
     button.setAttribute("aria-controls", `${tabPrefix}-panel-${id}`)
     button.dataset.demoTab = id
+    button.dataset.testid = `demo-tab-${id}`
     button.textContent = label
     button.setAttribute("aria-selected", "false")
     button.tabIndex = -1
@@ -136,6 +166,7 @@ export const mountDemoShell = (
     panel.setAttribute("aria-labelledby", button.id)
     panel.className = "demo-panel"
     panel.dataset.demoPanel = id
+    panel.dataset.testid = `demo-panel-${id}`
     panel.setAttribute("role", "tabpanel")
     panel.hidden = true
     stage.append(panel)
@@ -147,7 +178,52 @@ export const mountDemoShell = (
   const appRoot = document.createElement("div")
   appPanel.append(appRoot)
   const unmountApp = options.mountApp(appRoot)
+  const notificationsPanel = options.mountNotifications
+    ? addTab("notifications", "Notifications")
+    : undefined
   addTab("admin", "Emulators")
+
+  const badge = document.createElement("span")
+  badge.className = "demo-badge"
+  badge.dataset.testid = "demo-notifications-badge"
+  badge.hidden = true
+  buttons.find((button) => button.dataset.demoTab === "notifications")?.append(badge)
+
+  const renderBadge = (): void => {
+    const unread = selected === "notifications" ? 0 : Math.max(0, latestCount - seenCount)
+    badge.hidden = unread === 0
+    badge.textContent = unread > 99 ? "99+" : String(unread)
+    badge.setAttribute("aria-label", `${unread} new`)
+  }
+
+  const refreshBadge = async (): Promise<void> => {
+    if (!options.notificationCount) return
+    try {
+      latestCount = await options.notificationCount()
+      if (selected === "notifications") seenCount = latestCount
+      renderBadge()
+    } catch {
+      // The badge is a nicety; the panel shows the harness's own errors.
+    }
+  }
+  if (notificationsPanel && options.notificationCount) {
+    void refreshBadge()
+    badgeTimer = setInterval(() => void refreshBadge(), BADGE_POLL_MS)
+  }
+
+  const showNotifications = (): void => {
+    if (unmountNotifications || !notificationsPanel || !options.mountNotifications) return
+    const root = document.createElement("div")
+    root.className = "demo-notifications"
+    root.setAttribute("role", "region")
+    root.setAttribute("aria-label", "Notifications the example sent")
+    notificationsPanel.replaceChildren(root)
+    try {
+      unmountNotifications = options.mountNotifications(root)
+    } catch (error) {
+      showStatus(notificationsPanel, error instanceof Error ? error.message : String(error), true)
+    }
+  }
 
   const showStatus = (panel: HTMLElement, text: string, isError = false): void => {
     panel.replaceChildren()
@@ -209,6 +285,11 @@ export const mountDemoShell = (
     }
     for (const [panelId, panel] of panels) panel.hidden = panelId !== id
     if (id === "admin") void showAdmin()
+    if (id === "notifications") {
+      seenCount = latestCount
+      showNotifications()
+    }
+    renderBadge()
   }
 
   tabs.addEventListener("click", (event) => {
@@ -238,7 +319,9 @@ export const mountDemoShell = (
 
   return () => {
     adminTicket++
+    if (badgeTimer) clearInterval(badgeTimer)
     unpaste?.()
+    unmountNotifications?.()
     unmountApp()
     shell.remove()
   }

@@ -34,6 +34,12 @@ for (const pkg of pkgs) {
     )
     continue
   }
+  if (pkg.name === "@crvouga/mockingbird-notifications" && manifest.mockingbird?.layer === "tool") {
+    toolingLines.push(
+      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): Notification test harness that reads a fleet's Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators and shows every SMS, email and push on phone and mail screens, with a JSON API for tests. This is tooling, not a vendor emulator.`,
+    )
+    continue
+  }
   const parity = manifest.mockingbird?.parity
   if (
     manifest.mockingbird?.layer !== "service" ||

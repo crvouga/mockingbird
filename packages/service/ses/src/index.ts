@@ -92,7 +92,9 @@ export class SesAPI extends AwsProtocolAPI {
       }
     if (operation === "GetSendStatistics") return { SendDataPoints: [] }
     if (operation === "SendEmail" || operation === "SendRawEmail") {
-      const source = String(input.Source ?? "")
+      // Source may carry a display name: `"Billing" <billing@example.com>`. SES checks the address.
+      const raw = String(input.Source ?? "")
+      const source = (/<([^>]+)>\s*$/.exec(raw)?.[1] ?? raw).trim()
       if (
         operation === "SendEmail" &&
         !identities.has(source) &&

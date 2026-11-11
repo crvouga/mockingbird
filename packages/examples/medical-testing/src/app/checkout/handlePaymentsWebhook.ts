@@ -4,13 +4,15 @@ import {
   listOrderItems,
   markOrderFulfilled,
 } from "../db/ordersRepo.js"
+import { notifyPaymentReceived, PATIENT_PHONE } from "../notifications/patientNotifications.js"
 import type { Db } from "../ports/db.js"
 import type { LabTestingClient } from "../ports/labTestingClient.js"
+import type { Notifier } from "../ports/notifier.js"
 import type { PaymentsClient } from "../ports/paymentsClient.js"
 
 /**
  * A payments webhook confirming payment — verify it, then place the real
- * (mocked) lab order. This is the realistic pattern for any hosted-checkout
+ * (mocked) lab order, then tell the patient (if they opted in). This is the realistic pattern for any hosted-checkout
  * integration: the browser redirect back to `successUrl` and the webhook
  * confirming payment arrive independently and in no guaranteed order.
  */
@@ -18,6 +20,7 @@ export const handlePaymentsWebhook = async (
   db: Db,
   payments: PaymentsClient,
   labTesting: LabTestingClient,
+  notifier: Notifier,
   payload: string,
   signatureHeader: string | null,
 ): Promise<void> => {
@@ -41,9 +44,11 @@ export const handlePaymentsWebhook = async (
       firstName: event.metadata.patientFirstName ?? "Patient",
       lastName: event.metadata.patientLastName ?? "Patient",
       email: event.metadata.patientEmail ?? "patient@example.test",
+      phone: PATIENT_PHONE,
     },
     catalogTestIds,
   })
 
   await markOrderFulfilled(db, order.id, labOrderId)
+  await notifyPaymentReceived(db, notifier, order)
 }

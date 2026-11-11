@@ -113,6 +113,24 @@ export class SnsAPI extends AwsProtocolAPI {
       })
       return {}
     }
+    if (operation === "Publish" && input.PhoneNumber !== undefined && !input.TopicArn) {
+      // Direct SMS: `Publish({ PhoneNumber, Message })` needs no topic. SNS accepts E.164 only.
+      const phone = String(input.PhoneNumber)
+      if (!/^\+[1-9]\d{1,14}$/.test(phone))
+        throw new AwsError(
+          "InvalidParameter",
+          `Invalid parameter: PhoneNumber Reason: ${phone} is not valid to publish to`,
+        )
+      awsRequired(input, "Message")
+      const messageId = this.ids.next("", 36)
+      this.collection("messages").insert(messageId, {
+        ...input,
+        MessageId: messageId,
+        PhoneNumber: phone,
+        Timestamp: this.now() / 1000,
+      })
+      return { MessageId: messageId }
+    }
     const id = String(input.TopicArn ?? input.ResourceArn ?? ""),
       topic = this.get("topics", id, "NotFound")
     if (operation === "DeleteTopic") {

@@ -213,7 +213,7 @@ separate Vite dependency caches under `sites/docs/node_modules/.vite/dev` and `.
 so a production build does not replace modules served by an existing dev session. The lab
 ordering example's browser dependencies are optimized before its first launch. To verify this
 boundary, keep the dev server running, run `bun run docs:build`, then reload
-`/examples/medical-testing` and open both the Example and Emulators tabs.
+`/examples/medical-testing` and open the Example, Notifications and Emulators tabs.
 
 The docs site (`sites/docs`) is hosted on the shared `crvouga/workspace` fleet as the service
 `mockingbird-docs` ([shared-infra contract §4](https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt)).

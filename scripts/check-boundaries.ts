@@ -14,7 +14,7 @@
  *      could not install it),
  *   6. every workspace package is named `@crvouga/mockingbird` or
  *      `@crvouga/mockingbird-<kebab-case>` (hard rule: one npm naming convention),
- *   7. emulator services and the neutral fleet tool are published; a
+ *   7. emulator services and the neutral tools (fleet, notifications) are published; a
  *      service that imports private helper packages builds with
  *      scripts/bundle-service.ts, which inlines them into its `dist`.
  *      Postgres and SQLite bundle the same way from scripts/build.ts.
@@ -48,7 +48,7 @@ type Pkg = {
 const INTERNAL = /^@crvouga\/mockingbird(?:[-/].*)?$/
 const PACKAGE_NAME = /^@crvouga\/mockingbird(?:-[a-z0-9]+)*$/
 const SERVICE_NAME = /^@crvouga\/mockingbird-service-[a-z0-9]+(?:-[a-z0-9]+)*$/
-const BUNDLE_BUILD = "bun ../../../scripts/bundle-service.ts"
+const BUNDLE_BUILD = /\bbun (?:\.\.\/)+scripts\/bundle-service\.ts$/
 const BUILTIN = /^(?:(?:node|bun|deno):|bun$|stream\/web$|assert$)/
 const VALID_SPECIFIER = /^(?:@[a-z0-9][\w.-]*\/)?[a-z0-9][\w.-]*(?:\/[^\s"']+)*$/i
 
@@ -113,11 +113,15 @@ for (const pkg of packages.values()) {
   }
 }
 
-// 7. publish emulator services and the explicit neutral fleet tool.
+// 7. publish emulator services and the explicit neutral tools.
+const PUBLISHED_TOOLS = new Set([
+  "@crvouga/mockingbird-fleet",
+  "@crvouga/mockingbird-notifications",
+])
 for (const pkg of packages.values()) {
-  if (pkg.public && !SERVICE_NAME.test(pkg.name) && pkg.name !== "@crvouga/mockingbird-fleet") {
+  if (pkg.public && !SERVICE_NAME.test(pkg.name) && !PUBLISHED_TOOLS.has(pkg.name)) {
     fail(
-      `${pkg.name}: only emulator services and @crvouga/mockingbird-fleet are published — mark it "private": true`,
+      `${pkg.name}: only emulator services and ${[...PUBLISHED_TOOLS].join(", ")} are published — mark it "private": true`,
     )
   }
 }
@@ -128,7 +132,9 @@ for (const pkg of packages.values()) {
  * own bundles from `scripts/build.ts` and inline the same private helpers.
  */
 const bundled = (pkg: Pkg): string[] =>
-  pkg.public && (pkg.build === BUNDLE_BUILD || pkg.build === "bun run scripts/build.ts")
+  pkg.public &&
+  ((pkg.build !== undefined && BUNDLE_BUILD.test(pkg.build)) ||
+    pkg.build === "bun run scripts/build.ts")
     ? [...pkg.devDependencies].filter((d) => packages.get(d)?.private === true)
     : []
 

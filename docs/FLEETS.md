@@ -130,6 +130,19 @@ private payload outside tracked files. PostgreSQL accepts `user`, `password` and
 Redis accepts `password`. Protocol seeds are numeric. An admin key belongs in the config's
 `adminKey` field or `MOCKINGBIRD_ADMIN_KEY`; it is never part of discovery.
 
+## Seeing notifications
+
+`@crvouga/mockingbird-notifications` reads the same fleet and shows every SMS, email and push the
+messaging emulators accepted (Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur) on phone and
+webmail screens, with a JSON API tests can wait on. Point it at the controller or the ready file:
+
+```sh
+mockingbird-notifications serve --fleet http://127.0.0.1:9000/__admin/fleet
+mockingbird-notifications serve --manifest ready.json
+```
+
+See [its README](../packages/notifications/README.md).
+
 ## Fleet controls
 
 Call these paths under the manifest's `adminBase`. Every control request requires

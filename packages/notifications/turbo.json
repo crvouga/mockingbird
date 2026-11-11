@@ -1,0 +1,10 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "generate": {
+      "inputs": ["src/ui/**", "src/model.ts", "scripts/build-ui.ts"],
+      "outputs": ["src/generated/**"]
+    }
+  }
+}

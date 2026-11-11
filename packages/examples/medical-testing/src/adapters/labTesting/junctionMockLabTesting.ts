@@ -57,7 +57,7 @@ export const createJunctionMockLabTesting = (params: {
         last_name: input.patient.lastName,
         dob: "1990-01-01",
         gender: "unknown",
-        phone_number: "+14155550100",
+        phone_number: input.patient.phone,
         email: input.patient.email,
       },
       patient_address: {

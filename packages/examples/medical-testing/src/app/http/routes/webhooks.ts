@@ -18,6 +18,7 @@ webhookRoutes.post("/payments", async (c) => {
       c.get("db"),
       c.get("payments"),
       c.get("labTesting"),
+      c.get("notifier"),
       payload,
       signature,
     )
@@ -30,6 +31,6 @@ webhookRoutes.post("/payments", async (c) => {
 /** A lab-testing provider webhook reporting an order moved forward. */
 webhookRoutes.post("/lab-testing", async (c) => {
   const payload = await c.req.text()
-  await handleLabTestingWebhook(c.get("db"), c.get("labTesting"), payload)
+  await handleLabTestingWebhook(c.get("db"), c.get("labTesting"), c.get("notifier"), payload)
   return c.json({ received: true })
 })

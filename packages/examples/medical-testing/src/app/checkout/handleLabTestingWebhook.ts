@@ -5,14 +5,20 @@ import {
   listOrderItems,
   updateOrderStatus,
 } from "../db/ordersRepo.js"
+import {
+  notifyResultsReady,
+  notifySampleProcessing,
+} from "../notifications/patientNotifications.js"
 import { sampleResults } from "../orders/sampleResults.js"
 import type { Db } from "../ports/db.js"
 import type { LabTestingClient } from "../ports/labTestingClient.js"
+import type { Notifier } from "../ports/notifier.js"
 
 /** A lab-testing provider webhook reporting the order moved forward (e.g. results are ready). */
 export const handleLabTestingWebhook = async (
   db: Db,
   labTesting: LabTestingClient,
+  notifier: Notifier,
   payload: string,
 ): Promise<void> => {
   const event = labTesting.parseWebhookEvent(payload)
@@ -54,4 +60,6 @@ export const handleLabTestingWebhook = async (
       : "Sample received. Laboratory processing started.",
     "Laboratory",
   )
+  if (event.status === "results_ready") await notifyResultsReady(db, notifier, order)
+  else await notifySampleProcessing(db, notifier, order)
 }
