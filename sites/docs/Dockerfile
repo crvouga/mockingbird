@@ -1,4 +1,4 @@
-# The docs site, hosted on the crvouga/workspace fleet (https://raw.githubusercontent.com/crvouga/workspace/main/llms.txt §4).
+# The docs site, hosted by crvouga/personal (https://www.chrisvouga.dev/llms-cloud.txt §4).
 # Build context is the repo root: the site renders every service package, so turbo builds them first.
 #   docker build -f sites/docs/Dockerfile -t mockingbird-docs . && docker run --rm -p 8080:80 mockingbird-docs
 

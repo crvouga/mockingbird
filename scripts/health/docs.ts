@@ -42,7 +42,7 @@ export function webhookReadHealth(status: number, configured: boolean | undefine
       message:
         "Optional webhook receiver has no read token declared in fleet inventory; reads fail closed.",
       remedy:
-        "Configure WEBHOOK_READ_TOKEN in crvouga/workspace only when enabling deployed webhook parity.",
+        "Configure WEBHOOK_READ_TOKEN in crvouga/personal only when enabling deployed webhook parity.",
     }
   return {
     id: "webhook-read-protection",
@@ -115,7 +115,7 @@ export async function runDocsHealth() {
           problems.join("; ") || "Fresh hosting contract and authoritative fleet inventory agree.",
         url: INVENTORY_URL,
         ...(problems.length
-          ? { remedy: "Correct the managed hosting configuration in crvouga/workspace." }
+          ? { remedy: "Correct the managed hosting configuration in crvouga/personal." }
           : {}),
       }
     }),
@@ -192,7 +192,7 @@ export async function runDocsHealth() {
           ? "Deployed llms.txt matches current main."
           : "Deployed llms.txt differs from main (stale docs or failed deployment).",
         url: `${base}/llms.txt`,
-        remedy: "Inspect Publish image and the downstream crvouga/workspace deployment.",
+        remedy: "Inspect Publish image and the downstream crvouga/personal deployment.",
       }
     }),
   )
