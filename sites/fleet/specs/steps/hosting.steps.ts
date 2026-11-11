@@ -94,7 +94,6 @@ Given("the configuration sets:", async ({ world }, table: DataTable) => {
 Given("another program is already listening on the configured port", async ({ world }) => {
   const state = hosting(world)
   state.cleanups.push(await occupyPort(Number(state.env.PORT)))
-  state.notes.set("port occupied", "yes")
 })
 
 // ---- the database -------------------------------------------------------------------------
@@ -300,12 +299,12 @@ When(/^the server process receives (SIGTERM|SIGINT)$/, async ({ world }, signal:
 })
 
 Then("the server refuses to start", async ({ world }) => {
-  const state = hosting(world)
-  const run = lastRun(state)
+  const run = lastRun(hosting(world))
   expect(run.code, run.process.output()).toBe(78)
   expect(run.process.output()).not.toContain('"message":"listening"')
+  // Watched while the process was alive. Probing the port after it exited races other spec
+  // workers, which can be handed the same free port.
   expect(run.answered, "the port must never answer").toBe(false)
-  if (!state.notes.has("port occupied")) expect(await portIsOpen(run.port)).toBe(false)
 })
 
 Then("the server is listening", async ({ world }) => {
@@ -372,7 +371,6 @@ Then("the check never listened on the configured port", async ({ world }) => {
   const run = lastRun(hosting(world))
   expect(run.answered).toBe(false)
   expect(run.process.output()).not.toContain('"message":"listening"')
-  expect(await portIsOpen(run.port)).toBe(false)
 })
 
 // ---- the startup report -------------------------------------------------------------------
