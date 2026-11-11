@@ -92,6 +92,7 @@
     "release:publish": "bun scripts/release/publish.ts",
     "release:smoke": "bun scripts/release/consumer-smoke.ts",
     "release:seed": "bun scripts/release/seed.ts",
+    "release:npm-names": "bun scripts/release/npm-names.ts",
     "npm": "open https://www.npmjs.com/package/@crvouga/mockingbird",
     "health": "bun scripts/health/cli.ts",
     "secrets": "bun scripts/secrets/cli.ts",

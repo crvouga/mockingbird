@@ -19,6 +19,7 @@
  *   bun run release:publish                (CI, on main)
  *   bun run release:publish -- --local     (maintainer bootstrap: your npm login, no provenance)
  *   bun run release:seed -- --trust-only   (repair and verify published packages' OIDC setup)
+ *   bun run release:seed -- --reserve      (claim new packages' npm names from a branch, then trust)
  *   bun run release:publish -- --plan release-plan.json --group 1/8 (one CI leaf shard)
  */
 import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -41,10 +42,14 @@ import {
   packedManifest,
   pinManifest,
   REPO,
+  RESERVED_DIST_TAG,
+  RESERVED_VERSION,
   type Release,
   redact,
   releaseInOrder,
   releaseNotes,
+  reservationManifest,
+  reservationReadme,
   retiredPackages,
   root,
   seedSummary,
@@ -63,6 +68,8 @@ const local = argv.includes("--local")
 const trustOnly = argv.includes("--trust-only")
 const refreshRejected = argv.includes("--refresh-rejected")
 if (refreshRejected && !trustOnly) throw new Error("--refresh-rejected requires --trust-only")
+const reserve = argv.includes("--reserve")
+if (reserve && !trustOnly) throw new Error("--reserve requires --trust-only")
 const inCi = process.env.GITHUB_ACTIONS === "true"
 const pipeline = pipelineOptions(argv)
 if (pipeline && (local || trustOnly))
@@ -493,8 +500,47 @@ async function deprecateRetiredPackages(): Promise<void> {
   }
 }
 
+/**
+ * Publish a placeholder for every public package npm has never seen, so OIDC can publish its
+ * first release after merge. Runs from any branch: the placeholder carries no code from it.
+ */
+async function reserveNewPackages(): Promise<void> {
+  for (const pkg of trustPackages) {
+    const published = await npmVersions(pkg.name)
+    if (!Array.isArray(published)) {
+      fail(pkg.name, [`npm view: ${published.error}`])
+      continue
+    }
+    if (published.length > 0) continue
+    if (dryRun) {
+      console.log(`would reserve ${pkg.name}@${RESERVED_VERSION} (dist-tag ${RESERVED_DIST_TAG})`)
+      continue
+    }
+    const dir = mkdtempSync(join(packDir, "reserve-"))
+    writeFileSync(join(dir, "package.json"), reservationManifest(pkg.name))
+    writeFileSync(join(dir, "README.md"), reservationReadme(pkg.name))
+    console.log(`reserve ${pkg.name}@${RESERVED_VERSION}`)
+    const args = [
+      "publish",
+      dir,
+      "--access",
+      "public",
+      "--provenance=false",
+      "--tag",
+      RESERVED_DIST_TAG,
+    ]
+    if ((await npm(args, dir)) !== 0) {
+      fail(pkg.name, ["npm publish of the name placeholder failed"])
+      continue
+    }
+    const pending = await waitForNpmVersion(pkg.name, RESERVED_VERSION)
+    if (pending) fail(pkg.name, [pending])
+  }
+}
+
 let githubReleaseGaps = 0
 try {
+  if (reserve) await reserveNewPackages()
   if (!trustOnly && maintenance) githubReleaseGaps += await repairMissingReleases()
   // A package that cannot release never stops the independent ones; its dependents are skipped.
   // A GitHub release failure does not: the package is already on npm, and dependents may pin it.
