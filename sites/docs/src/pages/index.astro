@@ -16,6 +16,7 @@ import {
   CONTRACT,
   FEATURES,
   HEADLINE,
+  NOTIFICATIONS,
   PITCH,
   QUICK_START,
 } from "../lib/content.ts"
@@ -48,6 +49,12 @@ const carriers = await Promise.all(
     html: await highlightSource(carrier.code, carrier.lang),
   })),
 )
+const notificationCarriers = await Promise.all(
+  NOTIFICATIONS.carriers.map(async (carrier) => ({
+    ...carrier,
+    html: await highlightSource(carrier.code, carrier.lang),
+  })),
+)
 ---
 
 <Base>
@@ -60,6 +67,7 @@ const carriers = await Promise.all(
         <a class="btn btn-primary" href="/docs/getting-started">Get started <Icon name="arrow-right" /></a>
         <a class="btn btn-secondary" href="/services">Explore emulators</a>
         <a class="btn btn-secondary" href="#admin-controls">Admin controls</a>
+        <a class="btn btn-secondary" href="#notifications"><Icon name="bell" /> Notifications</a>
       </div>
       <div class="hero-install"><Install pkg={QUICK_START.package} /></div>
       <p class="runtime-list">Node.js <span>·</span> Bun <span>·</span> Browser <span>·</span> Workers</p>
@@ -150,9 +158,83 @@ const carriers = await Promise.all(
     </div>
   </section>
 
+  <section class="section container" id="notifications">
+    <div class="section-head">
+      <span class="eyebrow">05 / Notifications</span>
+      <h2>{NOTIFICATIONS.title}</h2>
+      <p set:html={inline(NOTIFICATIONS.intro)} />
+    </div>
+    <div class="devices" aria-label="The harness's three devices">
+      {NOTIFICATIONS.channels.map((channel, i) => (
+        <div class="device">
+          <div class="device-head">
+            <span class="feature-icon"><Icon name={channel.icon} /></span>
+            <div><h3>{channel.title}</h3><span class="device-services">{channel.services}</span></div>
+          </div>
+          <div class="device-screen" aria-hidden="true">
+            {i === 0 && (
+              <div class="sms">
+                <span class="sms-from">Cove Labs</span>
+                <span class="bubble">Your Cove sign-in code is 482913. It expires in 10 minutes.</span>
+                <span class="bubble">Your results are ready. Open Cove to review them.</span>
+                <span class="code-chip">From Messages <strong>482913</strong></span>
+              </div>
+            )}
+            {i === 1 && (
+              <div class="lock">
+                <span class="lock-time">9:41</span>
+                <span class="lock-date">Wednesday, November 11</span>
+                <span class="push-card"><span class="push-app">COVE · now</span><strong>Results ready</strong><span>Your lipid panel is back. Tap to review.</span></span>
+                <span class="push-card push-stacked"><span class="push-app">COVE · 2m ago</span><strong>Order confirmed</strong></span>
+              </div>
+            )}
+            {i === 2 && (
+              <div class="inbox">
+                <span class="inbox-bar">ada@example.com</span>
+                <span class="mail-row mail-unread"><strong>Cove Labs</strong><span>Your receipt for order #1042</span></span>
+                <span class="mail-row mail-unread"><strong>Cove Labs</strong><span>Your results are ready</span></span>
+                <span class="mail-row"><strong>Cove Labs</strong><span>Welcome to Cove</span></span>
+              </div>
+            )}
+          </div>
+          <p>{channel.body}</p>
+        </div>
+      ))}
+    </div>
+    <div class="carriers">
+      {notificationCarriers.map((carrier) => (
+        <div class="runtime-panel carrier" aria-label={`Notifications: ${carrier.label}`}>
+          <div class="panel-bar"><Icon name="terminal" /><span>{carrier.file}</span><span class="badge badge-accent">{carrier.label}</span></div>
+          <Fragment set:html={carrier.html} />
+        </div>
+      ))}
+    </div>
+    <div class="features controls">
+      {NOTIFICATIONS.topics.map((topic) => (
+        <div class="feature">
+          <span class="feature-icon"><Icon name={topic.icon} /></span>
+          <h3><a href={`/docs/notifications/${guideSlug(topic.page)}`}>{topic.title}</a></h3>
+          <p set:html={inline(topic.body)} />
+          <a class="text-link control-link" href={`/docs/notifications/${guideSlug(topic.page)}`}>Read the page <Icon name="arrow-right" /></a>
+        </div>
+      ))}
+    </div>
+    <div class="determinism">
+      <span class="feature-icon"><Icon name="play" /></span>
+      <div>
+        <h3>Watch a real app send them</h3>
+        <p>The lab ordering example mounts the harness as its Notifications tab. Place an order and the receipt, the text and the push arrive, all inside this browser tab.</p>
+      </div>
+      <div class="determinism-actions">
+        <a class="btn btn-secondary" href="/examples/medical-testing">Open the example</a>
+        <a class="btn btn-secondary" href="/docs/notifications">Notifications guide <Icon name="arrow-right" /></a>
+      </div>
+    </div>
+  </section>
+
   <section class="section container">
     <div class="section-head section-head-row">
-      <div><span class="eyebrow">05 / Emulator catalog</span><h2>Find your application's dependencies.</h2></div>
+      <div><span class="eyebrow">06 / Emulator catalog</span><h2>Find your application's dependencies.</h2></div>
       <a class="text-link" href="/services">All {totals.services} emulators <Icon name="arrow-right" /></a>
     </div>
     <div class="featured-head"><h3><Icon name="star" /> Featured emulators</h3><a class="text-link" href="/services?featured=1">View featured <Icon name="arrow-right" /></a></div>
@@ -174,7 +256,7 @@ const carriers = await Promise.all(
 
   <section class="section container">
     <div class="section-head">
-      <span class="eyebrow">06 / Interactive example</span>
+      <span class="eyebrow">07 / Interactive example</span>
       <h2>A complete application, running in your browser.</h2>
       <p>The client, server, database emulator, and API emulators share one browser tab. Explore the application and its state without configuring a server.</p>
     </div>
@@ -183,7 +265,7 @@ const carriers = await Promise.all(
 
   <section class="section container">
     <div class="section-head">
-      <span class="eyebrow">07 / Service interface</span>
+      <span class="eyebrow">08 / Service interface</span>
       <h2>A shared control plane for every HTTP emulator.</h2>
       <p set:html={inline(CONTRACT.intro)} />
     </div>
@@ -262,6 +344,33 @@ const carriers = await Promise.all(
   .determinism h3 { font-size: 16px; font-weight: 650; }
   .determinism p { margin-top: 6px; font-size: 14px; line-height: 1.65; color: var(--fg-muted); }
   .determinism .btn { flex: none; margin-left: auto; }
+  .devices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .device { display: flex; flex-direction: column; gap: 16px; padding: 22px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-elevated); }
+  .device-head { display: flex; align-items: center; gap: 12px; }
+  .device-head .feature-icon { margin-bottom: 0; }
+  .device-head h3 { font-size: 16px; font-weight: 650; }
+  .device-services { display: block; margin-top: 2px; color: var(--fg-subtle); font-size: 12px; }
+  .device > p { font-size: 13.5px; line-height: 1.65; color: var(--fg-muted); }
+  .device-screen { height: 220px; padding: 14px; overflow: hidden; border: 1px solid var(--border); border-radius: 22px; background: var(--bg-subtle); font-size: 12px; line-height: 1.45; }
+  .device-screen > div { display: flex; flex-direction: column; gap: 8px; height: 100%; }
+  .sms-from { align-self: center; color: var(--fg-subtle); font-size: 11px; font-weight: 600; }
+  .bubble { align-self: flex-start; max-width: 85%; padding: 8px 12px; border-radius: 16px 16px 16px 4px; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--fg); }
+  .code-chip { margin-top: auto; align-self: stretch; padding: 8px; border-radius: 8px; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--fg-subtle); text-align: center; font-size: 11px; }
+  .code-chip strong { margin-left: 6px; color: var(--highlight); font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.08em; }
+  .lock { align-items: stretch; }
+  .lock-time { align-self: center; font-size: 34px; font-weight: 300; letter-spacing: -0.03em; line-height: 1; color: var(--fg); }
+  .lock-date { align-self: center; margin-bottom: 4px; color: var(--fg-subtle); font-size: 11px; }
+  .push-card { display: flex; flex-direction: column; gap: 2px; padding: 9px 12px; border-radius: 14px; background: var(--bg-elevated); border: 1px solid var(--border); color: var(--fg-muted); }
+  .push-card strong { color: var(--fg); font-size: 12.5px; }
+  .push-app { color: var(--fg-subtle); font-size: 10px; letter-spacing: 0.04em; }
+  .push-stacked { opacity: 0.7; transform: scale(0.96); }
+  .inbox { gap: 0 !important; margin: -14px; }
+  .inbox-bar { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--fg-subtle); font-family: var(--font-mono); font-size: 11px; }
+  .mail-row { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--fg-muted); }
+  .mail-row strong { color: var(--fg-muted); font-weight: 500; }
+  .mail-unread strong, .mail-unread span { color: var(--fg); font-weight: 650; }
+  .determinism-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-left: auto; flex: none; }
+  .determinism .determinism-actions .btn { margin-left: 0; }
   .section-head-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 20px; }
   .section-head-row h2 { margin-top: 8px; }
   .text-link { display: inline-flex; align-items: center; gap: 8px; color: var(--highlight); font-size: 13px; }
@@ -283,7 +392,7 @@ const carriers = await Promise.all(
   .agent-docs a > span { flex: 1; color: var(--fg-subtle); font-size: 12px; }
   .agent-docs strong { display: block; font-family: var(--font-mono); color: var(--fg); font-size: 13px; margin-bottom: 4px; }
   .agent-docs a:hover strong { color: var(--highlight); }
-  @media (max-width: 1000px) { .hero { gap: 32px; } .features, .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); } .carriers { grid-template-columns: minmax(0, 1fr); } .determinism { flex-wrap: wrap; } .determinism .btn { margin-left: 0; } }
+  @media (max-width: 1000px) { .hero { gap: 32px; } .features, .categories { grid-template-columns: repeat(2, minmax(0, 1fr)); } .carriers, .devices { grid-template-columns: minmax(0, 1fr); } .determinism { flex-wrap: wrap; } .determinism .btn, .determinism-actions { margin-left: 0; } }
   @media (max-width: 800px) { .hero { grid-template-columns: minmax(0, 1fr); padding-block: 40px; } .hero h1 { font-size: clamp(36px, 7vw, 52px); } .agent-docs { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 24px; } }
   @media (max-width: 560px) { .features, .categories { grid-template-columns: minmax(0, 1fr); } .runtime-list { font-size: 10px; } .runtime-list span { padding-inline: 4px; } .panel-foot-end { display: none; } .stats { grid-template-columns: minmax(0, 1fr); } .stats > * + * { border-left: 0; border-top: 1px solid var(--border); } .stats > * { padding: 16px; } .stats strong { min-width: 4ch; } }
 </style>

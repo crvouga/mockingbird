@@ -197,6 +197,119 @@ x-mockingbird-fault: status=503; delay=2s`,
     "The same seed and the same requests give the same bytes: ids, timestamps, which requests a `rate` fault hits, and the request journal. Reset and restore rewind the random streams with the state, so a test passes or fails the same way whether it runs first or last, alone or beside forty workers.",
 } as const
 
+/**
+ * The notifications harness: every SMS, email and push an application sends through the
+ * messaging emulators, on lifelike devices. `docs/NOTIFICATIONS.md` is the hub and each topic
+ * is a file in `docs/notifications/`.
+ */
+export const NOTIFICATIONS = {
+  title: "See every text, email and push your app sends.",
+  intro:
+    "The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app, on a lock screen or notification shade, and in a webmail inbox. Tests read the same messages through a JSON API, and every element carries a test id.",
+  guide: "docs/NOTIFICATIONS.md",
+  /** Where each topic's page lives: `<pages>/<page>.md`, served at `/docs/notifications/<page>`. */
+  pages: "docs/notifications",
+  package: "@crvouga/mockingbird-notifications",
+  channels: [
+    {
+      icon: "message",
+      title: "Text messages",
+      services: "Twilio · SNS · Customer.io · Mailosaur",
+      body: "Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included.",
+    },
+    {
+      icon: "bell",
+      title: "Push",
+      services: "Firebase Cloud Messaging",
+      body: "An iOS lock screen or an Android notification shade, picked from the device token, with title, body, image, data, badge and sound.",
+    },
+    {
+      icon: "mail",
+      title: "Email",
+      services: "Resend · SES · SNS · Customer.io · Mailosaur",
+      body: "An inbox per recipient, to, cc and bcc, with the rendered HTML, attachments and headers. SES raw MIME is parsed.",
+    },
+  ],
+  topics: [
+    {
+      icon: "terminal",
+      title: "Run against a fleet",
+      page: "RUN_AGAINST_A_FLEET",
+      body: "`mockingbird-notifications serve --manifest .mockingbird/ready.json` finds the messaging emulators in a fleet, follows every namespace, and skips the rest.",
+    },
+    {
+      icon: "grid",
+      title: "Devices",
+      page: "DEVICES",
+      body: "Three devices side by side, a timeline of everything, and links that open one recipient or one message for a screenshot.",
+    },
+    {
+      icon: "check",
+      title: "End-to-end tests",
+      page: "END_TO_END_TESTS",
+      body: "A ready signal, a `data-testid` on everything, and each message's fields as attributes, so Playwright finds the email by who it went to.",
+    },
+    {
+      icon: "zap",
+      title: "Client",
+      page: "CLIENT",
+      body: '`waitForCode("+12025550123")` returns the code the app just texted. Run the harness in the test process, with no server.',
+    },
+    {
+      icon: "layers",
+      title: "Embed the UI",
+      page: "EMBED",
+      body: "`mountNotifications(panel, { harness })` puts the devices in a tab of your own app, with scoped styles and no server.",
+    },
+    {
+      icon: "plug",
+      title: "HTTP API",
+      page: "HTTP_API",
+      body: "`GET /api/wait?to=ada@example.com` blocks until the message arrives. Server-sent events for live views.",
+    },
+  ],
+  carriers: [
+    {
+      label: "Next to a fleet",
+      file: "terminal",
+      lang: "bash",
+      code: `npx mockingbird-fleet serve \\
+  --config mockingbird.json \\
+  --ready-file .mockingbird/ready.json
+npx mockingbird-notifications serve \\
+  --manifest .mockingbird/ready.json
+# http://127.0.0.1:8790`,
+    },
+    {
+      label: "In a test",
+      file: "signup.test.ts",
+      lang: "ts",
+      code: `const inbox = new NotificationClient(
+  "http://127.0.0.1:8790",
+)
+const code = await inbox.waitForCode(
+  "+12025550123",
+)
+await page.goto(inbox.link({
+  channel: "email",
+  to: "ada@example.com",
+}))`,
+    },
+    {
+      label: "In your app",
+      file: "devtools.ts",
+      lang: "ts",
+      code: `const harness = createNotificationHarness({
+  services: { twilio, resend, fcm },
+})
+mountNotifications(panel, {
+  harness,
+  title: "My app notifications",
+})`,
+    },
+  ],
+} as const
+
 export const CONTRACT = {
   intro:
     "Every HTTP service ships an in-process `fetch`, a Node server and a CLI, and all answer the same control surface, so a stack learns it once. Every internal path is under `/__admin` by default. Set `adminPrefix` or `serve --admin-prefix` (`MOCKINGBIRD_ADMIN_PREFIX`) to relocate the entire tree; `/health` and `/ns` aliases are removed.",
@@ -273,6 +386,15 @@ export const GUIDE_CHILDREN = {
     "JOURNAL_AND_STATE",
     "REFERENCE",
   ],
+  NOTIFICATIONS: [
+    "RUN_AGAINST_A_FLEET",
+    "DEVICES",
+    "END_TO_END_TESTS",
+    "CLIENT",
+    "EMBED",
+    "HTTP_API",
+    "REFERENCE",
+  ],
 } as const satisfies Record<string, readonly string[]>
 
 /**
@@ -324,6 +446,7 @@ export const CONTROL_GROUPS = [
 export const GUIDE_ORDER = [
   "GETTING_STARTED",
   "ADMIN_CONTROLS",
+  "NOTIFICATIONS",
   "WHY",
   "TESTING",
   "AUTHORING_A_SERVICE",

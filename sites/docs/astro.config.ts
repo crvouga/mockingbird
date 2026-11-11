@@ -22,7 +22,8 @@ export default defineConfig({
   security: {
     csp: {
       directives: [...PAGE_CSP_DIRECTIVES],
-      // Shiki highlights with style="" attributes, which cannot be hashed; <style> elements are.
+      // Shiki highlights with style="" attributes, which cannot be hashed. server/headers.ts also
+      // swaps the <style> hashes for 'unsafe-inline', since live examples add styles at runtime.
       styleDirective: {
         resources: ["'self'", { resource: "'unsafe-inline'", kind: "attribute" }],
       },

@@ -18,6 +18,7 @@ import {
   HEADLINE,
   IDENTITY,
   MARK_REPO_PATH,
+  NOTIFICATIONS,
   PITCH,
   QUICK_START,
   RISK_DISCLAIMER,
@@ -70,6 +71,16 @@ const controlPages = GUIDE_CHILDREN.ADMIN_CONTROLS.map((name) => {
 })
 const controlPath = (name: string) => `${ADMIN_CONTROLS.pages}/${name}.md`
 
+/** The notifications guide's pages, in the order the docs site shows them. */
+const notificationPages = GUIDE_CHILDREN.NOTIFICATIONS.map((name) => {
+  const path = `${NOTIFICATIONS.pages}/${name}.md`
+  return {
+    name,
+    path,
+    ...guideInfo({ file: name, markdown: readFileSync(join(root, path), "utf8") }),
+  }
+})
+
 const cell = (s: string) => s.replace(/\|/g, "\\|")
 const badge = (label: string, message: string | number, color: string) =>
   `https://img.shields.io/badge/${encodeURIComponent(label.replace(/-/g, "--").replace(/ /g, "_"))}-${encodeURIComponent(String(message))}-${color}`
@@ -92,7 +103,7 @@ const body = [
     `[![License](${badge("license", license, "2563eb")})](#license)`,
   ].join(" "),
   "",
-  `[Quick start](#quick-start) · [Why](docs/WHY.md) · [Design](docs/DESIGN.md) · [Guides](#guides) · [Catalog](${catalog}) · [llms.txt](llms.txt)`,
+  `[Quick start](#quick-start) · [Notifications](#notifications) · [Why](docs/WHY.md) · [Design](docs/DESIGN.md) · [Guides](#guides) · [Catalog](${catalog}) · [llms.txt](llms.txt)`,
   "",
   "</div>",
   "",
@@ -152,6 +163,32 @@ const body = [
   "| Control | |",
   "| --- | --- |",
   ...controlPages.map((page) => `| [${cell(page.title)}](${page.path}) | ${cell(page.summary)} |`),
+  "",
+  "## Notifications",
+  "",
+  `**${NOTIFICATIONS.title}**`,
+  "",
+  NOTIFICATIONS.intro,
+  "",
+  ...NOTIFICATIONS.channels.map(
+    (channel) => `- **${channel.title}** (${channel.services}). ${channel.body}`,
+  ),
+  "",
+  ...NOTIFICATIONS.carriers.flatMap((carrier) => [
+    `${carrier.label}:`,
+    "",
+    `\`\`\`${carrier.lang}`,
+    carrier.code,
+    "```",
+    "",
+  ]),
+  `Start at [${NOTIFICATIONS.guide}](${NOTIFICATIONS.guide}), or open the [lab ordering example](${IDENTITY.docs}/examples/medical-testing) and its Notifications tab:`,
+  "",
+  "| Page | |",
+  "| --- | --- |",
+  ...notificationPages.map(
+    (page) => `| [${cell(page.title)}](${page.path}) | ${cell(page.summary)} |`,
+  ),
   "",
   "## One contract for every HTTP service",
   "",

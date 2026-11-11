@@ -10,7 +10,7 @@ Run the APIs and databases your application depends on, inside your own process.
 
 [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-2563eb)](#license)
 
-[Quick start](#quick-start) · [Why](docs/WHY.md) · [Design](docs/DESIGN.md) · [Guides](#guides) · [Catalog](https://mockingbird.chrisvouga.dev/services) · [llms.txt](llms.txt)
+[Quick start](#quick-start) · [Notifications](#notifications) · [Why](docs/WHY.md) · [Design](docs/DESIGN.md) · [Guides](#guides) · [Catalog](https://mockingbird.chrisvouga.dev/services) · [llms.txt](llms.txt)
 
 </div>
 
@@ -196,6 +196,66 @@ Start at [docs/ADMIN_CONTROLS.md](docs/ADMIN_CONTROLS.md). Each control has its 
 | [Journal, metrics and state](docs/admin-controls/JOURNAL_AND_STATE.md) | Three ways to see what an emulator did and what it holds: the journal lists every request it received, metrics count them, and state reads and edits the stored rows directly. |
 | [Reference](docs/admin-controls/REFERENCE.md) | Every admin route, every control header, the error shape and how access is guarded, on one page. Each row links to the page that defines it. |
 
+## Notifications
+
+**See every text, email and push your app sends.**
+
+The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app, on a lock screen or notification shade, and in a webmail inbox. Tests read the same messages through a JSON API, and every element carries a test id.
+
+- **Text messages** (Twilio · SNS · Customer.io · Mailosaur). Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included.
+- **Push** (Firebase Cloud Messaging). An iOS lock screen or an Android notification shade, picked from the device token, with title, body, image, data, badge and sound.
+- **Email** (Resend · SES · SNS · Customer.io · Mailosaur). An inbox per recipient, to, cc and bcc, with the rendered HTML, attachments and headers. SES raw MIME is parsed.
+
+Next to a fleet:
+
+```bash
+npx mockingbird-fleet serve \
+  --config mockingbird.json \
+  --ready-file .mockingbird/ready.json
+npx mockingbird-notifications serve \
+  --manifest .mockingbird/ready.json
+# http://127.0.0.1:8790
+```
+
+In a test:
+
+```ts
+const inbox = new NotificationClient(
+  "http://127.0.0.1:8790",
+)
+const code = await inbox.waitForCode(
+  "+12025550123",
+)
+await page.goto(inbox.link({
+  channel: "email",
+  to: "ada@example.com",
+}))
+```
+
+In your app:
+
+```ts
+const harness = createNotificationHarness({
+  services: { twilio, resend, fcm },
+})
+mountNotifications(panel, {
+  harness,
+  title: "My app notifications",
+})
+```
+
+Start at [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md), or open the [lab ordering example](https://mockingbird.chrisvouga.dev/examples/medical-testing) and its Notifications tab:
+
+| Page | |
+| --- | --- |
+| [Run against a fleet](docs/notifications/RUN_AGAINST_A_FLEET.md) | Start the harness next to a running fleet, or next to emulators you started yourself. It finds the messaging emulators, skips everything else, and serves the devices and the API on one port. |
+| [Devices](docs/notifications/DEVICES.md) | The harness page shows three devices side by side: a phone's Messages app, a push lock screen or notification shade, and a webmail inbox. Each one behaves like the real app, in a generic style with no vendor marks. |
+| [End-to-end tests](docs/notifications/END_TO_END_TESTS.md) | Assert on a text, email or push the way the user would see it. The harness UI is built to be driven by Playwright, Cypress or any WebDriver client: it says when it is ready, gives everything a test id, and puts the notification's fields on each element that shows it. |
+| [Client and in-process harness](docs/notifications/CLIENT.md) | Read what your application sent from a test, with no browser: wait for a text, pull the one-time code out of it, or check an email's HTML. Use `NotificationClient` against a running harness, or run the harness inside the test process. |
+| [Embed the UI](docs/notifications/EMBED.md) | Mount the devices inside your own page, for example as a tab of your development shell. With an in-process harness, the emulators, the harness and the UI all run in one browser tab, with no server. |
+| [HTTP API](docs/notifications/HTTP_API.md) | Every route of a running harness, its filters, and the shape of a notification. The client and the devices page use the same API. |
+| [Reference](docs/notifications/REFERENCE.md) | Every export of `@crvouga/mockingbird-notifications`, and what the harness does not show. |
+
 ## One contract for every HTTP service
 
 Every HTTP service ships an in-process `fetch`, a Node server and a CLI, and all answer the same control surface, so a stack learns it once. Every internal path is under `/__admin` by default. Set `adminPrefix` or `serve --admin-prefix` (`MOCKINGBIRD_ADMIN_PREFIX`) to relocate the entire tree; `/health` and `/ns` aliases are removed.
@@ -250,6 +310,7 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | --- | --- |
 | [Getting started](docs/GETTING_STARTED.md) | Install a Mockingbird emulator, create a runtime, and send vendor-compatible requests. Each service is a self-contained TypeScript package with its own coverage matrix and integration guide. |
 | [Admin controls](docs/ADMIN_CONTROLS.md) | Every Mockingbird HTTP emulator answers the same controls: isolate state by key, reset it, snapshot and restore it, move the clock, inject faults, latency and timeouts, and replay all of it from a seed. They are the same on every emulator, and the same whether you set them at boot, call the admin API, or send a request header. |
+| [Notifications](docs/NOTIFICATIONS.md) | See every SMS, email and push your application sends, the way the person receiving it would: on a phone's Messages app, an iOS lock screen or Android notification shade, and a webmail inbox. The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io and Mailosaur emulators your app already sends through, and gives tests the same messages through a JSON API and a small client. |
 | [Why Mockingbird](docs/WHY.md) | Mockingbird gives applications local, stateful emulators for the vendor APIs and databases they depend on. Run integrations inside your process, control the state and clock, and inspect exactly which vendor operations each emulator supports. |
 | [Testing and parity](docs/TESTING.md) | How every emulator is proven to behave like its vendor: differential contracts, property-based walks, and live parity against real sandboxes. |
 | [Authoring a Mockingbird service](docs/AUTHORING_A_SERVICE.md) | How to add a vendor emulator to this repo. The reference implementation is [`packages/service/rxvortex`](../packages/service/rxvortex): copy its layout and patterns. |
