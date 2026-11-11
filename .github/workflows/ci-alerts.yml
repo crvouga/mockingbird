@@ -1,0 +1,64 @@
+# Raise a GitHub issue when an important workflow fails on main, and close it when that
+# workflow passes again (scripts/ci-alert.ts). One open `ci-failure` issue per workflow; every
+# later failure comments on it with the failed jobs and their error annotations.
+#
+# "Important" = every workflow that guards or ships main. Pull-request runs never alert: a red PR
+# is the author's to fix. Add a workflow here (by its `name:`) when it starts guarding main.
+name: CI alerts
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+      - Release
+      - Publish image
+      - Verify
+      - Parity
+      - Cache cleanup
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize per watched workflow so two quick failures cannot open two issues.
+  group: ci-alerts-${{ github.event.workflow_run.name }}
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    name: Alert
+    if: >-
+      ${{ !contains(fromJSON('["pull_request", "pull_request_target"]'),
+                    github.event.workflow_run.event) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            scripts/ci-alert.ts
+            .github/labels.json
+          sparse-checkout-cone-mode: false
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - name: Open, update or close the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_EVENT: ${{ github.event.workflow_run.event }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: bun scripts/ci-alert.ts
