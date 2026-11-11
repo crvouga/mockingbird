@@ -164,6 +164,7 @@ type Manifest = {
   exports?: Record<string, unknown>
   version?: string
   bin?: string | Record<string, string>
+  mockingbird?: { layer?: string }
 }
 
 const pkgs = discoverPackages().filter((p) => p.isPublic)
@@ -338,7 +339,11 @@ async function serveConfigSmoke(app: string, names: string[]): Promise<void> {
       JSON.parse(readFileSync(join(app, "node_modules", name, "package.json"), "utf8")) as Manifest,
     ]),
   )
-  const servers = names.filter((name) => "./server" in (manifests.get(name)?.exports ?? {}))
+  // Emulator services only: tools such as the notification harness also export `./server`.
+  const servers = names.filter((name) => {
+    const manifest = manifests.get(name)
+    return manifest?.mockingbird?.layer === "service" && "./server" in (manifest.exports ?? {})
+  })
   const services = servers.map((name) => name.replace("@crvouga/mockingbird-service-", ""))
   const [launcher] = servers
   if (launcher === undefined) return
