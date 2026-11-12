@@ -5,6 +5,8 @@ COPY package.json bun.lock turbo.json tsconfig.base.json biome.json ./
 COPY packages ./packages
 COPY scripts ./scripts
 COPY sites/docs/package.json ./sites/docs/package.json
+# The docs site depends on the Storybook workspace, which it publishes at /storybook/.
+COPY sites/storybook/package.json ./sites/storybook/package.json
 RUN command -v node || ln -s /usr/local/bin/bun /usr/local/bin/node
 RUN bun install --frozen-lockfile --ignore-scripts
 # Every service build embeds its admin vendor brand (scripts/admin-brand.ts) from the docs data.
