@@ -1,4 +1,5 @@
 import { CSS_RESET } from "@crvouga/mockingbird-ui"
+import { CARD_CORE } from "./card-input.js"
 import type { CheckoutSessionRecord } from "./state.js"
 import { detailsForNumber, HOSTED_PAGE_TEST_CARDS, type TestCardGroup } from "./test-tokens.js"
 
@@ -246,7 +247,10 @@ select{appearance:none;-webkit-appearance:none;cursor:pointer;
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation-duration:0s!important}}
 `
 
-const SCRIPT = `(() => {
+const ALERT = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 16A8 8 0 1 1 8 0a8 8 0 0 1 0 16zm0-4.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0-8a1 1 0 0 0-1 1v5a1 1 0 0 0 2 0v-5a1 1 0 0 0-1-1z"/></svg>`
+
+const SCRIPT = `${CARD_CORE}
+(() => {
   const form = document.getElementById("stripe-mock-form");
   if (!form) return;
   const $ = (id) => document.getElementById(id);
@@ -258,39 +262,82 @@ const SCRIPT = `(() => {
   const card = $("card"), exp = $("exp"), cvc = $("cvc"), zip = $("zip"), country = $("country");
   if (!card) return;
   const icons = $("card-icons");
-  const brandOf = (digits) =>
-    /^3[47]/.test(digits) ? "amex" : /^(6011|65|64[4-9])/.test(digits) ? "discover" :
-    /^(5[1-5]|2[2-7])/.test(digits) ? "mastercard" : /^4/.test(digits) ? "visa" : "";
-  const formatCard = (event) => {
-    const digits = card.value.replace(/\\D/g, "").slice(0, 19);
-    const brand = brandOf(digits);
-    const groups = brand === "amex" ? [4, 6, 5] : [4, 4, 4, 4, 3];
-    const parts = []; let at = 0;
-    for (const size of groups) { if (at >= digits.length) break; parts.push(digits.slice(at, at + size)); at += size; }
-    card.value = parts.join(" ");
-    if (event) card.closest(".row").classList.remove("invalid");
-    if (brand) icons.setAttribute("data-brand", brand); else icons.removeAttribute("data-brand");
+  const context = () => ({ brand: MBCard.brandOf(card.value), country: country.value });
+  MBCard.wire(
+    [{ name: "card", input: card }, { name: "exp", input: exp }, { name: "cvc", input: cvc }, { name: "name", input: $("name") }, { name: "country", input: country }, { name: "zip", input: zip }],
+    { context },
+  );
+  // Checkout validates a field once it is left, and every field when Pay is pressed; the card
+  // fields share one message under their group, the postal code has its own.
+  const touched = {};
+  let revealed = false;
+  const cardFields = [["card", card], ["exp", exp], ["cvc", cvc]];
+  const errorOf = (name, input) => {
+    const error = MBCard.validate(name, input.value, context());
+    if (!error) return null;
+    if (revealed) return error;
+    if (!input.value) return null;
+    if (error.code.indexOf("incomplete") !== 0) return error;
+    return touched[name] && document.activeElement !== input ? error : null;
+  };
+  const showError = (anchor, id, message) => {
+    let node = $(id);
+    if (!message) { if (node) node.remove(); return; }
+    if (!node) {
+      node = document.createElement("p");
+      node.className = "error";
+      node.id = id;
+      node.setAttribute("role", "alert");
+      node.setAttribute("data-testid", "stripe-mock-error");
+      node.innerHTML = ${JSON.stringify(ALERT)} + "<span></span>";
+      anchor.appendChild(node);
+    }
+    node.lastChild.textContent = message;
+  };
+  const serverError = card.closest(".field-block").querySelector("[data-testid='stripe-mock-error']:not(#card-error)");
+  const paint = () => {
+    const brand = MBCard.brandOf(card.value);
+    const known = brand !== "unknown" && brand !== "diners" && brand !== "jcb" && brand !== "unionpay";
+    if (known) icons.setAttribute("data-brand", brand); else icons.removeAttribute("data-brand");
     for (const icon of icons.querySelectorAll("svg")) icon.classList.toggle("active", icon.dataset.brand === brand);
     cvc.placeholder = brand === "amex" ? "CVV" : "CVC";
-    cvc.maxLength = brand === "amex" ? 4 : 3;
-  };
-  const formatExp = (event) => {
-    let digits = exp.value.replace(/\\D/g, "").slice(0, 4);
-    if (digits.length === 1 && Number(digits) > 1) digits = "0" + digits;
-    const deleting = event && event.inputType === "deleteContentBackward";
-    exp.value = digits.length > 2 || (digits.length === 2 && !deleting) ? digits.slice(0, 2) + " / " + digits.slice(2) : digits;
-  };
-  const formatZip = () => {
     const us = country.value === "US";
     zip.placeholder = us ? "ZIP" : "Postal code";
     zip.inputMode = us ? "numeric" : "text";
-    zip.maxLength = us ? 5 : 10;
+    zip.closest(".row").hidden = !["US", "CA", "GB"].includes(country.value);
+    let first = null;
+    for (const [name, input] of cardFields) {
+      const error = errorOf(name, input);
+      input.closest(".row").classList.toggle("invalid", !!error);
+      input.setAttribute("aria-invalid", error ? "true" : "false");
+      if (error && !first) first = error;
+    }
+    if (first && serverError) serverError.remove();
+    showError(card.closest(".field-block"), "card-error", first && first.message);
+    const zipError = zip.closest(".row").hidden ? null : errorOf("zip", zip);
+    zip.closest(".row").classList.toggle("invalid", !!zipError);
+    showError(zip.closest(".field-block"), "zip-error", zipError && zipError.message);
   };
-  card.addEventListener("input", formatCard);
-  exp.addEventListener("input", formatExp);
-  cvc.addEventListener("input", () => { cvc.value = cvc.value.replace(/\\D/g, ""); });
-  country.addEventListener("change", formatZip);
-  formatCard(); formatExp(); formatZip();
+  for (const input of [card, exp, cvc, zip]) {
+    input.addEventListener("input", paint);
+    input.addEventListener("blur", () => { if (input.value) touched[input.name] = true; paint(); });
+    input.addEventListener("focus", paint);
+  }
+  country.addEventListener("change", paint);
+  for (const [name, input] of cardFields.concat([["zip", zip]])) MBCard.reformat(input, name, context());
+  paint();
+  form.addEventListener("submit", (event) => {
+    if (event.submitter && event.submitter.value !== "pay") return;
+    revealed = true;
+    paint();
+    const fields = cardFields.concat(zip.closest(".row").hidden ? [] : [["zip", zip]]);
+    const invalid = fields.find(([name, input]) => MBCard.validate(name, input.value, context()));
+    if (!invalid) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    form.classList.remove("processing");
+    invalid[1].focus();
+  }, true);
 
   const autopay = $("stripe-mock-autopay");
   const KEY = "mockingbird.checkout.autopay";
@@ -325,7 +372,6 @@ const SCRIPT = `(() => {
 
 const ARROW_LEFT = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.4 7H15a1 1 0 0 1 0 2H3.4l4.3 4.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 1.4L3.4 7z"/></svg>`
 const LOCK = `<svg class="lock" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 7V5a4 4 0 1 1 8 0v2h.5A1.5 1.5 0 0 1 14 8.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 14.5v-6A1.5 1.5 0 0 1 3.5 7H4zm2 0h4V5a2 2 0 1 0-4 0v2z"/></svg>`
-const ALERT = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 16A8 8 0 1 1 8 0a8 8 0 0 1 0 16zm0-4.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm0-8a1 1 0 0 0-1 1v5a1 1 0 0 0 2 0v-5a1 1 0 0 0-1-1z"/></svg>`
 const CHECK = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.2 11.6 2.6 8a1 1 0 1 0-1.4 1.4l4.3 4.3a1 1 0 0 0 1.4 0l8-8a1 1 0 0 0-1.4-1.4l-7.3 7.3z"/></svg>`
 const CLOCK = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 16A8 8 0 1 1 8 0a8 8 0 0 1 0 16zm0-2A6 6 0 1 0 8 2a6 6 0 0 0 0 12zm1-6.4 2.7 2.7a1 1 0 0 1-1.4 1.4l-3-3A1 1 0 0 1 7 8V4a1 1 0 1 1 2 0v3.6z"/></svg>`
 const CARET = `<svg class="caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.3 1.3 8.9 6l-4.6 4.7-1-1L6.9 6 3.3 2.3z"/></svg>`
@@ -509,15 +555,15 @@ const cardSection = (
 ) => `<section><h2>Payment method</h2>
 <div class="field-block"><label class="label" for="card">Card information</label>
 <div class="group">
-<div class="row${view.error ? " invalid" : ""}"><input id="card" name="card" class="card-input" data-testid="stripe-mock-card" inputmode="numeric" autocomplete="cc-number" placeholder="1234 1234 1234 1234"${value("card")}><span class="icons" id="card-icons">${icons}</span></div>
-<div class="row split"><div class="row"><input id="exp" name="exp" data-testid="stripe-mock-exp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM / YY" aria-label="Expiration"${value("exp")}></div>
-<div class="row"><input id="cvc" name="cvc" class="cvc-input" data-testid="stripe-mock-cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="CVC" aria-label="CVC"${value("cvc")}><span class="icons">${CVC_ICON}</span></div></div>
+<div class="row${view.error ? " invalid" : ""}"><input id="card" name="card" class="card-input" data-testid="stripe-mock-card" inputmode="numeric" autocomplete="cc-number" placeholder="1234 1234 1234 1234" maxlength="23" aria-label="Card number"${value("card")}><span class="icons" id="card-icons">${icons}</span></div>
+<div class="row split"><div class="row"><input id="exp" name="exp" data-testid="stripe-mock-exp" inputmode="numeric" autocomplete="cc-exp" placeholder="MM / YY" maxlength="7" aria-label="Expiration"${value("exp")}></div>
+<div class="row"><input id="cvc" name="cvc" class="cvc-input" data-testid="stripe-mock-cvc" inputmode="numeric" autocomplete="cc-csc" placeholder="CVC" maxlength="4" aria-label="CVC"${value("cvc")}><span class="icons">${CVC_ICON}</span></div></div>
 </div>${error}</div>
 <div class="field-block"><label class="label" for="name">Cardholder name</label>
 <div class="group"><div class="row"><input id="name" name="name" data-testid="stripe-mock-name" autocomplete="cc-name" placeholder="Full name on card"${value("name")}></div></div></div>
 <div class="field-block"><label class="label" for="country">Country or region</label>
 <div class="group"><div class="row"><select id="country" name="country" data-testid="stripe-mock-country" autocomplete="country">${COUNTRIES.map(([code, name]) => `<option value="${code}"${code === country ? " selected" : ""}>${name}</option>`).join("")}</select></div>
-<div class="row"><input id="zip" name="zip" data-testid="stripe-mock-zip" autocomplete="postal-code" placeholder="ZIP" aria-label="ZIP"${value("zip")}></div></div></div>
+<div class="row"><input id="zip" name="zip" data-testid="stripe-mock-zip" autocomplete="postal-code" placeholder="ZIP" maxlength="10" aria-label="ZIP"${value("zip")}></div></div></div>
 </section>`
 
 const closed = (view: CheckoutPageView) => {

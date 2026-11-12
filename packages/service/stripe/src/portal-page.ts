@@ -8,6 +8,7 @@ import {
   previewProration,
   resetsBillingPeriod,
 } from "./billing-portal.js"
+import { CARD_CORE } from "./card-input.js"
 import { formatMoney } from "./checkout-page.js"
 import { findCustomer, type RequestScope } from "./internal.js"
 import { portalProducts } from "./render.js"
@@ -97,6 +98,8 @@ font-weight:600;text-decoration:none;background:#fff;color:var(--text);box-shado
 .error{padding:10px 12px;border-radius:6px;background:#ffe7f2;color:#b3093c;margin:0 0 20px}
 label.field{display:block;margin:0 0 14px}
 label.field span{display:block;color:var(--muted);font-weight:500;margin-bottom:6px}
+label.field.invalid input{border-color:var(--danger);box-shadow:0 0 0 1px var(--danger);color:var(--danger)}
+label.field .field-error{display:block;margin:6px 0 0;color:var(--danger);font-size:13px;font-weight:400}
 input[type=text],input[type=email],input[type=number],textarea,select{width:100%;min-width:0;max-width:100%;padding:8px 10px;border-radius:6px;border:0;
 box-shadow:0 0 0 1px rgba(60,66,87,.16),0 2px 5px rgba(60,66,87,.08);background:#fff}
 textarea{min-height:72px;resize:vertical}
@@ -114,14 +117,56 @@ textarea{min-height:72px;resize:vertical}
 .testcards button{border:0;border-radius:6px;padding:4px 8px;background:#fffbf0;box-shadow:0 0 0 1px #f5d37a;cursor:pointer;font-size:12px}
 `
 
-const SCRIPT = `(() => {
-  const set = (id, value) => { const input = document.getElementById(id); if (input) input.value = value; };
+const SCRIPT = `${CARD_CORE}
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const card = $("card"), exp = $("exp"), cvc = $("cvc"), zip = $("zip"), country = $("country");
+  if (card) {
+    const context = () => ({ brand: MBCard.brandOf(card.value), country: (country && country.value || "").toUpperCase() });
+    MBCard.wire([{ name: "card", input: card }, { name: "exp", input: exp }, { name: "cvc", input: cvc }, { name: "name", input: $("name") }, { name: "country", input: country }, { name: "zip", input: zip }], { context });
+    const fields = [["card", card], ["exp", exp], ["cvc", cvc], ["zip", zip]];
+    const touched = {};
+    let revealed = false;
+    const paint = () => {
+      for (const [name, input] of fields) {
+        let error = MBCard.validate(name, input.value, context());
+        if (error && !revealed && (!input.value || (error.code.indexOf("incomplete") === 0 && (!touched[name] || document.activeElement === input)))) error = null;
+        const label = input.closest("label");
+        label.classList.toggle("invalid", !!error);
+        input.setAttribute("aria-invalid", error ? "true" : "false");
+        let node = label.querySelector(".field-error");
+        if (!error) { if (node) node.remove(); continue; }
+        if (!node) { node = document.createElement("span"); node.className = "field-error"; node.setAttribute("role", "alert"); label.appendChild(node); }
+        node.textContent = error.message;
+      }
+    };
+    for (const [name, input] of fields) {
+      MBCard.reformat(input, name, context());
+      input.addEventListener("input", paint);
+      input.addEventListener("focus", paint);
+      input.addEventListener("blur", () => { if (input.value) touched[name] = true; paint(); });
+    }
+    card.form.addEventListener("submit", (event) => {
+      revealed = true;
+      paint();
+      const invalid = fields.find(([name, input]) => MBCard.validate(name, input.value, context()));
+      if (!invalid) return;
+      event.preventDefault();
+      invalid[1].focus();
+    });
+  }
+  const set = (input, value) => {
+    if (!input) return;
+    input.value = value;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  };
   for (const button of document.querySelectorAll("[data-test-card]")) {
     button.addEventListener("click", () => {
-      set("card", button.getAttribute("data-test-card"));
-      set("exp", "12 / 34");
-      set("cvc", "123");
-      set("zip", "94107");
+      const number = button.getAttribute("data-test-card");
+      set(card, number);
+      set(exp, "12 / 34");
+      set(cvc, /^3[47]/.test(number) ? "1234" : "123");
+      set(zip, "94107");
     });
   }
 })();`
@@ -467,12 +512,12 @@ const paymentMethodPage = (context: PortalContext, messages: PortalMessages) => 
   return `<h1>Add payment method</h1>
 <div class="testcards">${cards}</div>
 <form method="post" data-testid="stripe-mock-portal-payment-form">
-<label class="field"><span>Card number</span><input type="text" id="card" name="card" inputmode="numeric" autocomplete="cc-number" placeholder="1234 1234 1234 1234" data-testid="stripe-mock-portal-card"${value("card")}></label>
-<div class="split"><label class="field"><span>Expiration</span><input type="text" id="exp" name="exp" placeholder="MM / YY" data-testid="stripe-mock-portal-exp"${value("exp")}></label>
-<label class="field"><span>CVC</span><input type="text" id="cvc" name="cvc" inputmode="numeric" placeholder="CVC" data-testid="stripe-mock-portal-cvc"${value("cvc")}></label></div>
-<label class="field"><span>Name on card</span><input type="text" name="name" data-testid="stripe-mock-portal-name"${value("name")}></label>
-<div class="split"><label class="field"><span>Country</span><input type="text" name="country" value="${escapeHtml(messages.values?.country ?? "US")}" data-testid="stripe-mock-portal-country"></label>
-<label class="field"><span>ZIP</span><input type="text" id="zip" name="zip" data-testid="stripe-mock-portal-zip"${value("zip")}></label></div>
+<label class="field"><span>Card number</span><input type="text" id="card" name="card" inputmode="numeric" autocomplete="cc-number" placeholder="1234 1234 1234 1234" maxlength="23" data-testid="stripe-mock-portal-card"${value("card")}></label>
+<div class="split"><label class="field"><span>Expiration</span><input type="text" id="exp" name="exp" inputmode="numeric" autocomplete="cc-exp" maxlength="7" placeholder="MM / YY" data-testid="stripe-mock-portal-exp"${value("exp")}></label>
+<label class="field"><span>CVC</span><input type="text" id="cvc" name="cvc" inputmode="numeric" autocomplete="cc-csc" maxlength="4" placeholder="CVC" data-testid="stripe-mock-portal-cvc"${value("cvc")}></label></div>
+<label class="field"><span>Name on card</span><input type="text" id="name" name="name" autocomplete="cc-name" data-testid="stripe-mock-portal-name"${value("name")}></label>
+<div class="split"><label class="field"><span>Country</span><input type="text" id="country" name="country" autocomplete="country" maxlength="2" value="${escapeHtml(messages.values?.country ?? "US")}" data-testid="stripe-mock-portal-country"></label>
+<label class="field"><span>ZIP</span><input type="text" id="zip" name="zip" autocomplete="postal-code" maxlength="10" data-testid="stripe-mock-portal-zip"${value("zip")}></label></div>
 <div class="actions"><button class="btn primary" name="action" value="add_payment_method" data-testid="stripe-mock-portal-save-card">Add</button><a class="btn" href="${escapeHtml(backHref(context))}" data-testid="stripe-mock-portal-back">Go back</a></div>
 </form>`
 }
