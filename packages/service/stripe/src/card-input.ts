@@ -137,6 +137,8 @@ export const CARD_CORE = String.raw`var MBCard = (function () {
     }
     input.setSelectionRange(position, position);
   }
+  /** Fields whose completion is known; others (name, postal code) never move focus on their own. */
+  var ADVANCES = ["card", "exp", "cvc"];
   function deleting(event) {
     return !!(event && typeof event.inputType === "string" && event.inputType.indexOf("delete") === 0);
   }
@@ -161,7 +163,7 @@ export const CARD_CORE = String.raw`var MBCard = (function () {
         ctx.deleting = deleting(event);
         reformat(input, field.name, ctx);
         if (ctx.deleting || options.advance === false || !focused(input) || !caretAtEnd(input)) return;
-        if (field.name === "zip" || validate(field.name, input.value, context())) return;
+        if (ADVANCES.indexOf(field.name) === -1 || validate(field.name, input.value, context())) return;
         for (var next = index + 1; next < fields.length; next += 1) {
           if (usable(fields[next].input)) { fields[next].input.focus(); return; }
         }
