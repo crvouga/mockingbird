@@ -26,6 +26,33 @@ export type CognitoSession = {
   origin?: TokenOrigin
   /** Unix seconds of the sign-in a refresh token came from; refreshed tokens keep it. */
   authTime?: number
+  /** OAuth scopes granted through the hosted UI; refreshed tokens keep them. */
+  scope?: string
+}
+/** A user-pool app client as the hosted UI (/oauth2/authorize, /oauth2/token) sees it. */
+export type CognitoAppClient = {
+  clientId: string
+  /** When set, /oauth2/token requires it (client_secret_basic or client_secret_post). */
+  clientSecret?: string
+  /** Allowed callback URLs; redirect_uri must match one exactly. */
+  callbackUrls: string[]
+  /** SupportedIdentityProviders; omitted allows every provider name. */
+  identityProviders?: string[]
+  /** AllowedOAuthScopes; omitted allows the five system scopes. */
+  scopes?: string[]
+}
+/** A hosted-UI authorization in flight (picker shown) or an issued authorization code. */
+export type HostedGrant = {
+  kind: "transaction" | "code"
+  clientId: string
+  redirectUri: string
+  state?: string
+  scope: string
+  provider: string
+  challenge?: string
+  nonce?: string
+  username?: string
+  expires: number
 }
 export type TokenOrigin = { originJti: string; eventId: string }
 export type CognitoSeedUser = Partial<CognitoUser> & { username: string; password: string }
@@ -33,6 +60,10 @@ export type CognitoSeedUser = Partial<CognitoUser> & { username: string; passwor
 export class CognitoState {
   readonly users: Collection<CognitoUser>
   readonly sessions: Collection<CognitoSession>
+  readonly appClients: Collection<CognitoAppClient>
+  readonly hosted: Collection<HostedGrant>
+  /** The account the next /oauth2/authorize picks without rendering the picker. */
+  readonly nextAccount: Collection<{ username: string }>
   private readonly ids: IdSequence
   constructor(
     sqlite: SqliteClient,
@@ -41,6 +72,9 @@ export class CognitoState {
   ) {
     this.users = new Collection(sqlite, namespace, "cognito_users")
     this.sessions = new Collection(sqlite, namespace, "cognito_sessions")
+    this.appClients = new Collection(sqlite, namespace, "cognito_app_clients")
+    this.hosted = new Collection(sqlite, namespace, "cognito_hosted_grants")
+    this.nextAccount = new Collection(sqlite, namespace, "cognito_hosted_next_account")
     this.ids = new IdSequence(sqlite, namespace, "cognito")
     this.seed()
   }

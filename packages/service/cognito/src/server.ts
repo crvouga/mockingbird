@@ -43,5 +43,6 @@ export const serveTarget: ServeTarget = {
   banner: () => [
     "AWS SDK endpoint: set COGNITO_ENDPOINT to this URL",
     "admin: POST /__admin/users; GET /__admin/codes?username=…",
+    "hosted UI: GET /oauth2/authorize, POST /oauth2/token; POST /__admin/app-clients registers callback URLs",
   ],
 }

@@ -1,6 +1,9 @@
-import type { CognitoSeedUser, CognitoUser } from "./state.js"
+import type { CognitoAppClient, CognitoSeedUser, CognitoUser } from "./state.js"
 
-export type CognitoFixtures = { users: readonly CognitoSeedUser[] }
+export type CognitoFixtures = {
+  users: readonly CognitoSeedUser[]
+  appClients?: readonly CognitoAppClient[]
+}
 const identityFields = new Set([
   "userId",
   "providerName",
@@ -40,7 +43,16 @@ const string = (value: unknown, path: string) => {
 export function validateCognitoFixtures(value: unknown): CognitoFixtures {
   if (!record(value)) fail("fixtures", "expected an object")
   for (const key of Object.keys(value))
-    if (key !== "users") fail(`fixtures.${key}`, "unknown field")
+    if (key !== "users" && key !== "appClients") fail(`fixtures.${key}`, "unknown field")
+  if (value.appClients !== undefined) {
+    if (!Array.isArray(value.appClients)) fail("fixtures.appClients", "expected an array")
+    const ids = new Set<string>()
+    for (const [i, client] of (value.appClients as unknown[]).entries()) {
+      const { clientId } = validateAppClient(client, `fixtures.appClients[${i}]`)
+      if (ids.has(clientId)) fail(`fixtures.appClients[${i}].clientId`, "duplicate clientId")
+      ids.add(clientId)
+    }
+  }
   if (!Array.isArray(value.users)) fail("fixtures.users", "expected an array")
   const usernames = new Set<string>()
   const subjects = new Set<string>()
@@ -124,6 +136,44 @@ export function validateCognitoFixtures(value: unknown): CognitoFixtures {
         )
   return structuredClone(value) as CognitoFixtures
 }
+
+const appClientFields = new Set([
+  "clientId",
+  "clientSecret",
+  "callbackUrls",
+  "identityProviders",
+  "scopes",
+])
+/** A hosted-UI app client; callback URLs must be absolute and fragment-free, as in Cognito. */
+export function validateAppClient(value: unknown, path: string): CognitoAppClient {
+  if (!record(value)) fail(path, "expected an app client object")
+  for (const key of Object.keys(value))
+    if (!appClientFields.has(key)) fail(`${path}.${key}`, "unknown field")
+  string(value.clientId, `${path}.clientId`)
+  if (value.clientSecret !== undefined) string(value.clientSecret, `${path}.clientSecret`)
+  if (!Array.isArray(value.callbackUrls)) fail(`${path}.callbackUrls`, "expected an array")
+  for (const [i, url] of (value.callbackUrls as unknown[]).entries()) {
+    string(url, `${path}.callbackUrls[${i}]`)
+    let parsed: URL | undefined
+    try {
+      parsed = new URL(url as string)
+    } catch {}
+    if (!parsed || parsed.hash)
+      fail(`${path}.callbackUrls[${i}]`, "expected an absolute URL without a fragment")
+  }
+  for (const key of ["identityProviders", "scopes"]) {
+    if (value[key] === undefined) continue
+    if (!Array.isArray(value[key])) fail(`${path}.${key}`, "expected an array")
+    for (const [i, entry] of (value[key] as unknown[]).entries())
+      string(entry, `${path}.${key}[${i}]`)
+  }
+  return structuredClone(value) as CognitoAppClient
+}
+/** App-client admin responses never include the secret. */
+export const redactedAppClient = ({ clientSecret, ...client }: CognitoAppClient) => ({
+  ...client,
+  hasSecret: clientSecret !== undefined,
+})
 
 /** Shared allowlist for user-control responses; codes have their dedicated endpoint. */
 export const redactedUser = (user: CognitoUser) => ({
