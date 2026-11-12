@@ -195,9 +195,12 @@ color and description into `sites/docs/src/data/brands.json` and `sites/docs/pub
 the site reads; `bun run check:brands` fails while they are stale. `bun run brands:sync -- --all
 --links` refreshes every vendor and checks that each website and docs link still answers.
 
-The docs site publishes that record at `/brands.json`. Every admin shell fetches it when the page
-opens (logo, website, vendor API reference, and the service's page on this site). The emulator bundles
-do not contain it, so a docs deploy updates the chip in admins that are already published.
+The build embeds the service's own record in its package (`scripts/admin-brand.ts`, with the logo
+inlined as a `data:` URI), and the emulator serves it at `GET /__admin/ui/brands.json`, which needs no
+admin key. The admin shell reads its vendor chip (logo, website, vendor API reference, and a link to
+the service's page on this site) from there, so opening an admin makes no request to another host and
+works offline. A brand change ships with the next release of the service. The docs site still
+publishes the whole catalog at `/brands.json` for its own pages.
 
 Also add the package to `sites/docs/package.json` `devDependencies` (`"workspace:*"`) so turbo
 builds it before the site.

@@ -19,7 +19,15 @@
     },
     "build": {
       "dependsOn": ["^build", "generate"],
-      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "!README.md"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!README.md",
+        "$TURBO_ROOT$/scripts/bundle-service.ts",
+        "$TURBO_ROOT$/scripts/admin-brand.ts",
+        "$TURBO_ROOT$/sites/docs/src/data/brands.json",
+        "$TURBO_ROOT$/sites/docs/public/brands/**"
+      ],
       "outputs": ["dist/**"]
     },
     "typecheck": {

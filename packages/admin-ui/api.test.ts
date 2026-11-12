@@ -84,4 +84,25 @@ describe("brand metadata", () => {
     expect(brand?.logo).toBeUndefined()
     expect(brand?.docs).toBe("https://docs.example/notes")
   })
+  test("a relative catalog URL resolves against the page, so an emulator serves its own", () => {
+    const page = "http://127.0.0.1:4310/mount/__admin/ui"
+    expect(brandCatalogUrl("/mount/__admin/ui/brands.json", page)).toBe(
+      "http://127.0.0.1:4310/mount/__admin/ui/brands.json",
+    )
+    expect(brandCatalogUrl("/mount/__admin/ui/brands.json", `${page}?brands=/b.json`)).toBe(
+      "http://127.0.0.1:4310/b.json",
+    )
+  })
+  test("an embedded raster or SVG logo is accepted as a base64 data URI, nothing else", () => {
+    const png = "data:image/png;base64,iVBORw0KGgo="
+    const svg = "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4="
+    expect(brandFor("notes", { notes: { vendor: "Notes", logo: png } })?.logo).toBe(png)
+    expect(brandFor("notes", { notes: { vendor: "Notes", logo: svg } })?.logo).toBe(svg)
+    for (const logo of [
+      "data:text/html;base64,PGgxPg==",
+      "data:image/svg+xml,<svg onload=alert(1)>",
+      "data:image/png;base64,not base64!",
+    ])
+      expect(brandFor("notes", { notes: { vendor: "Notes", logo } })?.logo).toBeUndefined()
+  })
 })

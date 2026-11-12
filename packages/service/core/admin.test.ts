@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ADMIN_BRANDS_URL, renderAdminDocument } from "./src/admin-ui.js"
+import { adminBrandCatalog, renderAdminDocument } from "./src/admin-ui.js"
 import {
   ADMIN_KEY_HEADER,
   Collection,
@@ -198,10 +198,17 @@ describe("admin ui", () => {
     expect(html).toContain('name="viewport"')
     expect(html).toContain("prefers-color-scheme")
     expect(html).toContain("data-mockingbird-admin")
-    expect(html).toContain(ADMIN_BRANDS_URL)
+    expect(html).toContain('"brandsUrl":"/__admin/ui/brands.json"')
+    expect(html).not.toContain("mockingbird.chrisvouga.dev/brands.json")
     expect(html.includes('data-admin-ui-library="antd"')).toBe(true)
     expect(html).not.toContain("https://stripe.com")
     expect((await call(runtime, "GET", "/__admin/ui/")).status).toBe(200)
+
+    // The brand record is served by the emulator itself, without the admin key or a network hop.
+    const brands = await call(runtime, "GET", "/__admin/ui/brands.json")
+    expect(brands.status).toBe(200)
+    expect(brands.headers.get("content-type")).toContain("application/json")
+    expect(await brands.json()).toEqual({})
 
     const locked = await call(runtime, "GET", "/__admin/state")
     expect(locked.status).toBe(401)
@@ -242,7 +249,8 @@ describe("admin ui", () => {
     expect(html).toContain('data-admin-ui-library="antd"')
     expect(html).toContain('id="admin-root"')
     expect(html).toContain("MockingbirdAdmin.mount(")
-    expect(html).toContain(ADMIN_BRANDS_URL)
+    expect(html).toContain('"brandsUrl":"/__admin/ui/brands.json"')
+    expect(html).not.toContain("mockingbird.chrisvouga.dev/brands.json")
     expect(html).not.toContain("https://stripe.com")
     expect(html).not.toContain("https://docs.stripe.com")
     // All runtime dependencies are bundled; the document works with an in-process fetch.
@@ -251,6 +259,20 @@ describe("admin ui", () => {
     expect(hostile).not.toContain('</script><script>alert("x")')
     expect(hostile).toContain("\\u003c/script>")
     expect(hostile.match(/<\/script>/g)?.length).toBe(1)
+  })
+
+  test("the brand catalog carries only the record embedded at build time, keyed by the service", () => {
+    expect(adminBrandCatalog("stripe", undefined)).toEqual({})
+    const brand = {
+      vendor: "Stripe",
+      website: "https://stripe.com",
+      docs: "https://docs.stripe.com/api",
+      guide: "https://mockingbird.chrisvouga.dev/services/stripe",
+      logo: "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=",
+      color: "#635BFF",
+      description: "Payments.",
+    }
+    expect(adminBrandCatalog("payments", brand)).toEqual({ payments: brand })
   })
 
   test("an extension is listed on the manifest and a reserved id is rejected", async () => {

@@ -47,7 +47,7 @@ test("admin brands are absolute and carry the website, vendor docs, and our guid
   expect(record.aha?.guide).toBe(`${DOCS_ORIGIN}/services/aha`)
 })
 
-test("the admin shell fetches this origin and does not embed a vendor site", () => {
+test("the admin shell reads its brand from the emulator, never this origin, and names no vendor site", () => {
   const shell = readFileSync(
     join(import.meta.dir, "../../../packages/service/core/src/admin-ui.ts"),
     "utf8",
@@ -56,7 +56,9 @@ test("the admin shell fetches this origin and does not embed a vendor site", () 
     join(import.meta.dir, "../../../packages/service/core/src/admin-client.ts"),
     "utf8",
   )
-  expect(shell).toContain(`${DOCS_ORIGIN}/brands.json`)
+  // The record is embedded at build time (scripts/admin-brand.ts) and served by the emulator.
+  expect(shell).toContain("ADMIN_BRANDS_PATH")
+  expect(shell).not.toContain(`${DOCS_ORIGIN}/brands.json`)
   expect(`${shell}\n${client}`).not.toContain("https://stripe.com")
   expect(`${shell}\n${client}`).not.toContain("https://docs.stripe.com")
 })

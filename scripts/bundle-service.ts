@@ -19,6 +19,7 @@ import { $ } from "bun"
 import { build } from "esbuild"
 import { rollup } from "rollup"
 import { dts } from "rollup-plugin-dts"
+import { adminBrandDefine } from "./admin-brand.ts"
 import { VERSION_PLACEHOLDER } from "./bundle-service-version.ts"
 
 const pkgDir = process.cwd()
@@ -78,7 +79,12 @@ const js = await build({
   sourcemap: true,
   // The unreleased placeholder; `release:publish` rewrites it to the version it publishes
   // (see UNRELEASED_VERSION in packages/service/core/src/version.ts).
-  define: { __MOCKINGBIRD_PACKAGE_VERSION__: JSON.stringify(VERSION_PLACEHOLDER) },
+  // The admin shell's vendor chip ships inside the package (scripts/admin-brand.ts), so the
+  // emulator serves it from `/__admin/ui/brands.json` instead of the page calling the docs site.
+  define: {
+    __MOCKINGBIRD_PACKAGE_VERSION__: JSON.stringify(VERSION_PLACEHOLDER),
+    ...adminBrandDefine(pkgDir),
+  },
   external: [...external, "node:*", "bun", "bun:*"],
   logLevel: "warning",
   metafile: true,
@@ -95,20 +101,50 @@ try {
   await $`tsc -p tsconfig.build.json --emitDeclarationOnly --declarationMap false --outDir ${types}`.cwd(
     pkgDir,
   )
-  for (const e of entries) {
-    if (e.types === undefined) continue
+  // Every entry in ONE rollup, so a declaration two entries share (a class with private members,
+  // say) lands once and both entries import it. Rolled per entry, each file carries its own copy
+  // and TypeScript treats the copies as unrelated types (#697: `serve(createRedis())`).
+  // rollup-plugin-dts warns when a shared type has no public entry re-exporting it (a consumer's
+  // declaration emit could not name it, TS2742); that package keeps per-entry files instead.
+  const typed = entries.filter((e) => e.types !== undefined)
+  const typesPath = new Map(typed.map((e) => [e.name, relative("dist", e.types as string)]))
+  const roll = async (input: Record<string, string>, onWarning: (message: string) => void) => {
     const bundle = await rollup({
-      input: join(types, `${e.name}.d.ts`),
+      input,
       external: (id) => isBare(id) && !isInlined(id),
       plugins: [dts({ respectExternal: true, tsconfig: join(pkgDir, "tsconfig.build.json") })],
-      onwarn: (warning) => {
-        throw new Error(`${pkg.name}: ${warning.message}`)
-      },
+      onwarn: (warning) => onWarning(`${pkg.name}: ${warning.message}`),
     })
-    const { output } = await bundle.write({ file: join(pkgDir, e.types), format: "es" })
-    for (const chunk of output)
-      if (chunk.type === "chunk") for (const id of chunk.imports) kept.add(id)
-    await bundle.close()
+    try {
+      const { output } = await bundle.write({
+        dir: join(pkgDir, "dist"),
+        format: "es",
+        entryFileNames: (chunk) => typesPath.get(chunk.name) ?? `${chunk.name}.d.ts`,
+        chunkFileNames: "types-[hash].d.ts",
+      })
+      // An import of another file of this output (an entry or a shared chunk) is internal.
+      const emitted = new Set(output.map((file) => file.fileName))
+      for (const chunk of output)
+        if (chunk.type === "chunk")
+          for (const id of chunk.imports) if (!emitted.has(id)) kept.add(id)
+    } finally {
+      await bundle.close()
+    }
+  }
+  const fatal = (message: string) => {
+    throw new Error(message)
+  }
+  const inputOf = (e: (typeof typed)[number]) => ({ [e.name]: join(types, `${e.name}.d.ts`) })
+  class Unshareable extends Error {}
+  try {
+    if (typed.length > 1)
+      await roll(Object.assign({}, ...typed.map(inputOf)), (message) => {
+        throw new Unshareable(message)
+      })
+    else for (const e of typed) await roll(inputOf(e), fatal)
+  } catch (error) {
+    if (!(error instanceof Unshareable)) throw error
+    for (const e of typed) await roll(inputOf(e), fatal)
   }
 } finally {
   rmSync(types, { recursive: true, force: true })
