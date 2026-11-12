@@ -24,7 +24,8 @@
     "packages/adapters/*",
     "packages/auth/*",
     "sites/docs",
-    "sites/fleet"
+    "sites/fleet",
+    "sites/storybook"
   ],
   "overrides": {
     "postcss": "^8.5.30"
@@ -43,12 +44,13 @@
   "scripts": {
     "setup": "bun scripts/setup.ts",
     "build": "turbo run build",
+    "storybook": "bun run --cwd sites/storybook dev",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "generate": "turbo run generate",
     "openapi:check": "turbo run openapi:check",
-    "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:agents check:worktree check:llms check:readme check:brands check:parity-tiers check:service-discovery check:performance check:scripts check:workflows check:format",
+    "check": "turbo run lint typecheck openapi:check generate:check build test portability pack:check check:boundaries check:storybook check:agents check:worktree check:llms check:readme check:brands check:parity-tiers check:service-discovery check:performance check:scripts check:workflows check:format",
     "check:full": "bun scripts/ci-local.ts",
     "pack:check": "turbo run pack:check",
     "portability": "turbo run portability",
@@ -64,6 +66,7 @@
     "github:resolve-issues": "bun scripts/resolve-issues.ts dispatch",
     "verify:junction": "bun run --cwd packages/service/junction verify -- --sample 60 --orders",
     "check:boundaries": "bun scripts/check-boundaries.ts",
+    "check:storybook": "bun scripts/check-storybook.ts",
     "check:agents": "bun scripts/agent-commands.ts --check",
     "agents:sync": "bun scripts/agent-commands.ts",
     "check:worktree": "bun scripts/worktree/sync.ts --check",

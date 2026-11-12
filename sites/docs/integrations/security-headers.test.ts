@@ -8,6 +8,8 @@ import {
   pageKey,
   pagePolicies,
   SECURITY_HEADERS,
+  STORYBOOK_CSP,
+  STORYBOOK_PATH,
   type StaticHeaders,
   setSecurityHeaders,
 } from "../server/headers.ts"
@@ -50,6 +52,24 @@ describe("security headers", () => {
     expect(set.get("content-security-policy")).toBe("services")
   })
 
+  test("the UI catalog under /storybook gets its own policy; pages may be framed only by the site", () => {
+    for (const url of [
+      "/storybook",
+      "/storybook/",
+      "/storybook/iframe.html?id=x",
+      "/storybook/fleet/index.json",
+    ]) {
+      const { res, set } = response()
+      setSecurityHeaders(url, res as never, pagePolicies(headers))
+      expect(set.get("content-security-policy")).toBe(STORYBOOK_CSP)
+    }
+    expect(STORYBOOK_CSP).toContain("frame-ancestors 'self'")
+    expect(SECURITY_HEADERS["X-Frame-Options"]).toBe("SAMEORIGIN")
+    const { res, set } = response()
+    setSecurityHeaders("/storybookish", res as never, pagePolicies(headers))
+    expect(set.get("content-security-policy")).toBe("not-found")
+  })
+
   test("any other path gets the 404 page's CSP, or a deny-all one without it", () => {
     const { res, set } = response()
     setSecurityHeaders("/nope", res as never, pagePolicies(headers))
@@ -84,6 +104,8 @@ test.skipIf(!existsSync(join(dist, "_headers.json")))(
     )
     const blocked: string[] = []
     for (const file of new Bun.Glob("**/*.html").scanSync({ cwd: join(dist, "client") })) {
+      // The UI catalog is served with its own policy, which allows its inline scripts.
+      if (file.startsWith(`${STORYBOOK_PATH.slice(1)}/`)) continue
       const csp = policies.get(pageKey(`/${file}`.replace(/(index)?\.html$/, ""))) ?? ""
       const scriptSrc = /script-src([^;]*)/.exec(csp)?.[1] ?? ""
       const html = readFileSync(join(dist, "client", file), "utf8")

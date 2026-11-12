@@ -31,6 +31,25 @@ That is the whole onboarding: no secrets, no accounts, nothing self-hosted. `bun
 | Adapters | `adapter-node`, `adapter-bun` | tests only |
 | Auth | `credentials` (sandbox credentials for live parity, from the environment) | tests only |
 
+## UI work: the Storybook catalog
+
+Every piece of UI is a story in one catalog, [`sites/storybook`](../sites/storybook/README.md):
+each emulator's hosted pages (Checkout, sign-in, consent, inboxes, inspectors) drawn by the real
+emulator running in the browser, the Stripe.js Elements, the admin UIs, the example apps, the docs
+site's pages and the reports. The Fleet Cloud dashboard and the notifications harness keep their
+own Storybooks, which the catalog composes. Change UI there: open the story, edit the source, and
+the story re-renders (packages are read from `src/`).
+
+```sh
+bun run storybook                            # http://localhost:6008, everything composed
+bun run --cwd sites/storybook verify         # every story renders and plays without an error
+bun run check:storybook                      # every UI source file is in some story
+```
+
+A new page, screen or state gets a story in the same change; `bun run check:storybook` (part of
+`bun run check`) fails on a UI file no story catalogues. The catalog is published with the docs
+site at [`/storybook/`](https://mockingbird.chrisvouga.dev/storybook/).
+
 ## Infrastructure health
 
 `bun run health` checks deployed infrastructure and release readiness in one report. This is

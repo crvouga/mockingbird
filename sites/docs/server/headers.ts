@@ -4,7 +4,8 @@ import type { ServerResponse } from "node:http"
 export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
   "X-Content-Type-Options": "nosniff",
-  "X-Frame-Options": "DENY",
+  // The UI catalog at /storybook/ frames the site's own pages; no other origin may.
+  "X-Frame-Options": "SAMEORIGIN",
   "Referrer-Policy": "strict-origin-when-cross-origin",
 }
 
@@ -20,8 +21,31 @@ export const PAGE_CSP_DIRECTIVES = [
   "base-uri 'self'",
   "form-action 'self'",
   "frame-src 'none'",
-  "frame-ancestors 'none'",
+  "frame-ancestors 'self'",
 ] as const
+
+/** Where the UI catalog (sites/storybook) is published inside the site. */
+export const STORYBOOK_PATH = "/storybook"
+
+/**
+ * The UI catalog's policy. Storybook's manager and preview run inline and generated scripts, and
+ * each story draws an emulator page in a same-origin frame (srcdoc) that inherits this policy and
+ * runs that page's own inline scripts and styles. Nothing on these pages reads input from a URL.
+ */
+export const STORYBOOK_CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
+  "style-src 'self' 'unsafe-inline' https:",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data: https:",
+  "connect-src 'self'",
+  "frame-src 'self' blob: data:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join("; ")
 
 /** `dist/_headers.json`, which `astro build` writes with the adapter's `staticHeaders`. */
 export type StaticHeaders = { pathname: string; headers: { key: string; value: string }[] }[]
@@ -69,7 +93,11 @@ export function setSecurityHeaders(
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value)
   // Any other path is an asset, a markdown twin, the webhook receiver, or a miss Astro answers
   // with the 404 page, so it gets the 404 page's policy.
-  const csp = policies.get(pageKey(url)) ?? policies.get("/404") ?? FALLBACK_CSP
+  const key = pageKey(url)
+  const csp =
+    key === STORYBOOK_PATH || key.startsWith(`${STORYBOOK_PATH}/`)
+      ? STORYBOOK_CSP
+      : (policies.get(key) ?? policies.get("/404") ?? FALLBACK_CSP)
   const setHeader = res.setHeader.bind(res)
   res.setHeader = ((name: string, value: number | string | readonly string[]) =>
     setHeader(

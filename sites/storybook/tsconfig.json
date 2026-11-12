@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["bun", "vite/client"],
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src/**/*.ts", "stories/**/*.ts", "scripts/**/*.ts", ".storybook/**/*.ts"],
+  "exclude": ["storybook-static"]
+}

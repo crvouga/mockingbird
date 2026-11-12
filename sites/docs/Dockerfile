@@ -1,5 +1,6 @@
 # The docs site, hosted by crvouga/personal (https://www.chrisvouga.dev/llms-cloud.txt §4).
-# Build context is the repo root: the site renders every service package, so turbo builds them first.
+# Build context is the repo root: the site renders every service package, so turbo builds them first,
+# and the UI catalog (sites/storybook), which the build publishes at /storybook/.
 #   docker build -f sites/docs/Dockerfile -t mockingbird-docs . && docker run --rm -p 8080:80 mockingbird-docs
 
 FROM oven/bun:1.4.0 AS bun
