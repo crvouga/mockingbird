@@ -35,6 +35,11 @@ export const deviceScale = (value: number | undefined): number =>
 export const isCompact = (layout: DeviceLayout, width: number, scale = 1): boolean =>
   layout === "tabs" || (layout === "auto" && width > 0 && width / scale < TABS_BELOW_WIDTH)
 
+/** Below this container width the harness is on a phone: one-row top bar, full-screen device. */
+export const PHONE_BELOW_WIDTH = 640
+
+export const isPhoneWidth = (width: number): boolean => width > 0 && width < PHONE_BELOW_WIDTH
+
 /** How far a phone must shrink, on top of `scale`, to fit a container this wide (0.5 to 1). */
 export const phoneFit = (width: number, scale = 1): number =>
   Math.max(0.5, Math.min(1, (width / scale - 16) / 362))

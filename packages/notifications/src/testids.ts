@@ -11,7 +11,8 @@
  * The UI root (`TEST_IDS.app`) reports its state the same way: `data-ready` ("true" once the first
  * read finished), `data-view`, `data-namespace`, `data-count`, `data-version`, `data-connected`,
  * `data-sound`, `data-motion`, `data-layout` ("grid" = devices side by side, "tabs" = one device at
- * a time) and `data-tab` (the selected channel tab: "all", "sms", "push", "email" or "chat").
+ * a time), `data-size` ("phone" = a one-row top bar and the open device filling the screen, else
+ * "wide") and `data-tab` (the selected channel tab: "all", "sms", "push", "email" or "chat").
  *
  * This module has no dependencies, so Playwright, Cypress or WebdriverIO specs can import it.
  */
@@ -23,6 +24,8 @@ export const TEST_IDS = {
   topbar: "topbar",
   /** `<select>` of namespaces. */
   namespace: "namespace",
+  /** Narrow screens: shows or hides the rest of the top bar; `aria-expanded`. */
+  menu: "topbar-menu",
   /** Filter `<input>` (recipient, sender, text). */
   search: "search",
   /** View tabs; `aria-pressed="true"` on the active one. */

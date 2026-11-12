@@ -50,6 +50,12 @@ button { cursor: pointer; }
 .dot.ok { background: var(--ok); box-shadow: 0 0 0 3px rgba(48,209,88,.15); }
 .dot.bad { background: var(--bad); box-shadow: 0 0 0 3px rgba(255,69,58,.15); }
 .live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+/* Wide, the menu's contents sit in the bar itself; this is their order there. */
+.topbar-more { display: contents; }
+.menu-btn { display: none; place-items: center; flex: none; width: 36px; height: 36px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--muted); }
+.menu-btn[aria-expanded="true"] { color: var(--text); border-color: #3d4a66; }
+.topbar .namespace { order: 1; } .topbar .search { order: 2; } .topbar .tabs { order: 3; } .topbar .toggle { order: 4; }
+.topbar .icon-toggle { order: 5; } .topbar .live { order: 6; } .topbar .sources { order: 7; }
 .notice { margin: 14px 18px 0; padding: 10px 14px; border: 1px solid #5a2b2b; background: #2a1517; color: #ffb4ab; border-radius: 10px; font-size: 13px; }
 
 .devices { display: flex; flex-wrap: wrap; gap: 28px; padding: 22px 18px 40px; align-items: flex-start; justify-content: center; zoom: var(--mbn-scale, 1); }
@@ -402,6 +408,10 @@ button { cursor: pointer; }
 @keyframes mbn-fade { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 @keyframes mbn-rowflash { from { background: #fef7e0; } to { background: #fff; } }
 @container (max-width: 980px) { .mail-nav { width: 72px; } .mail-nav .lbl, .mail-nav .n, .compose .lbl { display: none; } .mail-logo { width: auto; } .compose { padding: 0 16px; } .mrow .svc { display: none; } }
+@container (max-width: 480px) { .mrow { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; grid-template-areas: "star from date" ". subj subj"; align-items: center; column-gap: 10px; row-gap: 2px; height: auto; padding: 10px 14px 11px 10px; }
+  .mrow .chk, .mrow .svc, .mrow .clip { display: none; } .mrow .star { grid-area: star; margin: 0; } .mrow .from { grid-area: from; width: auto; padding: 0; }
+  .mrow:hover .hover-actions, .mrow:focus-within .hover-actions { display: none; }
+  .mrow .date { grid-area: date; width: auto; } .mrow .subj { grid-area: subj; white-space: normal; line-height: 19px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; } }
 @container (max-width: 640px) { .mail-nav, .mail-search, .cat-tabs, .mail-logo .lbl, .mail-toolbar .range { display: none; } .mail-main { margin-left: 8px; } .mrow .from { width: 110px; } .reader .subject-row, .sender-row { padding-left: 16px; } .mail-frame, .mail-text, .attachments, .reply-row, .details { margin-left: 16px; } .mail-frame { width: calc(100% - 32px); } .sender-row { flex-wrap: wrap; } .sender-row .who { flex-basis: calc(100% - 54px); } .sender-row .meta { flex-basis: 100%; padding-left: 54px; white-space: normal; } .reader h1 { font-size: 19px; line-height: 24px; } }
 
 /* ── WhatsApp: the same phone, a different app ──────────────── */
@@ -505,6 +515,63 @@ button { cursor: pointer; }
 .chat-empty b { color: #1d1c1d; font-size: 16px; }
 @container (max-width: 560px) { .chat-side { display: none; } .chat-msg, .chat-head, .chat-day { padding-left: 12px; padding-right: 12px; } .chat-compose { margin: 0 12px 12px; } .chat-fields { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .devices { padding: 16px 8px; } .device-col.wide { flex-basis: 100%; } }
+
+/* ── Phone ──────────────────────────────────────────────────────
+   The harness itself is on a phone: a one-row top bar (search, status, a menu for the rest) and the
+   open device filling the screen below the tabs, instead of a 760px phone drawn at 362px wide. */
+&[data-size="phone"] { display: flex; flex-direction: column; overflow: hidden; }
+&[data-size="phone"]:not(.embedded) { height: 100dvh; max-height: 100%; min-height: 0; }
+&[data-size="phone"] .mbn-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; overscroll-behavior: contain; }
+&[data-size="phone"] input, &[data-size="phone"] select { font-size: 16px; }
+&[data-size="phone"] .topbar { position: relative; flex: none; gap: 8px; padding: 8px 10px; }
+&[data-size="phone"] .brand { margin: 0; }
+&[data-size="phone"] .brand-name { display: none; }
+&[data-size="phone"] .field { height: 36px; border-radius: 9px; }
+&[data-size="phone"] .field select, &[data-size="phone"] .field input { height: 34px; }
+&[data-size="phone"] .topbar .search { flex: 1 1 0; min-width: 0; max-width: none; }
+&[data-size="phone"] .live-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+&[data-size="phone"] .live { padding: 0 4px; }
+&[data-size="phone"] .menu-btn { display: grid; order: 8; }
+&[data-size="phone"] .topbar-more { display: none; order: 9; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 0 2px; }
+&[data-size="phone"] .menu-btn[aria-expanded="true"] + .topbar-more { display: flex; }
+&[data-size="phone"] .topbar-more .namespace { flex: 1 1 100%; }
+&[data-size="phone"] .topbar-more .namespace select { flex: 1; }
+&[data-size="phone"] .topbar-more .tabs button { padding: 7px 14px; }
+&[data-size="phone"] .topbar-more .icon-toggle { height: 36px; }
+&[data-size="phone"] .topbar-more .toggle { min-height: 36px; }
+&[data-size="phone"] .topbar-more .sources { flex-basis: 100%; margin: 0; }
+&[data-size="phone"] .channel-tabs[data-layout="tabs"] { padding: 0 4px; }
+&[data-size="phone"] .channel-tabs [role="tab"] { padding: 11px 6px 10px; }
+&[data-size="phone"] .notice { margin: 8px 10px 0; }
+&[data-size="phone"] .devices { zoom: 1; flex: 1 0 auto; min-height: 440px; flex-wrap: nowrap; align-items: stretch; padding: 0 10px 10px; gap: 0; }
+&[data-size="phone"] .device-col, &[data-size="phone"] .device-col.wide { flex: 1 1 100%; width: 100%; max-width: none; min-width: 0; align-items: stretch; gap: 0; }
+&[data-size="phone"] .device-head, &[data-size="phone"][data-layout="tabs"] .device-col:not(.wide) .device-head { display: flex; align-items: center; gap: 8px; width: 100%; height: auto; padding: 8px 0; }
+&[data-size="phone"] .device-head h2 { display: none; }
+&[data-size="phone"] .device-head .head-row { order: 2; width: auto; height: auto; flex: none; }
+&[data-size="phone"] .device-head .head-row:not(:has(> :not(h2))) { display: none; }
+&[data-size="phone"] .device-head > .field { flex: 1; min-width: 0; height: 36px; }
+&[data-size="phone"] .device-head .field select { flex: 1; width: 100%; max-width: none; }
+&[data-size="phone"] .seg button { padding: 6px 10px; }
+&[data-size="phone"] .iphone, &[data-size="phone"] .pixel { zoom: 1; display: flex; flex: 1; width: 100%; height: auto; min-height: 0; border-radius: 40px; padding: 7px;
+  box-shadow: 0 0 0 1.5px #3a3a3c, 0 18px 40px rgba(0,0,0,.45); }
+&[data-size="phone"] .iphone::before, &[data-size="phone"] .iphone::after, &[data-size="phone"] .pixel::after { display: none; }
+&[data-size="phone"] .iphone .screen, &[data-size="phone"] .pixel .screen { flex: 1; height: auto; border-radius: 33px; clip-path: inset(0 round 33px); }
+&[data-size="phone"] .window { flex: 1; height: auto; min-height: 0; border-radius: 16px; }
+&[data-size="phone"] .window .chrome { display: none; }
+&[data-size="phone"] .timeline { padding: 10px; overflow-x: visible; }
+/* The timeline table becomes one card per notification. */
+&[data-size="phone"] .tl, &[data-size="phone"] .tl tbody { display: block; }
+&[data-size="phone"] .tl thead { display: none; }
+&[data-size="phone"] .tl tbody tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "channel to time" "content content content" "source from status";
+  align-items: center; gap: 6px 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); }
+&[data-size="phone"] .tl tbody tr:last-child { border-bottom: 0; }
+&[data-size="phone"] .tl td { display: block; min-width: 0; padding: 0; border: 0; }
+&[data-size="phone"] .tl td[data-col="channel"] { grid-area: channel; } &[data-size="phone"] .tl td[data-col="time"] { grid-area: time; color: var(--muted); font-size: 11px; }
+&[data-size="phone"] .tl td[data-col="to"] { grid-area: to; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+&[data-size="phone"] .tl td[data-col="content"] { grid-area: content; max-width: none; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+&[data-size="phone"] .tl td[data-col="source"] { grid-area: source; font-size: 12px; }
+&[data-size="phone"] .tl td[data-col="from"] { grid-area: from; font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+&[data-size="phone"] .tl td[data-col="status"] { grid-area: status; font-size: 12px; }
 `
 
 /** The stylesheet, every rule scoped to `.mb-notifications`. */
