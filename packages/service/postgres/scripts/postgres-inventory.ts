@@ -40,6 +40,12 @@ export const SUPPORTED_OPERATORS = new Set([
   "#",
   "<<",
   ">>",
+  // range and inet operators (src/expressions/range-network-ops.ts)
+  "<<=",
+  ">>=",
+  "&<",
+  "&>",
+  "-|-",
   "~~",
   "~~*",
   "!~~",

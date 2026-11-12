@@ -6,11 +6,14 @@ import type { Prng } from "../runtime/prng.ts";
 import { PG_CATALOG_RELATIONS } from "../schema/catalog.ts";
 import { type ColumnType, type Datum, TYPE_OIDS, type TypeId, typeDisplayName } from "../types/value.ts";
 import type { ColumnarSlab } from "./columnar-slab.ts";
+import { gucDef, gucDefaultDisplay, TRANSACTION_GUCS } from "./guc-catalog.ts";
 
 // --- table / relation metadata ---------------------------------------------
 
 export interface ColumnMeta {
   name: string;
+  /** COMMENT ON COLUMN (pg_description, col_description) */
+  comment?: string;
   type: ColumnType;
   notNull: boolean;
   defaultExpr: Expr | null;
@@ -25,12 +28,14 @@ export interface ColumnMeta {
 
 export type ConstraintMeta =
   // indexOid links a key constraint to the index that backs it (see schema/index-catalog.ts)
-  | { kind: "primary_key"; name: string; columns: string[]; indexOid?: number }
-  | { kind: "unique"; name: string; columns: string[]; nullsNotDistinct: boolean; indexOid?: number }
-  | { kind: "check"; name: string; expr: Expr }
+  // comment: COMMENT ON CONSTRAINT (pg_description)
+  | { kind: "primary_key"; name: string; columns: string[]; indexOid?: number; comment?: string }
+  | { kind: "unique"; name: string; columns: string[]; nullsNotDistinct: boolean; indexOid?: number; comment?: string }
+  | { kind: "check"; name: string; expr: Expr; comment?: string }
   | {
       kind: "foreign_key";
       name: string;
+      comment?: string;
       columns: string[];
       refSchema: string;
       refTable: string;
@@ -38,6 +43,10 @@ export type ConstraintMeta =
       onDelete: string | null;
       onUpdate: string | null;
       match: "full" | "simple";
+      /** `DEFERRABLE`; absent means NOT DEFERRABLE */
+      deferrable?: boolean;
+      /** `INITIALLY DEFERRED`; only set together with `deferrable` */
+      initiallyDeferred?: boolean;
     };
 
 export interface IndexMeta {
@@ -76,6 +85,8 @@ export interface IndexMeta {
 }
 
 export interface TriggerMeta {
+  /** COMMENT ON TRIGGER */
+  comment?: string;
   constraint?: boolean;
   deferrable?: boolean;
   initiallyDeferred?: boolean;
@@ -142,6 +153,7 @@ export class TableData {
     copy.constraints = this.constraints;
     copy.triggers = this.triggers;
     copy.unlogged = this.unlogged;
+    copy.comment = this.comment;
     return copy;
   }
 
@@ -190,6 +202,8 @@ export class TableData {
   temp: boolean;
   /** UNLOGGED table (`pg_class.relpersistence = 'u'`); catalog metadata only, there is no WAL to skip */
   unlogged = false;
+  /** COMMENT ON TABLE (pg_description, obj_description) */
+  comment: string | undefined;
   /** monotonically increasing oid-like id for catalog output */
   readonly oid: number;
   /** >0 while shared with a clone or transaction snapshot. */
@@ -309,6 +323,7 @@ export class TableData {
       this.temp,
     );
     t.unlogged = this.unlogged;
+    t.comment = this.comment;
     t.durableChanges = this.durableChanges?.fork() ?? null;
     t.durableIds = this.durableIds;
     t.durableNextId = this.durableNextId;
@@ -395,9 +410,13 @@ export interface ViewData {
   temp: boolean;
   oid: number;
   shareCount?: number;
+  /** COMMENT ON VIEW / MATERIALIZED VIEW */
+  comment?: string;
 }
 
 export interface SequenceData {
+  /** COMMENT ON (pg_description) */
+  comment?: string;
   name: string;
   schema: string;
   increment: bigint;
@@ -418,6 +437,8 @@ export interface SequenceData {
 }
 
 export interface EnumData {
+  /** COMMENT ON (pg_description) */
+  comment?: string;
   name: string;
   schema: string;
   labels: string[];
@@ -426,6 +447,8 @@ export interface EnumData {
 }
 
 export interface DomainData {
+  /** COMMENT ON (pg_description) */
+  comment?: string;
   name: string;
   schema: string;
   baseType: ColumnType;
@@ -437,6 +460,10 @@ export interface DomainData {
 }
 
 export interface FunctionData {
+  /** COMMENT ON (pg_description) */
+  comment?: string;
+  /** IMMUTABLE / STABLE; absent means VOLATILE */
+  volatility?: "immutable" | "stable";
   settings?: Record<string, string>;
   name: string;
   schema: string;
@@ -446,6 +473,8 @@ export interface FunctionData {
   returns: TypeId | null;
   returnsSet: boolean;
   returnsTable: Array<{ name: string; type: TypeId }> | null;
+  /** OUT / INOUT parameters: variables of a plpgsql body that make up its result */
+  outArgs?: Array<{ name: string; type: TypeId }>;
   language: string;
   body: Statement[] | null;
   rawBody: string | null;
@@ -576,6 +605,18 @@ export class DatabaseState {
     newRow: Datum[] | null;
   }> = [];
   constraintModes = new Map<string, boolean>();
+  /**
+   * Foreign keys whose check is deferred to COMMIT (or SET CONSTRAINTS ... IMMEDIATE): the referencing
+   * table and constraint, and which side's change queued it (it picks the error message).
+   */
+  pendingForeignKeys: Array<{
+    schema: string;
+    table: string;
+    constraint: string;
+    side: "referencing" | "referenced";
+    /** for `side: "referenced"`: the referenced table whose row was updated or deleted */
+    referenced?: string;
+  }> = [];
   /** most recent sequence touched by nextval/setval, for lastval() */
   lastSequence: { schema: string; name: string } | null = null;
   /** Session currval per sequence; absent entry means currval is undefined. */
@@ -628,7 +669,15 @@ export class DatabaseState {
   }
 
   getSetting(name: string): string | undefined {
-    return this.localSettings.get(name) ?? this.settings.get(name);
+    const local = this.localSettings.get(name);
+    if (local !== undefined) return local;
+    // transaction_read_only and the like: outside a transaction block, each statement's own transaction
+    const transactionDefault = TRANSACTION_GUCS.get(name);
+    if (transactionDefault !== undefined) return this.getSetting(transactionDefault);
+    const value = this.settings.get(name);
+    if (value !== undefined) return value;
+    const def = gucDef(name);
+    return def ? gucDefaultDisplay(def) : undefined;
   }
 
   /** effective search path: existing schemas from search_path setting */
@@ -659,7 +708,26 @@ export class DatabaseState {
   }
 
   /** Resolve a possibly-qualified relation name to its schema. */
+  /**
+   * `pg_temp.x` (and `pg_temp_N.x`) names the session's temporary relation `x`. The engine keeps a
+   * temporary relation in the schema it was created in, flagged temporary: this finds that schema.
+   */
+  private resolveTempSchema(parts: string[]): string[] {
+    if (parts.length < 2) return parts;
+    const schema = parts[parts.length - 2]!;
+    if (!/^pg_temp(_\d+)?$/.test(schema) || this.schemas.has(schema)) return parts;
+    const name = parts[parts.length - 1]!;
+    for (const data of this.schemas.values()) {
+      const relation = data.tables.get(name) ?? data.views.get(name) ?? data.sequences.get(name);
+      const index = data.indexes.get(name);
+      const temp = relation?.temp === true || (index !== undefined && data.tables.get(index.table)?.temp === true);
+      if (temp) return [data.name, name];
+    }
+    return parts;
+  }
+
   resolveRelationSchema(parts: string[]): { schema: string; name: string } | null {
+    parts = this.resolveTempSchema(parts);
     if (parts.length === 2) {
       const [schema, name] = parts as [string, string];
       return { schema, name };
@@ -679,6 +747,7 @@ export class DatabaseState {
   }
 
   findTable(parts: string[]): TableData | null {
+    parts = this.resolveTempSchema(parts);
     if (parts.length >= 2) {
       const schema = parts[parts.length - 2]!;
       const name = parts[parts.length - 1]!;
@@ -701,6 +770,7 @@ export class DatabaseState {
   }
 
   findView(parts: string[]): ViewData | null {
+    parts = this.resolveTempSchema(parts);
     if (parts.length >= 2) {
       const schema = parts[parts.length - 2]!;
       const name = parts[parts.length - 1]!;
@@ -715,6 +785,7 @@ export class DatabaseState {
   }
 
   findSequence(parts: string[]): SequenceData | null {
+    parts = this.resolveTempSchema(parts);
     if (parts.length >= 2) {
       const schema = parts[parts.length - 2]!;
       const name = parts[parts.length - 1]!;
@@ -803,6 +874,7 @@ export class DatabaseState {
     s.inTransaction = this.inTransaction;
     s.pendingTriggers = this.pendingTriggers.slice();
     s.constraintModes = new Map(this.constraintModes);
+    s.pendingForeignKeys = this.pendingForeignKeys.slice();
     s.lastSequence = this.lastSequence ? { ...this.lastSequence } : null;
     s.sequenceCurrval = new Map(this.sequenceCurrval);
     s.tableStats = new Map(this.tableStats);
@@ -825,6 +897,7 @@ export class DatabaseState {
     s.inTransaction = this.inTransaction;
     s.pendingTriggers = this.pendingTriggers.slice();
     s.constraintModes = new Map(this.constraintModes);
+    s.pendingForeignKeys = this.pendingForeignKeys.slice();
     s.lastSequence = this.lastSequence ? { ...this.lastSequence } : null;
     s.sequenceCurrval = new Map(this.sequenceCurrval);
     s.tableStats = new Map(this.tableStats);
@@ -918,6 +991,7 @@ export class DatabaseState {
     this.prepared = other.prepared;
     this.pendingTriggers = other.pendingTriggers.slice();
     this.constraintModes = new Map(other.constraintModes);
+    this.pendingForeignKeys = other.pendingForeignKeys.slice();
     this.changes = other.changes;
     this.lastSequence = other.lastSequence;
     this.sequenceCurrval = other.sequenceCurrval;

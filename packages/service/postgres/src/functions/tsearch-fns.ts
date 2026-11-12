@@ -2,6 +2,7 @@ import { pgError } from "../errors/error.ts";
 import {
   parseTsvector,
   phrasetoTsquery,
+  websearchToTsquery,
   plaintoTsquery,
   toTsquery,
   toTsvector,
@@ -41,6 +42,14 @@ export function getTsearchFunctions(): Map<string, ScalarFn> {
       const config = args.length > 1 ? argText(ctx, args[0]!) : "english";
       const text = argText(ctx, args[args.length - 1]!);
       return tv("tsquery", plaintoTsquery(config, text));
+    }),
+  );
+  m.set(
+    "websearch_to_tsquery",
+    strict("tsquery", (ctx, args) => {
+      const config = args.length > 1 ? argText(ctx, args[0]!) : "english";
+      const text = argText(ctx, args[args.length - 1]!);
+      return tv("tsquery", websearchToTsquery(config, text));
     }),
   );
   m.set(

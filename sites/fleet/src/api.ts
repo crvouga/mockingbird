@@ -1151,6 +1151,8 @@ export function createRoutes(): Route[] {
           "This organization has its maximum number of members and pending invites",
         )
         const token = newSecret()
+        // One clock read, so the invite lasts exactly INVITE_DAYS from its creation.
+        const now = deps.now()
         const invite: Row<"invites"> = {
           id: newId("inv"),
           org_id: row.id,
@@ -1158,8 +1160,8 @@ export function createRoutes(): Route[] {
           role: (context.body.role as string | undefined) ?? "member",
           token_hash: sha256(token),
           invited_by: principal?.kind === "user" ? principal.user.id : (principal?.key.id ?? ""),
-          expires_at: new Date(deps.now() + INVITE_DAYS * 86_400_000).toISOString(),
-          created_at: iso(deps),
+          expires_at: new Date(now + INVITE_DAYS * 86_400_000).toISOString(),
+          created_at: new Date(now).toISOString(),
         }
         await deps.db.insert("invites", invite)
         return viewInvite(invite, deps, token)

@@ -1,4 +1,3 @@
-import type { Socket } from "node:net";
 import { type BindValue, bindValueToTyped } from "../api/bind.ts";
 import type { Database } from "../api/database.ts";
 import type { TextResultSet } from "../api/statement.ts";
@@ -30,6 +29,7 @@ import {
 import { ScramServer } from "./scram.ts";
 import { splitStatements } from "./split.ts";
 import { applyStartupSettings, StartupError, startupSettings } from "./startup.ts";
+import type { StreamSocket } from "./stream.ts";
 import { wireTypeModifier } from "./type-modifier.ts";
 
 /** One statement's outcome, before it is written to the wire. */
@@ -91,13 +91,27 @@ export type ServerFaults = {
   failConcurrentIndexBuild?: string;
 };
 
+/** Where a logged statement was: a simple `Query`, or the extended-protocol message that ran or failed it. */
+export type ServerLogPhase = "simple" | "parse" | "bind" | "describe" | "execute";
+
 export type ServerLog = {
   pid: number;
   sql: string;
   durationMs: number;
   /** `ok`, or the SQLSTATE of the error. */
   status: string;
+  /** The protocol step: a statement that fails at Parse or Bind is logged there, as the client sees it fail. */
+  phase: ServerLogPhase;
+  /** The `ErrorResponse` message the client received, when `status` is not `ok`. */
+  message?: string;
+  /** Rows returned or affected, when `status` is `ok`. */
+  rowCount?: number;
+  /** Bound parameter values of an extended-protocol statement; only with the `logParams` option. */
+  params?: readonly BindValue[];
 };
+
+/** Errors already reported to `onLog`, so an outer protocol step does not log them twice. */
+const loggedErrors = new WeakSet<object>();
 
 export type ConnectionOptions = {
   password?: string;
@@ -105,6 +119,8 @@ export type ConnectionOptions = {
   parameters: Record<string, string>;
   faults: ServerFaults;
   onLog?: (entry: ServerLog) => void;
+  /** Include bound parameter values in `onLog` entries (they may be large). */
+  logParams?: boolean;
   /**
    * When set, a startup packet that names a different database is fatal `3D000`.
    * Unset accepts any database name.
@@ -352,7 +368,7 @@ export class Connection implements Session {
   private persisting: Promise<void> | null = null;
 
   constructor(
-    private readonly socket: Socket,
+    private readonly socket: StreamSocket,
     private readonly cluster: Cluster,
     private readonly options: ConnectionOptions,
   ) {
@@ -361,12 +377,12 @@ export class Connection implements Session {
     this.pid = cluster.newPid();
     this.secret = Math.floor(Math.random() * 0x7fffffff);
     cluster.sessions.set(this.pid, this);
-    socket.on("data", (chunk: Buffer) => this.receive(chunk));
+    socket.on("data", (chunk: Uint8Array) => this.receive(chunk));
     socket.on("close", () => this.dispose());
     socket.on("error", () => this.dispose());
   }
 
-  private receive(chunk: Buffer): void {
+  private receive(chunk: Uint8Array): void {
     let messages: FrontendMessage[];
     try {
       messages = this.frames.push(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
@@ -451,6 +467,23 @@ export class Connection implements Session {
   }
 
   private lockWaiter: ((error: Error) => void) | null = null;
+
+  /** pg_terminate_backend from another session (or this one): FATAL 57P01, and the connection ends. */
+  terminate(): void {
+    if (this.lockWaiter)
+      this.lockWaiter(pgError("internal", "terminating connection due to administrator command", "57P01"));
+    this.fatal("57P01", "terminating connection due to administrator command");
+  }
+
+  activityState(): string {
+    if (this.busy) return "active";
+    if (this.aborted) return "idle in transaction (aborted)";
+    return this.transaction ? "idle in transaction" : "idle";
+  }
+
+  applicationName(): string {
+    return this.settings.get("application_name") ?? "";
+  }
 
   // --- startup ------------------------------------------------------------------------------
 
@@ -620,7 +653,7 @@ export class Connection implements Session {
       standard_conforming_strings: setting("standard_conforming_strings", "on"),
       is_superuser: "on",
       session_authorization: this.user,
-      default_transaction_read_only: "off",
+      default_transaction_read_only: setting("default_transaction_read_only", "off"),
       in_hot_standby: "off",
       scram_iterations: "4096",
       ...this.options.parameters,
@@ -649,21 +682,50 @@ export class Connection implements Session {
   }
 
   /** Run one statement against the engine, honoring the turn, locks, aborted state and faults. */
-  private async execute(sql: string, params: BindValue[] = []): Promise<Outcome> {
+  private async execute(sql: string, params: BindValue[] = [], phase: ServerLogPhase = "simple"): Promise<Outcome> {
     const text = sql.trim();
     if (text === "") return { empty: true };
     const started = performance.now();
     try {
       const outcome = await this.executeInner(text, params);
-      this.options.onLog?.({ pid: this.pid, sql: text, durationMs: performance.now() - started, status: "ok" });
+      this.log(phase, text, params, started, null, outcome.empty ? undefined : outcome.result.rowCount);
       return outcome;
     } catch (error) {
       if (this.inTransaction) this.aborted = true;
       if (isPostgresError(error) && error.sqlState === "40P01") this.cluster.unlockAll(this, true);
-      const status = isPostgresError(error) ? error.sqlState : "XX000";
-      this.options.onLog?.({ pid: this.pid, sql: text, durationMs: performance.now() - started, status });
+      this.log(phase, text, params, started, error);
       throw error;
     }
+  }
+
+  /**
+   * Report one statement to `onLog`: its outcome, or the error with the message the client receives.
+   * An error is reported once, by the innermost step that saw it.
+   */
+  private log(
+    phase: ServerLogPhase,
+    sql: string,
+    params: readonly BindValue[],
+    started: number,
+    error: unknown,
+    rowCount?: number,
+  ): void {
+    const onLog = this.options.onLog;
+    if (!onLog) return;
+    if (error !== null && typeof error === "object") {
+      if (loggedErrors.has(error)) return;
+      loggedErrors.add(error);
+    }
+    const fields = error === null ? null : errorFields(error);
+    onLog({
+      pid: this.pid,
+      sql,
+      durationMs: performance.now() - started,
+      status: fields ? fields.code : "ok",
+      phase,
+      ...(fields ? { message: fields.message } : rowCount !== undefined ? { rowCount } : {}),
+      ...(this.options.logParams && phase !== "simple" ? { params: params.slice() } : {}),
+    });
   }
 
   private async executeInner(text: string, params: BindValue[]): Promise<Outcome> {
@@ -881,7 +943,17 @@ export class Connection implements Session {
     if (stmt?.type !== "transaction") throw pgError("syntax", "invalid transaction command", "42601");
     switch (stmt.action) {
       case "begin":
-        this.transaction ??= { statements: [], savepoints: [], xid: this.database.state.allocateXid() };
+        if (!this.transaction) {
+          this.transaction = { statements: [], savepoints: [], xid: this.database.state.allocateXid() };
+          // BEGIN READ ONLY / ISOLATION LEVEL ...: the workspace replays them as SET TRANSACTION
+          if (stmt.modes?.length) {
+            this.transaction.statements.push({
+              kind: "sql",
+              sql: `SET TRANSACTION ${stmt.modes.join(", ")}`,
+              params: [],
+            });
+          }
+        }
         return command("BEGIN");
       case "commit": {
         const transaction = this.transaction;
@@ -935,10 +1007,7 @@ export class Connection implements Session {
   /** Rebase this transaction's successful writes onto the latest committed state. */
   private openWorkspace(): Database {
     const workspace = this.database.branch();
-    setDatabaseCatalogContext(workspace.state, {
-      name: this.databaseName,
-      names: () => this.cluster.databaseNames(),
-    });
+    setDatabaseCatalogContext(workspace.state, this.cluster.catalogContext(this.databaseName));
     // The workspace is this session's alone: a SET inside the block reaches the session at commit.
     workspace.state.settings = new Map(this.settings);
     workspace.state.settingDefaults = this.settingDefaults;
@@ -1382,27 +1451,47 @@ export class Connection implements Session {
     const paramOids: number[] = [];
     for (let i = 0; i < count; i++) paramOids.push(body.i32());
     const text = sql.trim();
-    if (text !== "" && !LISTEN.test(text) && !UNLISTEN.test(text) && !NOTIFY.test(text) && !TX_CONTROL.test(text)) {
-      // Syntax is checked now (a parse error belongs to Parse), the statement runs at Execute.
-      if (!CLUSTER_DDL.test(text)) this.database.prepare(text);
-    }
-    if (name !== "" && this.prepared.has(name)) {
-      throw pgError("internal", `prepared statement "${name}" already exists`, "42P05");
+    const started = performance.now();
+    try {
+      if (text !== "" && !LISTEN.test(text) && !UNLISTEN.test(text) && !NOTIFY.test(text) && !TX_CONTROL.test(text)) {
+        // Syntax is checked now (a parse error belongs to Parse), the statement runs at Execute.
+        if (!CLUSTER_DDL.test(text)) this.database.prepare(text);
+      }
+      if (name !== "" && this.prepared.has(name)) {
+        throw pgError("internal", `prepared statement "${name}" already exists`, "42P05");
+      }
+    } catch (error) {
+      this.log("parse", text, [], started, error);
+      throw error;
     }
     this.prepared.set(name, { name, sql: text, paramOids });
     this.write(backend.parseComplete());
   }
 
   private bind(body: ByteReader): void {
+    const seen: { sql: string; params: BindValue[] } = { sql: "", params: [] };
+    const started = performance.now();
+    try {
+      this.bindPortal(body, seen);
+    } catch (error) {
+      this.log("bind", seen.sql, seen.params, started, error);
+      throw error;
+    }
+  }
+
+  /** Bind; `seen` collects the statement and values decoded so far, for the log of a failed Bind. */
+  private bindPortal(body: ByteReader, seen: { sql: string; params: BindValue[] }): void {
     const portalName = body.cstring();
     const statementName = body.cstring();
     const prepared = this.prepared.get(statementName);
     if (!prepared) throw pgError("internal", `prepared statement "${statementName}" does not exist`, "26000");
+    seen.sql = prepared.sql;
     const formatCount = body.i16();
     const paramFormats: number[] = [];
     for (let i = 0; i < formatCount; i++) paramFormats.push(body.i16());
     const paramCount = body.i16();
     const params: BindValue[] = [];
+    seen.params = params;
     // A binary value is read by its type: the declared one, else the one Describe or inference gave.
     const oidOf = (i: number): number => prepared.paramOids[i] || this.resolveParamOids(prepared)[i] || 0;
     for (let i = 0; i < paramCount; i++) {
@@ -1438,7 +1527,7 @@ export class Connection implements Session {
     const portal = this.portals.get(name);
     if (!portal) throw pgError("internal", `portal "${name}" does not exist`, "34000");
     this.busy = true;
-    portal.outcome ??= await this.execute(portal.prepared.sql, portal.params);
+    portal.outcome ??= await this.execute(portal.prepared.sql, portal.params, "describe");
     portal.described = true;
     const outcome = portal.outcome;
     if (outcome.empty || outcome.result.columns.length === 0) this.write(backend.noData());
@@ -1540,7 +1629,7 @@ export class Connection implements Session {
     if (!portal) throw pgError("internal", `portal "${name}" does not exist`, "34000");
     this.busy = true;
     try {
-      portal.outcome ??= await this.execute(portal.prepared.sql, portal.params);
+      portal.outcome ??= await this.execute(portal.prepared.sql, portal.params, "execute");
     } catch (error) {
       if (error instanceof ConnectionDropped) return;
       throw error;

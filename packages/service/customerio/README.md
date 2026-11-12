@@ -5,7 +5,7 @@
 Stateful emulator of **Customer.io** for test suites, serving all three hosts our code talks to from
 one process: the Segment-compatible **CDP** (`identify`, `track`, `batch`, exactly as
 `@customerio/cdp-analytics-node` posts them), the **App API** transactional sends (email, SMS,
-inbox message), message catalog, profile attribute reads, sender opt-out reconciliation, and delivery-status reads, and the
+push, inbox message), message catalog, profile attribute reads with device lists, sender opt-out reconciliation, and delivery-status reads, and the
 **link-tracking** click endpoint. Sends land in an outbox a suite asserts on (and reads links out
 of); reporting events (`unsubscribed`, `subscribed`, `spammed`, subscription preferences,
 `clicked`) are posted to our reporting webhook, signed the way Customer.io signs them.
@@ -90,9 +90,10 @@ await cio.close()
 | --- | --- |
 | `POST /v1/identify`, `/v1/track`, `/v1/batch` | CDP, `Authorization: Basic base64(<write key>:)` (else 401 `{error}`). Segment events (`batch` of `identify` / `track`); each needs `userId` or `anonymousId` (else 400 `{error}`, which the SDK does not retry). A batch is validated before any entry is applied. → `{success: true}`. Identify shallow-merges traits; `cio_subscription_preferences.channels` / `.topics` merge one level so omitted keys and explicit `false` remain. Concurrent identifies on one profile are serialized. A repeated `messageId` is recorded as a duplicate and not applied. |
 | `POST /v1/send/email`, `/v1/send/sms`, `/v1/send/inbox_message` | App API, `Authorization: Bearer <app key>` (else 401 `{meta: {error}}`). `{transactional_message_id (id or trigger name, case-insensitive), identifiers: exactly one of id \| email \| cio_id, to?, from?, subject?, message_data?, send_to_unsubscribed?, tracked?, disable_message_retention?, headers?, attachments?}` → `{delivery_id, queued_at}`. Validation errors are 400 `{meta: {error}}`. SMS `to`, when present, must be E.164. With `strictMessages`, an unknown id is 400 `{meta: {error: "transactional_message_id not found"}}`. An `identifiers.id` with no profile creates a minimal one; `to` stays the literal recipient. Accepted sends start `pending` (not delivered). A profile that unsubscribed, or whose email/SMS channel is `false`, gets `suppressed` unless `send_to_unsubscribed` (inbox follows only the unsubscribed flag). `disable_message_retention` drops `message_data` from the outbox unless `retainMessageDataForTests`. `tracked: true` rewrites every URL to `<trackingBase>/click/<linkId>`. There is no send idempotency: a repeat creates another delivery. |
+| `POST /v1/send/push` | App API, Bearer auth as above. `{transactional_message_id, identifiers (exactly one of id \| email \| cio_id), to?, platform?, title?, message?, custom_data?, custom_payload?, custom_device?, sound?, image_url?, link?, send_to_unsubscribed?, disable_message_retention?}` → `{delivery_id, queued_at}`. `to` absent or `all` targets every device on the person, `last_used` the greatest `last_used`, anything else is one token. `platform` other than `all` is 400 (the vendor requires web push for those). `transactional_message_id` lookup, `strictMessages`, profile creation by `identifiers.id`, unsubscribed / `channels.push: false` suppression and `disable_message_retention` follow the email/SMS sends. `custom_device` upserts that device before targets are chosen. The outbox entry has `channel: "push"` and `push: {to, devices, to_on_profile, profile_found, title, message, custom_data, custom_payload, sound, image_url, link}`; `GET /v1/messages/{id}` reads it as `type: "push"` with the tokens as `recipient`. `queue_draft: true` is an explicit 400 (drafts are not modelled). See [Push best guesses](#push-and-devices-best-guess-not-oracle-verified). |
 | `GET /v1/transactional` | `{messages: [{id, name, trigger_name, description, send_to_unsubscribed, link_tracking, …}]}`, no pagination (the whole catalog, including hundreds of rows). Seeded with `acme_<key>` for every legacy email key the consumer app has, plus `acme_inbox_message` and `acme_playground_notification` (ids 1–21). `transactionalListKey: "transactional"` renames the array key. |
 | `GET /v1/transactional/{id}` | `{message: {...}}` by id or trigger name (case-insensitive), or 404. |
-| `GET /v1/customers/{customer_id}/attributes?id_type=id\|email\|cio_id` | `{customer: {identifiers: {id, email?, cio_id}, attributes, devices}}`. Unknown `id_type` is 400; an unknown customer is 404. Attributes spread stored traits, then `id`, `cio_id`, `email`, and `unsubscribed` win. |
+| `GET /v1/customers/{customer_id}/attributes?id_type=id\|email\|cio_id` | `{customer: {identifiers: {id, email?, cio_id}, attributes, devices: [{id (the token), platform, last_used, attributes?}]}}`. Unknown `id_type` is 400; an unknown customer is 404. Attributes spread stored traits, then `id`, `cio_id`, `email`, and `unsubscribed` win. |
 | `GET /v1/optouts?limit=&start=&from=` | Workspace sender opt-outs as `{optouts: [{customer_id, cio_id, optouts: [{channel, from}]}], next?}`. `limit` defaults to 100 (1–1000); follow `next` using `start` until it is absent. `from` filters sender/channel entries, omitting people with no matches. Sender values are trimmed and lowercased; E.164 numbers retain their form. |
 | `GET /v1/customers/{customer_id}/optouts?id_type=id\|email\|cio_id` | `{optouts: [{channel, from}]}` for an existing profile, empty if none, 404 for unknown people. Uses the same identity state as CDP identify and profile updates. App API authentication applies to both reads. |
 | `GET /v1/messages/{delivery_id}` | `{message: {id, type, recipient, customer_id, created, state, status, metrics}}`. `type` is `in_app` for inbox. No `message_data`. 404 when the id is missing or still inside `statusVisibleAfterMs`. Failure states add `failure_message`, `rejection_reason`, and `error`. |
@@ -121,7 +122,8 @@ is the JSON string of subscription preferences. `timestamp` never runs ahead of 
 | `POST /__admin/deliveries/:id` | `{"state": "pending"\|"sent"\|"delivered"\|"bounced"\|"dropped"\|"failed"\|"spammed"\|"undeliverable"\|"suppressed"}`. Stamps `metrics[state]` with unix seconds on the namespace clock. `delivered` is success; the failure states are terminal. |
 | `POST /__admin/namespace-clock` | `{"advance": <ms>}` adds to this namespace's clock offset only. |
 | `GET\|PUT /__admin/transactional` | Read or replace the workspace's transactional messages (`[{id?, name?, trigger_name, link_tracking?, send_to_unsubscribed?}]`). |
-| `GET\|PUT /__admin/settings` | `{strictMessages?, trackingBase?, keys?, statusVisibleAfterMs?, clockOffsetMs?, retainMessageDataForTests?, transactionalListKey?}` (`keys` restricts accepted write / App API keys). |
+| `GET /__admin/devices/:id`, `PUT /__admin/devices/:id` | Read or replace a person's device list: `{devices: [{token, platform, last_used?, attributes?}]}` (at most 25; `last_used` defaults to now). Creates the person when missing and applies `deviceTokenOwnership` to the tokens. |
+| `GET\|PUT /__admin/settings` | `{strictMessages?, trackingBase?, keys?, statusVisibleAfterMs?, clockOffsetMs?, retainMessageDataForTests?, transactionalListKey?, pushUnknownTargets?: "accept"\|"reject", deviceTokenOwnership?: "move"\|"share"}` (`keys` restricts accepted write / App API keys). |
 
 Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /__admin/faults/presets`):
 `transactional_message_missing` (400 meta.error: `trigger_name_missing`, then fallback; no delivery),
@@ -130,6 +132,7 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /_
 (429 with numeric `Retry-After`, definite, no delivery), `invalid_app_key`, `send_drop` and
 `send_drop_before_accept` (socket closes before enqueue: ambiguous, no delivery),
 `send_drop_after_accept` (delivery recorded, then the socket closes: ambiguous, one delivery),
+`push_unknown_targets_rejected` (push sends to a token not on the profile, a person with no profile, or a person with no devices answer 400 with no delivery),
 `cdp_unavailable` (503; the SDK retries), `cdp_bad_request` (400; no retry), `cdp_slow` (15 s, past
 the 10 s delivery timeout), `transactional_list_unavailable`, `omit_trigger_names` (omit every
 `trigger_name`, or only `params.ids`), `webhook_duplicate`, `webhook_drop`, `webhook_reorder`.
@@ -144,12 +147,43 @@ two namespaces do not, including faults and clock offsets. Resetting one namespa
 username) or the App API key (Bearer) through `PUT /__admin/credentials {"credentials":
 {"<key>": "<namespace>"}}`. The click endpoint carries no credential: use the header or prefix.
 
+### Push and devices (best guess, not oracle-verified)
+
+No live Customer.io workspace backs this surface (no parity keys); it follows the vendor docs:
+[transactional push](https://docs.customer.io/messaging/send/transactional/push/), the App API
+[`sendPush`](https://docs.customer.io/integrations/api/app/#tag/send-messages/operation/sendPush)
+operation, the [push developer guide](https://docs.customer.io/journeys/push-developer-guide) and
+the [device semantic events](https://docs.customer.io/integrations/data-in/semantic-events/cio-journeys/).
+Each of these is a **best guess, not oracle-verified**:
+
+- CDP `track` events `Device Created or Updated` / `Device Deleted` (directly or inside `/v1/batch`)
+  maintain the person's devices. The token is `context.device.token` (fallback
+  `properties.device_id`), the platform `context.device.type` lowercased (`unknown` when absent),
+  `last_used` is `properties.last_used` (unix seconds), else the event `timestamp`, else now. The
+  event `properties` become the device's `attributes`. An upsert creates the person when missing.
+  A repeated `messageId`, an event without `userId` or token, and any refused request (401, 400
+  batch validation) change no device. A person keeps at most 25 devices; adding a 26th removes the
+  one with the oldest `last_used`.
+- A token another person already holds **moves** to the new person by default
+  (`deviceTokenOwnership: "share"` keeps it on both).
+- `custom_data` values that are not strings answer 400 `custom_data.<key>: must be a string`: the
+  docs say "Firebase only supports string values"; the vendor's live answer is unobserved.
+- A `to` token that is not on the profile, a person with no profile, and a person with no devices
+  are accepted and recorded (`push.to_on_profile: false`, `push.profile_found: false`, `devices: []`).
+  `pushUnknownTargets: "reject"` or the `push_unknown_targets_rejected` preset turns each into a
+  definite 400 with no delivery, so suites can script either answer.
+- Error texts for these cases (`platform: values other than all require web push`,
+  `to: device not found on profile`, …) are emulator wording.
+
 ### Deliberately not modelled
 
 - Opt-out writes through the public PUT API, phone identifier workspace configuration, Twilio sender identity casing recovery, and automatic carrier STOP callbacks. Use the admin control to script reconciler state; it does not model carrier delivery enforcement.
 - Rendering: templates are not rendered; the outbox holds `message_data`, not HTML.
 - Campaigns, segments, journeys, broadcasts and the Track API (`track.customer.io`).
 - CDP `page`, `screen`, `group` and `alias` calls (our consumers send none).
+- Push delivery itself (no APNs/FCM calls), push reporting webhooks are not emitted automatically
+  (post `delivered` / `opened` / `failed` with `POST /__admin/reporting-events`), web push
+  platforms, and transactional push drafts (`queue_draft: true` answers 400).
 - Attachments are recorded by filename only. Customer.io documents a `{filename: base64}` map;
   our backend sends `[{filename, content, content_type}]`. Both are accepted; whether the real
   API accepts the array form is unverified (no sandbox credentials).
@@ -168,6 +202,7 @@ username) or the App API key (Bearer) through `PUT /__admin/credentials {"creden
 | `signReporting` | function | `(secret, timestampSeconds, body)` → the hex `x-cio-signature`. |
 | `customerIoCredential` | function | The write key or App API key a request carries. |
 | `DEFAULT_TRANSACTIONAL_MESSAGES`, `DEFAULT_SETTINGS`, `TRANSACTIONAL_EMAIL_KEYS` | values | The seeded catalog, settings, and our backend's legacy email keys. |
+| `DEVICE_UPSERT_EVENT`, `DEVICE_DELETE_EVENT`, `MAX_DEVICES_PER_PERSON` | values | The `Device Created or Updated` / `Device Deleted` event names that maintain a person's device list, and its cap (25; a 26th device drops the oldest). |
 | `DELIVERY_STATES` | values | Delivery lifecycle states. An accepted send starts at `pending`. |
 | `FAILURE_STATES` | values | Terminal failure states: `bounced`, `dropped`, `failed`, `spammed`, `undeliverable`, `suppressed`. `delivered` is success; `sent` stays open. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |

@@ -78,7 +78,7 @@ for (let i = 1; i < args.length; i++) {
 if (log) {
   options.onLog = (entry) =>
     console.error(
-      `[pid ${entry.pid}] ${entry.status} ${entry.durationMs.toFixed(1)}ms  ${entry.sql.replace(/\s+/g, " ").slice(0, 200)}`,
+      `[pid ${entry.pid}] ${entry.status} ${entry.phase} ${entry.durationMs.toFixed(1)}ms  ${entry.sql.replace(/\s+/g, " ").slice(0, 200)}${entry.message ? `  -- ${entry.message}` : ""}`,
     );
 }
 

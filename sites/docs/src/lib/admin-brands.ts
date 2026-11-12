@@ -1,9 +1,9 @@
 import type { Brand } from "./types.ts"
 
 /**
- * Public docs origin. Admin shells fetch `/brands.json` here.
- * The same URL is the only brand data in the admin shell (`admin-ui.ts` passes it;
- * `admin-client.ts` paints the chip from the fetched catalog).
+ * Public docs origin. The site publishes the whole catalog at `/brands.json`; each emulator
+ * embeds its own entry at build time (`scripts/admin-brand.ts`) and serves it at
+ * `/__admin/ui/brands.json`, so admin shells never fetch this origin.
  */
 export const DOCS_ORIGIN = "https://mockingbird.chrisvouga.dev"
 

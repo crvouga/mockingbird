@@ -61,11 +61,11 @@ describe("npm publish visibility", () => {
           delays.push(ms)
         },
       })
-      expect(error).toContain("pkg@1.1.0 is not visible on npm after 5 minutes")
+      expect(error).toContain("pkg@1.1.0 is not visible on npm after 15 minutes")
       expect(error).toContain("retry the release")
       if (!Array.isArray(response)) expect(error).toContain(response.error)
-      expect(queries).toBe(31)
-      expect(delays.reduce((sum, ms) => sum + ms, 0)).toBe(300_000)
+      expect(queries).toBe(91)
+      expect(delays.reduce((sum, ms) => sum + ms, 0)).toBe(900_000)
     }
   })
 })

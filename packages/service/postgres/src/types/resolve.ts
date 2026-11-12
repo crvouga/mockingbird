@@ -29,12 +29,6 @@ function modOf(t: TypeId, mods: number[]): TypeMod | null {
 
 /** PostgreSQL types the engine does not model: a name that is none of its types and one of these is refused as unsupported. */
 const UNMODELLED_TYPES: ReadonlySet<string> = new Set([
-  "int4range",
-  "int8range",
-  "numrange",
-  "tsrange",
-  "tstzrange",
-  "daterange",
   "int4multirange",
   "int8multirange",
   "nummultirange",

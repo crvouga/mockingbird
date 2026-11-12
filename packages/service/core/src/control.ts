@@ -65,6 +65,8 @@ export const assertAdminPrefixAvailable = (prefix: string, paths: readonly strin
 
 /** Carries the admin key, which is separate from any vendor credential. */
 export const ADMIN_KEY_HEADER = CONTROL_HEADERS.adminKey
+/** The admin shell's brand catalog, under the admin prefix. Public, like the shell. */
+export const ADMIN_BRANDS_PATH = "/ui/brands.json"
 
 /**
  * Whether `headers` carry `adminKey`. Constant-time, so response timing does not tell a caller
@@ -722,8 +724,11 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
         return undefined
       }
       const path = url.pathname.slice(adminPrefix.length) || "/"
-      // The shell has no data. Panel markup stays on GET /ui/manifest, which is locked.
-      const shell = request.method === "GET" && (path === "/ui" || path === "/ui/")
+      // The shell and its vendor chip have no data. Panel markup stays on GET /ui/manifest,
+      // which is locked.
+      const shell =
+        request.method === "GET" &&
+        (path === "/ui" || path === "/ui/" || path === ADMIN_BRANDS_PATH)
       if (
         !shell &&
         context.adminKey !== undefined &&

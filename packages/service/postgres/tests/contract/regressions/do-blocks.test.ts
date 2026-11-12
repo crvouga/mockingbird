@@ -213,12 +213,30 @@ sequenceParity(
   ],
 );
 
+// #682: these constructs run now (see tests/contract/functions/plpgsql-statements.test.ts)
+sequenceParity(
+  "#682 SELECT INTO, integer FOR, EXECUTE ... INTO / USING and GET DIAGNOSTICS in a DO block",
+  ["CREATE TABLE out (v text)"],
+  [
+    {
+      sql: `DO $$ DECLARE c int; d int; t int := 0; BEGIN
+        SELECT count(*) INTO c FROM out;
+        FOR i IN 1..3 LOOP t := t + i; END LOOP;
+        EXECUTE 'SELECT $1 * 2' INTO d USING t;
+        INSERT INTO out VALUES (c::text), (t::text), (d::text);
+        GET DIAGNOSTICS c = ROW_COUNT;
+        INSERT INTO out VALUES ('rows ' || c);
+      END $$`,
+    },
+    { sql: "SELECT v FROM out ORDER BY v", query: true },
+  ],
+);
+
 for (const [label, body] of [
-  ["SELECT INTO", "DECLARE c int; BEGIN SELECT count(*) INTO c FROM pg_class; END"],
-  ["FOR loop over a range", "BEGIN FOR i IN 1..3 LOOP NULL; END LOOP; END"],
-  ["EXECUTE ... INTO", "DECLARE c int; BEGIN EXECUTE 'SELECT 1' INTO c; END"],
-  ["EXECUTE ... USING", "BEGIN EXECUTE 'SELECT $1' USING 1; END"],
-  ["GET DIAGNOSTICS", "DECLARE c int; BEGIN GET DIAGNOSTICS c = ROW_COUNT; END"],
+  ["cursor declaration", "DECLARE c CURSOR FOR SELECT 1; BEGIN NULL; END"],
+  ["OPEN", "DECLARE c refcursor; BEGIN OPEN c FOR SELECT 1; END"],
+  ["FETCH", "DECLARE c refcursor; r record; BEGIN FETCH c INTO r; END"],
+  ["COMMIT", "BEGIN COMMIT; END"],
 ] as const) {
   test(`#534 an unsupported construct fails loud with 0A000 (${label})`, () => {
     expect(sqlStateOf(`DO $$ ${body} $$`)).toBe("0A000");
@@ -228,6 +246,8 @@ for (const [label, body] of [
 test("#534 a failed unsupported DO leaves earlier statements' effects alone", () => {
   const db = new Database();
   db.exec("CREATE TABLE keep (id int)");
-  expect(() => db.exec("DO $$ BEGIN INSERT INTO keep VALUES (1); FOR i IN 1..3 LOOP NULL; END LOOP; END $$")).toThrow();
+  expect(() =>
+    db.exec("DO $$ DECLARE c refcursor; BEGIN INSERT INTO keep VALUES (1); OPEN c FOR SELECT 1; END $$"),
+  ).toThrow();
   expect(db.query("SELECT count(*)::int AS n FROM keep")[0]).toEqual({ n: 0 });
 });

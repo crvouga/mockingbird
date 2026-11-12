@@ -22,6 +22,9 @@ import type {
   SelectBody,
   SelectCore,
   SelectStmt,
+  MergeStmt,
+  MergeWhenClause,
+  ReturningAliases,
   SelectTarget,
   SequenceOptions,
   SetOp,
@@ -192,6 +195,10 @@ const TYPE_LITERAL_NAMES = new Set([
 /** Second word of multi-word type names for TYPENAME 'literal' detection. */
 const MULTIWORD_TYPE_SECOND = new Set(["precision", "varying", "with", "without"]);
 
+/** Constraint timing as optional AST fields, present only when DEFERRABLE was written. */
+const deferrability = (timing: { deferrable: boolean; initiallyDeferred: boolean }) =>
+  timing.deferrable ? { deferrable: true, initiallyDeferred: timing.initiallyDeferred } : {};
+
 export class Parser {
   private tokens: Token[];
   private pos = 0;
@@ -338,7 +345,7 @@ export class Parser {
       case "delete":
         return this.parseDelete(null);
       case "merge":
-        throw unsupported("MERGE");
+        return this.parseMerge(null);
       case "create":
         return this.parseCreate();
       case "alter":
@@ -367,31 +374,7 @@ export class Parser {
         else {
           this.eatKw("work") || this.eatKw("transaction");
         }
-        const modes: string[] = [];
-        for (;;) {
-          if (this.eatKw("isolation")) {
-            this.expectKw("level");
-            let mode = "isolation level " + this.ident(true);
-            if (this.atKw("read") || this.atKw("committed") || this.atKw("uncommitted")) {
-              mode += " " + this.ident(true);
-            }
-            modes.push(mode);
-          } else if (this.eatKw("read")) {
-            if (this.eatKw("only")) modes.push("read only");
-            else {
-              this.expectKw("write");
-              modes.push("read write");
-            }
-          } else if (this.eatKw("deferrable")) {
-            modes.push("deferrable");
-          } else if (this.atKw("not")) {
-            this.pos++;
-            this.expectKw("deferrable");
-            modes.push("not deferrable");
-          } else break;
-          this.eatPunct(",");
-        }
-        return { type: "transaction", action: "begin", modes };
+        return { type: "transaction", action: "begin", modes: this.parseTransactionModes() };
       }
       case "commit":
       case "end": {
@@ -521,14 +504,47 @@ export class Parser {
         this.expectKw("on");
         const kind = this.ident(true);
         if (kind === "column" || kind === "constraint" || kind === "trigger") {
-          // COLUMN t.c / CONSTRAINT c ON t
+          // COLUMN t.c / CONSTRAINT c ON t / TRIGGER tg ON t
           const objectName = this.qualifiedName();
-          if (this.eatKw("on")) this.qualifiedName();
+          let onTable: string[] | undefined;
+          if (this.eatKw("on")) {
+            this.eatKw("domain");
+            onTable = this.qualifiedName();
+          }
           this.expectKw("is");
           let comment: string | null = null;
           if (this.peek().type === "string") comment = this.next().value;
           else this.expectKw("null");
-          return { type: "comment", objectKind: kind, objectName, comment };
+          return { type: "comment", objectKind: kind, objectName, comment, ...(onTable ? { onTable } : {}) };
+        }
+        if (kind === "function" || kind === "procedure" || kind === "routine" || kind === "aggregate") {
+          // FUNCTION name [ ( [ [ argmode ] [ argname ] argtype [, ...] ] ) ]
+          const objectName = this.qualifiedName();
+          let args: TypeName[] | undefined;
+          if (this.eatPunct("(")) {
+            args = [];
+            if (!this.atPunct(")") && !this.atOp("*")) {
+              do {
+                if (this.atKw("in") || this.atKw("out") || this.atKw("inout") || this.atKw("variadic")) this.pos++;
+                const save = this.pos;
+                const t = this.peek();
+                if ((t.type === "ident" && !RESERVED.has(t.value)) || t.type === "quoted_ident") {
+                  this.ident();
+                  // a lone identifier is the type itself, not an argument name
+                  if (this.atPunct(",") || this.atPunct(")")) this.pos = save;
+                }
+                args.push(this.parseTypeName());
+              } while (this.eatPunct(","));
+            } else if (this.atOp("*")) {
+              this.pos++;
+            }
+            this.expectPunct(")");
+          }
+          this.expectKw("is");
+          let comment: string | null = null;
+          if (this.peek().type === "string") comment = this.next().value;
+          else this.expectKw("null");
+          return { type: "comment", objectKind: kind, objectName, comment, ...(args ? { args } : {}) };
         }
         // TABLE / VIEW / SCHEMA / etc.
         let extra = "";
@@ -699,6 +715,7 @@ export class Parser {
         if (t.value === "insert") return this.parseInsert(withClause);
         if (t.value === "update") return this.parseUpdate(withClause);
         if (t.value === "delete") return this.parseDelete(withClause);
+        if (t.value === "merge") return this.parseMerge(withClause);
       }
       return this.parseSelectStmt(withClause);
     }
@@ -708,6 +725,7 @@ export class Parser {
       if (t.value === "insert") return this.parseInsert(null);
       if (t.value === "update") return this.parseUpdate(null);
       if (t.value === "delete") return this.parseDelete(null);
+      if (t.value === "merge") throw unsupported("MERGE in a WITH query");
     }
     return this.parseSelectStmt();
   }
@@ -1334,17 +1352,47 @@ export class Parser {
         onConflict = { target, action: { sets, where } };
       }
     }
-    const returning = this.parseReturning();
-    return { type: "insert", with: withClause, table, alias, columns, overriding, source, onConflict, returning };
+    const { returning, returningAliases } = this.parseReturningClause();
+    return {
+      type: "insert",
+      with: withClause,
+      table,
+      alias,
+      columns,
+      overriding,
+      source,
+      onConflict,
+      returning,
+      returningAliases,
+    };
   }
 
-  private parseReturning(): SelectTarget[] | null {
-    if (!this.eatKw("returning")) return null;
-    const targets: SelectTarget[] = [];
+  /** RETURNING [WITH (OLD AS o, NEW AS n)] targets */
+  private parseReturningClause(): { returning: SelectTarget[] | null; returningAliases: ReturningAliases | null } {
+    if (!this.eatKw("returning")) return { returning: null, returningAliases: null };
+    let returningAliases: ReturningAliases | null = null;
+    if (this.atKw("with") && this.peek(1).type === "punct" && this.peek(1).value === "(") {
+      this.pos += 2;
+      const aliases: { old?: string; new?: string } = {};
+      do {
+        let side: "old" | "new";
+        if (this.eatKw("old")) side = "old";
+        else if (this.eatKw("new")) side = "new";
+        else this.errorAt(this.peek(), "expected OLD or NEW");
+        if (aliases[side] !== undefined) {
+          throw pgError("syntax", `${side.toUpperCase()} cannot be specified multiple times`, "42601");
+        }
+        this.expectKw("as");
+        aliases[side] = this.ident();
+      } while (this.eatPunct(","));
+      this.expectPunct(")");
+      returningAliases = aliases;
+    }
+    const returning: SelectTarget[] = [];
     do {
-      targets.push(this.parseSelectTarget());
+      returning.push(this.parseSelectTarget());
     } while (this.eatPunct(","));
-    return targets;
+    return { returning, returningAliases };
   }
 
   private parseUpdateSets(): UpdateSet[] {
@@ -1462,8 +1510,20 @@ export class Parser {
         where = this.parseExpr();
       }
     }
-    const returning = this.parseReturning();
-    return { type: "update", with: withClause, table, only, alias, sets, from, where, whereCurrentOf, returning };
+    const { returning, returningAliases } = this.parseReturningClause();
+    return {
+      type: "update",
+      with: withClause,
+      table,
+      only,
+      alias,
+      sets,
+      from,
+      where,
+      whereCurrentOf,
+      returning,
+      returningAliases,
+    };
   }
 
   private parseDelete(withClause: WithClause | null): DeleteStmt {
@@ -1486,8 +1546,101 @@ export class Parser {
       } while (this.eatPunct(","));
     }
     const where = this.eatKw("where") ? this.parseExpr() : null;
-    const returning = this.parseReturning();
-    return { type: "delete", with: withClause, table, only, alias, using, where, returning };
+    const { returning, returningAliases } = this.parseReturningClause();
+    return { type: "delete", with: withClause, table, only, alias, using, where, returning, returningAliases };
+  }
+
+  private parseMerge(withClause: WithClause | null): MergeStmt {
+    this.expectKw("merge");
+    this.expectKw("into");
+    const only = this.eatKw("only");
+    const table = this.qualifiedName();
+    let alias: string | null = null;
+    if (this.eatKw("as")) alias = this.ident();
+    else {
+      const t = this.peek();
+      if (t.type === "quoted_ident" || (t.type === "ident" && !NO_ALIAS.has(t.value) && t.value !== "using")) {
+        alias = this.ident();
+      }
+    }
+    this.expectKw("using");
+    const source = this.parseFromItem();
+    this.expectKw("on");
+    const on = this.parseExpr();
+    const clauses: MergeWhenClause[] = [];
+    while (this.eatKw("when")) {
+      let match: MergeWhenClause["match"] = "matched";
+      if (this.eatKw("not")) {
+        this.expectKw("matched");
+        match = "not_matched_by_target";
+        if (this.eatKw("by")) {
+          if (this.eatKw("source")) match = "not_matched_by_source";
+          else this.expectKw("target");
+        }
+      } else this.expectKw("matched");
+      const condition = this.eatKw("and") ? this.parseExpr() : null;
+      this.expectKw("then");
+      let action: MergeWhenClause["action"];
+      if (this.atKw("do") && this.atKw("nothing", 1)) {
+        this.pos += 2;
+        action = { kind: "nothing" };
+      } else if (match !== "not_matched_by_target" && this.eatKw("update")) {
+        this.expectKw("set");
+        action = { kind: "update", sets: this.parseUpdateSets() };
+      } else if (match !== "not_matched_by_target" && this.eatKw("delete")) {
+        action = { kind: "delete" };
+      } else if (match === "not_matched_by_target" && this.eatKw("insert")) {
+        let columns: string[] | null = null;
+        if (this.eatPunct("(")) {
+          columns = [];
+          do {
+            columns.push(this.ident());
+          } while (this.eatPunct(","));
+          this.expectPunct(")");
+        }
+        let overriding: "system" | "user" | null = null;
+        if (this.eatKw("overriding")) {
+          if (this.eatKw("system")) overriding = "system";
+          else {
+            this.expectKw("user");
+            overriding = "user";
+          }
+          this.expectKw("value");
+        }
+        let values: Expr[] | null = null;
+        if (this.atKw("default") && this.atKw("values", 1)) this.pos += 2;
+        else {
+          this.expectKw("values");
+          this.expectPunct("(");
+          values = [];
+          do {
+            if (this.eatKw("default")) values.push({ type: "default_expr" });
+            else values.push(this.parseExpr());
+          } while (this.eatPunct(","));
+          this.expectPunct(")");
+        }
+        action = { kind: "insert", columns, overriding, values };
+      } else {
+        // PostgreSQL's grammar has no such action for this clause kind: a bare syntax error
+        const t = this.peek();
+        throw pgError("syntax", `syntax error at or near ${t.type === "eof" ? "end of input" : `"${t.value}"`}`);
+      }
+      clauses.push({ match, condition, action });
+    }
+    if (clauses.length === 0) this.errorAt(this.peek(), "expected WHEN");
+    const { returning, returningAliases } = this.parseReturningClause();
+    return {
+      type: "merge",
+      with: withClause,
+      table,
+      only,
+      alias,
+      source,
+      on,
+      clauses,
+      returning,
+      returningAliases,
+    };
   }
 
   // --- CREATE -------------------------------------------------------------------
@@ -1852,8 +2005,18 @@ export class Parser {
         this.expectPunct(")");
       }
       const { onDelete, onUpdate, match } = this.parseRefActions();
-      this.skipConstraintTail();
-      return { kind: "foreign_key", name, columns, refTable, refColumns, onDelete, onUpdate, match };
+      const timing = this.skipConstraintTail();
+      return {
+        kind: "foreign_key",
+        name,
+        columns,
+        refTable,
+        refColumns,
+        onDelete,
+        onUpdate,
+        match,
+        ...deferrability(timing),
+      };
     }
     if (this.atKw("exclude")) throw unsupported("EXCLUDE constraints");
     this.pos = save;
@@ -1880,15 +2043,27 @@ export class Parser {
     return { kind: "add_constraint_using_index", name, constraint, index };
   }
 
-  private skipConstraintTail(): void {
+  /**
+   * Constraint attributes after a constraint (`[NOT] DEFERRABLE`, `INITIALLY {DEFERRED | IMMEDIATE}`,
+   * `USING INDEX TABLESPACE`). Returns the timing so foreign keys can be checked at commit; `deferrable`
+   * is true when DEFERRABLE was already consumed by the caller.
+   */
+  private skipConstraintTail(deferrable = false): { deferrable: boolean; initiallyDeferred: boolean } {
+    let notDeferrable = false;
+    let initiallyDeferred = false;
     for (;;) {
-      if (this.eatKw("deferrable")) continue;
+      if (this.eatKw("deferrable")) {
+        deferrable = true;
+        continue;
+      }
       if (this.atKw("not") && this.atKw("deferrable", 1)) {
         this.pos += 2;
+        notDeferrable = true;
         continue;
       }
       if (this.eatKw("initially")) {
-        if (!this.eatKw("deferred")) this.expectKw("immediate");
+        if (this.eatKw("deferred")) initiallyDeferred = true;
+        else this.expectKw("immediate");
         continue;
       }
       if (this.eatKw("using")) {
@@ -1899,6 +2074,11 @@ export class Parser {
       }
       break;
     }
+    if (deferrable && notDeferrable) throw pgError("syntax", "multiple DEFERRABLE/NOT DEFERRABLE clauses not allowed");
+    if (initiallyDeferred && notDeferrable)
+      throw pgError("syntax", "constraint declared INITIALLY DEFERRED must be DEFERRABLE");
+    // INITIALLY DEFERRED on its own implies DEFERRABLE.
+    return { deferrable: deferrable || initiallyDeferred, initiallyDeferred };
   }
 
   private parseRefActions(): { onDelete: RefAction; onUpdate: RefAction; match: "full" | "partial" | "simple" | null } {
@@ -2006,8 +2186,17 @@ export class Parser {
           this.expectPunct(")");
         }
         const { onDelete, onUpdate, match } = this.parseRefActions();
-        this.skipConstraintTail();
-        constraints.push({ kind: "references", name: cname, table, columns, onDelete, onUpdate, match });
+        const timing = this.skipConstraintTail();
+        constraints.push({
+          kind: "references",
+          name: cname,
+          table,
+          columns,
+          onDelete,
+          onUpdate,
+          match,
+          ...deferrability(timing),
+        });
         continue;
       }
       if (this.eatKw("generated")) {
@@ -2038,11 +2227,14 @@ export class Parser {
         continue;
       }
       if (
-        this.eatKw("deferrable") ||
+        this.atKw("deferrable") ||
         (this.atKw("initially") && (this.atKw("deferred", 1) || this.atKw("immediate", 1)))
       ) {
-        this.skipConstraintTail();
-        continue;
+        // Key and foreign key constraints consume their own attributes; anywhere else they are misplaced.
+        throw pgError(
+          "syntax",
+          `misplaced ${this.atKw("deferrable") ? "DEFERRABLE" : `INITIALLY ${this.peek(1).value.toUpperCase()}`} clause`,
+        );
       }
       if (this.eatKw("storage")) {
         constraints.push({ kind: "storage", mode: this.parseStorageMode() });
@@ -2957,14 +3149,65 @@ export class Parser {
 
   // --- SET / EXPLAIN / COPY -----------------------------------------------------
 
+  /** `ISOLATION LEVEL ...`, `READ ONLY | WRITE`, `[NOT] DEFERRABLE`, as BEGIN and SET TRANSACTION take them. */
+  private parseTransactionModes(): string[] {
+    const modes: string[] = [];
+    for (;;) {
+      if (this.eatKw("isolation")) {
+        this.expectKw("level");
+        let mode = "isolation level " + this.ident(true);
+        if (this.atKw("read") || this.atKw("committed") || this.atKw("uncommitted")) {
+          mode += " " + this.ident(true);
+        }
+        modes.push(mode);
+      } else if (this.eatKw("read")) {
+        if (this.eatKw("only")) modes.push("read only");
+        else {
+          this.expectKw("write");
+          modes.push("read write");
+        }
+      } else if (this.eatKw("deferrable")) {
+        modes.push("deferrable");
+      } else if (this.atKw("not")) {
+        this.pos++;
+        this.expectKw("deferrable");
+        modes.push("not deferrable");
+      } else break;
+      this.eatPunct(",");
+    }
+    return modes;
+  }
+
   private parseSet(): Statement {
     this.expectKw("set");
     let local = false;
     if (this.eatKw("local")) local = true;
-    else this.eatKw("session");
-    if (this.atKw("transaction")) {
-      this.skipToStatementEnd();
-      return { type: "no_op", what: "SET TRANSACTION" };
+    else if (this.atKw("session") && this.atKw("characteristics", 1)) {
+      // SET SESSION CHARACTERISTICS AS TRANSACTION <modes>: the session's default_transaction_* values
+      this.pos += 2;
+      this.expectKw("as");
+      this.expectKw("transaction");
+      return {
+        type: "set",
+        name: "session characteristics",
+        value: null,
+        local: false,
+        transactionModes: this.parseTransactionModes(),
+      };
+    } else this.eatKw("session");
+    if (this.atKw("transaction") && !this.atKw("to", 1) && !this.atOp("=", 1)) {
+      this.pos++;
+      if (this.atKw("snapshot")) {
+        this.skipToStatementEnd();
+        return { type: "no_op", what: "SET TRANSACTION" };
+      }
+      return {
+        type: "set",
+        name: "transaction",
+        value: null,
+        local: true,
+        transactionModes: this.parseTransactionModes(),
+      };
     }
     if (this.eatKw("constraints")) {
       const names: string[][] | null = this.eatKw("all") ? null : [];
@@ -3373,12 +3616,23 @@ export class Parser {
           this.atKw("similar", 1));
       if (not) this.pos++;
       if (this.eatKw("like") || (this.peek(-1)?.value === "like" && false)) {
+        // `x [NOT] LIKE ANY|SOME|ALL (array | subquery)` compares with the ~~ / !~~ operator
+        const quantified = this.tryParseAnyAll(not ? "!~~" : "~~", left);
+        if (quantified) {
+          left = quantified;
+          continue;
+        }
         const pattern = this.parseGenericOps();
         const escape = this.eatKw("escape") ? this.parseGenericOps() : null;
         left = { type: "like", kind: "like", left, pattern, escape, not };
         continue;
       }
       if (this.eatKw("ilike")) {
+        const quantified = this.tryParseAnyAll(not ? "!~~*" : "~~*", left);
+        if (quantified) {
+          left = quantified;
+          continue;
+        }
         const pattern = this.parseGenericOps();
         const escape = this.eatKw("escape") ? this.parseGenericOps() : null;
         left = { type: "like", kind: "ilike", left, pattern, escape, not };

@@ -523,22 +523,38 @@ const start = async (
   return listening
 }
 
-const untilSignal = async (servers: { close(): Promise<void> }[]): Promise<number> =>
-  new Promise((resolve) => {
-    const stop = async () => {
-      ;(process as EventEmitter).removeListener("SIGINT", stop)
-      ;(process as EventEmitter).removeListener("SIGTERM", stop)
+/**
+ * Takes SIGINT/SIGTERM from the moment it is called, so a signal sent as soon as readiness is
+ * published (the ready file is written before startup returns) still shuts down cleanly.
+ */
+const watchSignals = () => {
+  let received = false
+  let wake = () => {}
+  const on = () => {
+    received = true
+    wake()
+  }
+  const dispose = () => {
+    ;(process as EventEmitter).removeListener("SIGINT", on)
+    ;(process as EventEmitter).removeListener("SIGTERM", on)
+  }
+  process.once("SIGINT", on)
+  process.once("SIGTERM", on)
+  return {
+    dispose,
+    async untilSignal(servers: { close(): Promise<void> }[]): Promise<number> {
+      if (!received) await new Promise<void>((resolve) => (wake = resolve))
+      dispose()
       const results = await Promise.allSettled(servers.map((s) => s.close()))
       for (const result of results)
         if (result.status === "rejected")
           console.error(
             result.reason instanceof Error ? result.reason.message : String(result.reason),
           )
-      resolve(results.some((r) => r.status === "rejected") ? 1 : 0)
-    }
-    process.once("SIGINT", stop)
-    process.once("SIGTERM", stop)
-  })
+      return results.some((r) => r.status === "rejected") ? 1 : 0
+    },
+  }
+}
 
 /** The standard `serve` command for a service, including multi-service `--config`. */
 export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand => ({
@@ -555,6 +571,7 @@ export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand =
     }
     const configPath = asString(values.config)
     if (configPath !== undefined) {
+      const signals = watchSignals()
       try {
         const config = JSON.parse(await readFile(configPath, "utf8")) as MockingbirdConfig
         config.adminPrefix = resolveAdminPrefix(
@@ -594,8 +611,9 @@ export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand =
                 console.log(`${name} emulator listening on ${endpoint.url}`)
           },
         })
-        return untilSignal([fleet])
+        return signals.untilSignal([fleet])
       } catch (error) {
+        signals.dispose()
         console.error(error instanceof Error ? error.message : String(error))
         return 1
       }
@@ -608,6 +626,7 @@ export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand =
     const adminKey = asString(values["admin-key"]) ?? process.env.MOCKINGBIRD_ADMIN_KEY
     const seed = asString(values.seed) ?? process.env.MOCKINGBIRD_SEED
     let listening: Listening
+    const signals = watchSignals()
     try {
       const adminControls = await resolveServeControls(values)
       const idBase = resolveServeIdBase(values)
@@ -626,9 +645,10 @@ export const serveCommand = (target: ServeTarget | ProtocolTarget): CliCommand =
         log,
       })
     } catch (error) {
+      signals.dispose()
       console.error(error instanceof Error ? error.message : String(error))
       return 1
     }
-    return untilSignal([listening])
+    return signals.untilSignal([listening])
   },
 })

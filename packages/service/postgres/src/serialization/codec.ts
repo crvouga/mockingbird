@@ -78,6 +78,8 @@ interface TableMetaBjv {
   unlogged?: true;
   /** ANALYZE bookkeeping; absent in snapshots of tables that were never analyzed */
   stats?: TableStats;
+  /** COMMENT ON TABLE; absent when there is none */
+  comment?: string;
 }
 
 interface ViewMetaBjv {
@@ -90,6 +92,7 @@ interface ViewMetaBjv {
   temp: boolean;
   oid: number;
   stats?: TableStats;
+  comment?: string;
 }
 
 type FunctionMetaBjv = Omit<FunctionData, "jsImpl">;
@@ -212,6 +215,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
           oid: table.oid,
           ...unloggedBjv(table),
           ...statsBjv(state, table.oid),
+          ...commentBjv(table.comment),
         } satisfies TableMetaBjv,
         forceId,
       );
@@ -235,6 +239,7 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
           temp: view.temp,
           oid: view.oid,
           ...statsBjv(state, view.oid),
+          ...commentBjv(view.comment),
         } satisfies ViewMetaBjv,
         forceId,
       );
@@ -311,6 +316,7 @@ function decodeInner(snapshot: Uint8Array, prng: Prng, clock: Clock): DecodedSna
       table.constraints = meta.constraints;
       table.triggers = meta.triggers;
       table.unlogged = meta.unlogged === true;
+      if (typeof meta.comment === "string") table.comment = meta.comment;
       table.slabXmins = meta.xmins ?? null;
       state.xidCounter = Math.max(
         state.xidCounter,
@@ -449,6 +455,16 @@ function writeTaggedDatum(
       w.text(jsonbText(value.value));
       return;
     }
+    case "pgrange": {
+      w.u8(13);
+      // tag 3 reads a safe integer back as a number, so the flags remember which bounds were bigints
+      const lowerBig = typeof value.lower === "bigint" ? 8 : 0;
+      const upperBig = typeof value.upper === "bigint" ? 16 : 0;
+      w.u8((value.empty ? 1 : 0) | (value.lowerInc ? 2 : 0) | (value.upperInc ? 4 : 0) | lowerBig | upperBig);
+      writeTaggedDatum(w, value.lower, internId, forceId);
+      writeTaggedDatum(w, value.upper, internId, forceId);
+      return;
+    }
     default: {
       const tz = value as unknown as { micros?: bigint; offsetSec?: number };
       if (typeof tz.micros === "bigint" && typeof tz.offsetSec === "number") {
@@ -524,6 +540,20 @@ function readTaggedDatum(r: Reader, intern: readonly string[]): Datum {
       const micros = r.i64();
       const offsetSec = r.i32();
       return { micros, offsetSec } as unknown as Datum;
+    }
+    case 13: {
+      const flags = r.u8();
+      const bigint = (v: Datum, bit: number): Datum => ((flags & bit) !== 0 && typeof v === "number" ? BigInt(v) : v);
+      const lower = bigint(readTaggedDatum(r, intern), 8);
+      const upper = bigint(readTaggedDatum(r, intern), 16);
+      return {
+        kind: "pgrange",
+        empty: (flags & 1) !== 0,
+        lower,
+        upper,
+        lowerInc: (flags & 2) !== 0,
+        upperInc: (flags & 4) !== 0,
+      };
     }
     default:
       return r.fail();
@@ -774,6 +804,10 @@ function indexBjv(idx: IndexMeta): IndexMeta {
   };
 }
 
+function commentBjv(comment: string | undefined): { comment?: string } {
+  return comment ? { comment } : {};
+}
+
 function unloggedBjv(table: TableData): { unlogged?: true } {
   return table.unlogged ? { unlogged: true } : {};
 }
@@ -932,6 +966,10 @@ function forceDatumIntern(pool: InternPool, value: Datum): void {
     case "jsonb":
       pool.forceId(jsonbText(value.value));
       return;
+    case "pgrange":
+      forceDatumIntern(pool, value.lower);
+      forceDatumIntern(pool, value.upper);
+      return;
     default:
       return;
   }
@@ -955,6 +993,7 @@ function forceSchemaIntern(pool: InternPool, state: DatabaseState, schemas: Sche
         oid: table.oid,
         ...unloggedBjv(table),
         ...statsBjv(state, table.oid),
+        ...commentBjv(table.comment),
       });
     }
     for (const view of sortedValues(schema.views)) {
@@ -970,6 +1009,7 @@ function forceSchemaIntern(pool: InternPool, state: DatabaseState, schemas: Sche
         temp: view.temp,
         oid: view.oid,
         ...statsBjv(state, view.oid),
+        ...commentBjv(view.comment),
       });
     }
     for (const seq of sortedValues(schema.sequences)) {

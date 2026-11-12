@@ -65,7 +65,11 @@ SRFS.set("generate_series", (ctx, args, alias) => {
   }
   // timestamp series
   if (a.t === "timestamp" || a.t === "timestamptz" || b.t === "timestamp" || b.t === "timestamptz" || a.t === "date") {
-    const t: TypeId = a.t === "timestamptz" || b.t === "timestamptz" ? "timestamptz" : "timestamp";
+    // date bounds resolve to the timestamptz variant (date's preferred implicit cast target)
+    const t: TypeId =
+      a.t === "timestamptz" || b.t === "timestamptz" || (a.t !== "timestamp" && b.t !== "timestamp")
+        ? "timestamptz"
+        : "timestamp";
     const start = castTo(ctx, a, t, { explicit: true }).v as bigint;
     const stop = castTo(ctx, b, t, { explicit: true }).v as bigint;
     const stepArg = args[2];

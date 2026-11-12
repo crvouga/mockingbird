@@ -17,6 +17,8 @@ import { type JsonbValue, jsonbText, parseJsonText, validateJsonText } from "./j
 import { jsonpathText } from "./jsonpath.ts";
 import { macaddrInput, networkInput } from "./network.ts";
 import { type Numeric, numericText, parseNumeric } from "./numeric.ts";
+import { type PgRange, parseRangeText, rangeText } from "./range.ts";
+import { isRangeType, RANGE_ARRAY_OIDS, RANGE_SUBTYPES, RANGE_TYPE_OIDS } from "./range-types.ts";
 import { namespaceText, parseNamespaceInput, parseOidText, parseRelationInput } from "./regnamespace.ts";
 
 /**
@@ -38,6 +40,7 @@ export type Datum =
   | Interval
   | PgArray
   | PgRecord
+  | PgRange
   | JsonbWrap;
 
 export interface PgArray {
@@ -173,6 +176,8 @@ const TYPE_ALIASES: Record<string, TypeId> = {
   bigserial: "int8",
   smallserial: "int2",
   serial2: "int2",
+  tid: "tid",
+  ...Object.fromEntries(Object.keys(RANGE_SUBTYPES).map((name) => [name, name])),
 };
 
 export function normalizeTypeName(name: string): TypeId | null {
@@ -277,6 +282,8 @@ export const TYPE_OIDS: Record<string, number> = {
   tsquery: 3615,
   void: 2278,
   unknown: 705,
+  tid: 27,
+  ...RANGE_TYPE_OIDS,
 };
 
 export const ARRAY_OIDS: Record<string, number> = {
@@ -307,6 +314,8 @@ export const ARRAY_OIDS: Record<string, number> = {
   macaddr: 1040,
   inet: 1041,
   jsonb: 3807,
+  tid: 1010,
+  ...RANGE_ARRAY_OIDS,
 };
 
 export function typeOid(t: TypeId): number {
@@ -540,6 +549,27 @@ export function parseUuidText(text: string): string {
   return `${m[1]}-${m[2]}-${m[3]}-${m[4]}-${m[5]}`.toLowerCase();
 }
 
+// --- tid ---------------------------------------------------------------------
+
+/** `tid` (a tuple's `ctid`): `(block,offset)`, block a uint32 and offset a uint16. */
+export function parseTidText(text: string): string {
+  // tidin: strtoul / strtol fields, so leading blanks and a sign are accepted and a negative block wraps
+  const m = /^\s*\(\s*([+-]?\d+),\s*([+-]?\d+)\)\s*$/.exec(text);
+  const block = m ? Number(m[1]) : Number.NaN;
+  const offset = m ? Number(m[2]) : Number.NaN;
+  if (!m || Math.abs(block) > 4294967295 || !(offset >= 0 && offset <= 65535)) {
+    throw pgError("invalid_text_representation", `invalid input syntax for type tid: "${text}"`);
+  }
+  return `(${block < 0 ? block + 4294967296 : block},${offset})`;
+}
+
+/** Order of two canonical `tid` texts: block, then offset. */
+export function tidCompare(a: string, b: string): number {
+  const [ab, ao] = a.slice(1, -1).split(",").map(Number) as [number, number];
+  const [bb, bo] = b.slice(1, -1).split(",").map(Number) as [number, number];
+  return ab !== bb ? (ab < bb ? -1 : 1) : ao === bo ? 0 : ao < bo ? -1 : 1;
+}
+
 // --- money -----------------------------------------------------------------
 
 export function parseMoneyText(text: string): bigint {
@@ -647,6 +677,7 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
   if (v === null) throw pgError("internal", "datumText called with null");
   if (isArrayType(t)) return arrayText(v as PgArray, ctx);
   if (isEnumType(t)) return v as string;
+  if (isRangeType(t)) return rangeText(t, v as PgRange, ctx);
   switch (t) {
     case "bool":
       return (v as boolean) ? "t" : "f";
@@ -707,6 +738,7 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
     case "inet":
     case "cidr":
     case "macaddr":
+    case "tid":
       return v as string;
     case "jsonb":
       return jsonbText((v as JsonbWrap).value);
@@ -730,6 +762,9 @@ export interface InputCtx {
   zoneOffsetForNaive(naiveMicros: bigint): number;
   /** enum label validation: returns true when label is valid for the enum type */
   enumHasLabel?(enumType: TypeId, label: string): boolean;
+  /** regtypein / regprocin: the name the value keeps, as regtypeout / regprocout print it */
+  regtypeIn?(text: string): string;
+  regprocIn?(text: string): string;
 }
 
 export const UTC_INPUT: InputCtx = { zoneOffsetForNaive: () => 0 };
@@ -741,6 +776,11 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     if ("oid" in parsed) return parsed.oid;
     if (!ctx.relationOid) throw unsupported("regclass input without a catalog");
     return ctx.relationOid(parsed.parts);
+  }
+  if (t === "regtype" || t === "regproc") {
+    const input = t === "regtype" ? ctx.regtypeIn : ctx.regprocIn;
+    if (!input) throw unsupported(`${t} input without a catalog`);
+    return input.call(ctx, text);
   }
   if (t === "regnamespace") {
     const parsed = parseNamespaceInput(text);
@@ -755,6 +795,7 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     }
     return text;
   }
+  if (isRangeType(t)) return parseRangeText(t, text, ctx);
   switch (t) {
     case "bool":
       return parseBoolText(text);
@@ -807,6 +848,8 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
       return networkInput(t, text);
     case "macaddr":
       return macaddrInput(text);
+    case "tid":
+      return parseTidText(text);
     case "tsvector":
       return parseTsvector(text);
     case "tsquery": {

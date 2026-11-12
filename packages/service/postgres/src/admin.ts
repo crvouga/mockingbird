@@ -8,7 +8,6 @@ import {
   createEngineAdmin,
   type EngineAdmin,
   type SqlCheckpoint,
-  type SqlColumn,
   type SqlEngine,
   type SqlPage,
   type SqlResult,
@@ -53,76 +52,95 @@ const touch = (db: Database): void => {
   if (!db.transactions.inTransaction) db.record();
 };
 
-const columnsOf = (db: Database, schema: string, table: string): SqlColumn[] => {
-  const columns = db.query<{ column_name: string; data_type: string }>(
-    `SELECT column_name, data_type
-     FROM information_schema.columns
-     WHERE table_schema = $1 AND table_name = $2
-     ORDER BY ordinal_position`,
-    [schema, table],
+const keyOf = (schema: string, table: string): string => `${schema}\u0000${table}`;
+
+/**
+ * One pass over the catalog for every table: three queries in total, grouped in maps, so the
+ * listing is linear in the schema size rather than one catalog scan per table (issue #695).
+ */
+const listed = (db: Database): SqlTable[] => {
+  const tables = db.query<{ table_schema: string; table_name: string; table_type: string }>(
+    `SELECT table_schema, table_name, table_type
+     FROM information_schema.tables
+     WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+     ORDER BY table_schema, table_name`,
   );
-  let keys = new Set<string>();
+  const columns = new Map<string, { name: string; type: string }[]>();
+  for (const row of db.query<{ table_schema: string; table_name: string; column_name: string; data_type: string }>(
+    `SELECT table_schema, table_name, column_name, data_type
+     FROM information_schema.columns
+     WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+     ORDER BY table_schema, table_name, ordinal_position`,
+  )) {
+    const key = keyOf(row.table_schema, row.table_name);
+    const list = columns.get(key) ?? [];
+    list.push({ name: row.column_name, type: row.data_type });
+    columns.set(key, list);
+  }
+  const keys = new Map<string, Set<string>>();
   try {
-    const primary = db.query<{ column_name: string }>(
-      `SELECT kcu.column_name
+    for (const row of db.query<{ table_schema: string; table_name: string; column_name: string }>(
+      `SELECT kcu.table_schema, kcu.table_name, kcu.column_name
        FROM information_schema.key_column_usage kcu
        JOIN information_schema.table_constraints tc
          ON tc.constraint_name = kcu.constraint_name
         AND tc.table_schema = kcu.table_schema
         AND tc.table_name = kcu.table_name
        WHERE tc.constraint_type = 'PRIMARY KEY'
-         AND kcu.table_schema = $1
-         AND kcu.table_name = $2
-       ORDER BY kcu.ordinal_position`,
-      [schema, table],
-    );
-    keys = new Set(primary.map((row) => row.column_name));
+         AND kcu.table_schema NOT IN ('pg_catalog', 'information_schema')`,
+    )) {
+      const key = keyOf(row.table_schema, row.table_name);
+      const set = keys.get(key) ?? new Set<string>();
+      set.add(row.column_name);
+      keys.set(key, set);
+    }
   } catch {
-    keys = new Set();
+    keys.clear();
   }
-  return columns.map((column) => ({
-    name: column.column_name,
-    type: column.data_type,
-    ...(keys.has(column.column_name) ? { primaryKey: true } : {}),
-  }));
-};
-
-const listed = (db: Database): SqlTable[] =>
-  db
-    .query<{ table_schema: string; table_name: string; table_type: string }>(
-      `SELECT table_schema, table_name, table_type
-       FROM information_schema.tables
-       WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
-       ORDER BY table_schema, table_name`,
-    )
-    .map((row) => ({
+  return tables.map((row) => {
+    const key = keyOf(row.table_schema, row.table_name);
+    const primary = keys.get(key);
+    return {
       schema: row.table_schema,
       name: row.table_name,
       kind: row.table_type === "VIEW" ? "view" : "table",
-      columns: columnsOf(db, row.table_schema, row.table_name),
-    }));
+      columns: (columns.get(key) ?? []).map((column) => ({
+        name: column.name,
+        type: column.type,
+        ...(primary?.has(column.name) ? { primaryKey: true } : {}),
+      })),
+    };
+  });
+};
 
-const requireTable = (db: Database, schema: string, table: string): SqlTable => {
-  const found = listed(db).find((item) => item.schema === schema && item.name === table);
-  if (!found) throw new Error(`no table ${schema}.${table}`);
-  return found;
+/** Existence check for one listed relation, without describing every other table. */
+const requireTable = (db: Database, schema: string, table: string): void => {
+  if (schema === "pg_catalog" || schema === "information_schema") throw new Error(`no table ${schema}.${table}`);
+  // Fast path: an ordinary table or view, looked up in the schema's maps. Anything else (temporary
+  // schemas, foreign tables) falls back to the catalog view the listing reads.
+  const stored = db.engineState.schemas.get(schema);
+  if (stored?.tables.has(table) || stored?.views.get(table)?.materialized === false) return;
+  const found = db.query(
+    `SELECT 1 FROM information_schema.tables
+     WHERE table_schema = $1 AND table_name = $2
+       AND table_schema NOT IN ('pg_catalog', 'information_schema')`,
+    [schema, table],
+  );
+  if (found.length === 0) throw new Error(`no table ${schema}.${table}`);
 };
 
 const adapt = (db: Database): SqlEngine => ({
   tables: () => listed(db),
   page(schema, table, limit, offset): SqlPage {
-    const found = requireTable(db, schema, table);
+    requireTable(db, schema, table);
     const from = `${quoteIdent(schema)}.${quoteIdent(table)}`;
     const take = bounded(limit);
     const skip = bounded(offset);
     const totalRow = db.query<{ count: unknown }>(`SELECT count(*) AS count FROM ${from}`);
     const total = asNumber(totalRow[0]?.count);
-    const rows = db.query<Record<string, unknown>>(`SELECT * FROM ${from} LIMIT ${take} OFFSET ${skip}`);
-    return {
-      columns: rows[0] ? Object.keys(rows[0]) : found.columns.map((column) => column.name),
-      rows,
-      total,
-    };
+    // The result set carries its column names, so an empty table needs no catalog lookup.
+    const result = db.prepare(`SELECT * FROM ${from} LIMIT ${take} OFFSET ${skip}`).result();
+    return { columns: result.columns, rows: result.rows, total };
   },
   query(sql, params): SqlResult {
     const rows = db.query<Record<string, unknown>>(sql, params as BindValue[]);

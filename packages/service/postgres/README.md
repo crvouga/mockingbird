@@ -17,7 +17,7 @@ isolation.
 - **Synchronous**, ESM-only API (no Promises, no `require`)
 - **SQL dialect verified** against real PostgreSQL 18.3 (PGlite by default; optional native server)
   via differential contracts and a fail-closed gate
-- In-process it is **not** a drop-in for the `pg` / `postgres.js` client APIs or on-disk clusters, but it also ships an **optional wire-protocol server** (`@crvouga/mockingbird-service-postgres/wire`, Node/Bun) that unmodified clients connect to over TCP
+- In-process it is **not** a drop-in for the `pg` / `postgres.js` client APIs or on-disk clusters, but it also ships an **optional wire-protocol server** (`@crvouga/mockingbird-service-postgres/wire`, Node/Bun) that unmodified clients connect to over TCP, or over injected streams in a browser or worker (`/transport`)
 - Intentional differences: deterministic `random()` / `now()` by default, and a custom snapshot
   format (not `pg_dump`)
 
@@ -90,8 +90,10 @@ await Promise.all([server.close(), fork.close(), restored.close()])
 ```
 
 `postgres.js`, a JDBC client and `psql` connect with the same connection string; see the
-[wire-protocol server](#wire-protocol-server-separate-processes) (Node/Bun only). In the browser,
-where no listener can run, use the embedded `Database` from the package root instead. It shares
+[wire-protocol server](#wire-protocol-server-separate-processes). In the browser, where no
+listener can run, either run the same server over injected streams
+([without a listener](#without-a-listener-browser-worker-edge)) or use the embedded `Database`
+from the package root. The embedded `Database` shares
 the same in-memory engine (no filesystem) and all its methods are **synchronous**; do not `await`
 them. See [Method semantics](#method-semantics).
 
@@ -166,7 +168,9 @@ await server.close()
 ```
 
 Errors are `pg`'s own `DatabaseError` with `code` set to the SQLSTATE. Where no listener can run
-(the browser), put the embedded `Database` behind whatever query interface your code uses. The
+(the browser), `pg` can still reach the server through its `stream` option
+([without a listener](#without-a-listener-browser-worker-edge)), or you can put the embedded
+`Database` behind whatever query interface your code uses. The
 differences from node-postgres to account for there: `int8` is a `bigint` unless you pass
 `{ int8: "string" }`; timestamps, dates, `numeric` and `json`/`jsonb` come back as PostgreSQL text
 (node-postgres parses timestamps to `Date` and JSON to objects); `prepare`/`query` accept one
@@ -226,6 +230,16 @@ failure. `server.fault({ failConcurrentIndexBuild: "57014" })` (and `database.fa
 concurrentIndexBuild: "57014" })` on the sync API) interrupts the next `CREATE INDEX CONCURRENTLY`
 or `REINDEX ... CONCURRENTLY` with that SQLSTATE and, as PostgreSQL does, leaves the index it was
 building in the catalog with `pg_index.indisvalid = false` until it is dropped or reindexed.
+
+`serve({ onLog })` reports every statement a client ran or failed, once, as `{ pid, sql, durationMs,
+status, phase, message?, rowCount?, params? }`: `status` is `"ok"` or the SQLSTATE, `message` is the
+`ErrorResponse` text the client received, and `phase` is `"simple"` for a simple `Query` or the
+extended-protocol step that ran or rejected it (`"parse"`, `"bind"`, `"describe"`, `"execute"`), so a
+syntax error or unsupported construct rejected at Parse is logged too. A portal runs at its first
+`Describe` or `Execute`, whichever comes first, and is logged under that step. `rowCount` is the
+rows returned or affected on success. `serve({ onLog, logParams: true })` adds the bound `params`
+of extended-protocol statements, so a failure can be replayed; it is off by default because values
+may be large.
 
 One committed engine is shared by every connection. Explicit transactions execute in per-session
 copy-on-write workspaces that rebase each statement on the latest committed state, providing
@@ -310,6 +324,46 @@ earlier in the open transaction is described. Binary results and parameters use 
 precision), `interval`, `bit`/`varbit`, enums and one-dimensional or multi-dimensional arrays of
 those. Inference is by the SQL's shape, so a parameter that only appears in an expression the
 emulator does not analyse is reported as `text` (PostgreSQL would raise `42P18` for some of these).
+
+#### Without a listener (browser, worker, edge)
+
+`createWireServer(options?)` from `@crvouga/mockingbird-service-postgres/transport` is the same
+server with no TCP listener and no `node:` import (SCRAM-SHA-256 is pure TypeScript), so it bundles
+for a browser, a SharedWorker or an edge runtime. `server.accept(stream)` serves one client
+connection given as `{ readable, writable }` web byte streams or a Node `Duplex`, and resolves when
+it closes; the session is then disposed as on a socket close (transaction rolled back, advisory
+locks and `LISTEN` registrations released). Connections accepted by one server share its cluster
+exactly as TCP connections to `serve()` do: turn-taking, read-committed visibility, advisory locks,
+`LISTEN` / `NOTIFY`. `serve()` is this server behind `net.createServer`, and it is also exported from
+`/wire`. Options are those of `serve()` minus the TCP ones (`port`, `host`, `url`, `user`); durable
+mode takes an injected `DurableStorage` (a directory path needs `fileStorage`, which stays in
+`/wire`). The connection shape is the same as `createRespServer` from
+`@crvouga/mockingbird-service-redis/transport`.
+
+```ts
+import { duplexPair } from "node:stream"
+import { createWireServer } from "@crvouga/mockingbird-service-postgres/transport"
+import pg from "pg"
+
+const server = await createWireServer({ password: "secret" })
+// Here an in-memory Node Duplex pair; in a browser or worker, pass web streams instead:
+// server.accept({ readable, writable }).
+const [serverSide, clientSide] = duplexPair()
+void server.accept(serverSide)
+// pg calls these socket methods on the stream it is given.
+const socket = Object.assign(clientSide, {
+  connect() {
+    queueMicrotask(() => clientSide.emit("connect"))
+    return clientSide
+  },
+  setNoDelay: () => clientSide,
+  setKeepAlive: () => clientSide,
+})
+const client = new pg.Client({ user: "postgres", password: "secret", stream: () => socket as never })
+```
+
+The server writes in the order it produces bytes; the client-side socket must deliver chunks in
+order too (schedule delivery on a microtask or `MessageChannel`, not `setTimeout(0)`).
 
 #### Durable mode (opt-in)
 
@@ -507,26 +561,37 @@ Intentional differences: custom `PGMM` snapshots; seeded `random()` / fixed `now
 - `EXPLAIN`: stub plan shapes, not real planner output
 - The in-process API does **not** poison a transaction after a failed statement (no `25P02`); the wire-protocol server does, per connection
 - Triggers fire in **creation order** (PostgreSQL: name order); `UPDATE OF` column lists are ignored; `INSTEAD OF` is unsupported
-- `COMMENT ON INDEX` is stored (`pg_description`, `obj_description`); comments on every other kind of object parse but are not stored
+- `COMMENT ON` is stored for tables, views, materialized views, columns, indexes, sequences, functions, constraints, triggers, types and domains (`pg_description`, `obj_description`, `col_description`); comments on schemas and the remaining object kinds (extensions, roles, databases, ...) parse but are not stored
+- Every PostgreSQL 18 run-time parameter is listed in `pg_settings` and accepted by `SET` / `SHOW` / `current_setting` / `set_config` with PostgreSQL's checks (contexts, units, ranges, enum values); most are kept with no effect on the engine. Those with behaviour: `transaction_read_only` / `default_transaction_read_only` (`BEGIN READ ONLY` refuses writes with `25006`), and `session_replication_role = replica`, which stops triggers and foreign-key checks (every trigger is an origin trigger: there is no `ALTER TABLE ... ENABLE REPLICA / ALWAYS TRIGGER`)
+- `pg_proc` has no signatures for the engine's built-in functions (`pronargs` -1, `prorettype` 0), and `pg_get_functiondef` of a built-in is `0A000`; user functions are complete. `pg_trigger` lists user triggers only (foreign keys are not enforced by internal RI triggers)
+- `pg_get_viewdef` / `pg_views.definition` follow PostgreSQL's layout for targets, joins, `WHERE` / `GROUP BY` / `HAVING` / `ORDER BY` / `LIMIT`, `DISTINCT`, set operations and `CASE`; a sublink (`IN (SELECT ...)`) in a view prints in the engine's own form
+- `pg_current_wal_lsn()` returns `text` (there is no `pg_lsn` type); it moves forward with every writing transaction
 - `round(float8)` rounds ties away from zero (PostgreSQL: half-to-even); numeric `round()` has full parity
 - `'1e400'::float8` saturates to `Infinity` instead of raising `22003`
-- In the engine `MERGE`, `CALL`/procedures, cursors (`DECLARE`/`FETCH`), `LISTEN`/`NOTIFY`, and full PL/pgSQL (packages, NOTICE, cursors) fail loud (`0A000`); the wire-protocol server implements `LISTEN`/`NOTIFY` itself
+- In the engine `CALL`/procedures, cursors (`DECLARE`/`FETCH`, and PL/pgSQL `OPEN`/`FETCH`/`MOVE`/`CLOSE`/cursor variables), PL/pgSQL `COMMIT`/`ROLLBACK`, `ALIAS FOR` and `FOREACH ... SLICE`, and `LISTEN`/`NOTIFY` fail loud (`0A000`); the wire-protocol server implements `LISTEN`/`NOTIFY` itself. SQL-standard `BEGIN ATOMIC` function bodies are rejected with `42601`
 - `VACUUM` / `CLUSTER` / `CHECKPOINT` / `GRANT` / `REVOKE` / `LOCK` are parsed no-ops. `ANALYZE` validates its targets and records `analyze_count` / `last_analyze`, and `REINDEX` validates its targets and repairs an invalid index; neither has planner statistics or a physical index behind it
 - `pg_stat_user_tables` / `pg_stat_user_indexes` have PostgreSQL 18's columns, but only `n_live_tup` (the exact row count, immediately), the `ANALYZE` bookkeeping and `idx_scan` for unique-key lookups are real; the other activity counters read zero
-- Index access methods other than btree (`USING hash` / `gin` / …) are recorded and shown by `pg_get_indexdef` and `pg_am`, not implemented differently; `pg_index` has no `indkey` (use `pg_get_indexdef(oid, n, pretty)`)
+- Index access methods other than btree (`USING hash` / `gin` / …) are recorded and shown by `pg_get_indexdef` and `pg_am`, not implemented differently; `pg_index.indkey` is an `int2[]` subscripted from 0 like PostgreSQL's `int2vector` (`indkey[0]`, `= ANY (indkey)` work; its text form is `[0:1]={1,2}`, not `1 2`)
 - Collation is `C` semantics (byte order); locale/ICU-dependent ordering is out of scope
 - Column `STORAGE` modes (`pg_attribute.attstorage`) and `UNLOGGED` persistence (`pg_class.relpersistence`) follow PostgreSQL's SQL and catalog contract but are metadata only: there is no TOAST and no WAL, so an unlogged table is stored, snapshotted and kept like any other
 - `pg_available_extensions` / `pg_extension` list only what `CREATE EXTENSION` can install here (`pgcrypto`, `pg_trgm`) plus the built-in `plpgsql`; any other extension is absent from the views and `CREATE EXTENSION` fails with `0A000`
 - pgvector is not modelled: `CREATE EXTENSION vector` fails with `0A000 extension "vector" is not available`, exactly as stock PostgreSQL 18 (which does not ship it) answers, and `vector(n)` / `<=>` do not exist (`42704`)
-- Range, multirange, geometric, `xml`, `pg_lsn` and `macaddr8` types fail with `0A000` (`type "int4range" is not supported`); `inet`, `cidr` and `macaddr` have input, output, ordering and casts, and the `family` / `masklen` / `host` / `network` / `broadcast` / `netmask` functions, but none of their operators (`<<`, `>>=`, `&&`, `+`)
+- The range types `int4range`, `int8range`, `numrange`, `daterange`, `tsrange` and `tstzrange` have literal input and output, constructors, `lower` / `upper` / `isempty` / `lower_inc` / `upper_inf` and friends, `range_merge`, ordering and every range operator (`@>`, `<@`, `&&`, `<<`, `>>`, `&<`, `&>`, `-|-`, `+`, `*`, `-`); multiranges (`int4multirange`, `range_agg`), geometric, `xml`, `pg_lsn` and `macaddr8` types fail with `0A000` (`type "int4multirange" is not supported`), and there are no GiST indexes or exclusion constraints
+- `inet`, `cidr` and `macaddr` have input, output, ordering and casts, the `family` / `masklen` / `host` / `network` / `broadcast` / `netmask` / `hostmask` / `set_masklen` / `inet_same_family` / `inet_merge` functions and the `inet` operators (`<<`, `<<=`, `>>`, `>>=`, `&&`, `~`, `&`, `|`, `+`, `-`); `abbrev` and `macaddr8` are not implemented
+- `MERGE` (`WHEN [NOT] MATCHED [BY SOURCE | BY TARGET]`, `RETURNING` with `merge_action()`) and PostgreSQL 18 `RETURNING old.* / new.*` (also `RETURNING WITH (OLD AS o, NEW AS n)`) are supported; a `MERGE` inside a `WITH` query fails with `0A000`
+- System columns `xmin`, `xmax`, `ctid` and `tableoid` resolve by name. `xmax` is `0` for every scanned row and the writing transaction in the `RETURNING` of an `ON CONFLICT DO UPDATE` that updated (so `RETURNING (xmax = 0) AS inserted` works); `ctid` is `(0,n)` for the row's position, so unlike PostgreSQL it does not move on `UPDATE` and shifts after a `DELETE`
+- Declarative partitioning (`PARTITION BY`), composite types (`CREATE TYPE ... AS (...)`) and row-level security policies (`CREATE POLICY`) fail with `0A000`
 - SQL/JSON path covers `lax` / `strict`, filters, variables, arithmetic and the `type` / `size` / `double` / `ceiling` / `floor` / `abs` methods; `.**`, `.keyvalue()`, datetime methods and the `.bigint()` / `.string()` conversions fail with `0A000`
-- `jsonb_populate_record(set)` is not implemented (composite types); `pg_depend`, `pg_authid`, `pg_locks`, `pg_stat_activity` and the other catalogs tools probe list only what the engine models (one role, one backend, no inheritance)
+- `jsonb_populate_record(set)` is not implemented (composite types); `pg_depend`, `pg_authid`, `pg_locks` and the other catalogs tools probe list only what the engine models (one role, no inheritance); `pg_stat_activity` / `pg_stat_database` list the engine's one backend, or every session of the wire server, whose `pg_blocking_pids`, `pg_cancel_backend` and `pg_terminate_backend` act on its sessions
 - `RowDescription` carries the type modifier (`varchar(32)`, `numeric(10,2)`) of table columns and typed casts; set operations, `VALUES` and `RETURNING` report `-1`
 
 **Also supported (oracle parity):** schemas + `search_path`, `pg_catalog` / `information_schema`
 introspection, sequences (`serial`, identity, `nextval`/`currval`/`setval`), enums, domains,
-`LANGUAGE sql` functions, plpgsql-lite UDFs and anonymous `DO` blocks (`DECLARE`, `EXCEPTION WHEN <condition>`, `RAISE`, `EXECUTE`, `RETURN NEXT`),
-row-level triggers, recursive + data-modifying CTEs, window functions with full frame specs,
+`LANGUAGE sql` functions, PL/pgSQL functions, trigger functions and anonymous `DO` blocks on one interpreter (`DECLARE` with
+`record` / `%ROWTYPE` / `%TYPE`, `SELECT ... INTO [STRICT]`, `PERFORM`, `FOUND`, `GET [STACKED] DIAGNOSTICS`, `LOOP` / `WHILE` /
+integer `FOR` / `FOR ... IN <query | EXECUTE>` / `FOREACH`, labels with `EXIT` / `CONTINUE`, `RETURN NEXT` / `RETURN QUERY [EXECUTE]`,
+`EXECUTE ... INTO ... USING`, `OUT` parameters, `ASSERT`, `RAISE`, `EXCEPTION WHEN <condition>`; triggers get `NEW` / `OLD` and every
+`TG_*` variable), row-level and statement-level triggers, recursive + data-modifying CTEs, window functions with full frame specs,
 `GROUPING SETS`/`ROLLUP`/`CUBE`, `DISTINCT ON`, `LATERAL`, arrays + `unnest` + subscripting,
 JSON/JSONB operator + function surface including `jsonb_path_query_first`, `tsvector` text
 search, `ON CONFLICT DO NOTHING/UPDATE`, `RETURNING`, `PREPARE`/`EXECUTE`/`DEALLOCATE`,

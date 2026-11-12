@@ -35,12 +35,15 @@ export interface RuleScope {
   ctx: EngineCtx;
   /** table the expression's columns belong to */
   table: TableData | null;
+  /** print a column's relation as written (`t.a`): the query reads more than one relation */
+  qualify?: boolean;
 }
 
 type Typed = TypeId | null;
 
 type Node =
-  | { k: "var"; name: string; type: Typed }
+  /** `qualifier`: the OLD / NEW of a trigger's WHEN condition, which ruleutils prints */
+  | { k: "var"; name: string; type: Typed; qualifier?: string }
   /** `text` null is SQL NULL; `type` null is an untyped literal nothing has claimed yet */
   | { k: "const"; type: Typed; mod: ColumnType["mod"]; text: string | null }
   | { k: "op"; op: string; args: Node[]; type: Typed }
@@ -274,7 +277,9 @@ class Analyzer {
       case "colref": {
         const name = e.parts[e.parts.length - 1]!;
         const column = this.scope.table?.columns.find((c) => c.name === name);
-        return { k: "var", name, type: column?.type.id ?? null };
+        const relation = e.parts.length >= 2 ? e.parts[e.parts.length - 2] : undefined;
+        const qualifier = relation === "old" || relation === "new" || this.scope.qualify ? relation : undefined;
+        return { k: "var", name, type: column?.type.id ?? null, ...(qualifier ? { qualifier } : {}) };
       }
       case "string_lit":
         return { k: "const", type: null, mod: null, text: e.value };
@@ -392,6 +397,9 @@ class Analyzer {
         return { k: "case", arg, whens, otherwise: results[results.length - 1]!, type: typeOf(results[0]!) };
       }
       case "func": {
+        if (e.star && !e.distinct && !e.over && !e.filter && !e.orderBy && !e.withinGroupOrderBy) {
+          return { k: "form", parts: [`${e.name.map(quoteIdentifier).join(".")}(*)`], type: "int8" };
+        }
         if (e.star || e.distinct || e.over || e.filter || e.orderBy || e.withinGroupOrderBy) break;
         const name = e.name[e.name.length - 1]!;
         const args = e.args.map((arg) => this.analyze(arg));
@@ -594,7 +602,9 @@ function keyword(p: Printer, word: string, before: number, after: number): strin
 function print(p: Printer, node: Node, showImplicit: boolean, parent: Node | null = null): string {
   switch (node.k) {
     case "var":
-      return quoteIdentifier(node.name);
+      if (!node.qualifier) return quoteIdentifier(node.name);
+      // a trigger condition's OLD / NEW print as written
+      return `${node.qualifier === "old" || node.qualifier === "new" ? node.qualifier : quoteIdentifier(node.qualifier)}.${quoteIdentifier(node.name)}`;
     case "const":
       return printConst(p, node, true);
     case "raw":

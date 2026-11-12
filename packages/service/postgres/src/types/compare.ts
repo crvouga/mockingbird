@@ -3,6 +3,8 @@ import { type Interval, intervalCmp } from "./datetime.ts";
 import { jsonbCompare } from "./jsonb.ts";
 import { networkCompare } from "./network.ts";
 import { isNumeric, type Numeric, numericCmp, numericStripTrailingZeros, numericText } from "./numeric.ts";
+import { type PgRange, rangeCompare, rangeKey } from "./range.ts";
+import { isRangeType } from "./range-types.ts";
 import {
   arrayElemType,
   byteaText,
@@ -13,6 +15,7 @@ import {
   type PgArray,
   type PgRecord,
   type TypeId,
+  tidCompare,
 } from "./value.ts";
 
 /**
@@ -40,6 +43,7 @@ function expectBigint(a: Datum, t: TypeId): bigint {
 export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DEFAULT_COMPARE_CTX): number {
   if (a === null || b === null) throw pgError("internal", "datumCompare called with null");
   if (isArrayType(t)) return arrayCompare(t, a as PgArray, b as PgArray, ctx);
+  if (isRangeType(t)) return rangeCompare(t, a as PgRange, b as PgRange, ctx);
   if (isEnumType(t)) {
     if (!ctx.enumOrder) return cmpString(a as string, b as string);
     return ctx.enumOrder(t, a as string) - ctx.enumOrder(t, b as string);
@@ -82,6 +86,9 @@ export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DE
     case "name":
     case "unknown":
     case "uuid":
+    // regtype / regproc keep their canonical name: one name per type or function
+    case "regtype":
+    case "regproc":
     case "tsvector":
     case "tsquery":
     case "bit":
@@ -91,6 +98,8 @@ export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DE
     case "inet":
     case "cidr":
       return networkCompare(a as string, b as string);
+    case "tid":
+      return tidCompare(a as string, b as string);
     case "bytea": {
       const ba = a as Uint8Array;
       const bb = b as Uint8Array;
@@ -183,6 +192,7 @@ export function datumKey(t: TypeId, v: Datum): string {
     return `A[${arr.dims.join(",")}]${arr.items.map((it) => (it === null ? "\u0000N" : datumKey(arrayElemType(t), it))).join("\u0001")}`;
   }
   if (isEnumType(t)) return `E${v as string}`;
+  if (isRangeType(t)) return rangeKey(t, v as PgRange);
   switch (t) {
     case "bool":
       return v ? "t" : "f";
@@ -216,6 +226,8 @@ export function datumKey(t: TypeId, v: Datum): string {
     case "name":
     case "unknown":
     case "uuid":
+    case "regtype":
+    case "regproc":
     case "json":
     case "tsvector":
     case "tsquery":
@@ -224,6 +236,7 @@ export function datumKey(t: TypeId, v: Datum): string {
     case "inet":
     case "cidr":
     case "macaddr":
+    case "tid":
       return `s${v}`;
     case "bytea":
       return `b${byteaText(v as Uint8Array)}`;

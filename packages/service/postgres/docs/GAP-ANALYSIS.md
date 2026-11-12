@@ -70,7 +70,7 @@ Treat any marketing phrase implying “no known bugs” or unqualified “drop-i
 | --- | --- | --- | --- | --- | --- |
 | 10 | Core DML/SELECT/joins/set ops/CTEs | **covered** | — | — | Area dirs + fuzz + metamorphic |
 | 11 | ON CONFLICT / RETURNING / UPDATE-FROM / DELETE-USING | **covered** | — | — | `on-conflict/`, `returning/`, `update-from/` |
-| 12 | Constraints + FK referential actions | **covered** | — | — | `constraints/`, `foreign-keys/`; DEFERRABLE checked at statement end (parsed, not deferred to commit) |
+| 12 | Constraints + FK referential actions | **covered** | — | — | `constraints/`, `foreign-keys/`; deferrable FKs checked at COMMIT (#683); DEFERRABLE UNIQUE/PK still per row |
 | 13 | Window functions (frames, EXCLUDE) | **covered** | — | — | `window-functions/` + fuzz |
 | 14 | GROUPING SETS / ROLLUP / CUBE | **covered** | — | — | `grouping/` |
 | 15 | Triggers | **partial** + 3 pins | major | M | Creation-order firing, `UPDATE OF` ignored, no INSTEAD OF (all pinned) |
@@ -101,7 +101,7 @@ Treat any marketing phrase implying “no known bugs” or unqualified “drop-i
 | --- | --- | --- | --- | --- | --- |
 | 27 | BEGIN/COMMIT/ROLLBACK/SAVEPOINT | **covered** | — | — | `transactions/`, `savepoints/` + DST fuzz |
 | 28 | Isolation levels / multi-session MVCC | **n/a** | — | — | Single session by design |
-| 29 | Deferred constraint timing (commit-time) | **partial** | major | M | DEFERRABLE parsed; checks run at statement end, not commit |
+| 29 | Deferred constraint timing (commit-time) | **partial** | minor | M | Deferrable FKs and constraint triggers run at commit; DEFERRABLE UNIQUE/PK still checked per row |
 
 ---
 
@@ -146,7 +146,7 @@ Treat any marketing phrase implying “no known bugs” or unqualified “drop-i
 | 1 | 20 | `25P02` aborted-transaction state | Most visible semantic difference in error paths | L |
 | 2 | 22–24 | Catalog long tail + `pg_get_viewdef` | ORM introspection/migration tools | L |
 | 3 | 5 | Interval/timezone corners | Common app bugs land here | L |
-| 4 | 29 | Commit-time deferred constraints | Silent semantic difference for DEFERRABLE users | M |
+| 4 | 29 | Commit-time deferred constraints | DEFERRABLE UNIQUE / PRIMARY KEY only; foreign keys are checked at commit (#683) | M |
 | 5 | 15 | Trigger name-order + `UPDATE OF` + INSTEAD OF | Documented but fixable | M |
 | 6 | 3 | numeric transcendental extremes | Precision claims | L |
 | 7 | 18 | Partitioned tables | Common in modern schemas | XL |

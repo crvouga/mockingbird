@@ -53,6 +53,9 @@ import { oidFromInteger } from "./regnamespace.ts";
 
 export interface CastEnv extends OutputCtx, InputCtx {
   enumLabels(enumType: TypeId): string[] | null;
+  /** The oid a regtype / regproc name stands for, and the name of an oid (null when none has it). */
+  regOid?(t: "regtype" | "regproc", name: string): number | null;
+  regName?(t: "regtype" | "regproc", oid: number): string | null;
 }
 
 export const UTC_CAST_ENV: CastEnv = {
@@ -116,6 +119,9 @@ const IMPLICIT_CASTS = new Set([
   "cidr->inet",
   "regclass->oid",
   "oid->regclass",
+  // regtype / regproc compare with an oid as the oid (the explicit oid -> reg* casts stay explicit here)
+  "regtype->oid",
+  "regproc->oid",
   "int2->regclass",
   "int4->regclass",
   "int8->regclass",
@@ -326,11 +332,20 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
   if ((from === "int4" || from === "int8" || from === "int2") && (target === "oid" || target === "regnamespace")) {
     return tv(target, oidFromInteger(v as number | bigint));
   }
-  if (
-    (from === "int4" || from === "int8" || from === "int2") &&
-    (target === "regclass" || target === "regtype" || target === "regproc")
-  ) {
+  if ((from === "int4" || from === "int8" || from === "int2") && target === "regclass") {
     return tv(target, Number(v));
+  }
+  // regtype / regproc keep the name their output prints; the oid comes from the catalog
+  if ((from === "regtype" || from === "regproc") && (target === "oid" || target === "int4" || target === "int8")) {
+    const oid = env.regOid?.(from, v as string) ?? 0;
+    return tv(target, target === "int8" ? BigInt(oid) : oid);
+  }
+  if (
+    (from === "oid" || from === "int4" || from === "int8" || from === "int2") &&
+    (target === "regtype" || target === "regproc")
+  ) {
+    const oid = oidFromInteger(v as number | bigint);
+    return tv(target, env.regName?.(target, oid) ?? String(oid));
   }
   if (from === "oid" && (target === "int4" || target === "int8")) {
     return tv(target, target === "int8" ? BigInt(v as number) : (v as number));

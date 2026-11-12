@@ -250,7 +250,8 @@ export function getDatetimeFunctions(): Map<string, ScalarFn> {
   m.set(
     "date_bin",
     strict("timestamp", (ctx, args) => {
-      const stride = args[0]!.v as Interval;
+      // an untyped stride literal ('15 minutes') resolves to interval
+      const stride = castTo(ctx, args[0]!, "interval", { explicit: true }).v as Interval;
       const src = castTo(ctx, args[1]!, args[1]!.t === "timestamptz" ? "timestamptz" : "timestamp", { explicit: true });
       const origin = castTo(ctx, args[2]!, src.t, { explicit: true });
       if (stride.months !== 0) {
@@ -684,6 +685,8 @@ function toCharNumeric(ctx: EngineCtx, src: TypedValue, fmt: string): string {
   const isNeg = n.coef < 0n || n.special === "-inf";
   const absText = isNumeric(n) ? numericAbsText(n) : "0";
   void numericToNumber;
+  const positional = toCharPositional(absText, isNeg, fmt, n.special !== null);
+  if (positional !== null) return positional;
 
   // parse format: count digit positions before/after decimal point
   const fm = fmt.includes("FM");
@@ -705,6 +708,121 @@ function toCharNumeric(ctx: EngineCtx, src: TypedValue, fmt: string): string {
     return assembleToChar(ip!, fracPart, intFmt, fracFmt, isNeg, fm, clean);
   }
   return assembleToChar(intPartRaw!, fracPart, intFmt, fracFmt, isNeg, fm, clean);
+}
+
+/**
+ * to_char(number, pattern) for patterns made only of `FM`, `9`, `0`, `,` / `G`, `.` / `D`, a leading
+ * or trailing `S` and a trailing `MI`, laid out position by position the way PostgreSQL's
+ * NUM_processor does (formatting.c): unfilled `9` positions are blanks, positions from the first
+ * `0` on are zero-filled, the sign sits right before the first printed digit, a lone leading zero
+ * of a fraction prints as a blank (`'0.5', '999.99'` is `    .50`), and FM drops the blanks and
+ * the trailing fraction zeros of `9` positions while keeping those of `0` positions and the point.
+ * Returns null for any other pattern (the caller's general path handles it).
+ */
+function toCharPositional(absText: string, negative: boolean, fmt: string, special: boolean): string | null {
+  let isNeg = negative;
+  if (special) return null;
+  let rest = fmt;
+  let fm = false;
+  if (/^FM/i.test(rest)) {
+    fm = true;
+    rest = rest.slice(2);
+  }
+  let signMode: "default" | "S-lead" | "S-trail" | "MI" = "default";
+  if (/^S/.test(rest)) {
+    signMode = "S-lead";
+    rest = rest.slice(1);
+  } else if (/MI$/.test(rest)) {
+    signMode = "MI";
+    rest = rest.slice(0, -2);
+  } else if (/S$/.test(rest)) {
+    signMode = "S-trail";
+    rest = rest.slice(0, -1);
+  }
+  if (!/^[90,G]*([.D][90]*)?$/.test(rest) || !/[90]/.test(rest)) return null;
+  const pointAt = rest.search(/[.D]/);
+  const intFmt = pointAt === -1 ? rest : rest.slice(0, pointAt);
+  const fracFmt = pointAt === -1 ? "" : rest.slice(pointAt + 1);
+  const hasPoint = pointAt !== -1;
+  const intPositions = (intFmt.match(/[90]/g) ?? []).length;
+  const post = fracFmt.length;
+  const hasZeroSpec = intFmt.includes("0");
+
+  // the number string: the value rounded to `post` fraction digits, or '#' marks on overflow
+  const rounded = roundDecimalText(absText, post);
+  let [intDigits = "0", fracDigits = ""] = rounded.split(".");
+  intDigits = intDigits.replace(/^0+(?=\d)/, "");
+  fracDigits = fracDigits.padEnd(post, "0");
+  // the sign follows the rounded value: -0.004 shown with two fraction digits is unsigned
+  if (/^0*$/.test(intDigits + fracDigits)) isNeg = false;
+  const overflow = intDigits.length > intPositions;
+  if (overflow) {
+    intDigits = "#".repeat(intPositions);
+    fracDigits = "#".repeat(post);
+  }
+
+  // FM: strip trailing fraction zeros of 9 positions, never those of 0 positions
+  let fracOut = fracDigits;
+  let pointOnlyRelevant = false;
+  if (fm && !overflow) {
+    let keep = fracDigits.replace(/0+$/, "").length;
+    keep = Math.max(keep, fracFmt.lastIndexOf("0") + 1);
+    fracOut = fracDigits.slice(0, keep);
+    pointOnlyRelevant = keep === 0;
+  }
+
+  // a lone leading zero before a fraction prints as a blank unless a 0 specifier asks for it
+  const predecBlank = !overflow && intDigits === "0" && post > 0 && !hasZeroSpec;
+  const blank = fm ? "" : " ";
+  const firstZero = intFmt.replace(/[,G]/g, "").indexOf("0");
+  const pre = intPositions - intDigits.length;
+  const signChar = isNeg ? "-" : signMode === "S-lead" || signMode === "S-trail" ? "+" : blank;
+  const leadSign = signMode === "default" || signMode === "S-lead";
+
+  let out = "";
+  let started = false;
+  let digitIdx = 0;
+  const startNumber = () => {
+    if (started) return;
+    started = true;
+    if (leadSign) out += signChar;
+  };
+  for (const ch of intFmt) {
+    if (ch === "," || ch === "G") {
+      out += started ? "," : blank;
+      continue;
+    }
+    const i = digitIdx++;
+    if (i < pre) {
+      if (firstZero !== -1 && i >= firstZero) {
+        startNumber();
+        out += "0";
+      } else {
+        out += blank;
+      }
+      continue;
+    }
+    const d = intDigits[i - pre]!;
+    if (predecBlank) {
+      if (fm && pointOnlyRelevant) {
+        startNumber();
+        out += "0";
+      } else {
+        out += blank;
+      }
+      continue;
+    }
+    startNumber();
+    out += d;
+  }
+  if (hasPoint) {
+    startNumber();
+    out += `.${fracOut}`;
+  }
+  startNumber();
+  if (signMode === "MI") out += isNeg ? "-" : blank;
+  if (signMode === "S-trail") out += signChar;
+  return out;
 }
 
 function numericAbsText(n: { coef: bigint; dscale: number; special: string | null }): string {

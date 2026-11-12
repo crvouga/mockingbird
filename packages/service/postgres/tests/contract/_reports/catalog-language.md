@@ -13,8 +13,6 @@ dropped from the catalog and are recorded here only.
 | PAR-row-03 | `SELECT (1, 2) = (1, 2, 3)` | 21000 cardinality at execution: `unequal number of entries in row expressions` | 42601 syntax at parse time (same message) |
 | PAR-neg-01 | `SELECT - -5` / `SELECT -(-5)` | error: `invalid input syntax for type numeric: "--5"` (unary minus folded into the literal) | returns `5` |
 | TYP-float-04 | `SELECT '1e400'::float8` | ok: `Infinity` | 22003: `"1e400" is out of range for type double precision` |
-| EXP-in-03 | `SELECT (1, 2) IN (SELECT n, n + 1 FROM t)` | error: `subquery has too many columns` | ok: `t` |
-| FUN-round-02 | `SELECT round(2.5::float8)` | `3` (half away from zero) | `2` (half to even) |
 
 ## Dropped from the catalog (recorded only)
 
@@ -54,7 +52,5 @@ dropped from the catalog and are recorded here only.
 
 ### Overload-resolution notes (not cataloged as divergences)
 
-`exp(0)`, `ln(1)`, `power(2, 10)` with bare integer arguments resolve to the `numeric` overload in
-memory (`1.0000000000000000`) but to `double precision` in the oracle (`1`). The catalog scenarios
-pin the overload with explicit `::float8` / `::numeric` casts; the bare-integer resolution gap is a
-real divergence in implicit-cast preference.
+`exp(0)`, `ln(1)`, `power(2, 10)` with bare integer arguments resolve to the `double precision`
+overload in both engines (float8 is the preferred numeric type; #691).

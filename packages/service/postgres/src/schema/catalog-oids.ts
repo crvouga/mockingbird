@@ -37,9 +37,12 @@ const PG_CATALOG_OIDS: ReadonlyArray<readonly [name: string, oid: number]> = [
   ["pg_available_extensions", 12081],
   ["pg_available_extension_versions", 12085],
   ["pg_settings", 12104],
+  ["pg_timezone_abbrevs", 12122],
+  ["pg_timezone_names", 12126],
   ["pg_stat_user_tables", 12165],
   ["pg_stat_user_indexes", 12196],
   ["pg_stat_activity", 12226],
+  ["pg_stat_database", 12270],
 ];
 
 const INFORMATION_SCHEMA_NAMES: readonly string[] = [
@@ -51,6 +54,10 @@ const INFORMATION_SCHEMA_NAMES: readonly string[] = [
   "table_constraints",
   "key_column_usage",
   "routines",
+  "triggers",
+  "constraint_column_usage",
+  "referential_constraints",
+  "check_constraints",
 ];
 
 const byKey = new Map<string, number>();

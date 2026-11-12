@@ -21,6 +21,10 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
+    },
+    "./transport": {
+      "types": "./dist/transport.d.ts",
+      "default": "./dist/transport.js"
     }
   },
   "bin": {
@@ -92,6 +96,7 @@
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-credentials": "workspace:*",
     "bullmq": "5.76.2",
+    "esbuild": "^0.28.2",
     "ioredis": "5.11.1",
     "ioredis-5-9": "npm:ioredis@5.9.2"
   }

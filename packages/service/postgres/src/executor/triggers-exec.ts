@@ -1,131 +1,57 @@
 import { triggerScope } from "./triggers-scope.ts";
-import type { Statement } from "../ast/nodes.ts";
 import { pgError, unsupported } from "../errors/error.ts";
-import { parse } from "../parser/index.ts";
 import type { TableData, TriggerMeta } from "../storage/database-state.ts";
-import { castTo } from "../types/cast.ts";
 import type { Datum } from "../types/value.ts";
-import { compileTriggerBody, findHandler, type PlStmt, runRaise } from "./plpgsql.ts";
-import type { ExecEnv, RowScope } from "./relation.ts";
-import { evalPredicate, evalScalar, runStatement } from "./select.ts";
+import { callPlpgsqlTrigger } from "./plpgsql.ts";
+import type { ExecEnv } from "./relation.ts";
+import { evalPredicate } from "./select.ts";
 import { setTriggerExecutor, type TriggerEvent } from "./triggers.ts";
 
 /**
- * Trigger executor: runs plpgsql-lite bodies against NEW/OLD rows.
- * Parsing is shared with UDF plpgsql in plpgsql.ts.
+ * Trigger executor: runs the trigger's plpgsql function on the same interpreter as every other
+ * plpgsql function, with NEW / OLD and the `TG_*` variables declared.
  */
-
-class ReturnSignal {
-  constructor(readonly row: Datum[] | null) {}
-}
-
-function runTriggerBody(
-  env: ExecEnv,
-  table: TableData,
-  stmts: PlStmt[],
-  vars: { newRow: Datum[] | null; oldRow: Datum[] | null },
-): void {
-  const scope = (): RowScope => triggerScope(table, vars.newRow, vars.oldRow);
-
-  for (const stmt of stmts) {
-    switch (stmt.kind) {
-      case "assign": {
-        if (stmt.target.length !== 2 || stmt.target[0] !== "new") {
-          throw unsupported(`trigger body: assignment to "${stmt.target.join(".")}"`);
-        }
-        if (vars.newRow === null) {
-          throw pgError("object_not_in_prerequisite_state", `record "new" is not assigned yet`, "55000");
-        }
-        const colName = stmt.target[1]!;
-        const idx = table.columns.findIndex((c) => c.name === colName);
-        if (idx === -1) {
-          throw pgError("undefined_column", `record "new" has no field "${colName}"`, "42703");
-        }
-        const v = evalScalar(env, scope(), stmt.expr);
-        vars.newRow = vars.newRow.slice();
-        vars.newRow[idx] =
-          v.v === null ? null : castTo(env.ctx, v, table.columns[idx]!.type.id, { assignment: true }).v;
-        break;
-      }
-      case "return_new":
-        throw new ReturnSignal(vars.newRow);
-      case "return_old":
-        throw new ReturnSignal(vars.oldRow);
-      case "return_empty":
-        throw new ReturnSignal(null);
-      case "return_expr": {
-        const v = evalScalar(env, scope(), stmt.expr);
-        if (v.v === null) throw new ReturnSignal(null);
-        throw unsupported("trigger body: RETURN expression");
-      }
-      case "if": {
-        let taken = false;
-        for (const b of stmt.branches) {
-          if (evalPredicate(env, scope(), b.cond)) {
-            runTriggerBody(env, table, b.body, vars);
-            taken = true;
-            break;
-          }
-        }
-        if (!taken) runTriggerBody(env, table, stmt.elseBody, vars);
-        break;
-      }
-      case "null":
-        break;
-      case "raise":
-        runRaise(env, stmt, scope());
-        break;
-      case "block": {
-        try {
-          runTriggerBody(env, table, stmt.body, vars);
-        } catch (e) {
-          if (e instanceof ReturnSignal) throw e;
-          const handler = stmt.handlers === null ? undefined : findHandler(stmt.handlers, e);
-          if (handler === undefined) throw e;
-          runTriggerBody(env, table, handler.body, vars);
-        }
-        break;
-      }
-      case "sql": {
-        const stmts = parse(stmt.text);
-        if (stmts.length !== 1) throw unsupported(`trigger body SQL: ${stmt.text}`);
-        runStatement(env, stmts[0]! as Statement);
-        break;
-      }
-      default:
-        throw unsupported(`trigger body: ${stmt.kind}`);
-    }
-  }
-}
-
 function executeTrigger(
   env: ExecEnv,
   table: TableData,
   trigger: TriggerMeta,
-  _event: TriggerEvent,
+  event: TriggerEvent,
   oldRow: Datum[] | null,
   newRow: Datum[] | null,
 ): Datum[] | null {
   const state = env.ctx.state;
   if (trigger.when !== null && !evalPredicate(env, triggerScope(table, newRow, oldRow), trigger.when)) {
-    return newRow; // WHEN false: trigger does not fire; row passes through unchanged
+    return newRow ?? oldRow; // WHEN false: trigger does not fire; row passes through unchanged
   }
   const fns = state.schemas.get(trigger.funcSchema)?.functions.get(trigger.funcName);
-  const fn = fns?.[0];
+  const fn = fns?.find((f) => f.argTypes.length === 0) ?? fns?.[0];
   if (!fn) {
     throw pgError("undefined_function", `function ${trigger.funcSchema}.${trigger.funcName}() does not exist`, "42883");
   }
-  const raw = fn.rawBody;
-  if (raw === null) throw unsupported(`trigger function ${fn.name} has no body`);
-  const stmts = compileTriggerBody(raw);
-  const vars = { newRow: newRow ? newRow.slice() : null, oldRow };
+  if (fn.language !== "plpgsql") throw unsupported(`trigger functions in LANGUAGE ${fn.language}`);
+  const saved = new Map(state.localSettings);
+  for (const [name, value] of Object.entries(fn.settings ?? {})) state.localSettings.set(name, value);
   try {
-    runTriggerBody(env, table, stmts, vars);
-  } catch (e) {
-    if (e instanceof ReturnSignal) return e.row;
-    throw e;
+    return callPlpgsqlTrigger(env, fn, {
+      table: {
+        name: table.name,
+        schema: table.schema,
+        oid: table.oid,
+        columns: table.columns.map((c) => ({ name: c.name, type: c.type.id })),
+      },
+      name: trigger.name,
+      when: trigger.timing === "before" ? "BEFORE" : trigger.timing === "after" ? "AFTER" : "INSTEAD OF",
+      level: trigger.forEachRow ? "ROW" : "STATEMENT",
+      op: event === "insert" ? "INSERT" : event === "update" ? "UPDATE" : "DELETE",
+      args: trigger.funcArgs,
+      oldRow,
+      newRow,
+      // a statement trigger reads its transition tables; a row trigger sees none of the statement's CTEs
+      ctes: trigger.forEachRow ? new Map() : env.ctes,
+    });
+  } finally {
+    state.localSettings = saved;
   }
-  throw pgError("invalid_function_definition", `control reached end of trigger procedure without RETURN`, "2F005");
 }
 
 setTriggerExecutor(executeTrigger);

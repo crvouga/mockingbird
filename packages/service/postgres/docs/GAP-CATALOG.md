@@ -54,7 +54,7 @@ Roles/privileges as enforcement (`CREATE ROLE`, `GRANT`, …), replication (`CRE
 | Text search | `simple`-style dictionary only; no ispell/synonym/thesaurus; `ts_headline` thin |
 | `pg_catalog` / `information_schema` | Commonly-queried columns/relations only; long tail returns absent-column errors |
 | GUCs | Common settings; long tail defaults/errors |
-| DEFERRABLE constraints | Checked at statement end, not commit time |
+| DEFERRABLE UNIQUE / PRIMARY KEY | Checked per row, not at commit (deferrable foreign keys and constraint triggers are checked at commit) |
 | EXPLAIN | Stub shapes |
 | Collation | `C` semantics only |
 

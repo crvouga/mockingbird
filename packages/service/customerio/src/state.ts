@@ -16,7 +16,7 @@ export type TransactionalMessage = {
   updated_at: number
 }
 
-export type Channel = "email" | "sms" | "inbox"
+export type Channel = "email" | "sms" | "push" | "inbox"
 
 /** Lifecycle states a delivery can be moved through. `pending` is the initial accepted state. */
 export const DELIVERY_STATES = [
@@ -76,12 +76,50 @@ export type Delivery = OutboxItem & {
   /** Why a send was suppressed: `unsubscribed` or `channel_off`. */
   reason: string | null
   failureMessage: string | null
+  /** Push sends only: the targeted devices and the overrides sent (bodies dropped without retention). */
+  push?: PushDetail
   /** Unix seconds keyed by the state that was entered (`delivered`, `bounced`, …). */
   metrics: Record<string, number>
   /** `GET /v1/messages/{id}` stays 404 until the mock clock reaches this instant. */
   visibleAt: number
   queuedAt: number
   clicks: number
+}
+
+/**
+ * One device on a person, as `GET /v1/customers/{id}/attributes` lists it: `id` is the push
+ * token, `last_used` unix seconds, `attributes` the device event's properties.
+ */
+export type Device = {
+  id: string
+  platform: string
+  last_used: number
+  attributes: Record<string, unknown>
+}
+
+/** A person's device list (stored apart from the profile so tokens can move between people). */
+export type PersonDevices = { userId: string; devices: Device[] }
+
+/** Customer.io keeps at most 25 devices per person; a 26th evicts the oldest `last_used`. */
+export const MAX_DEVICES_PER_PERSON = 25
+
+/** What a push send targeted, recorded on its delivery. */
+export type PushDetail = {
+  /** The request's `to`: `all`, `last_used`, or a device token. */
+  to: string
+  /** Tokens the send was addressed to. */
+  devices: string[]
+  /** For a token `to`: whether the token was on the profile. `null` for `all` / `last_used`. */
+  to_on_profile: boolean | null
+  /** Whether the person existed before the send. */
+  profile_found: boolean
+  title: string | null
+  message: string | null
+  custom_data: Record<string, string> | null
+  custom_payload: Record<string, unknown> | null
+  sound: string | null
+  image_url: string | null
+  link: string | null
 }
 
 /** One CDP call (identify or track), with the fields a suite asserts on. */
@@ -148,6 +186,17 @@ export type Settings = {
    * is the alternate key the trigger-name validator also accepts.
    */
   transactionalListKey: "messages" | "transactional"
+  /**
+   * Push sends whose `to` token is not on the profile, whose person has no profile, or whose
+   * person has no devices: `accept` records them (flagged on the delivery), `reject` answers 400.
+   * Customer.io's answer is unobserved; `accept` is the emulator default.
+   */
+  pushUnknownTargets: "accept" | "reject"
+  /**
+   * A device event naming a token another person holds: `move` takes it off the other person
+   * (the default), `share` leaves it on both.
+   */
+  deviceTokenOwnership: "move" | "share"
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -158,6 +207,8 @@ export const DEFAULT_SETTINGS: Settings = {
   clockOffsetMs: 0,
   retainMessageDataForTests: false,
   transactionalListKey: "messages",
+  pushUnknownTargets: "accept",
+  deviceTokenOwnership: "move",
 }
 
 /** Our backend's legacy transactional email keys (`customer-io.transactional-email-port.ts`). */
@@ -214,6 +265,7 @@ export class CustomerIoState {
   readonly optouts: Collection<CustomerOptOuts>
   readonly messages: Collection<TransactionalMessage>
   readonly links: Collection<TrackedLink>
+  readonly devices: Collection<PersonDevices>
   readonly settings: Collection<Settings>
   readonly ids: IdSequence
 
@@ -231,6 +283,7 @@ export class CustomerIoState {
     this.optouts = new Collection(sqlite, namespace, "optouts")
     this.messages = new Collection(sqlite, namespace, "transactional")
     this.links = new Collection(sqlite, namespace, "links")
+    this.devices = new Collection(sqlite, namespace, "devices")
     this.settings = new Collection(sqlite, namespace, "settings")
     this.ids = new IdSequence(sqlite, namespace, "customerio")
     this.ensureSeeded()
@@ -325,6 +378,51 @@ export class CustomerIoState {
     }
     this.profiles.insert(id, next)
     return next
+  }
+
+  devicesOf(userId: string): Device[] {
+    return this.devices.get(userId)?.devices ?? []
+  }
+
+  /** Replace a person's device list (oldest first, capped at {@link MAX_DEVICES_PER_PERSON}). */
+  setDevices(userId: string, devices: Device[]): Device[] {
+    const kept = [...devices]
+    while (kept.length > MAX_DEVICES_PER_PERSON) {
+      let oldest = 0
+      for (const [index, device] of kept.entries()) {
+        if (device.last_used < (kept[oldest] as Device).last_used) oldest = index
+      }
+      kept.splice(oldest, 1)
+    }
+    if (this.devices.has(userId)) this.devices.update(userId, { userId, devices: kept })
+    else this.devices.insert(userId, { userId, devices: kept })
+    return kept
+  }
+
+  /** Take tokens off everyone except `userId` (the `move` ownership rule). */
+  releaseTokens(userId: string, tokens: readonly string[]): void {
+    if (this.current().deviceTokenOwnership !== "move" || tokens.length === 0) return
+    for (const row of this.devices.list()) {
+      if (row.value.userId === userId) continue
+      const rest = row.value.devices.filter((device) => !tokens.includes(device.id))
+      if (rest.length !== row.value.devices.length) this.setDevices(row.value.userId, rest)
+    }
+  }
+
+  /** Add or refresh one device; it becomes the newest entry. */
+  upsertDevice(userId: string, device: Device): Device[] {
+    this.releaseTokens(userId, [device.id])
+    const rest = this.devicesOf(userId).filter((existing) => existing.id !== device.id)
+    return this.setDevices(userId, [...rest, device])
+  }
+
+  removeDevice(userId: string, token: string): Device[] {
+    const current = this.devicesOf(userId)
+    if (!current.some((device) => device.id === token)) return current
+    return this.setDevices(
+      userId,
+      current.filter((device) => device.id !== token),
+    )
   }
 
   deliveryId(): string {

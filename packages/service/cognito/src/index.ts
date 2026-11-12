@@ -10,6 +10,19 @@ import { CognitoSigner, type CognitoSigningKey } from "./crypto.js"
 import { redactedUser } from "./fixtures.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 import {
+  basicCredentials,
+  errorPage,
+  pickerPage,
+  providerType,
+  redirectTo,
+  S256_ONLY,
+  SYSTEM_SCOPES,
+  s256,
+  TOKEN_CORS,
+  tokenJson,
+} from "./hosted-ui.js"
+import {
+  type CognitoAppClient,
   type CognitoAttribute,
   type CognitoSeedUser,
   CognitoState,
@@ -20,7 +33,7 @@ import {
 export type { CognitoFixtures } from "./fixtures.js"
 export type { CognitoRuntime, CognitoRuntimeOptions } from "./runtime.js"
 export { COGNITO_PRESETS, createRuntime } from "./runtime.js"
-export type { CognitoAttribute, CognitoSeedUser, CognitoUser } from "./state.js"
+export type { CognitoAppClient, CognitoAttribute, CognitoSeedUser, CognitoUser } from "./state.js"
 export { document, operationIds, supportedOperationIds }
 export const COGNITO_NAMESPACE = "cognito"
 export const accessKeyCredential = sigV4AccessKeyId
@@ -30,6 +43,8 @@ export type CognitoAPIOptions = APIOptions & {
   clientId?: string
   region?: string
   users?: readonly CognitoSeedUser[]
+  /** App clients for the hosted UI; the default client is registered with no callback URLs. */
+  appClients?: readonly CognitoAppClient[]
   baseUrl?: string
   publicNamespace?: string
   adminPrefix?: string
@@ -65,12 +80,14 @@ export class CognitoAPI {
   private readonly now: () => number
   private readonly poolId: string
   private readonly defaultClientId: string
+  private readonly configuredClients: readonly CognitoAppClient[]
   constructor(options: CognitoAPIOptions = {}) {
     this.sqlite = bootSqlite(options.sqlite)
     this.namespace = options.namespace ?? COGNITO_NAMESPACE
     this.now = options.now ?? Date.now
     this.poolId = options.poolId ?? "us-east-1_mockingbird"
     this.defaultClientId = options.clientId ?? "mockingbird-client"
+    this.configuredClients = structuredClone(options.appClients ?? [])
     this.publicNamespace = options.publicNamespace ?? "default"
     this.adminPrefix = options.adminPrefix ?? "/__admin"
     this.baseUrl = options.baseUrl?.replace(/\/+$/, "")
@@ -141,12 +158,33 @@ export class CognitoAPI {
         }),
     }
   }
-  private issuer(request: Request, poolId = this.poolId) {
+  /** The public origin plus namespace prefix: the hosted-UI domain in this emulator. */
+  private publicBase(request: Request) {
     const prefix =
       this.publicNamespace === "default"
         ? ""
         : `${this.adminPrefix}/ns/${encodeURIComponent(this.publicNamespace)}`
-    return `${this.baseUrl ?? requestBaseUrl(request)}${prefix}/${encodeURIComponent(poolId)}`
+    return `${this.baseUrl ?? requestBaseUrl(request)}${prefix}`
+  }
+  private issuer(request: Request, poolId = this.poolId) {
+    return `${this.publicBase(request)}/${encodeURIComponent(poolId)}`
+  }
+  /** Admin-registered clients win over configured ones; the default client always exists. */
+  appClient(clientId: unknown): CognitoAppClient | undefined {
+    if (typeof clientId !== "string" || !clientId) return undefined
+    return (
+      this.state.appClients.get(clientId) ??
+      this.configuredClients.find((client) => client.clientId === clientId) ??
+      (clientId === this.defaultClientId ? { clientId, callbackUrls: [] } : undefined)
+    )
+  }
+  appClients(): CognitoAppClient[] {
+    const clients = new Map<string, CognitoAppClient>()
+    clients.set(this.defaultClientId, { clientId: this.defaultClientId, callbackUrls: [] })
+    for (const client of this.configuredClients) clients.set(client.clientId, client)
+    for (const { value } of this.state.appClients.list({ order: "oldest" }))
+      clients.set(value.clientId, value)
+    return [...clients.values()]
   }
   private requestId() {
     return this.state.token("req-")
@@ -179,6 +217,7 @@ export class CognitoAPI {
       eventId: this.state.uuid("event_id"),
     },
     authTime?: number,
+    oauth: { scope?: string; nonce?: string } = {},
   ) {
     const now = Math.floor(this.now() / 1000)
     const issuer = this.issuer(request)
@@ -198,7 +237,7 @@ export class CognitoAPI {
       username: user.username,
       client_id: clientId,
       token_use: "access",
-      scope: "aws.cognito.signin.user.admin",
+      scope: oauth.scope ?? "aws.cognito.signin.user.admin",
     })
     const id = await signer.sign({
       ...common,
@@ -206,6 +245,7 @@ export class CognitoAPI {
       email: attr(user, "email"),
       email_verified: attr(user, "email_verified") === "true",
       ...(identities.length ? { identities } : {}),
+      ...(oauth.nonce !== undefined ? { nonce: oauth.nonce } : {}),
       aud: clientId,
       token_use: "id",
     })
@@ -227,6 +267,7 @@ export class CognitoAPI {
         kind: "refresh",
         origin,
         authTime: now,
+        ...(oauth.scope !== undefined ? { scope: oauth.scope } : {}),
       })
     }
     return {
@@ -245,9 +286,12 @@ export class CognitoAPI {
       return Response.json({
         issuer,
         jwks_uri: `${issuer}/.well-known/jwks.json`,
-        authorization_endpoint: `${issuer}/oauth2/authorize`,
-        token_endpoint: `${issuer}/oauth2/token`,
+        authorization_endpoint: `${this.publicBase(request)}/oauth2/authorize`,
+        token_endpoint: `${this.publicBase(request)}/oauth2/token`,
         response_types_supported: ["code"],
+        scopes_supported: SYSTEM_SCOPES,
+        code_challenge_methods_supported: S256_ONLY,
+        token_endpoint_auth_methods_supported: ["client_secret_basic", "client_secret_post"],
         subject_types_supported: ["public"],
         id_token_signing_alg_values_supported: ["RS256"],
       })
@@ -263,6 +307,8 @@ export class CognitoAPI {
           )
         ).flatMap((set) => set.keys),
       })
+    const hosted = await this.hosted(request, url)
+    if (hosted) return hosted
     if (request.method !== "POST" || url.pathname !== "/")
       return this.error("ResourceNotFoundException", "Not found", 404)
     let body: Record<string, unknown>
@@ -354,11 +400,17 @@ export class CognitoAPI {
             false,
             session.origin,
             session.authTime,
+            session.scope !== undefined ? { scope: session.scope } : {},
           ),
         })
       }
       const user = this.requireUser(parameters.USERNAME)
-      if (!user || user.password !== parameters.PASSWORD || !user.enabled)
+      if (
+        !user ||
+        user.status === "EXTERNAL_PROVIDER" ||
+        user.password !== parameters.PASSWORD ||
+        !user.enabled
+      )
         return this.error("NotAuthorizedException", "Incorrect username or password.")
       if (!user.confirmed) return this.error("UserNotConfirmedException", "User is not confirmed.")
       if (user.status === "FORCE_CHANGE_PASSWORD") {
@@ -539,6 +591,261 @@ export class CognitoAPI {
       return this.response({})
     }
     return this.error("UnknownOperationException", `Unknown operation ${target}`)
+  }
+  /** Users the hosted-UI picker offers: the pool's own (not federated) accounts. */
+  pickableUsers(): CognitoUser[] {
+    return this.state.users
+      .list({ order: "oldest" })
+      .map(({ value }) => value)
+      .filter((user) => user.status !== "EXTERNAL_PROVIDER")
+  }
+  /**
+   * Hosted UI: /oauth2/authorize, /oauth2/idpresponse, /oauth2/token and /error. Returns
+   * undefined for every other route.
+   */
+  private async hosted(request: Request, url: URL): Promise<Response | undefined> {
+    const path = url.pathname
+    if (path === "/oauth2/authorize" && request.method === "GET")
+      return this.authorize(request, url)
+    if (path === "/oauth2/idpresponse" && request.method === "POST") {
+      const form = new URLSearchParams(await request.text())
+      return this.idpResponse(form.get("transaction"), form.get("username"), form.get("action"))
+    }
+    if (path === "/oauth2/token" && request.method === "OPTIONS")
+      return new Response(null, {
+        status: 204,
+        headers: {
+          ...TOKEN_CORS,
+          "access-control-allow-headers":
+            request.headers.get("access-control-request-headers") ?? "authorization, content-type",
+        },
+      })
+    if (path === "/oauth2/token" && request.method === "POST") return this.token(request)
+    if (path === "/error" && request.method === "GET")
+      return errorPage(
+        url.searchParams.get("error") ?? "unknown_error",
+        url.searchParams.get("error_description") ?? "",
+      )
+    return undefined
+  }
+  private authorize(request: Request, url: URL): Response | Promise<Response> {
+    const p = url.searchParams
+    const base = this.publicBase(request)
+    const client = this.appClient(p.get("client_id"))
+    // Without a valid client and registered callback URL there is nowhere safe to send an
+    // error, so the hosted UI's own /error page answers.
+    if (!client)
+      return redirectTo(`${base}/error`, {
+        error: "invalid_client",
+        client_id: p.get("client_id") ?? "",
+      })
+    const redirectUri = p.get("redirect_uri") ?? ""
+    if (!client.callbackUrls.includes(redirectUri))
+      return redirectTo(`${base}/error`, { error: "redirect_mismatch", client_id: client.clientId })
+    const state = p.get("state") ?? undefined
+    const fail = (error: string, description?: string) =>
+      redirectTo(redirectUri, { error, error_description: description, state })
+    const responseType = p.get("response_type")
+    if (!responseType) return fail("invalid_request")
+    if (responseType === "token")
+      return fail("unauthorized_client", "The implicit grant is not modelled by this emulator")
+    if (responseType !== "code") return fail("unsupported_response_type")
+    const challenge = p.get("code_challenge") ?? undefined
+    const method = p.get("code_challenge_method") ?? undefined
+    if (
+      (challenge === undefined) !== (method === undefined) ||
+      (method !== undefined && method !== "S256")
+    )
+      return fail("invalid_request")
+    if (p.has("idp_identifier") && !p.has("identity_provider"))
+      return fail(
+        "invalid_request",
+        "idp_identifier is not modelled by this emulator; use identity_provider",
+      )
+    const provider = p.get("identity_provider") ?? "COGNITO"
+    if (client.identityProviders && !client.identityProviders.includes(provider))
+      return fail("invalid_request", "Login option is not available. Please try another one")
+    // Requested scopes the client does not allow are ignored; none requested means all allowed.
+    const allowed = client.scopes ?? SYSTEM_SCOPES
+    const requested = (p.get("scope") ?? "").split(/[\s+]+/).filter(Boolean)
+    const scope = (requested.length ? requested.filter((s) => allowed.includes(s)) : allowed).join(
+      " ",
+    )
+    const transaction = this.state.token("txn-")
+    const nonce = p.get("nonce") ?? undefined
+    this.state.hosted.insert(transaction, {
+      kind: "transaction",
+      clientId: client.clientId,
+      redirectUri,
+      ...(state !== undefined ? { state } : {}),
+      scope,
+      provider,
+      ...(challenge !== undefined ? { challenge } : {}),
+      ...(nonce !== undefined ? { nonce } : {}),
+      expires: this.now() + 600_000,
+    })
+    const next = this.state.nextAccount.get("next")
+    if (next) {
+      this.state.nextAccount.delete("next")
+      return this.idpResponse(transaction, next.username, null)
+    }
+    return pickerPage(base, transaction, provider, this.pickableUsers())
+  }
+  private async idpResponse(
+    transactionId: string | null,
+    username: string | null,
+    action: string | null,
+  ): Promise<Response> {
+    const grant = transactionId ? this.state.hosted.get(transactionId) : undefined
+    if (grant?.kind !== "transaction" || grant.expires <= this.now())
+      return errorPage("invalid_request", "The sign-in session expired or does not exist")
+    this.state.hosted.delete(transactionId as string)
+    const back = (params: Record<string, string | undefined>) =>
+      redirectTo(grant.redirectUri, { ...params, state: grant.state })
+    if (action === "cancel") return back({ error: "access_denied" })
+    const picked = username ? this.state.users.get(username) : undefined
+    if (!picked || picked.status === "EXTERNAL_PROVIDER")
+      return errorPage("invalid_request", "Unknown account")
+    const user = grant.provider === "COGNITO" ? picked : this.federate(grant.provider, picked)
+    if (!user.enabled)
+      return back({ error: "invalid_request", error_description: "User is disabled." })
+    if (grant.provider === "COGNITO" && !user.confirmed)
+      return back({ error: "invalid_request", error_description: "User is not confirmed." })
+    const code = this.state.uuid("code")
+    const { kind: _kind, state: _state, ...rest } = grant
+    this.state.hosted.insert(code, {
+      ...rest,
+      kind: "code",
+      username: user.username,
+      // Authorization codes are valid for five minutes (authorization-endpoint docs).
+      expires: this.now() + 300_000,
+    })
+    return back({ code })
+  }
+  /**
+   * The user a federated sign-in lands on. The picked pool account stands in for the provider
+   * account: its provider subject is the subject it is already linked under, else its `sub`.
+   * A native user linked with AdminLinkProviderForUser to that subject signs in as itself;
+   * otherwise Cognito's `<Provider>_<subject>` user is created on first sign-in.
+   */
+  private federate(provider: string, picked: CognitoUser): CognitoUser {
+    const names = (identity: Record<string, unknown>) => ({
+      provider: identity.providerName ?? identity.ProviderName,
+      subject: identity.userId ?? identity.ProviderAttributeValue,
+    })
+    const own = picked.identities.map(names).find((identity) => identity.provider === provider)
+    const subject = typeof own?.subject === "string" ? own.subject : picked.sub
+    const linked = this.pickableUsers().find((user) =>
+      user.identities.some((identity) => {
+        const n = names(identity)
+        return n.provider === provider && n.subject === subject
+      }),
+    )
+    if (linked) return linked
+    const username = `${provider}_${subject}`
+    const existing = this.state.users.get(username)
+    if (existing) return existing
+    return this.state.put({
+      username,
+      // Federated users cannot sign in with a password; USER_PASSWORD_AUTH rejects them.
+      password: "",
+      createdAt: this.now(),
+      attributes: picked.attributes.filter((attribute) => attribute.Name !== "sub"),
+      confirmed: true,
+      status: "EXTERNAL_PROVIDER",
+      identities: [
+        {
+          userId: subject,
+          providerName: provider,
+          providerType: providerType(provider),
+          issuer: null,
+          primary: "true",
+          dateCreated: String(this.now()),
+        },
+      ],
+    })
+  }
+  private async token(request: Request): Promise<Response> {
+    const fail = (error: string, description?: string) =>
+      tokenJson({ error, ...(description ? { error_description: description } : {}) }, 400)
+    const form = new URLSearchParams(await request.text())
+    const basic = basicCredentials(request.headers.get("authorization"))
+    const bodyId = form.get("client_id")
+    if (basic && bodyId && basic.id !== bodyId) return fail("invalid_client")
+    const client = this.appClient(basic?.id ?? bodyId)
+    if (!client) return fail("invalid_client")
+    if (client.clientSecret !== undefined) {
+      const secret = basic?.secret ?? form.get("client_secret")
+      if (secret !== client.clientSecret) return fail("invalid_client")
+    }
+    const grantType = form.get("grant_type")
+    if (grantType === "authorization_code") {
+      const code = form.get("code")
+      if (!code) return fail("invalid_request")
+      const grant = this.state.hosted.get(code)
+      if (grant?.kind !== "code") return fail("invalid_grant")
+      // A code is single use: any redemption attempt consumes it.
+      this.state.hosted.delete(code)
+      if (grant.expires <= this.now() || grant.clientId !== client.clientId)
+        return fail("invalid_grant")
+      const redirectUri = form.get("redirect_uri")
+      if (!redirectUri) return fail("invalid_request")
+      if (redirectUri !== grant.redirectUri) return fail("unauthorized_client", "invalid_redirect")
+      if (grant.challenge !== undefined) {
+        const verifier = form.get("code_verifier")
+        if (!verifier || (await s256(verifier)) !== grant.challenge) return fail("invalid_grant")
+      }
+      const user = grant.username ? this.state.users.get(grant.username) : undefined
+      if (!user?.enabled) return fail("invalid_grant")
+      const tokens = await this.tokens(request, user, client.clientId, true, undefined, undefined, {
+        scope: grant.scope,
+        ...(grant.nonce !== undefined ? { nonce: grant.nonce } : {}),
+      })
+      return tokenJson({
+        access_token: tokens.AccessToken,
+        ...(grant.scope.split(" ").includes("openid") ? { id_token: tokens.IdToken } : {}),
+        refresh_token: tokens.RefreshToken,
+        token_type: "Bearer",
+        expires_in: tokens.ExpiresIn,
+      })
+    }
+    if (grantType === "refresh_token") {
+      const refreshToken = form.get("refresh_token")
+      if (!refreshToken) return fail("invalid_request")
+      const session = this.state.sessions.get(refreshToken)
+      const user = session && this.state.users.get(session.username)
+      if (
+        session?.kind !== "refresh" ||
+        session.clientId !== client.clientId ||
+        session.revoked ||
+        session.expires <= this.now() ||
+        !user ||
+        !user.enabled
+      )
+        return fail("invalid_grant")
+      const scope = session.scope ?? "aws.cognito.signin.user.admin"
+      const tokens = await this.tokens(
+        request,
+        user,
+        client.clientId,
+        false,
+        session.origin,
+        session.authTime,
+        { scope },
+      )
+      return tokenJson({
+        access_token: tokens.AccessToken,
+        // Refreshes of API sign-ins (no stored scope) carry an ID token, as InitiateAuth does.
+        ...(session.scope === undefined || scope.split(" ").includes("openid")
+          ? { id_token: tokens.IdToken }
+          : {}),
+        token_type: "Bearer",
+        expires_in: tokens.ExpiresIn,
+      })
+    }
+    if (grantType === "client_credentials")
+      return fail("unsupported_grant_type", "client_credentials is not modelled by this emulator")
+    return fail(grantType ? "unsupported_grant_type" : "invalid_request")
   }
   private userForAccess(value: unknown) {
     const session = typeof value === "string" ? this.state.sessions.get(value) : undefined

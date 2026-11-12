@@ -2,13 +2,16 @@ import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import type { TypedValue } from "../types/value.ts";
 import { getArrayFunctions } from "./array-fns.ts";
+import { getCatalogFunctions } from "./catalog-fns.ts";
 import { getDatetimeFunctions } from "./datetime-registry.ts";
 import { getEnumFunctions } from "./enum-fns.ts";
 import { getHashFunctions } from "./hash-fns.ts";
 import { getJsonFunctions } from "./json-fns.ts";
 import { getMathFunctions } from "./math-fns.ts";
+import { getMergeFunctions } from "./merge-fns.ts";
 import { getMiscFunctions } from "./misc-fns.ts";
 import { getNetworkFunctions } from "./network-fns.ts";
+import { getRangeFunctions, overloadRangeAccessors } from "./range-fns.ts";
 import { getStringFunctions } from "./string-fns.ts";
 import { getTsearchFunctions } from "./tsearch-fns.ts";
 import type { ScalarFn } from "./util.ts";
@@ -33,11 +36,15 @@ export function getScalarFunctions(): Map<string, ScalarFn> {
     getHashFunctions(),
     getEnumFunctions(),
     getNetworkFunctions(),
+    getRangeFunctions(),
+    getMergeFunctions(),
+    getCatalogFunctions(),
   ]) {
     for (const [name, fn] of source) {
       registry.set(name, fn);
     }
   }
+  overloadRangeAccessors(registry);
   // `length(tsvector)` overload: dispatch by arg type over the string version
   const stringLength = registry.get("length")!;
   const tsvectorLength = registry.get("tsvector_length")!;

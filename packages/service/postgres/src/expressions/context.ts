@@ -1,5 +1,6 @@
 import { quoteIdentifier } from "../sql/keywords.ts";
 import { pgError } from "../errors/error.ts";
+import { getRegResolver } from "../schema/catalog.ts";
 import { catalogRelationByOid, catalogRelationOid } from "../schema/catalog-oids.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
@@ -106,6 +107,22 @@ export class EngineCtx implements CastEnv, CompareCtx {
       if (schema.oid === oid) return schema.name;
     }
     return null;
+  }
+
+  regtypeIn(text: string): string {
+    return getRegResolver().typeIn(this.state, text);
+  }
+
+  regprocIn(text: string): string {
+    return getRegResolver().procIn(this.state, text);
+  }
+
+  regOid(t: "regtype" | "regproc", name: string): number | null {
+    return getRegResolver().oid(this.state, t, name);
+  }
+
+  regName(t: "regtype" | "regproc", oid: number): string | null {
+    return getRegResolver().name(this.state, t, oid);
   }
 
   zoneOffsetAt(utcMicros: bigint): number {

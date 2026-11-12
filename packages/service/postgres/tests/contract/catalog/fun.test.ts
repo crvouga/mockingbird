@@ -1,4 +1,3 @@
-import { expect } from "bun:test";
 import { FUN_SECTION } from "../../../compat/sections/fun.ts";
 import { runCatalog } from "./run.ts";
 
@@ -97,10 +96,8 @@ runCatalog(FUN_SECTION, [
   },
   {
     id: "FUN-round-02",
-    kind: "divergence",
-    fn: (db) => {
-      expect(db.query("SELECT round(2.5::float8) AS a, round(3.5::float8) AS b")).toEqual([{ a: 3, b: 4 }]);
-    },
+    kind: "parity",
+    sql: "SELECT round(2.5::float8) AS a, round(3.5::float8) AS b, round(-2.5::float8) AS c",
   },
   {
     id: "FUN-trunc-01",

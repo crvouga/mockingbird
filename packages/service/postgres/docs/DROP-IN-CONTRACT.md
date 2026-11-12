@@ -105,7 +105,7 @@ These are **not** drop-in failures; marketing must not imply them:
 1. **Wire protocol** / network clients / connection pooling
 2. **Multi-session concurrency**, MVCC across connections, isolation levels, locks that block
 3. **Roles / authentication / privileges** as enforcement (GRANT/REVOKE parse as no-ops)
-4. **Full PL/pgSQL** and other procedural languages (plpgsql-lite UDFs: DECLARE / EXCEPTION WHEN others / RETURN NEXT / FOR-IN-SELECT)
+4. **Full PL/pgSQL** and other procedural languages (the PL/pgSQL interpreter covers functions, trigger functions and DO blocks except cursors, transaction control and procedures; see COMPATIBILITY.md)
 5. **Extensions** (`CREATE EXTENSION`), foreign data wrappers, logical/physical replication
 6. **Storage internals** — VACUUM behavior, TOAST, tablespaces, checkpoints
 7. **LISTEN/NOTIFY**, cursors (`DECLARE`/`FETCH`), `MERGE`, `CALL` (fail loud today)

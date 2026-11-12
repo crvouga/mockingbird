@@ -7,6 +7,10 @@ COPY scripts ./scripts
 COPY sites/docs/package.json ./sites/docs/package.json
 RUN command -v node || ln -s /usr/local/bin/bun /usr/local/bin/node
 RUN bun install --frozen-lockfile --ignore-scripts
+# Every service build embeds its admin vendor brand (scripts/admin-brand.ts) from the docs data.
+COPY sites/docs/src/lib/admin-brands.ts sites/docs/src/lib/types.ts ./sites/docs/src/lib/
+COPY sites/docs/src/data/brands.json ./sites/docs/src/data/brands.json
+COPY sites/docs/public/brands ./sites/docs/public/brands
 RUN bunx turbo run build --filter=@crvouga/mockingbird-service-stripe --filter=@crvouga/mockingbird-service-postgres --filter=@crvouga/mockingbird-service-redis --concurrency=2
 RUN bun build packages/examples/fleet-reference/entrypoint.ts --target=bun --outfile=/out/fleet.js
 RUN bun packages/examples/fleet-reference/inventory.ts > /out/inventory.json

@@ -177,11 +177,8 @@ runCatalog(CAT_SECTION, [
   },
   {
     id: "CAT-viewdef-01",
-    kind: "divergence",
-    fn: (db) => {
-      db.exec("CREATE TABLE t (id int)");
-      db.exec("CREATE VIEW myv AS SELECT id FROM t");
-      expect(() => db.query("SELECT pg_get_viewdef('myv') AS d")).toThrow(/pg_get_viewdef/);
-    },
+    kind: "parity",
+    setup: ["CREATE TABLE t (id int)", "CREATE VIEW myv AS SELECT id FROM t"],
+    sql: "SELECT pg_get_viewdef('myv') AS d",
   },
 ]);

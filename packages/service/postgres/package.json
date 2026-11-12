@@ -40,6 +40,11 @@
       "import": "./dist/unstable.js",
       "default": "./dist/unstable.js"
     },
+    "./transport": {
+      "types": "./dist/wire/transport.d.ts",
+      "import": "./dist/wire/transport.js",
+      "default": "./dist/wire/transport.js"
+    },
     "./wire": {
       "types": "./dist/wire/index.d.ts",
       "import": "./dist/wire/index.js",

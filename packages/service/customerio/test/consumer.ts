@@ -699,3 +699,91 @@ export const readCustomerIoOptOutPage = async (
   if (!response.ok) throw new Error(`Customer.io opt-outs HTTP ${response.status}`)
   return (await response.json()) as CustomerIoOptOutPage
 }
+
+// ------------------------------------------------------------------ push (issue #671)
+
+/**
+ * The reporter's push path (issue #671): raw `fetch` to `POST /v1/send/push`, deciding per phone
+ * whether Customer.io or its own sender delivers. Definite 4xx falls back, 408/5xx hold, 429 waits.
+ */
+export type PushSendResult =
+  | { ok: true; deliveryId: string; queuedAt: number }
+  | { ok: false; status: number; error: string | undefined; outcome: "fallback" | "hold" | "retry" }
+
+export const sendCustomerIoPush = async (request: {
+  appApiHost: string
+  apiKey: string | null
+  body: Record<string, unknown>
+  fetchImpl: Fetch
+}): Promise<PushSendResult> => {
+  const response = await request.fetchImpl(
+    new Request(`${request.appApiHost}/v1/send/push`, {
+      method: "POST",
+      headers: {
+        ...(request.apiKey ? { Authorization: `Bearer ${request.apiKey}` } : {}),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request.body),
+    }),
+  )
+  if (response.ok) {
+    const parsed = (await response.json()) as { delivery_id: string; queued_at: number }
+    return { ok: true, deliveryId: parsed.delivery_id, queuedAt: parsed.queued_at }
+  }
+  const error = extractCustomerIoErrorDetail(await response.text().catch(() => ""))
+  const outcome =
+    response.status === 429 ? "retry" : isDefiniteRejection(response.status) ? "fallback" : "hold"
+  return { ok: false, status: response.status, error, outcome }
+}
+
+/** The tokens Customer.io holds for a person (`GET /v1/customers/{id}/attributes`). */
+export const readCustomerIoDevices = async (request: {
+  appApiHost: string
+  apiKey: string
+  customerId: string
+  fetchImpl: Fetch
+}): Promise<{ id: string; platform: string; last_used: number }[] | null> => {
+  const response = await request.fetchImpl(
+    new Request(
+      `${request.appApiHost}/v1/customers/${encodeURIComponent(request.customerId)}/attributes`,
+      { headers: { Authorization: `Bearer ${request.apiKey}` } },
+    ),
+  )
+  if (response.status === 404) return null
+  if (!response.ok) throw new Error(`attributes read failed with ${response.status}`)
+  const body = (await response.json()) as {
+    customer: { devices: { id: string; platform: string; last_used: number }[] }
+  }
+  return body.customer.devices
+}
+
+/** The CDP device events, as raw `fetch` to `/v1/track` (Basic write key). */
+export const trackDeviceEvent = (request: {
+  cdpHost: string
+  writeKey: string
+  userId: string
+  event: "Device Created or Updated" | "Device Deleted"
+  token: string
+  type?: "ios" | "android"
+  timestamp?: string
+  properties?: Record<string, unknown>
+  fetchImpl: Fetch
+}) =>
+  request.fetchImpl(
+    new Request(`${request.cdpHost}/v1/track`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${btoa(`${request.writeKey}:`)}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId: request.userId,
+        event: request.event,
+        context: {
+          device: { token: request.token, ...(request.type ? { type: request.type } : {}) },
+        },
+        ...(request.properties ? { properties: request.properties } : {}),
+        ...(request.timestamp ? { timestamp: request.timestamp } : {}),
+      }),
+    }),
+  )

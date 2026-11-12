@@ -4,7 +4,6 @@ import type {
   InsertStmt,
   OnConflictClause,
   SelectStmt,
-  SelectTarget,
   UpdateSet,
   UpdateStmt,
 } from "../ast/nodes.ts";
@@ -13,7 +12,9 @@ import {
   checkForeignKeys,
   checkNotNull,
   checkUnique,
+  deferForeignKey,
   findConflict,
+  foreignKeyDeferred,
   referencingConstraints,
   uniqueSpecsFor,
 } from "../constraints/enforce.ts";
@@ -23,11 +24,14 @@ import { sequenceNextval } from "../functions/misc-fns.ts";
 import { indexInsertRow, indexUpdateRow, prepareDmlIndexStores, rebuildTableIndexes } from "../indexes/maintain.ts";
 import { tryPointRowIndices } from "../planner/access.ts";
 import type { ColumnMeta, TableData } from "../storage/database-state.ts";
+import { replicaRole } from "../storage/guc.ts";
 import { castTo } from "../types/cast.ts";
 import { datumKey } from "../types/compare.ts";
-import { type Datum, type TypedValue, type TypeId, tv, UNKNOWN } from "../types/value.ts";
-import { commandResult, type ExecEnv, type ExecResult, inferColumnName, type Relation, RowScope } from "./relation.ts";
+import { type Datum, type TypedValue, tv, UNKNOWN } from "../types/value.ts";
+import { commandResult, type ExecEnv, type ExecResult, type Relation, RowScope } from "./relation.ts";
+import { evalReturning, type ReturningRow } from "./returning.ts";
 import { applyWith, buildFrom, evalPredicate, evalScalar, executeSelectStmt } from "./select.ts";
+import { mentionsSystemColumn, systemColumns, withSystemValues } from "./system-columns.ts";
 import { fireRowTriggers, fireStatementTriggers } from "./triggers.ts";
 
 // ---------------------------------------------------------------------------
@@ -52,7 +56,7 @@ export function withStatementRollback<T>(env: ExecEnv, fn: () => T): T {
   }
 }
 
-function requireTargetTable(env: ExecEnv, parts: string[], verb: string): TableData {
+export function requireTargetTable(env: ExecEnv, parts: string[], verb: string): TableData {
   const state = env.ctx.state;
   const table = state.findTable(parts);
   if (table) {
@@ -72,7 +76,7 @@ function tableRowScope(env: ExecEnv, table: TableData, label: string, row: Datum
 }
 
 /** cast an expression result for assignment to a column */
-function coerceToColumn(env: ExecEnv, v: TypedValue, col: ColumnMeta): Datum {
+export function coerceToColumn(env: ExecEnv, v: TypedValue, col: ColumnMeta): Datum {
   const ctx = env.ctx;
   const out = castTo(ctx, v, col.type.id, { assignment: true, mod: col.type.mod });
   if (col.domain) {
@@ -81,7 +85,7 @@ function coerceToColumn(env: ExecEnv, v: TypedValue, col: ColumnMeta): Datum {
   return out.v;
 }
 
-function columnDefault(env: ExecEnv, _table: TableData, col: ColumnMeta): Datum {
+export function columnDefault(env: ExecEnv, _table: TableData, col: ColumnMeta): Datum {
   if (col.identity) {
     const seq = env.ctx.state.findSequence(col.identity.sequence.split("."));
     if (!seq) throw pgError("undefined_object", `sequence for identity column "${col.name}" not found`, "42704");
@@ -95,7 +99,7 @@ function columnDefault(env: ExecEnv, _table: TableData, col: ColumnMeta): Datum 
   return null;
 }
 
-function computeGeneratedColumns(env: ExecEnv, table: TableData, row: Datum[]): void {
+export function computeGeneratedColumns(env: ExecEnv, table: TableData, row: Datum[]): void {
   for (let i = 0; i < table.columns.length; i++) {
     const col = table.columns[i]!;
     if (!col.generated) continue;
@@ -103,56 +107,6 @@ function computeGeneratedColumns(env: ExecEnv, table: TableData, row: Datum[]): 
     const v = evalScalar(env, scope, col.generated);
     row[i] = coerceToColumn(env, v, col);
   }
-}
-
-function evalReturning(
-  env: ExecEnv,
-  table: TableData,
-  label: string,
-  targets: SelectTarget[],
-  rows: Datum[][],
-  command: string,
-): ExecResult {
-  // expand stars against the table's columns
-  interface Item {
-    name: string;
-    expr: Expr | null;
-    colIdx: number;
-  }
-  const items: Item[] = [];
-  for (const t of targets) {
-    if (t.expr.type === "star") {
-      for (let i = 0; i < table.columns.length; i++) {
-        items.push({ name: table.columns[i]!.name, expr: null, colIdx: i });
-      }
-      continue;
-    }
-    items.push({ name: t.alias ?? inferColumnName(t.expr), expr: t.expr, colIdx: -1 });
-  }
-  const columns = items.map((it) => ({
-    name: it.name,
-    type: it.colIdx >= 0 ? table.columns[it.colIdx]!.type.id : (UNKNOWN as TypeId),
-  }));
-  const outRows: Datum[][] = [];
-  for (const row of rows) {
-    const scope = tableRowScope(env, table, label, row);
-    const out: Datum[] = [];
-    for (let k = 0; k < items.length; k++) {
-      const it = items[k]!;
-      if (it.colIdx >= 0) {
-        out.push(row[it.colIdx] ?? null);
-      } else {
-        const v = evalScalar(env, scope, it.expr!);
-        if (columns[k]!.type === UNKNOWN) columns[k]!.type = v.t;
-        out.push(v.v);
-      }
-    }
-    outRows.push(out);
-  }
-  for (const c of columns) {
-    if (c.type === UNKNOWN) c.type = "text";
-  }
-  return { columns, rows: outRows, command, rowCount: rows.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -289,7 +243,7 @@ function applyOnConflictUpdate(
   checkNotNull(env, table, updated);
   checkChecks(env, table, updated);
   checkUnique(env, table, updated, existingIdx);
-  checkForeignKeys(env, table, updated);
+  checkForeignKeys(env, table, updated, true);
   handleReferencedUpdate(env, table, [existing], [updated]);
   return true;
 }
@@ -302,7 +256,7 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
   const colIdxs = insertTargetColumns(env, table, stmt);
   const sourceRows = insertSourceRows(env, stmt, colIdxs);
 
-  const insertedRows: Datum[][] = [];
+  const insertedRows: ReturningRow[] = [];
   let insertedCount = 0;
   // Rows the statement inserted, and the (old, new) pairs ON CONFLICT DO UPDATE rewrote: the transition tables.
   const addedRows: Datum[][] = [];
@@ -382,7 +336,12 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
           );
           if (did) {
             insertedCount++;
-            insertedRows.push(rows[conflictIdx]!);
+            insertedRows.push({
+              old: replaced,
+              new: rows[conflictIdx]!,
+              position: conflictIdx,
+              xmax: env.ctx.rowVersionXid(),
+            });
             conflictOldRows.push(replaced);
             conflictNewRows.push(rows[conflictIdx]!);
             fireRowTriggers(env, table, "after", "update", null, rows[conflictIdx]!);
@@ -394,13 +353,13 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
       checkNotNull(env, table, newRow);
       checkChecks(env, table, newRow);
       checkUnique(env, table, newRow, rows.length);
-      checkForeignKeys(env, table, newRow);
+      checkForeignKeys(env, table, newRow, true);
       table.rowXmins.set(newRow, env.ctx.rowVersionXid());
       rows.push(newRow);
       table.recordDurableRow(newRow);
       indexInsertRow(env, table, rows.length - 1, newRow);
       insertedCount++;
-      insertedRows.push(newRow);
+      insertedRows.push({ old: null, new: newRow, position: rows.length - 1, xmax: 0 });
       addedRows.push(newRow);
       fireRowTriggers(env, table, "after", "insert", null, newRow);
     }
@@ -411,7 +370,7 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
     }
     env.ctx.state.changes = insertedCount;
     if (stmt.returning) {
-      const res = evalReturning(env, table, label, stmt.returning, insertedRows, "INSERT");
+      const res = evalReturning(env, table, label, stmt.returning, stmt.returningAliases, insertedRows, "INSERT");
       return { ...res, rowCount: insertedCount };
     }
     return commandResult("INSERT", insertedCount);
@@ -422,7 +381,13 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
 // UPDATE
 // ---------------------------------------------------------------------------
 
-function applyUpdateSets(env: ExecEnv, table: TableData, sets: UpdateSet[], scope: RowScope, row: Datum[]): void {
+export function applyUpdateSets(
+  env: ExecEnv,
+  table: TableData,
+  sets: UpdateSet[],
+  scope: RowScope,
+  row: Datum[],
+): void {
   for (const set of sets) {
     if (set.columns.some((c) => c.subscripts !== null || c.fields.length > 0)) {
       throw unsupported("UPDATE with subscripted or field-qualified target columns");
@@ -494,6 +459,11 @@ function applyUpdateSets(env: ExecEnv, table: TableData, sets: UpdateSet[], scop
 
 export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   if (stmt.whereCurrentOf) throw unsupported("WHERE CURRENT OF");
+  // A row that fails a constraint, or a referenced key it strands, undoes the rows updated before it.
+  return withStatementRollback(env0, () => updateRows(env0, stmt));
+}
+
+function updateRows(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "update");
   const label = stmt.alias ?? table.name;
@@ -502,8 +472,14 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   // FROM items build an auxiliary relation each target row can join against
   const fromSource = stmt.from.length > 0 ? buildFrom(env, stmt.from) : null;
 
-  const targetCols = table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label }));
+  // xmin / xmax / ctid / tableoid join the scan only when the statement reads them
+  const system = mentionsSystemColumn([stmt.where, stmt.sets]);
+  const targetCols = [
+    ...table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label })),
+    ...(system ? systemColumns(label) : []),
+  ];
   const updatedRows: Datum[][] = [];
+  const returningRows: ReturningRow[] = [];
   const replacedRows: Datum[][] = [];
   let updateCount = 0;
 
@@ -511,6 +487,7 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   // other tuples while scanning. Keep their established full-scan evaluation order.
   const point =
     !fromSource &&
+    !system &&
     stmt.where &&
     table.triggers.length === 0 &&
     !table.columns.some((column) => column.generated || column.domain) &&
@@ -536,7 +513,8 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
       let found = false;
       for (const frow of fromSource.rel.rows) {
         const cols = [...targetCols, ...fromSource.rel.columns];
-        const scope = new RowScope(cols, [...oldRow, ...frow], env.outer, new Set([label, ...fromSource.rangeVars]));
+        const targetRow = system ? withSystemValues(table, oldRow, ri) : oldRow;
+        const scope = new RowScope(cols, [...targetRow, ...frow], env.outer, new Set([label, ...fromSource.rangeVars]));
         if (!stmt.where || evalPredicate(env, scope, stmt.where)) {
           matchScope = scope;
           found = true;
@@ -545,7 +523,12 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
       }
       if (!found) continue;
     } else {
-      const scope = new RowScope(targetCols, oldRow, env.outer, new Set([label]));
+      const scope = new RowScope(
+        targetCols,
+        system ? withSystemValues(table, oldRow, ri) : oldRow,
+        env.outer,
+        new Set([label]),
+      );
       if (stmt.where && !evalPredicate(env, scope, stmt.where)) continue;
       matchScope = scope;
     }
@@ -564,7 +547,7 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
       checkNotNull(env, table, finalRow);
       checkChecks(env, table, finalRow);
       checkUnique(env, table, finalRow, ri);
-      checkForeignKeys(env, table, finalRow);
+      checkForeignKeys(env, table, finalRow, true);
     } catch (err) {
       table.replaceRow(ri, oldRow);
       throw err;
@@ -573,6 +556,7 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
     handleReferencedUpdate(env, table, [oldRow], [finalRow]);
     updateCount++;
     updatedRows.push(finalRow);
+    if (stmt.returning) returningRows.push({ old: oldRow, new: finalRow, position: ri, xmax: 0 });
     replacedRows.push(oldRow);
     fireRowTriggers(env, table, "after", "update", oldRow, finalRow);
   }
@@ -580,7 +564,7 @@ export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   fireStatementTriggers(env, table, "after", "update", { oldRows: replacedRows, newRows: updatedRows });
   env.ctx.state.changes = updateCount;
   if (stmt.returning) {
-    const res = evalReturning(env, table, label, stmt.returning, updatedRows, "UPDATE");
+    const res = evalReturning(env, table, label, stmt.returning, stmt.returningAliases, returningRows, "UPDATE");
     return { ...res, rowCount: updateCount };
   }
   return commandResult("UPDATE", updateCount);
@@ -616,7 +600,11 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
 
   const rows = table.writeRows();
   const usingSource = stmt.using.length > 0 ? buildFrom(env, stmt.using) : null;
-  const targetCols = table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label }));
+  const system = mentionsSystemColumn(stmt.where);
+  const targetCols = [
+    ...table.columns.map((c) => ({ name: c.name, type: c.type.id, table: label })),
+    ...(system ? systemColumns(label) : []),
+  ];
 
   const toDelete: number[] = [];
   for (let ri = 0; ri < rows.length; ri++) {
@@ -625,17 +613,29 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
     if (usingSource) {
       matched = usingSource.rel.rows.some((urow) => {
         const cols = [...targetCols, ...usingSource.rel.columns];
-        const scope = new RowScope(cols, [...row, ...urow], env.outer, new Set([label, ...usingSource.rangeVars]));
+        const targetRow = system ? withSystemValues(table, row, ri) : row;
+        const scope = new RowScope(
+          cols,
+          [...targetRow, ...urow],
+          env.outer,
+          new Set([label, ...usingSource.rangeVars]),
+        );
         return !stmt.where || evalPredicate(env, scope, stmt.where);
       });
     } else {
-      const scope = new RowScope(targetCols, row, env.outer, new Set([label]));
+      const scope = new RowScope(
+        targetCols,
+        system ? withSystemValues(table, row, ri) : row,
+        env.outer,
+        new Set([label]),
+      );
       matched = !stmt.where || evalPredicate(env, scope, stmt.where);
     }
     if (matched) toDelete.push(ri);
   }
 
   const deletedRows: Datum[][] = [];
+  const deletedPositions: number[] = [];
   // delete from the end to keep indexes stable
   const skipped = new Set<number>();
   for (const ri of toDelete) {
@@ -650,6 +650,7 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
     table.recordDurableDelete(row);
     rows.splice(ri, 1);
     deletedRows.unshift(row);
+    deletedPositions.unshift(ri);
   }
   for (const row of deletedRows) {
     fireRowTriggers(env, table, "after", "delete", row, null);
@@ -659,7 +660,9 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   fireStatementTriggers(env, table, "after", "delete", { oldRows: deletedRows, newRows: [] });
   env.ctx.state.changes = deletedRows.length;
   if (stmt.returning) {
-    const res = evalReturning(env, table, label, stmt.returning, deletedRows, "DELETE");
+    const xmax = env.ctx.rowVersionXid();
+    const returningRows = deletedRows.map((row, k) => ({ old: row, new: null, position: deletedPositions[k]!, xmax }));
+    const res = evalReturning(env, table, label, stmt.returning, stmt.returningAliases, returningRows, "DELETE");
     return { ...res, rowCount: deletedRows.length };
   }
   return commandResult("DELETE", deletedRows.length);
@@ -693,7 +696,23 @@ function referencingRowIdxs(ref: ReturnType<typeof referencingConstraints>[numbe
   return out;
 }
 
+/** A referenced row removed or re-keyed under its referencing rows: RESTRICT is 23001, NO ACTION 23503. */
+function referencedViolation(table: TableData, child: TableData, constraint: string, action: string) {
+  return action === "restrict"
+    ? pgError(
+        "restrict_violation",
+        `update or delete on table "${table.name}" violates RESTRICT setting of foreign key constraint "${constraint}" on table "${child.name}"`,
+        "23001",
+      )
+    : pgError(
+        "constraint_foreign_key",
+        `update or delete on table "${table.name}" violates foreign key constraint "${constraint}" on table "${child.name}"`,
+        "23503",
+      );
+}
+
 export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datum[], depth: number): void {
+  if (replicaRole(env.ctx.state)) return;
   if (depth > MAX_FK_DEPTH) {
     throw pgError("program_limit_exceeded", "foreign key cascade depth exceeded", "54001");
   }
@@ -740,21 +759,23 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
           child.replaceRow(i, newRow);
           checkNotNull(env, child, newRow);
           checkChecks(env, child, newRow);
-          checkForeignKeys(env, child, newRow);
+          checkForeignKeys(env, child, newRow, true);
         }
         break;
       }
       default:
-        throw pgError(
-          "constraint_foreign_key",
-          `update or delete on table "${table.name}" violates foreign key constraint "${con.name}" on table "${ref.table.name}"`,
-          "23503",
-        );
+        // NO ACTION waits for COMMIT when the constraint is deferred; RESTRICT never does.
+        if (action === "no_action" && foreignKeyDeferred(env.ctx.state, ref.table.schema, con)) {
+          deferForeignKey(env.ctx.state, ref.table, con, "referenced", table.name);
+          break;
+        }
+        throw referencedViolation(table, ref.table, con.name, action);
     }
   }
 }
 
 export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: Datum[][], newRows: Datum[][]): void {
+  if (replicaRole(env.ctx.state)) return;
   for (const ref of referencingConstraints(env, table)) {
     const con = ref.constraint;
     for (let r = 0; r < oldRows.length; r++) {
@@ -800,16 +821,16 @@ export function handleReferencedUpdate(env: ExecEnv, table: TableData, oldRows: 
             }
             child.rowXmins.set(newRow, env.ctx.rowVersionXid());
             child.replaceRow(i, newRow);
-            checkForeignKeys(env, child, newRow);
+            checkForeignKeys(env, child, newRow, true);
           }
           break;
         }
         default:
-          throw pgError(
-            "constraint_foreign_key",
-            `update or delete on table "${table.name}" violates foreign key constraint "${con.name}" on table "${ref.table.name}"`,
-            "23503",
-          );
+          if (action === "no_action" && foreignKeyDeferred(env.ctx.state, ref.table.schema, con)) {
+            deferForeignKey(env.ctx.state, ref.table, con, "referenced", table.name);
+            break;
+          }
+          throw referencedViolation(table, ref.table, con.name, action);
       }
     }
   }

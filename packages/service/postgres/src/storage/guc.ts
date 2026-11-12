@@ -9,3 +9,12 @@ export function validateStorageSetting(name: string, value: string): void {
     throw pgError("invalid_parameter_value", `invalid value for parameter "${name}": "${value}"`, "22023");
   }
 }
+
+/**
+ * `session_replication_role = replica`: triggers (foreign keys' own included) fire only when
+ * enabled for replicas. The engine has no ALTER TABLE ... ENABLE REPLICA / ALWAYS TRIGGER, so every
+ * trigger is an origin trigger and none fires.
+ */
+export function replicaRole(state: { getSetting(name: string): string | undefined }): boolean {
+  return state.getSetting("session_replication_role") === "replica";
+}

@@ -77,6 +77,7 @@ import { assertNotExtensionMember, executeDropExtension } from "./extensions.ts"
 import { executeRenameEnum } from "./rename-type.ts";
 import { commandResult, type ExecEnv, type ExecResult, inferColumnName, RowScope } from "./relation.ts";
 import { evalScalar, executeSelectStmt } from "./select.ts";
+import { compilePlpgsql } from "./plpgsql.ts";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -448,6 +449,7 @@ function buildColumn(
           onDelete: refActionText(c.onDelete),
           onUpdate: refActionText(c.onUpdate),
           match: c.match === "full" ? "full" : "simple",
+          ...(c.deferrable ? { deferrable: true, initiallyDeferred: c.initiallyDeferred === true } : {}),
         });
         break;
       }
@@ -543,6 +545,7 @@ function buildTableConstraint(
         onDelete: refActionText(con.onDelete),
         onUpdate: refActionText(con.onUpdate),
         match: con.match === "full" ? "full" : "simple",
+        ...(con.deferrable ? { deferrable: true, initiallyDeferred: con.initiallyDeferred === true } : {}),
       };
     }
     case "exclude":
@@ -952,9 +955,29 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
     }
   }
 
+  // OUT / INOUT parameters make up the result when RETURNS is omitted (or RETURNS [SETOF] record)
+  const outArgs = stmt.args
+    .filter((a) => (a.mode === "out" || a.mode === "inout") && a.name !== null)
+    .map((a) => ({ name: a.name!, type: resolveTypeName(state, a.typeName).column.id }));
+  if (outArgs.length > 0 && !stmt.returnsTable && (returns === null || returns === "record")) {
+    if (outArgs.length === 1) returns = outArgs[0]!.type;
+    else {
+      returns = null;
+      returnsTable = outArgs;
+    }
+  }
+
   let body: import("../ast/nodes.ts").Statement[] | null = stmt.sqlBody;
   if (body === null && stmt.body !== null && lang === "sql") {
     body = parse(stmt.body);
+  }
+  // check_function_bodies: a plpgsql body's syntax (and any construct the interpreter lacks) fails here
+  if (
+    lang === "plpgsql" &&
+    stmt.body !== null &&
+    !/^(off|false|no|0)$/i.test(state.getSetting("check_function_bodies") ?? "on")
+  ) {
+    compilePlpgsql(stmt.body);
   }
 
   const existing = schema.functions.get(name) ?? [];
@@ -971,6 +994,7 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
     returns,
     returnsSet,
     returnsTable,
+    ...(outArgs.length > 0 ? { outArgs } : {}),
     language: lang,
     body,
     rawBody: stmt.body,
@@ -981,6 +1005,7 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
       ]),
     ),
     strict: stmt.strict,
+    ...(stmt.volatility && stmt.volatility !== "volatile" ? { volatility: stmt.volatility } : {}),
     oid: state.nextOid(),
   };
   if (sameSig !== -1) existing[sameSig] = fn;
