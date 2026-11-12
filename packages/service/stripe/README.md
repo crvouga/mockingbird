@@ -276,6 +276,19 @@ finalize; a customer credit balance is applied at finalize; `void` works only on
   `retrievePaymentIntent`, `retrieveSetupIntent`, `createPaymentMethod`, `handleCardAction`. It calls
   `POST /v1/{payment,setup}_intents/:id/confirm` with the publishable key and `client_secret` (the
   requests UI suites already wait for); 3-D Secure cards are authenticated in place.
+- Elements look and type like Stripe's. Card Elements take `style` (`base` / `complete` / `empty` /
+  `invalid`, with `::placeholder`, `:focus`, `:hover`, `iconColor`…), `classes`, `hideIcon` /
+  `showIcon` and `placeholder`, and put `StripeElement--focus|complete|empty|invalid` on the mount
+  container. The Payment Element (card number with brand icons, expiry, CVC, country, postal code)
+  follows the Appearance API — `theme` (`stripe`, `night`, `flat`, `none`), `variables`, `rules`
+  (`.Input`, `.Input--invalid`, `.Label`, `.Error`…), `labels: "floating"`, `inputs: "condensed"`
+  — plus `elements({ fonts })`, `fields.billingDetails` and `defaultValues`. It shows an error
+  under a field once you leave it; `elements.submit()` and `confirmPayment` show every error,
+  focus the first invalid field and resolve `{ error }` instead of confirming.
+- Every card form here — Elements, the hosted Checkout page, the portal — shares one field
+  script: numbers grouped per brand, `MM / YY` masking (`4` → `04 / `), brand-sized CVC, caret kept
+  in place while reformatting, focus moving on once a field is complete, Backspace in an empty
+  field returning to the previous one, and Stripe's validation messages before anything is posted.
 
 A publishable key may only confirm or read an intent whose `client_secret` it presents, and create
 payment methods; anything else is Stripe's 401.
@@ -429,7 +442,8 @@ plus `port`, `host`; resolves `{url, port, runtime, close}`), `serveTarget` (the
 ## Deliberately not modelled
 
 - **Stripe.js internals**: the stand-in covers the calls our UI makes; Payment Element wallets,
-  Link, `paymentRequest` (it reports no wallet) and Elements styling are not modelled. Native
+  Link, `paymentRequest` (it reports no wallet), and Payment Element methods other than card are
+  not modelled; Elements render in the page rather than in an iframe. Native
   PaymentSheet cannot be redirected (member-app native keeps its fake provider).
 - **Connect** (`Stripe-Account`, application fees, transfers), tax, shipping, Radar, mandates,
   meters, quotes, credit notes, payouts, and non-card payment methods (bank debits, wallets).

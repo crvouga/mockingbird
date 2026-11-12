@@ -31,6 +31,11 @@
       ],
       "outputs": ["dist/**"]
     },
+    "storybook:build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "!**/*.test.ts", "!README.md"],
+      "outputs": ["storybook-static/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build", "generate"],
       "inputs": ["$TURBO_DEFAULT$", "!README.md"]
@@ -124,6 +129,18 @@
         "packages/**/src/**/*.ts",
         "!packages/**/node_modules/**",
         "!packages/**/dist/**"
+      ]
+    },
+    "//#check:storybook": {
+      "inputs": [
+        "scripts/check-storybook.ts",
+        "packages/**/*.ts",
+        "packages/**/*.tsx",
+        "sites/docs/src/pages/**",
+        "sites/fleet/src/ui/**",
+        "sites/storybook/stories/**",
+        "!**/node_modules/**",
+        "!**/dist/**"
       ]
     },
     "//#check:agents": {

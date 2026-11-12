@@ -3,6 +3,7 @@ import node from "@astrojs/node"
 import { defineConfig } from "astro/config"
 import { catalog } from "./integrations/catalog/index.ts"
 import { deployment } from "./integrations/deployment.ts"
+import { storybook } from "./integrations/storybook.ts"
 import { PAGE_CSP_DIRECTIVES } from "./server/headers.ts"
 
 const docsRoot = fileURLToPath(new URL(".", import.meta.url))
@@ -52,6 +53,7 @@ export default defineConfig({
       },
     },
     catalog({ repoRoot, docsRoot }),
+    storybook(repoRoot),
   ],
   ...(pinDocsPort ? { server: { port: reservedDocsPort, host: "127.0.0.1" } } : {}),
   vite: {

@@ -137,6 +137,7 @@
     "@crvouga/mockingbird-service-wholescripts": "workspace:*",
     "@crvouga/mockingbird-service-whoop": "workspace:*",
     "@crvouga/mockingbird-service-workos": "workspace:*",
+    "@crvouga/mockingbird-storybook": "workspace:*",
     "@playwright/test": "1.65.0",
     "@types/node": "22.20.1",
     "typescript": "5.9.3"

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { CARD_CORE } from "./src/card-input.js"
 import { stripeJs } from "./src/stripe-js.js"
 
 class FakeElement {
@@ -79,7 +80,8 @@ const loadStripeJs = () => {
       return host
     },
     Stripe: window.Stripe as (key: string) => {
-      elements: () => {
+      elements: (options?: Record<string, unknown>) => {
+        submit: () => Promise<{ error?: { code: string } }>
         create: (
           type: string,
           options?: Record<string, unknown>,
@@ -235,7 +237,7 @@ describe("Stripe.js card Elements", () => {
     cvc.on("change", (event) => cvcChanges.push(event))
 
     enter(inputOf(expiryHost, "exp"), "1299")
-    expect(inputOf(expiryHost, "exp").value).toBe("12/99")
+    expect(inputOf(expiryHost, "exp").value).toBe("12 / 99")
     expect(expiryChanges.at(-1)).toMatchObject({ complete: true, empty: false })
 
     enter(inputOf(numberHost, "card"), "4242424242424242")
@@ -299,5 +301,84 @@ describe("Stripe.js card Elements", () => {
     number.clear()
 
     expect(events).toEqual(["focus", "blur", "change:false", "change:false", "change:true"])
+  })
+})
+
+type Core = {
+  format: (name: string, value: string, ctx?: Record<string, unknown>) => string
+  validate: (name: string, value: string, ctx?: Record<string, unknown>) => { code: string } | null
+}
+const core = new Function(`${CARD_CORE}; return MBCard;`)() as Core
+
+describe("shared card-field core", () => {
+  test("masks numbers per brand, expiry as MM / YY, and CVC per brand", () => {
+    expect(core.format("card", "4242424242424242424242424242")).toBe("4242 4242 4242 4242")
+    expect(core.format("card", "378282246310005")).toBe("3782 822463 10005")
+    expect(core.format("exp", "4")).toBe("04 / ")
+    expect(core.format("exp", "13")).toBe("01 / 3")
+    expect(core.format("exp", "12", { deleting: true })).toBe("12")
+    expect(core.format("exp", "12/345")).toBe("12 / 34")
+    expect(core.format("cvc", "12345", { brand: "amex" })).toBe("1234")
+    expect(core.format("cvc", "12345", { brand: "visa" })).toBe("123")
+  })
+
+  test("validates with Stripe's codes", () => {
+    expect(core.validate("card", "4242 4242 4242 4242")).toBeNull()
+    expect(core.validate("card", "4242 4242")?.code).toBe("incomplete_number")
+    expect(core.validate("card", "4242 4242 4242 4241")?.code).toBe("invalid_number")
+    expect(core.validate("exp", "13 / 30")?.code).toBe("invalid_expiry_month")
+    expect(core.validate("zip", "941", { country: "US" })?.code).toBe("incomplete_zip")
+    expect(core.validate("zip", "SW1A 1AA", { country: "GB" })).toBeNull()
+  })
+})
+
+describe("Stripe.js Payment Element", () => {
+  test("renders labelled card and billing fields themed by the Appearance API", () => {
+    const browser = loadStripeJs()
+    const host = browser.host("#payment")
+    browser
+      .Stripe("pk_test_mockingbird")
+      .elements({
+        appearance: {
+          theme: "night",
+          variables: { colorPrimary: "#ff0066" },
+          rules: { ".Input:focus": { borderColor: "#ff0066" } },
+        },
+      })
+      .create("payment")
+      .mount("#payment")
+
+    expect(host.querySelectorAll("input").map((input) => input.name)).toEqual([
+      "card",
+      "exp",
+      "cvc",
+      "zip",
+    ])
+    expect(host.querySelector('[name="country"]')?.value).toBe("US")
+    const css = host.querySelectorAll("style")[0]?.textContent ?? ""
+    expect(css).toContain("--colorPrimary:#ff0066")
+    expect(css).toContain("--colorBackground:#30313d")
+    expect(css).toMatch(/\.mb-Input:focus\{border-color:#ff0066\}/)
+  })
+
+  test("elements.submit() reports the first invalid field and reveals every error", async () => {
+    const browser = loadStripeJs()
+    const host = browser.host("#payment")
+    const elements = browser.Stripe("pk_test_mockingbird").elements()
+    elements.create("payment").mount("#payment")
+
+    expect(await elements.submit()).toMatchObject({ error: { code: "incomplete_number" } })
+    const shown = host
+      .querySelectorAll("div")
+      .filter((node) => (node.attributes.get("class") ?? "").split(" ").includes("mb-Error"))
+      .map((node) => node.textContent)
+      .filter(Boolean)
+    expect(shown).toContain("Your card number is incomplete.")
+
+    enter(inputOf(host, "card"), "4242424242424242")
+    enter(inputOf(host, "exp"), "1234")
+    enter(inputOf(host, "cvc"), "123")
+    enter(inputOf(host, "zip"), "94107")
+    expect(await elements.submit()).toEqual({})
   })
 })

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": [
+        "^build",
+        "@crvouga/mockingbird-fleet-cloud#storybook:build",
+        "@crvouga/mockingbird-notifications#storybook:build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/packages/**/src/**",
+        "$TURBO_ROOT$/packages/**/package.json",
+        "$TURBO_ROOT$/docs/*.md",
+        "$TURBO_ROOT$/sites/docs/src/pages/**",
+        "!$TURBO_ROOT$/**/node_modules/**",
+        "!$TURBO_ROOT$/**/dist/**"
+      ],
+      "outputs": ["storybook-static/**"]
+    },
+    "test": {
+      "dependsOn": ["build"],
+      "inputs": ["$TURBO_DEFAULT$", "storybook-static/**"],
+      "outputs": []
+    }
+  }
+}
