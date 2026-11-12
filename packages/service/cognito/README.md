@@ -113,7 +113,7 @@ Operations outside the documented subset, production quotas, real email/SMS deli
 
 - `CognitoAPI`, `CognitoAPIOptions`: AWS JSON handler and options.
 - `createRuntime`, `CognitoRuntime`, `CognitoRuntimeOptions`: full Mockingbird service runtime.
-- `COGNITO_NAMESPACE`, `COGNITO_PRESETS`, `accessKeyCredential`: service constants and controls.
+- `COGNITO_NAMESPACE`, `COGNITO_PRESETS`, `COGNITO_DEFAULT_SENDER`, `accessKeyCredential`: service constants and controls (`COGNITO_DEFAULT_SENDER` is the `from` address on delivered email codes).
 - `CognitoAttribute`, `CognitoSeedUser`, `CognitoUser`, `CognitoFixtures`: state and fixture types.
 - `document`, `operationIds`, `supportedOperationIds`: generated OpenAPI metadata.
 - `createServer`, `CognitoServerOptions`, `DEFAULT_PORT`, `serveTarget` from `./server`: Node HTTP adapter and CLI integration.
