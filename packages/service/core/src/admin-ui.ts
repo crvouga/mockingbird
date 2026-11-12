@@ -1,5 +1,5 @@
 import { requestBaseUrl } from "@crvouga/mockingbird-core"
-import { adminClientSource } from "./admin-client.js"
+import { type AdminClient, loadAdminClient } from "./admin-client.js"
 import type { AdminRoutes } from "./control.js"
 import { ADMIN_BRANDS_PATH, ADMIN_KEY_HEADER, ADMIN_PREFIX } from "./control.js"
 import type { AdminExtension, AdminUi } from "./surface.js"
@@ -59,9 +59,14 @@ export const adminBrandCatalog = (
  * Bespoke panels arrive later from `GET /ui/manifest`, which stays behind the admin key.
  * The header chip is filled from `GET <adminPrefix>/ui/brands.json` on the same emulator.
  */
-export const renderAdminDocument = (service: string, adminPrefix = ADMIN_PREFIX): string => {
+export const renderAdminDocument = async (
+  service: string,
+  adminPrefix = ADMIN_PREFIX,
+): Promise<string> => adminDocument(await loadAdminClient(), service, adminPrefix)
+
+const adminDocument = (client: AdminClient, service: string, adminPrefix: string): string => {
   const name = escapeHtml(service)
-  const script = adminClientSource({
+  const script = client.adminClientSource({
     standardRoutes: STANDARD_ADMIN_ROUTES,
     adminPrefix,
     adminKeyHeader: ADMIN_KEY_HEADER,
@@ -127,14 +132,26 @@ export const adminUiRoutes = (
   ui: AdminUi | undefined,
   adminPrefix = ADMIN_PREFIX,
 ): AdminRoutes => {
-  const document = (request: Request) => {
+  // The client bundle is loaded here, on the first page request, not when the runtime is built;
+  // `render` and `defaultHtml()` stay synchronous for bespoke documents.
+  const page = async ({ request }: { request: Request }): Promise<Response> => {
+    let client: AdminClient
+    try {
+      client = await loadAdminClient()
+    } catch (error) {
+      // An app bundle may leave the client out (`--external:./admin-ui.js`) and never serve it.
+      return new Response(
+        `The admin page is not available: its browser client (admin-ui.js) could not be loaded. ${error instanceof Error ? error.message : String(error)}`,
+        { status: 503, headers: { "content-type": "text/plain; charset=utf-8" } },
+      )
+    }
     const mountPrefix = new URL(requestBaseUrl(request)).pathname.replace(/\/$/, "")
-    const shell = () => renderAdminDocument(service, `${mountPrefix}${adminPrefix}`)
-    return ui?.render ? ui.render({ service, defaultHtml: shell }) : shell()
+    const shell = () => adminDocument(client, service, `${mountPrefix}${adminPrefix}`)
+    return htmlResponse(ui?.render ? ui.render({ service, defaultHtml: shell }) : shell())
   }
   return {
-    "GET /ui": ({ request }) => htmlResponse(document(request)),
-    "GET /ui/": ({ request }) => htmlResponse(document(request)),
+    "GET /ui": page,
+    "GET /ui/": page,
     [`GET ${ADMIN_BRANDS_PATH}`]: () => json(adminBrandCatalog(service)),
     "GET /ui/manifest": () =>
       json({

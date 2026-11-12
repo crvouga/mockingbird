@@ -1,29 +1,11 @@
-import { ADMIN_BROWSER_BUNDLE } from "./bundle.js"
 import { type ComposableAdminApi, composeAdminRoutes } from "./compose.js"
-import type { AdminConfig, MembersConfig } from "./model.js"
+import { adminClientSource } from "./document.js"
+import type { AdminConfig } from "./model.js"
 
 export type { ComposableAdminApi, ComposedAdminRoutes } from "./compose.js"
 export { composeAdminRoutes } from "./compose.js"
+export { adminClientScript, adminClientSource, membersClientSource } from "./document.js"
 export type { AdminApiConfig, AdminConfig, MembersConfig } from "./model.js"
-
-/**
- * The prebuilt browser client as a script file of its own: it defines the `MockingbirdAdmin`
- * global (`mount`, `mountMembers`) and mounts nothing. Serve it as `text/javascript`. The bundle
- * is stored escaped for inlining in a `<script>` element; this is the unescaped source.
- */
-export const adminClientScript = (): string =>
-  ADMIN_BROWSER_BUNDLE.replace(/<\\\/script/gi, "</script")
-
-/** Embed the prebuilt browser client without a CDN or framework runtime dependency. */
-export const adminClientSource = (config: AdminConfig): string => {
-  const payload = JSON.stringify(config).replace(/</g, "\\u003c")
-  return `<script>\n${ADMIN_BROWSER_BUNDLE}\nMockingbirdAdmin.mount(document.getElementById("admin-root"), ${payload});\n</script>`
-}
-
-export const membersClientSource = (config: MembersConfig): string => {
-  const payload = JSON.stringify(config).replace(/</g, "\\u003c")
-  return `<script>\n${ADMIN_BROWSER_BUNDLE}\nMockingbirdAdmin.mountMembers(document.getElementById("admin-root"), ${payload});\n</script>`
-}
 
 const escapeHtml = (value: string): string =>
   value.replace(

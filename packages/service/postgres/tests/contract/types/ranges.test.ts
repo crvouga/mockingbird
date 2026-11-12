@@ -114,10 +114,11 @@ queryErrorParity("unknown element against a range", [], "SELECT int4range(1, 5) 
 queryErrorParity("range of another element type", [], "SELECT int4range(1, 5) @> 3::int8", "undefined_function");
 queryErrorParity("ranges of different types", [], "SELECT int4range(1, 5) = int8range(1, 5)", "undefined_function");
 queryErrorParity("range constructor argument types", [], "SELECT int4range(1::int8, 2)", "undefined_function");
-test("multiranges stay unsupported (0A000)", () => {
+// #692: multiranges are modelled now (tests/contract/issue-692/multiranges.test.ts)
+test("a multirange column and range_agg", () => {
   const db = new Database();
-  expect(() => db.exec("CREATE TABLE m (r int4multirange)")).toThrow(/type "int4multirange" is not supported/);
-  expect(() => db.query("SELECT range_agg(int4range(1, 2))")).toThrow();
+  db.exec("CREATE TABLE m (r int4multirange)");
+  expect(db.query("SELECT range_agg(int4range(1, 2))::text AS r")).toEqual([{ r: "{[1,2)}" }]);
 });
 
 test("range values survive an encoded snapshot", () => {

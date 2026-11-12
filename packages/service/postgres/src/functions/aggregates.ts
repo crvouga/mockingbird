@@ -26,6 +26,7 @@ import {
   wrapJsonb,
 } from "../types/value.ts";
 import { datumToJsonb } from "./json-fns.ts";
+import { rangeAgg, rangeIntersectAgg } from "./range-aggs.ts";
 import { numericAsNumber } from "./util.ts";
 
 /** Incremental accumulator; the executor feeds rows and reads the result. */
@@ -567,6 +568,8 @@ const FACTORIES = new Map<string, AggregateFactory>([
   ["regr_sxx", () => new CorrAcc("regr_sxx")],
   ["regr_syy", () => new CorrAcc("regr_syy")],
   ["regr_sxy", () => new CorrAcc("regr_sxy")],
+  ["range_agg", rangeAgg],
+  ["range_intersect_agg", rangeIntersectAgg],
 ]);
 
 export function getAggregateFactories(): Map<string, AggregateFactory> {

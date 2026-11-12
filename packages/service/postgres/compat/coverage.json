@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-10-11T00:19:02.759Z",
+  "generatedAt": "2026-11-12T18:25:17.487Z",
   "referenceServerVersion": "18.3",
   "counts": {
     "total": 183,
-    "notApplicable": 56,
-    "sqlBehavior": 127,
-    "verified": 43,
-    "partiallyVerified": 27,
-    "unsupported": 57,
+    "notApplicable": 39,
+    "sqlBehavior": 144,
+    "verified": 63,
+    "partiallyVerified": 31,
+    "unsupported": 50,
     "unknown": 0
   },
   "coverage": {
@@ -51,9 +51,11 @@
       "notes": "constraint add/drop supported"
     },
     "sql-altereventtrigger": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-alterextension": {
       "status": "NOT_APPLICABLE",
@@ -78,9 +80,11 @@
       "notes": "parsed no-op"
     },
     "sql-altergroup": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "ADD / DROP USER"
     },
     "sql-alterindex": {
       "status": "VERIFIED",
@@ -122,9 +126,11 @@
       "notes": "not implemented; statements fail loud via unsupported()"
     },
     "sql-alterpolicy": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-alterprocedure": {
       "status": "UNSUPPORTED",
@@ -137,9 +143,11 @@
       "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
     },
     "sql-alterrole": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-alterroutine": {
       "status": "UNSUPPORTED",
@@ -227,14 +235,17 @@
     "sql-altertype": {
       "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/types/"
+        "tests/contract/types/",
+        "tests/contract/issue-692/"
       ],
-      "notes": "ADD VALUE / RENAME supported for enums"
+      "notes": "ADD VALUE / RENAME for enums; ADD / DROP / ALTER / RENAME ATTRIBUTE and RENAME TO for composites"
     },
     "sql-alteruser": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "ALTER ROLE"
     },
     "sql-alterusermapping": {
       "status": "NOT_APPLICABLE",
@@ -263,9 +274,12 @@
       "notes": ""
     },
     "sql-call": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "procedures are unsupported; CALL fails loud"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/functions/",
+        "tests/wire/"
+      ],
+      "notes": "IN / INOUT / OUT parameters, defaults and named arguments; COMMIT / ROLLBACK inside non-atomic procedures"
     },
     "sql-checkpoint": {
       "status": "PARTIALLY_VERIFIED",
@@ -275,9 +289,11 @@
       "notes": "parsed no-op"
     },
     "sql-close": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "protocol cursors fail loud"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-cluster": {
       "status": "PARTIALLY_VERIFIED",
@@ -352,9 +368,11 @@
       "notes": ""
     },
     "sql-createeventtrigger": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "ddl_command_start / _end, sql_drop, table_rewrite; login triggers never fire"
     },
     "sql-createextension": {
       "status": "NOT_APPLICABLE",
@@ -376,12 +394,14 @@
       "evidence": [
         "tests/contract/functions/"
       ],
-      "notes": "LANGUAGE sql plus a PL/pgSQL interpreter shared by functions, trigger functions and DO blocks (DECLARE, record/%ROWTYPE, SELECT INTO, loops, RETURN NEXT/QUERY, EXECUTE INTO/USING, GET DIAGNOSTICS, FOUND, OUT params); no cursors/transaction control/NOTICE/procedures"
+      "notes": "LANGUAGE sql (AS, RETURN, BEGIN ATOMIC) plus a PL/pgSQL interpreter shared by functions, procedures, trigger functions and DO blocks (DECLARE, ALIAS FOR, record/%ROWTYPE, SELECT INTO, loops, FOREACH SLICE, array element assignment, cursors, RETURN NEXT/QUERY, EXECUTE INTO/USING, GET DIAGNOSTICS, FOUND, OUT params, COMMIT/ROLLBACK in procedures); no NOTICE delivery, no refcursor SQL type"
     },
     "sql-creategroup": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "CREATE ROLE"
     },
     "sql-createindex": {
       "status": "VERIFIED",
@@ -418,14 +438,19 @@
       "notes": "not implemented; statements fail loud via unsupported()"
     },
     "sql-createpolicy": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/",
+        "tests/wire/"
+      ],
+      "notes": ""
     },
     "sql-createprocedure": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "procedures fail loud"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/functions/"
+      ],
+      "notes": "LANGUAGE plpgsql and LANGUAGE sql (AS or BEGIN ATOMIC); VARIADIC parameters not modelled"
     },
     "sql-createpublication": {
       "status": "NOT_APPLICABLE",
@@ -433,9 +458,11 @@
       "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
     },
     "sql-createrole": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-createrule": {
       "status": "UNSUPPORTED",
@@ -529,14 +556,17 @@
       "status": "PARTIALLY_VERIFIED",
       "evidence": [
         "tests/contract/types/",
-        "tests/contract/catalog/"
+        "tests/contract/catalog/",
+        "tests/contract/issue-692/"
       ],
-      "notes": "enum types supported; composite/range/base types fail loud"
+      "notes": "enum and composite types; range and base types fail loud"
     },
     "sql-createuser": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "CREATE ROLE ... LOGIN"
     },
     "sql-createusermapping": {
       "status": "NOT_APPLICABLE",
@@ -558,9 +588,12 @@
       "notes": ""
     },
     "sql-declare": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "protocol cursors fail loud"
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/",
+        "tests/wire/"
+      ],
+      "notes": "rows computed at DECLARE; BINARY is recorded but rows are sent as text; WHERE CURRENT OF fails loud"
     },
     "sql-delete": {
       "status": "VERIFIED",
@@ -621,9 +654,11 @@
       "notes": ""
     },
     "sql-dropeventtrigger": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-dropextension": {
       "status": "NOT_APPLICABLE",
@@ -648,9 +683,11 @@
       "notes": ""
     },
     "sql-dropgroup": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "DROP ROLE"
     },
     "sql-dropindex": {
       "status": "VERIFIED",
@@ -692,14 +729,18 @@
       "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
     },
     "sql-droppolicy": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-dropprocedure": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "procedures fail loud"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/functions/"
+      ],
+      "notes": "also DROP ROUTINE"
     },
     "sql-droppublication": {
       "status": "NOT_APPLICABLE",
@@ -707,9 +748,11 @@
       "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
     },
     "sql-droprole": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-droproutine": {
       "status": "UNSUPPORTED",
@@ -803,9 +846,11 @@
       "notes": ""
     },
     "sql-dropuser": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "DROP ROLE"
     },
     "sql-dropusermapping": {
       "status": "NOT_APPLICABLE",
@@ -841,16 +886,19 @@
       "notes": "stub plan shapes; not plan-identical"
     },
     "sql-fetch": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "protocol cursors fail loud"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/",
+        "tests/wire/"
+      ],
+      "notes": ""
     },
     "sql-grant": {
       "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/misc/"
+        "tests/contract/issue-692/"
       ],
-      "notes": "parsed no-op (no roles)"
+      "notes": "role membership and object privileges are recorded (relacl, has_*_privilege, information_schema); object privileges are not enforced"
     },
     "sql-importforeignschema": {
       "status": "NOT_APPLICABLE",
@@ -886,14 +934,17 @@
     "sql-merge": {
       "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/merge/"
+        "tests/contract/merge/",
+        "tests/contract/issue-692/"
       ],
-      "notes": "WHEN [NOT] MATCHED [BY SOURCE | BY TARGET] with conditions, UPDATE / DELETE / INSERT / DO NOTHING, RETURNING with merge_action() and old / new, triggers and constraints; MERGE inside a WITH query fails loud (0A000)"
+      "notes": "also inside WITH; MERGE into a partitioned table or one under row-level security fails loud"
     },
     "sql-move": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "protocol cursors fail loud"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": ""
     },
     "sql-notify": {
       "status": "UNSUPPORTED",
@@ -948,9 +999,9 @@
     "sql-revoke": {
       "status": "PARTIALLY_VERIFIED",
       "evidence": [
-        "tests/contract/misc/"
+        "tests/contract/issue-692/"
       ],
-      "notes": "parsed no-op (no roles)"
+      "notes": "role membership and object privileges are recorded; object privileges are not enforced"
     },
     "sql-rollback": {
       "status": "VERIFIED",
@@ -1015,14 +1066,19 @@
       "notes": "Constraint triggers and DEFERRABLE foreign keys honour SET CONSTRAINTS and are checked at COMMIT; DEFERRABLE UNIQUE / PRIMARY KEY are still checked per row"
     },
     "sql-set-role": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/",
+        "tests/wire/"
+      ],
+      "notes": ""
     },
     "sql-set-session-authorization": {
-      "status": "NOT_APPLICABLE",
-      "evidence": [],
-      "notes": "roles/replication/storage/server-admin surface; out of scope for an in-memory single-session engine"
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/issue-692/"
+      ],
+      "notes": "engine-only tests: PGlite cannot RESET SESSION AUTHORIZATION"
     },
     "sql-set-transaction": {
       "status": "PARTIALLY_VERIFIED",

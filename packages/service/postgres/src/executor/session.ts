@@ -30,7 +30,12 @@ import { castTo } from "../types/cast.ts";
 import { resolveTypeName } from "../types/resolve.ts";
 import { type Datum, datumText, tv, UNKNOWN } from "../types/value.ts";
 import { executeInsert } from "./dml.ts";
+import { sessionUserName } from "../storage/roles.ts";
 import { commandResult, type ExecEnv, type ExecResult } from "./relation.ts";
+import { executeSetRole } from "./roles.ts";
+import { rowSecurityActive } from "./row-security.ts";
+import { isPartitioned } from "./partition.ts";
+import { plainTableScan, scanTableRows } from "./scan.ts";
 import { evalScalar, executeSelectStmt, runStatement } from "./select.ts";
 
 // ---------------------------------------------------------------------------
@@ -196,6 +201,19 @@ export function applyTransactionModes(state: DatabaseState, modes: readonly stri
 
 registerConfigurationSetter(applySetting);
 
+/** `role` and `session_authorization`: settings whose values are role names, checked by the roles module. */
+const ROLE_SETTINGS: ReadonlySet<string> = new Set(["role", "session_authorization"]);
+
+function setRoleSetting(state: DatabaseState, name: string, value: string | null, local: boolean): void {
+  if (local) {
+    if (state.inTransaction) state.localSettings.set(name, value ?? (name === "role" ? "none" : "default"));
+    return;
+  }
+  state.localSettings.delete(name);
+  if (value === null) state.settings.delete(name);
+  else state.settings.set(name, value);
+}
+
 export function executeSet(env: ExecEnv, stmt: SetStmt): ExecResult {
   const state = env.ctx.state;
   if (stmt.transactionModes) {
@@ -203,6 +221,9 @@ export function executeSet(env: ExecEnv, stmt: SetStmt): ExecResult {
     if (stmt.name === "transaction" && !txManagerFor(state).inTransaction) return commandResult("SET", 0);
     applyTransactionModes(state, stmt.transactionModes, stmt.name !== "transaction");
     return commandResult("SET", 0);
+  }
+  if (ROLE_SETTINGS.has(stmt.name)) {
+    return executeSetRole(env, stmt, (name, value) => setRoleSetting(state, name, value, stmt.local));
   }
   applySetting(state, stmt.name, stmt.value, stmt.local);
   return commandResult("SET", 0);
@@ -228,7 +249,11 @@ export function executeShow(env: ExecEnv, stmt: ShowStmt): ExecResult {
       rowCount: rows.length,
     };
   }
-  const value = state.getSetting(name);
+  const value = ROLE_SETTINGS.has(name)
+    ? name === "role"
+      ? (state.getSetting("role") ?? "none")
+      : sessionUserName(state)
+    : state.getSetting(name);
   if (value === undefined) {
     throw pgError("undefined_object", `unrecognized configuration parameter "${stmt.name}"`, "42704");
   }
@@ -243,8 +268,18 @@ export function executeShow(env: ExecEnv, stmt: ShowStmt): ExecResult {
 export function executeReset(env: ExecEnv, stmt: ResetStmt): ExecResult {
   const state = env.ctx.state;
   const name = canonicalGucName(stmt.name);
+  if (ROLE_SETTINGS.has(name)) {
+    return executeSetRole(env, { type: "set", name, value: null, local: false }, (key, value) =>
+      setRoleSetting(state, key, value, false),
+    );
+  }
   if (name === "all") {
-    state.settings = new Map([...getDefaultSettings(), ...(state.settingDefaults ?? [])]);
+    // RESET ALL leaves ROLE and SESSION AUTHORIZATION alone (GUC_NO_RESET_ALL)
+    const kept = [...ROLE_SETTINGS].flatMap((key) => {
+      const value = state.settings.get(key);
+      return value === undefined ? [] : [[key, value] as [string, string]];
+    });
+    state.settings = new Map([...getDefaultSettings(), ...(state.settingDefaults ?? []), ...kept]);
     // RESET ALL leaves the transaction's own characteristics alone
     for (const key of [...state.localSettings.keys()]) {
       if (!TRANSACTION_GUCS.has(key)) state.localSettings.delete(key);
@@ -353,7 +388,18 @@ export function executeCopy(env: ExecEnv, stmt: CopyStmt): ExecResult {
           })
         : table.columns.map((_, i) => i);
       columns = idxs.map((i) => ({ name: table.columns[i]!.name, type: table.columns[i]!.type.id }));
-      rows = Array.from({ length: table.rowCount() }, (_, i) => idxs.map((j) => table.rowAt(i)[j] ?? null));
+      if (isPartitioned(env.ctx.state, table)) {
+        throw pgError("wrong_object_type", `cannot copy from partitioned table "${table.name}"`, "42809");
+      }
+      if (plainTableScan(env, table)) {
+        rows = Array.from({ length: table.rowCount() }, (_, i) => idxs.map((j) => table.rowAt(i)[j] ?? null));
+      } else {
+        // a partitioned table's rows live in its partitions; row security narrows what COPY sees
+        const scanned = scanTableRows(env, table, table.name, undefined, () =>
+          Array.from({ length: table.rowCount() }, (_, i) => table.rowAt(i)),
+        );
+        rows = scanned.map((row) => idxs.map((j) => row[j] ?? null));
+      }
     }
     const delim = format === "csv" ? "," : "\t";
     const nullStr = String(stmt.options.null ?? (format === "csv" ? "" : "\\N"));
@@ -488,6 +534,10 @@ export function executeCopyFromData(env: ExecEnv, stmt: CopyStmt, data: string):
     throw pgError("syntax", "COPY FROM requires a table", "42601");
   }
   beforeStatement(env.ctx.state, txManagerFor(env.ctx.state), stmt);
+  const target = env.ctx.state.findTable(stmt.table);
+  if (target && rowSecurityActive(env.ctx.state, target)) {
+    throw pgError("feature_not_supported", "COPY FROM not supported with row-level security", "0A000");
+  }
   const delim = String(stmt.options.delimiter ?? (format === "csv" ? "," : "\t"));
   const nullStr = String(stmt.options.null ?? (format === "csv" ? "" : "\\N"));
   const quote = String(stmt.options.quote ?? '"');

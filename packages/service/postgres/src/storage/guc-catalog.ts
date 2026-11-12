@@ -329,6 +329,9 @@ export function allSettings(state: DatabaseState): Array<{ key: string; name: st
   for (const def of allGucDefs()) keys.add(def.name.toLowerCase());
   for (const key of state.settings.keys()) keys.add(key);
   for (const key of state.localSettings.keys()) keys.add(key);
+  // ROLE and SESSION AUTHORIZATION are GUC_NO_SHOW_ALL
+  keys.delete("role");
+  keys.delete("session_authorization");
   return [...keys]
     .map((key) => ({ key, name: gucDef(key)?.name ?? key, value: state.getSetting(key) ?? "" }))
     .sort((a, b) => byGucName(a.name, b.name));

@@ -1,4 +1,4 @@
-import type { Expr, SelectStmt, Statement, TypeName } from "../ast/nodes.ts";
+import type { Expr, FuncCall, SelectStmt, Statement, SubscriptExpr, TypeName } from "../ast/nodes.ts";
 import { isPostgresError, pgError, unsupported } from "../errors/error.ts";
 import { tokenize } from "../lexer/tokenize.ts";
 import { parse } from "../parser/index.ts";
@@ -7,7 +7,27 @@ import { castTo } from "../types/cast.ts";
 import { datumEquals } from "../types/compare.ts";
 import { resolveTypeName } from "../types/resolve.ts";
 import type { Datum, TypedValue, TypeId } from "../types/value.ts";
-import { isPgArray, isPgRecord, tv } from "../types/value.ts";
+import {
+  arrayElemType,
+  arrayTypeOf,
+  isArrayType,
+  isPgArray,
+  isPgRecord,
+  makeArray,
+  typeDisplayName,
+  tv,
+} from "../types/value.ts";
+import { type AssignSubscript, assignArraySubscripts } from "../types/array-assign.ts";
+import {
+  atomicFunctionContext,
+  bindCall,
+  currentTxFrame,
+  invokeProcedure,
+  runRoutine,
+  transactionControl,
+  writableTarget,
+} from "./call.ts";
+import { addPortal, findPortal, removePortal, unnamedPortalName } from "./portals.ts";
 import { commandResult, type ExecEnv, type ExecResult, type Relation, RowScope } from "./relation.ts";
 import { evalPredicate, evalScalar, runStatement } from "./select.ts";
 
@@ -175,15 +195,11 @@ const SQL_STATEMENT_KEYWORDS = new Set([
   "security",
 ]);
 
-/** Statements PL/pgSQL has that this interpreter does not model. */
-const UNSUPPORTED_STATEMENTS: Record<string, string> = {
-  open: "plpgsql cursors (OPEN)",
-  fetch: "plpgsql cursors (FETCH)",
-  move: "plpgsql cursors (MOVE)",
-  close: "plpgsql cursors (CLOSE)",
-  commit: "plpgsql transaction control (COMMIT)",
-  rollback: "plpgsql transaction control (ROLLBACK)",
-};
+/** Cursor statements and transaction control, which PL/pgSQL handles itself. */
+const PL_STATEMENTS = new Set(["open", "fetch", "move", "close", "commit", "rollback"]);
+
+/** `FETCH` / `MOVE` direction keywords. */
+const DIRECTIONS = new Set(["next", "prior", "first", "last", "absolute", "relative", "forward", "backward", "all"]);
 
 const RAISE_LEVELS = new Set(["debug", "log", "info", "notice", "warning", "exception"]);
 
@@ -196,6 +212,15 @@ interface Into {
 }
 
 type Handler = { conditions: string[]; body: PlStmt[] };
+
+/** Where a FETCH / MOVE goes: `count` null means ALL (FORWARD ALL / BACKWARD ALL / ALL). */
+export type FetchDirection =
+  | { kind: "next" | "prior" | "first" | "last" }
+  | { kind: "absolute" | "relative"; count: Expr }
+  | { kind: "forward" | "backward"; count: Expr | null };
+
+/** Arguments of `OPEN bound(args)` / `FOR r IN bound(args)`: positional, or `name := expr`. */
+type CursorArgs = Array<{ name: string | null; expr: Expr }>;
 
 export type PlStmt =
   | { kind: "assign"; target: Target; expr: Expr }
@@ -247,14 +272,37 @@ export type PlStmt =
       using: Expr[];
       body: PlStmt[];
     }
-  | { kind: "foreach"; label: string | null; targets: Target[]; array: Expr; body: PlStmt[] }
-  | { kind: "exit"; isContinue: boolean; label: string | null; cond: Expr | null };
+  | { kind: "foreach"; label: string | null; targets: Target[]; slice: number; array: Expr; body: PlStmt[] }
+  | { kind: "exit"; isContinue: boolean; label: string | null; cond: Expr | null }
+  | { kind: "assign_subscript"; target: Target; subscripts: SubscriptExpr["indexes"]; expr: Expr }
+  | { kind: "call"; call: FuncCall }
+  | { kind: "transaction"; action: "commit" | "rollback" }
+  | {
+      kind: "open";
+      cursor: string;
+      /** unbound `OPEN c [[NO] SCROLL] FOR ...`: the query, or EXECUTE's command */
+      query: Statement | null;
+      dynamic: Expr | null;
+      using: Expr[];
+      scroll: boolean | null;
+      /** bound `OPEN c(args)` */
+      args: CursorArgs | null;
+    }
+  | { kind: "fetch"; move: boolean; direction: FetchDirection; cursor: string; into: Target[] | null }
+  | { kind: "close"; cursor: string }
+  | { kind: "for_cursor"; label: string | null; variable: string; cursor: string; args: CursorArgs; body: PlStmt[] };
 
 export type PlDeclType =
   | { kind: "type"; typeName: TypeName }
   | { kind: "record" }
   | { kind: "rowtype"; table: string[] }
-  | { kind: "copytype"; ref: string[] };
+  | { kind: "copytype"; ref: string[] }
+  /** `name ALIAS FOR target` (a variable name or `$n`) */
+  | { kind: "alias"; target: string }
+  /** an unbound cursor variable (`refcursor`) */
+  | { kind: "refcursor" }
+  /** `name [NO] SCROLL CURSOR [(args)] FOR query` */
+  | { kind: "cursor"; scroll: boolean | null; params: Array<{ name: string; typeName: TypeName }>; query: Statement };
 
 export interface PlDecl {
   name: string;
@@ -283,9 +331,14 @@ const syntaxError = (near: string): Error =>
     "42601",
   );
 
+/** What the parser knows about a declared name: a bound cursor (with its parameter count), an unbound one, or neither. */
+type DeclInfo = { cursor: "bound"; nargs: number } | { cursor: "unbound" } | { cursor: null };
+
 class PlParser {
   private tokens: Tok[];
   private pos = 0;
+  /** declarations in scope, innermost block last */
+  private scopes: Array<Map<string, DeclInfo>> = [];
   constructor(private readonly src: string) {
     this.tokens = tokenize(src);
   }
@@ -335,8 +388,26 @@ class PlParser {
     return this.parseBlock(label);
   }
 
+  private declInfo(name: string): DeclInfo | undefined {
+    for (let i = this.scopes.length - 1; i >= 0; i--) {
+      const info = this.scopes[i]!.get(name);
+      if (info !== undefined) return info;
+    }
+    return undefined;
+  }
+
   /** `[DECLARE decls] BEGIN stmts [EXCEPTION handlers] END [label]` */
   private parseBlock(label: string | null): Extract<PlStmt, { kind: "block" }> {
+    const scope = new Map<string, DeclInfo>();
+    this.scopes.push(scope);
+    try {
+      return this.parseBlockIn(label, scope);
+    } finally {
+      this.scopes.pop();
+    }
+  }
+
+  private parseBlockIn(label: string | null, scope: Map<string, DeclInfo>): Extract<PlStmt, { kind: "block" }> {
     const decls: PlDecl[] = [];
     if (this.atKw("declare")) {
       this.pos++;
@@ -345,7 +416,19 @@ class PlParser {
           this.pos++;
           continue;
         }
-        decls.push(this.parseDecl());
+        const decl = this.parseDecl();
+        decls.push(decl);
+        const type = decl.type;
+        scope.set(
+          decl.name,
+          type.kind === "cursor"
+            ? { cursor: "bound", nargs: type.params.length }
+            : type.kind === "refcursor"
+              ? { cursor: "unbound" }
+              : type.kind === "alias"
+                ? (this.declInfo(type.target) ?? { cursor: null })
+                : { cursor: null },
+        );
       }
     }
     this.expectKw("begin");
@@ -396,10 +479,22 @@ class PlParser {
     const nameTok = this.next();
     if (!isName(nameTok)) throw syntaxError(nameTok.value);
     const name = nameTok.value;
-    if (this.atKw("alias")) throw unsupported("plpgsql ALIAS FOR declarations");
+    if (this.atKw("alias")) {
+      this.pos++;
+      this.expectKw("for");
+      const target = this.next();
+      if (target.type !== "param" && !isName(target)) throw syntaxError(target.value);
+      this.expectSemi();
+      return {
+        name,
+        type: { kind: "alias", target: target.type === "param" ? `$${target.value}` : target.value },
+        init: null,
+        notNull: false,
+      };
+    }
     if (this.atKw("constant")) this.pos++;
     if (this.atKw("cursor") || (this.atKw("no") && this.atKw("scroll", 1)) || this.atKw("scroll")) {
-      throw unsupported("plpgsql cursors (cursor declarations)");
+      return { name, type: this.parseCursorDecl(), init: null, notNull: false };
     }
     const typeStart = this.pos;
     let depth = 0;
@@ -440,6 +535,46 @@ class PlParser {
     return { name, type: this.declType(typeToks), init, notNull };
   }
 
+  /** `[NO] SCROLL CURSOR [(name type, ...)] {FOR | IS} query;` */
+  private parseCursorDecl(): PlDeclType {
+    let scroll: boolean | null = null;
+    if (this.atKw("no")) {
+      this.pos += 2;
+      scroll = false;
+    } else if (this.atKw("scroll")) {
+      this.pos++;
+      scroll = true;
+    }
+    this.expectKw("cursor");
+    const params: Array<{ name: string; typeName: TypeName }> = [];
+    if (isPunct(this.peek(), "(")) {
+      this.pos++;
+      for (;;) {
+        const pname = this.next();
+        if (!isName(pname)) throw syntaxError(pname.value);
+        const start = this.peek();
+        let depth = 0;
+        while (this.peek().type !== "eof") {
+          const t = this.peek();
+          if (isPunct(t, "(")) depth++;
+          if (isPunct(t, ")")) {
+            if (depth === 0) break;
+            depth--;
+          }
+          if (depth === 0 && isPunct(t, ",")) break;
+          this.pos++;
+        }
+        const end = this.peek();
+        if (end === start) throw syntaxError(end.value);
+        params.push({ name: pname.value, typeName: parseTypeNameText(this.src.slice(start.pos, end.pos)) });
+        if (isPunct(this.next(), ")")) break;
+      }
+    }
+    if (!(this.atKw("for") || this.atKw("is"))) throw syntaxError(this.peek().value);
+    this.pos++;
+    return { kind: "cursor", scroll, params, query: parseOne(this.sqlTextUntilSemi()) };
+  }
+
   private declType(toks: Tok[]): PlDeclType {
     const last = toks[toks.length - 1]!;
     const pct = toks[toks.length - 2];
@@ -448,6 +583,7 @@ class PlParser {
       return last.value === "rowtype" ? { kind: "rowtype", table: ref } : { kind: "copytype", ref };
     }
     if (toks.length === 1 && toks[0]!.type === "ident" && toks[0]!.value === "record") return { kind: "record" };
+    if (toks.length === 1 && toks[0]!.type === "ident" && toks[0]!.value === "refcursor") return { kind: "refcursor" };
     const text = this.src.slice(toks[0]!.pos, last.pos + last.value.length + (last.type === "quoted_ident" ? 2 : 0));
     return { kind: "type", typeName: parseTypeNameText(text) };
   }
@@ -480,11 +616,17 @@ class PlParser {
     if (this.atKw("foreach")) {
       this.pos++;
       const targets = this.parseTargets();
-      if (this.atKw("slice")) throw unsupported("plpgsql FOREACH ... SLICE");
+      let slice = 0;
+      if (this.atKw("slice")) {
+        this.pos++;
+        const n = this.next();
+        if (n.type !== "number" || !/^\d+$/.test(n.value)) throw syntaxError(n.value);
+        slice = Number(n.value);
+      }
       this.expectKw("in");
       this.expectKw("array");
       const array = this.parseExprUntilKw("loop");
-      return { kind: "foreach", label, targets, array, body: this.parseLoopBody(label) };
+      return { kind: "foreach", label, targets, slice, array, body: this.parseLoopBody(label) };
     }
     if (label !== null) throw syntaxError(this.peek().value);
     if (this.atKw("exit") || this.atKw("continue")) {
@@ -574,17 +716,209 @@ class PlParser {
     if (this.atKw("get") && !isAssignOp(this.peek(1))) return this.parseDiagnostics();
     const head = this.peek();
     const assigns = isAssignOp(this.peek(1)) || isPunct(this.peek(1), ".") || isPunct(this.peek(1), "[");
-    if (head.type === "ident" && !assigns && UNSUPPORTED_STATEMENTS[head.value] !== undefined) {
-      throw unsupported(UNSUPPORTED_STATEMENTS[head.value]!);
-    }
+    if (head.type === "ident" && !assigns && PL_STATEMENTS.has(head.value)) return this.parsePlStatement();
     if (head.type === "ident" && SQL_STATEMENT_KEYWORDS.has(head.value) && !isAssignOp(this.peek(1))) {
       return this.parseSql();
     }
+    const targetStart = this.peek().pos;
     const target = this.parseTarget();
-    if (isPunct(this.peek(), "[")) throw unsupported("plpgsql assignment to an array element");
+    if (isPunct(this.peek(), "[")) return this.parseSubscriptAssign(target, targetStart);
     const opTok = this.next();
     if (!isAssignOp(opTok)) throw syntaxError(opTok.type === "eof" ? "end of input" : opTok.value);
     return { kind: "assign", target, expr: this.parseExprUntilSemi() };
+  }
+
+  /** `a[i] := v`, `a[i][j] := v`, `a[lo:hi] := arr`, `rec.f[i] := v` */
+  private parseSubscriptAssign(target: Target, start: number): PlStmt {
+    let depth = 0;
+    let at = this.pos;
+    for (; ; at++) {
+      const t = this.tokens[at]!;
+      if (t.type === "eof") throw syntaxError("end of input");
+      if (isPunct(t, "(") || isPunct(t, "[")) depth++;
+      if (isPunct(t, ")") || isPunct(t, "]")) depth--;
+      if (depth === 0 && isAssignOp(t)) break;
+      if (depth === 0 && isPunct(t, ";")) throw syntaxError(";");
+    }
+    const lhs = parseSqlExpr(this.src.slice(start, this.tokens[at]!.pos));
+    const subscripts: SubscriptExpr["indexes"][number][] = [];
+    let node: Expr = lhs;
+    while (node.type === "subscript") {
+      subscripts.unshift(...node.indexes);
+      node = node.base;
+    }
+    if (subscripts.length === 0) throw syntaxError("[");
+    this.pos = at + 1;
+    return { kind: "assign_subscript", target, subscripts, expr: this.parseExprUntilSemi() };
+  }
+
+  /** OPEN / FETCH / MOVE / CLOSE and COMMIT / ROLLBACK. */
+  private parsePlStatement(): PlStmt {
+    const keyword = this.next().value;
+    if (keyword === "commit" || keyword === "rollback") {
+      if (this.atKw("and")) {
+        this.pos++;
+        if (this.atKw("no")) this.pos++;
+        this.expectKw("chain");
+      }
+      this.expectSemi();
+      return { kind: "transaction", action: keyword };
+    }
+    if (keyword === "close") {
+      const cursor = this.cursorName();
+      this.expectSemi();
+      return { kind: "close", cursor };
+    }
+    if (keyword === "open") return this.parseOpen();
+    const move = keyword === "move";
+    const direction = this.parseDirection(move);
+    if (this.atKw("from") || this.atKw("in")) this.pos++;
+    const cursor = this.cursorName();
+    let into: Target[] | null = null;
+    if (!move) {
+      this.expectKw("into");
+      into = this.parseTargets();
+    }
+    this.expectSemi();
+    return { kind: "fetch", move, direction, cursor, into };
+  }
+
+  private cursorName(): string {
+    const t = this.next();
+    if (!isName(t)) throw syntaxError(t.type === "eof" ? "end of input" : t.value);
+    return t.value;
+  }
+
+  /** The direction of FETCH / MOVE (NEXT when none is given). */
+  private parseDirection(move: boolean): FetchDirection {
+    const t = this.peek();
+    const next = this.peek(1);
+    if (
+      !(t.type === "ident" && DIRECTIONS.has(t.value)) ||
+      isPunct(next, ";") ||
+      (next.type === "ident" && next.value === "into")
+    ) {
+      return { kind: "next" };
+    }
+    this.pos++;
+    const countUntilFrom = () =>
+      this.parseExprUntilAny((x) => x.type === "ident" && (x.value === "from" || x.value === "in"));
+    let direction: FetchDirection;
+    switch (t.value) {
+      case "next":
+      case "prior":
+      case "first":
+      case "last":
+        direction = { kind: t.value };
+        break;
+      case "absolute":
+      case "relative":
+        direction = { kind: t.value, count: countUntilFrom() };
+        break;
+      case "all":
+        direction = { kind: "forward", count: null };
+        break;
+      default: {
+        const kind = t.value as "forward" | "backward";
+        if (this.atKw("all")) {
+          this.pos++;
+          direction = { kind, count: null };
+        } else if (this.atKw("from") || this.atKw("in") || isName(this.peek())) {
+          direction = { kind, count: { type: "number_lit", raw: "1" } };
+        } else {
+          direction = { kind, count: countUntilFrom() };
+        }
+      }
+    }
+    if (!move && (direction.kind === "forward" || direction.kind === "backward")) {
+      const count = direction.count;
+      if (count === null || (count.type === "number_lit" && Number(count.raw) !== 1)) {
+        throw pgError("unsupported", "FETCH statement cannot return multiple rows", "0A000");
+      }
+    }
+    return direction;
+  }
+
+  /** `OPEN c [[NO] SCROLL] FOR query | FOR EXECUTE cmd [USING ...]` or `OPEN bound [(args)]` */
+  private parseOpen(): PlStmt {
+    const cursor = this.cursorName();
+    const info = this.declInfo(cursor);
+    if (this.atKw("no") || this.atKw("scroll") || this.atKw("for")) {
+      if (info?.cursor === "bound") throw syntaxError(this.peek().value.toUpperCase());
+      let scroll: boolean | null = null;
+      if (this.atKw("no")) {
+        this.pos++;
+        this.expectKw("scroll");
+        scroll = false;
+      } else if (this.atKw("scroll")) {
+        this.pos++;
+        scroll = true;
+      }
+      this.expectKw("for");
+      if (this.atKw("execute")) {
+        this.pos++;
+        const { expr, into, using } = this.parseDynamic(new Set(["using"]), (t) => isPunct(t, ";"));
+        if (into) throw syntaxError("into");
+        this.expectSemi();
+        return { kind: "open", cursor, query: null, dynamic: expr, using, scroll, args: null };
+      }
+      return {
+        kind: "open",
+        cursor,
+        query: parseOne(this.sqlTextUntilSemi()),
+        dynamic: null,
+        using: [],
+        scroll,
+        args: null,
+      };
+    }
+    if (info?.cursor === "unbound") throw syntaxError(this.peek().type === "eof" ? "end of input" : this.peek().value);
+    const args = isPunct(this.peek(), "(") ? this.parseCursorArgs() : null;
+    this.checkCursorArgs(cursor, info, args);
+    this.expectSemi();
+    return { kind: "open", cursor, query: null, dynamic: null, using: [], scroll: null, args };
+  }
+
+  /** `(expr, ...)` or `(name := expr, ...)` after a bound cursor. */
+  private parseCursorArgs(): CursorArgs {
+    this.pos++;
+    const args: CursorArgs = [];
+    for (;;) {
+      let name: string | null = null;
+      if (
+        isName(this.peek()) &&
+        this.peek(1).type === "op" &&
+        (this.peek(1).value === ":=" || this.peek(1).value === "=>")
+      ) {
+        name = this.next().value;
+        this.pos++;
+      }
+      const start = this.peek().pos;
+      let depth = 0;
+      for (;;) {
+        const t = this.peek();
+        if (t.type === "eof") throw syntaxError("end of input");
+        if (depth === 0 && (isPunct(t, ",") || isPunct(t, ")"))) break;
+        if (isPunct(t, "(") || isPunct(t, "[")) depth++;
+        if (isPunct(t, ")") || isPunct(t, "]")) depth--;
+        this.pos++;
+      }
+      args.push({ name, expr: parseSqlExpr(this.src.slice(start, this.peek().pos)) });
+      if (isPunct(this.next(), ")")) return args;
+    }
+  }
+
+  private checkCursorArgs(cursor: string, info: DeclInfo | undefined, args: CursorArgs | null): void {
+    if (info?.cursor !== "bound") return;
+    if (info.nargs > 0 && args === null) throw pgError("syntax", `cursor "${cursor}" has arguments`, "42601");
+    if (info.nargs === 0 && args !== null) throw pgError("syntax", `cursor "${cursor}" has no arguments`, "42601");
+    if (args !== null && args.length !== info.nargs) {
+      throw pgError(
+        "syntax",
+        `${args.length < info.nargs ? "not enough" : "too many"} arguments for cursor "${cursor}"`,
+        "42601",
+      );
+    }
   }
 
   private parseReturn(): PlStmt {
@@ -650,11 +984,30 @@ class PlParser {
       if (range !== -1 && t.type === "ident" && t.value === "by") by = end;
     }
     const loopTok = this.tokens[end]!;
+    const first = this.tokens[start]!;
+    const info = isName(first) ? this.declInfo(first.value) : undefined;
+    if (range === -1 && info !== undefined && info.cursor !== null) {
+      if (info.cursor === "unbound") {
+        throw pgError("syntax", "cursor FOR loop must use a bound cursor variable", "42601");
+      }
+      if (targets.length !== 1 || targets[0]!.length !== 1) {
+        throw pgError("syntax", "cursor FOR loop must have only one target variable", "42601");
+      }
+      this.pos = start + 1;
+      const args = isPunct(this.peek(), "(") ? this.parseCursorArgs() : null;
+      this.checkCursorArgs(first.value, info, args);
+      this.expectKw("loop");
+      return {
+        kind: "for_cursor",
+        label,
+        variable: targets[0]![0]!,
+        cursor: first.value,
+        args: args ?? [],
+        body: this.parseLoopBody(label),
+      };
+    }
     if (range === -1) {
       const text = this.src.slice(this.tokens[start]!.pos, loopTok.pos).trim();
-      if (targets.length === 1 && targets[0]!.length === 1 && /^[A-Za-z_][A-Za-z0-9_$]*$/.test(text)) {
-        throw unsupported("plpgsql cursors (FOR over a cursor)");
-      }
       this.pos = end + 1;
       return {
         kind: "for_query",
@@ -809,7 +1162,12 @@ class PlParser {
       text = `${this.src.slice(this.tokens[start]!.pos, this.tokens[intoAt]!.pos)} ${this.src.slice(this.peek().pos, semi.pos)}`;
     }
     this.pos = end + 1;
-    return { kind: "sql", stmt: parseOne(text), into };
+    const stmt = parseOne(text);
+    if (stmt.type === "call") {
+      if (into) throw syntaxError("into");
+      return { kind: "call", call: stmt.call };
+    }
+    return { kind: "sql", stmt, into };
   }
 
   /**
@@ -1012,6 +1370,10 @@ interface ScalarVar {
   type: TypeId;
   value: Datum;
   notNull: boolean;
+  /** a cursor variable: its portal name is the value; a bound one carries its query */
+  cursor?: { bound: Extract<PlDeclType, { kind: "cursor" }> | null };
+  /** a routine parameter: `$n` reads this variable (index n - 1) */
+  param?: number;
 }
 
 interface RecordVar {
@@ -1089,6 +1451,18 @@ export class PlVars {
     this.frames[this.frames.length - 1]!.set(name, { kind: "record", fields, values, fixed });
   }
 
+  /** `name ALIAS FOR target`: the same variable under another name. */
+  alias(name: string, target: string): void {
+    const v = this.find(target);
+    if (v === undefined) throw pgError("undefined_object", `variable "${target}" does not exist`, "42704");
+    this.frames[this.frames.length - 1]!.set(name, v);
+  }
+
+  /** A scalar variable declared in the innermost frame. */
+  declared(name: string): ScalarVar {
+    return this.frames[this.frames.length - 1]!.get(name) as ScalarVar;
+  }
+
   get(name: string): TypedValue | undefined {
     const v = this.find(name);
     if (v === undefined) return undefined;
@@ -1131,6 +1505,7 @@ export class PlVars {
         );
       }
       v.value = cast;
+      if (v.param !== undefined && env.params) env.params[v.param] = tv(v.type, cast);
       return;
     }
     assignRecord(env, v, value);
@@ -1237,23 +1612,22 @@ function resolveErrcode(value: string): string {
   return /^[0-9A-Z]{5}$/.test(value) ? value : resolveCondition(value);
 }
 
-interface Subtransaction {
+export interface Subtransaction {
   release(): void;
   rollback(): void;
 }
 
 /** An EXCEPTION block's implicit savepoint: what its body wrote is taken back when a handler catches an error. */
-function beginSubtransaction(env: ExecEnv): Subtransaction {
+export function beginSubtransaction(env: ExecEnv): Subtransaction {
   const state = env.ctx.state;
-  state.freezeShared();
-  const snapshot = state.cloneShallow();
   const prng = state.prng.getState();
+  const hold = state.holdForRollback();
   return {
-    release: () => state.thawShared(),
+    release: () => state.releaseHold(hold.epoch),
     rollback: () => {
-      state.restoreFrom(snapshot);
+      state.restoreFrom(hold.state, true);
       state.prng.setState(prng);
-      state.thawShared();
+      state.releaseHold(hold.epoch);
     },
   };
 }
@@ -1364,6 +1738,17 @@ function declare(run: Run, d: PlDecl): void {
     return table.columns.map((c) => ({ name: c.name, type: c.type.id }));
   };
   switch (d.type.kind) {
+    case "alias":
+      vars.alias(d.name, d.type.target);
+      return;
+    case "refcursor":
+      vars.declareScalar(d.name, "text", null, d.notNull);
+      vars.declared(d.name).cursor = { bound: null };
+      break;
+    case "cursor":
+      vars.declareScalar(d.name, "text", null);
+      vars.declared(d.name).cursor = { bound: d.type };
+      return;
     case "record":
       vars.declareRecord(d.name, null, null, false);
       break;
@@ -1431,8 +1816,15 @@ function runBlock(run: Run, stmt: Extract<PlStmt, { kind: "block" }>): void {
       return;
     }
     const subtransaction = vars.subtransactions ? beginSubtransaction(run.env) : null;
+    // COMMIT / ROLLBACK cannot end the transaction while this block's subtransaction is open
+    const ctl = currentTxFrame()?.ctl ?? null;
     try {
-      runStmts(run, stmt.body);
+      if (ctl) ctl.subtransactions++;
+      try {
+        runStmts(run, stmt.body);
+      } finally {
+        if (ctl) ctl.subtransactions--;
+      }
       subtransaction?.release();
     } catch (e) {
       if (e instanceof PlReturn || e instanceof LoopSignal) {
@@ -1679,9 +2071,38 @@ function runStmt(run: Run, stmt: PlStmt): void {
       if (array.v === null) throw pgError("null_value_not_allowed", "FOREACH expression must not be null", "22004");
       if (!isPgArray(array.v)) throw pgError("datatype_mismatch", "FOREACH expression must yield an array", "42804");
       if (stmt.targets.length !== 1) throw unsupported("plpgsql FOREACH with several targets");
-      const elem = array.v.elem;
-      for (const item of array.v.items) {
-        vars.assign(env, stmt.targets[0]!, tv(elem, item));
+      const arr = array.v;
+      const elem = arr.elem;
+      const target = stmt.targets[0]!;
+      const loopVar = target.length === 1 ? vars.find(target[0]!) : undefined;
+      const varIsArray = loopVar?.kind === "scalar" && isArrayType(loopVar.type);
+      if (stmt.slice === 0) {
+        if (varIsArray) {
+          throw pgError("datatype_mismatch", "FOREACH loop variable must not be of an array type", "42804");
+        }
+        for (const item of arr.items) {
+          vars.assign(env, target, tv(elem, item));
+          if (!iterate(run, stmt.label, stmt.body)) break;
+        }
+        return;
+      }
+      if (!varIsArray) {
+        throw pgError("datatype_mismatch", "FOREACH ... SLICE loop variable must be of an array type", "42804");
+      }
+      const ndims = arr.dims.length;
+      if (stmt.slice > ndims) {
+        throw pgError(
+          "array_subscript_error",
+          `slice dimension (${stmt.slice}) is out of the valid range 0..${ndims}`,
+          "2202E",
+        );
+      }
+      const dims = arr.dims.slice(ndims - stmt.slice);
+      const lbs = arr.lbs.slice(ndims - stmt.slice);
+      const size = dims.reduce((a, b) => a * b, 1);
+      for (let at = 0; at + size <= arr.items.length && size > 0; at += size) {
+        const part = makeArray(elem, arr.items.slice(at, at + size), dims.slice(), lbs.slice());
+        vars.assign(env, target, tv(arrayTypeOf(elem), part));
         if (!iterate(run, stmt.label, stmt.body)) break;
       }
       return;
@@ -1689,7 +2110,252 @@ function runStmt(run: Run, stmt: PlStmt): void {
     case "exit":
       if (stmt.cond !== null && !predicate(run, stmt.cond)) return;
       throw new LoopSignal(stmt.isContinue, stmt.label);
+    case "assign_subscript":
+      assignSubscript(run, stmt);
+      return;
+    case "call":
+      runCall(run, stmt.call);
+      return;
+    case "transaction":
+      transactionControl(stmt.action);
+      return;
+    case "open":
+      openCursor(run, stmt);
+      return;
+    case "fetch":
+      fetchCursor(run, stmt);
+      return;
+    case "close": {
+      const name = portalNameOf(run, stmt.cursor);
+      if (findPortal(env.ctx, name) === undefined) {
+        throw pgError("invalid_cursor", `cursor "${name}" does not exist`, "34000");
+      }
+      removePortal(env.ctx, name);
+      return;
+    }
+    case "for_cursor": {
+      const name = openBoundCursor(run, stmt.cursor, stmt.args);
+      const portal = findPortal(env.ctx, name)!;
+      vars.push();
+      let found = false;
+      try {
+        vars.declareRecord(stmt.variable, null, null, false);
+        while (portal.pos < portal.rows.length) {
+          const row = portal.rows[portal.pos++]!;
+          found = true;
+          vars.assignRow(env, [[stmt.variable]], portal.columns, row);
+          if (!iterate(run, stmt.label, stmt.body)) break;
+        }
+      } finally {
+        vars.pop();
+        removePortal(env.ctx, name);
+      }
+      vars.setFound(found);
+      return;
+    }
   }
+}
+
+/** `a[i] := v` on a variable or record field holding an array. */
+function assignSubscript(run: Run, stmt: Extract<PlStmt, { kind: "assign_subscript" }>): void {
+  const { env, vars } = run;
+  const current = vars.lookup(stmt.target);
+  if (current === undefined) {
+    throw pgError("syntax", `"${stmt.target.join(".")}" is not a known variable`, "42601");
+  }
+  const v = stmt.target.length === 1 ? vars.find(stmt.target[0]!) : undefined;
+  const type = v?.kind === "scalar" ? v.type : current.t;
+  if (!isArrayType(type)) {
+    throw pgError(
+      "datatype_mismatch",
+      `cannot subscript type ${typeDisplayName(type)} because it does not support subscripting`,
+      "42804",
+    );
+  }
+  const bound = (e: Expr | null): number | null => {
+    if (e === null) return null;
+    const value = evalIn(run, e);
+    if (value.v === null) {
+      throw pgError("null_value_not_allowed", "array subscript in assignment must not be null", "22004");
+    }
+    return Number(castTo(env.ctx, value, "int4", { assignment: true }).v);
+  };
+  const subscripts: AssignSubscript[] = stmt.subscripts.map((s) => ({
+    lower: bound(s.lower),
+    upper: bound(s.upper),
+    slice: s.slice,
+  }));
+  const elem = arrayElemType(type);
+  const raw = evalIn(run, stmt.expr);
+  const slice = subscripts.some((s) => s.slice);
+  const value = assignCast(env, raw, slice ? type : elem);
+  vars.assign(env, stmt.target, tv(type, assignArraySubscripts(current.v, elem, subscripts, value)));
+}
+
+/** `CALL p(args)` from PL/pgSQL: OUT / INOUT results are written back to the variables passed for them. */
+function runCall(run: Run, call: FuncCall): void {
+  const bound = bindCall(run.env, call);
+  const fn = bound.fn;
+  const writes: Target[] = [];
+  (fn.argModes ?? []).forEach((mode, i) => {
+    if (mode !== "out" && mode !== "inout") return;
+    const source = bound.sources[i]!;
+    const target = source === -1 ? null : writableTarget(call.args[source]);
+    if (target === null || run.vars.lookup(target) === undefined) {
+      throw pgError(
+        "syntax",
+        `procedure parameter "${fn.argNames[i] ?? `$${i + 1}`}" is an output parameter but corresponding argument is not writable`,
+        "42601",
+      );
+    }
+    writes.push(target);
+  });
+  const out = invokeProcedure(run.env, bound);
+  if (out === null) return;
+  const outs = fn.outArgs ?? [];
+  writes.forEach((target, i) => {
+    run.vars.assign(run.env, target, tv(outs[i]?.type ?? "text", out[i] ?? null));
+  });
+}
+
+/** The cursor variable called `name`. */
+function cursorVar(run: Run, name: string): ScalarVar {
+  const v = run.vars.find(name);
+  if (v?.kind !== "scalar" || v.cursor === undefined) {
+    throw pgError("datatype_mismatch", `variable "${name}" must be of type cursor or refcursor`, "42804");
+  }
+  return v;
+}
+
+/** The portal name a cursor variable holds (22004 when it holds none). */
+function portalNameOf(run: Run, name: string): string {
+  const v = cursorVar(run, name);
+  if (v.value === null) throw pgError("null_value_not_allowed", `cursor variable "${name}" is null`, "22004");
+  return String(v.value);
+}
+
+/** Open a portal on `result` under the variable's name (or a fresh unnamed one). */
+function openPortal(run: Run, v: ScalarVar, result: ExecResult, noScroll: boolean): string {
+  const ctx = run.env.ctx;
+  const name = v.value === null ? unnamedPortalName(ctx) : String(v.value);
+  if (findPortal(ctx, name) !== undefined) {
+    throw pgError("duplicate_object", `cursor "${name}" already in use`, "42P03");
+  }
+  addPortal(ctx, name, result, !noScroll, "");
+  v.value = name;
+  return name;
+}
+
+/** Open a bound cursor with its arguments; the portal's name. */
+function openBoundCursor(run: Run, name: string, args: CursorArgs | null): string {
+  const v = cursorVar(run, name);
+  const decl = v.cursor!.bound;
+  if (decl === null) throw pgError("syntax", `cursor "${name}" is not a bound cursor`, "42601");
+  const given = args ?? [];
+  const values: Array<TypedValue | undefined> = decl.params.map(() => undefined);
+  given.forEach((arg, i) => {
+    const at = arg.name === null ? i : decl.params.findIndex((p) => p.name === arg.name);
+    if (at < 0) throw pgError("syntax", `cursor "${name}" has no argument named "${arg.name}"`, "42601");
+    if (values[at] !== undefined) {
+      throw pgError(
+        "syntax",
+        `value for parameter "${decl.params[at]!.name}" of cursor "${name}" specified more than once`,
+        "42601",
+      );
+    }
+    values[at] = evalIn(run, arg.expr);
+  });
+  if (values.some((x) => x === undefined)) {
+    throw pgError("syntax", `not enough arguments for cursor "${name}"`, "42601");
+  }
+  const state = run.env.ctx.state;
+  run.vars.push();
+  let result: ExecResult;
+  try {
+    decl.params.forEach((p, i) => {
+      const type = resolveTypeName(state, p.typeName).column.id;
+      run.vars.declareScalar(p.name, type, assignCast(run.env, values[i]!, type));
+    });
+    result = runStatement(run.env, decl.query);
+  } finally {
+    run.vars.pop();
+  }
+  return openPortal(run, v, result, decl.scroll === false);
+}
+
+function openCursor(run: Run, stmt: Extract<PlStmt, { kind: "open" }>): void {
+  if (stmt.query === null && stmt.dynamic === null) {
+    openBoundCursor(run, stmt.cursor, stmt.args);
+    return;
+  }
+  const v = cursorVar(run, stmt.cursor);
+  if (v.cursor!.bound !== null) throw syntaxError("FOR");
+  const result = stmt.query !== null ? runStatement(run.env, stmt.query) : runDynamic(run, stmt.dynamic!, stmt.using);
+  openPortal(run, v, result, stmt.scroll === false);
+}
+
+/** FETCH / MOVE: reposition the portal and, for FETCH, assign the row landed on. */
+function fetchCursor(run: Run, stmt: Extract<PlStmt, { kind: "fetch" }>): void {
+  const { env, vars } = run;
+  const name = portalNameOf(run, stmt.cursor);
+  const portal = findPortal(env.ctx, name);
+  if (portal === undefined) throw pgError("invalid_cursor", `cursor "${name}" does not exist`, "34000");
+  const n = portal.rows.length;
+  const from = portal.pos;
+  const count = (e: Expr): number => {
+    const value = evalIn(run, e);
+    if (value.v === null) throw pgError("null_value_not_allowed", "FETCH / MOVE count must not be null", "22004");
+    return Number(castTo(env.ctx, value, "int8", { assignment: true }).v);
+  };
+  const clamp = (p: number) => Math.max(0, Math.min(n + 1, p));
+  const dir = stmt.direction;
+  let to: number;
+  let moved: number | null = null;
+  switch (dir.kind) {
+    case "next":
+      to = clamp(from + 1);
+      break;
+    case "prior":
+      to = clamp(from - 1);
+      break;
+    case "first":
+      to = clamp(1);
+      break;
+    case "last":
+      to = n;
+      break;
+    case "absolute": {
+      const k = count(dir.count);
+      to = k >= 0 ? clamp(k) : clamp(n + 1 + k);
+      break;
+    }
+    case "relative":
+      to = clamp(from + count(dir.count));
+      break;
+    case "forward": {
+      const k = dir.count === null ? n + 1 : count(dir.count);
+      if (!stmt.move && k !== 1) throw pgError("unsupported", "FETCH statement cannot return multiple rows", "0A000");
+      to = clamp(from + k);
+      if (stmt.move) moved = Math.max(0, Math.min(from + k, n) - from);
+      break;
+    }
+    case "backward": {
+      const k = dir.count === null ? n + 1 : count(dir.count);
+      if (!stmt.move && k !== 1) throw pgError("unsupported", "FETCH statement cannot return multiple rows", "0A000");
+      to = clamp(from - k);
+      if (stmt.move) moved = Math.max(0, Math.min(from - 1, n) - Math.max(from - k, 1) + 1);
+      break;
+    }
+  }
+  if (!portal.scrollable && to < from) {
+    throw pgError("object_not_in_prerequisite_state", "cursor can only scan forward", "55000");
+  }
+  portal.pos = to;
+  const row = to >= 1 && to <= n ? portal.rows[to - 1]! : null;
+  const rows = moved ?? (row === null ? 0 : 1);
+  vars.rowCount = rows;
+  vars.setFound(rows > 0);
+  if (!stmt.move) vars.assignRow(env, stmt.into!, portal.columns, row);
 }
 
 /** Run a body to its end, a RETURN, or an error; the RETURN's value (null when none). */
@@ -1742,10 +2408,13 @@ function startRun(
     allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
   };
   vars.declareScalar("found", "bool", false);
-  for (let i = 0; i < (fn?.argNames.length ?? 0); i++) {
-    const n = fn!.argNames[i];
-    if (n == null) continue;
+  for (let i = 0; i < (fn?.argTypes.length ?? 0); i++) {
+    // `$n` and the parameter's name are one variable: assigning either changes what both read
+    const positional = `$${i + 1}`;
+    const n = fn!.argNames[i] ?? positional;
     vars.declareScalar(n, fn!.argTypes[i]!, bound[i]?.v ?? null);
+    vars.declared(n).param = i;
+    if (n !== positional) vars.alias(positional, n);
   }
   const outs = fn ? outColumns(fn) : null;
   if (outs) for (const c of outs) if (vars.find(c.name) === undefined) vars.declareScalar(c.name, c.type, null);
@@ -1838,7 +2507,26 @@ export interface TriggerCall {
  * Run a plpgsql trigger function. Returns the row it returned (null for `RETURN NULL`), positionally
  * matched to the table's columns.
  */
+/** Run a plpgsql event trigger function (`RETURNS event_trigger`) with `TG_EVENT` and `TG_TAG` (issue #692). */
+export function callPlpgsqlEventTrigger(env: ExecEnv, fn: FunctionData, event: string, tag: string): void {
+  if (fn.language !== "plpgsql")
+    throw pgError("unsupported", `event trigger functions in LANGUAGE ${fn.language}`, "0A000");
+  const raw = fn.rawBody;
+  if (raw === null) throw pgError("unsupported", `function ${fn.name} has no executable body`);
+  atomicFunctionContext(() => {
+    const program = compilePlpgsql(raw);
+    const run = startRun(env, null, [], null);
+    run.vars.declareScalar("tg_event", "text", event);
+    run.vars.declareScalar("tg_tag", "text", tag);
+    runBody(run, program);
+  });
+}
+
 export function callPlpgsqlTrigger(env: ExecEnv, fn: FunctionData, call: TriggerCall): Datum[] | null {
+  return atomicFunctionContext(() => runTrigger(env, fn, call));
+}
+
+function runTrigger(env: ExecEnv, fn: FunctionData, call: TriggerCall): Datum[] | null {
   const raw = fn.rawBody;
   if (raw === null) throw pgError("unsupported", `function ${fn.name} has no executable body`);
   const program = compilePlpgsql(raw);
@@ -1900,16 +2588,120 @@ export function executeDo(env: ExecEnv, language: string, body: string): ExecRes
   }
   const program = compilePlpgsql(body);
   const run = startRun(env, null, [], null);
-  run.vars.subtransactions = true;
-  const subtransaction = beginSubtransaction(env);
-  try {
+  runRoutine(env, false, (frame) => {
+    run.vars.subtransactions = !frame.inFunction;
     runBody(run, program);
-  } catch (e) {
-    subtransaction.rollback();
-    throw e;
-  }
-  subtransaction.release();
+  });
   // the block's own INSERT / UPDATE / DELETE are not the DO command's row count
   env.ctx.state.changes = 0;
   return commandResult("DO", 0);
+}
+
+/** Names a trigger function's body sees without declaring them. */
+const TRIGGER_VARIABLES = [
+  "new",
+  "old",
+  "tg_name",
+  "tg_when",
+  "tg_level",
+  "tg_op",
+  "tg_relid",
+  "tg_relname",
+  "tg_table_name",
+  "tg_table_schema",
+  "tg_nargs",
+  "tg_argv",
+];
+
+/**
+ * Checks PostgreSQL makes when it compiles a routine's body: an `ALIAS FOR` must name a variable
+ * (or `$n` parameter) in scope, and a procedure's RETURN takes no value.
+ */
+export function checkRoutineBody(
+  program: PlProgram,
+  routine: { procedure: boolean; params: Array<string | null>; trigger: boolean },
+): void {
+  const scopes: Array<Set<string>> = [
+    new Set([
+      "found",
+      ...routine.params.filter((p): p is string => p !== null),
+      ...routine.params.map((_, i) => `$${i + 1}`),
+      ...(routine.trigger ? TRIGGER_VARIABLES : []),
+    ]),
+  ];
+  const known = (name: string) => scopes.some((scope) => scope.has(name));
+  const visit = (stmts: PlStmt[]): void => {
+    for (const stmt of stmts) {
+      if (stmt.kind === "return" && stmt.expr !== null && routine.procedure) {
+        throw pgError("syntax", "RETURN cannot have a parameter in a procedure", "42601");
+      }
+      if (stmt.kind === "block") {
+        const scope = new Set<string>();
+        scopes.push(scope);
+        for (const d of stmt.decls) {
+          if (d.type.kind === "alias" && !known(d.type.target) && !scope.has(d.type.target)) {
+            throw pgError("undefined_object", `variable "${d.type.target}" does not exist`, "42704");
+          }
+          scope.add(d.name);
+        }
+        visit(stmt.body);
+        for (const h of stmt.handlers ?? []) visit(h.body);
+        scopes.pop();
+        continue;
+      }
+      // loop variables are in scope in the loop body
+      const loopScope = new Set<string>();
+      if (stmt.kind === "for_int") loopScope.add(stmt.variable);
+      if (stmt.kind === "for_cursor") loopScope.add(stmt.variable);
+      scopes.push(loopScope);
+      switch (stmt.kind) {
+        case "if":
+          for (const b of stmt.branches) visit(b.body);
+          visit(stmt.elseBody);
+          break;
+        case "case":
+          for (const b of stmt.branches) visit(b.body);
+          if (stmt.elseBody) visit(stmt.elseBody);
+          break;
+        case "loop":
+        case "while":
+        case "for_int":
+        case "for_query":
+        case "for_cursor":
+        case "foreach":
+          visit(stmt.body);
+          break;
+        default:
+          break;
+      }
+      scopes.pop();
+    }
+  };
+  visit(program.body);
+}
+
+/**
+ * Run a PL/pgSQL procedure for CALL; the OUT / INOUT parameters' final values (null when it has
+ * none). `subtransactions`: EXCEPTION blocks undo their writes (not when called from a function).
+ */
+export function callPlpgsqlProcedure(
+  env: ExecEnv,
+  fn: FunctionData,
+  args: TypedValue[],
+  subtransactions: boolean,
+): Datum[] | null {
+  const raw = fn.rawBody;
+  if (raw === null) throw pgError("unsupported", `procedure ${fn.name} has no executable body`);
+  const program = compilePlpgsql(raw);
+  const run = startRun(env, fn, args, null);
+  run.vars.subtransactions = subtransactions;
+  // OUT parameters start NULL whatever the call passed for them
+  (fn.argModes ?? []).forEach((mode, i) => {
+    const name = fn.argNames[i];
+    if (mode === "out" && name != null) run.vars.assign(run.env, [name], tv(fn.argTypes[i]!, null));
+  });
+  runBody(run, program);
+  const outs = fn.outArgs ?? [];
+  if (outs.length === 0) return null;
+  return outs.map((c) => assignCast(run.env, run.vars.get(c.name) ?? tv(c.type, null), c.type));
 }

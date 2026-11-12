@@ -1,3 +1,7 @@
+import type { FromJsonTable, PartitionBoundSpec, PartitionOfClause, PartitionSpec, Statement692 } from "./nodes-ext.ts";
+
+export type * from "./nodes-ext.ts";
+
 /**
  * Discriminated-union AST. `type` tags are snake_case; interfaces PascalCase.
  * Identifier parts are stored case-folded (unquoted → lowercase) by the parser.
@@ -333,7 +337,7 @@ export interface SelectCore {
   readonly windows: ReadonlyArray<{ name: string; spec: WindowSpec }>;
 }
 
-export type FromItem = FromTable | FromSubquery | FromFunc | FromJoin;
+export type FromItem = FromTable | FromSubquery | FromFunc | FromJoin | FromJsonTable;
 
 export interface FromTable {
   readonly type: "from_table";
@@ -341,6 +345,8 @@ export interface FromTable {
   readonly only: boolean;
   readonly alias: string | null;
   readonly colAliases: string[] | null;
+  /** `TABLESAMPLE method (args) [REPEATABLE (seed)]` */
+  readonly tablesample?: { readonly method: string; readonly args: Expr[]; readonly repeatable: Expr | null };
 }
 export interface FromSubquery {
   readonly type: "from_subquery";
@@ -494,6 +500,8 @@ export type ColumnConstraint =
       table: string[];
       columns: string[] | null;
       onDelete: RefAction;
+      /** `ON DELETE SET NULL (cols)` / `SET DEFAULT (cols)` */
+      onDeleteColumns?: string[];
       onUpdate: RefAction;
       match: "full" | "partial" | "simple" | null;
       /** `DEFERRABLE` / `INITIALLY DEFERRED`; absent means NOT DEFERRABLE INITIALLY IMMEDIATE */
@@ -501,7 +509,8 @@ export type ColumnConstraint =
       initiallyDeferred?: boolean;
     }
   | { kind: "generated_identity"; always: boolean; name: string | null; options: SequenceOptions }
-  | { kind: "generated_stored"; expr: Expr; name: string | null }
+  /** `GENERATED ALWAYS AS (expr) STORED | VIRTUAL`; `virtual` when not STORED (the PostgreSQL 18 default) */
+  | { kind: "generated_stored"; expr: Expr; name: string | null; virtual?: boolean }
   | { kind: "collate"; collation: string[] }
   /** `STORAGE mode`; the mode is validated against the column type when the column is built */
   | { kind: "storage"; mode: string };
@@ -525,6 +534,8 @@ export type TableConstraint =
       refTable: string[];
       refColumns: string[] | null;
       onDelete: RefAction;
+      /** `ON DELETE SET NULL (cols)` / `SET DEFAULT (cols)` */
+      onDeleteColumns?: string[];
       onUpdate: RefAction;
       match: "full" | "partial" | "simple" | null;
       /** `DEFERRABLE` / `INITIALLY DEFERRED`; absent means NOT DEFERRABLE INITIALLY IMMEDIATE */
@@ -542,6 +553,10 @@ export interface CreateTableStmt {
   readonly columns: ColumnDef[];
   readonly constraints: TableConstraint[];
   readonly likeClauses: ReadonlyArray<{ table: string[]; options: string[] }>;
+  /** `PARTITION BY { RANGE | LIST | HASH } (...)` */
+  readonly partitionBy?: PartitionSpec;
+  /** `PARTITION OF parent FOR VALUES ...` */
+  readonly partitionOf?: PartitionOfClause;
 }
 
 export interface CreateTableAsStmt {
@@ -676,6 +691,8 @@ export interface CreateFunctionStmt {
   readonly language: string;
   readonly body: string | null; // AS 'body'
   readonly sqlBody: Statement[] | null; // BEGIN ATOMIC ... END or RETURN expr
+  /** CREATE PROCEDURE */
+  readonly procedure?: boolean;
   readonly settings?: Record<string, string>;
   readonly volatility: "immutable" | "stable" | "volatile" | null;
   readonly strict: boolean;
@@ -722,7 +739,11 @@ export type AlterTableAction =
   | { kind: "add_identity"; column: string; always: boolean; options: SequenceOptions }
   | { kind: "drop_identity"; column: string; ifExists: boolean }
   | { kind: "validate_constraint"; name: string }
-  | { kind: "reloptions" };
+  | { kind: "reloptions" }
+  /** `{ ENABLE | DISABLE } ROW LEVEL SECURITY` / `[NO] FORCE ROW LEVEL SECURITY` */
+  | { kind: "row_security"; enable?: boolean; force?: boolean }
+  | { kind: "attach_partition"; name: string[]; bound: PartitionBoundSpec }
+  | { kind: "detach_partition"; name: string[]; concurrently: boolean; finalize: boolean };
 
 export interface AlterTableStmt {
   readonly type: "alter_table";
@@ -764,8 +785,12 @@ export interface DropStmt {
     | "type"
     | "domain"
     | "function"
+    | "procedure"
+    | "routine"
     | "trigger"
-    | "extension";
+    | "extension"
+    | "policy"
+    | "event_trigger";
   readonly names: string[][];
   /** for DROP TRIGGER name ON table */
   readonly onTable: string[] | null;
@@ -903,6 +928,12 @@ export interface DoStmt {
   readonly body: string;
 }
 
+/** `CALL procedure(args)` */
+export interface CallStmt {
+  readonly type: "call";
+  readonly call: FuncCall;
+}
+
 // ---------------------------------------------------------------------------
 // statement union
 // ---------------------------------------------------------------------------
@@ -947,4 +978,6 @@ export type Statement =
   | AnalyzeStmt
   | ReindexStmt
   | NoOpStmt
-  | DoStmt;
+  | DoStmt
+  | CallStmt
+  | Statement692;

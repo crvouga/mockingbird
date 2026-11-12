@@ -1,3 +1,4 @@
+import { type CursorData, copyCursors } from "../executor/cursors.ts";
 import { type BindValue, bindValueToTyped } from "../api/bind.ts";
 import type { Database } from "../api/database.ts";
 import type { TextResultSet } from "../api/statement.ts";
@@ -26,7 +27,8 @@ import {
   ProtocolError,
   utf8,
 } from "./protocol.ts";
-import { ScramServer } from "./scram.ts";
+import { type ScramCredentialStore, ScramServer } from "./scram.ts";
+import { runInImplicitTransaction } from "../executor/call.ts";
 import { splitStatements } from "./split.ts";
 import { applyStartupSettings, StartupError, startupSettings } from "./startup.ts";
 import type { StreamSocket } from "./stream.ts";
@@ -114,7 +116,10 @@ export type ServerLog = {
 const loggedErrors = new WeakSet<object>();
 
 export type ConnectionOptions = {
+  /** Require SCRAM-SHA-256 with this password; omitted means trust (AuthenticationOk). */
   password?: string;
+  /** The server's per-role SCRAM verifiers, so PBKDF2 runs once per role rather than per connection. */
+  scramCredentials?: ScramCredentialStore;
   serverVersion: string;
   parameters: Record<string, string>;
   faults: ServerFaults;
@@ -133,7 +138,7 @@ const COMMIT = /^(commit|end)\b/i;
 const LISTEN = /^listen\s+("?)([A-Za-z_][\w$]*)\1\s*$/i;
 const UNLISTEN = /^unlisten\s+(\*|"?[A-Za-z_][\w$]*"?)\s*$/i;
 const NOTIFY = /^notify\s+("?)([A-Za-z_][\w$]*)\1\s*(?:,\s*'((?:[^']|'')*)')?\s*$/i;
-const RETURNS_ROWS = /^(select|with|values|show|table|explain)\b/i;
+const RETURNS_ROWS = /^(select|with|values|show|table|explain|fetch)\b/i;
 const CLUSTER_DDL = /^(create|drop|alter)\s+database\b/i;
 const IDENT = '(?:"((?:[^"]|"")+)"|([A-Za-z_][A-Za-z0-9_$]*))';
 const CREATE_DATABASE = new RegExp(
@@ -360,6 +365,8 @@ export class Connection implements Session {
   private closed = false;
   /** This session's settings. They stand in for the database's own around each of its engine calls. */
   private settings = new Map<string, string>();
+  /** This session's open SQL cursors (DECLARE ... WITH HOLD outlives its transaction). */
+  private cursors = new Map<string, CursorData>();
   /** What `RESET` returns to: the database's settings at connect, then the startup packet's. */
   private settingDefaults: ReadonlyMap<string, string> = new Map();
   /** Durable commits that are persisted and not yet acknowledged on the socket. */
@@ -430,15 +437,18 @@ export class Connection implements Session {
    */
   private inSession<T>(db: Database, fn: () => T): T {
     const state = db.state;
-    const shared = { settings: state.settings, defaults: state.settingDefaults };
+    const shared = { settings: state.settings, defaults: state.settingDefaults, cursors: state.cursors };
     state.settings = this.settings;
     state.settingDefaults = this.settingDefaults;
+    state.cursors = this.cursors;
     try {
       return fn();
     } finally {
       this.settings = state.settings;
+      this.cursors = state.cursors;
       state.settings = shared.settings;
       state.settingDefaults = shared.defaults;
+      state.cursors = shared.cursors;
     }
   }
 
@@ -585,7 +595,7 @@ export class Connection implements Session {
     this.databaseName = requested;
     this.startupParameters = parameters;
     if (this.options.password !== undefined) {
-      this.scram = new ScramServer(this.options.password);
+      this.scram = new ScramServer(this.options.password, this.user, this.options.scramCredentials);
       this.write(backend.authenticationSASL(["SCRAM-SHA-256"]));
       return;
     }
@@ -908,6 +918,18 @@ export class Connection implements Session {
       // Index commands PostgreSQL refuses in a transaction block (CREATE / DROP INDEX CONCURRENTLY,
       // REINDEX CONCURRENTLY | SCHEMA | DATABASE | SYSTEM) run outside the statement rollback wrapper:
       // a failed concurrent build has to keep the invalid index it leaves in the catalog.
+      // DECLARE without WITH HOLD needs a transaction block (each autocommit statement runs in its own)
+      if (this.transaction === null && /^\s*declare\b/i.test(text)) {
+        const declared = parseSql(text);
+        const [only] = declared;
+        if (declared.length === 1 && only?.type === "declare_cursor" && !only.hold) {
+          throw new PostgresError(
+            "transaction_state",
+            "DECLARE CURSOR can only be used in transaction blocks",
+            "25P01",
+          );
+        }
+      }
       const statements = /\b(concurrently|reindex)\b/i.test(text) ? parseSql(text) : [];
       const refused = statements.map(refusedInTransactionBlock).find((command) => command !== null);
       if (refused && this.transaction !== null) {
@@ -917,7 +939,13 @@ export class Connection implements Session {
         db.state.faults.concurrentIndexBuild = faults.failConcurrentIndexBuild;
         faults.failConcurrentIndexBuild = undefined;
       }
-      const statement = () => (refused ? run() : db.transaction(run));
+      // outside a transaction block the statement's own transaction is implicit: a procedure's COMMIT ends it
+      const statement = () =>
+        refused
+          ? run()
+          : workspace
+            ? db.transaction(run)
+            : runInImplicitTransaction(db.state, () => db.transaction(run));
       const outcome = workspace ? statement() : this.inSession(db, statement);
       if (this.transaction && mutatesDatabase(text)) {
         this.transaction.statements.push({ kind: "sql", sql: text, params: params.slice() });
@@ -1010,6 +1038,8 @@ export class Connection implements Session {
     setDatabaseCatalogContext(workspace.state, this.cluster.catalogContext(this.databaseName));
     // The workspace is this session's alone: a SET inside the block reaches the session at commit.
     workspace.state.settings = new Map(this.settings);
+    // the session's held cursors, copied: replaying this block's FETCHes must not move the session's own
+    workspace.state.cursors = copyCursors(this.cursors);
     workspace.state.settingDefaults = this.settingDefaults;
     workspace.transactions.begin();
     workspace.state.transactionXid = this.transaction?.xid ?? null;

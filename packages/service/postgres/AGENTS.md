@@ -11,7 +11,7 @@ Guidance for humans and coding agents editing this repository. For install and c
 1. Custom snapshot codec (`PGMM`), not `pg_dump` / on-disk clusters
 2. Deterministic `random()` / `gen_random_uuid()` and fixed `now()` by default (injectable)
 3. Single-session **engine**: no MVCC across connections, no aborted-transaction (`25P02`) state in the sync API
-4. `NOT APPLICABLE` items: roles/auth enforcement, replication, VACUUM internals, storage params, full PL/pgSQL
+4. `NOT APPLICABLE` items: object-privilege enforcement (roles, `SET ROLE` and row-level security are modelled), replication, VACUUM internals, storage params, full PL/pgSQL
 
 **Non-goals:** matching `pg`/`postgres.js` **client APIs**, full PL/pgSQL, or MVCC in the synchronous
 API. The optional wire-protocol server (`src/wire/`, a Node/Bun-only entry over the one engine) is

@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-notifications",
   "version": "0.0.0-development",
-  "description": "Notification test harness for Mockingbird fleets: every SMS, WhatsApp message, email, push and chat message your app sends through the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators, on lifelike phone, mail and chat screens and a JSON API for tests.",
+  "description": "Notification test harness for Mockingbird fleets: every SMS, WhatsApp message, email, push and chat message your app sends through the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito emulators, on lifelike phone, mail and chat screens and a JSON API for tests.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -75,6 +75,7 @@
     "@aws-sdk/client-sns": "3.1001.0",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@crvouga/mockingbird-admin-ui": "workspace:*",
+    "@crvouga/mockingbird-service-cognito": "workspace:*",
     "@crvouga/mockingbird-service-customerio": "workspace:*",
     "@crvouga/mockingbird-service-fcm": "workspace:*",
     "@crvouga/mockingbird-service-mailosaur": "workspace:*",

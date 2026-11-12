@@ -176,7 +176,7 @@ curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset`,
     {
       icon: "bell",
       title: "Notifications, with the same flag",
-      body: "The **Notifications** tab shows what Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack accepted, and tests read the same messages from the dashboard's JSON API.",
+      body: "The **Notifications** tab shows what Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito accepted, and tests read the same messages from the dashboard's JSON API.",
     },
   ],
   /** Everything else that works, for when a fleet is more than the job needs. */
@@ -311,7 +311,7 @@ x-mockingbird-fault: status=503; delay=2s`,
 export const NOTIFICATIONS = {
   title: "See every text, email, push and chat message your app sends.",
   intro:
-    "The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app or a WhatsApp chat, on a lock screen or notification shade, in a webmail inbox, and in a team chat window. Tests read the same messages through a JSON API, and every element carries a test id.",
+    "The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app or a WhatsApp chat, on a lock screen or notification shade, in a webmail inbox, and in a team chat window. Tests read the same messages through a JSON API, and every element carries a test id.",
   guide: "docs/NOTIFICATIONS.md",
   /** Where each topic's page lives: `<pages>/<page>.md`, served at `/docs/notifications/<page>`. */
   pages: "docs/notifications",
@@ -320,8 +320,8 @@ export const NOTIFICATIONS = {
     {
       icon: "message",
       title: "Text messages",
-      services: "Twilio · SNS · Customer.io · Mailosaur",
-      body: "Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included, and WhatsApp messages open as a WhatsApp chat.",
+      services: "Twilio · SNS · Customer.io · Mailosaur · Cognito",
+      body: "Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify and Cognito codes included, and WhatsApp messages open as a WhatsApp chat.",
     },
     {
       icon: "bell",
@@ -332,7 +332,7 @@ export const NOTIFICATIONS = {
     {
       icon: "mail",
       title: "Email",
-      services: "Resend · SES · SNS · Customer.io · Mailosaur",
+      services: "Resend · SES · SNS · Customer.io · Mailosaur · Cognito",
       body: "An inbox per recipient, to, cc and bcc, with the rendered HTML, attachments and headers. SES raw MIME is parsed.",
     },
     {

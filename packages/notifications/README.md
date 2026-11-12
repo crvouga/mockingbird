@@ -10,9 +10,9 @@ Automated tests get the same data from a JSON API and a small client.
 
 | Channel | Emulators read | Shown as |
 | --- | --- | --- |
-| SMS | Twilio (Messages and Verify codes), Amazon SNS (direct `PhoneNumber` and `sms` topic subscribers), Customer.io, Mailosaur | Messages app: threads per sender, bubbles, one-time code suggestion |
+| SMS | Twilio (Messages and Verify codes), Amazon SNS (direct `PhoneNumber` and `sms` topic subscribers), Customer.io, Mailosaur, Amazon Cognito (verification codes and invitations to `phone_number`) | Messages app: threads per sender, bubbles, one-time code suggestion |
 | WhatsApp | Twilio (Messages to a `whatsapp:` address, and Verify with `Channel=whatsapp`) | The same phone, as a WhatsApp chat. The channel is `sms` with `sms.via: "whatsapp"`; `to` is the bare number |
-| Email | Resend, Amazon SES (`SendEmail` and MIME `SendRawEmail`), Amazon SNS (`email` / `email-json` subscribers), Customer.io, Mailosaur, Twilio Verify email | Webmail: inbox per recipient (to, cc, bcc), rendered HTML, attachments, headers |
+| Email | Resend, Amazon SES (`SendEmail` and MIME `SendRawEmail`), Amazon SNS (`email` / `email-json` subscribers), Customer.io, Mailosaur, Twilio Verify email, Amazon Cognito (SignUp, ResendConfirmationCode and ForgotPassword codes, AdminCreateUser invitations) | Webmail: inbox per recipient (to, cc, bcc), rendered HTML, attachments, headers |
 | Push | Firebase Cloud Messaging | iOS lock screen or Android shade, chosen from the device token's platform; title, body, image, data, badge, sound |
 | Chat | Slack (`chat.postMessage`, `chat.postEphemeral` and incoming webhooks) | Team chat window: a channel list, bot messages with mrkdwn, Block Kit blocks, attachments and reactions |
 

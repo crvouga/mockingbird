@@ -75,10 +75,13 @@ export function executeRenameEnum(env: ExecEnv, enumData: EnumData, newName: str
         baseType.id === domain.baseType.id &&
         defaultExpr === domain.defaultExpr &&
         checks.every((c, i) => c.expr === domain.checks[i]?.expr);
-      if (!same) sch.domains.set(name, { ...domain, baseType, defaultExpr, checks, shareCount: 0 });
+      if (!same) sch.domains.set(name, { ...domain, baseType, defaultExpr, checks });
     }
 
-    for (const overloads of sch.functions.values()) {
+    for (const [name, shared] of [...sch.functions]) {
+      // snapshots share overload lists: replace the list rather than changing it in place
+      const overloads = shared.slice();
+      let changed = false;
       overloads.forEach((fn, index) => {
         const argTypes = fn.argTypes.map(retype);
         const returns = fn.returns === null ? null : retype(fn.returns);
@@ -89,8 +92,11 @@ export function executeRenameEnum(env: ExecEnv, enumData: EnumData, newName: str
           returns === fn.returns &&
           returnsTable?.every((c, i) => c.type === fn.returnsTable?.[i]?.type) !== false &&
           argDefaults.every((d, i) => d === fn.argDefaults[i]);
-        if (!same) overloads[index] = { ...fn, argTypes, returns, returnsTable, argDefaults };
+        if (same) return;
+        overloads[index] = { ...fn, argTypes, returns, returnsTable, argDefaults };
+        changed = true;
       });
+      if (changed) sch.functions.set(name, overloads);
     }
 
     for (const [name, index] of [...sch.indexes]) {

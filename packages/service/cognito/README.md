@@ -78,7 +78,8 @@ The hosted-UI domain is the emulator's own origin (plus the `/__admin/ns/<name>`
 ### Admin and deterministic controls
 
 - `GET/POST /__admin/users` lists redacted users or seeds one. Passwords and tokens are never returned.
-- `GET /__admin/codes?username=…` returns local confirmation/reset codes without sending mail.
+- `GET /__admin/codes?username=…` returns a user's current confirmation/reset codes; without `username` it is a 400.
+- `GET /__admin/outbox` lists every message Cognito delivered, oldest first (filters `to`, `since`, `limit`, `channel` = `email`/`sms`, `trigger`, `username`; `GET /__admin/outbox/:id` reads one). SignUp, ResendConfirmationCode and ForgotPassword send Cognito's default verification message (`no-reply@verificationemail.com`, subject `Your verification code`, body `Your verification code is <code>.`) to the user's `email`, or by SMS to `phone_number` when the user has no email, and `CodeDeliveryDetails` names that medium. AdminCreateUser sends the default invitation (`Your username is <username> and temporary password is <password>.`) over `DesiredDeliveryMediums` (SMS by default, email for a user without `phone_number`) unless `MessageAction` is `SUPPRESS`. Each entry has `to`, `channel`, `deliveryMedium`, `attributeName`, `username`, `trigger`, `code`, `from`, `subject`, `body` and `createdAt`. Custom message templates are not modelled. Run the [notifications harness](../../notifications/README.md) against the pool to see these on a phone and webmail screen and finish sign-up from there.
 - `POST /__admin/sessions/revoke {"username":"…"}` invalidates access and refresh sessions.
 - `POST /__admin/hosted-ui/next-account {"username":"…"}` picks the hosted UI's next account; `GET/POST /__admin/app-clients` lists or registers hosted-UI app clients.
 - `POST /__admin/keys/rotate {"retainPrevious":true}` rotates signing keys and retains at most two prior keys. As in Cognito, ID and access tokens are signed with different keys, so the JWKS lists one key of each kind per generation and rotation replaces both (the response names them `kid` and `accessKid`). Every new key receives a fresh random UUID `kid`, independently of the virtual clock. Reset starts a fresh key ring.
@@ -90,7 +91,7 @@ The shared runtime supplies reset, clock, snapshots, journals, metrics, faults, 
 
 Use `fixtures: { users: [...] }` in a fleet service entry, or `options: { fixtures: "./synthetic-users.json" }` for an explicit JSON file containing the same object. The standalone CLI accepts `--fixtures ./synthetic-users.json`. Each user requires `username` and `password`; optional `sub`, `confirmed`, `enabled`, `status`, `createdAt`, attributes, groups, linked identities and inspection codes match the in-process seed fields. Invalid fields, duplicate usernames/subjects/email aliases and conflicting identities fail with field paths before readiness. Diagnostics omit values. Fixture identity objects accept Cognito identity claim fields and the supported provider-link fields, rather than arbitrary nested objects.
 
-Fixtures form the reset baseline for every independent namespace. Importing a snapshot replaces saved state, including deleted fixture users, without reseeding. Synthetic passwords stay in private state/archives; user admin responses redact passwords, session data and inspection codes. Codes remain available only from `/__admin/codes`.
+Fixtures form the reset baseline for every independent namespace. Importing a snapshot replaces saved state, including deleted fixture users, without reseeding. Synthetic passwords stay in private state/archives; user admin responses redact passwords, session data and inspection codes. Codes remain available only from `/__admin/codes` and the delivered messages in `/__admin/outbox`.
 
 | Surface | Public origin and path prefix | Namespace isolation |
 | --- | --- | --- |
@@ -106,13 +107,13 @@ Current and retained synthetic signing keys live in namespace storage, so namesp
 
 ### Deliberately not modelled
 
-Operations outside the documented subset, production quotas, email/SMS delivery, MFA, Lambda triggers, device tracking, Cognito Identity Pools, AWS billing, dashboards, and outbound vendor calls are not implemented. The hosted UI renders an emulator account picker instead of Cognito's managed login pages or the real Google/Apple pages (see Hosted UI above for the unmodelled parameters and grants).
+Operations outside the documented subset, production quotas, real email/SMS delivery (messages are recorded in `/__admin/outbox` instead), custom message templates, MFA, Lambda triggers, device tracking, Cognito Identity Pools, AWS billing, dashboards, and outbound vendor calls are not implemented. The hosted UI renders an emulator account picker instead of Cognito's managed login pages or the real Google/Apple pages (see Hosted UI above for the unmodelled parameters and grants).
 
 ## API
 
 - `CognitoAPI`, `CognitoAPIOptions`: AWS JSON handler and options.
 - `createRuntime`, `CognitoRuntime`, `CognitoRuntimeOptions`: full Mockingbird service runtime.
-- `COGNITO_NAMESPACE`, `COGNITO_PRESETS`, `accessKeyCredential`: service constants and controls.
+- `COGNITO_NAMESPACE`, `COGNITO_PRESETS`, `COGNITO_DEFAULT_SENDER`, `accessKeyCredential`: service constants and controls (`COGNITO_DEFAULT_SENDER` is the `from` address on delivered email codes).
 - `CognitoAttribute`, `CognitoSeedUser`, `CognitoUser`, `CognitoFixtures`: state and fixture types.
 - `document`, `operationIds`, `supportedOperationIds`: generated OpenAPI metadata.
 - `createServer`, `CognitoServerOptions`, `DEFAULT_PORT`, `serveTarget` from `./server`: Node HTTP adapter and CLI integration.

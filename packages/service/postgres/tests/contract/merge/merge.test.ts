@@ -132,13 +132,14 @@ test("MERGE fires row triggers and reports the row count", () => {
   db.close();
 });
 
-test("MERGE in a WITH query stays unsupported (0A000)", () => {
+// #692: MERGE inside WITH runs (more in tests/contract/issue-692/tablesample-merge-cte.test.ts)
+test("MERGE in a WITH query", () => {
   const db = new Database();
   db.exec("CREATE TABLE c (a int)");
-  expect(() =>
-    db.exec(
+  expect(
+    db.query(
       "WITH m AS (MERGE INTO c USING (SELECT 1 AS a) s ON true WHEN NOT MATCHED THEN INSERT VALUES (1) RETURNING *) SELECT * FROM m",
     ),
-  ).toThrow(/MERGE in a WITH query is not supported/);
+  ).toEqual([{ a: 1 }]);
   db.close();
 });

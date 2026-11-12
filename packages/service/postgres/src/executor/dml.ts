@@ -27,11 +27,28 @@ import type { ColumnMeta, TableData } from "../storage/database-state.ts";
 import { replicaRole } from "../storage/guc.ts";
 import { castTo } from "../types/cast.ts";
 import { datumKey } from "../types/compare.ts";
-import { type Datum, type TypedValue, tv, UNKNOWN } from "../types/value.ts";
+import {
+  type Datum,
+  isCompositeType,
+  type PgRecord,
+  type TypedValue,
+  tv,
+  typeDisplayName,
+  UNKNOWN,
+} from "../types/value.ts";
 import { commandResult, type ExecEnv, type ExecResult, type Relation, RowScope } from "./relation.ts";
 import { evalReturning, type ReturningRow } from "./returning.ts";
 import { applyWith, buildFrom, evalPredicate, evalScalar, executeSelectStmt } from "./select.ts";
 import { mentionsSystemColumn, systemColumns, withSystemValues } from "./system-columns.ts";
+import {
+  checkPartitionConstraint,
+  isPartitioned,
+  leafPartitions,
+  qualified,
+  routeRow,
+  satisfiesPartitionConstraint,
+} from "./partition.ts";
+import { checkReturnedRowVisible, checkRowSecurity, rowSecurityFilter } from "./row-security.ts";
 import { fireRowTriggers, fireStatementTriggers } from "./triggers.ts";
 
 // ---------------------------------------------------------------------------
@@ -42,17 +59,17 @@ import { fireRowTriggers, fireStatementTriggers } from "./triggers.ts";
 export function withStatementRollback<T>(env: ExecEnv, fn: () => T): T {
   if (env.ctx.state.inTransaction) return fn();
   const state = env.ctx.state;
-  state.freezeShared();
-  const snap = state.cloneShallow();
+  // O(1) in the catalog's size: the snapshot forks the catalog maps instead of copying them (#710)
   const prngSnap = state.prng.getState();
+  const hold = state.holdForRollback();
   try {
     return fn();
   } catch (e) {
-    state.restoreFrom(snap);
+    state.restoreFrom(hold.state, true);
     state.prng.setState(prngSnap);
     throw e;
   } finally {
-    state.thawShared();
+    state.releaseHold(hold.epoch);
   }
 }
 
@@ -232,11 +249,21 @@ function applyOnConflictUpdate(
     ...table.columns.map((c) => ({ name: c.name, type: c.type.id, table: "excluded" })),
   ];
   const scope = new RowScope(cols, [...existing, ...newRow], env.outer, new Set([label, "excluded"]));
+  // row security: the conflicting row must be one the role may update (an error, not a skip)
+  const updatable = rowSecurityFilter(env, table, "update");
+  if (updatable && !updatable(existing)) {
+    throw pgError(
+      "misuse",
+      `new row violates row-level security policy (USING expression) for table "${table.name}"`,
+      "42501",
+    );
+  }
   if (where && !evalPredicate(env, scope, where)) return false;
 
   const updated = existing.slice();
   applyUpdateSets(env, table, sets, scope, updated);
   computeGeneratedColumns(env, table, updated);
+  checkRowSecurity(env, table, "update", updated);
   table.rowXmins.set(updated, env.ctx.rowVersionXid());
   table.replaceRow(existingIdx, updated);
   indexUpdateRow(env, table, existingIdx, existing, updated);
@@ -252,6 +279,7 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "insert into");
   const rows = table.writeRows();
+  const partitioned = isPartitioned(env.ctx.state, table);
   const label = stmt.alias ?? table.name;
   const colIdxs = insertTargetColumns(env, table, stmt);
   const sourceRows = insertSourceRows(env, stmt, colIdxs);
@@ -293,16 +321,23 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
         row[i] = columnDefault(env, table, col);
       }
 
+      // a partitioned table routes the row to the partition that takes it
+      const tgt = partitioned ? requireTargetTable(env, qualified(routeRow(env, table, row)), "insert into") : table;
+      const tgtRows = tgt === table ? rows : tgt.writeRows();
+
       // BEFORE triggers
-      const fired = fireRowTriggers(env, table, "before", "insert", null, row);
+      const fired = fireRowTriggers(env, tgt, "before", "insert", null, row);
       if (fired.row === null) continue;
       const newRow = fired.row;
 
-      computeGeneratedColumns(env, table, newRow);
+      computeGeneratedColumns(env, tgt, newRow);
+      checkPartitionConstraint(env, tgt, newRow);
+      checkRowSecurity(env, table, "insert", newRow);
+      if (stmt.returning) checkReturnedRowVisible(env, table, newRow);
 
       // ON CONFLICT arbiter check
       if (stmt.onConflict) {
-        const arbiters = resolveArbiters(env, table, stmt.onConflict);
+        const arbiters = resolveArbiters(env, tgt, stmt.onConflict);
         let conflictIdx: number | null = null;
         let conflictWhereOk = true;
         for (const a of arbiters) {
@@ -313,10 +348,10 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
             stmt.onConflict.target.where
           ) {
             // conflict_target WHERE clause constrains the arbiter (partial indexes)
-            const scope = tableRowScope(env, table, label, newRow);
+            const scope = tableRowScope(env, tgt, label, newRow);
             conflictWhereOk = evalPredicate(env, scope, stmt.onConflict.target.where);
           }
-          const idx = findConflict(env, table, a.spec, newRow);
+          const idx = findConflict(env, tgt, a.spec, newRow);
           if (idx !== null) {
             conflictIdx = idx;
             break;
@@ -324,10 +359,10 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
         }
         if (conflictIdx !== null && conflictWhereOk) {
           if (stmt.onConflict.action === "nothing") continue;
-          const replaced = rows[conflictIdx]!;
+          const replaced = tgtRows[conflictIdx]!;
           const did = applyOnConflictUpdate(
             env,
-            table,
+            tgt,
             label,
             conflictIdx,
             newRow,
@@ -338,30 +373,31 @@ export function executeInsert(env0: ExecEnv, stmt: InsertStmt): ExecResult {
             insertedCount++;
             insertedRows.push({
               old: replaced,
-              new: rows[conflictIdx]!,
+              new: tgtRows[conflictIdx]!,
               position: conflictIdx,
               xmax: env.ctx.rowVersionXid(),
+              table: tgt,
             });
             conflictOldRows.push(replaced);
-            conflictNewRows.push(rows[conflictIdx]!);
-            fireRowTriggers(env, table, "after", "update", null, rows[conflictIdx]!);
+            conflictNewRows.push(tgtRows[conflictIdx]!);
+            fireRowTriggers(env, tgt, "after", "update", null, tgtRows[conflictIdx]!);
           }
           continue;
         }
       }
 
-      checkNotNull(env, table, newRow);
-      checkChecks(env, table, newRow);
-      checkUnique(env, table, newRow, rows.length);
-      checkForeignKeys(env, table, newRow, true);
-      table.rowXmins.set(newRow, env.ctx.rowVersionXid());
-      rows.push(newRow);
-      table.recordDurableRow(newRow);
-      indexInsertRow(env, table, rows.length - 1, newRow);
+      checkNotNull(env, tgt, newRow);
+      checkChecks(env, tgt, newRow);
+      checkUnique(env, tgt, newRow, tgtRows.length);
+      checkForeignKeys(env, tgt, newRow, true);
+      tgt.rowXmins.set(newRow, env.ctx.rowVersionXid());
+      tgtRows.push(newRow);
+      tgt.recordDurableRow(newRow);
+      indexInsertRow(env, tgt, tgtRows.length - 1, newRow);
       insertedCount++;
-      insertedRows.push({ old: null, new: newRow, position: rows.length - 1, xmax: 0 });
+      insertedRows.push({ old: null, new: newRow, position: tgtRows.length - 1, xmax: 0, table: tgt });
       addedRows.push(newRow);
-      fireRowTriggers(env, table, "after", "insert", null, newRow);
+      fireRowTriggers(env, tgt, "after", "insert", null, newRow);
     }
 
     fireStatementTriggers(env, table, "after", "insert", { oldRows: [], newRows: addedRows });
@@ -389,6 +425,28 @@ export function applyUpdateSets(
   row: Datum[],
 ): void {
   for (const set of sets) {
+    const target = set.columns[0];
+    if (
+      set.columns.length === 1 &&
+      target &&
+      target.subscripts === null &&
+      target.fields.length > 0 &&
+      "type" in set.value &&
+      set.value.type !== "default_expr"
+    ) {
+      // SET composite_column.field = value
+      const i = table.columnIndex(target.name);
+      if (i === -1) {
+        throw pgError(
+          "undefined_column",
+          `column "${target.name}" of relation "${table.name}" does not exist`,
+          "42703",
+        );
+      }
+      const v = evalScalar(env, scope, set.value);
+      row[i] = assignCompositeField(env, table.columns[i]!, row[i] ?? null, target.fields, v);
+      continue;
+    }
     if (set.columns.some((c) => c.subscripts !== null || c.fields.length > 0)) {
       throw unsupported("UPDATE with subscripted or field-qualified target columns");
     }
@@ -457,13 +515,106 @@ export function applyUpdateSets(
   }
 }
 
+/** The value of a composite column with `fields` (a path of attribute names) set to `value`. */
+function assignCompositeField(
+  env: ExecEnv,
+  col: ColumnMeta,
+  current: Datum,
+  fields: string[],
+  value: TypedValue,
+): Datum {
+  const assign = (type: string, base: Datum, path: string[]): Datum => {
+    const attrs = isCompositeType(type) ? env.ctx.compositeAttributes(type) : null;
+    if (!attrs) {
+      throw pgError(
+        "datatype_mismatch",
+        `cannot assign to field "${path[0]}" of column "${col.name}" because its type ${typeDisplayName(type)} is not a composite type`,
+        "42804",
+      );
+    }
+    const index = attrs.names.indexOf(path[0]!);
+    if (index === -1) {
+      throw pgError(
+        "undefined_column",
+        `cannot assign to field "${path[0]}" of column "${col.name}" because there is no such column in data type ${typeDisplayName(type)}`,
+        "42703",
+      );
+    }
+    const old = base === null ? attrs.types.map(() => null) : (base as PgRecord).values;
+    const fieldType = attrs.types[index]!;
+    const next =
+      path.length > 1
+        ? assign(fieldType, old[index] ?? null, path.slice(1))
+        : castTo(env.ctx, value, fieldType, { assignment: true }).v;
+    const values = old.slice();
+    values[index] = next;
+    return { kind: "pgrecord", types: attrs.types.slice(), values, names: attrs.names.slice() };
+  };
+  return assign(col.type.id, current, fields);
+}
+
 export function executeUpdate(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   if (stmt.whereCurrentOf) throw unsupported("WHERE CURRENT OF");
   // A row that fails a constraint, or a referenced key it strands, undoes the rows updated before it.
-  return withStatementRollback(env0, () => updateRows(env0, stmt));
+  return withStatementRollback(env0, () => {
+    const parent = env0.ctx.state.findTable(stmt.table);
+    if (parent && isPartitioned(env0.ctx.state, parent)) {
+      return throughPartitions(env0, parent, stmt, "update", (env, leaf) => updateRows(env, leaf, parent));
+    }
+    return updateRows(env0, stmt);
+  });
 }
 
-function updateRows(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
+/**
+ * UPDATE / DELETE through a partitioned table: the statement runs on each leaf partition (under the
+ * parent's name), with the parent's statement triggers around it once.
+ */
+function throughPartitions<S extends UpdateStmt | DeleteStmt>(
+  env0: ExecEnv,
+  parent: TableData,
+  stmt: S,
+  event: "update" | "delete",
+  run: (env: ExecEnv, stmt: S) => ExecResult,
+): ExecResult {
+  const env = applyWith(env0, stmt.with);
+  fireStatementTriggers(env, parent, "before", event);
+  const results: ExecResult[] = [];
+  for (const leaf of leafPartitions(env.ctx.state, parent)) {
+    results.push(run(env, { ...stmt, with: null, table: qualified(leaf), alias: stmt.alias ?? parent.name }));
+  }
+  fireStatementTriggers(env, parent, "after", event);
+  const count = results.reduce((n, r) => n + r.rowCount, 0);
+  env.ctx.state.changes = count;
+  const command = event === "update" ? "UPDATE" : "DELETE";
+  if (!stmt.returning) return commandResult(command, count);
+  return {
+    // a partition with no RETURNING rows cannot type an expression column: take one that has rows
+    columns: (results.find((r) => r.rows.length > 0) ?? results[0])?.columns ?? [],
+    rows: results.flatMap((r) => r.rows),
+    command,
+    rowCount: count,
+  };
+}
+
+/** Insert a row moved out of a partition by UPDATE into the partition of `root` that takes it. */
+function insertRoutedRow(env: ExecEnv, root: TableData, row: Datum[]): { table: TableData; position: number } {
+  const target = requireTargetTable(env, qualified(routeRow(env, root, row)), "insert into");
+  const fired = fireRowTriggers(env, target, "before", "insert", null, row);
+  const newRow = fired.row ?? row;
+  checkNotNull(env, target, newRow);
+  checkChecks(env, target, newRow);
+  const rows = target.writeRows();
+  checkUnique(env, target, newRow, rows.length);
+  checkForeignKeys(env, target, newRow, true);
+  target.rowXmins.set(newRow, env.ctx.rowVersionXid());
+  rows.push(newRow);
+  target.recordDurableRow(newRow);
+  indexInsertRow(env, target, rows.length - 1, newRow);
+  fireRowTriggers(env, target, "after", "insert", null, newRow);
+  return { table: target, position: rows.length - 1 };
+}
+
+function updateRows(env0: ExecEnv, stmt: UpdateStmt, root?: TableData): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "update");
   const label = stmt.alias ?? table.name;
@@ -480,6 +631,7 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
   ];
   const updatedRows: Datum[][] = [];
   const returningRows: ReturningRow[] = [];
+  const moved: Array<{ ri: number; oldRow: Datum[]; newRow: Datum[] }> = [];
   const replacedRows: Datum[][] = [];
   let updateCount = 0;
 
@@ -502,10 +654,14 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
       ? tryPointRowIndices(env, table, label, stmt.where)
       : null;
   const rows = point ? null : table.writeRows();
+  // row-level security: the rows UPDATE may change, and (when it reads them) may see
+  const updatable = rowSecurityFilter(env, table, "update");
+  const readable = stmt.where || stmt.returning || fromSource ? rowSecurityFilter(env, table, "select") : null;
 
   for (let candidate = 0; candidate < (point ? point.indices.length : rows!.length); candidate++) {
     const ri = point ? point.indices[candidate]! : candidate;
     const oldRow = point ? table.rowAt(ri) : rows![ri]!;
+    if ((updatable && !updatable(oldRow)) || (readable && !readable(oldRow))) continue;
     let matchScope: RowScope | null = null;
 
     if (fromSource) {
@@ -541,6 +697,14 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
     const finalRow = fired.row;
 
     computeGeneratedColumns(env, table, finalRow);
+    checkRowSecurity(env, root ?? table, "update", finalRow);
+    if (stmt.returning) checkReturnedRowVisible(env, root ?? table, finalRow);
+    // through a partitioned table a row whose key now belongs elsewhere moves there
+    if (root && !satisfiesPartitionConstraint(env, table, finalRow)) {
+      moved.push({ ri, oldRow, newRow: finalRow });
+      continue;
+    }
+    checkPartitionConstraint(env, table, finalRow);
     table.rowXmins.set(finalRow, env.ctx.rowVersionXid());
     table.replaceRow(ri, finalRow);
     try {
@@ -561,6 +725,24 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt): ExecResult {
     fireRowTriggers(env, table, "after", "update", oldRow, finalRow);
   }
 
+  if (root && moved.length > 0) {
+    // the moved rows leave this partition (as a DELETE) and enter their new one (as an INSERT)
+    const current = table.writeRows();
+    for (const { oldRow } of moved) fireRowTriggers(env, table, "before", "delete", oldRow, null);
+    for (const { ri } of [...moved].sort((a, b) => b.ri - a.ri)) {
+      table.recordDurableDelete(current[ri]!);
+      current.splice(ri, 1);
+    }
+    rebuildTableIndexes(env, table);
+    for (const { oldRow } of moved) fireRowTriggers(env, table, "after", "delete", oldRow, null);
+    for (const { oldRow, newRow } of moved) {
+      const placed = insertRoutedRow(env, root, newRow);
+      updateCount++;
+      if (stmt.returning) {
+        returningRows.push({ old: oldRow, new: newRow, position: placed.position, xmax: 0, table: placed.table });
+      }
+    }
+  }
   fireStatementTriggers(env, table, "after", "update", { oldRows: replacedRows, newRows: updatedRows });
   env.ctx.state.changes = updateCount;
   if (stmt.returning) {
@@ -593,6 +775,16 @@ function isPureUpdateValue(expr: Expr): boolean {
 // ---------------------------------------------------------------------------
 
 export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
+  const parent = env0.ctx.state.findTable(stmt.table);
+  if (parent && isPartitioned(env0.ctx.state, parent)) {
+    return withStatementRollback(env0, () =>
+      throughPartitions(env0, parent, stmt, "delete", (env, leaf) => deleteRows(env, leaf)),
+    );
+  }
+  return deleteRows(env0, stmt);
+}
+
+function deleteRows(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "delete from");
   const label = stmt.alias ?? table.name;
@@ -607,8 +799,11 @@ export function executeDelete(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   ];
 
   const toDelete: number[] = [];
+  const deletable = rowSecurityFilter(env, table, "delete");
+  const readable = stmt.where || stmt.returning || usingSource ? rowSecurityFilter(env, table, "select") : null;
   for (let ri = 0; ri < rows.length; ri++) {
     const row = rows[ri]!;
+    if ((deletable && !deletable(row)) || (readable && !readable(row))) continue;
     let matched: boolean;
     if (usingSource) {
       matched = usingSource.rel.rows.some((urow) => {
@@ -738,7 +933,7 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
       case "set_null": {
         for (const i of idxs) {
           const newRow = childRows[i]!.slice();
-          for (const c of con.columns) {
+          for (const c of con.onDeleteColumns ?? con.columns) {
             newRow[child.columnIndex(c)] = null;
           }
           child.rowXmins.set(newRow, env.ctx.rowVersionXid());
@@ -751,10 +946,13 @@ export function handleReferencedDelete(env: ExecEnv, table: TableData, row: Datu
       case "set_default": {
         for (const i of idxs) {
           const newRow = childRows[i]!.slice();
-          for (const c of con.columns) {
+          for (const c of con.onDeleteColumns ?? con.columns) {
             const ci = child.columnIndex(c);
             newRow[ci] = columnDefault(env, child, child.columns[ci]!);
           }
+          // the defaults still pointing at the row being deleted fail like a dangling key
+          if (rowKeyFor(child, newRow, con.columns) === key)
+            throw referencedViolation(table, child, con.name, "no_action");
           child.rowXmins.set(newRow, env.ctx.rowVersionXid());
           child.replaceRow(i, newRow);
           checkNotNull(env, child, newRow);

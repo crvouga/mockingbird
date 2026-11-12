@@ -1,6 +1,6 @@
 # Notifications
 
-See every SMS, WhatsApp message, email, push and chat message your application sends, the way the person receiving it would: on a phone's Messages app, an iOS lock screen or Android notification shade, a webmail inbox, and a team chat window. The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators your app already sends through, and gives tests the same messages through a JSON API and a small client.
+See every SMS, WhatsApp message, email, push and chat message your application sends, the way the person receiving it would: on a phone's Messages app, an iOS lock screen or Android notification shade, a webmail inbox, and a team chat window. The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito emulators your app already sends through, and gives tests the same messages through a JSON API and a small client.
 
 <!-- search: notifications harness sms text message email inbox push fcm lock screen notification shade twilio resend ses sns customer.io mailosaur slack chat channel whatsapp block kit webhook tabs one-time code otp verify e2e playwright screenshot outbox messages app webmail -->
 

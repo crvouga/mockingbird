@@ -6,11 +6,8 @@
 import {
   ContentType,
   concatUrls,
-  getAllDataTypes,
   getSearchParameters,
   HTTP_TERMINOLOGY_HL7_ORG,
-  type InternalTypeSchema,
-  isResourceType,
   MEDPLUM_VERSION,
 } from "@medplum/core"
 import type {
@@ -20,6 +17,7 @@ import type {
   CapabilityStatementRestResourceSearchParam,
   ResourceType,
 } from "@medplum/fhirtypes"
+import { RESOURCE_TYPE_SUMMARIES } from "../schema.js"
 
 /** The server stamps `date` once, when the statement is first built. */
 const STARTED_AT = new Date().toISOString()
@@ -236,34 +234,32 @@ export const capabilityStatement = (baseUrl: string): CapabilityStatement => {
             },
           ],
         },
-        resource: Object.entries(getAllDataTypes())
-          .filter(
-            ([resourceType, typeSchema]) =>
-              isResourceType(resourceType) &&
-              typeSchema.url?.startsWith("http://hl7.org/fhir/StructureDefinition/") &&
-              typeSchema.version === "4.0.1",
-          )
-          .map(
-            ([resourceType, typeSchema]) =>
-              ({
-                type: resourceType as ResourceType,
-                profile: typeSchema.url,
-                supportedProfile: supportedProfiles[resourceType]?.length
-                  ? supportedProfiles[resourceType]
-                  : undefined,
-                interaction: DEFAULT_RESOURCE_INTERACTIONS.map((code) => ({ code })),
-                versioning: "versioned",
-                readHistory: true,
-                updateCreate: false,
-                conditionalCreate: true,
-                conditionalUpdate: true,
-                conditionalRead: "not-supported",
-                conditionalDelete: "single",
-                referencePolicy: ["literal", "logical", "local"],
-                searchParam: buildSearchParameters(typeSchema),
-                operation: supportedOperations[resourceType],
-              }) satisfies CapabilityStatementRestResource,
-          ),
+        // Every resource type in schema order, read from a summary the generator precomputes so
+        // the statement does not parse every StructureDefinition (src/schema.ts).
+        resource: RESOURCE_TYPE_SUMMARIES.filter(
+          ({ url, version }) =>
+            url.startsWith("http://hl7.org/fhir/StructureDefinition/") && version === "4.0.1",
+        ).map(
+          ({ type: resourceType, url }) =>
+            ({
+              type: resourceType as ResourceType,
+              profile: url,
+              supportedProfile: supportedProfiles[resourceType]?.length
+                ? supportedProfiles[resourceType]
+                : undefined,
+              interaction: DEFAULT_RESOURCE_INTERACTIONS.map((code) => ({ code })),
+              versioning: "versioned",
+              readHistory: true,
+              updateCreate: false,
+              conditionalCreate: true,
+              conditionalUpdate: true,
+              conditionalRead: "not-supported",
+              conditionalDelete: "single",
+              referencePolicy: ["literal", "logical", "local"],
+              searchParam: buildSearchParameters(resourceType),
+              operation: supportedOperations[resourceType],
+            }) satisfies CapabilityStatementRestResource,
+        ),
         interaction: [{ code: "transaction" }, { code: "batch" }],
         searchParam: supportedSearchParams,
         extension: [
@@ -280,9 +276,9 @@ export const capabilityStatement = (baseUrl: string): CapabilityStatement => {
 }
 
 const buildSearchParameters = (
-  typeSchema: InternalTypeSchema,
+  resourceType: string,
 ): CapabilityStatementRestResourceSearchParam[] | undefined => {
-  const searchParams = getSearchParameters(typeSchema.name)
+  const searchParams = getSearchParameters(resourceType)
   if (!searchParams) return undefined
   const entries = Object.values(searchParams)
   if (entries.length === 0) return undefined

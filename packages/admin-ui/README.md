@@ -6,7 +6,13 @@ data uses Ant Design Table with bounded columns, horizontal scrolling, search,
 sorting, pagination, and expandable JSON details.
 
 `bun run build` compiles a production browser bundle and exports it as a string.
-Service runtimes import that string without importing React or accessing the DOM.
+Service runtimes import that string without importing React or accessing the DOM, and
+only lazily: the runtime loads `./document` with a dynamic `import()` on the first
+`/__admin/ui` request, and each published service ships it as its own `dist/admin-ui.js`
+beside its entries (`scripts/bundle-service-js.ts`). An app that only calls
+`createRuntime().fetch` never loads it; an app bundler that splits code keeps it out of the
+main chunk, and a single-file bundle can leave it out with `--external:./admin-ui.js` (the
+admin page then answers 503).
 Each published service bundles the document locally; administration works without
 a CDN, in Bun, Node, a standalone browser page, or the docs example's Shadow DOM.
 The bundle includes notices and license texts for its third-party dependencies.
@@ -39,6 +45,7 @@ The advanced Latency and Faults screens remain available for persistent and sche
 | Import | For | Exports |
 | --- | --- | --- |
 | `@crvouga/mockingbird-admin-ui` | A service runtime that serves the admin page as one HTML document | `adminClientScript`, `adminClientSource`, `membersClientSource`, `composeAdminApis`, `composeAdminRoutes` |
+| `@crvouga/mockingbird-admin-ui/document` | The browser client alone, as a string; what a runtime loads lazily | `adminClientScript`, `adminClientSource`, `membersClientSource` |
 | `@crvouga/mockingbird-admin-ui/browser` | A page that bundles the UI as an ES module and mounts it into its own DOM | `mount`, `mountMembers`, types `AdminEnvironment`, `PanelScript` |
 | `@crvouga/mockingbird-admin-ui/compose` | The routing for several admin APIs, without the browser bundle | `composeAdminRoutes`, types `ComposableAdminApi`, `ComposedAdminRoutes` |
 

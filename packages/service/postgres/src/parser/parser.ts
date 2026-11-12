@@ -38,6 +38,8 @@ import type {
   WithClause,
 } from "../ast/nodes.ts";
 import { pgError, unsupported } from "../errors/error.ts";
+import type { ParserApi } from "./api.ts";
+import * as ext from "./ext-692.ts";
 import { type Token, tokenize } from "../lexer/tokenize.ts";
 
 /** Fully reserved words: cannot be a bare identifier / alias. */
@@ -203,8 +205,18 @@ export class Parser {
   private tokens: Token[];
   private pos = 0;
 
+  private readonly source: string;
+
   constructor(sql: string) {
+    this.source = sql;
     this.tokens = tokenize(sql);
+  }
+
+  /** The source text from token `start` to the current position (DECLARE's `pg_cursors.statement`). */
+  private sourceFrom(start: number): string {
+    const from = this.tokens[start]?.pos ?? 0;
+    const end = this.peek().type === "eof" ? this.source.length : this.peek().pos;
+    return this.source.slice(from, end).trim();
   }
 
   // --- token helpers -------------------------------------------------------
@@ -292,6 +304,39 @@ export class Parser {
       parts.push(this.ident(true));
     }
     return parts;
+  }
+
+  /** The cursor and sub-parsers for grammar kept in `./ext-*.ts` modules. */
+  private ext(): ParserApi {
+    const p = this;
+    return {
+      get pos() {
+        return p.pos;
+      },
+      set pos(value: number) {
+        p.pos = value;
+      },
+      peek: (offset) => p.peek(offset),
+      next: () => p.next(),
+      atKw: (word, offset) => p.atKw(word, offset),
+      eatKw: (word) => p.eatKw(word),
+      expectKw: (word) => p.expectKw(word),
+      atPunct: (punct, offset) => p.atPunct(punct, offset),
+      eatPunct: (punct) => p.eatPunct(punct),
+      expectPunct: (punct) => p.expectPunct(punct),
+      atOp: (op, offset) => p.atOp(op, offset),
+      eatOp: (op) => p.eatOp(op),
+      errorAt: (token, message) => p.errorAt(token, message),
+      ident: (allowReserved) => p.ident(allowReserved),
+      qualifiedName: () => p.qualifiedName(),
+      parseExpr: () => p.parseExpr(),
+      parseTypeName: () => p.parseTypeName(),
+      parseSelectStmt: () => p.parseSelectStmt(),
+      parseStatement: () => p.parseStatement(),
+      parseIfExists: () => p.parseIfExists(),
+      parseIfNotExists: () => p.parseIfNotExists(),
+      atStatementEnd: () => p.atPunct(";") || p.peek().type === "eof",
+    };
   }
 
   // --- entry ---------------------------------------------------------------
@@ -451,6 +496,10 @@ export class Parser {
           this.pos += 2;
           return { type: "reset", name: "timezone" };
         }
+        if (this.atKw("session") && this.atKw("authorization", 1)) {
+          this.pos += 2;
+          return { type: "reset", name: "session_authorization" };
+        }
         const parts = [this.ident(true)];
         while (this.atPunct(".")) {
           this.pos++;
@@ -560,12 +609,11 @@ export class Parser {
         return { type: "comment", objectKind: kind + extra, objectName, comment };
       }
       case "grant":
-      case "revoke": {
-        // parse loosely to end of statement; execution is a no-op
-        const what = t.value.toUpperCase();
-        this.skipToStatementEnd();
-        return { type: "no_op", what };
-      }
+      case "revoke":
+        return ext.parseGrant(this.ext());
+      case "reassign":
+        this.pos++;
+        return ext.parseRoleUtility(this.ext(), "REASSIGN OWNED");
       case "analyze":
       case "analyse":
         return this.parseAnalyze();
@@ -583,10 +631,12 @@ export class Parser {
       case "unlisten":
         throw unsupported(t.value.toUpperCase());
       case "declare":
+        return ext.parseDeclareCursor(this.ext(), (start) => this.sourceFrom(start));
       case "fetch":
       case "move":
+        return ext.parseFetch(this.ext());
       case "close":
-        throw unsupported("cursors");
+        return ext.parseCloseCursor(this.ext());
       case "lock": {
         this.skipToStatementEnd();
         return { type: "no_op", what: "LOCK" };
@@ -606,8 +656,19 @@ export class Parser {
         }
         return { type: "do", language, body };
       }
-      case "call":
-        throw unsupported("CALL");
+      case "call": {
+        this.pos++;
+        const call = this.parseExpr();
+        if (call.type !== "func" || call.over || call.star || call.distinct || call.filter) {
+          const t = this.peek();
+          throw pgError(
+            "syntax",
+            t.type === "eof" ? "syntax error at end of input" : `syntax error at or near "${t.value}"`,
+            "42601",
+          );
+        }
+        return { type: "call", call };
+      }
       case "import":
         throw unsupported("IMPORT FOREIGN SCHEMA");
       case "security":
@@ -725,7 +786,7 @@ export class Parser {
       if (t.value === "insert") return this.parseInsert(null);
       if (t.value === "update") return this.parseUpdate(null);
       if (t.value === "delete") return this.parseDelete(null);
-      if (t.value === "merge") throw unsupported("MERGE in a WITH query");
+      if (t.value === "merge") return this.parseMerge(null);
     }
     return this.parseSelectStmt();
   }
@@ -1179,6 +1240,11 @@ export class Parser {
       const { alias, colAliases } = this.parseAliasClause();
       return { type: "from_func", call: funcs[0]!, lateral, withOrdinality, alias, colAliases, rowsFrom: funcs };
     }
+    if (this.atKw("json_table") && this.atPunct("(", 1)) {
+      const table = ext.parseJsonTable(this.ext(), lateral);
+      const { alias, colAliases } = this.parseAliasClause();
+      return { ...table, alias, colAliases };
+    }
     const only = this.eatKw("only");
     // function call in FROM?
     const save = this.pos;
@@ -1195,7 +1261,24 @@ export class Parser {
       // trailing * (inheritance marker) — accept and ignore
     }
     const { alias, colAliases } = this.parseAliasClause();
-    if (this.atKw("tablesample")) throw unsupported("TABLESAMPLE");
+    if (this.eatKw("tablesample")) {
+      const method = this.qualifiedName().join(".");
+      this.expectPunct("(");
+      const args: Expr[] = [];
+      if (!this.atPunct(")")) {
+        do {
+          args.push(this.parseExpr());
+        } while (this.eatPunct(","));
+      }
+      this.expectPunct(")");
+      let repeatable: Expr | null = null;
+      if (this.eatKw("repeatable")) {
+        this.expectPunct("(");
+        repeatable = this.parseExpr();
+        this.expectPunct(")");
+      }
+      return { type: "from_table", name, only, alias, colAliases, tablesample: { method, args, repeatable } };
+    }
     return { type: "from_table", name, only, alias, colAliases };
   }
 
@@ -1707,6 +1790,7 @@ export class Parser {
       this.pos++;
       const name = this.qualifiedName();
       this.expectKw("as");
+      if (this.atPunct("(")) return ext.parseCompositeTypeBody(this.ext(), name);
       if (this.eatKw("enum")) {
         this.expectPunct("(");
         const labels: string[] = [];
@@ -1757,8 +1841,7 @@ export class Parser {
     if (this.atKw("function") || this.atKw("procedure")) {
       const isProc = this.atKw("procedure");
       this.pos++;
-      if (isProc) throw unsupported("CREATE PROCEDURE");
-      return this.parseCreateFunction(orReplace);
+      return this.parseCreateFunction(orReplace, isProc);
     }
     if (this.atKw("trigger") || (this.atKw("constraint") && this.atKw("trigger", 1))) {
       const constraint = this.eatKw("constraint");
@@ -1795,9 +1878,10 @@ export class Parser {
       return { type: "create_extension", name, ifNotExists, schema, version, cascade };
     }
     if (this.atKw("database")) throw unsupported("CREATE DATABASE");
-    if (this.atKw("role") || this.atKw("user") || this.atKw("group")) throw unsupported("roles");
+    if (this.atKw("role") || this.atKw("user") || this.atKw("group")) return ext.parseCreateRole(this.ext());
     if (this.atKw("rule")) throw unsupported("CREATE RULE");
-    if (this.atKw("policy")) throw unsupported("CREATE POLICY");
+    if (this.atKw("policy")) return ext.parseCreatePolicy(this.ext());
+    if (this.atKw("event") && this.atKw("trigger", 1)) return ext.parseCreateEventTrigger(this.ext());
     if (this.atKw("collation")) throw unsupported("CREATE COLLATION");
     if (this.atKw("cast")) throw unsupported("CREATE CAST");
     if (this.atKw("operator")) throw unsupported("CREATE OPERATOR");
@@ -1828,6 +1912,7 @@ export class Parser {
   private parseCreateTable(temp: boolean, unlogged: boolean): Statement {
     const ifNotExists = this.parseIfNotExists();
     const name = this.qualifiedName();
+    if (this.atKw("partition") && this.atKw("of", 1)) return this.parsePartitionOf(name, ifNotExists, temp, unlogged);
     // CREATE TABLE AS
     if (this.atKw("as") || (this.atPunct("(") === false && this.atKw("as"))) {
       this.pos++;
@@ -1921,7 +2006,71 @@ export class Parser {
     this.expectPunct(")");
     // storage/partition options
     if (this.eatKw("inherits")) throw unsupported("table inheritance");
-    if (this.eatKw("partition")) throw unsupported("table partitioning");
+    const partitionBy = this.parsePartitionByClause();
+    this.parseTableStorageTail();
+    return {
+      type: "create_table",
+      name,
+      ifNotExists,
+      temp,
+      unlogged,
+      columns,
+      constraints,
+      likeClauses,
+      ...(partitionBy ? { partitionBy } : {}),
+    };
+  }
+
+  private parsePartitionByClause() {
+    if (!(this.atKw("partition") && this.atKw("by", 1))) return undefined;
+    this.pos += 2;
+    return ext.parsePartitionSpec(this.ext());
+  }
+
+  /** `CREATE TABLE name PARTITION OF parent [( column options / constraints )] FOR VALUES ... [PARTITION BY ...]` */
+  private parsePartitionOf(name: string[], ifNotExists: boolean, temp: boolean, unlogged: boolean): Statement {
+    this.pos += 2;
+    const parent = this.qualifiedName();
+    const columns: ColumnDef[] = [];
+    const constraints: TableConstraint[] = [];
+    if (this.eatPunct("(")) {
+      do {
+        const tc = this.tryParseTableConstraint();
+        if (tc) {
+          constraints.push(tc);
+          continue;
+        }
+        // column_name [WITH OPTIONS] column_constraint ...: no type, the parent's column is meant
+        const column = this.ident();
+        if (this.atKw("with") && this.atKw("options", 1)) this.pos += 2;
+        // an empty type name: the column keeps the parent's type
+        columns.push({
+          name: column,
+          typeName: { parts: [], mods: [], arrayDims: 0 },
+          constraints: this.parseColumnConstraints(),
+        });
+      } while (this.eatPunct(","));
+      this.expectPunct(")");
+    }
+    const bound = ext.parsePartitionBound(this.ext());
+    const partitionBy = this.parsePartitionByClause();
+    this.parseTableStorageTail();
+    return {
+      type: "create_table",
+      name,
+      ifNotExists,
+      temp,
+      unlogged,
+      columns,
+      constraints,
+      likeClauses: [],
+      partitionOf: { parent, bound },
+      ...(partitionBy ? { partitionBy } : {}),
+    };
+  }
+
+  /** WITH (...), ON COMMIT, TABLESPACE after a CREATE TABLE's column list */
+  private parseTableStorageTail(): void {
     if (this.eatKw("using")) this.ident(true);
     if (this.eatKw("with")) {
       this.expectPunct("(");
@@ -1938,7 +2087,6 @@ export class Parser {
       if (this.peek(-1)!.value === "delete") this.expectKw("rows");
     }
     if (this.eatKw("tablespace")) this.ident(true);
-    return { type: "create_table", name, ifNotExists, temp, unlogged, columns, constraints, likeClauses };
   }
 
   private tryParseTableConstraint(): TableConstraint | null {
@@ -2004,7 +2152,7 @@ export class Parser {
         } while (this.eatPunct(","));
         this.expectPunct(")");
       }
-      const { onDelete, onUpdate, match } = this.parseRefActions();
+      const { onDelete, onUpdate, match, onDeleteColumns } = this.parseRefActions();
       const timing = this.skipConstraintTail();
       return {
         kind: "foreign_key",
@@ -2012,6 +2160,7 @@ export class Parser {
         columns,
         refTable,
         refColumns,
+        ...(onDeleteColumns ? { onDeleteColumns } : {}),
         onDelete,
         onUpdate,
         match,
@@ -2081,9 +2230,26 @@ export class Parser {
     return { deferrable: deferrable || initiallyDeferred, initiallyDeferred };
   }
 
-  private parseRefActions(): { onDelete: RefAction; onUpdate: RefAction; match: "full" | "partial" | "simple" | null } {
+  private parseRefActions(): {
+    onDelete: RefAction;
+    onUpdate: RefAction;
+    match: "full" | "partial" | "simple" | null;
+    onDeleteColumns?: string[];
+  } {
     let onDelete: RefAction = null;
     let onUpdate: RefAction = null;
+    let onDeleteColumns: string[] | undefined;
+    // `SET NULL (col, ...)` / `SET DEFAULT (col, ...)` (PostgreSQL 15): only ON DELETE takes the list
+    const setColumns = (action: RefAction): string[] | undefined => {
+      if ((action !== "set_null" && action !== "set_default") || !this.atPunct("(")) return undefined;
+      this.pos++;
+      const columns: string[] = [];
+      do {
+        columns.push(this.ident());
+      } while (this.eatPunct(","));
+      this.expectPunct(")");
+      return columns;
+    };
     let match: "full" | "partial" | "simple" | null = null;
     for (;;) {
       if (this.eatKw("match")) {
@@ -2096,16 +2262,25 @@ export class Parser {
       if (this.atKw("on") && this.atKw("delete", 1)) {
         this.pos += 2;
         onDelete = this.parseRefAction();
+        onDeleteColumns = setColumns(onDelete);
         continue;
       }
       if (this.atKw("on") && this.atKw("update", 1)) {
         this.pos += 2;
         onUpdate = this.parseRefAction();
+        if (setColumns(onUpdate)) {
+          const action = onUpdate === "set_null" ? "SET NULL" : "SET DEFAULT";
+          throw pgError(
+            "feature_not_supported",
+            `a column list with ${action} is only supported for ON DELETE actions`,
+            "0A000",
+          );
+        }
         continue;
       }
       break;
     }
-    return { onDelete, onUpdate, match };
+    return { onDelete, onUpdate, match, ...(onDeleteColumns ? { onDeleteColumns } : {}) };
   }
 
   private parseRefAction(): RefAction {
@@ -2129,6 +2304,10 @@ export class Parser {
   private parseColumnDef(): ColumnDef {
     const name = this.ident();
     const typeName = this.parseTypeName();
+    return { name, typeName, constraints: this.parseColumnConstraints() };
+  }
+
+  private parseColumnConstraints(): ColumnConstraint[] {
     const constraints: ColumnConstraint[] = [];
     for (;;) {
       let cname: string | null = null;
@@ -2185,13 +2364,14 @@ export class Parser {
           } while (this.eatPunct(","));
           this.expectPunct(")");
         }
-        const { onDelete, onUpdate, match } = this.parseRefActions();
+        const { onDelete, onUpdate, match, onDeleteColumns } = this.parseRefActions();
         const timing = this.skipConstraintTail();
         constraints.push({
           kind: "references",
           name: cname,
           table,
           columns,
+          ...(onDeleteColumns ? { onDeleteColumns } : {}),
           onDelete,
           onUpdate,
           match,
@@ -2209,8 +2389,10 @@ export class Parser {
             this.expectPunct("(");
             const expr = this.parseExpr();
             this.expectPunct(")");
-            this.expectKw("stored");
-            constraints.push({ kind: "generated_stored", expr, name: cname });
+            // PostgreSQL 18: VIRTUAL is the default when neither STORED nor VIRTUAL is written
+            const virtual = !this.eatKw("stored");
+            if (virtual) this.eatKw("virtual");
+            constraints.push({ kind: "generated_stored", expr, name: cname, ...(virtual ? { virtual } : {}) });
           }
         } else {
           this.expectKw("by");
@@ -2247,7 +2429,7 @@ export class Parser {
       if (cname !== null) this.errorAt(this.peek(), "expected column constraint");
       break;
     }
-    return { name, typeName, constraints };
+    return constraints;
   }
 
   /** `STORAGE { PLAIN | EXTERNAL | EXTENDED | MAIN | DEFAULT }`: an identifier (not a string) or DEFAULT. */
@@ -2476,7 +2658,7 @@ export class Parser {
     return { type: "create_view", name, orReplace, temp, columns, query, materialized, withData };
   }
 
-  private parseCreateFunction(orReplace: boolean): CreateFunctionStmt {
+  private parseCreateFunction(orReplace: boolean, procedure = false): CreateFunctionStmt {
     const name = this.qualifiedName();
     this.expectPunct("(");
     const args: CreateFunctionStmt["args"][number][] = [];
@@ -2512,6 +2694,10 @@ export class Parser {
     this.expectPunct(")");
     let returns: TypeName | null = null;
     let returnsTable: CreateFunctionStmt["returnsTable"] = null;
+    if (procedure && this.atKw("returns")) {
+      const t = this.peek(1);
+      throw pgError("syntax", `syntax error at or near "${t.value}"`, "42601");
+    }
     if (this.eatKw("returns")) {
       if (this.eatKw("table")) {
         this.expectPunct("(");
@@ -2692,6 +2878,7 @@ export class Parser {
       volatility,
       strict,
       settings,
+      ...(procedure ? { procedure } : {}),
     };
   }
 
@@ -2812,6 +2999,10 @@ export class Parser {
     if (this.eatKw("sequence")) {
       const ifExists = this.parseIfExists();
       const name = this.qualifiedName();
+      if (this.atKw("owner") && this.atKw("to", 1)) {
+        this.pos += 2;
+        return { type: "role_utility", what: "ALTER SEQUENCE", roles: [this.ident(true)], target: name };
+      }
       if (this.atKw("rename")) {
         this.pos++;
         this.expectKw("to");
@@ -2865,6 +3056,10 @@ export class Parser {
     }
     if (this.eatKw("schema")) {
       const name = this.ident();
+      if (this.atKw("owner") && this.atKw("to", 1)) {
+        this.pos += 2;
+        return { type: "role_utility", what: "ALTER SCHEMA", roles: [this.ident(true)], target: [name] };
+      }
       if (this.eatKw("rename")) {
         this.expectKw("to");
         return { type: "alter_schema", name, action: { kind: "rename", to: this.ident() } };
@@ -2873,6 +3068,16 @@ export class Parser {
     }
     if (this.eatKw("type")) {
       const name = this.qualifiedName();
+      if (this.atKw("owner") && this.atKw("to", 1)) {
+        this.pos += 2;
+        return { type: "role_utility", what: "ALTER TYPE", roles: [this.ident(true)], target: name };
+      }
+      if (
+        (this.atKw("add") || this.atKw("drop") || this.atKw("alter") || this.atKw("rename")) &&
+        this.atKw("attribute", 1)
+      ) {
+        return ext.parseAlterCompositeType(this.ext(), name);
+      }
       if (this.eatKw("add")) {
         this.expectKw("value");
         const ifNotExists = this.parseIfNotExists();
@@ -2907,13 +3112,13 @@ export class Parser {
       this.skipToStatementEnd();
       return { type: "no_op", what: "ALTER FUNCTION" };
     }
-    if (
-      this.eatKw("database") ||
-      this.eatKw("role") ||
-      this.eatKw("user") ||
-      this.eatKw("system") ||
-      this.eatKw("default")
-    ) {
+    if (this.atKw("role") || this.atKw("user") || this.atKw("group")) return ext.parseAlterRole(this.ext());
+    if (this.atKw("policy")) return ext.parseAlterPolicy(this.ext());
+    if (this.atKw("event") && this.atKw("trigger", 1)) return ext.parseAlterEventTrigger(this.ext());
+    if (this.atKw("default") && this.atKw("privileges", 1)) {
+      return ext.parseRoleUtility(this.ext(), "ALTER DEFAULT PRIVILEGES");
+    }
+    if (this.eatKw("database") || this.eatKw("system") || this.eatKw("default")) {
       this.skipToStatementEnd();
       return { type: "no_op", what: "ALTER (other)" };
     }
@@ -3049,6 +3254,33 @@ export class Parser {
       this.expectKw("constraint");
       return { kind: "validate_constraint", name: this.ident() };
     }
+    if ((this.atKw("enable") || this.atKw("disable")) && this.atKw("row", 1)) {
+      const enable = this.next().value === "enable";
+      this.expectKw("row");
+      this.expectKw("level");
+      this.expectKw("security");
+      return { kind: "row_security", enable };
+    }
+    if (this.atKw("force") || (this.atKw("no") && this.atKw("force", 1))) {
+      const force = this.next().value === "force";
+      if (!force) this.pos++;
+      this.expectKw("row");
+      this.expectKw("level");
+      this.expectKw("security");
+      return { kind: "row_security", force };
+    }
+    if (this.atKw("attach") && this.atKw("partition", 1)) {
+      this.pos += 2;
+      const name = this.qualifiedName();
+      return { kind: "attach_partition", name, bound: ext.parsePartitionBound(this.ext()) };
+    }
+    if (this.atKw("detach") && this.atKw("partition", 1)) {
+      this.pos += 2;
+      const name = this.qualifiedName();
+      const concurrently = this.eatKw("concurrently");
+      const finalize = this.eatKw("finalize");
+      return { kind: "detach_partition", name, concurrently, finalize };
+    }
     if (this.eatKw("enable") || this.eatKw("disable")) {
       this.skipToStatementEnd();
       return { kind: "rename_table", to: "" } as never; // unreachable in practice
@@ -3075,23 +3307,39 @@ export class Parser {
     else if (this.eatKw("type")) kind = "type";
     else if (this.eatKw("domain")) kind = "domain";
     else if (this.eatKw("function")) kind = "function";
+    else if (this.eatKw("procedure")) kind = "procedure";
+    else if (this.eatKw("routine")) kind = "routine";
     else if (this.eatKw("trigger")) kind = "trigger";
     else if (this.eatKw("extension")) kind = "extension";
     else if (this.eatKw("database")) throw unsupported("DROP DATABASE");
-    else if (this.eatKw("role") || this.eatKw("user")) throw unsupported("roles");
+    else if (this.atKw("role") || this.atKw("user") || this.atKw("group")) return ext.parseDropRole(this.ext());
     else if (this.eatKw("rule")) throw unsupported("DROP RULE");
-    else if (this.eatKw("policy")) throw unsupported("DROP POLICY");
-    else if (this.eatKw("owned")) throw unsupported("DROP OWNED");
+    else if (this.eatKw("policy")) kind = "policy";
+    else if (this.atKw("event") && this.atKw("trigger", 1)) {
+      this.pos += 2;
+      kind = "event_trigger";
+    } else if (this.atKw("owned")) return ext.parseRoleUtility(this.ext(), "DROP OWNED");
     else this.errorAt(this.peek(), "unrecognized DROP");
     const ifExists = this.parseIfExists();
     const names: string[][] = [];
-    const funcArgs: TypeName[][] | null = kind === "function" ? [] : null;
+    const routine = kind === "function" || kind === "procedure" || kind === "routine";
+    const funcArgs: TypeName[][] | null = routine ? [] : null;
     do {
       names.push(this.qualifiedName());
-      if (kind === "function" && this.eatPunct("(")) {
+      if (routine && this.eatPunct("(")) {
         const types: TypeName[] = [];
         if (!this.atPunct(")")) {
           do {
+            // an argument mode, unless it is the argument's name; a function's OUT arguments are not
+            // part of its signature (a procedure's are)
+            let outArg = false;
+            if (
+              ["in", "out", "inout", "variadic"].some((mode) => this.atKw(mode)) &&
+              !(this.atPunct(",", 1) || this.atPunct(")", 1))
+            ) {
+              outArg = this.peek().value === "out";
+              this.pos++;
+            }
             // allow optional arg name
             const save = this.pos;
             try {
@@ -3105,7 +3353,8 @@ export class Parser {
             } catch {
               this.pos = save;
             }
-            types.push(this.parseTypeName());
+            const argType = this.parseTypeName();
+            if (!(outArg && kind === "function")) types.push(argType);
           } while (this.eatPunct(","));
         }
         this.expectPunct(")");
@@ -3115,7 +3364,7 @@ export class Parser {
       }
     } while (this.eatPunct(","));
     let onTable: string[] | null = null;
-    if (kind === "trigger") {
+    if (kind === "trigger" || kind === "policy") {
       this.expectKw("on");
       onTable = this.qualifiedName();
     }
@@ -3219,9 +3468,17 @@ export class Parser {
       if (!deferred) this.expectKw("immediate");
       return { type: "set_constraints", names, deferred };
     }
-    if (this.atKw("role") || (this.atKw("session", 0) && this.atKw("authorization", 1))) {
-      this.skipToStatementEnd();
-      return { type: "no_op", what: "SET ROLE" };
+    if (this.atKw("role") || this.atKw("authorization") || (this.atKw("session") && this.atKw("authorization", 1))) {
+      // SET [SESSION | LOCAL] ROLE { name | NONE } / SET [SESSION | LOCAL] SESSION AUTHORIZATION { name | DEFAULT }
+      const name = this.eatKw("role") ? "role" : "session_authorization";
+      if (name === "session_authorization") {
+        this.eatKw("session");
+        this.expectKw("authorization");
+        if (this.eatKw("default")) return { type: "set", name, value: null, local };
+      }
+      const t = this.next();
+      if (t.type !== "ident" && t.type !== "quoted_ident" && t.type !== "string") this.errorAt(t, "expected role name");
+      return { type: "set", name, value: t.type === "ident" && t.value === "none" ? "none" : t.value, local };
     }
     if (this.atKw("time") && this.atKw("zone", 1)) {
       this.pos += 2;
@@ -4119,15 +4376,17 @@ export class Parser {
           this.maybePrecision();
           return { type: "func", name: ["pg_catalog", "localtimestamp"], args: [] };
         case "current_user":
-        case "user":
           this.pos++;
           return { type: "func", name: ["pg_catalog", "current_user"], args: [] };
+        case "user":
+          this.pos++;
+          return { type: "func", name: ["pg_catalog", "user"], args: [] };
         case "session_user":
           this.pos++;
           return { type: "func", name: ["pg_catalog", "session_user"], args: [] };
         case "current_role":
           this.pos++;
-          return { type: "func", name: ["pg_catalog", "current_user"], args: [] };
+          return { type: "func", name: ["pg_catalog", "current_role"], args: [] };
         case "current_catalog":
           this.pos++;
           return { type: "func", name: ["pg_catalog", "current_catalog"], args: [] };

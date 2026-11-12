@@ -223,6 +223,7 @@
         "@aws-sdk/client-sns": "3.1001.0",
         "@crvouga/mockingbird-adapter-node": "workspace:*",
         "@crvouga/mockingbird-admin-ui": "workspace:*",
+        "@crvouga/mockingbird-service-cognito": "workspace:*",
         "@crvouga/mockingbird-service-customerio": "workspace:*",
         "@crvouga/mockingbird-service-fcm": "workspace:*",
         "@crvouga/mockingbird-service-mailosaur": "workspace:*",

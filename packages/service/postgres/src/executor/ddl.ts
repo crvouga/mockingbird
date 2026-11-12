@@ -52,6 +52,7 @@ import {
   type ColumnMeta,
   type ConstraintMeta,
   type DatabaseState,
+  type FunctionData,
   type IndexMeta,
   SchemaData,
   type SequenceData,
@@ -77,7 +78,41 @@ import { assertNotExtensionMember, executeDropExtension } from "./extensions.ts"
 import { executeRenameEnum } from "./rename-type.ts";
 import { commandResult, type ExecEnv, type ExecResult, inferColumnName, RowScope } from "./relation.ts";
 import { evalScalar, executeSelectStmt } from "./select.ts";
-import { compilePlpgsql } from "./plpgsql.ts";
+import { checkRoutineBody, compilePlpgsql } from "./plpgsql.ts";
+import { findRoutineToDrop } from "./call.ts";
+import { alterRowSecurity, dropPolicy } from "./row-security.ts";
+import { alterTableOwner } from "./roles.ts";
+import {
+  attachPartition,
+  createPartition,
+  detachPartition,
+  isPartitioned,
+  leafPartitions,
+  partitionsToDrop,
+  setPartitionKey,
+} from "./partition.ts";
+
+const state0 = (env: ExecEnv) => env.ctx.state;
+
+/** Foreign keys referencing a partitioned table are not modelled: its rows live in the partitions. */
+function checkForeignKeyTargets(
+  state: import("../storage/database-state.ts").DatabaseState,
+  constraints: readonly ConstraintMeta[],
+): void {
+  for (const con of constraints) {
+    if (con.kind !== "foreign_key") continue;
+    const target = state.schemas.get(con.refSchema)?.tables.get(con.refTable);
+    if (target && isPartitioned(state, target)) throw unsupported("foreign keys referencing a partitioned table");
+  }
+}
+import { dropEventTrigger, eventTriggersUsing } from "./event-triggers.ts";
+import { dropComposite, findComposite, renameComposite } from "./composite.ts";
+import {
+  checkNoVirtualKey,
+  checkVirtualGenerationExpr,
+  checkVirtualKeyConstraints,
+  foreignKeySetColumns,
+} from "./generated-virtual.ts";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -447,6 +482,7 @@ function buildColumn(
           refTable: refTable.name,
           refColumns,
           onDelete: refActionText(c.onDelete),
+          ...foreignKeySetColumns([def.name], c.onDeleteColumns),
           onUpdate: refActionText(c.onUpdate),
           match: c.match === "full" ? "full" : "simple",
           ...(c.deferrable ? { deferrable: true, initiallyDeferred: c.initiallyDeferred === true } : {}),
@@ -471,6 +507,10 @@ function buildColumn(
       }
       case "generated_stored":
         col.generated = c.expr;
+        if (c.virtual) {
+          checkVirtualGenerationExpr(state, c.expr);
+          col.virtual = true;
+        }
         break;
       case "collate":
         col.collate = c.collation.join(".");
@@ -543,6 +583,7 @@ function buildTableConstraint(
         refTable: refTable.name,
         refColumns,
         onDelete: refActionText(con.onDelete),
+        ...foreignKeySetColumns(con.columns, con.onDeleteColumns),
         onUpdate: refActionText(con.onUpdate),
         match: con.match === "full" ? "full" : "simple",
         ...(con.deferrable ? { deferrable: true, initiallyDeferred: con.initiallyDeferred === true } : {}),
@@ -554,6 +595,10 @@ function buildTableConstraint(
 }
 
 export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecResult {
+  if (stmt.partitionOf) {
+    if (state0(env).findTable(stmt.name) && stmt.ifNotExists) return commandResult("CREATE TABLE", 0);
+    return createPartition(env, stmt, (plain) => executeCreateTable(env, plain));
+  }
   const state = env.ctx.state;
   const { schema, name } = targetSchema(env, stmt.name);
   if (schema.hasRelation(name)) {
@@ -608,6 +653,7 @@ export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecRes
     built.constraints.push(buildTableConstraint(env, name, built.columns, con, taken, self));
   }
   completeSelfReferences(self, built.constraints);
+  checkVirtualKeyConstraints(built.columns, built.constraints);
   // each key constraint gets an index of its name, which must not be a relation already (the new table included)
   const written = new Set<string | null>(stmt.constraints.map((con) => con.name));
   for (const def of stmt.columns) {
@@ -645,6 +691,8 @@ export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecRes
   const table = new TableData(schema.name, name, built.columns, state.nextOid(), stmt.temp);
   table.unlogged = stmt.unlogged;
   table.constraints = built.constraints;
+  if (stmt.partitionBy) setPartitionKey(env, table, stmt.partitionBy);
+  checkForeignKeyTargets(state, built.constraints);
   schema.tables.set(name, table);
   return commandResult("CREATE TABLE", 0);
 }
@@ -711,6 +759,11 @@ export function executeCreateIndex(env: ExecEnv, stmt: CreateIndexStmt): ExecRes
       }
     }
   }
+  checkNoVirtualKey(
+    table.columns,
+    stmt.columns.map((c) => (c.expr.type === "colref" && c.expr.parts.length === 1 ? c.expr.parts[0]! : null)),
+    "index",
+  );
   assertGinTrgmIndex(state, table, stmt, (expr) => expressionTypeOf(env, table, expr));
   const method = stmt.using ?? "btree";
   if (!ACCESS_METHODS.has(method) || method === "heap") {
@@ -851,6 +904,11 @@ export function executeCreateEnum(env: ExecEnv, stmt: CreateEnumStmt): ExecResul
 export function executeAlterEnum(env: ExecEnv, stmt: AlterEnumStmt): ExecResult {
   const found = env.ctx.state.findEnum(stmt.name);
   if (!found) {
+    const composite = findComposite(env.ctx.state, stmt.name);
+    if (composite && stmt.action.kind === "rename_type") {
+      renameComposite(env, composite, stmt.action.to);
+      return commandResult("ALTER TYPE", 0);
+    }
     if (stmt.action.kind === "rename_type" && env.ctx.state.findDomain(stmt.name)) {
       throw unsupported("ALTER TYPE ... RENAME TO on a domain");
     }
@@ -916,15 +974,11 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
   if (lang !== "sql" && lang !== "plpgsql") {
     throw unsupported(`LANGUAGE ${stmt.language} functions`);
   }
-  const argTypes = stmt.args
-    .filter((a) => a.mode === "in" || a.mode === "inout" || a.mode === "variadic")
-    .map((a) => resolveTypeName(state, a.typeName).column.id);
-  const argNames = stmt.args
-    .filter((a) => a.mode === "in" || a.mode === "inout" || a.mode === "variadic")
-    .map((a) => a.name);
-  const argDefaults = stmt.args
-    .filter((a) => a.mode === "in" || a.mode === "inout" || a.mode === "variadic")
-    .map((a) => a.defaultExpr);
+  // a procedure's OUT parameters are part of its call signature (CALL passes a placeholder for them)
+  const inCall = (a: CreateFunctionStmt["args"][number]) => a.mode !== "out" || stmt.procedure === true;
+  const argTypes = stmt.args.filter(inCall).map((a) => resolveTypeName(state, a.typeName).column.id);
+  const argNames = stmt.args.filter(inCall).map((a) => a.name);
+  const argDefaults = stmt.args.filter(inCall).map((a) => a.defaultExpr);
 
   let returns: TypeId | null = null;
   let returnsSet = false;
@@ -937,6 +991,8 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
     const bare = parts.length === 1 ? parts[0]! : null;
     if (bare === "trigger") {
       returns = "trigger" as TypeId;
+    } else if (bare === "event_trigger") {
+      returns = "event_trigger" as TypeId;
     } else if (bare === "void") {
       returns = "void";
     } else if (bare === "setof") {
@@ -959,7 +1015,7 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
   const outArgs = stmt.args
     .filter((a) => (a.mode === "out" || a.mode === "inout") && a.name !== null)
     .map((a) => ({ name: a.name!, type: resolveTypeName(state, a.typeName).column.id }));
-  if (outArgs.length > 0 && !stmt.returnsTable && (returns === null || returns === "record")) {
+  if (outArgs.length > 0 && !stmt.procedure && !stmt.returnsTable && (returns === null || returns === "record")) {
     if (outArgs.length === 1) returns = outArgs[0]!.type;
     else {
       returns = null;
@@ -977,15 +1033,23 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
     stmt.body !== null &&
     !/^(off|false|no|0)$/i.test(state.getSetting("check_function_bodies") ?? "on")
   ) {
-    compilePlpgsql(stmt.body);
+    checkRoutineBody(compilePlpgsql(stmt.body), {
+      procedure: stmt.procedure === true,
+      params: stmt.args.map((a) => a.name),
+      trigger: returns === "trigger",
+    });
   }
 
-  const existing = schema.functions.get(name) ?? [];
+  // a copy: snapshots share overload lists, so they are replaced rather than changed in place
+  const existing = (schema.functions.get(name) ?? []).slice();
   const sameSig = existing.findIndex((f) => f.argTypes.length === argTypes.length);
   if (sameSig !== -1 && !stmt.orReplace) {
     throw pgError("duplicate_function", `function "${name}" already exists with same argument types`, "42723");
   }
-  const fn = {
+  if (sameSig !== -1 && (existing[sameSig]!.kind === "p") !== (stmt.procedure === true)) {
+    throw pgError("wrong_object_type", "cannot change routine kind", "42809");
+  }
+  const fn: FunctionData = {
     name,
     schema: schema.name,
     argNames,
@@ -1006,12 +1070,13 @@ export function executeCreateFunction(env: ExecEnv, stmt: CreateFunctionStmt): E
     ),
     strict: stmt.strict,
     ...(stmt.volatility && stmt.volatility !== "volatile" ? { volatility: stmt.volatility } : {}),
+    ...(stmt.procedure ? { kind: "p" as const, argModes: stmt.args.map((a) => a.mode) } : {}),
     oid: state.nextOid(),
   };
   if (sameSig !== -1) existing[sameSig] = fn;
   else existing.push(fn);
   schema.functions.set(name, existing);
-  return commandResult("CREATE FUNCTION", 0);
+  return commandResult(stmt.procedure ? "CREATE PROCEDURE" : "CREATE FUNCTION", 0);
 }
 
 /** The `REFERENCING` clause checks of CREATE TRIGGER, in the order PostgreSQL applies them. */
@@ -1298,6 +1363,7 @@ export function executeAlterTable(env: ExecEnv, stmt: AlterTableStmt): ExecResul
       case "add_constraint": {
         const taken = constraintNames(table);
         const con = buildTableConstraint(env, table.name, table.columns, action.constraint, taken);
+        checkVirtualKeyConstraints(table.columns, [con]);
         // the index a key constraint brings is a relation: its name must be free in the schema
         if (isKeyConstraint(con)) claimConstraintIndexName(schema, con, action.constraint.name !== null);
         checkForeignKeyPersistence(state, relPersistence(table), [con], table);
@@ -1462,7 +1528,17 @@ export function executeAlterTable(env: ExecEnv, stmt: AlterTableStmt): ExecResul
         break;
       }
       case "owner_to":
-        break; // no-op
+        alterTableOwner(state, table, action.role);
+        break;
+      case "row_security":
+        alterRowSecurity(state, table, action.enable, action.force);
+        break;
+      case "attach_partition":
+        attachPartition(env, table, action.name, action.bound);
+        break;
+      case "detach_partition":
+        detachPartition(env, table, action.name);
+        break;
       case "add_identity": {
         const idx = table.columnIndex(action.column);
         if (idx === -1) {
@@ -1689,6 +1765,14 @@ export function executeDrop(env: ExecEnv, stmt: DropStmt): ExecResult {
           }
         }
         const schema = state.getSchema(table.schema);
+        // a partitioned table takes its partitions with it
+        for (const child of partitionsToDrop(state, table)) {
+          const childSchema = state.getSchema(child.schema);
+          childSchema.tables.delete(child.name);
+          for (const [iname, idx] of [...childSchema.indexes]) {
+            if (idx.table === child.name) childSchema.indexes.delete(iname);
+          }
+        }
         schema.tables.delete(table.name);
         // drop owned sequences and indexes
         for (const [sname, seq] of [...schema.sequences]) {
@@ -1778,6 +1862,7 @@ export function executeDrop(env: ExecEnv, stmt: DropStmt): ExecResult {
           state.getSchema(d.schema).domains.delete(d.name);
           break;
         }
+        if (dropComposite(env, parts, stmt.cascade)) break;
         if (!stmt.ifExists) {
           throw pgError("undefined_object", `type "${parts.join(".")}" does not exist`, "42704");
         }
@@ -1792,20 +1877,39 @@ export function executeDrop(env: ExecEnv, stmt: DropStmt): ExecResult {
         state.getSchema(d.schema).domains.delete(d.name);
         break;
       }
-      case "function": {
-        const fns = state.findFunctions(parts);
-        if (fns.length === 0) {
+      case "function":
+      case "procedure":
+      case "routine": {
+        const fn = findRoutineToDrop(state, stmt.kind, parts, stmt.funcArgs?.[stmt.names.indexOf(parts)]);
+        if (fn === null) {
           if (stmt.ifExists) break;
-          throw pgError("undefined_function", `function ${parts.join(".")} does not exist`, "42883");
+          if (stmt.kind === "function") {
+            throw pgError("undefined_function", `function ${parts.join(".")} does not exist`, "42883");
+          }
+          throw pgError("undefined_function", `could not find a ${stmt.kind} named "${parts.join(".")}"`, "42883");
         }
-        const fn = fns[0]!;
         assertNotExtensionMember(fn);
+        if (eventTriggersUsing(state, fn.oid).length > 0 && !stmt.cascade) {
+          throw pgError(
+            "dependent_objects",
+            `cannot drop function ${fn.name}() because other objects depend on it`,
+            "2BP01",
+          );
+        }
+        for (const trigger of eventTriggersUsing(state, fn.oid)) dropEventTrigger(env, trigger.name, true);
         const schema = state.getSchema(fn.schema);
-        const list = schema.functions.get(fn.name) ?? [];
-        if (list.length <= 1) schema.functions.delete(fn.name);
-        else schema.functions.set(fn.name, list.slice(1));
+        const list = (schema.functions.get(fn.name) ?? []).filter((f) => f !== fn);
+        if (list.length === 0) schema.functions.delete(fn.name);
+        else schema.functions.set(fn.name, list);
         break;
       }
+      case "policy":
+        if (!stmt.onTable) throw pgError("syntax", "DROP POLICY requires ON table", "42601");
+        dropPolicy(env, parts[parts.length - 1]!, stmt.onTable, stmt.ifExists);
+        break;
+      case "event_trigger":
+        dropEventTrigger(env, parts[parts.length - 1]!, stmt.ifExists);
+        break;
       case "trigger": {
         if (!stmt.onTable) throw pgError("syntax", "DROP TRIGGER requires ON table", "42601");
         const table = state.findTable(stmt.onTable);
@@ -1830,10 +1934,12 @@ export function executeDrop(env: ExecEnv, stmt: DropStmt): ExecResult {
 
 export function executeTruncate(env: ExecEnv, stmt: TruncateStmt): ExecResult {
   const state = env.ctx.state;
-  const tables: TableData[] = stmt.tables.map((parts) => {
+  const tables: TableData[] = stmt.tables.flatMap((parts) => {
     const t = state.findTable(parts);
     if (!t) throw pgError("undefined_table", `relation "${parts.join(".")}" does not exist`, "42P01");
-    return state.ensureWritableTable(t);
+    // TRUNCATE of a partitioned table empties its partitions
+    const targets = isPartitioned(state, t) ? leafPartitions(state, t) : [t];
+    return targets.map((target) => state.ensureWritableTable(target));
   });
   const set = new Set(tables);
   if (stmt.cascade) {

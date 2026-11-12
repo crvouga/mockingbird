@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-11T00:19:02.756Z",
+  "generatedAt": "2026-11-12T18:25:17.484Z",
   "sourceUrl": "https://www.postgresql.org/docs/18/sql-commands.html",
   "count": 183,
   "requirements": [
@@ -49,7 +49,7 @@
       "id": "sql-altereventtrigger",
       "text": "ALTER EVENT TRIGGER — change the definition of an event trigger",
       "source": "sql-altereventtrigger.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-alterextension",
@@ -79,7 +79,7 @@
       "id": "sql-altergroup",
       "text": "ALTER GROUP — change role name or membership",
       "source": "sql-altergroup.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-alterindex",
@@ -127,7 +127,7 @@
       "id": "sql-alterpolicy",
       "text": "ALTER POLICY — change the definition of a row-level security policy",
       "source": "sql-alterpolicy.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-alterprocedure",
@@ -145,7 +145,7 @@
       "id": "sql-alterrole",
       "text": "ALTER ROLE — change a database role",
       "source": "sql-alterrole.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-alterroutine",
@@ -247,7 +247,7 @@
       "id": "sql-alteruser",
       "text": "ALTER USER — change a database role",
       "source": "sql-alteruser.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-alterusermapping",
@@ -367,7 +367,7 @@
       "id": "sql-createeventtrigger",
       "text": "CREATE EVENT TRIGGER — define a new event trigger",
       "source": "sql-createeventtrigger.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-createextension",
@@ -397,7 +397,7 @@
       "id": "sql-creategroup",
       "text": "CREATE GROUP — define a new database role",
       "source": "sql-creategroup.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-createindex",
@@ -439,7 +439,7 @@
       "id": "sql-createpolicy",
       "text": "CREATE POLICY — define a new row-level security policy for a table",
       "source": "sql-createpolicy.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-createprocedure",
@@ -457,7 +457,7 @@
       "id": "sql-createrole",
       "text": "CREATE ROLE — define a new database role",
       "source": "sql-createrole.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-createrule",
@@ -559,7 +559,7 @@
       "id": "sql-createuser",
       "text": "CREATE USER — define a new database role",
       "source": "sql-createuser.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-createusermapping",
@@ -649,7 +649,7 @@
       "id": "sql-dropeventtrigger",
       "text": "DROP EVENT TRIGGER — remove an event trigger",
       "source": "sql-dropeventtrigger.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-dropextension",
@@ -679,7 +679,7 @@
       "id": "sql-dropgroup",
       "text": "DROP GROUP — remove a database role",
       "source": "sql-dropgroup.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-dropindex",
@@ -727,7 +727,7 @@
       "id": "sql-droppolicy",
       "text": "DROP POLICY — remove a row-level security policy from a table",
       "source": "sql-droppolicy.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-dropprocedure",
@@ -745,7 +745,7 @@
       "id": "sql-droprole",
       "text": "DROP ROLE — remove a database role",
       "source": "sql-droprole.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-droproutine",
@@ -847,7 +847,7 @@
       "id": "sql-dropuser",
       "text": "DROP USER — remove a database role",
       "source": "sql-dropuser.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-dropusermapping",
@@ -1045,13 +1045,13 @@
       "id": "sql-set-role",
       "text": "SET ROLE — set the current user identifier of the current session",
       "source": "sql-set-role.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-set-session-authorization",
       "text": "SET SESSION AUTHORIZATION — set the session user identifier and the current user identifier of the current session",
       "source": "sql-set-session-authorization.html",
-      "classification": "NOT_APPLICABLE"
+      "classification": "SQL_BEHAVIOR"
     },
     {
       "id": "sql-set-transaction",

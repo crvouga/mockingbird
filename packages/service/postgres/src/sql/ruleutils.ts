@@ -402,6 +402,10 @@ class Analyzer {
         }
         if (e.star || e.distinct || e.over || e.filter || e.orderBy || e.withinGroupOrderBy) break;
         const name = e.name[e.name.length - 1]!;
+        // SQL value functions (CURRENT_USER, SESSION_USER, ...) print back as their keyword
+        if (e.name.length === 2 && e.name[0] === "pg_catalog" && e.args.length === 0 && SQL_VALUE_KEYWORDS.has(name)) {
+          return { k: "form", parts: [name.toUpperCase()], type: "name" };
+        }
         const args = e.args.map((arg) => this.analyze(arg));
         // `x op ANY (array)` / `x op ALL (array)` reach here as an internal call
         if ((name === "__any_array" || name === "__all_array") && args.length === 3 && isUntyped(args[2]!)) {
@@ -672,6 +676,8 @@ function looksLikeFunction(node: Node): boolean {
 }
 
 /** A stored expression as PostgreSQL prints it: a predicate, CHECK body or default. */
+const SQL_VALUE_KEYWORDS: ReadonlySet<string> = new Set(["current_user", "session_user", "current_role", "user"]);
+
 export function deparseRuleExpr(scope: RuleScope, expr: Expr, pretty = false): string {
   const node = new Analyzer(scope).analyze(expr);
   return print({ scope, pretty, indent: 0 }, node, false);

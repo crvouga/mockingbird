@@ -34,8 +34,11 @@ import {
 import { executeDelete, executeInsert, executeUpdate, withStatementRollback } from "./dml.ts";
 import { executeCreateExtension } from "./extensions.ts";
 import { executeAnalyze, executeReindex } from "./maintenance.ts";
+import { dispatch692 } from "./ext-692.ts";
+import { ddlCommandTag, withEventTriggers } from "./event-triggers.ts";
 import { executeMerge } from "./merge.ts";
 import { executeDo } from "./plpgsql.ts";
+import { executeCall } from "./call.ts";
 import { commandResult, type ExecEnv, type ExecResult, relationResult } from "./relation.ts";
 import { executeSelectStmt, setStatementRunner } from "./select.ts";
 import {
@@ -81,18 +84,27 @@ function alterTableIsSelfContained(stmt: AlterTableStmt): boolean {
   return stmt.actions.length === 1 && action !== undefined && SELF_CONTAINED_ALTER_ACTIONS.has(action.kind);
 }
 
-/** Execute one parsed statement against `state`. */
+/** Execute one parsed statement against `state` (inside the event triggers it fires, if any). */
 export function executeStatement(env: ExecEnv, stmt: Statement): ExecResult {
+  if (env.ctx.state.catalogExt.eventTriggers.size > 0 && ddlCommandTag(stmt) !== null) {
+    // an event trigger's error takes back the command
+    return withStatementRollback(env, () => withEventTriggers(env, stmt, () => executeStatementCore(env, stmt)));
+  }
+  return executeStatementCore(env, stmt);
+}
+
+function executeStatementCore(env: ExecEnv, stmt: Statement): ExecResult {
   beforeStatement(env.ctx.state, txManagerFor(env.ctx.state), stmt);
   if (!RESHAPES_TABLES.has(stmt.type)) {
-    if (
-      (stmt.type === "insert" || stmt.type === "update" || stmt.type === "delete") &&
-      (env.ctx.state.pendingTriggers.length > 0 ||
-        env.ctx.state.findTable(stmt.table)?.triggers.some((t) => t.constraint))
-    ) {
+    if (stmt.type === "insert" || stmt.type === "update" || stmt.type === "delete") {
+      const flush =
+        env.ctx.state.pendingTriggers.length > 0 ||
+        env.ctx.state.findTable(stmt.table)?.triggers.some((t) => t.constraint) === true;
+      // The statement's implicit savepoint (O(1), #710) is taken before the target table is
+      // resolved, so a failing row also takes back the rows the statement wrote before it.
       return withStatementRollback(env, () => {
         const result = dispatchStatement(env, stmt);
-        flushConstraintTriggers(env.ctx.state);
+        if (flush) flushConstraintTriggers(env.ctx.state);
         return result;
       });
     }
@@ -192,6 +204,24 @@ function dispatchStatement(env: ExecEnv, stmt: Statement): ExecResult {
       return commandResult(stmt.what.toUpperCase(), 0);
     case "do":
       return executeDo(env, stmt.language, stmt.body);
+    case "call":
+      return executeCall(env, stmt);
+    case "declare_cursor":
+    case "fetch":
+    case "close_cursor":
+    case "create_role":
+    case "alter_role":
+    case "drop_role":
+    case "grant_role":
+    case "grant":
+    case "role_utility":
+    case "create_policy":
+    case "alter_policy":
+    case "create_composite_type":
+    case "alter_composite_type":
+    case "create_event_trigger":
+    case "alter_event_trigger":
+      return dispatch692(env, stmt);
     default: {
       const t: never = stmt;
       throw pgError("internal", `unhandled statement type ${(t as { type: string }).type}`);

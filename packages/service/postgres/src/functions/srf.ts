@@ -1,3 +1,5 @@
+import { isMultirangeType, multirangeRange, type PgMultirange } from "../types/multirange.ts";
+import { ddlCommandsRelation, droppedObjectsRelation } from "../executor/event-trigger-context.ts";
 import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import { pgRegexToJs, regexFlags } from "../expressions/pattern.ts";
@@ -22,6 +24,7 @@ import {
   type JsonbWrap,
   makeArray,
   type PgArray,
+  type PgRecord,
   type TypedValue,
   type TypeId,
   tv,
@@ -173,6 +176,12 @@ SRFS.set("generate_subscripts", (ctx, args, alias) => {
 });
 
 SRFS.set("unnest", (_ctx, args, alias) => {
+  // unnest(multirange): its ranges in order
+  if (args.length === 1 && isMultirangeType(args[0]!.t)) {
+    const a = args[0]!;
+    const rows = a.v === null ? [] : (a.v as PgMultirange).ranges.map((r): Datum[] => [r]);
+    return { columns: [{ name: alias, type: multirangeRange(a.t) }], rows };
+  }
   if (args.length === 1) {
     const a = args[0]!;
     if (a.v === null)
@@ -404,6 +413,56 @@ for (const prefix of ["json", "jsonb"]) {
   SRFS.set(`${prefix}_to_recordset`, jsonToRecordSrf(`${prefix}_to_recordset`, true));
 }
 
+/** The composite type of populate_record's first argument, as column definitions. */
+function populateColumns(ctx: EngineCtx, name: string, base: TypedValue): SrfColumnDefs {
+  const attrs = ctx.compositeAttributes(base.t);
+  if (!attrs) {
+    throw pgError("datatype_mismatch", `first argument of ${name} must be a row type`, "42804");
+  }
+  return attrs.names.map((n, i) => ({ name: n, column: { id: attrs.types[i]!, mod: null } }));
+}
+
+/** One populated row: the object's keys over the base record's fields (or NULLs). */
+export function populateRow(ctx: EngineCtx, name: string, base: TypedValue, object: TypedValue): Datum[] | null {
+  const defs = populateColumns(ctx, name, base);
+  if (object.v === null) return base.v === null ? null : (base.v as PgRecord).values.slice();
+  const v = jsonInput(ctx, object);
+  if (v.j !== "obj") {
+    throw pgError(
+      "invalid_parameter_value",
+      `cannot call populate_composite on ${v.j === "arr" ? "an array" : "a scalar"}`,
+      "22023",
+    );
+  }
+  const fallback = base.v === null ? null : (base.v as PgRecord).values;
+  return defs.map((def, i) => {
+    const value = v.v.get(def.name);
+    return value === undefined ? (fallback?.[i] ?? null) : jsonToColumn(ctx, value, def.column);
+  });
+}
+
+for (const prefix of ["json", "jsonb"]) {
+  const name = `${prefix}_populate_recordset`;
+  SRFS.set(name, (ctx, args) => {
+    const defs = populateColumns(ctx, name, args[0]!);
+    const columns = defs.map((d) => ({ name: d.name, type: d.column.id }));
+    if (args[1]?.v === null || args[1] === undefined) return { columns, rows: [] };
+    const v = jsonInput(ctx, args[1]);
+    if (v.j !== "arr") throw pgError("invalid_parameter_value", `cannot call ${name} on a non-array`, "22023");
+    const fallback = args[0]!.v === null ? null : (args[0]!.v as PgRecord).values;
+    const rows = v.v.map((item) => {
+      if (item.j !== "obj") {
+        throw pgError("invalid_parameter_value", `argument of ${name} must be an array of objects`, "22023");
+      }
+      return defs.map((def, i) => {
+        const value = item.v.get(def.name);
+        return value === undefined ? (fallback?.[i] ?? null) : jsonToColumn(ctx, value, def.column);
+      });
+    });
+    return { columns, rows };
+  });
+}
+
 // jsonb_path_query(target, path [, vars [, silent]]): one row per selected item
 for (const name of ["jsonb_path_query", "jsonb_path_query_tz"]) {
   SRFS.set(name, (ctx, args) => {
@@ -422,6 +481,10 @@ for (const name of ["jsonb_path_query", "jsonb_path_query_tz"]) {
     return { columns, rows: items.map((item) => [wrapJsonb(item)]) };
   });
 }
+
+// event trigger inquiry functions (issue #692): what the firing DDL command did
+SRFS.set("pg_event_trigger_ddl_commands", () => ddlCommandsRelation());
+SRFS.set("pg_event_trigger_dropped_objects", () => droppedObjectsRelation());
 
 export function getSrfFunctions(): Map<string, SrfFn> {
   return SRFS;

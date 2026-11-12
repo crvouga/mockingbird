@@ -57,6 +57,15 @@ async function resetOracle(db: PGlite): Promise<void> {
     // not in a transaction
   }
   await db.exec(`
+    RESET ROLE;
+    CLOSE ALL;
+    DO $$
+    DECLARE e text;
+    BEGIN
+      FOR e IN SELECT evtname FROM pg_event_trigger LOOP
+        EXECUTE format('DROP EVENT TRIGGER %I', e);
+      END LOOP;
+    END $$;
     DO $$
     DECLARE s text;
     BEGIN
@@ -70,6 +79,16 @@ async function resetOracle(db: PGlite): Promise<void> {
       END LOOP;
     END $$;
     CREATE SCHEMA public;
+    -- a stock public schema lets every role look up its objects (USAGE to PUBLIC)
+    GRANT USAGE ON SCHEMA public TO PUBLIC;
+    DO $$
+    DECLARE r text;
+    BEGIN
+      FOR r IN SELECT rolname FROM pg_roles WHERE oid >= 16384 AND rolname <> session_user LOOP
+        EXECUTE format('DROP OWNED BY %I CASCADE', r);
+        EXECUTE format('DROP ROLE %I', r);
+      END LOOP;
+    END $$;
     DEALLOCATE ALL;
     RESET ALL;
     SET TIME ZONE 'UTC';

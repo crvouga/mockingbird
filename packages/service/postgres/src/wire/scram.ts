@@ -80,18 +80,77 @@ const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => {
   return diff === 0;
 };
 
+/** What PostgreSQL keeps in `pg_authid.rolpassword` for a SCRAM-SHA-256 role: `SCRAM-SHA-256$<i>:<salt>$<StoredKey>:<ServerKey>`. */
+export type ScramCredentials = {
+  readonly salt: Uint8Array;
+  readonly iterations: number;
+  readonly storedKey: Uint8Array;
+  readonly serverKey: Uint8Array;
+};
+
+/** PostgreSQL's default `scram_iterations`. */
+export const SCRAM_ITERATIONS = 4096;
+
+/** The one expensive step of SCRAM: PBKDF2 over the password, then the two keys a verifier stores. */
+export const deriveScramCredentials = (
+  password: string,
+  salt: Uint8Array,
+  iterations: number = SCRAM_ITERATIONS,
+): ScramCredentials => {
+  const salted = hmacSha256(pbkdf2Sha256(utf8.encode(password), salt, iterations));
+  return {
+    salt,
+    iterations,
+    storedKey: sha256(salted(utf8.encode("Client Key"))),
+    serverKey: salted(utf8.encode("Server Key")),
+  };
+};
+
+/**
+ * Per-role SCRAM verifiers, derived once like PostgreSQL's `pg_authid`: a role gets a stable random
+ * salt and its StoredKey/ServerKey on first use, so later connections compute only HMACs. A new
+ * password for the role derives a new verifier (and a new salt), as `ALTER ROLE … PASSWORD` does.
+ */
+export class ScramCredentialStore {
+  private readonly roles = new Map<string, { password: string; credentials: ScramCredentials }>();
+
+  /** `derive` is the PBKDF2 step; tests inject a counting wrapper. */
+  constructor(
+    private readonly derive: (
+      password: string,
+      salt: Uint8Array,
+      iterations: number,
+    ) => ScramCredentials = deriveScramCredentials,
+  ) {}
+
+  /** The verifier for `user` with `password`, derived on first use and whenever the password changes. */
+  credentials(user: string, password: string): ScramCredentials {
+    const cached = this.roles.get(user);
+    if (cached && cached.password === password) return cached.credentials;
+    const credentials = this.derive(password, randomBytes(16), SCRAM_ITERATIONS);
+    this.roles.set(user, { password, credentials });
+    return credentials;
+  }
+}
+
 /**
  * Server side of SCRAM-SHA-256 (RFC 7677) as PostgreSQL speaks it: one round trip after the
  * client's first message, channel binding declined (`n` or `y`; no TLS here).
+ *
+ * Pass the server's {@link ScramCredentialStore} so the PBKDF2 step runs once per role rather
+ * than once per connection; without one each instance derives its own verifier.
  */
 export class ScramServer {
   private clientFirstBare = "";
   private serverFirst = "";
   private nonce = "";
-  private readonly salt = randomBytes(16);
-  private readonly iterations = 4096;
+  private verifier: ScramCredentials | null = null;
 
-  constructor(private readonly password: string) {}
+  constructor(
+    private readonly password: string,
+    private readonly user = "postgres",
+    private readonly store: ScramCredentialStore = new ScramCredentialStore(),
+  ) {}
 
   /** The server-first-message for a client-first-message; null when the client message is malformed. */
   first(clientFirst: string): string | null {
@@ -100,14 +159,18 @@ export class ScramServer {
     const bare = m[4] as string;
     const nonce = /(?:^|,)r=([^,]+)/.exec(bare)?.[1];
     if (!nonce) return null;
+    const verifier = this.store.credentials(this.user, this.password);
+    this.verifier = verifier;
     this.clientFirstBare = bare;
     this.nonce = nonce + toBase64(randomBytes(18));
-    this.serverFirst = `r=${this.nonce},s=${toBase64(this.salt)},i=${this.iterations}`;
+    this.serverFirst = `r=${this.nonce},s=${toBase64(verifier.salt)},i=${verifier.iterations}`;
     return this.serverFirst;
   }
 
   /** The server-final-message (`v=…`) when the client's proof is right; null otherwise. */
   final(clientFinal: string): string | null {
+    const verifier = this.verifier;
+    if (verifier === null) return null;
     const proofAt = clientFinal.lastIndexOf(",p=");
     if (proofAt === -1) return null;
     const withoutProof = clientFinal.slice(0, proofAt);
@@ -115,19 +178,14 @@ export class ScramServer {
     if (proof === null) return null;
     const nonce = /(?:^|,)r=([^,]+)/.exec(withoutProof)?.[1];
     if (nonce !== this.nonce) return null;
-    const salted = pbkdf2Sha256(utf8.encode(this.password), this.salt, this.iterations);
-    const salt = hmacSha256(salted);
-    const clientKey = salt(utf8.encode("Client Key"));
-    const storedKey = sha256(clientKey);
     const authMessage = utf8.encode(`${this.clientFirstBare},${this.serverFirst},${withoutProof}`);
-    const clientSignature = hmacSha256(storedKey)(authMessage);
+    const clientSignature = hmacSha256(verifier.storedKey)(authMessage);
     if (proof.byteLength !== clientSignature.byteLength) return null;
-    const recovered = new Uint8Array(clientKey.byteLength);
+    const recovered = new Uint8Array(clientSignature.byteLength);
     for (let i = 0; i < recovered.byteLength; i++) {
       recovered[i] = (proof[i] as number) ^ (clientSignature[i] as number);
     }
-    if (!sameBytes(sha256(recovered), storedKey)) return null;
-    const serverKey = salt(utf8.encode("Server Key"));
-    return `v=${toBase64(hmacSha256(serverKey)(authMessage))}`;
+    if (!sameBytes(sha256(recovered), verifier.storedKey)) return null;
+    return `v=${toBase64(hmacSha256(verifier.serverKey)(authMessage))}`;
   }
 }

@@ -24,6 +24,8 @@ import {
 import {
   type CognitoAppClient,
   type CognitoAttribute,
+  type CognitoMessage,
+  type CognitoMessageTrigger,
   type CognitoSeedUser,
   CognitoState,
   type CognitoUser,
@@ -33,7 +35,14 @@ import {
 export type { CognitoFixtures } from "./fixtures.js"
 export type { CognitoRuntime, CognitoRuntimeOptions } from "./runtime.js"
 export { COGNITO_PRESETS, createRuntime } from "./runtime.js"
-export type { CognitoAppClient, CognitoAttribute, CognitoSeedUser, CognitoUser } from "./state.js"
+export type {
+  CognitoAppClient,
+  CognitoAttribute,
+  CognitoMessage,
+  CognitoMessageTrigger,
+  CognitoSeedUser,
+  CognitoUser,
+} from "./state.js"
 export { document, operationIds, supportedOperationIds }
 export const COGNITO_NAMESPACE = "cognito"
 export const accessKeyCredential = sigV4AccessKeyId
@@ -59,6 +68,32 @@ const attr = (user: CognitoUser, name: string) =>
 // Cognito signs ID and access tokens with different keys, so each token type has its own ring.
 const KEY_RINGS = { id: "ring", access: "access-ring" } as const
 type KeyRing = (typeof KEY_RINGS)[keyof typeof KEY_RINGS]
+/** Cognito's default sender and message templates (no custom VerificationMessageTemplate). */
+export const COGNITO_DEFAULT_SENDER = "no-reply@verificationemail.com"
+const SMS_SENDER = "Cognito"
+const VERIFICATION_SUBJECT = "Your verification code"
+const verificationMessage = (code: string) => `Your verification code is ${code}.`
+const INVITATION_SUBJECT = "Your temporary password"
+const invitationMessage = (username: string, password: string) =>
+  `Your username is ${username} and temporary password is ${password}.`
+type Medium = "EMAIL" | "SMS"
+const ATTRIBUTE_FOR: Record<Medium, "email" | "phone_number"> = {
+  EMAIL: "email",
+  SMS: "phone_number",
+}
+/** Where a verification code goes: the email address if the user has one, else the phone. */
+const verificationMedium = (user: CognitoUser): Medium | null =>
+  attr(user, "email") ? "EMAIL" : attr(user, "phone_number") ? "SMS" : null
+const codeDeliveryDetails = (user: CognitoUser) => {
+  const medium = verificationMedium(user)
+  if (!medium)
+    return { Destination: user.username, DeliveryMedium: "EMAIL", AttributeName: "email" }
+  return {
+    Destination: attr(user, ATTRIBUTE_FOR[medium]),
+    DeliveryMedium: medium,
+    AttributeName: ATTRIBUTE_FOR[medium],
+  }
+}
 const publicUser = (user: CognitoUser) => ({
   Username: user.username,
   Attributes: [{ Name: "sub", Value: user.sub }, ...user.attributes],
@@ -185,6 +220,59 @@ export class CognitoAPI {
     for (const { value } of this.state.appClients.list({ order: "oldest" }))
       clients.set(value.clientId, value)
     return [...clients.values()]
+  }
+  /** Records the message Cognito would send `user` over `medium`; no-op without that attribute. */
+  private deliver(
+    user: CognitoUser,
+    medium: Medium,
+    trigger: CognitoMessageTrigger,
+    content: { code: string | null; subject: string; body: string },
+  ): CognitoMessage | undefined {
+    const attributeName = ATTRIBUTE_FOR[medium]
+    const to = attr(user, attributeName)
+    if (!to) return undefined
+    const email = medium === "EMAIL"
+    return this.state.outbox.record({
+      id: this.state.messageId(),
+      to,
+      createdAt: new Date(this.now()).toISOString(),
+      channel: email ? "email" : "sms",
+      deliveryMedium: medium,
+      attributeName,
+      username: user.username,
+      trigger,
+      code: content.code,
+      from: email ? COGNITO_DEFAULT_SENDER : SMS_SENDER,
+      subject: email ? content.subject : null,
+      body: content.body,
+    })
+  }
+  private sendCode(user: CognitoUser, trigger: CognitoMessageTrigger, code: string) {
+    const medium = verificationMedium(user)
+    if (medium)
+      this.deliver(user, medium, trigger, {
+        code,
+        subject: VERIFICATION_SUBJECT,
+        body: verificationMessage(code),
+      })
+    return codeDeliveryDetails(user)
+  }
+  /**
+   * AdminCreateUser's invitation: the temporary password over each DesiredDeliveryMediums the
+   * user has an attribute for. Without DesiredDeliveryMediums Cognito defaults to SMS; a user
+   * with no phone_number gets it by email instead (best guess, not oracle-verified).
+   */
+  private invite(user: CognitoUser, password: string, desired: unknown) {
+    const requested = Array.isArray(desired)
+      ? desired.filter((m): m is Medium => m === "EMAIL" || m === "SMS")
+      : []
+    const fallback: Medium[] = attr(user, "phone_number") ? ["SMS"] : ["EMAIL"]
+    for (const medium of requested.length ? requested : fallback)
+      this.deliver(user, medium, "AdminCreateUser", {
+        code: null,
+        subject: INVITATION_SUBJECT,
+        body: invitationMessage(user.username, password),
+      })
   }
   private requestId() {
     return this.state.token("req-")
@@ -345,11 +433,7 @@ export class CognitoAPI {
       return this.response({
         UserSub: user.sub,
         UserConfirmed: false,
-        CodeDeliveryDetails: {
-          Destination: attr(user, "email") ?? username,
-          DeliveryMedium: "EMAIL",
-          AttributeName: "email",
-        },
+        CodeDeliveryDetails: this.sendCode(user, "SignUp", "123456"),
       })
     }
     if (target === "ConfirmSignUp" || target === "AdminConfirmSignUp") {
@@ -366,13 +450,9 @@ export class CognitoAPI {
     if (target === "ResendConfirmationCode") {
       const user = this.requireUser(username)
       if (!user) return this.error("UserNotFoundException", "User does not exist.")
-      this.state.put({ ...user, confirmationCode: "123456" })
+      const updated = this.state.put({ ...user, confirmationCode: "123456" })
       return this.response({
-        CodeDeliveryDetails: {
-          Destination: attr(user, "email") ?? user.username,
-          DeliveryMedium: "EMAIL",
-          AttributeName: "email",
-        },
+        CodeDeliveryDetails: this.sendCode(updated, "ResendConfirmationCode", "123456"),
       })
     }
     if (target === "InitiateAuth") {
@@ -453,13 +533,9 @@ export class CognitoAPI {
     if (target === "ForgotPassword") {
       const user = this.requireUser(username)
       if (!user) return this.error("UserNotFoundException", "User does not exist.")
-      this.state.put({ ...user, resetCode: "654321" })
+      const updated = this.state.put({ ...user, resetCode: "654321" })
       return this.response({
-        CodeDeliveryDetails: {
-          Destination: attr(user, "email") ?? user.username,
-          DeliveryMedium: "EMAIL",
-          AttributeName: "email",
-        },
+        CodeDeliveryDetails: this.sendCode(updated, "ForgotPassword", "654321"),
       })
     }
     if (target === "ConfirmForgotPassword") {
@@ -492,6 +568,8 @@ export class CognitoAPI {
           : [],
         status: "FORCE_CHANGE_PASSWORD",
       })
+      if (body.MessageAction !== "SUPPRESS")
+        this.invite(user, temporary, body.DesiredDeliveryMediums)
       return this.response({ User: publicUser(user) })
     }
     if (target === "AdminSetUserPassword") {

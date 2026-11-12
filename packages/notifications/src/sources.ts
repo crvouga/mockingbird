@@ -667,6 +667,36 @@ const slack: Reader = async (context) => {
   })
 }
 
+/**
+ * Cognito's verification codes and AdminCreateUser invitations, from its default sender, as the
+ * user receives them: email to the `email` attribute, SMS to `phone_number`.
+ */
+const cognito: Reader = async (context) =>
+  list(await context.read("/outbox"), "messages").flatMap((m): Notification[] => {
+    const to = str(m.to) ?? ""
+    const body = str(m.body) ?? ""
+    const common = {
+      context,
+      service: "cognito" as const,
+      providerId: str(m.id) ?? "",
+      createdAt: iso(m.createdAt),
+      status: "delivered",
+      raw: m,
+    }
+    if (m.channel === "sms")
+      return [
+        smsNotification(
+          { ...common, to, from: { name: null, address: str(m.from) ?? "Cognito" } },
+          { body, code: str(m.code) },
+        ),
+      ]
+    return emailNotifications(
+      { ...common, from: parseAddress(str(m.from) ?? "no-reply@verificationemail.com") },
+      [to],
+      { subject: str(m.subject) ?? "Your verification code", text: body },
+    )
+  })
+
 export const READERS: Record<ServiceKind, Reader> = {
   twilio,
   resend,
@@ -676,4 +706,5 @@ export const READERS: Record<ServiceKind, Reader> = {
   customerio,
   mailosaur,
   slack,
+  cognito,
 }

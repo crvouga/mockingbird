@@ -32,7 +32,7 @@ import type { Snapshot } from "../api/snapshot.ts";
 import type { ServerLog } from "./connection.ts";
 import type { DurableOptions, DurableStorage } from "./durable.ts";
 import { fileStorage } from "./file-storage.ts";
-import { createWireServer, type WireServer, type WireServerOptions } from "./transport.ts";
+import { createWireServer, type WireAuth, type WireServer, type WireServerOptions } from "./transport.ts";
 
 export type ServeOptions = {
   /** TCP port; `0` (the default) picks a free one, reported as `server.port`. */
@@ -46,6 +46,13 @@ export type ServeOptions = {
   database?: Database | Snapshot;
   /** Require SCRAM-SHA-256 with this password; omitted means trust (AuthenticationOk). */
   password?: string;
+  /**
+   * Client authentication, as a `pg_hba.conf` method. `"scram-sha-256"` (the default when
+   * `password` is set) runs the SCRAM exchange; `"trust"` (the default without one) sends
+   * AuthenticationOk at once with no password exchange, even when `password` (or a URL password)
+   * is set. `"scram-sha-256"` without a password throws.
+   */
+  auth?: WireAuth;
   /** `server_version` reported at startup and by `SHOW server_version`. Default `18.3`. */
   serverVersion?: string;
   /** Extra `ParameterStatus` values sent at startup (override the defaults). */
@@ -155,6 +162,7 @@ const start = async (options: ServeOptions): Promise<PostgresServer> => {
   const wire = await createWireServer({
     ...(options.database !== undefined ? { database: options.database } : {}),
     ...(options.password !== undefined ? { password: options.password } : {}),
+    ...(options.auth !== undefined ? { auth: options.auth } : {}),
     ...(options.serverVersion !== undefined ? { serverVersion: options.serverVersion } : {}),
     ...(options.parameters !== undefined ? { parameters: options.parameters } : {}),
     ...(options.onLog !== undefined ? { onLog: options.onLog } : {}),
@@ -219,4 +227,4 @@ export type { ServerFaults, ServerLog, ServerLogPhase } from "./connection.ts";
 export type { ClusterImage, DurableCommit, DurableOptions, DurableStorage } from "./durable.ts";
 export { fileStorage } from "./file-storage.ts";
 export type { ByteStreamPair, ClientStream, DuplexLike } from "./stream.ts";
-export { createWireServer, type WireServer, type WireServerOptions } from "./transport.ts";
+export { createWireServer, type WireAuth, type WireServer, type WireServerOptions } from "./transport.ts";

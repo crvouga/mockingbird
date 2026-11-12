@@ -11,6 +11,7 @@ import { UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
 import {
   type Datum,
   isArrayType,
+  isCompositeType,
   isEnumType,
   makeArray,
   TYPE_OIDS,
@@ -39,9 +40,11 @@ import {
   regtypeName,
   regtypeOid,
   returnTypeOid,
+  typeIdOid,
 } from "./reg-types.ts";
 import { ACCESS_METHODS, indexAttributeCount, indexMethod, isKeyConstraint } from "./index-catalog.ts";
 import { extensionCatalogRelation } from "./catalog-extensions.ts";
+import { catalogRelation692, extendPgClass } from "./catalog-692.ts";
 import { attrdefOid, columnDefaults, systemCatalogRelation } from "./catalog-system.ts";
 import { type Persistence, relPersistence } from "./persistence.ts";
 import { columnStorage } from "./storage.ts";
@@ -89,6 +92,7 @@ function attTypmod(mod: { a?: number; b?: number } | null, type: TypeId): number
 }
 
 function enumOid(ctx: EngineCtx, t: TypeId): number {
+  if (isCompositeType(t) || (isArrayType(t) && isCompositeType(t.slice(0, -2)))) return typeIdOid(ctx.state, t);
   if (!isEnumType(t)) return typeOid(t);
   const e = ctx.state.findEnumByKey(t.slice(5));
   return e ? e.oid : 0;
@@ -201,6 +205,12 @@ function pgClass(ctx: EngineCtx): Relation {
       rows[rows.length - 1]![RELAM] = ACCESS_METHODS.get(indexMethod(i))?.[0] ?? 403;
     }
   }
+  extendPgClass(ctx, rows);
+  for (const c of ctx.state.catalogExt.composites.values()) {
+    push(c.relOid, c.name, c.schema, "c", c.attributes.length, 0, false, true, "p");
+    rows[rows.length - 1]![RELAM] = 0;
+    rows[rows.length - 1]![3] = c.oid;
+  }
   return rel(
     [
       ["oid", "oid"],
@@ -256,9 +266,29 @@ function pgAttribute(ctx: EngineCtx): Relation {
         withDefault.has(attrdefOid(t.oid, i + 1)),
         false,
         c.identity ? (c.identity.always ? "a" : "d") : "",
-        c.generated ? "s" : "",
+        c.generated ? (c.virtual ? "v" : "s") : "",
         isArrayType(c.type.id) ? 1 : 0,
         columnStorage(c),
+      ]);
+    });
+  }
+  // a composite type's attributes belong to its pg_class entry (relkind 'c')
+  for (const c of ctx.state.catalogExt.composites.values()) {
+    c.attributes.forEach((a, i) => {
+      rows.push([
+        c.relOid,
+        a.name,
+        enumOid(ctx, a.type.id),
+        i + 1,
+        attTypmod(a.type.mod, a.type.id),
+        -1,
+        false,
+        false,
+        false,
+        "",
+        "",
+        isArrayType(a.type.id) ? 1 : 0,
+        "x",
       ]);
     });
   }
@@ -308,6 +338,11 @@ function pgType(ctx: EngineCtx): Relation {
       rows.push([d.oid, d.name, namespaceOid(ctx.state, d.schema), "d", "S", 0, 0, typeOid(d.baseType.id), 0, -1]);
     }
   }
+  for (const c of ctx.state.catalogExt.composites.values()) {
+    const ns = namespaceOid(ctx.state, c.schema);
+    rows.push([c.oid, c.name, ns, "c", "C", 0, c.arrayOid, 0, c.relOid, -1]);
+    rows.push([c.arrayOid, `_${c.name}`, ns, "b", "A", c.oid, 0, 0, 0, -1]);
+  }
   return rel(
     [
       ["oid", "oid"],
@@ -341,9 +376,10 @@ function pgProc(ctx: EngineCtx): Relation {
           f.oid,
           f.name,
           namespaceOid(ctx.state, f.schema),
-          "f",
+          f.kind ?? "f",
           f.returnsSet,
-          f.argTypes.length,
+          // a procedure's OUT parameters are in its call signature but not in pronargs
+          f.argModes ? f.argModes.filter((m) => m !== "out").length : f.argTypes.length,
           10,
           LANGUAGE_OIDS[f.language] ?? 12,
           returnTypeOid(ctx.state, f),
@@ -449,6 +485,7 @@ function pgConstraint(ctx: EngineCtx): Relation {
       false,
       int2Array(conkey),
       fk && refTable ? int2Array(fk.refColumns.map((name) => attnum(refTable, name))) : null,
+      fk?.onDeleteColumns ? int2Array(fk.onDeleteColumns.map((name) => attnum(t, name))) : null,
       c?.kind === "check" ? checkClause(ctx, t, c.expr, false) : null,
     ]);
   }
@@ -473,6 +510,7 @@ function pgConstraint(ctx: EngineCtx): Relation {
       ["connoinherit", "bool"],
       ["conkey", "int2[]"],
       ["confkey", "int2[]"],
+      ["confdelsetcols", "int2[]"],
       // PostgreSQL stores a pg_node_tree here; this is the text pg_get_expr() returns
       ["conbin", "text"],
     ],
@@ -1464,6 +1502,8 @@ function infoRoutines(ctx: EngineCtx): Relation {
 // --- dispatch ----------------------------------------------------------------
 
 function buildCatalogRelation(ctx: EngineCtx, schema: string, name: string): Relation | null {
+  const extended = catalogRelation692(ctx, schema, name);
+  if (extended) return extended;
   if (schema === "pg_catalog") {
     switch (name) {
       case "pg_namespace":

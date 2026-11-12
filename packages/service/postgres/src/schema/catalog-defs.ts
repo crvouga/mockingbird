@@ -77,6 +77,7 @@ function foreignKeyDefinition(state: DatabaseState, c: ForeignKey): string {
   if (c.match === "full") out += " MATCH FULL";
   if (c.onUpdate && c.onUpdate !== "no_action") out += ` ON UPDATE ${actionRule(c.onUpdate)}`;
   if (c.onDelete && c.onDelete !== "no_action") out += ` ON DELETE ${actionRule(c.onDelete)}`;
+  if (c.onDeleteColumns) out += ` (${columnList(c.onDeleteColumns)})`;
   if (c.deferrable) out += c.initiallyDeferred ? " DEFERRABLE INITIALLY DEFERRED" : " DEFERRABLE";
   return out;
 }
@@ -160,11 +161,17 @@ function typeText(state: DatabaseState, t: TypeId): string {
 export function functionArguments(ctx: EngineCtx, f: FunctionData, withDefaults = true): string {
   const parts = f.argTypes.map((t, i) => {
     const name = f.argNames[i];
-    let text = `${name ? `${quoteIdentifier(name)} ` : ""}${typeText(ctx.state, t)}`;
+    // a procedure lists every parameter in place, with its mode
+    // (IN too, once any parameter has another mode, as PostgreSQL marks proargmodes)
+    const mode = f.argModes?.[i];
+    const marked = f.argModes?.some((m) => m !== "in") === true;
+    const prefix = mode === undefined || !marked ? "" : `${mode.toUpperCase()} `;
+    let text = `${prefix}${name ? `${quoteIdentifier(name)} ` : ""}${typeText(ctx.state, t)}`;
     const dflt = f.argDefaults[i];
     if (withDefaults && dflt) text += ` DEFAULT ${deparseRuleExpr({ ctx, table: null }, dflt, true)}`;
     return text;
   });
+  if (f.argModes) return parts.join(", ");
   for (const out of f.outArgs ?? []) parts.push(`OUT ${quoteIdentifier(out.name)} ${typeText(ctx.state, out.type)}`);
   return parts.join(", ");
 }
@@ -182,12 +189,13 @@ export function functionResult(state: DatabaseState, f: FunctionData): string {
 /** pg_get_functiondef: the CREATE OR REPLACE FUNCTION command that recreates the function. */
 export function functionDefinition(ctx: EngineCtx, f: FunctionData): string {
   const name = `${quoteIdentifier(f.schema)}.${quoteIdentifier(f.name)}`;
-  let out = `CREATE OR REPLACE FUNCTION ${name}(${functionArguments(ctx, f)})\n`;
-  out += ` RETURNS ${functionResult(ctx.state, f)}\n`;
+  const kind = f.kind === "p" ? "procedure" : "function";
+  let out = `CREATE OR REPLACE ${kind.toUpperCase()} ${name}(${functionArguments(ctx, f)})\n`;
+  if (f.kind !== "p") out += ` RETURNS ${functionResult(ctx.state, f)}\n`;
   out += ` LANGUAGE ${f.language}\n`;
   const attributes = [f.volatility?.toUpperCase(), f.strict ? "STRICT" : undefined].filter((a) => a !== undefined);
   if (attributes.length > 0) out += ` ${attributes.join(" ")}\n`;
   for (const [setting, value] of Object.entries(f.settings ?? {})) out += ` SET ${setting} TO '${value}'\n`;
-  out += `AS $function$${f.rawBody ?? ""}$function$\n`;
+  out += `AS $${kind}$${f.rawBody ?? ""}$${kind}$\n`;
   return out;
 }

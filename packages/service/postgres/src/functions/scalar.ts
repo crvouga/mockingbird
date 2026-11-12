@@ -11,6 +11,7 @@ import { getMathFunctions } from "./math-fns.ts";
 import { getMergeFunctions } from "./merge-fns.ts";
 import { getMiscFunctions } from "./misc-fns.ts";
 import { getNetworkFunctions } from "./network-fns.ts";
+import { overloadMultirangeFunctions } from "./multirange-fns.ts";
 import { getRangeFunctions, overloadRangeAccessors } from "./range-fns.ts";
 import { getStringFunctions } from "./string-fns.ts";
 import { getTsearchFunctions } from "./tsearch-fns.ts";
@@ -45,6 +46,7 @@ export function getScalarFunctions(): Map<string, ScalarFn> {
     }
   }
   overloadRangeAccessors(registry);
+  overloadMultirangeFunctions(registry);
   // `length(tsvector)` overload: dispatch by arg type over the string version
   const stringLength = registry.get("length")!;
   const tsvectorLength = registry.get("tsvector_length")!;

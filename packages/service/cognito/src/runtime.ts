@@ -3,6 +3,7 @@ import {
   type Clock,
   type FaultPreset,
   type MockControls,
+  outboxAdminRoutes,
   type RequestLog,
   type ServiceRuntime,
   createRuntime as serviceRuntime,
@@ -64,6 +65,20 @@ const json = (body: unknown, status = 200) => Response.json(body, { status })
 const adminError = (message: string, status = 400) =>
   json({ error: { type: "mockingbird_admin", message } }, status)
 const admin = (runtime: CognitoRuntime): AdminRoutes => ({
+  // Every message Cognito delivered: `?to=&since=&limit=`, plus `channel`, `trigger`, `username`.
+  ...outboxAdminRoutes(
+    runtime,
+    (api) => api.state.outbox,
+    (params) => {
+      const filters = (["channel", "trigger", "username"] as const).flatMap((key) => {
+        const value = params.get(key)
+        return value === null ? [] : [[key, value] as const]
+      })
+      return filters.length
+        ? (item) => filters.every(([key, value]) => item[key] === value)
+        : undefined
+    },
+  ),
   "POST /hosted-ui/next-account": ({ namespace, body }) => {
     const username = (body as { username?: unknown } | null)?.username
     if (typeof username !== "string") return adminError("username is required")
@@ -105,7 +120,9 @@ const admin = (runtime: CognitoRuntime): AdminRoutes => ({
     return json(redactedUser(runtime.instance(namespace).state.put(input as CognitoSeedUser)), 201)
   },
   "GET /codes": ({ namespace, url }) => {
-    const user = runtime.instance(namespace).state.find(url.searchParams.get("username") ?? "")
+    const username = url.searchParams.get("username")
+    if (!username) return adminError("the username query parameter is required")
+    const user = runtime.instance(namespace).state.find(username)
     return user
       ? json({
           username: user.username,

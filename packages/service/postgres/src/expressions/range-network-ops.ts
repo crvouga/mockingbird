@@ -25,6 +25,7 @@ import {
 import { isRangeType } from "../types/range-types.ts";
 import { type TypedValue, type TypeId, tv, typeDisplayName } from "../types/value.ts";
 import type { EngineCtx } from "./context.ts";
+import { evalMultirangeBinary } from "./multirange-ops.ts";
 
 /**
  * Operators on range types and on `inet` / `cidr`, plus `xid = int4`. `evalBinary` asks here
@@ -41,6 +42,8 @@ const NETWORK_OPS = new Set(["<<", "<<=", ">>", ">>=", "&&", "&", "|", "+", "-"]
 const INTEGER_TYPES = new Set(["int2", "int4", "int8"]);
 
 export function evalRangeOrNetworkBinary(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue): TypedValue | null {
+  const multirange = evalMultirangeBinary(ctx, op, l, r);
+  if (multirange) return multirange;
   if (isRangeType(l.t) || isRangeType(r.t)) return RANGE_OPS.has(op) ? evalRangeOp(ctx, op, l, r) : null;
   if (NETWORK_TYPES.has(l.t) || NETWORK_TYPES.has(r.t))
     return NETWORK_OPS.has(op) ? evalNetworkOp(ctx, op, l, r) : null;
