@@ -24,6 +24,7 @@ import type { Snapshot } from "../api/snapshot.ts";
 import { Cluster, type Session } from "./cluster.ts";
 import { Connection, type ServerFaults, type ServerLog } from "./connection.ts";
 import { Durability, type DurableOptions, type DurableStorage, openImage } from "./durable.ts";
+import { ScramCredentialStore } from "./scram.ts";
 import { type ClientStream, toSocket } from "./stream.ts";
 
 export type WireServerOptions = {
@@ -34,6 +35,13 @@ export type WireServerOptions = {
   database?: Database | Snapshot;
   /** Require SCRAM-SHA-256 with this password; omitted means trust (AuthenticationOk). */
   password?: string;
+  /**
+   * Client authentication, as a `pg_hba.conf` method. `"scram-sha-256"` (the default when
+   * `password` is set) runs the SCRAM exchange; `"trust"` (the default without one) sends
+   * AuthenticationOk at once with no password exchange, even when `password` is set — for
+   * in-process use where the handshake is only cost. `"scram-sha-256"` without `password` throws.
+   */
+  auth?: WireAuth;
   /** `server_version` reported at startup and by `SHOW server_version`. Default `18.3`. */
   serverVersion?: string;
   /** Extra `ParameterStatus` values sent at startup (override the defaults). */
@@ -56,6 +64,9 @@ export type WireServerOptions = {
    */
   durable?: DurableStorage | DurableOptions;
 };
+
+/** A `pg_hba.conf` authentication method the server supports. */
+export type WireAuth = "scram-sha-256" | "trust";
 
 export type WireServer = {
   /**
@@ -118,6 +129,15 @@ const hostSession = (cluster: Cluster): Session => ({
 
 /** Create a wire-protocol server that accepts connections from {@link WireServer.accept}. */
 export const createWireServer = async (options: WireServerOptions = {}): Promise<WireServer> => {
+  const auth = options.auth ?? (options.password !== undefined ? "scram-sha-256" : "trust");
+  if (auth !== "trust" && auth !== "scram-sha-256")
+    throw new Error(`createWireServer: unsupported auth ${String(auth)}`);
+  if (auth === "scram-sha-256" && options.password === undefined) {
+    throw new Error('createWireServer: auth "scram-sha-256" needs a password');
+  }
+  const password = auth === "scram-sha-256" ? options.password : undefined;
+  // One verifier per role for this server's lifetime, like pg_authid: PBKDF2 once, HMACs per connection.
+  const scramCredentials = new ScramCredentialStore();
   const seed = isSnapshot(options.database) ? options.database.open() : (options.database ?? new Database());
   const initialName = options.databaseName ?? "postgres";
   const durable = durableOptions(options.durable);
@@ -150,7 +170,7 @@ export const createWireServer = async (options: WireServerOptions = {}): Promise
         return socket.closed;
       }
       const connection = new Connection(socket, cluster, {
-        ...(options.password !== undefined ? { password: options.password } : {}),
+        ...(password !== undefined ? { password, scramCredentials } : {}),
         serverVersion: options.serverVersion ?? "18.3",
         parameters: options.parameters ?? {},
         faults,

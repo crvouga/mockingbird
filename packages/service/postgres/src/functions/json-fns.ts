@@ -1,3 +1,4 @@
+import { populateRow } from "./srf.ts";
 import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import { castTo } from "../types/cast.ts";
@@ -151,6 +152,17 @@ function jsonpathFunction(name: string): ScalarFn {
 
 export function getJsonFunctions(): Map<string, ScalarFn> {
   const m = new Map<string, ScalarFn>();
+
+  // json[b]_populate_record(base composite, from_json): a value of the base's composite type
+  for (const prefix of ["json", "jsonb"]) {
+    const name = `${prefix}_populate_record`;
+    m.set(name, (ctx, args) => {
+      const base = args[0]!;
+      const values = populateRow(ctx, name, base, args[1] ?? tv("json", null));
+      const attrs = ctx.compositeAttributes(base.t)!;
+      return tv(base.t, values === null ? null : { kind: "pgrecord", types: attrs.types, values, names: attrs.names });
+    });
+  }
 
   m.set(
     "to_json",

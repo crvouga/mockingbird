@@ -1,5 +1,6 @@
 import { pgError } from "../errors/error.ts";
 import { flushDeferredForeignKeys } from "../constraints/enforce.ts";
+import { endTransactionCursors } from "../executor/cursors.ts";
 import { flushConstraintTriggers } from "../executor/triggers.ts";
 import { assert } from "../runtime/assert.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
@@ -8,17 +9,20 @@ import { TRANSACTION_GUCS } from "../storage/guc-catalog.ts";
 interface Snapshot {
   state: DatabaseState;
   prngState: bigint;
+  /** the copy-on-write hold this snapshot keeps on the live state ({@link DatabaseState.holdForRollback}) */
+  epoch: number;
 }
 
 /**
- * Single-session transaction manager with copy-on-write snapshots: BEGIN /
- * SAVEPOINT freeze shared catalog objects and capture a shallow clone; writes
- * copy-on-write via ensureWritableTable. ROLLBACK restores the snapshot.
+ * Single-session transaction manager with copy-on-write snapshots: BEGIN / SAVEPOINT take an O(1)
+ * hold on the live catalog and keep a forked view of it; writes copy-on-write via
+ * `ensureWritable*`. ROLLBACK restores the snapshot. Holds are released at COMMIT / ROLLBACK.
  */
 export class TransactionManager {
   private base: Snapshot | null = null;
   private savepoints: Array<{ name: string; snap: Snapshot }> = [];
-  private freezeDepth = 0;
+  /** every hold taken in this transaction (BEGIN and each SAVEPOINT), released when it ends */
+  private holds: number[] = [];
   /**
    * Whether a statement of this transaction has read or written data yet (PostgreSQL's
    * FirstSnapshotSet): after that, the transaction's isolation level and read-write mode are fixed.
@@ -37,23 +41,23 @@ export class TransactionManager {
   }
 
   private takeSnapshot(): Snapshot {
-    this.state.freezeShared();
-    this.freezeDepth++;
-    return { state: this.state.cloneShallow(), prngState: this.state.prng.getState() };
+    const prngState = this.state.prng.getState();
+    const { state, epoch } = this.state.holdForRollback();
+    this.holds.push(epoch);
+    return { state, prngState, epoch };
   }
 
   private restore(snap: Snapshot): void {
     // A savepoint may be restored repeatedly. Keep its catalog maps independent
     // when the live branch replaces a table after the first ROLLBACK TO.
-    this.state.restoreFrom(snap.state.cloneShallow());
+    // The snapshot's hold is still alive here, so its objects stay copy-on-write.
+    this.state.restoreFrom(snap.state.cloneShallow(), true);
     this.state.prng.setState(snap.prngState);
   }
 
-  private thawOnce(): void {
-    if (this.freezeDepth > 0) {
-      this.state.thawShared();
-      this.freezeDepth--;
-    }
+  private releaseHolds(): void {
+    for (const epoch of this.holds) this.state.releaseHold(epoch);
+    this.holds = [];
   }
 
   begin(): void {
@@ -68,7 +72,7 @@ export class TransactionManager {
       const value = this.state.getSetting(sessionDefault);
       if (value !== undefined) this.state.localSettings.set(name, value);
     }
-    assert(this.freezeDepth === 1, "BEGIN freeze depth");
+    assert(this.holds.length === 1, "BEGIN holds one snapshot");
   }
 
   commit(): void {
@@ -88,7 +92,8 @@ export class TransactionManager {
     this.state.pendingTriggers = [];
     this.state.pendingForeignKeys = [];
     this.state.constraintModes.clear();
-    while (this.freezeDepth > 0) this.thawOnce();
+    endTransactionCursors(this.state, true);
+    this.releaseHolds();
   }
 
   rollback(): void {
@@ -104,7 +109,8 @@ export class TransactionManager {
     this.state.pendingTriggers = [];
     this.state.pendingForeignKeys = [];
     this.state.constraintModes.clear();
-    while (this.freezeDepth > 0) this.thawOnce();
+    endTransactionCursors(this.state, false);
+    this.releaseHolds();
   }
 
   savepoint(name: string): void {
@@ -141,6 +147,6 @@ export class TransactionManager {
     this.savepoints = [];
     this.state.inTransaction = false;
     this.state.transactionXid = null;
-    this.freezeDepth = 0;
+    this.releaseHolds();
   }
 }

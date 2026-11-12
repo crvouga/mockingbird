@@ -14,6 +14,7 @@ import {
   arrayElemType,
   enumTypeName,
   isArrayType,
+  isCompositeType,
   isEnumType,
   TYPE_OIDS,
   type TypeId,
@@ -161,6 +162,10 @@ export function regtypeOid(state: DatabaseState, name: string): number | null {
   }
   const id = resolved.column.id;
   if (isEnumType(id)) return state.findEnumByKey(id.slice(5))?.oid ?? null;
+  if (isCompositeType(id)) return state.catalogExt.composites.get(id.slice(5))?.oid ?? null;
+  if (isArrayType(id) && isCompositeType(arrayElemType(id))) {
+    return state.catalogExt.composites.get(arrayElemType(id).slice(5))?.arrayOid ?? null;
+  }
   if (isArrayType(id)) return ARRAY_OIDS[arrayElemType(id)] ?? null;
   return TYPE_OIDS[id] ?? null;
 }
@@ -177,6 +182,10 @@ export function regtypeName(state: DatabaseState, oid: number): string | null {
       if (d.oid === oid) return visibleUserType(state, d.schema, d.name, "domain");
     }
   }
+  for (const c of state.catalogExt.composites.values()) {
+    if (c.oid === oid) return c.name;
+    if (c.arrayOid === oid) return `${c.name}[]`;
+  }
   return null;
 }
 
@@ -185,6 +194,10 @@ export function typeIdOid(state: DatabaseState, t: TypeId): number {
   const pseudo = PSEUDO_TYPES.get(t);
   if (pseudo !== undefined) return pseudo;
   if (isEnumType(t)) return state.findEnumByKey(t.slice(5))?.oid ?? 0;
+  if (isCompositeType(t)) return state.catalogExt.composites.get(t.slice(5))?.oid ?? 0;
+  if (isArrayType(t) && isCompositeType(arrayElemType(t))) {
+    return state.catalogExt.composites.get(arrayElemType(t).slice(5))?.arrayOid ?? 0;
+  }
   if (isArrayType(t)) return ARRAY_OIDS[arrayElemType(t)] ?? 0;
   return TYPE_OIDS[t] ?? 0;
 }

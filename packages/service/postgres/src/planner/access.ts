@@ -1,6 +1,7 @@
 import type { Expr, FromItem } from "../ast/nodes.ts";
 import { type UniqueSpec, uniqueKeyOf, uniqueSpecsFor } from "../constraints/enforce.ts";
 import { type ExecEnv, RowScope } from "../executor/relation.ts";
+import { plainTableScan } from "../executor/scan.ts";
 import { makeEvalScope } from "../executor/select.ts";
 import { evalExpr } from "../expressions/eval.ts";
 import { indexStoreFor } from "../indexes/maintain.ts";
@@ -202,7 +203,7 @@ export function tryIndexedFromItem(env: ExecEnv, item: FromItem, where: Expr | n
   if (!where || item.type !== "from_table") return null;
   const state = env.ctx.state;
   const table = state.findTable(item.name);
-  if (!table) return null;
+  if (!table || !plainTableScan(env, table, item)) return null;
   const alias = item.alias ?? item.name[item.name.length - 1]!;
   table.materializeSlab();
   return tryIndexedTableRows(env, table, alias, where)?.map((row) => [...row, table.rowXmins.get(row) ?? 2]) ?? null;

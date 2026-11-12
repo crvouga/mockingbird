@@ -91,8 +91,8 @@ export function uniqueSpecsFor(env: ExecEnv, table: TableData): UniqueSpec[] {
   }
   const schema = env.ctx.state.schemas.get(table.schema);
   if (schema) {
-    for (const idx of schema.indexes.values()) {
-      if (idx.table !== table.name || !idx.unique || idx.isConstraint || idx.valid === false) continue;
+    for (const idx of schema.indexesOn(table.name)) {
+      if (!idx.unique || idx.isConstraint || idx.valid === false) continue;
       specs.push(uniqueSpecOfIndex(table, idx));
     }
   }

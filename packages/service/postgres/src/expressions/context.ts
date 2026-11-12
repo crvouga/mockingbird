@@ -52,7 +52,7 @@ export class EngineCtx implements CastEnv, CompareCtx {
         );
       }
     }
-    const target = this.state.resolveRelationSchema(parts);
+    const target = this.state.resolveRelationSchema(parts) ?? this.compositeRelation(parts);
     if (!target) return null;
     const catalogOid = catalogRelationOid(target.schema, target.name);
     if (catalogOid !== null) return catalogOid;
@@ -62,7 +62,19 @@ export class EngineCtx implements CastEnv, CompareCtx {
       schema?.tables.get(target.name) ??
       schema?.views.get(target.name) ??
       schema?.indexes.get(target.name);
-    return relation?.oid ?? null;
+    if (relation) return relation.oid ?? null;
+    // a composite type is a relation of kind 'c'
+    return this.state.catalogExt.composites.get(`${target.schema}.${target.name}`)?.relOid ?? null;
+  }
+
+  /** A composite type's relation, for `'name'::regclass`. */
+  private compositeRelation(parts: string[]): { schema: string; name: string } | null {
+    const composites = this.state.catalogExt.composites;
+    if (composites.size === 0) return null;
+    const name = parts[parts.length - 1]!;
+    const schemas = parts.length >= 2 ? [parts[parts.length - 2]!] : this.state.effectiveSearchPath();
+    for (const schema of schemas) if (composites.has(`${schema}.${name}`)) return { schema, name };
+    return null;
   }
 
   relationOid(parts: string[]): number {
@@ -149,6 +161,13 @@ export class EngineCtx implements CastEnv, CompareCtx {
     if (!labels) return 0;
     const idx = labels.indexOf(label);
     return idx === -1 ? labels.length : idx;
+  }
+
+  /** A composite type's attribute names and types (record_in, casts, field selection). */
+  compositeAttributes(t: TypeId): { names: string[]; types: TypeId[] } | null {
+    const c = this.state.catalogExt.composites.get(t.slice(5));
+    if (!c) return null;
+    return { names: c.attributes.map((a) => a.name), types: c.attributes.map((a) => a.type.id) };
   }
 
   requireEnum(enumType: TypeId): string[] {

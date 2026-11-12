@@ -14,6 +14,7 @@ export type ServiceKind =
   | "customerio"
   | "mailosaur"
   | "slack"
+  | "cognito"
 
 export const SERVICE_KINDS: readonly ServiceKind[] = [
   "twilio",
@@ -24,6 +25,7 @@ export const SERVICE_KINDS: readonly ServiceKind[] = [
   "customerio",
   "mailosaur",
   "slack",
+  "cognito",
 ]
 
 export const SERVICE_LABELS: Record<ServiceKind, string> = {
@@ -35,13 +37,14 @@ export const SERVICE_LABELS: Record<ServiceKind, string> = {
   customerio: "Customer.io",
   mailosaur: "Mailosaur",
   slack: "Slack",
+  cognito: "Amazon Cognito",
 }
 
 export type Address = { name: string | null; address: string }
 
 export type SmsContent = {
   body: string
-  /** One-time code the sender included (Twilio Verify), when known. */
+  /** One-time code the sender included (Twilio Verify, Cognito), when known. */
   code: string | null
   media: string[]
   /** `whatsapp` when the message went to a `whatsapp:` address; plain text messages omit it. */

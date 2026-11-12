@@ -433,7 +433,7 @@ export function pgcryptoInstalled(state: DatabaseState): boolean {
 
 export function installPgcrypto(state: DatabaseState, schemaName: string): void {
   const schema = state.getSchema(schemaName);
-  const existing = schema.functions.get("digest") ?? [];
+  const existing = (schema.functions.get("digest") ?? []).slice();
   // text overload first so untyped literals prefer digest(text, text), as PostgreSQL does.
   const arg0Types: TypeId[] = ["text", "bytea"];
   for (const arg0 of arg0Types) {

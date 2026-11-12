@@ -25,7 +25,14 @@ import type {
 type IncomingHttpHeaders = Record<string, string | string[] | undefined>;
 import type { LogEvent } from './batch.js';
 import { processBatch } from './batch.js';
-import { graphqlHandler } from './graphql/index.js';
+// Local change: GraphQL (and the `graphql` package) loads on the first $graphql request, not at import.
+const graphqlHandler = (
+  req: FhirRequest,
+  repo: FhirRepository,
+  router: FhirRouter,
+  options?: FhirRouteOptions
+): Promise<FhirResponse> =>
+  import('./graphql/index.js').then((graphql) => graphql.graphqlHandler(req, repo, router, options));
 import type { CreateResourceOptions, FhirRepository, UpdateResourceOptions } from './repo.js';
 import { RepositoryMode } from './repo.js';
 import type { HttpMethod, RouteResult } from './urlrouter.js';

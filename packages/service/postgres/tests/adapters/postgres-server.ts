@@ -17,6 +17,15 @@ import type { CellValue, ContractDb, ContractStatement, QueryResult, SqlValue } 
  */
 
 const RESET_SQL = `
+RESET ROLE;
+CLOSE ALL;
+DO $$
+DECLARE e text;
+BEGIN
+  FOR e IN SELECT evtname FROM pg_event_trigger LOOP
+    EXECUTE format('DROP EVENT TRIGGER %I', e);
+  END LOOP;
+END $$;
 DO $$
 DECLARE s text;
 BEGIN
@@ -30,6 +39,14 @@ BEGIN
   END LOOP;
 END $$;
 CREATE SCHEMA public;
+DO $$
+DECLARE r text;
+BEGIN
+  FOR r IN SELECT rolname FROM pg_roles WHERE oid >= 16384 AND rolname <> session_user LOOP
+    EXECUTE format('DROP OWNED BY %I CASCADE', r);
+    EXECUTE format('DROP ROLE %I', r);
+  END LOOP;
+END $$;
 GRANT ALL ON SCHEMA public TO PUBLIC;
 GRANT ALL ON SCHEMA public TO CURRENT_USER;
 DEALLOCATE ALL;

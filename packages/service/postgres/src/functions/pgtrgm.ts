@@ -34,7 +34,7 @@ export function pgTrgmInstalled(state: DatabaseState): boolean {
 
 export function installPgTrgm(state: DatabaseState, schemaName: string): void {
   const schema = state.getSchema(schemaName);
-  const existing = schema.functions.get("similarity") ?? [];
+  const existing = (schema.functions.get("similarity") ?? []).slice();
   const fn: FunctionData = {
     name: "similarity",
     schema: schema.name,

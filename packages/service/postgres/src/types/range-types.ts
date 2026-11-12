@@ -29,3 +29,31 @@ export const RANGE_ARRAY_OIDS: Readonly<Record<string, number>> = {
 export function isRangeType(t: string): boolean {
   return RANGE_SUBTYPES[t] !== undefined;
 }
+
+/** The built-in multirange types and the range type each is made of. */
+export const MULTIRANGE_RANGES: Readonly<Record<string, string>> = {
+  int4multirange: "int4range",
+  int8multirange: "int8range",
+  nummultirange: "numrange",
+  datemultirange: "daterange",
+  tsmultirange: "tsrange",
+  tstzmultirange: "tstzrange",
+};
+
+/** pg_type oids of the multirange types and of their array types. */
+export const MULTIRANGE_TYPE_OIDS: Readonly<Record<string, number>> = {
+  int4multirange: 4451,
+  nummultirange: 4532,
+  tsmultirange: 4533,
+  tstzmultirange: 4534,
+  datemultirange: 4535,
+  int8multirange: 4536,
+};
+export const MULTIRANGE_ARRAY_OIDS: Readonly<Record<string, number>> = {
+  int4multirange: 6150,
+  nummultirange: 6151,
+  tsmultirange: 6152,
+  tstzmultirange: 6153,
+  datemultirange: 6155,
+  int8multirange: 6157,
+};

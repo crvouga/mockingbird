@@ -64,7 +64,7 @@ curl -X POST http://127.0.0.1:9000/__admin/fleet/namespaces/default/reset
 - **A port per emulator.** Every emulator listens on its own port. Give it a fixed one, or `"port": 0` for a free one so two fleets never collide; `ready.json` lists the URLs that were actually bound.
 - **One controller.** `/__admin/fleet` resets, snapshots and restores a namespace across every emulator in one call, moves their clocks together, and waits until they are idle.
 - **One dashboard.** `--dashboard` serves every emulator's admin UI from one origin, under an **Emulators** tab. Nothing else to install.
-- **Notifications, with the same flag.** The **Notifications** tab shows what Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack accepted, and tests read the same messages from the dashboard's JSON API.
+- **Notifications, with the same flag.** The **Notifications** tab shows what Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito accepted, and tests read the same messages from the dashboard's JSON API.
 
 The full guide: [docs/FLEETS.md](docs/FLEETS.md).
 
@@ -260,11 +260,11 @@ Start at [docs/ADMIN_CONTROLS.md](docs/ADMIN_CONTROLS.md). Each control has its 
 
 **See every text, email, push and chat message your app sends.**
 
-The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app or a WhatsApp chat, on a lock screen or notification shade, in a webmail inbox, and in a team chat window. Tests read the same messages through a JSON API, and every element carries a test id.
+The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito emulators your app already sends through, and shows each message the way the person receiving it would: in a phone's Messages app or a WhatsApp chat, on a lock screen or notification shade, in a webmail inbox, and in a team chat window. Tests read the same messages through a JSON API, and every element carries a test id.
 
-- **Text messages** (Twilio · SNS · Customer.io · Mailosaur). Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify codes included, and WhatsApp messages open as a WhatsApp chat.
+- **Text messages** (Twilio · SNS · Customer.io · Mailosaur · Cognito). Threads per sender, bubbles, and the one-time code offered above the keyboard. Twilio Verify and Cognito codes included, and WhatsApp messages open as a WhatsApp chat.
 - **Push** (Firebase Cloud Messaging). An iOS lock screen or an Android notification shade, picked from the device token, with title, body, image, data, badge and sound.
-- **Email** (Resend · SES · SNS · Customer.io · Mailosaur). An inbox per recipient, to, cc and bcc, with the rendered HTML, attachments and headers. SES raw MIME is parsed.
+- **Email** (Resend · SES · SNS · Customer.io · Mailosaur · Cognito). An inbox per recipient, to, cc and bcc, with the rendered HTML, attachments and headers. SES raw MIME is parsed.
 - **Chat** (Slack). A team chat window: channels, bot messages with mrkdwn, Block Kit blocks, attachments and reactions, from chat.postMessage and incoming webhooks.
 
 With a fleet:
@@ -371,7 +371,7 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | [Getting started](docs/GETTING_STARTED.md) | Run the emulators your application depends on as a fleet: one `mockingbird.json`, one command, each emulator on its own port, and one dashboard for their admin UIs and the notifications your app sends. A fleet is the recommended way to use Mockingbird; a single emulator and in-process use come after it on this page. |
 | [Fleets](docs/FLEETS.md) | A fleet is the recommended way to run Mockingbird: one `mockingbird.json`, one process, every emulator your application calls on its own port, one controller that resets and snapshots them together, and one dashboard for their admin UIs and the notifications your app sent. |
 | [Admin controls](docs/ADMIN_CONTROLS.md) | Every Mockingbird HTTP emulator answers the same controls: isolate state by key, reset it, snapshot and restore it, move the clock, inject faults, latency and timeouts, and replay all of it from a seed. They are the same on every emulator, and the same whether you set them at boot, call the admin API, or send a request header. |
-| [Notifications](docs/NOTIFICATIONS.md) | See every SMS, WhatsApp message, email, push and chat message your application sends, the way the person receiving it would: on a phone's Messages app, an iOS lock screen or Android notification shade, a webmail inbox, and a team chat window. The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur and Slack emulators your app already sends through, and gives tests the same messages through a JSON API and a small client. |
+| [Notifications](docs/NOTIFICATIONS.md) | See every SMS, WhatsApp message, email, push and chat message your application sends, the way the person receiving it would: on a phone's Messages app, an iOS lock screen or Android notification shade, a webmail inbox, and a team chat window. The notifications harness reads the Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito emulators your app already sends through, and gives tests the same messages through a JSON API and a small client. |
 | [Why Mockingbird](docs/WHY.md) | Mockingbird gives applications local, stateful emulators for the vendor APIs and databases they depend on. Run integrations inside your process, control the state and clock, and inspect exactly which vendor operations each emulator supports. |
 | [Testing and parity](docs/TESTING.md) | How every emulator is proven to behave like its vendor: differential contracts, property-based walks, and live parity against real sandboxes. |
 | [Authoring a Mockingbird service](docs/AUTHORING_A_SERVICE.md) | How to add a vendor emulator to this repo. The reference implementation is [`packages/service/rxvortex`](../packages/service/rxvortex): copy its layout and patterns. |

@@ -202,7 +202,8 @@ export class Database {
       oid: this.engineState.nextOid(),
       jsImpl: spec.fn,
     };
-    const existing = functions.get(name) ?? [];
+    // a copy: snapshots share overload lists, so they are replaced rather than changed in place
+    const existing = (functions.get(name) ?? []).slice();
     const sameSig = existing.findIndex(
       (f) => f.argTypes.length === argTypes.length && f.argTypes.every((t, i) => t === argTypes[i]),
     );

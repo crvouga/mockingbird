@@ -497,6 +497,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     customerio: "Customer.io",
     mailosaur: "Mailosaur",
     slack: "Slack",
+    cognito: "Cognito",
   }
 
   const CHANNEL_LABEL: Record<Channel, string> = {
@@ -791,7 +792,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
             .map((s) => `<b>${esc(s.name)}</b>: ${esc(s.error)}`)
             .join(" · ")}</div>`
         : !state.sources.length
-          ? `<div class="notice" ${tid(TEST_IDS.notice)} data-kind="empty" style="border-color:#3a3f4b;background:#171a21;color:#9aa1b1">No messaging emulators found yet. Start the fleet with twilio, resend, fcm, ses, sns, customerio, mailosaur or slack.</div>`
+          ? `<div class="notice" ${tid(TEST_IDS.notice)} data-kind="empty" style="border-color:#3a3f4b;background:#171a21;color:#9aa1b1">No messaging emulators found yet. Start the fleet with twilio, resend, fcm, ses, sns, customerio, mailosaur, slack or cognito.</div>`
           : ""
   }
 
@@ -987,7 +988,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
             <div class="preview" ${tid(TEST_IDS.smsThreadPreview)}>${esc(latest?.sms?.body ?? "")}</div></div></div></div>`
               })
               .join("")}</div>`
-          : `<div class="empty-ios" ${tid(TEST_IDS.smsEmpty)}>${to ? "No Messages" : "No text messages yet.<br><br>SMS sent through Twilio, SNS, Customer.io or Mailosaur, and WhatsApp sent through Twilio, show up here."}</div>`
+          : `<div class="empty-ios" ${tid(TEST_IDS.smsEmpty)}>${to ? "No Messages" : "No text messages yet.<br><br>SMS sent through Twilio, SNS, Customer.io, Mailosaur or Cognito, and WhatsApp sent through Twilio, show up here."}</div>`
       }
     </div>`
     }

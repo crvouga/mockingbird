@@ -61,6 +61,7 @@ const PARITY_IRRELEVANT = ["**/*.md", "**/*.test.ts", "**/tests/**", "**/test/**
  */
 const PARITY_GLOBAL = [
   "scripts/bundle-service.ts",
+  "scripts/bundle-service-js.ts",
   "scripts/bundle-service-version.ts",
   "scripts/parity-service.ts",
 ]

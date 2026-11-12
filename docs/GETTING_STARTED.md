@@ -94,7 +94,7 @@ curl http://127.0.0.1:9002/api/2010-04-01/Accounts/AC000000000000000000000000000
   further install. `--dashboard-port <n>` moves it; `"dashboard": true` in the config turns it on
   without a flag.
 - **Notifications, with the same flag.** The Notifications tab reads the Twilio, Resend, FCM, SES,
-  SNS, Customer.io, Mailosaur and Slack emulators in the fleet. Tests read the same messages from
+  SNS, Customer.io, Mailosaur, Slack and Cognito emulators in the fleet. Tests read the same messages from
   the dashboard's JSON API: `GET http://127.0.0.1:8790/api/wait?to=%2B12025550123`. See
   [Notifications](NOTIFICATIONS.md).
 
@@ -146,6 +146,12 @@ npm install -D @crvouga/mockingbird-service-postgres @crvouga/mockingbird-servic
 The portable entry runs in Node 22+, Bun 1.2+, browsers, and Workers. Listening servers use
 the separate `./server` entry or CLI. Follow the service guide for SDK configuration and
 synthetic credentials; local emulation needs no vendor account.
+
+Bundling emulators into a browser app or worker: the admin page's client (about 1.3 MB) ships
+as each package's `dist/admin-ui.js` and loads with a dynamic `import()` on the first
+`/__admin/ui` request. With code splitting (`esbuild --splitting`, Vite, Rollup, webpack) it
+stays out of your main chunk. In a single-file bundle that never serves the admin page, leave it
+out with `--external:./admin-ui.js`; `/__admin/ui` then answers 503.
 
 ### Build a checkout
 

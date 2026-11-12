@@ -86,6 +86,17 @@ function hashAny(k: Uint8Array, seed: bigint): { b: number; c: number } {
   return { b: s[1]!, c: s[2]! };
 }
 
+/** PostgreSQL's `hash_any_extended(bytes, seed)` as an unsigned 64-bit integer. */
+export function hashAnyExtendedUint64(bytes: Uint8Array, seed: bigint): bigint {
+  const { b, c } = hashAny(bytes, seed);
+  return (BigInt(b >>> 0) << 32n) | BigInt(c >>> 0);
+}
+
+/** PostgreSQL's `hash_any` over raw bytes, as an unsigned 32-bit integer. */
+export function hashAnyUint32(bytes: Uint8Array): number {
+  return hashAny(bytes, 0n).c >>> 0;
+}
+
 export function hashText(text: string): number {
   return hashAny(utf8.encode(text), 0n).c | 0;
 }

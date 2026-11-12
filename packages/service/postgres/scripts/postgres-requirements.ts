@@ -33,27 +33,13 @@ export interface CoverageEntry {
  * cross-session messaging, protocol cursors, two-phase commit.
  */
 const NA_SLUGS = new Set([
-  // roles and privileges
+  // privileges that only matter for a server (roles, policies and SET ROLE are SQL behaviour since #692)
   "sql-alterdefaultprivileges",
-  "sql-altergroup",
-  "sql-alterpolicy",
-  "sql-alterrole",
-  "sql-alteruser",
   "sql-alterusermapping",
-  "sql-creategroup",
-  "sql-createpolicy",
-  "sql-createrole",
-  "sql-createuser",
   "sql-createusermapping",
   "sql-drop-owned",
-  "sql-dropgroup",
-  "sql-droppolicy",
-  "sql-droprole",
-  "sql-dropuser",
   "sql-dropusermapping",
   "sql-reassign-owned",
-  "sql-set-role",
-  "sql-set-session-authorization",
   // databases, tablespaces, server infrastructure
   "sql-alterdatabase",
   "sql-createdatabase",
@@ -91,10 +77,6 @@ const NA_SLUGS = new Set([
   "sql-commit-prepared",
   "sql-prepare-transaction",
   "sql-rollback-prepared",
-  // event triggers
-  "sql-altereventtrigger",
-  "sql-createeventtrigger",
-  "sql-dropeventtrigger",
   // server-side load
   "sql-load",
 ]);
@@ -146,7 +128,8 @@ const SEED: Record<string, { status: CoverageStatus; evidence: string[]; notes: 
   "sql-set-constraints": {
     status: "PARTIALLY_VERIFIED",
     evidence: ["tests/contract/foreign-keys/"],
-    notes: "Constraint triggers and DEFERRABLE foreign keys honour SET CONSTRAINTS and are checked at COMMIT; DEFERRABLE UNIQUE / PRIMARY KEY are still checked per row",
+    notes:
+      "Constraint triggers and DEFERRABLE foreign keys honour SET CONSTRAINTS and are checked at COMMIT; DEFERRABLE UNIQUE / PRIMARY KEY are still checked per row",
   },
   "sql-lock": {
     status: "PARTIALLY_VERIFIED",
@@ -202,13 +185,13 @@ const SEED: Record<string, { status: CoverageStatus; evidence: string[]; notes: 
   "sql-dropschema": { status: "VERIFIED", evidence: ["tests/contract/schemas/"], notes: "" },
   "sql-createtype": {
     status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/types/", "tests/contract/catalog/"],
-    notes: "enum types supported; composite/range/base types fail loud",
+    evidence: ["tests/contract/types/", "tests/contract/catalog/", "tests/contract/issue-692/"],
+    notes: "enum and composite types; range and base types fail loud",
   },
   "sql-altertype": {
     status: "PARTIALLY_VERIFIED",
-    evidence: ["tests/contract/types/"],
-    notes: "ADD VALUE / RENAME supported for enums",
+    evidence: ["tests/contract/types/", "tests/contract/issue-692/"],
+    notes: "ADD VALUE / RENAME for enums; ADD / DROP / ALTER / RENAME ATTRIBUTE and RENAME TO for composites",
   },
   "sql-droptype": { status: "VERIFIED", evidence: ["tests/contract/types/"], notes: "" },
   "sql-createdomain": { status: "VERIFIED", evidence: ["tests/contract/types/", "tests/contract/catalog/"], notes: "" },
@@ -222,7 +205,7 @@ const SEED: Record<string, { status: CoverageStatus; evidence: string[]; notes: 
     status: "PARTIALLY_VERIFIED",
     evidence: ["tests/contract/functions/"],
     notes:
-      "LANGUAGE sql plus plpgsql-lite (DECLARE, EXCEPTION WHEN others, CASE, FOR-IN-SELECT, RETURN NEXT); no cursors/NOTICE/packages",
+      "LANGUAGE sql (AS, RETURN, BEGIN ATOMIC) plus a PL/pgSQL interpreter shared by functions, procedures, trigger functions and DO blocks (DECLARE, ALIAS FOR, record/%ROWTYPE, SELECT INTO, loops, FOREACH SLICE, array element assignment, cursors, RETURN NEXT/QUERY, EXECUTE INTO/USING, GET DIAGNOSTICS, FOUND, OUT params, COMMIT/ROLLBACK in procedures); no NOTICE delivery, no refcursor SQL type",
   },
   "sql-alterfunction": {
     status: "PARTIALLY_VERIFIED",
@@ -289,22 +272,75 @@ const SEED: Record<string, { status: CoverageStatus; evidence: string[]; notes: 
     notes:
       "INDEX / TABLE / SCHEMA / DATABASE / SYSTEM with CONCURRENTLY: targets are validated, a unique index is re-checked, an invalid index is repaired and a failed concurrent rebuild leaves its _ccnew index; there is no physical index to rebuild and TABLESPACE is ignored",
   },
-  "sql-grant": { status: "PARTIALLY_VERIFIED", evidence: ["tests/contract/misc/"], notes: "parsed no-op (no roles)" },
-  "sql-revoke": { status: "PARTIALLY_VERIFIED", evidence: ["tests/contract/misc/"], notes: "parsed no-op (no roles)" },
+  "sql-grant": {
+    status: "PARTIALLY_VERIFIED",
+    evidence: ["tests/contract/issue-692/"],
+    notes:
+      "role membership and object privileges are recorded (relacl, has_*_privilege, information_schema); object privileges are not enforced",
+  },
+  "sql-revoke": {
+    status: "PARTIALLY_VERIFIED",
+    evidence: ["tests/contract/issue-692/"],
+    notes: "role membership and object privileges are recorded; object privileges are not enforced",
+  },
+  // roles (#692)
+  "sql-createrole": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
+  "sql-createuser": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "CREATE ROLE ... LOGIN" },
+  "sql-creategroup": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "CREATE ROLE" },
+  "sql-alterrole": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
+  "sql-alteruser": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "ALTER ROLE" },
+  "sql-altergroup": { status: "PARTIALLY_VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "ADD / DROP USER" },
+  "sql-droprole": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
+  "sql-dropuser": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "DROP ROLE" },
+  "sql-dropgroup": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "DROP ROLE" },
+  "sql-set-role": { status: "VERIFIED", evidence: ["tests/contract/issue-692/", "tests/wire/"], notes: "" },
+  "sql-set-session-authorization": {
+    status: "PARTIALLY_VERIFIED",
+    evidence: ["tests/contract/issue-692/"],
+    notes: "engine-only tests: PGlite cannot RESET SESSION AUTHORIZATION",
+  },
+  // row-level security (#692)
+  "sql-createpolicy": { status: "VERIFIED", evidence: ["tests/contract/issue-692/", "tests/wire/"], notes: "" },
+  "sql-alterpolicy": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
+  "sql-droppolicy": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
+  // event triggers (#692)
+  "sql-createeventtrigger": {
+    status: "PARTIALLY_VERIFIED",
+    evidence: ["tests/contract/issue-692/"],
+    notes: "ddl_command_start / _end, sql_drop, table_rewrite; login triggers never fire",
+  },
+  "sql-altereventtrigger": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
+  "sql-dropeventtrigger": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
   "sql-security-label": { status: "PARTIALLY_VERIFIED", evidence: ["tests/contract/misc/"], notes: "parsed no-op" },
   // explicitly unsupported dialect statements (fail loud)
-  "sql-merge": { status: "UNSUPPORTED", evidence: [], notes: "MERGE fails loud; use INSERT ... ON CONFLICT" },
-  "sql-call": { status: "UNSUPPORTED", evidence: [], notes: "procedures are unsupported; CALL fails loud" },
-  "sql-createprocedure": { status: "UNSUPPORTED", evidence: [], notes: "procedures fail loud" },
+  "sql-merge": {
+    status: "PARTIALLY_VERIFIED",
+    evidence: ["tests/contract/merge/", "tests/contract/issue-692/"],
+    notes: "also inside WITH; MERGE into a partitioned table or one under row-level security fails loud",
+  },
+  "sql-call": {
+    status: "VERIFIED",
+    evidence: ["tests/contract/functions/", "tests/wire/"],
+    notes: "IN / INOUT / OUT parameters, defaults and named arguments; COMMIT / ROLLBACK inside non-atomic procedures",
+  },
+  "sql-createprocedure": {
+    status: "VERIFIED",
+    evidence: ["tests/contract/functions/"],
+    notes: "LANGUAGE plpgsql and LANGUAGE sql (AS or BEGIN ATOMIC); VARIADIC parameters not modelled",
+  },
   "sql-alterprocedure": { status: "UNSUPPORTED", evidence: [], notes: "procedures fail loud" },
-  "sql-dropprocedure": { status: "UNSUPPORTED", evidence: [], notes: "procedures fail loud" },
+  "sql-dropprocedure": { status: "VERIFIED", evidence: ["tests/contract/functions/"], notes: "also DROP ROUTINE" },
   "sql-listen": { status: "UNSUPPORTED", evidence: [], notes: "LISTEN/NOTIFY fails loud (single session)" },
   "sql-notify": { status: "UNSUPPORTED", evidence: [], notes: "LISTEN/NOTIFY fails loud (single session)" },
   "sql-unlisten": { status: "UNSUPPORTED", evidence: [], notes: "LISTEN/NOTIFY fails loud (single session)" },
-  "sql-declare": { status: "UNSUPPORTED", evidence: [], notes: "protocol cursors fail loud" },
-  "sql-fetch": { status: "UNSUPPORTED", evidence: [], notes: "protocol cursors fail loud" },
-  "sql-move": { status: "UNSUPPORTED", evidence: [], notes: "protocol cursors fail loud" },
-  "sql-close": { status: "UNSUPPORTED", evidence: [], notes: "protocol cursors fail loud" },
+  "sql-declare": {
+    status: "PARTIALLY_VERIFIED",
+    evidence: ["tests/contract/issue-692/", "tests/wire/"],
+    notes: "rows computed at DECLARE; BINARY is recorded but rows are sent as text; WHERE CURRENT OF fails loud",
+  },
+  "sql-fetch": { status: "VERIFIED", evidence: ["tests/contract/issue-692/", "tests/wire/"], notes: "" },
+  "sql-move": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
+  "sql-close": { status: "VERIFIED", evidence: ["tests/contract/issue-692/"], notes: "" },
 };
 
 function classify(slug: string): RequirementClass {

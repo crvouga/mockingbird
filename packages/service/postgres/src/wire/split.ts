@@ -2,6 +2,8 @@
  * Split a simple-query script into statements at top-level semicolons, the way the server's
  * lexer would: quoted strings (`'…'`, `E'…'` with backslashes, `"…"`), dollar quoting
  * (`$tag$…$tag$`), line and (nested) block comments never split. Empty statements are dropped.
+ * Neither does a semicolon inside the SQL-standard body of `CREATE FUNCTION` / `CREATE PROCEDURE`
+ * (`BEGIN ATOMIC … END`, with `CASE … END` nested in it), as PostgreSQL's own scanner tracks it.
  */
 export const splitStatements = (script: string): string[] => {
   const out: string[] = [];
@@ -9,10 +11,21 @@ export const splitStatements = (script: string): string[] => {
   let hasSql = false;
   let i = 0;
   const n = script.length;
+  /** the statement's leading words, enough to tell a CREATE [OR REPLACE] FUNCTION / PROCEDURE */
+  let words: string[] = [];
+  let previousWord = "";
+  let atomicDepth = 0;
   const push = (end: number) => {
     const text = script.slice(start, end).trim();
     if (hasSql) out.push(text);
     hasSql = false;
+    words = [];
+    previousWord = "";
+    atomicDepth = 0;
+  };
+  const createsRoutine = (): boolean => {
+    const head = words[1] === "or" && words[2] === "replace" ? words[3] : words[1];
+    return words[0] === "create" && (head === "function" || head === "procedure");
   };
   while (i < n) {
     const c = script[i] as string;
@@ -68,7 +81,21 @@ export const splitStatements = (script: string): string[] => {
         continue;
       }
     }
-    if (c === ";") {
+    if (/[A-Za-z_\u0080-\uffff]/.test(c)) {
+      let end = i + 1;
+      while (end < n && /[A-Za-z0-9_$\u0080-\uffff]/.test(script[end] as string)) end++;
+      // E'…' and U&'…' prefixes: the quote that follows is scanned on its own
+      const word = script.slice(i, end).toLowerCase();
+      hasSql = true;
+      if (words.length < 4) words.push(word);
+      if (word === "atomic" && previousWord === "begin" && createsRoutine()) atomicDepth++;
+      else if (atomicDepth > 0 && word === "case") atomicDepth++;
+      else if (atomicDepth > 0 && word === "end") atomicDepth--;
+      previousWord = word;
+      i = end;
+      continue;
+    }
+    if (c === ";" && atomicDepth === 0) {
       push(i);
       start = i + 1;
     }

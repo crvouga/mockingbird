@@ -2,6 +2,7 @@ import type { Expr, FromItem, SelectBody, SelectCore, SelectStmt } from "../ast/
 import type { EngineCtx } from "../expressions/context.ts";
 import type { TableData, ViewData } from "../storage/database-state.ts";
 import { deparseExpr } from "./deparse.ts";
+import { unsupported } from "../errors/error.ts";
 import { quoteIdentifier } from "./keywords.ts";
 import { deparseRuleExpr, type RuleScope } from "./ruleutils.ts";
 
@@ -133,6 +134,8 @@ class Printer {
         return `(${new Printer(this.ctx, this.pretty).query(item.query)}) ${quoteIdentifier(item.alias ?? "subquery")}`;
       case "from_func":
         return `${this.expr(scope, item.call)}${item.alias ? ` ${quoteIdentifier(item.alias)}` : ""}`;
+      case "from_json_table":
+        throw unsupported("the definition of a view over JSON_TABLE");
     }
   }
 

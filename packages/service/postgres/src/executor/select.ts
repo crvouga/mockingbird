@@ -37,7 +37,17 @@ import type { FunctionData } from "../storage/database-state.ts";
 import { canImplicitCast, castTo, unifyTypes } from "../types/cast.ts";
 import { datumCompare, datumKey } from "../types/compare.ts";
 import { resolveTypeName } from "../types/resolve.ts";
-import { type Datum, type TypedValue, type TypeId, type TypeMod, tv, UNKNOWN } from "../types/value.ts";
+import {
+  type Datum,
+  type PgRecord,
+  type TypedValue,
+  type TypeId,
+  type TypeMod,
+  tv,
+  typeDisplayName,
+  UNKNOWN,
+} from "../types/value.ts";
+import { atomicFunctionContext } from "./call.ts";
 import { callPlpgsqlScalar, callPlpgsqlSet } from "./plpgsql.ts";
 import {
   childEnv,
@@ -48,6 +58,8 @@ import {
   RowScope,
   relationResult,
 } from "./relation.ts";
+import { materializeJsonTable } from "./json-table.ts";
+import { plainTableScan, scanTableRows } from "./scan.ts";
 import { systemColumns, withSystemValues } from "./system-columns.ts";
 import { computeWindowValues } from "./window.ts";
 
@@ -257,6 +269,15 @@ export function resolveUserFunctionForArgs(env: ExecEnv, name: string[], args: T
  * a candidate without a matching parameter name or a default for every gap is
  * not a match (PostgreSQL raises 42883 then).
  */
+/** A procedure called like a function (`SELECT p()`): PostgreSQL resolves it, then refuses it. */
+function procedureInExpression(name: string[], args: TypedValue[]): Error {
+  return pgError(
+    "wrong_object_type",
+    `${name.join(".")}(${args.map((a) => typeDisplayName(a.t)).join(", ")}) is a procedure`,
+    "42809",
+  );
+}
+
 export function bindUserFunctionCall(
   env: ExecEnv,
   name: string[],
@@ -265,6 +286,7 @@ export function bindUserFunctionCall(
 ): { fn: FunctionData; args: TypedValue[] } | null {
   if (!argNames || argNames.every((n) => n === null)) {
     const fn = resolveUserFunctionForArgs(env, name, args);
+    if (fn?.kind === "p") throw procedureInExpression(name, args);
     return fn ? { fn, args } : null;
   }
   for (const fn of env.ctx.state.findFunctions(name)) {
@@ -278,6 +300,7 @@ export function bindUserFunctionCall(
     }
     if (!ok) continue;
     if (slots.some((s, i) => s === undefined && !fn.argDefaults[i])) continue;
+    if (fn.kind === "p") throw procedureInExpression(name, args);
     const bound = slots.map((s, i) => s ?? evalScalar(env, null, fn.argDefaults[i]!));
     return { fn, args: bound };
   }
@@ -313,7 +336,7 @@ function functionEnv(env: ExecEnv, fn: FunctionData, args: TypedValue[]): ExecEn
   return fnEnv;
 }
 
-function runFunctionBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): ExecResult | null {
+export function runFunctionBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): ExecResult | null {
   if (fn.strict && args.some((a) => a.v === null)) return null;
   if (!fn.body || fn.body.length === 0) {
     throw pgError("unsupported", `function ${fn.name} has no executable body`);
@@ -326,7 +349,7 @@ function runFunctionBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): Ex
   return last;
 }
 
-function withFunctionSettings<T>(env: ExecEnv, fn: FunctionData, run: () => T): T {
+export function withFunctionSettings<T>(env: ExecEnv, fn: FunctionData, run: () => T): T {
   const state = env.ctx.state;
   const saved = new Map(state.localSettings);
   for (const [name, value] of Object.entries(fn.settings ?? {})) state.localSettings.set(name, value);
@@ -338,7 +361,7 @@ function withFunctionSettings<T>(env: ExecEnv, fn: FunctionData, run: () => T): 
 }
 
 export function callSqlFunctionScalar(env: ExecEnv, fn: FunctionData, args: TypedValue[]): TypedValue {
-  return withFunctionSettings(env, fn, () => callSqlFunctionScalarBody(env, fn, args));
+  return atomicFunctionContext(() => withFunctionSettings(env, fn, () => callSqlFunctionScalarBody(env, fn, args)));
 }
 
 function callSqlFunctionScalarBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): TypedValue {
@@ -378,7 +401,7 @@ function callSqlFunctionScalarBody(env: ExecEnv, fn: FunctionData, args: TypedVa
 }
 
 export function callSqlFunctionSet(env: ExecEnv, fn: FunctionData, args: TypedValue[]): Relation {
-  return withFunctionSettings(env, fn, () => callSqlFunctionSetBody(env, fn, args));
+  return atomicFunctionContext(() => withFunctionSettings(env, fn, () => callSqlFunctionSetBody(env, fn, args)));
 }
 
 function callSqlFunctionSetBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): Relation {
@@ -605,11 +628,22 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
             ...table.columns.map((c) => ({ name: c.name, type: c.type.id, mod: c.type.mod, table: label })),
             ...systemColumns(label),
           ],
-          rows: shapeOnly ? [] : table.serializationRows().map((row, i) => withSystemValues(table, row, i)),
+          rows: shapeOnly
+            ? []
+            : scanTableRows(env, table, label, item, () =>
+                table.serializationRows().map((row, i) => withSystemValues(table, row, i)),
+              ),
         };
         return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
       }
       const view = state.findView(item.name);
+      if (view && item.tablesample && !view.materialized) {
+        throw pgError(
+          "feature_not_supported",
+          "TABLESAMPLE clause can only be applied to tables and materialized views",
+          "0A000",
+        );
+      }
       if (view) {
         let rel: Relation;
         if (view.materialized) {
@@ -666,6 +700,13 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
     case "from_join": {
       return joinSource(env, item, scope);
     }
+    case "from_json_table": {
+      const rel = shapeOnly
+        ? { ...materializeJsonTable(env, { ...item, context: { type: "null_lit" } }, scope), rows: [] }
+        : materializeJsonTable(env, item, scope ?? env.outer);
+      const label = item.alias ?? "json_table";
+      return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
+    }
   }
 }
 
@@ -695,6 +736,15 @@ function srfCallRelation(
       return callSqlFunctionSet(env, userFn, boundUser.args);
     }
     const v = callSqlFunctionScalar(env, userFn, boundUser.args);
+    // a function returning a composite type is a row of its attributes in FROM
+    const attrs = env.ctx.compositeAttributes(v.t);
+    if (attrs) {
+      const values = v.v === null ? attrs.types.map(() => null) : (v.v as PgRecord).values;
+      return {
+        columns: attrs.names.map((name, i) => ({ name, type: attrs.types[i]!, table: null })),
+        rows: [values.slice()],
+      };
+    }
     return { columns: [{ name: userFn.name, type: v.t === UNKNOWN ? "text" : v.t, table: null }], rows: [[v.v]] };
   }
   const srf = getSrfFunctions().get(bare);
@@ -705,8 +755,16 @@ function srfCallRelation(
       rows: res.rows,
     };
   }
-  // scalar builtin in FROM: one row, one column
+  // scalar builtin in FROM: one row, one column (a composite result is a row of its attributes)
   const v = evalExpr(env.ctx, evalScope, call);
+  const attrs = env.ctx.compositeAttributes(v.t);
+  if (attrs) {
+    const values = v.v === null ? attrs.types.map(() => null) : (v.v as PgRecord).values;
+    return {
+      columns: attrs.names.map((name, i) => ({ name, type: attrs.types[i]!, table: null })),
+      rows: [values.slice()],
+    };
+  }
   return { columns: [{ name: bare, type: v.t === UNKNOWN ? "text" : v.t, table: null }], rows: [[v.v]] };
 }
 
@@ -765,6 +823,7 @@ function isLateralItem(item: FromItem): boolean {
     case "from_subquery":
       return item.lateral;
     case "from_func":
+    case "from_json_table":
       return true; // functions in FROM may implicitly reference earlier items
     case "from_join":
       return isLateralItem(item.left) || isLateralItem(item.right);
@@ -2065,9 +2124,35 @@ function findNestedSrfCall(e: unknown): FuncCall | null {
   return null;
 }
 
-function expandTargets(core: SelectCore, columns: Relation["columns"]): ProjItem[] {
+/** The attribute names of the composite type `base` evaluates to, when that type is known without evaluating it. */
+function compositeStarFields(env: ExecEnv, columns: Relation["columns"], base: Expr): string[] | null {
+  let type: TypeId | null = null;
+  if (base.type === "colref") {
+    const name = base.parts[base.parts.length - 1]!;
+    const table = base.parts.length > 1 ? base.parts[base.parts.length - 2]! : null;
+    type = columns.find((c) => c.name === name && (table === null || c.table === table))?.type ?? null;
+  } else if (base.type === "cast") {
+    type = resolveTypeName(env.ctx.state, base.target).column.id;
+  }
+  return type ? (env.ctx.compositeAttributes(type)?.names ?? null) : null;
+}
+
+function expandTargets(
+  core: SelectCore,
+  columns: Relation["columns"],
+  compositeFields?: (base: Expr) => string[] | null,
+): ProjItem[] {
   const items: ProjItem[] = [];
   for (const t of core.targets) {
+    // `(composite).*`: one column per attribute
+    const fields = t.expr.type === "field_select" && t.expr.field === "*" ? compositeFields?.(t.expr.base) : null;
+    if (fields && t.expr.type === "field_select") {
+      for (const field of fields) {
+        const expr: Expr = { type: "field_select", base: t.expr.base, field };
+        items.push({ name: field, kind: "expr", colIdx: -1, expr, hidden: false });
+      }
+      continue;
+    }
     if (t.expr.type === "star") {
       if (t.expr.table) {
         const label = t.expr.table[t.expr.table.length - 1]!;
@@ -2156,10 +2241,12 @@ export function executeCore(
   // The old path built/stamped every tuple before replacing it with an index result.
   // Resolve safe point probes first, then build only column metadata and matching tuples.
   const item = core.from.length === 1 ? core.from[0] : null;
-  const pointTable =
+  const pointCandidate =
     item?.type === "from_table" && !item.colAliases?.length && !(item.name.length === 1 && env.ctes.has(item.name[0]!))
       ? env.ctx.state.findTable(item.name)
       : null;
+  const pointTable =
+    pointCandidate && item?.type === "from_table" && plainTableScan(env, pointCandidate, item) ? pointCandidate : null;
   const point =
     pointTable && core.where && item?.type === "from_table"
       ? tryPointRowIndices(env, pointTable, item.alias ?? item.name[item.name.length - 1]!, core.where)
@@ -2369,7 +2456,7 @@ export function executeCore(
   }
 
   // 7. projection plan
-  const projItems = expandTargets(core, srcCols);
+  const projItems = expandTargets(core, srcCols, (base) => compositeStarFields(env, srcCols, base));
   const visibleCount = projItems.length;
 
   // ORDER BY resolution

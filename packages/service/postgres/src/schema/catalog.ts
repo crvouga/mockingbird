@@ -78,4 +78,11 @@ export const PG_CATALOG_RELATIONS: ReadonlySet<string> = new Set([
   "pg_stat_database",
   "pg_timezone_names",
   "pg_timezone_abbrevs",
+  // issue #692: roles, row-level security, cursors, partitioning, event triggers
+  "pg_auth_members",
+  "pg_policy",
+  "pg_policies",
+  "pg_cursors",
+  "pg_partitioned_table",
+  "pg_event_trigger",
 ]);

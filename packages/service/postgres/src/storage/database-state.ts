@@ -5,7 +5,9 @@ import type { Clock } from "../runtime/clock.ts";
 import type { Prng } from "../runtime/prng.ts";
 import { PG_CATALOG_RELATIONS } from "../schema/catalog.ts";
 import { type ColumnType, type Datum, TYPE_OIDS, type TypeId, typeDisplayName } from "../types/value.ts";
+import { type CatalogExt, EMPTY_CATALOG_EXT } from "./catalog-ext.ts";
 import type { ColumnarSlab } from "./columnar-slab.ts";
+import type { CursorData } from "../executor/cursors.ts";
 import { gucDef, gucDefaultDisplay, TRANSACTION_GUCS } from "./guc-catalog.ts";
 
 // --- table / relation metadata ---------------------------------------------
@@ -18,7 +20,9 @@ export interface ColumnMeta {
   notNull: boolean;
   defaultExpr: Expr | null;
   identity: { always: boolean; sequence: string } | null; // sequence = qualified seq key "schema.name"
-  generated: Expr | null; // GENERATED ALWAYS AS (...) STORED
+  generated: Expr | null; // GENERATED ALWAYS AS (...) STORED | VIRTUAL
+  /** a VIRTUAL generated column (`pg_attribute.attgenerated = 'v'`); the engine still keeps its value in the row */
+  virtual?: true;
   collate: string | null;
   /** resolved domain name when column type came from a domain */
   domain: string | null; // "schema.name"
@@ -41,6 +45,8 @@ export type ConstraintMeta =
       refTable: string;
       refColumns: string[];
       onDelete: string | null;
+      /** `ON DELETE SET NULL (cols)` / `SET DEFAULT (cols)`: the referencing columns the action sets */
+      onDeleteColumns?: string[];
       onUpdate: string | null;
       match: "full" | "simple";
       /** `DEFERRABLE`; absent means NOT DEFERRABLE */
@@ -206,8 +212,6 @@ export class TableData {
   comment: string | undefined;
   /** monotonically increasing oid-like id for catalog output */
   readonly oid: number;
-  /** >0 while shared with a clone or transaction snapshot. */
-  shareCount = 0;
   /** Derived unique/btree index maps; null until built or invalidated. */
   indexStores: Map<string, import("../indexes/index.ts").IndexStore> | null = null;
   /** DML replaces tuples; DDL must detach them before changing cells in place. */
@@ -296,18 +300,6 @@ export class TableData {
   mutableRows(): Datum[][] {
     this.materializeSlab();
     return this.rows;
-  }
-
-  get frozen(): boolean {
-    return this.shareCount > 0;
-  }
-
-  freeze(): void {
-    this.shareCount++;
-  }
-
-  thaw(): void {
-    if (this.shareCount > 0) this.shareCount--;
   }
 
   columnIndex(name: string): number {
@@ -409,7 +401,6 @@ export interface ViewData {
   matColumns: Array<{ name: string; type: TypeId }> | null;
   temp: boolean;
   oid: number;
-  shareCount?: number;
   /** COMMENT ON VIEW / MATERIALIZED VIEW */
   comment?: string;
 }
@@ -433,7 +424,6 @@ export interface SequenceData {
   /** UNLOGGED sequence (`pg_class.relpersistence = 'u'`); absent = logged */
   unlogged?: boolean;
   oid: number;
-  shareCount?: number;
 }
 
 export interface EnumData {
@@ -443,7 +433,6 @@ export interface EnumData {
   schema: string;
   labels: string[];
   oid: number;
-  shareCount?: number;
 }
 
 export interface DomainData {
@@ -456,7 +445,6 @@ export interface DomainData {
   defaultExpr: Expr | null;
   checks: Array<{ name: string; expr: Expr }>;
   oid: number;
-  shareCount?: number;
 }
 
 export interface FunctionData {
@@ -475,6 +463,13 @@ export interface FunctionData {
   returnsTable: Array<{ name: string; type: TypeId }> | null;
   /** OUT / INOUT parameters: variables of a plpgsql body that make up its result */
   outArgs?: Array<{ name: string; type: TypeId }>;
+  /**
+   * `p` for a procedure (CREATE PROCEDURE); absent for a function. A procedure's argument lists
+   * cover every parameter in call order, OUT ones included (CALL passes a placeholder for them).
+   */
+  kind?: "p";
+  /** a procedure's parameter modes, parallel to argTypes */
+  argModes?: Array<"in" | "out" | "inout" | "variadic">;
   language: string;
   body: Statement[] | null;
   rawBody: string | null;
@@ -487,20 +482,182 @@ export interface FunctionData {
   ) => null | boolean | number | bigint | string | Uint8Array;
 }
 
+// --- copy-on-write bookkeeping --------------------------------------------------
+//
+// Snapshots (BEGIN, SAVEPOINT, autocommit statement rollback, PL/pgSQL EXCEPTION blocks, exported
+// snapshots) share catalog objects with the live state instead of copying them. Every catalog
+// object is stamped with the epoch at which it entered a catalog map (or was copied for writing);
+// a state treats an object as shared, and copies it before changing it, when that stamp is older
+// than the state's own `cowEpoch`. Taking a snapshot only advances `cowEpoch` — O(1), however big
+// the catalog is — and the catalog maps themselves are {@link ForkMap}s, so forking them is O(1)
+// and a write copies only the few internal pages it touches (issue #710).
+
+let epochCounter = 0;
+/** Epoch at which each catalog object (table, view, sequence, enum, ...) became owned by a live state. */
+const bornAt = new WeakMap<object, number>();
+
+function nextEpoch(): number {
+  return ++epochCounter;
+}
+
+/** Mark `value` as freshly owned: writable in place until the next snapshot of the state holding it. */
+function stampOwned(value: object): void {
+  bornAt.set(value, epochCounter);
+}
+
+/** @internal How many catalog maps were copied entry by entry (a plain Map turned into a fork); tests use it. */
+export const catalogCopyStats = { mapsCopied: 0 };
+
+/**
+ * A catalog map (one schema's tables, views, sequences, ...): an insertion-ordered map with O(1)
+ * forks. A value inserted for the first time is stamped as owned by the state writing it.
+ */
+export class CatalogMap<V extends object> implements Map<string, V> {
+  #map: ForkMap<string, V>;
+  /** one derived view of the entries (see {@link derived}), dropped by writes it depends on; forks share it */
+  #derived: { build: (map: CatalogMap<V>) => unknown; on: (value: V) => unknown; value: unknown } | null = null;
+
+  constructor(entries?: Iterable<readonly [string, V]>) {
+    this.#map = new ForkMap();
+    if (entries) for (const [key, value] of entries) this.set(key, value);
+  }
+
+  /** O(1) copy: both sides copy-on-write the pages they later change. */
+  fork(): CatalogMap<V> {
+    const copy = new CatalogMap<V>();
+    copy.#map = this.#map.fork();
+    copy.#derived = this.#derived;
+    return copy;
+  }
+
+  /**
+   * `build(this)`, computed once until a key is added or deleted, or a value is replaced by one
+   * whose `on(value)` differs. Forks share the cached value, so a lookup structure survives
+   * snapshots without being rebuilt. `build` should keep keys, not values, which may be replaced.
+   */
+  derived<R>(build: (map: CatalogMap<V>) => R, on: (value: V) => unknown): R {
+    if (this.#derived?.build !== build) this.#derived = { build, on, value: build(this) };
+    return this.#derived.value as R;
+  }
+
+  /**
+   * `map` as a CatalogMap: a plain Map (assigned by a caller) is copied once, without stamping its
+   * values, so they stay shared with whatever else holds them.
+   */
+  static of<V extends object>(map: Map<string, V>): CatalogMap<V> {
+    if (map instanceof CatalogMap) return map;
+    catalogCopyStats.mapsCopied++;
+    const copy = new CatalogMap<V>();
+    for (const [key, value] of map) copy.#map.set(key, value);
+    return copy;
+  }
+
+  get size(): number {
+    return this.#map.size;
+  }
+
+  get [Symbol.toStringTag](): string {
+    return "Map";
+  }
+
+  get(key: string): V | undefined {
+    return this.#map.get(key);
+  }
+
+  has(key: string): boolean {
+    return this.#map.has(key);
+  }
+
+  set(key: string, value: V): this {
+    if (!bornAt.has(value)) stampOwned(value);
+    const derived = this.#derived;
+    if (derived) {
+      const previous = this.#map.get(key);
+      if (previous === undefined || derived.on(previous) !== derived.on(value)) this.#derived = null;
+    }
+    this.#map.set(key, value);
+    return this;
+  }
+
+  delete(key: string): boolean {
+    this.#derived = null;
+    return this.#map.delete(key);
+  }
+
+  clear(): void {
+    this.#derived = null;
+    this.#map.clear();
+  }
+
+  entries(): MapIterator<[string, V]> {
+    return this.#map.entries();
+  }
+
+  keys(): MapIterator<string> {
+    return this.#map.keys();
+  }
+
+  values(): MapIterator<V> {
+    return this.#map.values();
+  }
+
+  [Symbol.iterator](): MapIterator<[string, V]> {
+    return this.#map.entries();
+  }
+
+  forEach(callback: (value: V, key: string, map: Map<string, V>) => void, thisArg?: unknown): void {
+    for (const [key, value] of this.#map) callback.call(thisArg, value, key, this);
+  }
+}
+
+/** A schema's index names grouped by table name, in creation order. */
+function indexNamesByTable(indexes: Map<string, IndexMeta>): Map<string, string[]> {
+  const byTable = new Map<string, string[]>();
+  for (const [name, index] of indexes) {
+    const list = byTable.get(index.table);
+    if (list) list.push(name);
+    else byTable.set(index.table, [name]);
+  }
+  return byTable;
+}
+
+const indexTable = (index: IndexMeta): string => index.table;
+
+const NO_INDEXES: readonly IndexMeta[] = Object.freeze([]);
+
+/** A state-level map (prepared statements, currval, stats, host functions) as a forkable map. */
+function forkable<K extends string | number, V>(map: Map<K, V>): ForkMap<K, V> {
+  if (map instanceof ForkMap) return map;
+  catalogCopyStats.mapsCopied++;
+  return new ForkMap(map);
+}
+
 export class SchemaData {
   name: string;
-  tables = new Map<string, TableData>();
-  views = new Map<string, ViewData>();
-  sequences = new Map<string, SequenceData>();
-  enums = new Map<string, EnumData>();
-  domains = new Map<string, DomainData>();
-  functions = new Map<string, FunctionData[]>();
-  indexes = new Map<string, IndexMeta>();
+  tables: Map<string, TableData> = new CatalogMap<TableData>();
+  views: Map<string, ViewData> = new CatalogMap<ViewData>();
+  sequences: Map<string, SequenceData> = new CatalogMap<SequenceData>();
+  enums: Map<string, EnumData> = new CatalogMap<EnumData>();
+  domains: Map<string, DomainData> = new CatalogMap<DomainData>();
+  functions: Map<string, FunctionData[]> = new CatalogMap<FunctionData[]>();
+  indexes: Map<string, IndexMeta> = new CatalogMap<IndexMeta>();
   oid: number;
 
   constructor(name: string, oid: number) {
     this.name = name;
     this.oid = oid;
+  }
+
+  /**
+   * The indexes on table `table`, in creation order, without scanning the whole schema: the
+   * grouping is cached until the schema's index map next changes (writes look this up per row).
+   */
+  indexesOn(table: string): readonly IndexMeta[] {
+    const indexes = this.indexes;
+    const names = (
+      indexes instanceof CatalogMap ? indexes.derived(indexNamesByTable, indexTable) : indexNamesByTable(indexes)
+    ).get(table);
+    return names ? names.map((name) => indexes.get(name)!) : NO_INDEXES;
   }
 
   /** all relation names (tables, views, sequences, indexes share pg_class namespace) */
@@ -530,16 +687,23 @@ export class SchemaData {
     return s;
   }
 
-  /** Share table/sequence objects; copy maps so CREATE/DROP is isolated. */
+  /**
+   * Share every catalog object and fork the maps, so CREATE/DROP on either side stays isolated.
+   * O(1) per map: neither side copies anything until it writes. Overload lists are shared too;
+   * writers replace a list (`functions.set(name, [...])`) rather than changing it in place.
+   */
   cloneShallow(): SchemaData {
-    const s = new SchemaData(this.name, this.oid);
-    s.tables = new Map(this.tables);
-    s.views = new Map(this.views);
-    s.sequences = new Map(this.sequences);
-    s.enums = new Map(this.enums);
-    s.domains = new Map(this.domains);
-    for (const [k, v] of this.functions) s.functions.set(k, v.slice());
-    s.indexes = new Map(this.indexes);
+    // every field is assigned below: skip the constructor's empty maps
+    const s = Object.create(SchemaData.prototype) as SchemaData;
+    s.name = this.name;
+    s.oid = this.oid;
+    s.tables = (this.tables = CatalogMap.of(this.tables)).fork();
+    s.views = (this.views = CatalogMap.of(this.views)).fork();
+    s.sequences = (this.sequences = CatalogMap.of(this.sequences)).fork();
+    s.enums = (this.enums = CatalogMap.of(this.enums)).fork();
+    s.domains = (this.domains = CatalogMap.of(this.domains)).fork();
+    s.functions = (this.functions = CatalogMap.of(this.functions)).fork();
+    s.indexes = (this.indexes = CatalogMap.of(this.indexes)).fork();
     return s;
   }
 }
@@ -565,6 +729,9 @@ export interface PreparedStatement {
 
 // --- database state -----------------------------------------------------------
 
+/** Set while {@link DatabaseState.cloneShallow} constructs its clone, which it fills in itself. */
+let constructingClone = false;
+
 export class DatabaseState {
   schemas = new Map<string, SchemaData>();
   settings = new Map<string, string>();
@@ -579,8 +746,8 @@ export class DatabaseState {
    * Host functions registered under `pg_catalog`: found ahead of the search path, the way
    * PostgreSQL finds its own functions whatever `search_path` says. Copied to clones, not encoded.
    */
-  systemFunctions = new Map<string, FunctionData[]>();
-  prepared = new Map<string, PreparedStatement>();
+  systemFunctions: Map<string, FunctionData[]> = new ForkMap();
+  prepared: Map<string, PreparedStatement> = new ForkMap();
   prng: Prng;
   clock: Clock;
   changes = 0;
@@ -620,15 +787,33 @@ export class DatabaseState {
   /** most recent sequence touched by nextval/setval, for lastval() */
   lastSequence: { schema: string; name: string } | null = null;
   /** Session currval per sequence; absent entry means currval is undefined. */
-  sequenceCurrval = new Map<string, bigint>();
+  sequenceCurrval: Map<string, bigint> = new ForkMap();
   /** Per-table ANALYZE bookkeeping, keyed by table oid. */
-  tableStats = new Map<number, TableStats>();
+  tableStats: Map<number, TableStats> = new ForkMap();
+  /**
+   * Catalog objects stamped before this epoch may be shared with a snapshot: they are copied
+   * before being changed (see `ensureWritable*`). Advancing it is how a snapshot is taken.
+   */
+  private cowEpoch = nextEpoch();
+  /** `cowEpoch` never drops below this: set by snapshots that are never released. */
+  private cowFloor = 0;
+  /** Epochs of the released-later snapshots still alive (ascending). */
+  private cowHolds: number[] = [];
   /** Armed failure presets. Not part of snapshots, clones or transaction rollback. */
   faults: EngineFaults = {};
+  /**
+   * Roles, privileges, composite types, event triggers, partitioning and row-level security
+   * (issue #692): one immutable value, replaced on every change, so clones and rollback copy it by reference.
+   */
+  catalogExt: CatalogExt = EMPTY_CATALOG_EXT;
+  /** Open SQL cursors of this session (`DECLARE`); session state, never part of a snapshot. */
+  cursors = new Map<string, CursorData>();
 
   constructor(prng: Prng, clock: Clock) {
     this.prng = prng;
     this.clock = clock;
+    // cloneShallow assigns every field itself
+    if (constructingClone) return;
     this.schemas.set("public", new SchemaData("public", this.nextOid()));
     this.settings.set("timezone", "UTC");
     this.settings.set("search_path", '"$user", public');
@@ -878,6 +1063,7 @@ export class DatabaseState {
     s.lastSequence = this.lastSequence ? { ...this.lastSequence } : null;
     s.sequenceCurrval = new Map(this.sequenceCurrval);
     s.tableStats = new Map(this.tableStats);
+    s.catalogExt = this.catalogExt;
     s.oidCounter = this.oidCounter;
     s.xidCounter = this.xidCounter;
     s.transactionXid = this.transactionXid;
@@ -885,106 +1071,142 @@ export class DatabaseState {
     return s;
   }
 
-  /** Share frozen catalog objects; copy maps so CREATE/DROP is isolated. */
+  /**
+   * Share catalog objects and fork every map, so CREATE/DROP on either side stays isolated. O(number
+   * of schemas): no catalog map is copied. Callers take {@link freezeShared} or
+   * {@link holdForRollback} first, so this state copies a shared object before changing it; the
+   * clone starts with everything shared.
+   */
   cloneShallow(): DatabaseState {
-    const s = new DatabaseState(this.prng, this.clock);
+    constructingClone = true;
+    let s: DatabaseState;
+    try {
+      s = new DatabaseState(this.prng, this.clock);
+    } finally {
+      constructingClone = false;
+    }
     s.schemas = new Map();
     for (const [k, v] of this.schemas) s.schemas.set(k, v.cloneShallow());
     s.settings = new Map(this.settings);
     s.localSettings = new Map(this.localSettings);
-    s.prepared = new Map(this.prepared);
+    s.prepared = (this.prepared = forkable(this.prepared)).fork();
     s.changes = this.changes;
     s.inTransaction = this.inTransaction;
     s.pendingTriggers = this.pendingTriggers.slice();
     s.constraintModes = new Map(this.constraintModes);
     s.pendingForeignKeys = this.pendingForeignKeys.slice();
     s.lastSequence = this.lastSequence ? { ...this.lastSequence } : null;
-    s.sequenceCurrval = new Map(this.sequenceCurrval);
-    s.tableStats = new Map(this.tableStats);
+    s.sequenceCurrval = (this.sequenceCurrval = forkable(this.sequenceCurrval)).fork();
+    s.tableStats = (this.tableStats = forkable(this.tableStats)).fork();
+    s.catalogExt = this.catalogExt;
     s.oidCounter = this.oidCounter;
     s.xidCounter = this.xidCounter;
     s.transactionXid = this.transactionXid;
-    for (const [name, overloads] of this.systemFunctions) s.systemFunctions.set(name, overloads.slice());
+    // overload lists are replaced, never changed in place, so the clone shares them
+    s.systemFunctions = (this.systemFunctions = forkable(this.systemFunctions)).fork();
+    s.cowFloor = s.cowEpoch = nextEpoch();
     return s;
   }
 
-  freezeShared(): void {
-    for (const schema of this.schemas.values()) {
-      for (const table of schema.tables.values()) table.freeze();
-      for (const seq of schema.sequences.values()) seq.shareCount = (seq.shareCount ?? 0) + 1;
-      for (const view of schema.views.values()) view.shareCount = (view.shareCount ?? 0) + 1;
-      for (const en of schema.enums.values()) en.shareCount = (en.shareCount ?? 0) + 1;
-      for (const domain of schema.domains.values()) domain.shareCount = (domain.shareCount ?? 0) + 1;
-    }
+  /** Whether `object` may be shared with a snapshot, so it must be copied before it is changed. */
+  isShared(object: object): boolean {
+    return (bornAt.get(object) ?? -1) < this.cowEpoch;
   }
 
-  thawShared(): void {
-    for (const schema of this.schemas.values()) {
-      for (const table of schema.tables.values()) table.thaw();
-      for (const seq of schema.sequences.values()) {
-        if ((seq.shareCount ?? 0) > 0) seq.shareCount = (seq.shareCount ?? 1) - 1;
-      }
-      for (const view of schema.views.values()) {
-        if ((view.shareCount ?? 0) > 0) view.shareCount = (view.shareCount ?? 1) - 1;
-      }
-      for (const en of schema.enums.values()) {
-        if ((en.shareCount ?? 0) > 0) en.shareCount = (en.shareCount ?? 1) - 1;
-      }
-      for (const domain of schema.domains.values()) {
-        if ((domain.shareCount ?? 0) > 0) domain.shareCount = (domain.shareCount ?? 1) - 1;
-      }
-    }
+  /**
+   * Share every catalog object with snapshots taken from now on, for good (exported snapshots,
+   * durable checkpoints): an object is copied before its first change after this. O(1).
+   */
+  freezeShared(): void {
+    this.cowFloor = this.cowEpoch = nextEpoch();
+  }
+
+  /**
+   * Share every catalog object with a rollback snapshot (BEGIN, SAVEPOINT, a statement's or an
+   * EXCEPTION block's implicit savepoint) and return that snapshot. O(number of schemas). Pass the
+   * returned epoch to {@link releaseHold} once the snapshot is discarded or restored, so objects
+   * nothing else shares become writable in place again.
+   */
+  holdForRollback(): { state: DatabaseState; epoch: number } {
+    const epoch = nextEpoch();
+    this.cowEpoch = epoch;
+    this.cowHolds.push(epoch);
+    return { state: this.cloneShallow(), epoch };
+  }
+
+  /** The snapshot taken at `epoch` by {@link holdForRollback} is gone. */
+  releaseHold(epoch: number): void {
+    const at = this.cowHolds.lastIndexOf(epoch);
+    if (at === -1) return;
+    this.cowHolds.splice(at, 1);
+    // Objects stamped before a live hold's epoch are in its snapshot; the floor guards permanent ones.
+    this.cowEpoch = Math.max(this.cowFloor, this.cowHolds[this.cowHolds.length - 1] ?? 0);
+  }
+
+  /** @internal Tests: epochs of rollback snapshots still held. */
+  heldSnapshots(): number {
+    return this.cowHolds.length;
+  }
+
+  private owned<T extends object>(copy: T): T {
+    stampOwned(copy);
+    return copy;
   }
 
   ensureWritableTable(table: TableData): TableData {
-    if (!table.frozen) {
+    if (!this.isShared(table)) {
       table.ownTuples();
       return table;
     }
     const schema = this.schemas.get(table.schema);
-    const copy = table.cloneForWrite();
+    const copy = this.owned(table.cloneForWrite());
     schema?.tables.set(table.name, copy);
     return copy;
   }
 
   ensureWritableTableForDml(table: TableData): TableData {
-    if (!table.frozen) return table;
-    const copy = table.cloneForDml();
+    if (!this.isShared(table)) return table;
+    const copy = this.owned(table.cloneForDml());
     this.schemas.get(table.schema)?.tables.set(table.name, copy);
     return copy;
   }
 
   ensureWritableSequence(seq: SequenceData): SequenceData {
-    if ((seq.shareCount ?? 0) === 0) return seq;
+    if (!this.isShared(seq)) return seq;
     const schema = this.schemas.get(seq.schema);
-    const copy: SequenceData = { ...seq, shareCount: 0 };
+    const copy: SequenceData = this.owned({ ...seq });
     schema?.sequences.set(seq.name, copy);
     return copy;
   }
 
   ensureWritableView(view: ViewData): ViewData {
-    if ((view.shareCount ?? 0) === 0) return view;
+    if (!this.isShared(view)) return view;
     const schema = this.schemas.get(view.schema);
-    const copy: ViewData = {
+    const copy: ViewData = this.owned({
       ...view,
-      shareCount: 0,
       matRows: view.matRows ? view.matRows.map((r) => r.slice()) : null,
       matColumns: view.matColumns ? view.matColumns.map((c) => ({ ...c })) : null,
-    };
+    });
     schema?.views.set(view.name, copy);
     return copy;
   }
 
   ensureWritableEnum(en: EnumData): EnumData {
-    if ((en.shareCount ?? 0) === 0) return en;
+    if (!this.isShared(en)) return en;
     const schema = this.schemas.get(en.schema);
-    const copy: EnumData = { ...en, labels: en.labels.slice(), shareCount: 0 };
+    const copy: EnumData = this.owned({ ...en, labels: en.labels.slice() });
     schema?.enums.set(en.name, copy);
     return copy;
   }
 
-  /** copy the contents of `other` into this state (rollback restore) */
-  restoreFrom(other: DatabaseState): void {
+  /**
+   * Copy the contents of `other` into this state (rollback restore). `other`'s objects may be shared
+   * with anything (an exported snapshot, another database), so they are all treated as shared from
+   * now on — except when `other` is this state's own {@link holdForRollback} snapshot whose hold is
+   * still alive (`fromHold`), which already protects them until it is released.
+   */
+  restoreFrom(other: DatabaseState, fromHold = false): void {
+    if (!fromHold) this.freezeShared();
     this.schemas = other.schemas;
     this.settings = other.settings;
     this.localSettings = other.localSettings;
@@ -996,6 +1218,7 @@ export class DatabaseState {
     this.lastSequence = other.lastSequence;
     this.sequenceCurrval = other.sequenceCurrval;
     this.tableStats = other.tableStats;
+    this.catalogExt = other.catalogExt;
     this.oidCounter = other.oidCounter;
     this.xidCounter = Math.max(this.xidCounter, other.xidCounter);
     this.transactionXid = other.transactionXid;

@@ -59,8 +59,18 @@ describe("TwilioAPI", () => {
         },
         includeUnsafe: true,
         // No API call creates a recording, so recording commands only run with a missing sid
-        // (the rest are skipped as ineligible): draw them more often.
-        weights: { FetchRecordingMedia: 8, FetchRecording: 8, DeleteRecording: 8 },
+        // (the rest are skipped as ineligible): draw them more often. Commands that need a
+        // message or verification created earlier in the walk are drawn more often too, or an
+        // unlucky seed leaves one unexercised (#702: FetchMessage; seed 50: UpdateVerification).
+        weights: {
+          FetchRecordingMedia: 8,
+          FetchRecording: 8,
+          DeleteRecording: 8,
+          FetchMessage: 4,
+          FetchVerification: 4,
+          UpdateVerification: 4,
+          CreateVerificationCheck: 4,
+        },
         coverageBias: 4,
         numRuns: Math.max(params.numRuns ?? 100, 100),
         maxCommands: 20,

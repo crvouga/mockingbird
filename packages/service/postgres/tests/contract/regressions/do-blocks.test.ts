@@ -232,22 +232,31 @@ sequenceParity(
   ],
 );
 
-for (const [label, body] of [
-  ["cursor declaration", "DECLARE c CURSOR FOR SELECT 1; BEGIN NULL; END"],
-  ["OPEN", "DECLARE c refcursor; BEGIN OPEN c FOR SELECT 1; END"],
-  ["FETCH", "DECLARE c refcursor; r record; BEGIN FETCH c INTO r; END"],
-  ["COMMIT", "BEGIN COMMIT; END"],
-] as const) {
-  test(`#534 an unsupported construct fails loud with 0A000 (${label})`, () => {
-    expect(sqlStateOf(`DO $$ ${body} $$`)).toBe("0A000");
-  });
-}
+// #682: cursors and transaction control run in DO blocks now (tests/contract/functions/plpgsql-cursors.test.ts,
+// tests/contract/functions/procedures.test.ts); what is still not modelled keeps failing loud.
+sequenceParity(
+  "#534 cursors and COMMIT in a DO block",
+  ["CREATE TABLE out (v text)"],
+  [
+    { sql: "DO $$ DECLARE c CURSOR FOR SELECT 1; BEGIN NULL; END $$" },
+    {
+      sql: "DO $$ DECLARE c refcursor; r record; BEGIN OPEN c FOR SELECT 1 AS one; FETCH c INTO r; INSERT INTO out VALUES (r.one::text); END $$",
+    },
+    { sql: "DO $$ DECLARE c refcursor; r record; BEGIN FETCH c INTO r; END $$" },
+    { sql: "DO $$ BEGIN INSERT INTO out VALUES ('committed'); COMMIT; END $$" },
+    { sql: "SELECT v FROM out ORDER BY v", query: true },
+  ],
+);
+
+test("#534 an unsupported construct fails loud with 0A000 (GET DIAGNOSTICS PG_ROUTINE_OID)", () => {
+  expect(sqlStateOf("DO $$ DECLARE o oid; BEGIN GET DIAGNOSTICS o = PG_ROUTINE_OID; END $$")).toBe("0A000");
+});
 
 test("#534 a failed unsupported DO leaves earlier statements' effects alone", () => {
   const db = new Database();
   db.exec("CREATE TABLE keep (id int)");
   expect(() =>
-    db.exec("DO $$ DECLARE c refcursor; BEGIN INSERT INTO keep VALUES (1); OPEN c FOR SELECT 1; END $$"),
+    db.exec("DO $$ DECLARE o oid; BEGIN INSERT INTO keep VALUES (1); GET DIAGNOSTICS o = PG_ROUTINE_OID; END $$"),
   ).toThrow();
   expect(db.query("SELECT count(*)::int AS n FROM keep")[0]).toEqual({ n: 0 });
 });

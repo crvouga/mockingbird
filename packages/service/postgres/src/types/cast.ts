@@ -36,11 +36,13 @@ import {
   INT4_MIN,
   type InputCtx,
   isArrayType,
+  isCompositeType,
   isEnumType,
   type JsonbWrap,
   makeArray,
   type OutputCtx,
   type PgArray,
+  type PgRecord,
   type TypedValue,
   type TypeId,
   type TypeMod,
@@ -49,6 +51,10 @@ import {
   wrapJsonb,
 } from "./value.ts";
 import { networkCastText, networkInput, networkToCidr } from "./network.ts";
+import { DEFAULT_COMPARE_CTX } from "./compare.ts";
+import { isMultirangeType, makeMultirange, multirangeRange } from "./multirange.ts";
+import type { PgRange } from "./range.ts";
+import { isRangeType } from "./range-types.ts";
 import { oidFromInteger } from "./regnamespace.ts";
 
 export interface CastEnv extends OutputCtx, InputCtx {
@@ -197,6 +203,14 @@ export interface CastOptions {
 
 /** Cast a typed value to `target`. */
 export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: CastOptions = {}): TypedValue {
+  if (isCompositeType(target) || isCompositeType(value.t)) {
+    const composite = castComposite(env, value, target, opts);
+    if (composite) return composite;
+  }
+  // a range is the one-range multirange of its type
+  if (isMultirangeType(target) && isRangeType(value.t) && multirangeRange(target) === value.t) {
+    return tv(target, value.v === null ? null : makeMultirange(value.t, [value.v as PgRange], DEFAULT_COMPARE_CTX));
+  }
   const { t: from, v } = value;
   if (v === null) return tv(target, applyNullTypmod(target, opts));
   if (from === target) {
@@ -353,6 +367,37 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
 
   if (!opts.explicit && !opts.assignment) cannotCast(from, target);
   cannotCast(from, target);
+}
+
+/**
+ * Casts to and from composite types: a row of the composite's width takes its attribute types (each
+ * field assignment-cast), a composite is a record. Null when the generic rules apply (text I/O).
+ */
+function castComposite(env: CastEnv, value: TypedValue, target: TypeId, opts: CastOptions): TypedValue | null {
+  if (!isCompositeType(target)) {
+    return isCompositeType(value.t) && target === "record" ? tv("record", value.v) : null;
+  }
+  if (value.t === target) return value.v === null ? tv(target, null) : value;
+  if (value.t !== "record" && !isCompositeType(value.t)) return null;
+  if (value.v === null) return tv(target, null);
+  const attrs = env.compositeAttributes?.(target);
+  if (!attrs) throw pgError("undefined_object", `type "${typeDisplayName(target)}" does not exist`, "42704");
+  const rec = value.v as PgRecord;
+  if (rec.values.length !== attrs.types.length) {
+    throw pgError(
+      "cannot_coerce",
+      `cannot cast type ${typeDisplayName(value.t)} to ${typeDisplayName(target)}`,
+      "42846",
+    );
+  }
+  const values = attrs.types.map(
+    (type, i) =>
+      castTo(env, tv(rec.types[i] ?? "unknown", rec.values[i] ?? null), type, {
+        explicit: opts.explicit,
+        assignment: true,
+      }).v,
+  );
+  return tv(target, { kind: "pgrecord", types: attrs.types.slice(), values, names: attrs.names.slice() });
 }
 
 function applyNullTypmod(_target: TypeId, _opts: CastOptions): null {

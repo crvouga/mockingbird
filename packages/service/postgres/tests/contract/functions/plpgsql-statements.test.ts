@@ -237,3 +237,118 @@ END $$`,
   ],
   "SELECT f20() AS v",
 );
+
+// #682: ALIAS FOR, assignment to array elements and slices, FOREACH ... SLICE.
+parity(
+  "ALIAS FOR $n and for a named parameter share the parameter's variable",
+  [
+    "CREATE FUNCTION a1(int, text) RETURNS text LANGUAGE plpgsql AS $$ DECLARE n ALIAS FOR $1; s ALIAS FOR $2; BEGIN n := n + 1; RETURN s || n || $1; END $$",
+    "CREATE FUNCTION a2(v int) RETURNS int LANGUAGE plpgsql AS $$ DECLARE w ALIAS FOR v; BEGIN w := w * 10; RETURN v; END $$",
+    "CREATE FUNCTION a4() RETURNS int LANGUAGE plpgsql AS $$ DECLARE x int := 5; BEGIN DECLARE y ALIAS FOR x; BEGIN y := 6; END; RETURN x; END $$",
+  ],
+  "SELECT a1(1, 'x') AS a1, a2(2) AS a2, a4() AS a4",
+);
+
+sequenceParity(
+  "ALIAS FOR NEW in a trigger function",
+  ["CREATE TABLE tt (a int)"],
+  [
+    {
+      sql: "CREATE FUNCTION trg() RETURNS trigger LANGUAGE plpgsql AS $$ DECLARE nr ALIAS FOR new; BEGIN nr.a := nr.a * 2; RETURN nr; END $$",
+    },
+    { sql: "CREATE TRIGGER t1 BEFORE INSERT ON tt FOR EACH ROW EXECUTE FUNCTION trg()" },
+    { sql: "INSERT INTO tt VALUES (21)" },
+    { sql: "SELECT a FROM tt", query: true },
+  ],
+);
+
+errorParity(
+  "ALIAS FOR an unknown variable is refused when the function is created",
+  [],
+  "CREATE FUNCTION a3() RETURNS int LANGUAGE plpgsql AS $$ DECLARE w ALIAS FOR nosuch; BEGIN RETURN 1; END $$",
+);
+
+errorParity(
+  "ALIAS FOR a parameter past the last one is refused when the function is created",
+  [],
+  "CREATE FUNCTION a5(int) RETURNS int LANGUAGE plpgsql AS $$ DECLARE w ALIAS FOR $3; BEGIN RETURN 1; END $$",
+);
+
+parity(
+  "assignment to array elements extends one-dimensional arrays, also below the lower bound",
+  [
+    "CREATE FUNCTION e1() RETURNS text LANGUAGE plpgsql AS $$ DECLARE a int[] := ARRAY[1,2,3]; BEGIN a[2] := 20; a[5] := 50; RETURN a::text; END $$",
+    "CREATE FUNCTION e2() RETURNS text LANGUAGE plpgsql AS $$ DECLARE a int[]; BEGIN a[3] := 1; RETURN a::text || array_lower(a, 1); END $$",
+    "CREATE FUNCTION e4() RETURNS text LANGUAGE plpgsql AS $$ DECLARE a int[] := ARRAY[1,2,3]; BEGIN a[0] := 0; a[-2] := -2; RETURN a::text; END $$",
+    "CREATE FUNCTION e6() RETURNS text LANGUAGE plpgsql AS $$ DECLARE a text[] := '{}'; BEGIN FOR i IN 1..3 LOOP a[i] := i::text || 'x'; END LOOP; RETURN a::text; END $$",
+  ],
+  "SELECT e1() AS e1, e2() AS e2, e4() AS e4, e6() AS e6",
+);
+
+parity(
+  "assignment to an element of a multi-dimensional array, a slice, and an array field of a record",
+  [
+    "CREATE TABLE ar (id int, v int[])",
+    "CREATE FUNCTION e3() RETURNS text LANGUAGE plpgsql AS $$ DECLARE a int[] := '{{1,2},{3,4}}'; BEGIN a[2][1] := 30; RETURN a::text; END $$",
+    "CREATE FUNCTION e5() RETURNS text LANGUAGE plpgsql AS $$ DECLARE a int[] := ARRAY[1,2,3,4]; BEGIN a[2:3] := ARRAY[20,30]; RETURN a::text; END $$",
+    "CREATE FUNCTION e8() RETURNS text LANGUAGE plpgsql AS $$ DECLARE r ar%ROWTYPE; BEGIN r.v := ARRAY[1]; r.v[3] := 3; RETURN r.v::text; END $$",
+  ],
+  "SELECT e3() AS e3, e5() AS e5, e8() AS e8",
+);
+
+for (const [label, body] of [
+  ["a NULL subscript", "DECLARE a int[] := ARRAY[1]; BEGIN a[NULL] := 1; RETURN a::text; END"],
+  ["a value of the wrong type", "DECLARE a int[] := ARRAY[1,2]; BEGIN a[2] := 'abc'; RETURN a::text; END"],
+  ["a subscript on a scalar", "DECLARE a int; BEGIN a[1] := 1; RETURN a::text; END"],
+  [
+    "an element outside a multi-dimensional array",
+    "DECLARE a int[] := '{{1,2},{3,4}}'; BEGIN a[3][1] := 30; RETURN a::text; END",
+  ],
+  ["a slice longer than its source", "DECLARE a int[] := ARRAY[1,2,3]; BEGIN a[1:2] := ARRAY[9]; RETURN a::text; END"],
+] as const) {
+  queryErrorParity(
+    `array element assignment errors: ${label}`,
+    [`CREATE FUNCTION bad() RETURNS text LANGUAGE plpgsql AS $$ ${body} $$`],
+    "SELECT bad()",
+  );
+}
+
+parity(
+  "FOREACH ... SLICE over a 2-D and 3-D array, a whole 1-D array, and kept lower bounds",
+  [
+    "CREATE FUNCTION s1() RETURNS text LANGUAGE plpgsql AS $$ DECLARE x int[]; s text := ''; BEGIN FOREACH x SLICE 1 IN ARRAY ARRAY[[1,2],[3,4],[5,6]] LOOP s := s || x::text || ';'; END LOOP; RETURN s; END $$",
+    "CREATE FUNCTION s2() RETURNS text LANGUAGE plpgsql AS $$ DECLARE x int[]; s text := ''; BEGIN FOREACH x SLICE 1 IN ARRAY ARRAY[1,2,3] LOOP s := s || x::text || ';'; END LOOP; RETURN s; END $$",
+    "CREATE FUNCTION s3() RETURNS text LANGUAGE plpgsql AS $$ DECLARE x int[]; s text := ''; BEGIN FOREACH x SLICE 2 IN ARRAY '{{{1,2},{3,4}},{{5,6},{7,8}}}'::int[] LOOP s := s || x::text || ';'; END LOOP; RETURN s; END $$",
+    "CREATE FUNCTION s7() RETURNS text LANGUAGE plpgsql AS $$ DECLARE x int[]; s text := ''; BEGIN FOREACH x SLICE 1 IN ARRAY '[2:3][0:1]={{1,2},{3,4}}'::int[] LOOP s := s || x::text || array_lower(x, 1) || ';'; END LOOP; RETURN s; END $$",
+    "CREATE FUNCTION s9() RETURNS text LANGUAGE plpgsql AS $$ DECLARE x int; s text := ''; BEGIN FOREACH x IN ARRAY ARRAY[[1,2],[3,4]] LOOP s := s || x::text || ';'; END LOOP; RETURN s; END $$",
+  ],
+  "SELECT s1() AS s1, s2() AS s2, s3() AS s3, s7() AS s7, s9() AS s9",
+);
+
+for (const [label, body] of [
+  [
+    "a slice deeper than the array",
+    "x int[]; BEGIN FOREACH x SLICE 3 IN ARRAY ARRAY[[1,2],[3,4]] LOOP END LOOP; RETURN 'x'; END",
+  ],
+  [
+    "a scalar slice variable",
+    "x int; BEGIN FOREACH x SLICE 1 IN ARRAY ARRAY[[1,2],[3,4]] LOOP END LOOP; RETURN 'x'; END",
+  ],
+  [
+    "an array variable without SLICE",
+    "x int[]; BEGIN FOREACH x SLICE 0 IN ARRAY ARRAY[[1,2],[3,4]] LOOP END LOOP; RETURN 'x'; END",
+  ],
+  ["SLICE of an empty array", "x int[]; BEGIN FOREACH x SLICE 1 IN ARRAY '{}'::int[] LOOP END LOOP; RETURN 'x'; END"],
+] as const) {
+  queryErrorParity(
+    `FOREACH ... SLICE errors: ${label}`,
+    [`CREATE FUNCTION bad() RETURNS text LANGUAGE plpgsql AS $$ DECLARE ${body} $$`],
+    "SELECT bad()",
+  );
+}
+
+errorParity(
+  "the SLICE dimension must be a constant",
+  [],
+  "CREATE FUNCTION s10(n int) RETURNS text LANGUAGE plpgsql AS $$ DECLARE x int[]; BEGIN FOREACH x SLICE n IN ARRAY ARRAY[1] LOOP END LOOP; RETURN ''; END $$",
+);

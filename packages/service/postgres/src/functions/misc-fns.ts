@@ -1,3 +1,5 @@
+import { currentUserName, sessionUserName } from "../storage/roles.ts";
+import { registerPrivilegeFunctions } from "./privilege-fns.ts";
 import { isPostgresError, pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import { findIndexByOid } from "../schema/index-catalog.ts";
@@ -211,10 +213,10 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
     const schemas = includeImplicit ? ["pg_catalog", ...path] : path;
     return tv("name[]", makeArray("name", schemas));
   });
-  m.set("current_user", () => tv("name", "postgres"));
-  m.set("session_user", () => tv("name", "postgres"));
-  m.set("current_role", () => tv("name", "postgres"));
-  m.set("user", () => tv("name", "postgres"));
+  m.set("current_user", (ctx) => tv("name", currentUserName(ctx.state)));
+  m.set("session_user", (ctx) => tv("name", sessionUserName(ctx.state)));
+  m.set("current_role", (ctx) => tv("name", currentUserName(ctx.state)));
+  m.set("user", (ctx) => tv("name", currentUserName(ctx.state)));
   m.set("pg_backend_pid", () => tv("int4", 1));
   m.set("txid_current", () => tv("int8", 1n));
   m.set("pg_current_xact_id", () => tv("int8", 1n));
@@ -349,9 +351,7 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set("pg_table_is_visible", (_ctx, args) => tv("bool", args[0]!.v !== null));
   m.set("pg_function_is_visible", (_ctx, args) => tv("bool", args[0]!.v !== null));
   m.set("pg_type_is_visible", (_ctx, args) => tv("bool", args[0]!.v !== null));
-  m.set("has_table_privilege", () => tv("bool", true));
-  m.set("has_schema_privilege", () => tv("bool", true));
-  m.set("has_column_privilege", () => tv("bool", true));
+  registerPrivilegeFunctions(m);
   m.set("pg_encoding_to_char", (_ctx, args) => tv("name", args[0]!.v === null ? null : "UTF8"));
   m.set("pg_postmaster_start_time", (ctx) => tv("timestamptz", ctx.txNow));
   m.set("pg_conf_load_time", (ctx) => tv("timestamptz", ctx.txNow));

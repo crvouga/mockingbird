@@ -373,3 +373,96 @@ test("in-process runtimes and aliases identified from the health route", async (
   expect((await local.list({ source: "mail" })).every((n) => n.service === "resend")).toBe(true)
   local.close()
 })
+
+describe("Cognito verification codes", () => {
+  type Pool = { fetch(request: Request): Promise<Response> }
+  const call = (pool: Pool, target: string, body: Record<string, unknown>) =>
+    pool.fetch(
+      new Request("http://cognito.local/", {
+        method: "POST",
+        headers: {
+          "x-amz-target": `AWSCognitoIdentityProviderService.${target}`,
+          "content-type": "application/x-amz-json-1.1",
+        },
+        body: JSON.stringify({ ClientId: "client", ...body }),
+      }),
+    )
+  const signUp = (pool: Pool, username: string, attribute: { Name: string; Value: string }) =>
+    call(pool, "SignUp", {
+      Username: username,
+      Password: "Password!122",
+      UserAttributes: [attribute],
+    })
+  /** `name` other than `cognito` is an alias the harness identifies from the health route. */
+  const setup = async (name = "cognito") => {
+    const { createRuntime } = await import("@crvouga/mockingbird-service-cognito")
+    const pool = createRuntime({ poolId: "us-east-1_x", clientId: "client" })
+    const harness = createNotificationHarness({ services: { [name]: pool }, pollIntervalMs: 0 })
+    const codes = async (username: string) =>
+      (await (
+        await pool.fetch(
+          new Request(
+            `http://cognito.local/__admin/codes?username=${encodeURIComponent(username)}`,
+          ),
+        )
+      ).json()) as { confirmationCode: string; resetCode?: string }
+    return { pool, harness, codes }
+  }
+
+  test("SignUp lists one email to the user with the code /__admin/codes reports", async () => {
+    const { pool, harness, codes } = await setup()
+    await signUp(pool, "ada@example.test", { Name: "email", Value: "ada@example.test" })
+    const { confirmationCode } = await codes("ada@example.test")
+    const emails = await harness.list({ channel: "email" })
+    expect(emails).toHaveLength(1)
+    expect(emails[0]).toMatchObject({
+      channel: "email",
+      service: "cognito",
+      source: "cognito",
+      to: "ada@example.test",
+      from: { name: null, address: "no-reply@verificationemail.com" },
+      email: {
+        subject: "Your verification code",
+        text: `Your verification code is ${confirmationCode}.`,
+      },
+    })
+    harness.close()
+  })
+
+  test("ResendConfirmationCode and ForgotPassword each deliver another email with the new code", async () => {
+    const { pool, harness, codes } = await setup()
+    await signUp(pool, "ada@example.test", { Name: "email", Value: "ada@example.test" })
+    await call(pool, "ResendConfirmationCode", { Username: "ada@example.test" })
+    await call(pool, "ForgotPassword", { Username: "ada@example.test" })
+    const { confirmationCode, resetCode } = await codes("ada@example.test")
+    const emails = await harness.list({ channel: "email", to: "ada@example.test" })
+    expect(emails.map((n) => [(n.raw as { trigger: string }).trigger, n.email?.text])).toEqual([
+      ["SignUp", `Your verification code is ${confirmationCode}.`],
+      ["ResendConfirmationCode", `Your verification code is ${confirmationCode}.`],
+      ["ForgotPassword", `Your verification code is ${resetCode}.`],
+    ])
+    harness.close()
+  })
+
+  test("a user whose code goes to phone_number gets it on the sms channel, over HTTP too", async () => {
+    const { pool, harness } = await setup("identity")
+    await signUp(pool, "grace", { Name: "phone_number", Value: "+12025550142" })
+    const [sms] = await harness.list({ channel: "sms" })
+    expect(sms).toMatchObject({
+      source: "identity",
+      service: "cognito",
+      to: "+12025550142",
+      from: { address: "Cognito" },
+      sms: { body: "Your verification code is 123456.", code: "123456" },
+    })
+    const latest = await (
+      await harness.fetch(
+        new Request("http://harness/api/notifications/latest?service=cognito&to=%2B12025550142"),
+      )
+    ).json()
+    expect(latest.sms.code).toBe("123456")
+    const sources = await (await harness.fetch(new Request("http://harness/api/sources"))).json()
+    expect(sources.sources).toMatchObject([{ name: "identity", service: "cognito", ok: true }])
+    harness.close()
+  })
+})

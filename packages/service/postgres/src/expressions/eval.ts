@@ -20,6 +20,7 @@ import { datumCompare, datumEquals } from "../types/compare.ts";
 import type { JsonbValue } from "../types/jsonb.ts";
 import { resolveTypeName } from "../types/resolve.ts";
 import {
+  isCompositeType,
   arrayElemType,
   arrayTypeOf,
   type Datum,
@@ -369,7 +370,7 @@ function compareMaybeRow(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValu
 }
 
 function isPgRecordValue(v: TypedValue): boolean {
-  return v.t === "record" && v.v !== null;
+  return (v.t === "record" || isCompositeType(v.t)) && v.v !== null;
 }
 
 function recordAllNull(rec: PgRecord, wantNotNull: boolean): boolean {
@@ -834,7 +835,14 @@ function evalJsonbSubscript(ctx: EngineCtx, scope: EvalScope, base: TypedValue, 
 }
 
 function evalFieldSelect(ctx: EngineCtx, base: TypedValue, field: string): TypedValue {
-  void ctx;
+  if (isCompositeType(base.t)) {
+    const attrs = ctx.compositeAttributes(base.t);
+    const index = attrs?.names.indexOf(field) ?? -1;
+    if (!attrs || index === -1) {
+      throw pgError("undefined_column", `column "${field}" not found in data type ${typeDisplayName(base.t)}`, "42703");
+    }
+    return tv(attrs.types[index]!, base.v === null ? null : ((base.v as PgRecord).values[index] ?? null));
+  }
   if (base.t === "record" && base.v !== null) {
     const rec = base.v as PgRecord;
     if (rec.names) {

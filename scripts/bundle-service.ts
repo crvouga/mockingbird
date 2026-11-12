@@ -9,17 +9,20 @@
  * out of a public package's `dependencies`.
  *
  * Runs from the package directory; one entry per `exports` subpath and per `bin` target
- * (./dist/x.js ← src/x.ts). A bin gets no declarations, and keeps its `#!` line.
+ * (./dist/x.js ← src/x.ts). A bin gets no declarations, and keeps its `#!` line. The admin
+ * page's browser client is the exception to inlining it all in the entries' graph: it is emitted
+ * as `dist/admin-ui.js` and loaded with a dynamic `import()` only when the page is first served
+ * (scripts/bundle-service-js.ts).
  *
  *   bun ../../../scripts/bundle-service.ts
  */
 import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { join, relative } from "node:path"
 import { $ } from "bun"
-import { build } from "esbuild"
 import { rollup } from "rollup"
 import { dts } from "rollup-plugin-dts"
 import { adminBrandDefine } from "./admin-brand.ts"
+import { bundleServiceJs } from "./bundle-service-js.ts"
 import { VERSION_PLACEHOLDER } from "./bundle-service-version.ts"
 
 const pkgDir = process.cwd()
@@ -28,6 +31,7 @@ const pkg = JSON.parse(await Bun.file(join(pkgDir, "package.json")).text()) as {
   exports: Record<string, { types: string; default: string }>
   bin?: string | Record<string, string>
   dependencies?: Record<string, string>
+  devDependencies?: Record<string, string>
   peerDependencies?: Record<string, string>
   mockingbird?: { runtime?: string }
 }
@@ -64,19 +68,13 @@ for (const e of entries) {
   if (!existsSync(join(pkgDir, e.src))) throw new Error(`${pkg.name}: missing entry ${e.src}`)
 }
 
-rmSync(join(pkgDir, "dist"), { recursive: true, force: true })
-
-const js = await build({
+// Code splitting is always on, so the admin page's client stays in `dist/admin-ui.js`, loaded
+// only by the runtime's dynamic import (scripts/bundle-service-js.ts).
+const metafile = await bundleServiceJs({
   absWorkingDir: pkgDir,
   entryPoints: Object.fromEntries(entries.map((e) => [e.name, e.src])),
   outdir: "dist",
-  bundle: true,
-  splitting: entries.length > 1,
-  format: "esm",
   platform: pkg.mockingbird?.runtime === "node" ? "node" : "neutral",
-  mainFields: ["module", "main"],
-  target: "es2022",
-  sourcemap: true,
   // The unreleased placeholder; `release:publish` rewrites it to the version it publishes
   // (see UNRELEASED_VERSION in packages/service/core/src/version.ts).
   // The admin shell's vendor chip ships inside the package (scripts/admin-brand.ts), so the
@@ -86,11 +84,13 @@ const js = await build({
     ...adminBrandDefine(pkgDir),
   },
   external: [...external, "node:*", "bun", "bun:*"],
-  logLevel: "warning",
-  metafile: true,
+  importsAdminUi:
+    "@crvouga/mockingbird-admin-ui" in { ...pkg.dependencies, ...pkg.devDependencies },
+}).catch((error: unknown) => {
+  throw new Error(`${pkg.name}: ${error instanceof Error ? error.message : String(error)}`)
 })
 const kept = new Set(
-  Object.values(js.metafile.outputs).flatMap((o) =>
+  Object.values(metafile.outputs).flatMap((o) =>
     o.imports.filter((i) => i.external).map((i) => i.path),
   ),
 )

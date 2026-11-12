@@ -1,9 +1,11 @@
 import type { Expr, MergeStmt, MergeWhenClause } from "../ast/nodes.ts";
 import { checkChecks, checkForeignKeys, checkNotNull, checkUnique } from "../constraints/enforce.ts";
-import { pgError } from "../errors/error.ts";
+import { pgError, unsupported } from "../errors/error.ts";
 import { indexInsertRow, indexUpdateRow, rebuildTableIndexes } from "../indexes/maintain.ts";
 import type { TableData } from "../storage/database-state.ts";
 import type { Datum } from "../types/value.ts";
+import { isPartitioned } from "./partition.ts";
+import { rowSecurityActive } from "./row-security.ts";
 import {
   applyUpdateSets,
   coerceToColumn,
@@ -45,6 +47,8 @@ export function executeMerge(env0: ExecEnv, stmt: MergeStmt): ExecResult {
 function mergeRows(env0: ExecEnv, stmt: MergeStmt): ExecResult {
   const env = applyWith(env0, stmt.with);
   const table = requireTargetTable(env, stmt.table, "execute MERGE on");
+  if (rowSecurityActive(env.ctx.state, table)) throw unsupported("MERGE on a table with row-level security");
+  if (isPartitioned(env.ctx.state, table)) throw unsupported("MERGE into a partitioned table");
   const label = stmt.alias ?? table.name;
   const source = buildFrom(env, [stmt.source]);
   const sourceCols: RelColumn[] = source.rel.columns;

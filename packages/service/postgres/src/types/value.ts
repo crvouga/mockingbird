@@ -18,7 +18,16 @@ import { jsonpathText } from "./jsonpath.ts";
 import { macaddrInput, networkInput } from "./network.ts";
 import { type Numeric, numericText, parseNumeric } from "./numeric.ts";
 import { type PgRange, parseRangeText, rangeText } from "./range.ts";
-import { isRangeType, RANGE_ARRAY_OIDS, RANGE_SUBTYPES, RANGE_TYPE_OIDS } from "./range-types.ts";
+import {
+  isRangeType,
+  MULTIRANGE_ARRAY_OIDS,
+  MULTIRANGE_RANGES,
+  MULTIRANGE_TYPE_OIDS,
+  RANGE_ARRAY_OIDS,
+  RANGE_SUBTYPES,
+  RANGE_TYPE_OIDS,
+} from "./range-types.ts";
+import { isMultirangeType, multirangeText, type PgMultirange, parseMultirangeText } from "./multirange.ts";
 import { namespaceText, parseNamespaceInput, parseOidText, parseRelationInput } from "./regnamespace.ts";
 
 /**
@@ -41,6 +50,7 @@ export type Datum =
   | PgArray
   | PgRecord
   | PgRange
+  | PgMultirange
   | JsonbWrap;
 
 export interface PgArray {
@@ -178,6 +188,7 @@ const TYPE_ALIASES: Record<string, TypeId> = {
   serial2: "int2",
   tid: "tid",
   ...Object.fromEntries(Object.keys(RANGE_SUBTYPES).map((name) => [name, name])),
+  ...Object.fromEntries(Object.keys(MULTIRANGE_RANGES).map((name) => [name, name])),
 };
 
 export function normalizeTypeName(name: string): TypeId | null {
@@ -206,10 +217,22 @@ export function enumTypeName(t: TypeId): string {
   return t.slice(5);
 }
 
+/** A composite type created with `CREATE TYPE name AS (...)`: `"comp:" + schema + "." + name`. */
+export function isCompositeType(t: TypeId): boolean {
+  return t.startsWith("comp:");
+}
+
+/** The unqualified name of a composite type id. */
+export function compositeTypeName(t: TypeId): string {
+  const key = t.slice(5);
+  return key.slice(key.indexOf(".") + 1);
+}
+
 /** SQL-facing type name (format_type / pg_typeof style). */
 export function typeDisplayName(t: TypeId): string {
   if (isArrayType(t)) return `${typeDisplayName(arrayElemType(t))}[]`;
   if (isEnumType(t)) return enumTypeName(t);
+  if (isCompositeType(t)) return compositeTypeName(t);
   switch (t) {
     case "bool":
       return "boolean";
@@ -284,6 +307,7 @@ export const TYPE_OIDS: Record<string, number> = {
   unknown: 705,
   tid: 27,
   ...RANGE_TYPE_OIDS,
+  ...MULTIRANGE_TYPE_OIDS,
 };
 
 export const ARRAY_OIDS: Record<string, number> = {
@@ -316,6 +340,7 @@ export const ARRAY_OIDS: Record<string, number> = {
   jsonb: 3807,
   tid: 1010,
   ...RANGE_ARRAY_OIDS,
+  ...MULTIRANGE_ARRAY_OIDS,
 };
 
 export function typeOid(t: TypeId): number {
@@ -678,6 +703,7 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
   if (isArrayType(t)) return arrayText(v as PgArray, ctx);
   if (isEnumType(t)) return v as string;
   if (isRangeType(t)) return rangeText(t, v as PgRange, ctx);
+  if (isMultirangeType(t)) return multirangeText(t, v as PgMultirange, ctx);
   switch (t) {
     case "bool":
       return (v as boolean) ? "t" : "f";
@@ -764,6 +790,8 @@ export interface InputCtx {
   enumHasLabel?(enumType: TypeId, label: string): boolean;
   /** regtypein / regprocin: the name the value keeps, as regtypeout / regprocout print it */
   regtypeIn?(text: string): string;
+  /** a composite type's attributes, for record_in */
+  compositeAttributes?(t: TypeId): { names: string[]; types: TypeId[] } | null;
   regprocIn?(text: string): string;
 }
 
@@ -796,6 +824,12 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     return text;
   }
   if (isRangeType(t)) return parseRangeText(t, text, ctx);
+  if (isMultirangeType(t)) return parseMultirangeText(t, text, ctx);
+  if (isCompositeType(t)) {
+    const attrs = ctx.compositeAttributes?.(t);
+    if (!attrs) throw pgError("undefined_object", `type "${compositeTypeName(t)}" does not exist`, "42704");
+    return parseRecordText(text, attrs.names, attrs.types, ctx);
+  }
   switch (t) {
     case "bool":
       return parseBoolText(text);
@@ -867,6 +901,71 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     default:
       throw unsupported(`input of type ${t}`);
   }
+}
+
+/** record_in: `(f1,"f 2",,...)`; an empty field is NULL, `""` an empty string, `""` / `\\` escapes in quotes. */
+export function parseRecordText(text: string, names: string[], types: TypeId[], ctx: InputCtx): PgRecord {
+  const malformed = (_detail: string) =>
+    pgError("invalid_text_representation", `malformed record literal: "${text}"`, "22P02");
+  let pos = 0;
+  while (pos < text.length && /\s/.test(text[pos]!)) pos++;
+  if (text[pos] !== "(") throw malformed("Missing left parenthesis.");
+  pos++;
+  const values: Datum[] = [];
+  for (let i = 0; i < types.length; i++) {
+    if (i > 0) {
+      if (text[pos] !== ",") throw malformed("Too few columns.");
+      pos++;
+    }
+    if (text[pos] === "," || text[pos] === ")") {
+      if (text[pos] === ")" && i < types.length - 1) throw malformed("Too few columns.");
+      values.push(null);
+      continue;
+    }
+    let field = "";
+    let quoted = false;
+    while (pos < text.length) {
+      const c = text[pos]!;
+      if (c === '"') {
+        quoted = true;
+        pos++;
+        while (pos < text.length) {
+          const d = text[pos]!;
+          if (d === "\\") {
+            field += text[pos + 1] ?? "";
+            pos += 2;
+          } else if (d === '"') {
+            if (text[pos + 1] === '"') {
+              field += '"';
+              pos += 2;
+            } else {
+              pos++;
+              break;
+            }
+          } else {
+            field += d;
+            pos++;
+          }
+        }
+        continue;
+      }
+      if (c === "," || c === ")") break;
+      if (c === "\\") {
+        field += text[pos + 1] ?? "";
+        pos += 2;
+        continue;
+      }
+      field += c;
+      pos++;
+    }
+    if (pos >= text.length) throw malformed("Unexpected end of input.");
+    values.push(field === "" && !quoted ? null : datumFromText(types[i]!, field, ctx));
+  }
+  if (text[pos] !== ")") throw malformed(text[pos] === "," ? "Too many columns." : "Too few columns.");
+  pos++;
+  while (pos < text.length && /\s/.test(text[pos]!)) pos++;
+  if (pos !== text.length) throw malformed("Junk after right parenthesis.");
+  return { kind: "pgrecord", types: types.slice(), values, names: names.slice() };
 }
 
 function parseArrayText(t: TypeId, text: string, ctx: InputCtx): PgArray {

@@ -24,6 +24,7 @@
         "!**/*.test.ts",
         "!README.md",
         "$TURBO_ROOT$/scripts/bundle-service.ts",
+        "$TURBO_ROOT$/scripts/bundle-service-js.ts",
         "$TURBO_ROOT$/scripts/admin-brand.ts",
         "$TURBO_ROOT$/sites/docs/src/data/brands.json",
         "$TURBO_ROOT$/sites/docs/public/brands/**"
@@ -185,6 +186,7 @@
         "bun.lock"
       ],
       "dependsOn": [
+        "@crvouga/mockingbird-service#build",
         "@crvouga/mockingbird-service-sqlite#build",
         "@crvouga/mockingbird-service-postgres#build"
       ]
@@ -307,6 +309,7 @@
     },
     "//#check:performance": {
       "dependsOn": [
+        "@crvouga/mockingbird-service#build",
         "@crvouga/mockingbird-service-sqlite#build",
         "@crvouga/mockingbird-service-postgres#build"
       ],

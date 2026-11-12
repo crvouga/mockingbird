@@ -1,4 +1,4 @@
-import { Collection, IdSequence } from "@crvouga/mockingbird-service"
+import { Collection, IdSequence, OutboxStore } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 
 export type CognitoAttribute = { Name: string; Value?: string }
@@ -54,6 +54,33 @@ export type HostedGrant = {
   username?: string
   expires: number
 }
+/** What triggered a Cognito message: the operation, as Cognito's custom message triggers name it. */
+export type CognitoMessageTrigger =
+  | "SignUp"
+  | "ResendConfirmationCode"
+  | "ForgotPassword"
+  | "AdminCreateUser"
+/**
+ * A message Cognito delivered (from its default sender) to a user's email address or phone, kept
+ * in the namespace's outbox so `GET /__admin/outbox` and the notifications harness can show it.
+ */
+export type CognitoMessage = {
+  id: string
+  /** The email address or E.164 phone number the message went to. */
+  to: string
+  createdAt: string
+  channel: "email" | "sms"
+  deliveryMedium: "EMAIL" | "SMS"
+  attributeName: "email" | "phone_number"
+  username: string
+  trigger: CognitoMessageTrigger
+  /** The verification code, or null for an AdminCreateUser invitation (it carries a password). */
+  code: string | null
+  from: string
+  /** Email only. */
+  subject: string | null
+  body: string
+}
 export type TokenOrigin = { originJti: string; eventId: string }
 export type CognitoSeedUser = Partial<CognitoUser> & { username: string; password: string }
 
@@ -64,6 +91,9 @@ export class CognitoState {
   readonly hosted: Collection<HostedGrant>
   /** The account the next /oauth2/authorize picks without rendering the picker. */
   readonly nextAccount: Collection<{ username: string }>
+  readonly outbox: OutboxStore<CognitoMessage>
+  /** Only its sequence is used: message ids sort in send order, even within one millisecond. */
+  private readonly messageIds: Collection<never>
   private readonly ids: IdSequence
   constructor(
     sqlite: SqliteClient,
@@ -75,6 +105,8 @@ export class CognitoState {
     this.appClients = new Collection(sqlite, namespace, "cognito_app_clients")
     this.hosted = new Collection(sqlite, namespace, "cognito_hosted_grants")
     this.nextAccount = new Collection(sqlite, namespace, "cognito_hosted_next_account")
+    this.outbox = new OutboxStore<CognitoMessage>(sqlite, namespace, "cognito_outbox")
+    this.messageIds = new Collection(sqlite, namespace, "cognito_message_ids")
     this.ids = new IdSequence(sqlite, namespace, "cognito")
     this.seed()
   }
@@ -112,6 +144,9 @@ export class CognitoState {
           (attribute) => attribute.Name === "email" && attribute.Value === name,
         ),
       )?.value
+  }
+  messageId(): string {
+    return `msg-${String(this.messageIds.nextSequence()).padStart(10, "0")}`
   }
   token(prefix: string): string {
     return this.ids.next(prefix, 32)

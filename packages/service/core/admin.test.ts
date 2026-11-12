@@ -244,8 +244,8 @@ describe("admin ui", () => {
     expect(html.endsWith("<!-- end notes -->")).toBe(true)
   })
 
-  test("the shared document contains the bundled component UI and escapes configuration", () => {
-    const html = renderAdminDocument("stripe")
+  test("the shared document contains the bundled component UI and escapes configuration", async () => {
+    const html = await renderAdminDocument("stripe")
     expect(html).toContain('data-admin-ui-library="antd"')
     expect(html).toContain('id="admin-root"')
     expect(html).toContain("MockingbirdAdmin.mount(")
@@ -255,7 +255,7 @@ describe("admin ui", () => {
     expect(html).not.toContain("https://docs.stripe.com")
     // All runtime dependencies are bundled; the document works with an in-process fetch.
     expect(html).not.toMatch(/<script[^>]+src=/)
-    const hostile = renderAdminDocument('</script><script>alert("x")</script>')
+    const hostile = await renderAdminDocument('</script><script>alert("x")</script>')
     expect(hostile).not.toContain('</script><script>alert("x")')
     expect(hostile).toContain("\\u003c/script>")
     expect(hostile.match(/<\/script>/g)?.length).toBe(1)

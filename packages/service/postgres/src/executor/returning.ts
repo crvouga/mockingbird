@@ -23,6 +23,8 @@ export interface ReturningRow {
   /** MERGE: the source row (all NULL for WHEN NOT MATCHED BY SOURCE) and what `merge_action()` reports */
   readonly source?: Datum[];
   readonly action?: "INSERT" | "UPDATE" | "DELETE";
+  /** the partition a row routed through a partitioned table landed in (its `tableoid`) */
+  readonly table?: TableData;
 }
 
 /** The MERGE source relation RETURNING can also read. */
@@ -169,7 +171,7 @@ export function evalReturning(
   for (const entry of rows) {
     const current = command === "DELETE" ? entry.old : (entry.new ?? entry.old);
     const scopeRow = [
-      ...withSystemValues(table, current ?? nulls, entry.position, entry.xmax),
+      ...withSystemValues(entry.table ?? table, current ?? nulls, entry.position, entry.xmax),
       ...(names.old !== null ? (entry.old ?? nulls) : []),
       ...(names.new !== null ? (entry.new ?? nulls) : []),
       ...(source ? (entry.source ?? source.columns.map(() => null)) : []),

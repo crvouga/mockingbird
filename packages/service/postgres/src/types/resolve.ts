@@ -29,12 +29,6 @@ function modOf(t: TypeId, mods: number[]): TypeMod | null {
 
 /** PostgreSQL types the engine does not model: a name that is none of its types and one of these is refused as unsupported. */
 const UNMODELLED_TYPES: ReadonlySet<string> = new Set([
-  "int4multirange",
-  "int8multirange",
-  "nummultirange",
-  "tsmultirange",
-  "tstzmultirange",
-  "datemultirange",
   "point",
   "line",
   "lseg",
@@ -47,7 +41,21 @@ const UNMODELLED_TYPES: ReadonlySet<string> = new Set([
   "pg_lsn",
   "txid_snapshot",
   "pg_snapshot",
+  // PL/pgSQL cursor variables are modelled inside the interpreter; the SQL type is not
+  "refcursor",
 ]);
+
+/** A composite type (`CREATE TYPE ... AS (...)`) named by `parts` along the search path. */
+function findCompositeType(state: DatabaseState, parts: string[]): { schema: string; name: string } | null {
+  const composites = state.catalogExt.composites;
+  if (composites.size === 0) return null;
+  if (parts.length >= 2) return composites.get(`${parts[parts.length - 2]}.${parts[parts.length - 1]}`) ?? null;
+  for (const schema of state.effectiveSearchPath()) {
+    const found = composites.get(`${schema}.${parts[0]}`);
+    if (found) return found;
+  }
+  return null;
+}
 
 /**
  * Resolve a parsed type name against the catalog: builtin alias, enum, or
@@ -75,6 +83,12 @@ export function resolveTypeName(state: DatabaseState, tn: TypeName): ResolvedTyp
     const elem: TypeId = `enum:${enumData.schema}.${enumData.name}`;
     const id = tn.arrayDims > 0 ? arrayTypeOf(elem) : elem;
     return { column: { id, mod: null }, domain: null, serial: null };
+  }
+
+  const composite = findCompositeType(state, tn.parts);
+  if (composite) {
+    const elem: TypeId = `comp:${composite.schema}.${composite.name}`;
+    return { column: { id: tn.arrayDims > 0 ? arrayTypeOf(elem) : elem, mod: null }, domain: null, serial: null };
   }
 
   const domainData = state.findDomain(tn.parts);

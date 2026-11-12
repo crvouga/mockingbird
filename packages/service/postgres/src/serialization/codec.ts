@@ -1,3 +1,4 @@
+import { catalogExtFromBjv, catalogExtToBjv } from "./catalog-ext-codec.ts";
 import { registerCodec } from "../api/database.ts";
 import type { SelectStmt } from "../ast/nodes.ts";
 import { PostgresError } from "../errors/error.ts";
@@ -35,6 +36,7 @@ import {
 import type { Interval } from "../types/datetime.ts";
 import { jsonbText, parseJsonText } from "../types/jsonb.ts";
 import type { Numeric } from "../types/numeric.ts";
+import type { PgRange } from "../types/range.ts";
 import type { Datum, PgArray, PgRecord, TypeId } from "../types/value.ts";
 import {
   InternPool,
@@ -52,6 +54,8 @@ import {
 const MAGIC = utf8Encode("PGMM");
 /** PGMM v3: adaptive intern, BJV schema, columnar slab hydrate, zero-copy blobs. */
 const VERSION = 3;
+/** Tag of the optional trailer that carries {@link DatabaseState.catalogExt}. */
+const CATALOG_EXT_TRAILER = 0x45;
 
 /** PRNG + clock captured alongside catalog/rows. */
 export interface SnapshotRuntime {
@@ -173,6 +177,9 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
 
   pool.finalize();
   forceAllEncodeIntern(pool, state, schemas, internValues);
+  // issue #692 catalog (roles, policies, partitions, ...): an optional trailer after the runtime
+  const catalogExt = catalogExtToBjv(state.catalogExt);
+  if (catalogExt !== null) forceBjvStrings(pool, catalogExt);
 
   const internId = (s: string): number => pool.id(s);
   const forceId = (s: string): number => {
@@ -266,6 +273,10 @@ export function encodeDatabaseState(state: DatabaseState, runtime: SnapshotRunti
   }
   w.u64(runtime.prngState);
   w.i64(BigInt(Math.trunc(runtime.nowMs)));
+  if (catalogExt !== null) {
+    w.u8(CATALOG_EXT_TRAILER);
+    writeBjv(w, catalogExt, forceId);
+  }
   return w.finish();
 }
 
@@ -361,6 +372,10 @@ function decodeInner(snapshot: Uint8Array, prng: Prng, clock: Clock): DecodedSna
   state.lastSequence = r.u8() === 1 ? { schema: str(readVarintU32(r)), name: str(readVarintU32(r)) } : null;
   if (r.remaining() < 16) throw snapshotError();
   const runtime: SnapshotRuntime = { prngState: r.u64(), nowMs: finiteNowMs(Number(r.i64())) };
+  if (!r.done()) {
+    if (r.u8() !== CATALOG_EXT_TRAILER) throw snapshotError();
+    state.catalogExt = catalogExtFromBjv(readBjv(r, intern));
+  }
   if (!r.done()) throw new PostgresError("snapshot_format", "snapshot has trailing data", "XX000");
   return { state, runtime };
 }
@@ -465,6 +480,12 @@ function writeTaggedDatum(
       writeTaggedDatum(w, value.upper, internId, forceId);
       return;
     }
+    case "pgmultirange": {
+      w.u8(14);
+      writeVarintU32(w, value.ranges.length);
+      for (const range of value.ranges) writeTaggedDatum(w, range, internId, forceId);
+      return;
+    }
     default: {
       const tz = value as unknown as { micros?: bigint; offsetSec?: number };
       if (typeof tz.micros === "bigint" && typeof tz.offsetSec === "number") {
@@ -554,6 +575,12 @@ function readTaggedDatum(r: Reader, intern: readonly string[]): Datum {
         lowerInc: (flags & 2) !== 0,
         upperInc: (flags & 4) !== 0,
       };
+    }
+    case 14: {
+      const count = readVarintU32(r);
+      const ranges: PgRange[] = [];
+      for (let i = 0; i < count; i++) ranges.push(readTaggedDatum(r, intern) as PgRange);
+      return { kind: "pgmultirange", ranges };
     }
     default:
       return r.fail();
@@ -733,10 +760,8 @@ function countNonNull(bits: Uint8Array, n: number): number {
 
 // --- schema catalog (BJV) -----------------------------------------------------
 
-function stripRuntimeFields<T extends { shareCount?: number; jsImpl?: unknown }>(
-  value: T,
-): Omit<T, "shareCount" | "jsImpl"> {
-  const { shareCount: _sc, jsImpl: _js, ...rest } = value;
+function stripRuntimeFields<T extends object>(value: T): Omit<T, "jsImpl"> {
+  const { jsImpl: _js, ...rest } = value as T & { jsImpl?: unknown };
   return rest;
 }
 
@@ -969,6 +994,9 @@ function forceDatumIntern(pool: InternPool, value: Datum): void {
     case "pgrange":
       forceDatumIntern(pool, value.lower);
       forceDatumIntern(pool, value.upper);
+      return;
+    case "pgmultirange":
+      for (const range of value.ranges) forceDatumIntern(pool, range);
       return;
     default:
       return;
