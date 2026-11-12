@@ -27,7 +27,7 @@ test("CI build and publish consume the frozen group without replanning or reconc
   const path = join(dir, "plan.json")
   writeFileSync(path, serializePlan(plan, "frozen-sha"))
   writeFileSync(calls, "")
-  // Exercise real CLI timeout paths without spending five minutes per failure.
+  // Exercise real CLI timeout paths without spending fifteen minutes per failure.
   const clock = join(dir, "clock.ts")
   writeFileSync(
     clock,
@@ -195,10 +195,10 @@ esac
     writeFileSync(calls, "")
     writeFileSync(`${missing}.stuck`, "")
     const timedOut = await run("publish", "prerequisites", [], 1)
-    expect(timedOut).toContain("not visible on npm after 5 minutes")
+    expect(timedOut).toContain("not visible on npm after 15 minutes")
     expect(timedOut).toContain("released=0 failed=1")
     const timedOutCalls = readFileSync(calls, "utf8").trim().split("\n")
-    expect(timedOutCalls.filter((c) => c === "sleep 10000")).toHaveLength(30)
+    expect(timedOutCalls.filter((c) => c === "sleep 10000")).toHaveLength(90)
     expect(timedOutCalls.some((c) => c.startsWith("git tag -a "))).toBe(false)
     expect(timedOutCalls.some((c) => c.startsWith("git push "))).toBe(false)
     rmSync(`${missing}.stuck`)

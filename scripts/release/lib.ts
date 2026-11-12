@@ -338,17 +338,18 @@ export async function waitForNpmVersion(
   const versions = options.versions ?? npmVersions
   const sleep = options.sleep ?? Bun.sleep
   let detail = "version is not listed"
-  // Poll for five minutes. Do not tag a pending publish: subsequent plans use tags
-  // to decide which dependency versions are ready for consumers.
-  for (let attempt = 0; attempt <= 30; attempt++) {
+  // Poll for fifteen minutes: a multi-megabyte tarball can take npm more than five to list.
+  // Do not tag a pending publish: subsequent plans use tags to decide which dependency
+  // versions are ready for consumers.
+  for (let attempt = 0; attempt <= 90; attempt++) {
     const published = await versions(name)
     if (Array.isArray(published) && published.includes(version)) return null
     detail = Array.isArray(published) ? "version is not listed" : published.error
-    if (attempt === 30) break
+    if (attempt === 90) break
     if (attempt === 0) console.log(`waiting for ${name}@${version} to become visible on npm`)
     await sleep(10_000)
   }
-  return `${name}@${version} is not visible on npm after 5 minutes (${detail}). npm may still be processing it; retry the release.`
+  return `${name}@${version} is not visible on npm after 15 minutes (${detail}). npm may still be processing it; retry the release.`
 }
 
 /**
