@@ -1,5 +1,6 @@
 import type { Relation } from "../executor/relation.ts";
 import type { EngineCtx } from "../expressions/context.ts";
+import type { DatabaseState } from "../storage/database-state.ts";
 
 /**
  * Virtual pg_catalog / information_schema relations, materialized on demand.
@@ -12,6 +13,25 @@ let builder: CatalogBuilder | null = null;
 
 export function setCatalogBuilder(b: CatalogBuilder): void {
   builder = b;
+}
+
+/** regtype / regproc resolution, registered by the catalog builder (keeps the import graph acyclic). */
+export interface RegResolver {
+  typeIn(state: DatabaseState, text: string): string;
+  procIn(state: DatabaseState, text: string): string;
+  oid(state: DatabaseState, t: "regtype" | "regproc", name: string): number | null;
+  name(state: DatabaseState, t: "regtype" | "regproc", oid: number): string | null;
+}
+
+let regResolver: RegResolver | null = null;
+
+export function setRegResolver(r: RegResolver): void {
+  regResolver = r;
+}
+
+export function getRegResolver(): RegResolver {
+  if (!regResolver) throw new Error("regtype / regproc resolution is not registered");
+  return regResolver;
 }
 
 export function catalogRelation(ctx: EngineCtx, schema: string, name: string): Relation | null {
@@ -55,4 +75,7 @@ export const PG_CATALOG_RELATIONS: ReadonlySet<string> = new Set([
   "pg_authid",
   "pg_locks",
   "pg_stat_activity",
+  "pg_stat_database",
+  "pg_timezone_names",
+  "pg_timezone_abbrevs",
 ]);

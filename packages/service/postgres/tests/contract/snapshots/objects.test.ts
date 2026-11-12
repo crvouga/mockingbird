@@ -64,6 +64,21 @@ const cases = [
     ],
     probes: ["SELECT id, a FROM t ORDER BY id", "SELECT id, a FROM other.t ORDER BY id"],
   },
+  {
+    // #686: comments are kept on their objects and travel with the snapshot
+    name: "comments",
+    setup: [
+      "CREATE TABLE t (id int CONSTRAINT t_pos CHECK (id > 0), a text)",
+      "CREATE VIEW v AS SELECT id FROM t",
+      "CREATE FUNCTION f() RETURNS int LANGUAGE sql AS $$ SELECT 1 $$",
+      "COMMENT ON TABLE t IS 'table note'",
+      "COMMENT ON COLUMN t.a IS 'column note'",
+      "COMMENT ON VIEW v IS 'view note'",
+      "COMMENT ON FUNCTION f() IS 'function note'",
+      "COMMENT ON CONSTRAINT t_pos ON t IS 'constraint note'",
+    ],
+    probes: ["SELECT classoid::regclass::text AS catalog, objsubid, description FROM pg_description ORDER BY 3"],
+  },
 ] as const;
 
 for (const c of cases) {

@@ -1,10 +1,10 @@
-import { validateStorageSetting } from "../storage/guc.ts";
 import { isPostgresError, pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import { findIndexByOid } from "../schema/index-catalog.ts";
 import { quoteIdent } from "../sql/deparse.ts";
 import { deparseIndex, deparseIndexColumn } from "../sql/deparse-index.ts";
 import type { SequenceData } from "../storage/database-state.ts";
+import { setConfiguration } from "../storage/guc-catalog.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import { castTo } from "../types/cast.ts";
 import { parseRelationInput } from "../types/regnamespace.ts";
@@ -18,6 +18,7 @@ import {
   type TypeId,
   typeDisplayName,
 } from "../types/value.ts";
+import { assertSequenceWritable } from "../transactions/read-only.ts";
 import { argBigInt, argInt, argText, type ScalarFn, strict } from "./util.ts";
 
 export const PG_VERSION_TEXT = "PostgreSQL 18.3 (postgres-mem) on TypeScript, in-memory engine";
@@ -81,6 +82,7 @@ function readSessionCurrval(ctx: EngineCtx, seq: SequenceData): bigint {
 }
 
 export function sequenceNextval(ctx: EngineCtx, seq: SequenceData): bigint {
+  assertSequenceWritable(ctx.state, "nextval", seq.temp);
   seq = ctx.state.ensureWritableSequence(seq);
   let next: bigint;
   if (!seq.isCalled) {
@@ -164,8 +166,36 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
     }),
   );
 
+  // regtypein / regprocin with soft errors: a name that names no type (no single function) is NULL
+  m.set(
+    "to_regtype",
+    strict("regtype", (ctx, args) => {
+      try {
+        return tv("regtype", ctx.regtypeIn(argText(ctx, args[0]!)));
+      } catch (error) {
+        if (isPostgresError(error) && ["42704", "42601", "42602", "3F000"].includes(error.sqlState)) {
+          return tv("regtype", null);
+        }
+        throw error;
+      }
+    }),
+  );
+  m.set(
+    "to_regproc",
+    strict("regproc", (ctx, args) => {
+      try {
+        return tv("regproc", ctx.regprocIn(argText(ctx, args[0]!)));
+      } catch (error) {
+        if (isPostgresError(error) && ["42883", "42725", "42602", "3F000"].includes(error.sqlState)) {
+          return tv("regproc", null);
+        }
+        throw error;
+      }
+    }),
+  );
+
   // statistics are never pending here: every read already sees the current counters
-  m.set("pg_stat_force_next_flush", () => tv("void", null));
+  m.set("pg_stat_force_next_flush", () => tv("void", ""));
 
   m.set("version", () => tv("text", PG_VERSION_TEXT));
   m.set("current_database", (ctx) => tv("name", databaseCatalogContext(ctx.state).name));
@@ -188,7 +218,8 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set("pg_backend_pid", () => tv("int4", 1));
   m.set("txid_current", () => tv("int8", 1n));
   m.set("pg_current_xact_id", () => tv("int8", 1n));
-  m.set("pg_sleep", () => tv("void", null));
+  // void results are non-NULL datums that print as ''; pg_sleep is strict
+  m.set("pg_sleep", (_ctx, args) => tv("void", args[0]?.v === null ? null : ""));
   // like regtypeout, an enum is schema-qualified only when its schema is not the one its bare name resolves to
   const visibleTypeName = (ctx: EngineCtx, t: TypeId): string => {
     if (isArrayType(t)) return `${visibleTypeName(ctx, arrayElemType(t))}[]`;
@@ -232,13 +263,9 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
       throw pgError("null_value_not_allowed", "NULL value not allowed for parameter name", "22004");
     }
     const name = argText(ctx, args[0]!).toLowerCase();
-    const value = args[1]!.v === null ? "" : argText(ctx, args[1]!);
-    if (!ctx.state.settings.has(name) && !name.includes("."))
-      throw pgError("undefined_object", `unrecognized configuration parameter "${name}"`, "42704");
-    validateStorageSetting(name, value);
-    const local = args[2]?.v === true;
-    if (!local || ctx.state.inTransaction) (local ? ctx.state.localSettings : ctx.state.settings).set(name, value);
-    return tv("text", value);
+    // a NULL value resets the parameter, as RESET does
+    const value = args[1]!.v === null ? null : argText(ctx, args[1]!);
+    return tv("text", setConfiguration(ctx.state, name, value, args[2]?.v === true));
   });
 
   // --- sequences -------------------------------------------------------------
@@ -277,7 +304,9 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set(
     "setval",
     strict("int8", (ctx, args) => {
-      const seq = ctx.state.ensureWritableSequence(findSequenceForCall(ctx, argText(ctx, args[0]!)));
+      const found = findSequenceForCall(ctx, argText(ctx, args[0]!));
+      assertSequenceWritable(ctx.state, "setval", found.temp);
+      const seq = ctx.state.ensureWritableSequence(found);
       const value = argBigInt(ctx, args[1]!);
       const isCalled = args.length > 2 ? args[2]!.v === true : true;
       if (value < seq.minValue || value > seq.maxValue) {
@@ -311,26 +340,11 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
     }),
   );
 
-  m.set("format_type", (ctx, args) => {
-    if (args[0]!.v === null) return tv("text", null);
-    const oid = argInt(ctx, args[0]!);
-    const name = ctx.state.typeNameForOid(oid);
-    return tv("text", name ?? "???");
-  });
   // pg_index.indpred / indexprs hold the deparsed text already (not a pg_node_tree): hand it back
   m.set("pg_get_expr", (_ctx, args) => {
     const expr = args[0];
     return tv("text", expr && (expr.t === "text" || expr.t === "unknown") ? (expr.v as string | null) : null);
   });
-  // only index comments are stored (COMMENT ON INDEX); every other object has none
-  m.set("obj_description", (ctx, args) => {
-    const [oid, catalog] = args;
-    if (!oid || oid.v === null || (catalog && catalog.v === null)) return tv("text", null);
-    if (catalog && argText(ctx, catalog) !== "pg_class") return tv("text", null);
-    return tv("text", findIndexByOid(ctx.state, argInt(ctx, oid))?.index.comment ?? null);
-  });
-  m.set("col_description", () => tv("text", null));
-  m.set("shobj_description", () => tv("text", null));
   m.set("pg_get_userbyid", () => tv("name", "postgres"));
   m.set("pg_table_is_visible", (_ctx, args) => tv("bool", args[0]!.v !== null));
   m.set("pg_function_is_visible", (_ctx, args) => tv("bool", args[0]!.v !== null));
@@ -362,9 +376,9 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set("pg_indexes_size", () => tv("int8", 0n));
   m.set("pg_database_size", () => tv("int8", 8192n));
 
-  m.set("pg_advisory_lock", () => tv("void", null));
+  m.set("pg_advisory_lock", (_ctx, args) => tv("void", args.some((a) => a.v === null) ? null : ""));
   m.set("pg_advisory_unlock", () => tv("bool", true));
-  m.set("pg_advisory_unlock_all", () => tv("void", null));
+  m.set("pg_advisory_unlock_all", () => tv("void", ""));
   m.set("pg_try_advisory_lock", () => tv("bool", true));
 
   m.set("pg_notification_queue_usage", () => tv("float8", 0));

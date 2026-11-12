@@ -61,6 +61,7 @@ import {
 } from "../types/value.ts";
 import type { EngineCtx } from "./context.ts";
 import { likeMatch, regexMatch } from "./pattern.ts";
+import { evalRangeOrNetworkBinary, evalRangeOrNetworkUnary } from "./range-network-ops.ts";
 
 const NUM_LADDER = ["int2", "int4", "int8", "numeric", "float4", "float8"];
 
@@ -153,20 +154,22 @@ function resolveUnknowns(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValu
     t === "tsquery" ||
     isArrayType(t);
   // ^ has only float8 and numeric candidates: ints resolve to the preferred float8
-  const unknownTarget = (known: TypeId): TypeId => {
+  const unknownTarget = (known: TypeId, unknownOnRight: boolean): TypeId => {
     if (op === "^" && known !== "numeric") return "float8";
+    // interval has only `interval * float8`, `float8 * interval` and `interval / float8`
+    if (known === "interval" && (op === "*" || (op === "/" && unknownOnRight))) return "float8";
     if (op === "||" && !concatsWithSelf(known)) return "text";
     return known;
   };
   if (l.t === "unknown" && r.t !== "unknown") {
-    if (!opCapable(op, r.t)) opNotExist(op, l.t, r.t);
-    const target = unknownTarget(r.t);
-    return [castTo(ctx, l, target), target === r.t ? r : castTo(ctx, r, target)];
+    if (!opCapable(op, r.t) || (op === "/" && r.t === "interval")) opNotExist(op, l.t, r.t);
+    const target = unknownTarget(r.t, false);
+    return [castTo(ctx, l, target), target === r.t || r.t === "interval" ? r : castTo(ctx, r, target)];
   }
   if (r.t === "unknown" && l.t !== "unknown") {
     if (!opCapable(op, l.t)) opNotExist(op, l.t, r.t);
-    const target = unknownTarget(l.t);
-    return [target === l.t ? l : castTo(ctx, l, target), castTo(ctx, r, target)];
+    const target = unknownTarget(l.t, true);
+    return [target === l.t || l.t === "interval" ? l : castTo(ctx, l, target), castTo(ctx, r, target)];
   }
   if (l.t === "unknown" && r.t === "unknown") {
     if (COMPARISONS.has(op) || op === "||" || op === "~~" || op === "~") {
@@ -188,6 +191,8 @@ function resolveUnknowns(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValu
 const AMBIGUOUS_ON_UNKNOWN = new Set(["+", "-", "*", "/", "%", "&", "|", "#", "<<", ">>"]);
 
 export function evalBinary(ctx: EngineCtx, op: string, l0: TypedValue, r0: TypedValue): TypedValue {
+  const special = evalRangeOrNetworkBinary(ctx, op, l0, r0);
+  if (special !== null) return special;
   // jsonb/json extraction ops keep unknown on rhs as text
   const [l, r] = resolveJsonUnknowns(ctx, op, l0, r0);
 
@@ -1125,6 +1130,8 @@ function evalTextSearchMatch(ctx: EngineCtx, l0: TypedValue, r0: TypedValue): Ty
 // --- unary --------------------------------------------------------------------------
 
 export function evalUnary(ctx: EngineCtx, op: string, operand: TypedValue): TypedValue {
+  const special = evalRangeOrNetworkUnary(op, operand);
+  if (special !== null) return special;
   const { t, v } = operand;
   switch (op) {
     case "-": {

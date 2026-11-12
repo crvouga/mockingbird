@@ -388,6 +388,12 @@ export interface SelectStmt {
 // DML
 // ---------------------------------------------------------------------------
 
+/** The names RETURNING gives the old and new row versions (PostgreSQL 18). */
+export interface ReturningAliases {
+  readonly old?: string;
+  readonly new?: string;
+}
+
 export interface InsertStmt {
   readonly type: "insert";
   readonly with: WithClause | null;
@@ -398,6 +404,8 @@ export interface InsertStmt {
   readonly source: SelectStmt | "default_values";
   readonly onConflict: OnConflictClause | null;
   readonly returning: SelectTarget[] | null;
+  /** `RETURNING WITH (OLD AS o, NEW AS n)` */
+  readonly returningAliases?: ReturningAliases | null;
 }
 
 export interface OnConflictClause {
@@ -421,6 +429,39 @@ export interface UpdateStmt {
   readonly where: Expr | null;
   readonly whereCurrentOf: string | null;
   readonly returning: SelectTarget[] | null;
+  /** `RETURNING WITH (OLD AS o, NEW AS n)` */
+  readonly returningAliases?: ReturningAliases | null;
+}
+
+/** `MERGE INTO target USING source ON cond WHEN ... THEN ...` (https://www.postgresql.org/docs/18/sql-merge.html) */
+export interface MergeStmt {
+  readonly type: "merge";
+  readonly with: WithClause | null;
+  readonly table: string[];
+  readonly only: boolean;
+  readonly alias: string | null;
+  readonly source: FromItem;
+  readonly on: Expr;
+  readonly clauses: MergeWhenClause[];
+  readonly returning: SelectTarget[] | null;
+  readonly returningAliases?: ReturningAliases | null;
+}
+
+export interface MergeWhenClause {
+  /** WHEN MATCHED / WHEN NOT MATCHED [BY TARGET] / WHEN NOT MATCHED BY SOURCE */
+  readonly match: "matched" | "not_matched_by_target" | "not_matched_by_source";
+  readonly condition: Expr | null;
+  readonly action:
+    | { readonly kind: "update"; readonly sets: UpdateSet[] }
+    | { readonly kind: "delete" }
+    | { readonly kind: "nothing" }
+    | {
+        readonly kind: "insert";
+        readonly columns: string[] | null;
+        readonly overriding: "system" | "user" | null;
+        /** null for DEFAULT VALUES; a `default_expr` item stands for DEFAULT */
+        readonly values: Expr[] | null;
+      };
 }
 
 export interface DeleteStmt {
@@ -432,6 +473,8 @@ export interface DeleteStmt {
   readonly using: FromItem[];
   readonly where: Expr | null;
   readonly returning: SelectTarget[] | null;
+  /** `RETURNING WITH (OLD AS o, NEW AS n)` */
+  readonly returningAliases?: ReturningAliases | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -453,6 +496,9 @@ export type ColumnConstraint =
       onDelete: RefAction;
       onUpdate: RefAction;
       match: "full" | "partial" | "simple" | null;
+      /** `DEFERRABLE` / `INITIALLY DEFERRED`; absent means NOT DEFERRABLE INITIALLY IMMEDIATE */
+      deferrable?: boolean;
+      initiallyDeferred?: boolean;
     }
   | { kind: "generated_identity"; always: boolean; name: string | null; options: SequenceOptions }
   | { kind: "generated_stored"; expr: Expr; name: string | null }
@@ -481,6 +527,9 @@ export type TableConstraint =
       onDelete: RefAction;
       onUpdate: RefAction;
       match: "full" | "partial" | "simple" | null;
+      /** `DEFERRABLE` / `INITIALLY DEFERRED`; absent means NOT DEFERRABLE INITIALLY IMMEDIATE */
+      deferrable?: boolean;
+      initiallyDeferred?: boolean;
     }
   | { kind: "exclude"; name: string | null };
 
@@ -766,6 +815,11 @@ export interface SetStmt {
   readonly name: string;
   readonly value: string | null; // null => DEFAULT
   readonly local: boolean;
+  /**
+   * `SET TRANSACTION <modes>` (name `transaction`) and `SET SESSION CHARACTERISTICS AS TRANSACTION
+   * <modes>` (name `session characteristics`): the modes as BEGIN lists them.
+   */
+  readonly transactionModes?: string[];
 }
 
 export interface ShowStmt {
@@ -818,6 +872,10 @@ export interface CommentStmt {
   readonly objectKind: string;
   readonly objectName: string[];
   readonly comment: string | null;
+  /** CONSTRAINT / TRIGGER ... ON table */
+  readonly onTable?: string[];
+  /** FUNCTION / PROCEDURE name(argtypes): the argument types, when a list is given */
+  readonly args?: TypeName[];
 }
 
 export interface AnalyzeStmt {
@@ -854,6 +912,7 @@ export type Statement =
   | InsertStmt
   | UpdateStmt
   | DeleteStmt
+  | MergeStmt
   | CreateTableStmt
   | CreateTableAsStmt
   | CreateIndexStmt

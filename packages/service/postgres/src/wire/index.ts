@@ -1,8 +1,9 @@
 /**
  * A PostgreSQL wire-protocol (frontend/backend 3.0) TCP server in front of the in-memory
  * engine, so a separate process can use it through a normal `postgres://` connection string:
- * `pg`, `postgres.js`, a JDBC client, `psql`. It runs in Node and Bun (it needs `node:net`),
- * not the browser.
+ * `pg`, `postgres.js`, a JDBC client, `psql`. It runs in Node and Bun (it needs `node:net`).
+ * Where no listener can run (a browser, a worker, an edge runtime), `createWireServer()` from
+ * `/transport` is the same server accepting connections as injected byte streams.
  *
  * One {@link Database} is shared by every connection through a {@link Cluster}: the engine
  * runs one statement at a time, so a connection inside an explicit `BEGIN` block holds the
@@ -26,12 +27,12 @@
  * @module
  */
 import { createServer, type Server, type Socket } from "node:net";
-import { Database } from "../api/database.ts";
+import type { Database } from "../api/database.ts";
 import type { Snapshot } from "../api/snapshot.ts";
-import { Cluster, type Session } from "./cluster.ts";
-import { Connection, type ServerFaults, type ServerLog } from "./connection.ts";
-import { Durability, type DurableOptions, type DurableStorage, openImage } from "./durable.ts";
+import type { ServerLog } from "./connection.ts";
+import type { DurableOptions, DurableStorage } from "./durable.ts";
 import { fileStorage } from "./file-storage.ts";
+import { createWireServer, type WireServer, type WireServerOptions } from "./transport.ts";
 
 export type ServeOptions = {
   /** TCP port; `0` (the default) picks a free one, reported as `server.port`. */
@@ -49,8 +50,13 @@ export type ServeOptions = {
   serverVersion?: string;
   /** Extra `ParameterStatus` values sent at startup (override the defaults). */
   parameters?: Record<string, string>;
-  /** Per-statement log sink, for tests and debugging. */
+  /**
+   * Per-statement log sink, for tests and debugging. Every statement the client ran or failed is
+   * reported once, including those rejected at Parse or Bind, with the error message it received.
+   */
   onLog?: (entry: ServerLog) => void;
+  /** Include extended-protocol parameter values in `onLog` entries (`params`). Off by default: they may be large. */
+  logParams?: boolean;
   /**
    * `postgres://` or `postgresql://` URL. User, password, host, port, and database name
    * fill the fields above when those fields are omitted. An omitted port means `5432`;
@@ -77,36 +83,16 @@ export type ServeOptions = {
   durable?: string | DurableStorage | DurableOptions;
 };
 
-export type PostgresServer = {
+/** A listening {@link WireServer}: the same controls, plus the TCP address. */
+export type PostgresServer = WireServer & {
   /** The bound port. */
   readonly port: number;
   /** The bound host. */
   readonly host: string;
   /** `postgres://` URL for the bound address, including the database name. */
   readonly connectionString: string;
-  /** The shared engine, for seeding, snapshotting or asserting from the test process. */
-  readonly database: Database;
-  /** Names in the cluster catalog, in deterministic order. */
-  databaseNames(): readonly string[];
-  /** Resolve a named database, or throw SQLSTATE `3D000`. */
-  getDatabase(name: string): Database;
   /** The underlying `net.Server`. */
   readonly server: Server;
-  /** Open connections right now. */
-  readonly connections: number;
-  /** Arm a fault preset for the next statement / connection (see {@link ServerFaults}). */
-  fault(fault: ServerFaults): void;
-  clearFaults(): void;
-  /** Freeze the live state (the admin `snapshot()` control). */
-  snapshot(name?: string): Snapshot;
-  snapshotAll(): Map<string, Snapshot>;
-  restoreAll(points: ReadonlyMap<string, Snapshot>): void;
-  faultState(): ServerFaults;
-  /**
-   * Durable mode: persist every database now, for changes made through `database` /
-   * `getDatabase()` / `restoreAll()` rather than a connection. Resolves at once without `durable`.
-   */
-  persist(): Promise<void>;
   /** Stop listening and close every connection. Durable mode also waits for a write in flight. */
   close(): Promise<void>;
 };
@@ -153,71 +139,36 @@ const normalize = (input: ServeInput): ServeOptions => {
   };
 };
 
-const isSnapshot = (value: unknown): value is Snapshot =>
-  typeof value === "object" && value !== null && "open" in value && typeof (value as Snapshot).open === "function";
-
-const durableOptions = (durable: ServeOptions["durable"]): (DurableOptions & { storage: DurableStorage }) | null => {
-  if (durable === undefined) return null;
-  const options: DurableOptions =
-    typeof durable === "string" || "write" in durable ? { storage: durable as string | DurableStorage } : durable;
-  const storage = typeof options.storage === "string" ? fileStorage(options.storage) : options.storage;
-  return { ...options, storage };
+/** A directory path becomes the file-backed store; the transport server takes only injected storage. */
+const resolveDurable = (durable: ServeOptions["durable"]): WireServerOptions["durable"] => {
+  if (durable === undefined) return undefined;
+  if (typeof durable === "string") return fileStorage(durable);
+  if ("write" in durable) return durable;
+  return { ...durable, storage: typeof durable.storage === "string" ? fileStorage(durable.storage) : durable.storage };
 };
-
-/** The statement turn for work that is not a connection's: {@link PostgresServer.persist}. */
-const hostSession = (cluster: Cluster): Session => ({
-  pid: cluster.newPid(),
-  database: cluster.db,
-  databaseName: cluster.defaultDatabaseName,
-  waitingForTurn: null,
-  waitingForLock: null,
-  pendingNotifies: [],
-  queueNotification: () => undefined,
-});
 
 /** Start a server and resolve once it is listening. A string argument is a `postgres://` URI. */
 export const serve = (input: ServeInput = {}): Promise<PostgresServer> => start(normalize(input));
 
 const start = async (options: ServeOptions): Promise<PostgresServer> => {
-  const seed = isSnapshot(options.database) ? options.database.open() : (options.database ?? new Database());
-  const initialName = options.databaseName ?? "postgres";
-  const durable = durableOptions(options.durable);
-  const image = durable ? await durable.storage.read() : null;
-  const restored = image ? openImage(image, seed) : null;
-  if (restored && !restored.has(initialName)) {
-    throw new Error(
-      `durable storage holds no database "${initialName}" (it has ${[...restored.keys()].sort().join(", ")}); start with that databaseName or an empty storage`,
-    );
-  }
-  const cluster = new Cluster(restored?.get(initialName) ?? seed, initialName);
-  for (const [name, database] of restored ?? []) if (name !== initialName) cluster.attach(name, database);
-  let durability: Durability | null = null;
-  if (durable) {
-    durability = new Durability(cluster, durable.storage, durable);
-    cluster.durability = durability;
-    // An empty storage is initialised with the starting state, so the first restart finds a cluster.
-    if (image) durability.adopt(image);
-    else await durability.persist("all");
-  }
-  const faults: ServerFaults = {};
-  const connections = new Set<Connection>();
+  const durable = resolveDurable(options.durable);
+  const wire = await createWireServer({
+    ...(options.database !== undefined ? { database: options.database } : {}),
+    ...(options.password !== undefined ? { password: options.password } : {}),
+    ...(options.serverVersion !== undefined ? { serverVersion: options.serverVersion } : {}),
+    ...(options.parameters !== undefined ? { parameters: options.parameters } : {}),
+    ...(options.onLog !== undefined ? { onLog: options.onLog } : {}),
+    ...(options.logParams !== undefined ? { logParams: options.logParams } : {}),
+    ...(options.databaseName !== undefined ? { databaseName: options.databaseName } : {}),
+    ...(options.allowDatabaseSelection !== undefined ? { allowDatabaseSelection: options.allowDatabaseSelection } : {}),
+    ...(durable !== undefined ? { durable } : {}),
+  });
   const host = options.host ?? "127.0.0.1";
   const user = options.user || "postgres";
 
   const server = createServer((socket: Socket) => {
     socket.setNoDelay(true);
-    const connection = new Connection(socket, cluster, {
-      ...(options.password !== undefined ? { password: options.password } : {}),
-      serverVersion: options.serverVersion ?? "18.3",
-      parameters: options.parameters ?? {},
-      faults,
-      ...(options.databaseName !== undefined && !options.allowDatabaseSelection
-        ? { database: options.databaseName }
-        : {}),
-      ...(options.onLog ? { onLog: options.onLog } : {}),
-    });
-    connections.add(connection);
-    socket.on("close", () => connections.delete(connection));
+    void wire.accept(socket);
   });
 
   return new Promise<PostgresServer>((resolve, reject) => {
@@ -226,7 +177,7 @@ const start = async (options: ServeOptions): Promise<PostgresServer> => {
       server.removeListener("error", reject);
       const address = server.address();
       const port = typeof address === "object" && address !== null ? address.port : 0;
-      const name = initialName;
+      const name = options.databaseName ?? "postgres";
       const auth = options.password
         ? `${encodeURIComponent(user)}:${encodeURIComponent(options.password)}@`
         : `${encodeURIComponent(user)}@`;
@@ -234,50 +185,29 @@ const start = async (options: ServeOptions): Promise<PostgresServer> => {
         port,
         host,
         connectionString: `postgres://${auth}${host}:${port}/${encodeURIComponent(name)}`,
+        accept: (stream) => wire.accept(stream),
         get database() {
-          return cluster.db;
+          return wire.database;
         },
-        databaseNames() {
-          return cluster.databaseNames();
-        },
-        getDatabase(databaseName) {
-          return cluster.requireDatabase(databaseName);
-        },
+        databaseNames: () => wire.databaseNames(),
+        getDatabase: (databaseName) => wire.getDatabase(databaseName),
         server,
         get connections() {
-          return connections.size;
+          return wire.connections;
         },
-        fault(next) {
-          Object.assign(faults, next);
-        },
-        clearFaults() {
-          for (const key of Object.keys(faults)) delete faults[key as keyof ServerFaults];
-        },
-        faultState() {
-          return structuredClone(faults);
-        },
-        snapshotAll: () => cluster.snapshotAll(),
-        restoreAll: (points) => cluster.restoreAll(points),
-        snapshot(databaseName = initialName) {
-          return cluster.requireDatabase(databaseName).snapshot();
-        },
-        async persist() {
-          if (!durability) return;
-          const session = hostSession(cluster);
-          await cluster.acquireTurn(session);
-          try {
-            await durability.persist("all");
-          } finally {
-            cluster.releaseTurn(session);
-          }
-        },
+        fault: (next) => wire.fault(next),
+        clearFaults: () => wire.clearFaults(),
+        faultState: () => wire.faultState(),
+        snapshotAll: () => wire.snapshotAll(),
+        restoreAll: (points) => wire.restoreAll(points),
+        snapshot: (databaseName) => wire.snapshot(databaseName),
+        persist: () => wire.persist(),
         async close() {
-          for (const connection of connections) connection.destroy();
-          connections.clear();
+          const closing = wire.close();
           await new Promise<void>((done, fail) => {
             server.close((error?: Error | null) => (error ? fail(error) : done()));
           });
-          await durability?.idle();
+          await closing;
         },
       });
     });
@@ -285,6 +215,8 @@ const start = async (options: ServeOptions): Promise<PostgresServer> => {
 };
 
 export { Cluster } from "./cluster.ts";
-export type { ServerFaults, ServerLog } from "./connection.ts";
+export type { ServerFaults, ServerLog, ServerLogPhase } from "./connection.ts";
 export type { ClusterImage, DurableCommit, DurableOptions, DurableStorage } from "./durable.ts";
 export { fileStorage } from "./file-storage.ts";
+export type { ByteStreamPair, ClientStream, DuplexLike } from "./stream.ts";
+export { createWireServer, type WireServer, type WireServerOptions } from "./transport.ts";

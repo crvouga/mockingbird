@@ -514,8 +514,8 @@ parity(
   [],
   "SELECT family('1.2.3.4'::inet) AS f4, family('::1'::inet) AS f6, masklen('192.168.1.5/24'::inet) AS m, host('192.168.1.5/24'::inet) AS h, network('192.168.1.5/24'::inet) AS n, broadcast('192.168.1.5/24'::inet) AS b, netmask('192.168.1.5/24'::inet) AS nm, netmask('2001:db8::1/32'::inet) AS nm6, broadcast('2001:db8::1/32'::inet) AS b6, network('::1'::inet) AS n6",
 );
-test("#538 range and geometric types are refused as unsupported (0A000), not as missing", () => {
-  for (const type of ["int4range", "daterange", "point", "box", "macaddr8", "xml"]) {
+test("#538 multirange and geometric types are refused as unsupported (0A000), not as missing", () => {
+  for (const type of ["int4multirange", "datemultirange", "point", "box", "macaddr8", "xml"]) {
     expect(sqlStateOf(`SELECT NULL::${type}`)).toBe("0A000");
     expect(sqlStateOf(`CREATE TABLE r (a ${type})`)).toBe("0A000");
   }
@@ -523,6 +523,6 @@ test("#538 range and geometric types are refused as unsupported (0A000), not as 
 });
 test("#538 an unsupported type leaves no table behind", () => {
   const db = new Database();
-  expect(() => db.exec("CREATE TABLE ranges (id int, r int4range)")).toThrow();
+  expect(() => db.exec("CREATE TABLE ranges (id int, r int4multirange)")).toThrow();
   expect(db.query("SELECT count(*)::int AS n FROM pg_class WHERE relname = 'ranges'")).toEqual([{ n: 0 }]);
 });

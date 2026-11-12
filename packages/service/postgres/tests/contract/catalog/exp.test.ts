@@ -1,4 +1,3 @@
-import { expect } from "bun:test";
 import { EXP_SECTION } from "../../../compat/sections/exp.ts";
 import { runCatalog } from "./run.ts";
 
@@ -50,11 +49,9 @@ runCatalog(EXP_SECTION, [
   },
   {
     id: "EXP-in-03",
-    kind: "divergence",
-    fn: (db) => {
-      db.exec("CREATE TABLE t (n int); INSERT INTO t VALUES (1), (2)");
-      expect(() => db.query("SELECT (1, 2) IN (SELECT n, n + 1 FROM t) AS v")).toThrow(/too many columns/);
-    },
+    kind: "parity",
+    setup: ["CREATE TABLE t (n int)", "INSERT INTO t VALUES (1), (2)"],
+    sql: "SELECT (1, 2) IN (SELECT n, n + 1 FROM t) AS v",
   },
   { id: "EXP-case-01", kind: "parity", sql: "SELECT CASE WHEN NULL THEN 'y' ELSE 'n' END AS v" },
   {

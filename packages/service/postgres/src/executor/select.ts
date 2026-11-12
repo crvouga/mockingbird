@@ -48,6 +48,7 @@ import {
   RowScope,
   relationResult,
 } from "./relation.ts";
+import { systemColumns, withSystemValues } from "./system-columns.ts";
 import { computeWindowValues } from "./window.ts";
 
 // ---------------------------------------------------------------------------
@@ -119,8 +120,20 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
       if (p === undefined) throw pgError("undefined_parameter", `there is no parameter $${index}`, "42P02");
       return p;
     },
-    execScalarSubquery(q) {
+    execScalarSubquery(q, width = 1) {
       const rel = executeSelectStmt(childEnv(env, scope), q);
+      if (width > 1) {
+        checkRowSubqueryWidth(rel, width);
+        if (rel.rows.length > 1) {
+          throw pgError(
+            "cardinality_violation",
+            "more than one row returned by a subquery used as an expression",
+            "21000",
+          );
+        }
+        const row = rel.rows[0];
+        return tv("record", row ? rowSubqueryRecord(rel, row) : null);
+      }
       if (rel.columns.length !== 1) {
         throw pgError("cardinality_violation", "subquery must return only one column", "42601");
       }
@@ -138,8 +151,12 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
       const rel = executeSelectStmt(childEnv(env, scope), q);
       return rel.rows.length > 0;
     },
-    execColumnSubquery(q) {
+    execColumnSubquery(q, width = 1) {
       const rel = executeSelectStmt(childEnv(env, scope), q);
+      if (width > 1) {
+        checkRowSubqueryWidth(rel, width);
+        return { type: "record", values: rel.rows.map((row) => rowSubqueryRecord(rel, row)) };
+      }
       if (rel.columns.length !== 1) {
         throw pgError("cardinality_violation", "subquery has too many columns", "42601");
       }
@@ -164,12 +181,25 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
       return extras?.groupingValue?.(node);
     },
     callUserFunction(name, args, node) {
-      void node;
-      const fn = resolveUserFunctionForArgs(env, name, args);
-      if (!fn) return undefined;
-      return callSqlFunctionScalar(env, fn, args);
+      const bound = bindUserFunctionCall(env, name, args, node.argNames);
+      if (!bound) return undefined;
+      return callSqlFunctionScalar(env, bound.fn, bound.args);
     },
     callStatefulFunction: undefined,
+  };
+}
+
+/** a row subquery (`(a, b) IN (SELECT x, y ...)`) must project exactly as many columns as the row has fields */
+function checkRowSubqueryWidth(rel: Relation, width: number): void {
+  if (rel.columns.length > width) throw pgError("cardinality_violation", "subquery has too many columns", "42601");
+  if (rel.columns.length < width) throw pgError("cardinality_violation", "subquery has too few columns", "42601");
+}
+
+function rowSubqueryRecord(rel: Relation, row: Datum[]): Datum {
+  return {
+    kind: "pgrecord",
+    types: rel.columns.map((c) => (c.type === UNKNOWN ? "text" : c.type)),
+    values: row.slice(0, rel.columns.length),
   };
 }
 
@@ -216,6 +246,40 @@ export function resolveUserFunctionForArgs(env: ExecEnv, name: string[], args: T
       }
     }
     if (ok) return fn;
+  }
+  return null;
+}
+
+/**
+ * Resolve a UDF call and lay its arguments out positionally. Named notation
+ * (`f(b => 5, a => 7)`, mixed `f(7, b => 5)`) binds each named value to the
+ * parameter of that name and fills the skipped parameters from their defaults;
+ * a candidate without a matching parameter name or a default for every gap is
+ * not a match (PostgreSQL raises 42883 then).
+ */
+export function bindUserFunctionCall(
+  env: ExecEnv,
+  name: string[],
+  args: TypedValue[],
+  argNames: readonly (string | null)[] | undefined,
+): { fn: FunctionData; args: TypedValue[] } | null {
+  if (!argNames || argNames.every((n) => n === null)) {
+    const fn = resolveUserFunctionForArgs(env, name, args);
+    return fn ? { fn, args } : null;
+  }
+  for (const fn of env.ctx.state.findFunctions(name)) {
+    const slots: Array<TypedValue | undefined> = new Array(fn.argTypes.length).fill(undefined);
+    let ok = args.length <= fn.argTypes.length;
+    for (let i = 0; ok && i < args.length; i++) {
+      const n = argNames[i] ?? null;
+      const idx = n === null ? i : fn.argNames.indexOf(n);
+      if (idx < 0 || slots[idx] !== undefined || !canImplicitCast(args[i]!.t, fn.argTypes[idx]!)) ok = false;
+      else slots[idx] = args[i]!;
+    }
+    if (!ok) continue;
+    if (slots.some((s, i) => s === undefined && !fn.argDefaults[i])) continue;
+    const bound = slots.map((s, i) => s ?? evalScalar(env, null, fn.argDefaults[i]!));
+    return { fn, args: bound };
   }
   return null;
 }
@@ -279,8 +343,12 @@ export function callSqlFunctionScalar(env: ExecEnv, fn: FunctionData, args: Type
 
 function callSqlFunctionScalarBody(env: ExecEnv, fn: FunctionData, args: TypedValue[]): TypedValue {
   const retT = fn.returns ?? "text";
+  // a void result is a non-NULL datum (it prints as '') from PL/pgSQL and C-level functions, but
+  // NULL from a LANGUAGE sql function; a strict function called with a NULL argument yields NULL
+  const strictNull = fn.strict && args.some((a) => a.v === null);
   if (fn.language === "plpgsql") {
-    return callPlpgsqlScalar(env, fn, args);
+    const result = callPlpgsqlScalar(env, fn, args);
+    return retT === "void" ? tv("void", strictNull ? null : "") : result;
   }
   if (fn.language === "internal") {
     if (fn.rawBody === "pg_trgm") return evalPgTrgmFunction(env.ctx, fn, args);
@@ -293,10 +361,12 @@ function callSqlFunctionScalarBody(env: ExecEnv, fn: FunctionData, args: TypedVa
     if (fn.strict && args.some((a) => a.v === null)) return tv(retT, null);
     const jsArgs = args.map((a) => datumToJs(a.t, a.v, env.ctx));
     const out = fn.jsImpl(...jsArgs);
+    if (retT === "void") return tv("void", "");
     if (out === null || out === undefined) return tv(retT, null);
     return castTo(env.ctx, bindValueToTyped(out, 0), retT, {});
   }
   const last = runFunctionBody(env, fn, args);
+  if (retT === "void") return tv("void", null);
   if (last === null) return tv(retT, null);
   if (fn.returnsSet || fn.returnsTable) {
     throw pgError("feature_not_supported", `set-returning function ${fn.name} called in scalar context`, "0A000");
@@ -533,9 +603,9 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
         const rel: Relation = {
           columns: [
             ...table.columns.map((c) => ({ name: c.name, type: c.type.id, mod: c.type.mod, table: label })),
-            { name: "xmin", type: "xid", table: label, hidden: true, system: true },
+            ...systemColumns(label),
           ],
-          rows: shapeOnly ? [] : table.serializationRows().map((row) => [...row, table.rowXmins.get(row) ?? 2]),
+          rows: shapeOnly ? [] : table.serializationRows().map((row, i) => withSystemValues(table, row, i)),
         };
         return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
       }
@@ -618,12 +688,13 @@ function srfCallRelation(
         : call.name[call.name.length - 1]!;
   const evalScope = makeEvalScope(env, scope);
   const args = call.args.map((a) => evalExpr(env.ctx, evalScope, a));
-  const userFn = resolveUserFunctionForArgs(env, call.name, args);
-  if (userFn) {
+  const boundUser = bindUserFunctionCall(env, call.name, args, call.argNames);
+  if (boundUser) {
+    const userFn = boundUser.fn;
     if (userFn.returnsSet || userFn.returnsTable) {
-      return callSqlFunctionSet(env, userFn, args);
+      return callSqlFunctionSet(env, userFn, boundUser.args);
     }
-    const v = callSqlFunctionScalar(env, userFn, args);
+    const v = callSqlFunctionScalar(env, userFn, boundUser.args);
     return { columns: [{ name: userFn.name, type: v.t === UNKNOWN ? "text" : v.t, table: null }], rows: [[v.v]] };
   }
   const srf = getSrfFunctions().get(bare);
@@ -1959,6 +2030,39 @@ interface ProjItem {
   colIdx: number;
   expr: Expr | null;
   hidden: boolean;
+  /** kind "srf" whose set-returning call sits inside `expr` (`generate_series(...)::date`) */
+  srfCall?: FuncCall;
+}
+
+function isBuiltinSrfCall(e: Expr): boolean {
+  return e.type === "func" && !e.over && e.name.length === 1 && isSrfName(e.name[0]!) && !isAggregateName(e.name[0]!);
+}
+
+/** The first built-in set-returning call nested in a select-list expression (not in a subquery or aggregate). */
+function findNestedSrfCall(e: unknown): FuncCall | null {
+  if (!e || typeof e !== "object") return null;
+  if (Array.isArray(e)) {
+    for (const item of e) {
+      const found = findNestedSrfCall(item);
+      if (found) return found;
+    }
+    return null;
+  }
+  // a subquery (scalar, EXISTS, IN, ANY, ARRAY(...)) is its own query level
+  if ((e as { type?: unknown }).type === "select") return null;
+  const node = e as Expr;
+  if (node.type === "subquery_expr" || node.type === "array_query") return null;
+  if (node.type === "func") {
+    if (isBuiltinSrfCall(node)) return node;
+    if (node.over || isAggregateName(node.name[node.name.length - 1]!)) return null;
+  }
+  for (const value of Object.values(node as unknown as Record<string, unknown>)) {
+    if (value && typeof value === "object") {
+      const found = findNestedSrfCall(value);
+      if (found) return found;
+    }
+  }
+  return null;
 }
 
 function expandTargets(core: SelectCore, columns: Relation["columns"]): ProjItem[] {
@@ -1989,13 +2093,16 @@ function expandTargets(core: SelectCore, columns: Relation["columns"]): ProjItem
       continue;
     }
     const name = t.alias ?? inferColumnName(t.expr);
-    const isSrf =
-      t.expr.type === "func" &&
-      !t.expr.over &&
-      t.expr.name.length === 1 &&
-      isSrfName(t.expr.name[0]!) &&
-      !isAggregateName(t.expr.name[0]!);
-    items.push({ name, kind: isSrf ? "srf" : "expr", colIdx: -1, expr: t.expr, hidden: false });
+    if (isBuiltinSrfCall(t.expr)) {
+      items.push({ name, kind: "srf", colIdx: -1, expr: t.expr, hidden: false });
+      continue;
+    }
+    const nested = findNestedSrfCall(t.expr);
+    items.push(
+      nested
+        ? { name, kind: "srf", colIdx: -1, expr: t.expr, hidden: false, srfCall: nested }
+        : { name, kind: "expr", colIdx: -1, expr: t.expr, hidden: false },
+    );
   }
   return items;
 }
@@ -2380,12 +2487,32 @@ export function executeCore(
         continue;
       }
       if (p.kind === "srf") {
-        const call = p.expr as FuncCall;
+        const call = p.srfCall ?? (p.expr as FuncCall);
         const scope = makeEvalScope(env, rc.scope, extras);
         const args = call.args.map((a) => evalExpr(ctx, scope, a));
         const srf = getSrfFunctions().get(call.name[0]!)!;
         const res = srf(ctx, args, p.name);
-        if (res.columns.length === 1) {
+        if (p.srfCall) {
+          // evaluate the surrounding expression once per produced row, the call standing for that row's value
+          const srfType = res.columns.length === 1 ? res.columns[0]!.type : "record";
+          const outer = (value: Datum): TypedValue =>
+            evalScalar(env, rc.scope, p.expr!, {
+              ...extras,
+              exprOverride: (node) => (node === p.srfCall ? tv(srfType, value) : extras.exprOverride?.(node)),
+            });
+          const srfValue = (r: Datum[]): Datum =>
+            res.columns.length === 1
+              ? (r[0] ?? null)
+              : {
+                  kind: "pgrecord" as const,
+                  types: res.columns.map((c) => c.type),
+                  values: r.slice(),
+                  names: res.columns.map((c) => c.name),
+                };
+          const produced = res.rows.map((r) => outer(srfValue(r)));
+          const type = produced[0]?.t ?? outer(null).t;
+          cells.push({ values: produced.map((v) => v.v), type });
+        } else if (res.columns.length === 1) {
           cells.push({ values: res.rows.map((r) => r[0] ?? null), type: res.columns[0]!.type });
         } else {
           cells.push({
@@ -2443,8 +2570,14 @@ export function executeCore(
       env.outer,
       rangeVars,
     );
+    // aggregates nested inside expressions (`max(x) + 0`, `coalesce(sum(x), 0)`)
+    // probe as their empty-input result so the surrounding expression resolves
+    const probeAggs = new Map<FuncCall, TypedValue>();
+    for (const agg of collector.aggs) {
+      probeAggs.set(agg, computeAggregate(env, agg, [], probeScope));
+    }
     const probeExtras = {
-      aggMap: new Map(),
+      aggMap: probeAggs,
       windowAt: () => tv(UNKNOWN, null),
     };
     const probeType = (expr: Expr): TypeId => {
@@ -2460,10 +2593,22 @@ export function executeCore(
       }
       return evalScalar(env, probeScope, expr, probeExtras).t;
     };
+    // a set-returning call probes through its own result columns (NULL arguments yield no rows)
+    const probeSrfType = (p: ProjItem): TypeId => {
+      const call = p.srfCall ?? (p.expr as FuncCall);
+      const args = call.args.map((a) => evalScalar(env, probeScope, a, probeExtras));
+      const res = getSrfFunctions().get(call.name[0]!)!(ctx, args, p.name);
+      const srfType = res.columns.length === 1 ? res.columns[0]!.type : "record";
+      if (!p.srfCall) return srfType;
+      return evalScalar(env, probeScope, p.expr!, {
+        ...probeExtras,
+        exprOverride: (node) => (node === p.srfCall ? tv(srfType, null) : undefined),
+      }).t;
+    };
     for (let k = 0; k < projItems.length; k++) {
       const p = projItems[k]!;
       if (outColumns[k]!.type !== UNKNOWN || p.kind === "col") continue;
-      const t = probeType(p.expr!);
+      const t = p.kind === "srf" ? probeSrfType(p) : probeType(p.expr!);
       outColumns[k]!.type = t === UNKNOWN ? "text" : t;
     }
   }

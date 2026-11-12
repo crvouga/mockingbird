@@ -55,12 +55,5 @@ export const DDL_SECTION: CatalogSection = section("DDL", "Schema definition", t
   ["domain-02", "domain CHECK violation errors"],
   ["gen-01", "generated STORED column on insert"],
   ["gen-02", "generated column recomputes on UPDATE"],
-  [
-    "comment-01",
-    "COMMENT ON TABLE parses but is not stored",
-    D,
-    "oracle stores the comment; memory obj_description(oid) returns NULL (see tests/contract/_reports/catalog-querydml.md)",
-    undefined,
-    "comment-on-not-stored",
-  ],
+  ["comment-01", "COMMENT ON TABLE is stored and read back with obj_description"],
 ]);

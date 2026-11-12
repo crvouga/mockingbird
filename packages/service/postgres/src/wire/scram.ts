@@ -1,4 +1,84 @@
-import { createHash, createHmac, pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
+import { digestBytes } from "../functions/pgcrypto.ts";
+
+/*
+ * SHA-256, HMAC and PBKDF2 are the engine's own pure implementations rather than `node:crypto`,
+ * so the wire server runs where no Node built-in exists (a browser or edge worker). Randomness
+ * comes from `crypto.getRandomValues`, a global in browsers, workers, Node 20+, Bun and Deno.
+ */
+const utf8 = new TextEncoder();
+const sha256 = (data: Uint8Array): Uint8Array => digestBytes(data, "sha256");
+
+const concat = (a: Uint8Array, b: Uint8Array): Uint8Array => {
+  const out = new Uint8Array(a.byteLength + b.byteLength);
+  out.set(a, 0);
+  out.set(b, a.byteLength);
+  return out;
+};
+
+/** HMAC-SHA-256 (RFC 2104) keyed by `key`. Returns a function, so PBKDF2 reuses the padded keys. */
+const hmacSha256 = (key: Uint8Array): ((message: Uint8Array) => Uint8Array) => {
+  const block = new Uint8Array(64);
+  block.set(key.byteLength > 64 ? sha256(key) : key);
+  const inner = block.map((byte) => byte ^ 0x36);
+  const outer = block.map((byte) => byte ^ 0x5c);
+  return (message) => sha256(concat(outer, sha256(concat(inner, message))));
+};
+
+/** PBKDF2-HMAC-SHA-256 (RFC 8018) for one 32-byte block, which is all SCRAM-SHA-256 needs. */
+const pbkdf2Sha256 = (password: Uint8Array, salt: Uint8Array, iterations: number): Uint8Array => {
+  const prf = hmacSha256(password);
+  let u = prf(concat(salt, new Uint8Array([0, 0, 0, 1])));
+  const out = u.slice();
+  for (let i = 1; i < iterations; i++) {
+    u = prf(u);
+    for (let j = 0; j < out.byteLength; j++) out[j] = (out[j] as number) ^ (u[j] as number);
+  }
+  return out;
+};
+
+const randomBytes = (length: number): Uint8Array => crypto.getRandomValues(new Uint8Array(length));
+
+const BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+const toBase64 = (bytes: Uint8Array): string => {
+  let out = "";
+  for (let i = 0; i < bytes.byteLength; i += 3) {
+    const a = bytes[i] as number;
+    const b = bytes[i + 1];
+    const c = bytes[i + 2];
+    const n = (a << 16) | ((b ?? 0) << 8) | (c ?? 0);
+    out += BASE64[(n >> 18) & 63];
+    out += BASE64[(n >> 12) & 63];
+    out += b === undefined ? "=" : BASE64[(n >> 6) & 63];
+    out += c === undefined ? "=" : BASE64[n & 63];
+  }
+  return out;
+};
+
+/** Decode standard base64; null when `text` is not well-formed. */
+const fromBase64 = (text: string): Uint8Array | null => {
+  if (text.length % 4 !== 0 || !/^[A-Za-z0-9+/]*={0,2}$/.test(text)) return null;
+  const padding = text.endsWith("==") ? 2 : text.endsWith("=") ? 1 : 0;
+  const out = new Uint8Array((text.length / 4) * 3 - padding);
+  let at = 0;
+  for (let i = 0; i < text.length; i += 4) {
+    const n =
+      (BASE64.indexOf(text[i] as string) << 18) |
+      (BASE64.indexOf(text[i + 1] as string) << 12) |
+      (Math.max(0, BASE64.indexOf(text[i + 2] as string)) << 6) |
+      Math.max(0, BASE64.indexOf(text[i + 3] as string));
+    for (const byte of [(n >> 16) & 255, (n >> 8) & 255, n & 255]) if (at < out.byteLength) out[at++] = byte;
+  }
+  return out;
+};
+
+/** Compare without an early exit, as `timingSafeEqual` does. */
+const sameBytes = (a: Uint8Array, b: Uint8Array): boolean => {
+  if (a.byteLength !== b.byteLength) return false;
+  let diff = 0;
+  for (let i = 0; i < a.byteLength; i++) diff |= (a[i] as number) ^ (b[i] as number);
+  return diff === 0;
+};
 
 /**
  * Server side of SCRAM-SHA-256 (RFC 7677) as PostgreSQL speaks it: one round trip after the
@@ -21,8 +101,8 @@ export class ScramServer {
     const nonce = /(?:^|,)r=([^,]+)/.exec(bare)?.[1];
     if (!nonce) return null;
     this.clientFirstBare = bare;
-    this.nonce = nonce + randomBytes(18).toString("base64");
-    this.serverFirst = `r=${this.nonce},s=${this.salt.toString("base64")},i=${this.iterations}`;
+    this.nonce = nonce + toBase64(randomBytes(18));
+    this.serverFirst = `r=${this.nonce},s=${toBase64(this.salt)},i=${this.iterations}`;
     return this.serverFirst;
   }
 
@@ -31,23 +111,23 @@ export class ScramServer {
     const proofAt = clientFinal.lastIndexOf(",p=");
     if (proofAt === -1) return null;
     const withoutProof = clientFinal.slice(0, proofAt);
-    const proof = Buffer.from(clientFinal.slice(proofAt + 3), "base64");
+    const proof = fromBase64(clientFinal.slice(proofAt + 3));
+    if (proof === null) return null;
     const nonce = /(?:^|,)r=([^,]+)/.exec(withoutProof)?.[1];
     if (nonce !== this.nonce) return null;
-    const salted = pbkdf2Sync(this.password, this.salt, this.iterations, 32, "sha256");
-    const clientKey = createHmac("sha256", salted).update("Client Key").digest();
-    const storedKey = createHash("sha256").update(clientKey).digest();
-    const authMessage = `${this.clientFirstBare},${this.serverFirst},${withoutProof}`;
-    const clientSignature = createHmac("sha256", storedKey).update(authMessage).digest();
+    const salted = pbkdf2Sha256(utf8.encode(this.password), this.salt, this.iterations);
+    const salt = hmacSha256(salted);
+    const clientKey = salt(utf8.encode("Client Key"));
+    const storedKey = sha256(clientKey);
+    const authMessage = utf8.encode(`${this.clientFirstBare},${this.serverFirst},${withoutProof}`);
+    const clientSignature = hmacSha256(storedKey)(authMessage);
     if (proof.byteLength !== clientSignature.byteLength) return null;
-    const recovered = Buffer.alloc(clientKey.byteLength);
+    const recovered = new Uint8Array(clientKey.byteLength);
     for (let i = 0; i < recovered.byteLength; i++) {
       recovered[i] = (proof[i] as number) ^ (clientSignature[i] as number);
     }
-    const recoveredStored = createHash("sha256").update(recovered).digest();
-    if (!timingSafeEqual(recoveredStored, storedKey)) return null;
-    const serverKey = createHmac("sha256", salted).update("Server Key").digest();
-    const serverSignature = createHmac("sha256", serverKey).update(authMessage).digest();
-    return `v=${serverSignature.toString("base64")}`;
+    if (!sameBytes(sha256(recovered), storedKey)) return null;
+    const serverKey = salt(utf8.encode("Server Key"));
+    return `v=${toBase64(hmacSha256(serverKey)(authMessage))}`;
   }
 }

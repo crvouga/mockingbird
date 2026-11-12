@@ -3,7 +3,9 @@ import type { EngineCtx } from "../expressions/context.ts";
 import { pgTrgmInstalled } from "../functions/pgtrgm.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import { deparseDefault } from "../sql/deparse-default.ts";
-import { UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
+import { type Interval, UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
+import { zoneOffsetAtUtc } from "../types/timezone.ts";
+import { TIMEZONE_ABBREVS, TIMEZONE_NAMES } from "../types/timezone-data.ts";
 import { builtinNamespaceOid } from "../types/regnamespace.ts";
 import { type Datum, TYPE_OIDS, type TypeId } from "../types/value.ts";
 import { catalogRelationOid } from "./catalog-oids.ts";
@@ -292,7 +294,7 @@ function pgLocks(ctx: EngineCtx): Relation {
         null,
         null,
         virtualTransaction,
-        BACKEND_PID,
+        currentBackendPid(ctx),
         "AccessShareLock",
         true,
         true,
@@ -310,7 +312,7 @@ function pgLocks(ctx: EngineCtx): Relation {
         null,
         null,
         virtualTransaction,
-        BACKEND_PID,
+        currentBackendPid(ctx),
         "ExclusiveLock",
         true,
         true,
@@ -327,12 +329,59 @@ function databaseOidOf(ctx: EngineCtx): number {
   return 5 + Math.max(index, 0);
 }
 
+/** The pid of the session running this statement: its wire connection's, or the engine's one backend. */
+export function currentBackendPid(ctx: EngineCtx): number {
+  return databaseCatalogContext(ctx.state).currentPid?.() ?? BACKEND_PID;
+}
+
 /**
- * `pg_stat_activity`: the current backend, active. The statement text is not tracked, so `query`
- * is empty; other backends of a wire server are not listed.
+ * `pg_stat_activity`: one row per backend. The engine on its own has one (the current, active);
+ * a wire server lists each connected session, with its database, application_name, state, and a
+ * Lock wait for a session waiting on another's lock. The statement text is not tracked, so `query`
+ * is empty, and the timestamps are the current time.
  */
 function pgStatActivity(ctx: EngineCtx): Relation {
   const now = BigInt(Math.round(ctx.state.clock().getTime())) * 1000n + UNIX_EPOCH_MICROS_FROM_PG;
+  const context = databaseCatalogContext(ctx.state);
+  const names = context.names();
+  const self = currentBackendPid(ctx);
+  const backends = context.backends?.() ?? [
+    {
+      pid: self,
+      databaseName: context.name,
+      applicationName: ctx.state.getSetting("application_name") ?? "",
+      state: "active",
+      waiting: false,
+    },
+  ];
+  const rows: Datum[][] = backends.map((backend) => {
+    const current = backend.pid === self;
+    const state = current ? "active" : backend.state;
+    return [
+      5 + Math.max(names.indexOf(backend.databaseName), 0),
+      backend.databaseName,
+      backend.pid,
+      null,
+      SUPERUSER_OID,
+      "postgres",
+      current ? (ctx.state.getSetting("application_name") ?? "") : backend.applicationName,
+      null,
+      null,
+      null,
+      now,
+      state === "idle" ? null : now,
+      now,
+      now,
+      backend.waiting ? "Lock" : state === "idle" ? "Client" : null,
+      backend.waiting ? "advisory" : state === "idle" ? "ClientRead" : null,
+      state,
+      null,
+      null,
+      null,
+      "",
+      "client backend",
+    ];
+  });
   return rel(
     [
       ["datid", "oid"],
@@ -358,33 +407,134 @@ function pgStatActivity(ctx: EngineCtx): Relation {
       ["query", "text"],
       ["backend_type", "text"],
     ],
-    [
-      [
-        databaseOidOf(ctx),
-        databaseCatalogContext(ctx.state).name,
-        BACKEND_PID,
-        null,
-        SUPERUSER_OID,
-        "postgres",
-        "",
-        null,
-        null,
-        null,
-        now,
-        now,
-        now,
-        now,
-        null,
-        null,
-        "active",
-        null,
-        null,
-        null,
-        "",
-        "client backend",
-      ],
-    ],
+    rows,
     "pg_stat_activity",
+  );
+}
+
+/**
+ * `pg_stat_database`: a row per database, plus PostgreSQL's row for shared objects (datid 0).
+ * `numbackends` counts the sessions connected to each; the I/O and tuple counters the engine
+ * does not collect read zero.
+ */
+function pgStatDatabase(ctx: EngineCtx): Relation {
+  const context = databaseCatalogContext(ctx.state);
+  const names = context.names();
+  const backends = context.backends?.() ?? [{ databaseName: context.name }];
+  const row = (datid: number, datname: string | null, numbackends: number | null): Datum[] => [
+    datid,
+    datname,
+    numbackends,
+    ...Array.from({ length: 14 }, () => 0n),
+    null,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0n,
+    0n,
+    0n,
+    0n,
+    0n,
+    0n,
+    null,
+  ];
+  const rows: Datum[][] = [row(0, null, 0)];
+  names.forEach((name, index) => {
+    rows.push(row(5 + index, name, backends.filter((b) => b.databaseName === name).length));
+  });
+  return rel(
+    [
+      ["datid", "oid"],
+      ["datname", "name"],
+      ["numbackends", "int4"],
+      ["xact_commit", "int8"],
+      ["xact_rollback", "int8"],
+      ["blks_read", "int8"],
+      ["blks_hit", "int8"],
+      ["tup_returned", "int8"],
+      ["tup_fetched", "int8"],
+      ["tup_inserted", "int8"],
+      ["tup_updated", "int8"],
+      ["tup_deleted", "int8"],
+      ["conflicts", "int8"],
+      ["temp_files", "int8"],
+      ["temp_bytes", "int8"],
+      ["deadlocks", "int8"],
+      ["checksum_failures", "int8"],
+      ["checksum_last_failure", "timestamptz"],
+      ["blk_read_time", "float8"],
+      ["blk_write_time", "float8"],
+      ["session_time", "float8"],
+      ["active_time", "float8"],
+      ["idle_in_transaction_time", "float8"],
+      ["sessions", "int8"],
+      ["sessions_abandoned", "int8"],
+      ["sessions_fatal", "int8"],
+      ["sessions_killed", "int8"],
+      ["parallel_workers_to_launch", "int8"],
+      ["parallel_workers_launched", "int8"],
+      ["stats_reset", "timestamptz"],
+    ],
+    rows,
+    "pg_stat_database",
+  );
+}
+
+const interval = (seconds: number): Interval => ({
+  kind: "interval",
+  months: 0,
+  days: 0,
+  micros: BigInt(seconds) * 1_000_000n,
+});
+
+/**
+ * `pg_timezone_names`: every zone name PostgreSQL's tz database has, with its abbreviation, offset
+ * and DST flag at the current transaction time. The offsets come from the same zone rules
+ * `AT TIME ZONE` uses; the abbreviations are PostgreSQL's (`MST`, `IST`, `-07`).
+ */
+function pgTimezoneNames(ctx: EngineCtx): Relation {
+  const now = ctx.txNow;
+  const year = new Date(Number((now - UNIX_EPOCH_MICROS_FROM_PG) / 1000n)).getUTCFullYear();
+  const at = (month: number) => BigInt(Date.UTC(year, month, 15, 12)) * 1000n + UNIX_EPOCH_MICROS_FROM_PG;
+  const rows: Datum[][] = [];
+  for (const [name, january, july] of TIMEZONE_NAMES) {
+    let offset = 0;
+    let winter = 0;
+    let summer = 0;
+    try {
+      offset = zoneOffsetAtUtc(name, now);
+      winter = zoneOffsetAtUtc(name, at(0));
+      summer = zoneOffsetAtUtc(name, at(6));
+    } catch {
+      // a zone the host's time zone data does not know (Factory): UTC
+    }
+    const abbrev = offset === winter ? january : offset === summer ? (july ?? january) : january;
+    rows.push([name, abbrev, interval(offset), offset > Math.min(winter, summer)]);
+  }
+  return rel(
+    [
+      ["name", "text"],
+      ["abbrev", "text"],
+      ["utc_offset", "interval"],
+      ["is_dst", "bool"],
+    ],
+    rows,
+    "pg_timezone_names",
+  );
+}
+
+/** `pg_timezone_abbrevs`: the abbreviations of PostgreSQL's Default set (timezone_abbreviations). */
+function pgTimezoneAbbrevs(): Relation {
+  return rel(
+    [
+      ["abbrev", "text"],
+      ["utc_offset", "interval"],
+      ["is_dst", "bool"],
+    ],
+    TIMEZONE_ABBREVS.map(([abbrev, offset, isDst]) => [abbrev, interval(offset), isDst]),
+    "pg_timezone_abbrevs",
   );
 }
 
@@ -407,6 +557,12 @@ export function systemCatalogRelation(ctx: EngineCtx, name: string): Relation | 
       return pgLocks(ctx);
     case "pg_stat_activity":
       return pgStatActivity(ctx);
+    case "pg_stat_database":
+      return pgStatDatabase(ctx);
+    case "pg_timezone_names":
+      return pgTimezoneNames(ctx);
+    case "pg_timezone_abbrevs":
+      return pgTimezoneAbbrevs();
     default:
       return null;
   }

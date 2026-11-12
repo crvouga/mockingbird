@@ -1,13 +1,15 @@
-import { flushConstraintTriggers, setConstraints } from "./triggers.ts";
 import type { AlterTableStmt, Statement } from "../ast/nodes.ts";
 import { pgError } from "../errors/error.ts";
+import { flushConstraintTriggers, setConstraints } from "./triggers.ts";
 // side effect: registers the pg_catalog / information_schema builder
 import "../schema/catalog-tables.ts";
 import "./triggers-exec.ts";
 import { EngineCtx } from "../expressions/context.ts";
 import { syncIndexCatalog } from "../schema/index-catalog.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
+import { beforeStatement } from "../transactions/read-only.ts";
 import type { TypedValue } from "../types/value.ts";
+import { executeComment } from "./comment.ts";
 import {
   executeAlterEnum,
   executeAlterIndex,
@@ -31,8 +33,8 @@ import {
 } from "./ddl.ts";
 import { executeDelete, executeInsert, executeUpdate, withStatementRollback } from "./dml.ts";
 import { executeCreateExtension } from "./extensions.ts";
-import { executeComment } from "./comment.ts";
 import { executeAnalyze, executeReindex } from "./maintenance.ts";
+import { executeMerge } from "./merge.ts";
 import { executeDo } from "./plpgsql.ts";
 import { commandResult, type ExecEnv, type ExecResult, relationResult } from "./relation.ts";
 import { executeSelectStmt, setStatementRunner } from "./select.ts";
@@ -46,6 +48,7 @@ import {
   executeSet,
   executeShow,
   executeTransaction,
+  txManagerFor,
 } from "./session.ts";
 
 /** Statements that can add, move, rename or drop a table, and so the indexes that follow it. */
@@ -80,6 +83,7 @@ function alterTableIsSelfContained(stmt: AlterTableStmt): boolean {
 
 /** Execute one parsed statement against `state`. */
 export function executeStatement(env: ExecEnv, stmt: Statement): ExecResult {
+  beforeStatement(env.ctx.state, txManagerFor(env.ctx.state), stmt);
   if (!RESHAPES_TABLES.has(stmt.type)) {
     if (
       (stmt.type === "insert" || stmt.type === "update" || stmt.type === "delete") &&
@@ -112,6 +116,8 @@ function dispatchStatement(env: ExecEnv, stmt: Statement): ExecResult {
       return executeUpdate(env, stmt);
     case "delete":
       return executeDelete(env, stmt);
+    case "merge":
+      return executeMerge(env, stmt);
     case "create_table":
       return executeCreateTable(env, stmt);
     case "create_table_as":

@@ -27,14 +27,6 @@ PGlite oracle (Postgres 18.3). Each bullet: the SQL, the memory result, the orac
 - `SELECT log(2::numeric, 8::numeric)` — memory: `2.9999999999999997`; oracle: `3.0000000000000000`
 - `SELECT 2::numeric ^ 10` — memory: `1024`; oracle: `1024.0000000000000`
 - `SELECT 9::numeric ^ 0.5` — memory: `3.000000000000000`; oracle: `3.0000000000000000`
-- `SELECT power(2::numeric, 10)` — memory: `1024`; oracle: `1024.0000000000000`
-
-## Float semantics
-
-- `SELECT round(2.5::float8)` — memory: `3`; oracle: `2` (round half to even)
-- `SELECT power(1::float8, 'NaN'::float8)` — memory: `NaN`; oracle: `1`
-- `SELECT power(0::float8, -1)` — memory: succeeds (`Infinity`); oracle: error 2201F
-  `zero raised to a negative power is undefined`
 
 ## Parser
 

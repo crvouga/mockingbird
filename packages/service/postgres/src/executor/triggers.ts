@@ -1,7 +1,9 @@
 import { EngineCtx } from "../expressions/context.ts";
+import { replicaRole } from "../storage/guc.ts";
 import { pgError } from "../errors/error.ts";
 import type { SetConstraintsStmt } from "../ast/nodes.ts";
-import type { DatabaseState } from "../storage/database-state.ts";
+import { flushDeferredForeignKeys } from "../constraints/enforce.ts";
+import type { DatabaseState, SchemaData } from "../storage/database-state.ts";
 import { evalPredicate } from "./select.ts";
 import { triggerScope } from "./triggers-scope.ts";
 import { unsupported } from "../errors/error.ts";
@@ -48,6 +50,7 @@ export function fireRowTriggers(
   newRow: Datum[] | null,
 ): TriggerFireResult {
   let row = newRow ?? oldRow;
+  if (replicaRole(env.ctx.state)) return { row };
   for (const t of table.triggers) {
     if (t.timing !== timing || !matches(t, event) || !t.forEachRow) continue;
     if (!executor) throw unsupported(`trigger "${t.name}" execution`);
@@ -64,10 +67,12 @@ export function fireRowTriggers(
       });
       continue;
     }
-    const result = executor(env, table, t, event, oldRow, timing === "before" ? row : newRow);
+    // NEW is NULL in a DELETE trigger; a BEFORE trigger sees the row as earlier BEFORE triggers left it
+    const triggerNew = event === "delete" ? null : timing === "before" ? row : newRow;
+    const result = executor(env, table, t, event, oldRow, triggerNew);
     if (timing === "before") {
       if (result === null) return { row: null };
-      row = result;
+      if (event !== "delete") row = result;
     }
   }
   return { row };
@@ -108,6 +113,7 @@ export function fireStatementTriggers(
   event: TriggerEvent,
   transitions?: TransitionRows,
 ): void {
+  if (replicaRole(env.ctx.state)) return;
   const fired = table.triggers
     .filter((t) => !t.forEachRow && t.timing === timing && matches(t, event))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
@@ -165,17 +171,26 @@ export function flushConstraintTriggers(state: DatabaseState, all = false): void
 
 export function setConstraints(state: DatabaseState, stmt: SetConstraintsStmt): void {
   if (!state.inTransaction) return;
-  const matches: Array<{ schema: string; trigger: TriggerMeta }> = [];
+  // Constraint triggers and foreign keys share SET CONSTRAINTS; both are looked up by name per schema.
+  const matches: Array<{ schema: string; name: string; deferrable: boolean }> = [];
+  const candidates = (schema: SchemaData) =>
+    [...schema.tables.values()].flatMap((table) => [
+      ...table.triggers
+        .filter((t) => t.constraint)
+        .map((t) => ({ schema: schema.name, name: t.name, deferrable: t.deferrable === true })),
+      ...table.constraints
+        .filter((c) => c.kind === "foreign_key")
+        .map((c) => ({ schema: schema.name, name: c.name, deferrable: c.deferrable === true })),
+    ]);
   if (stmt.names) {
     for (const name of stmt.names) {
       const schemas = name.length > 1 ? [name[name.length - 2]!] : state.effectiveSearchPath();
       let found = false;
-      for (const schema of schemas) {
-        const items = [...(state.schemas.get(schema)?.tables.values() ?? [])].flatMap((table) =>
-          table.triggers.filter((t) => t.constraint && t.name === name[name.length - 1]),
-        );
+      for (const schemaName of schemas) {
+        const schema = state.schemas.get(schemaName);
+        const items = schema ? candidates(schema).filter((c) => c.name === name[name.length - 1]) : [];
         if (items.length) {
-          for (const trigger of items) matches.push({ schema, trigger });
+          matches.push(...items);
           found = true;
           break;
         }
@@ -183,18 +198,18 @@ export function setConstraints(state: DatabaseState, stmt: SetConstraintsStmt): 
       if (!found) throw pgError("undefined_object", `constraint "${name.join(".")}" does not exist`, "42704");
     }
   } else {
-    for (const schema of state.schemas.values())
-      for (const table of schema.tables.values())
-        for (const trigger of table.triggers)
-          if (trigger.constraint && trigger.deferrable) matches.push({ schema: schema.name, trigger });
+    for (const schema of state.schemas.values()) matches.push(...candidates(schema).filter((c) => c.deferrable));
   }
-  for (const { trigger } of matches)
-    if (stmt.deferred && !trigger.deferrable)
-      throw pgError("misuse", `constraint "${trigger.name}" is not deferrable`, "55000");
+  for (const match of matches)
+    if (stmt.deferred && !match.deferrable)
+      throw pgError("misuse", `constraint "${match.name}" is not deferrable`, "55000");
   const previous = new Map(state.constraintModes);
-  for (const { schema, trigger } of matches) state.constraintModes.set(keyOf(schema, trigger.name), stmt.deferred);
+  for (const { schema, name } of matches) state.constraintModes.set(keyOf(schema, name), stmt.deferred);
   try {
-    if (!stmt.deferred) flushConstraintTriggers(state);
+    if (!stmt.deferred) {
+      flushConstraintTriggers(state);
+      flushDeferredForeignKeys(state);
+    }
   } catch (error) {
     state.constraintModes = previous;
     throw error;

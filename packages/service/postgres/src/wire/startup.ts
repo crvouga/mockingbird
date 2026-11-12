@@ -11,6 +11,8 @@
  * A failure there is an ERROR raised before the backend can recover from one, which PostgreSQL
  * reports as FATAL and closes the connection.
  */
+import { isPostgresError } from "../errors/error.ts";
+import { type GucDef, gucDef, normalizeGucValue } from "../storage/guc-catalog.ts";
 import { validateZone } from "../types/timezone.ts";
 
 /** ErrorResponse fields of a rejected startup packet; the connection always ends with FATAL. */
@@ -356,6 +358,21 @@ const PARAMETERS: Record<string, { display?: string; check: Check; ignored?: tru
   max_identifier_length: { check: readOnly },
 };
 
+/** Any other PostgreSQL parameter: settable at connection start unless fixed at server start or reload. */
+const catalogCheck = (def: GucDef, value: string): string => {
+  if (def.context === "internal") throw fail("55P02", `parameter "${def.name}" cannot be changed`);
+  if (def.context === "postmaster") {
+    throw fail("55P02", `parameter "${def.name}" cannot be changed without restarting the server`);
+  }
+  if (def.context === "sighup") throw fail("55P02", `parameter "${def.name}" cannot be changed now`);
+  try {
+    return normalizeGucValue(def, value);
+  } catch (error) {
+    if (isPostgresError(error)) throw fail(error.sqlState, error.message);
+    throw error;
+  }
+};
+
 /**
  * Check `settings` and write them into `session`, a copy of the database's settings. Returns the
  * values that are now the session's reset defaults. A parameter the engine has no setting for
@@ -368,11 +385,16 @@ export const applyStartupSettings = (
   const applied = new Map<string, string>();
   for (const { name, value } of settings) {
     const key = name.toLowerCase();
-    if (!session.has(key) && !key.includes(".")) {
+    const def = gucDef(key);
+    if (!session.has(key) && !def && !key.includes(".")) {
       throw fail("42704", `unrecognized configuration parameter "${name}"`);
     }
     const parameter = PARAMETERS[key];
-    const checked = parameter ? parameter.check(value, parameter.display ?? key, session) : value;
+    const checked = parameter
+      ? parameter.check(value, parameter.display ?? key, session)
+      : def
+        ? catalogCheck(def, value)
+        : value;
     if (parameter?.ignored) continue;
     session.set(key, checked);
     applied.set(key, checked);

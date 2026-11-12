@@ -18,6 +18,7 @@ import {
   numericMod,
   numericMul,
   numericPower,
+  numericRescale,
   numericRound,
   numericSign,
   numericSqrt,
@@ -43,11 +44,48 @@ function checkFloat(v: number, _op: string): number {
   return v;
 }
 
-function floatErr(v: number, allowInf: boolean): number {
-  if (!allowInf && !Number.isFinite(v) && !Number.isNaN(v)) {
-    throw pgError("numeric_value_out_of_range", "value out of range: overflow");
+/** C rint(): round half to even, keeping the sign of zero */
+function rint(f: number): number {
+  if (!Number.isFinite(f)) return f;
+  const floor = Math.floor(f);
+  const diff = f - floor;
+  let r: number;
+  if (diff > 0.5) r = floor + 1;
+  else if (diff < 0.5) r = floor;
+  else r = floor % 2 === 0 ? floor : floor + 1;
+  return r === 0 && (f < 0 || Object.is(f, -0)) ? -0 : r;
+}
+
+/** round(numeric, s) / trunc(numeric, s) show exactly s fraction digits for s > 0 (`round(4.2, 3)` is 4.200) */
+function padScale(v: Numeric, s: number): Numeric {
+  const target = Math.min(s, 2000);
+  return target > v.dscale ? numericRescale(v, target) : v;
+}
+
+/** float8 `power` with PostgreSQL's dpow() edge cases and range errors */
+function floatPower(x: number, y: number): number {
+  if (Number.isNaN(x)) return y === 0 ? 1 : Number.NaN;
+  if (Number.isNaN(y)) return x === 1 ? 1 : Number.NaN;
+  if (x === 0 && y < 0) {
+    throw pgError("invalid_argument_for_power_function", "zero raised to a negative power is undefined", "2201F");
   }
-  return v;
+  if (x < 0 && Number.isFinite(x) && Number.isFinite(y) && !Number.isInteger(y)) {
+    throw pgError(
+      "invalid_argument_for_power_function",
+      "a negative number raised to a non-integer power yields a complex result",
+      "2201F",
+    );
+  }
+  // C's pow(): (-1) ** ±Infinity is 1, |x| < 1 ** -Infinity is +Infinity, etc.
+  if (Math.abs(x) === 1 && !Number.isFinite(y)) return 1;
+  const r = x ** y;
+  if (!Number.isFinite(r) && Number.isFinite(x) && Number.isFinite(y)) {
+    throw pgError("numeric_value_out_of_range", "value out of range: overflow", "22003");
+  }
+  if (r === 0 && x !== 0 && Number.isFinite(x) && Number.isFinite(y)) {
+    throw pgError("numeric_value_out_of_range", "value out of range: underflow", "22003");
+  }
+  return r;
 }
 
 export function getMathFunctions(): Map<string, ScalarFn> {
@@ -99,16 +137,14 @@ export function getMathFunctions(): Map<string, ScalarFn> {
       const a = args[0]!;
       if (args.length === 1) {
         if (isFloatArg(a)) {
-          // PG float round: round-half-away-from-zero
-          const f = argFloat(ctx, a);
-          const r = f >= 0 ? Math.round(f) : -Math.round(-f);
-          return tv("float8", r);
+          // PG float round is C rint(): ties go to the even neighbour, the sign of zero is kept
+          return tv("float8", rint(argFloat(ctx, a)));
         }
         if (isIntType(a.t)) return tv(a.t, a.v);
         return tv("numeric", numericRound(argNumeric(ctx, a), 0));
       }
       const s = argInt(ctx, args[1]!);
-      return tv("numeric", numericRound(argNumeric(ctx, a), s));
+      return tv("numeric", padScale(numericRound(argNumeric(ctx, a), s), s));
     }),
   );
   m.set(
@@ -121,7 +157,7 @@ export function getMathFunctions(): Map<string, ScalarFn> {
         return tv("numeric", numericTrunc(argNumeric(ctx, a), 0));
       }
       const s = argInt(ctx, args[1]!);
-      return tv("numeric", numericTrunc(argNumeric(ctx, a), s));
+      return tv("numeric", padScale(numericTrunc(argNumeric(ctx, a), s), s));
     }),
   );
   m.set(
@@ -156,7 +192,17 @@ export function getMathFunctions(): Map<string, ScalarFn> {
     "exp",
     strict("numeric", (ctx, args) => {
       const a = args[0]!;
-      if (isFloatArg(a)) return tv("float8", floatErr(Math.exp(argFloat(ctx, a)), true));
+      if (isFloatArg(a)) {
+        const f = argFloat(ctx, a);
+        const r = Math.exp(f);
+        if (Number.isFinite(f) && r === Number.POSITIVE_INFINITY) {
+          throw pgError("numeric_value_out_of_range", "value out of range: overflow", "22003");
+        }
+        if (Number.isFinite(f) && r === 0) {
+          throw pgError("numeric_value_out_of_range", "value out of range: underflow", "22003");
+        }
+        return tv("float8", r);
+      }
       return tv("numeric", numericExp(argNumeric(ctx, a)));
     }),
   );
@@ -199,14 +245,22 @@ export function getMathFunctions(): Map<string, ScalarFn> {
       return tv("numeric", numericLog10(argNumeric(ctx, a)));
     }),
   );
-  const powerFn = strict("numeric", (ctx: Parameters<ScalarFn>[0], args: TypedValue[]) => {
+  const powerFn: ScalarFn = (ctx, args) => {
     const a = args[0]!;
     const b = args[1]!;
-    if (isFloatArg(a) || isFloatArg(b)) {
-      return tv("float8", floatErr(argFloat(ctx, a) ** argFloat(ctx, b), true));
+    if (a.v === null || b.v === null) {
+      return tv(
+        (a.t === "numeric" || b.t === "numeric") && !isFloatArg(a) && !isFloatArg(b) ? "numeric" : "float8",
+        null,
+      );
+    }
+    // power(float8, float8) and power(numeric, numeric): integer and unknown arguments resolve to
+    // float8, the preferred numeric type; only a numeric argument picks the numeric variant
+    if (isFloatArg(a) || isFloatArg(b) || (a.t !== "numeric" && b.t !== "numeric")) {
+      return tv("float8", floatPower(argFloat(ctx, a), argFloat(ctx, b)));
     }
     return tv("numeric", numericPower(argNumeric(ctx, a), argNumeric(ctx, b)));
-  });
+  };
   m.set("power", powerFn);
   m.set("pow", powerFn);
   m.set(
@@ -434,7 +488,7 @@ export function getMathFunctions(): Map<string, ScalarFn> {
       throw pgError("invalid_parameter_value", `setseed parameter ${seed} is out of allowed range [-1,1]`, "22023");
     }
     ctx.state.prng.setSeedFloat(seed);
-    return tv("void", null);
+    return tv("void", "");
   });
   m.set(
     "erf",
@@ -471,8 +525,34 @@ export function getMathFunctions(): Map<string, ScalarFn> {
   m.set("num_nulls", (_ctx, args) => tv("int4", args.filter((a) => a.v === null).length));
   m.set("num_nonnulls", (_ctx, args) => tv("int4", args.filter((a) => a.v !== null).length));
 
+  // These have only float8 and numeric single-argument overloads: an integer or unknown argument
+  // resolves to float8, the preferred numeric type (`sqrt(4)` is double precision `2`).
+  for (const name of FLOAT_PREFERRED_UNARY) {
+    const impl = m.get(name)!;
+    m.set(name, (ctx, args) => {
+      const a = args[0];
+      if (args.length !== 1 || a === undefined || !(isIntType(a.t) || a.t === "unknown")) return impl(ctx, args);
+      const f = castTo(ctx, a, "float8", { explicit: true });
+      return f.v === null ? f : impl(ctx, [f]);
+    });
+  }
+
   return m;
 }
+
+const FLOAT_PREFERRED_UNARY = [
+  "ceil",
+  "ceiling",
+  "floor",
+  "round",
+  "trunc",
+  "sign",
+  "sqrt",
+  "exp",
+  "ln",
+  "log",
+  "log10",
+];
 
 function bigintGcd(a: bigint, b: bigint): bigint {
   let x = a < 0n ? -a : a;

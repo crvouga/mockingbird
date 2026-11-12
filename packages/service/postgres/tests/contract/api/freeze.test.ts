@@ -29,12 +29,12 @@ describe("public API exports", () => {
     ]);
   });
 
-  test("package.json exports ., ./admin, ./unstable, ./wire and ./server", () => {
+  test("package.json exports ., ./admin, ./unstable, ./wire, ./transport and ./server", () => {
     const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../../package.json"), "utf8")) as {
       exports: Record<string, unknown>;
       mockingbird?: { entries?: Record<string, string> };
     };
-    expect(Object.keys(pkg.exports).sort()).toEqual([".", "./admin", "./server", "./unstable", "./wire"]);
+    expect(Object.keys(pkg.exports).sort()).toEqual([".", "./admin", "./server", "./transport", "./unstable", "./wire"]);
     // The wire server is a Node-only entry, so the main and unstable entries stay portable.
     expect(pkg.mockingbird?.entries).toEqual({
       "wire/index": "node",

@@ -117,9 +117,9 @@
     {
       "id": "row-value-subquery-arity",
       "scope": "sql",
-      "predicate": "Row-constructor arity mismatches surface at execution (21000) instead of parse time (42601), and multi-column row-value IN (SELECT ...) is rejected as unsupported",
-      "specifiedBehavior": "Single-column IN subqueries have full parity; multi-column row-value subquery comparison is out of scope for this milestone and fails loud.",
-      "pinnedBy": ["PAR-row-03", "EXP-in-03"]
+      "predicate": "Row-constructor arity mismatches between two row constructors surface at execution (21000) instead of parse time (42601)",
+      "specifiedBehavior": "Row-value IN / = / ANY / ALL against a multi-column subquery have parity (42601 on a column-count mismatch); only the constructor-vs-constructor arity error differs.",
+      "pinnedBy": ["PAR-row-03"]
     },
     {
       "id": "float8-overflow-saturates",
@@ -129,25 +129,11 @@
       "pinnedBy": ["TYP-float-04"]
     },
     {
-      "id": "round-half-away-from-zero",
-      "scope": "sql",
-      "predicate": "round(float8) rounds ties away from zero (round(2.5::float8) = 3); PostgreSQL rounds half to even (= 2)",
-      "specifiedBehavior": "numeric round() has full parity; only the float8 overload diverges on exact .5 ties.",
-      "pinnedBy": ["FUN-round-02"]
-    },
-    {
       "id": "drop-cascade-view-retained",
       "scope": "sql",
       "predicate": "DROP TABLE ... CASCADE does not drop dependent views; the view remains and errors when queried",
       "specifiedBehavior": "Dependency tracking for CASCADE drops of views is not implemented; drop the view explicitly.",
       "pinnedBy": ["DDL-drop-03"]
-    },
-    {
-      "id": "comment-on-not-stored",
-      "scope": "sql",
-      "predicate": "COMMENT ON for any object other than an index parses and succeeds but the comment is not stored; obj_description() / col_description() return NULL for it and pg_description has no row",
-      "specifiedBehavior": "COMMENT ON INDEX is persisted (pg_description, obj_description) and differential-tested. For tables, columns and every other object kind COMMENT ON is accepted for compatibility and the description is not persisted; a missing target of those kinds is not an error either.",
-      "pinnedBy": ["DDL-comment-01"]
     },
     {
       "id": "trigger-order-creation",
@@ -185,13 +171,6 @@
       "pinnedBy": ["CAT-ver-01"]
     },
     {
-      "id": "pg-get-viewdef-missing",
-      "scope": "catalog",
-      "predicate": "pg_get_viewdef() is not implemented and raises 42883",
-      "specifiedBehavior": "View definitions are visible via information_schema.views.view_definition (stored SQL text).",
-      "pinnedBy": ["CAT-viewdef-01"]
-    },
-    {
       "id": "storage-persistence-catalog-only",
       "scope": "sql",
       "predicate": "Column storage modes (STORAGE / SET STORAGE, pg_attribute.attstorage) and relation persistence (UNLOGGED, SET LOGGED / UNLOGGED, pg_class.relpersistence) are catalog metadata only: there is no TOAST and no write-ahead log",
@@ -225,6 +204,13 @@
       "predicate": "pg_index exposes indexrelid, indrelid, indnatts, indnkeyatts and the boolean flags; indexprs and indpred are the deparsed text that pg_get_expr() returns rather than pg_node_tree, and indkey, indcollation, indclass and indoption are absent. Index access methods other than btree are recorded and rendered (USING hash / gin / gist / spgist / brin) but every index is maintained the same way",
       "specifiedBehavior": "pg_get_indexdef(), pg_indexes.indexdef and pg_get_expr(indpred | indexprs, indrelid) are differential-tested against PostgreSQL across methods, ordering, NULLS placement, INCLUDE, operator classes, collations, storage parameters, quoted identifiers and an expression / predicate matrix. Read index columns through pg_get_indexdef(oid, n, pretty) instead of indkey. Expressions outside that matrix (subqueries, row constructors, SIMILAR TO, array slices, window or aggregate calls) are rendered best-effort.",
       "pinnedBy": ["tests/contract/catalogs/index-definitions.test.ts"]
+    },
+    {
+      "id": "system-columns-xmax-ctid",
+      "scope": "engine",
+      "predicate": "There is no heap: a scanned row's xmax is always 0 and ctid is (0,n) for the row's position in the table",
+      "specifiedBehavior": "RETURNING reports xmax as the writing transaction for an ON CONFLICT DO UPDATE that updated and for a DELETE, so RETURNING (xmax = 0) AS inserted matches PostgreSQL. PostgreSQL keeps the xid of an upsert or FOR UPDATE locker in xmax and gives an updated row a new ctid; the engine keeps ctid at the row's position (it shifts after a DELETE). Tests assert engine behavior for scans after writes.",
+      "pinnedBy": ["tests/contract/returning/old-new.test.ts"]
     }
   ]
 }

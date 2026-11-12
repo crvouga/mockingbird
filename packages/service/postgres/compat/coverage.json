@@ -6,8 +6,8 @@
     "notApplicable": 56,
     "sqlBehavior": 127,
     "verified": 43,
-    "partiallyVerified": 26,
-    "unsupported": 58,
+    "partiallyVerified": 27,
+    "unsupported": 57,
     "unknown": 0
   },
   "coverage": {
@@ -376,7 +376,7 @@
       "evidence": [
         "tests/contract/functions/"
       ],
-      "notes": "LANGUAGE sql plus plpgsql-lite (DECLARE, EXCEPTION WHEN others, CASE, FOR-IN-SELECT, RETURN NEXT); no cursors/NOTICE/packages"
+      "notes": "LANGUAGE sql plus a PL/pgSQL interpreter shared by functions, trigger functions and DO blocks (DECLARE, record/%ROWTYPE, SELECT INTO, loops, RETURN NEXT/QUERY, EXECUTE INTO/USING, GET DIAGNOSTICS, FOUND, OUT params); no cursors/transaction control/NOTICE/procedures"
     },
     "sql-creategroup": {
       "status": "NOT_APPLICABLE",
@@ -884,9 +884,11 @@
       "notes": "parsed no-op; no concurrent lockers exist"
     },
     "sql-merge": {
-      "status": "UNSUPPORTED",
-      "evidence": [],
-      "notes": "MERGE fails loud; use INSERT ... ON CONFLICT"
+      "status": "PARTIALLY_VERIFIED",
+      "evidence": [
+        "tests/contract/merge/"
+      ],
+      "notes": "WHEN [NOT] MATCHED [BY SOURCE | BY TARGET] with conditions, UPDATE / DELETE / INSERT / DO NOTHING, RETURNING with merge_action() and old / new, triggers and constraints; MERGE inside a WITH query fails loud (0A000)"
     },
     "sql-move": {
       "status": "UNSUPPORTED",
@@ -1010,7 +1012,7 @@
       "evidence": [
         "tests/contract/foreign-keys/"
       ],
-      "notes": "DEFERRABLE parsed; constraints check at statement end"
+      "notes": "Constraint triggers and DEFERRABLE foreign keys honour SET CONSTRAINTS and are checked at COMMIT; DEFERRABLE UNIQUE / PRIMARY KEY are still checked per row"
     },
     "sql-set-role": {
       "status": "NOT_APPLICABLE",

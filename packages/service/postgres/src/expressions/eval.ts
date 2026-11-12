@@ -56,10 +56,14 @@ export interface EvalScope {
    */
   exprOverride?(node: Expr): TypedValue | undefined;
   param?(index: number): TypedValue;
-  execScalarSubquery?(q: SelectStmt): TypedValue;
+  /** `width` > 1: a row subquery compared with a row constructor; the value is a record */
+  execScalarSubquery?(q: SelectStmt, width?: number): TypedValue;
   execExistsSubquery?(q: SelectStmt): boolean;
-  /** rows with a single projected column for IN / ANY / ALL / ARRAY(...) */
-  execColumnSubquery?(q: SelectStmt): { type: TypeId; values: Datum[] };
+  /**
+   * rows with a single projected column for IN / ANY / ALL / ARRAY(...); with `width` > 1
+   * (`(a, b) IN (SELECT x, y ...)`) each row comes back as one record of `width` fields
+   */
+  execColumnSubquery?(q: SelectStmt, width?: number): { type: TypeId; values: Datum[] };
   /** precomputed aggregate results (keyed by AST node identity) */
   aggValue?(node: FuncCall): TypedValue | undefined;
   /** precomputed window function results */
@@ -333,10 +337,32 @@ function evalBinaryNode(ctx: EngineCtx, scope: EvalScope, op: string, leftE: Exp
     if (r === true) return tv("bool", true);
     return tv("bool", l === null || r === null ? null : false);
   }
+  // `(a, b) = (SELECT x, y)`: a row subquery comparison
+  if (ROW_COMPARE_OPS.has(op) && rowWidth(leftE) > 1 && rightE.type === "subquery_expr" && rightE.kind === "scalar") {
+    if (!scope.execScalarSubquery) throw unsupported("subqueries in this context");
+    const l = evalExpr(ctx, scope, leftE);
+    const r = scope.execScalarSubquery(rightE.query, rowWidth(leftE));
+    return r.v === null ? tv("bool", null) : rowCompare(ctx, op, l.v as PgRecord, r.v as PgRecord);
+  }
   const l = evalExpr(ctx, scope, leftE);
   const r = evalExpr(ctx, scope, rightE);
   // row-wise comparison: (a,b) = (c,d)
   if (isPgRecordValue(l) && isPgRecordValue(r) && ["=", "<>", "!=", "<", "<=", ">", ">="].includes(op)) {
+    return rowCompare(ctx, op, l.v as PgRecord, r.v as PgRecord);
+  }
+  return evalBinary(ctx, op, l, r);
+}
+
+const ROW_COMPARE_OPS = new Set(["=", "<>", "!=", "<", "<=", ">", ">="]);
+
+/** the number of fields a row constructor on the left of a subquery comparison spans (1 otherwise) */
+function rowWidth(e: Expr): number {
+  return e.type === "row" ? e.items.length : 1;
+}
+
+/** `l op r`, comparing row constructors field by field */
+function compareMaybeRow(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue): TypedValue {
+  if (isPgRecordValue(l) && isPgRecordValue(r) && ROW_COMPARE_OPS.has(op)) {
     return rowCompare(ctx, op, l.v as PgRecord, r.v as PgRecord);
   }
   return evalBinary(ctx, op, l, r);
@@ -567,9 +593,9 @@ function evalIn(ctx: EngineCtx, scope: EvalScope, e: InExpr): TypedValue {
     }
   } else if (e.query) {
     if (!scope.execColumnSubquery) throw unsupported("subqueries in this context");
-    const { type, values } = scope.execColumnSubquery(e.query);
+    const { type, values } = scope.execColumnSubquery(e.query, rowWidth(e.left));
     for (const value of values) {
-      const cmp = evalBinary(ctx, "=", left, tv(type, value));
+      const cmp = compareMaybeRow(ctx, "=", left, tv(type, value));
       if (cmp.v === true) {
         found = true;
         break;
@@ -622,7 +648,7 @@ function evalSubquery(ctx: EngineCtx, scope: EvalScope, e: SubqueryExpr): TypedV
     case "all": {
       if (!scope.execColumnSubquery) throw unsupported("subqueries in this context");
       const left = evalExpr(ctx, scope, e.left!);
-      const { type, values } = scope.execColumnSubquery(e.query);
+      const { type, values } = scope.execColumnSubquery(e.query, rowWidth(e.left!));
       return anyAllCompare(
         ctx,
         e.op ?? "=",
@@ -644,14 +670,14 @@ export function anyAllCompare(
   let sawNull = false;
   if (kind === "any") {
     for (const r of rights) {
-      const cmp = toBool(ctx, evalBinary(ctx, op, left, r));
+      const cmp = toBool(ctx, compareMaybeRow(ctx, op, left, r));
       if (cmp === true) return tv("bool", true);
       if (cmp === null) sawNull = true;
     }
     return tv("bool", sawNull ? null : false);
   }
   for (const r of rights) {
-    const cmp = toBool(ctx, evalBinary(ctx, op, left, r));
+    const cmp = toBool(ctx, compareMaybeRow(ctx, op, left, r));
     if (cmp === false) return tv("bool", false);
     if (cmp === null) sawNull = true;
   }
@@ -900,7 +926,12 @@ function evalFuncCall(ctx: EngineCtx, scope: EvalScope, e: FuncCall): TypedValue
 
   throw pgError(
     "undefined_function",
-    `function ${e.name.join(".")}(${args.map((a) => a.t).join(", ")}) does not exist`,
+    `function ${e.name.join(".")}(${args
+      .map((a, i) => {
+        const n = e.argNames?.[i];
+        return n ? `${n} => ${typeDisplayName(a.t)}` : typeDisplayName(a.t);
+      })
+      .join(", ")}) does not exist`,
   );
 }
 

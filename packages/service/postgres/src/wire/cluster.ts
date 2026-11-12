@@ -1,7 +1,7 @@
 import { Database } from "../api/database.ts";
 import type { Snapshot } from "../api/snapshot.ts";
 import { PostgresError } from "../errors/error.ts";
-import { setDatabaseCatalogContext } from "../runtime/database-context.ts";
+import { type DatabaseCatalogContext, setDatabaseCatalogContext } from "../runtime/database-context.ts";
 import type { Durability } from "./durable.ts";
 
 /**
@@ -74,7 +74,7 @@ export class Cluster {
   restoreCatalog(entries: ReadonlyMap<string, Database>): void {
     this.databases.clear();
     for (const [name, db] of entries) {
-      setDatabaseCatalogContext(db.state, { name, names: () => this.databaseNames() });
+      setDatabaseCatalogContext(db.state, this.catalogContext(name));
       this.databases.set(name, db);
     }
   }
@@ -142,8 +142,44 @@ export class Cluster {
     return count;
   }
 
+  /**
+   * What the engine's catalogs and server-activity functions see of the server: its databases and
+   * sessions (pg_stat_activity, pg_stat_database), lock waits (pg_blocking_pids), and the signals
+   * pg_cancel_backend / pg_terminate_backend send.
+   */
+  catalogContext(name: string): DatabaseCatalogContext {
+    return {
+      name,
+      names: () => this.databaseNames(),
+      currentPid: () => this.current?.pid ?? 0,
+      backends: () =>
+        [...this.sessions.values()].map((session) => ({
+          pid: session.pid,
+          databaseName: session.databaseName,
+          applicationName: session.applicationName?.() ?? "",
+          state: session.activityState?.() ?? "idle",
+          waiting: session.waitingForLock !== null,
+        })),
+      blockingPids: (pid) => {
+        const key = this.sessions.get(pid)?.waitingForLock;
+        const holder = key == null ? undefined : this.locks.get(key)?.holder;
+        return holder && holder.pid !== pid ? [holder.pid] : [];
+      },
+      signalBackend: (pid, signal) => {
+        const target = this.sessions.get(pid);
+        if (!target) return false;
+        if (signal === "cancel" && target === this.current) {
+          throw new PostgresError("internal", "canceling statement due to user request", "57014");
+        }
+        if (signal === "cancel") target.cancel?.();
+        else target.terminate?.();
+        return true;
+      },
+    };
+  }
+
   private installDatabase(name: string, db: Database): void {
-    const context = { name, names: () => this.databaseNames() };
+    const context = this.catalogContext(name);
     setDatabaseCatalogContext(db.state, context);
     this.databases.set(name, db);
     registerSessionFunctions(this, db);
@@ -297,6 +333,13 @@ export interface Session {
   /** NOTIFYs issued inside the current transaction block, sent at commit. */
   pendingNotifies: { channel: string; payload: string }[];
   queueNotification(pid: number, channel: string, payload: string): void;
+  /** pg_stat_activity's state: active, idle, idle in transaction, ... */
+  activityState?(): string;
+  applicationName?(): string;
+  /** pg_cancel_backend: the statement in flight fails with 57014 */
+  cancel?(): void;
+  /** pg_terminate_backend: the connection ends with FATAL 57P01 */
+  terminate?(): void;
 }
 
 const lockKey = (args: unknown[]): string => args.map((a) => String(a)).join(":");

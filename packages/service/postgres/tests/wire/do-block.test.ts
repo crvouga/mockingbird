@@ -27,7 +27,7 @@ test("DO blocks run, report DO, and raise with the block's own SQLSTATE", async 
       code: "P0001",
       message: "boom",
     });
-    await expect(client.query("DO $$ BEGIN FOR i IN 1..3 LOOP NULL; END LOOP; END $$")).rejects.toMatchObject({
+    await expect(client.query("DO $$ DECLARE c refcursor; BEGIN OPEN c FOR SELECT 1; END $$")).rejects.toMatchObject({
       code: "0A000",
     });
     await client.query("BEGIN");

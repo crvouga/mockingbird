@@ -12,10 +12,20 @@ import type {
   TransactionStmt,
 } from "../ast/nodes.ts";
 import { validateStorageSetting } from "../storage/guc.ts";
+import {
+  allSettings,
+  assertGucSettable,
+  gucDef,
+  gucDefaultDisplay,
+  normalizeGucValue,
+  registerConfigurationSetter,
+  TRANSACTION_GUCS,
+} from "../storage/guc-catalog.ts";
 import { pgError, unsupported } from "../errors/error.ts";
 import { Prng } from "../runtime/prng.ts";
 import { DatabaseState } from "../storage/database-state.ts";
 import { TransactionManager } from "../transactions/manager.ts";
+import { beforeStatement } from "../transactions/read-only.ts";
 import { castTo } from "../types/cast.ts";
 import { resolveTypeName } from "../types/resolve.ts";
 import { type Datum, datumText, tv, UNKNOWN } from "../types/value.ts";
@@ -42,7 +52,10 @@ export function executeTransaction(env: ExecEnv, stmt: TransactionStmt): ExecRes
   const tx = txManagerFor(env.ctx.state);
   switch (stmt.action) {
     case "begin":
-      tx.begin();
+      if (!tx.inTransaction) {
+        tx.begin();
+        if (stmt.modes?.length) applyTransactionModes(env.ctx.state, stmt.modes, false);
+      }
       return commandResult("BEGIN", 0);
     case "commit":
       tx.commit();
@@ -84,48 +97,114 @@ function resetValue(state: DatabaseState, name: string): string | undefined {
 function canonicalGucName(name: string): string {
   const n = name.toLowerCase();
   if (n === "time zone" || n === "timezone") return "timezone";
-  if (n === "session characteristics as transaction isolation level") return "transaction_isolation";
   return n;
 }
 
-/** display name PG uses in SHOW output */
-function showColumnName(guc: string): string {
-  switch (guc) {
-    case "timezone":
-      return "TimeZone";
-    case "datestyle":
-      return "DateStyle";
-    case "intervalstyle":
-      return "IntervalStyle";
-    default:
-      return guc;
+/** The name PostgreSQL reports a parameter by (`TimeZone`, `DateStyle`, `work_mem`). */
+function displayGucName(guc: string): string {
+  return gucDef(guc)?.name ?? guc;
+}
+
+function isKnownGuc(state: DatabaseState, name: string): boolean {
+  return gucDef(name) !== undefined || getDefaultSettings().has(name) || state.settings.has(name) || name.includes(".");
+}
+
+const activeTransaction = (message: string) => pgError("transaction_state", message, "25001");
+
+/** check_transaction_read_only / _isolation / _deferrable: what may change once the transaction runs. */
+function checkTransactionChange(state: DatabaseState, tx: TransactionManager, name: string, value: string): void {
+  const current = state.getSetting(name);
+  if (name === "transaction_read_only") {
+    if (value === "off" && current === "on") {
+      if (tx.inSubtransaction)
+        throw activeTransaction("cannot set transaction read-write mode inside a read-only transaction");
+      if (tx.snapshotTaken) throw activeTransaction("transaction read-write mode must be set before any query");
+    }
+  } else if (name === "transaction_isolation") {
+    if (value !== current) {
+      if (tx.snapshotTaken) throw activeTransaction("SET TRANSACTION ISOLATION LEVEL must be called before any query");
+      if (tx.inSubtransaction)
+        throw activeTransaction("SET TRANSACTION ISOLATION LEVEL must not be called in a subtransaction");
+    }
+  } else if (name === "transaction_deferrable") {
+    if (tx.inSubtransaction)
+      throw activeTransaction("SET TRANSACTION [NOT] DEFERRABLE cannot be called within a subtransaction");
+    if (tx.snapshotTaken) throw activeTransaction("SET TRANSACTION [NOT] DEFERRABLE must be called before any query");
   }
 }
 
-function isKnownGuc(name: string): boolean {
-  return getDefaultSettings().has(name) || name.includes(".");
+/**
+ * `SET`, `SET LOCAL`, `RESET` (value `null`) and `set_config()`: check the parameter and the value
+ * the way PostgreSQL does, then store the value `SHOW` prints. Returns that value.
+ */
+export function applySetting(state: DatabaseState, rawName: string, value: string | null, local: boolean): string {
+  const name = canonicalGucName(rawName);
+  if (!isKnownGuc(state, name)) {
+    throw pgError("undefined_object", `unrecognized configuration parameter "${rawName}"`, "42704");
+  }
+  const def = gucDef(name);
+  const tx = txManagerFor(state);
+  const sessionDefault = TRANSACTION_GUCS.get(name);
+  let shown: string | undefined;
+  if (value === null) {
+    shown = sessionDefault !== undefined ? state.getSetting(sessionDefault) : resetValue(state, name);
+  } else {
+    if (def) {
+      assertGucSettable(def);
+      shown = normalizeGucValue(def, value);
+    } else shown = value;
+    validateStorageSetting(name, shown);
+  }
+  if (sessionDefault !== undefined) {
+    // a transaction's characteristics: outside a transaction block there is nothing to change
+    if (!tx.inTransaction || shown === undefined) return shown ?? "";
+    checkTransactionChange(state, tx, name, shown);
+    state.localSettings.set(name, shown);
+    return shown;
+  }
+  if (local) {
+    // SET LOCAL outside a transaction is a no-op (PostgreSQL warns)
+    if (tx.inTransaction) {
+      state.localSettings.set(name, shown ?? (def ? gucDefaultDisplay(def) : ""));
+    }
+    return state.getSetting(name) ?? "";
+  }
+  if (shown === undefined) state.settings.delete(name);
+  else state.settings.set(name, shown);
+  state.localSettings.delete(name);
+  return state.getSetting(name) ?? "";
 }
+
+/** `SET TRANSACTION <modes>` / `BEGIN <modes>` (or the session's defaults for SET SESSION CHARACTERISTICS). */
+export function applyTransactionModes(state: DatabaseState, modes: readonly string[], session: boolean): void {
+  for (const mode of modes) {
+    let name: string;
+    let value: string;
+    if (mode.startsWith("isolation level ")) {
+      name = "transaction_isolation";
+      value = mode.slice("isolation level ".length);
+    } else if (mode === "read only" || mode === "read write") {
+      name = "transaction_read_only";
+      value = mode === "read only" ? "on" : "off";
+    } else {
+      name = "transaction_deferrable";
+      value = mode === "deferrable" ? "on" : "off";
+    }
+    applySetting(state, session ? `default_${name}` : name, value, !session);
+  }
+}
+
+registerConfigurationSetter(applySetting);
 
 export function executeSet(env: ExecEnv, stmt: SetStmt): ExecResult {
   const state = env.ctx.state;
-  const name = canonicalGucName(stmt.name);
-  if (!isKnownGuc(name) && !state.settings.has(name)) {
-    throw pgError("undefined_object", `unrecognized configuration parameter "${stmt.name}"`, "42704");
-  }
-  const target = stmt.local ? state.localSettings : state.settings;
-  if (stmt.local && !txManagerFor(state).inTransaction) {
-    // SET LOCAL outside a transaction is a no-op with a warning in PG
+  if (stmt.transactionModes) {
+    // SET TRANSACTION outside a transaction block is a no-op (PostgreSQL warns)
+    if (stmt.name === "transaction" && !txManagerFor(state).inTransaction) return commandResult("SET", 0);
+    applyTransactionModes(state, stmt.transactionModes, stmt.name !== "transaction");
     return commandResult("SET", 0);
   }
-  if (stmt.value === null) {
-    // SET x TO DEFAULT
-    const dflt = resetValue(state, name);
-    if (dflt !== undefined) target.set(name, dflt);
-    else target.delete(name);
-    return commandResult("SET", 0);
-  }
-  validateStorageSetting(name, stmt.value);
-  target.set(name, stmt.value);
+  applySetting(state, stmt.name, stmt.value, stmt.local);
   return commandResult("SET", 0);
 }
 
@@ -133,9 +212,11 @@ export function executeShow(env: ExecEnv, stmt: ShowStmt): ExecResult {
   const state = env.ctx.state;
   const name = canonicalGucName(stmt.name);
   if (name === "all") {
-    const rows: Datum[][] = [...state.settings.entries()]
-      .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-      .map(([k, v]) => [k, state.localSettings.get(k) ?? v, ""]);
+    const rows: Datum[][] = allSettings(state).map(({ key, name, value }) => [
+      name,
+      value,
+      gucDef(key)?.shortDesc ?? "",
+    ]);
     return {
       columns: [
         { name: "name", type: "text" },
@@ -152,7 +233,7 @@ export function executeShow(env: ExecEnv, stmt: ShowStmt): ExecResult {
     throw pgError("undefined_object", `unrecognized configuration parameter "${stmt.name}"`, "42704");
   }
   return {
-    columns: [{ name: showColumnName(name), type: "text" }],
+    columns: [{ name: displayGucName(name), type: "text" }],
     rows: [[value]],
     command: "SHOW",
     rowCount: 1,
@@ -164,16 +245,13 @@ export function executeReset(env: ExecEnv, stmt: ResetStmt): ExecResult {
   const name = canonicalGucName(stmt.name);
   if (name === "all") {
     state.settings = new Map([...getDefaultSettings(), ...(state.settingDefaults ?? [])]);
-    state.localSettings.clear();
+    // RESET ALL leaves the transaction's own characteristics alone
+    for (const key of [...state.localSettings.keys()]) {
+      if (!TRANSACTION_GUCS.has(key)) state.localSettings.delete(key);
+    }
     return commandResult("RESET", 0);
   }
-  if (!isKnownGuc(name) && !state.settings.has(name)) {
-    throw pgError("undefined_object", `unrecognized configuration parameter "${stmt.name}"`, "42704");
-  }
-  const dflt = resetValue(state, name);
-  if (dflt !== undefined) state.settings.set(name, dflt);
-  else state.settings.delete(name);
-  state.localSettings.delete(name);
+  applySetting(state, stmt.name, null, false);
   return commandResult("RESET", 0);
 }
 
@@ -409,6 +487,7 @@ export function executeCopyFromData(env: ExecEnv, stmt: CopyStmt, data: string):
   if (stmt.direction !== "from" || stmt.table === null) {
     throw pgError("syntax", "COPY FROM requires a table", "42601");
   }
+  beforeStatement(env.ctx.state, txManagerFor(env.ctx.state), stmt);
   const delim = String(stmt.options.delimiter ?? (format === "csv" ? "," : "\t"));
   const nullStr = String(stmt.options.null ?? (format === "csv" ? "" : "\\N"));
   const quote = String(stmt.options.quote ?? '"');

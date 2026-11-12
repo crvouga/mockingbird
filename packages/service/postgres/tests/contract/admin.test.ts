@@ -109,3 +109,85 @@ test("SQL admin uses the configured prefix for health, UI and query routes", asy
   for (const path of ["/health", "/__admin/health", "/__admin/ui", "/__admin/sql/tables"])
     expect((await admin.fetch(request(path))).status).toBe(404);
 });
+
+describe("admin catalog reads scale with the schema (#695)", () => {
+  const seed = (tables: number): Database => {
+    const db = new Database();
+    db.exec("CREATE SCHEMA app");
+    for (let i = 0; i < tables; i++) {
+      db.exec(`CREATE TABLE app.t${i} (
+        id serial PRIMARY KEY,
+        parent_id int${i > 0 ? ` REFERENCES app.t${i - 1} (id)` : ""},
+        name text NOT NULL, email text UNIQUE, created_at timestamptz DEFAULT now())`);
+      db.exec(`CREATE INDEX t${i}_name ON app.t${i} (name)`);
+    }
+    return db;
+  };
+
+  // Counts catalog queries instead of timing them: before the fix every table cost two
+  // information_schema scans, and every page re-listed every table.
+  const countingCatalogReads = (db: Database): (() => number) => {
+    let reads = 0;
+    const query = db.query.bind(db);
+    db.query = ((sql: string, params?: unknown[]) => {
+      if (sql.includes("information_schema")) reads++;
+      return query(sql, params as never);
+    }) as typeof db.query;
+    return () => reads;
+  };
+
+  test("GET /sql/tables issues a fixed number of catalog reads, whatever the table count", async () => {
+    for (const tables of [3, 40]) {
+      const db = seed(tables);
+      const reads = countingCatalogReads(db);
+      const admin = createAdmin({ database: db });
+      const body = (await (await admin.fetch(request("/__admin/sql/tables"))).json()) as {
+        tables: { schema: string; name: string; columns: { name: string; type: string; primaryKey?: boolean }[] }[];
+      };
+      expect(body.tables.filter((table) => table.schema === "app")).toHaveLength(tables);
+      expect(reads()).toBe(3);
+      const t1 = body.tables.find((table) => table.schema === "app" && table.name === "t1");
+      expect(t1?.columns).toEqual([
+        { name: "id", type: "integer", primaryKey: true },
+        { name: "parent_id", type: "integer" },
+        { name: "name", type: "text" },
+        { name: "email", type: "text" },
+        { name: "created_at", type: "timestamp with time zone" },
+      ]);
+    }
+  });
+
+  test("GET /state and a single table page do not re-describe every table", async () => {
+    const db = seed(40);
+    const reads = countingCatalogReads(db);
+    const admin = createAdmin({ database: db });
+    const state = (await (await admin.fetch(request("/__admin/state"))).json()) as {
+      collections: { name: string; count: number }[];
+    };
+    expect(state.collections.filter((collection) => collection.name.startsWith("app."))).toHaveLength(40);
+    expect(reads()).toBe(3);
+    const page = (await (await admin.fetch(request("/__admin/sql/tables/app/t7"))).json()) as {
+      columns: string[];
+      rows: unknown[];
+      total: number;
+    };
+    // An empty table still reports its columns, from the result set rather than the catalog.
+    expect(page).toMatchObject({ columns: ["id", "parent_id", "name", "email", "created_at"], rows: [], total: 0 });
+    expect(reads()).toBe(3);
+  });
+
+  test("a page is served for tables and views only, never for catalog relations", async () => {
+    const db = new Database();
+    db.exec("CREATE TABLE items (id int PRIMARY KEY, label text)");
+    db.exec("INSERT INTO items VALUES (1, 'one')");
+    db.exec("CREATE VIEW item_labels AS SELECT label FROM items");
+    db.exec("CREATE MATERIALIZED VIEW item_ids AS SELECT id FROM items");
+    const admin = createAdmin({ database: db });
+    const view = (await (await admin.fetch(request("/__admin/sql/tables/public/item_labels"))).json()) as {
+      rows: unknown[];
+    };
+    expect(view.rows).toEqual([{ label: "one" }]);
+    for (const path of ["public/missing", "public/item_ids", "pg_catalog/pg_class", "information_schema/tables"])
+      expect((await admin.fetch(request(`/__admin/sql/tables/${path}`))).status).toBe(400);
+  });
+});

@@ -3,11 +3,14 @@ import { fileURLToPath } from "node:url";
 import { $ } from "bun";
 import { rollup } from "rollup";
 import { dts } from "rollup-plugin-dts";
+import { adminBrandDefine } from "../../../../scripts/admin-brand.ts";
 import { inlineCoreTypes } from "../../../../scripts/inline-core-types.ts";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 const { version } = await Bun.file("package.json").json();
+// The admin shell's vendor chip, served by the emulator itself (scripts/admin-brand.ts).
+const brand = Object.entries(adminBrandDefine(process.cwd())).map(([name, value]) => `--define:${name}=${value}`);
 
 const build = Bun.spawn(
   [
@@ -16,8 +19,11 @@ const build = Bun.spawn(
     "src/index.ts",
     "src/unstable.ts",
     "src/admin.ts",
+    // The listener-free wire server: browser-safe, unlike the rest of src/wire.
+    "src/wire/transport.ts",
     "--bundle",
     `--define:MOCKINGBIRD_POSTGRES_VERSION=${JSON.stringify(version)}`,
+    ...brand,
     "--format=esm",
     "--outdir=dist",
     "--platform=browser",
@@ -39,6 +45,7 @@ const serverBuild = Bun.spawn(
     "src/server.ts",
     "--bundle",
     `--define:MOCKINGBIRD_POSTGRES_VERSION=${JSON.stringify(version)}`,
+    ...brand,
     "--format=esm",
     "--outdir=dist",
     "--outbase=src",

@@ -146,7 +146,7 @@ const SEED: Record<string, { status: CoverageStatus; evidence: string[]; notes: 
   "sql-set-constraints": {
     status: "PARTIALLY_VERIFIED",
     evidence: ["tests/contract/foreign-keys/"],
-    notes: "DEFERRABLE parsed; constraints check at statement end",
+    notes: "Constraint triggers and DEFERRABLE foreign keys honour SET CONSTRAINTS and are checked at COMMIT; DEFERRABLE UNIQUE / PRIMARY KEY are still checked per row",
   },
   "sql-lock": {
     status: "PARTIALLY_VERIFIED",

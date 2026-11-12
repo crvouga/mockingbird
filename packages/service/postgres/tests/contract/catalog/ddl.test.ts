@@ -314,13 +314,8 @@ runCatalog(DDL_SECTION, [
   },
   {
     id: "DDL-comment-01",
-    kind: "divergence",
-    fn: (db) => {
-      db.exec("CREATE TABLE t (id int)");
-      db.exec("COMMENT ON TABLE t IS 'catalog table'");
-      // Oracle returns the stored comment; memory accepts the statement but stores nothing.
-      const row = db.query<{ d: string | null }>("SELECT obj_description(oid) AS d FROM pg_class WHERE relname = 't'");
-      expect(row[0]).toEqual({ d: null });
-    },
+    kind: "parity",
+    setup: ["CREATE TABLE t (id int)", "COMMENT ON TABLE t IS 'catalog table'"],
+    sql: "SELECT obj_description(oid) AS d FROM pg_class WHERE relname = 't'",
   },
 ]);

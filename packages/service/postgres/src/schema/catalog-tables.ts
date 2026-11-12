@@ -1,25 +1,45 @@
 import type { Relation, RelColumn } from "../executor/relation.ts";
 import type { EngineCtx } from "../expressions/context.ts";
-import { getAggregateFactories } from "../functions/aggregates.ts";
-import { getScalarFunctions } from "../functions/scalar.ts";
-import { getSrfFunctions } from "../functions/srf.ts";
-import { WINDOW_FUNCTION_NAMES } from "../functions/window.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
+import { allSettings, gucBaseSetting, gucDef, gucDefaultDisplay } from "../storage/guc-catalog.ts";
 import { deparseDefault } from "../sql/deparse-default.ts";
 import { deparseIndex, deparseIndexExpressions, deparseIndexPredicate } from "../sql/deparse-index.ts";
+import { quoteIdentifier } from "../sql/keywords.ts";
+import { viewDefinition } from "../sql/viewdef.ts";
 import type { DatabaseState, IndexMeta, SequenceData, TableData } from "../storage/database-state.ts";
 import { UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
 import {
   type Datum,
   isArrayType,
   isEnumType,
+  makeArray,
   TYPE_OIDS,
   type TypeId,
   typeDisplayName,
   typeOid,
 } from "../types/value.ts";
 import { BUILTIN_NAMESPACES, builtinNamespaceOid } from "../types/regnamespace.ts";
-import { setCatalogBuilder } from "./catalog.ts";
+import { setCatalogBuilder, setRegResolver } from "./catalog.ts";
+import {
+  actionCode,
+  actionRule,
+  checkClause,
+  triggerAction,
+  triggerCondition,
+  triggerEvents,
+  triggerType,
+} from "./catalog-defs.ts";
+import { attnum, constraintEntries, descriptions, triggerEntries } from "./catalog-entries.ts";
+import {
+  builtinProcs,
+  regprocIn,
+  regprocName,
+  regprocOid,
+  regtypeIn,
+  regtypeName,
+  regtypeOid,
+  returnTypeOid,
+} from "./reg-types.ts";
 import { ACCESS_METHODS, indexAttributeCount, indexMethod, isKeyConstraint } from "./index-catalog.ts";
 import { extensionCatalogRelation } from "./catalog-extensions.ts";
 import { attrdefOid, columnDefaults, systemCatalogRelation } from "./catalog-system.ts";
@@ -306,31 +326,32 @@ function pgType(ctx: EngineCtx): Relation {
   );
 }
 
+const LANGUAGE_OIDS: Record<string, number> = { internal: 12, c: 13, sql: 14, plpgsql: 13534 };
+
 function pgProc(ctx: EngineCtx): Relation {
   const rows: Datum[][] = [];
-  let oid = 1000;
-  const seen = new Set<string>();
-  const push = (name: string, ns: number, kind: string, retset: boolean, nargs: number, realOid?: number) => {
-    rows.push([realOid ?? oid++, name, ns, kind, retset, nargs]);
-  };
-  for (const name of getScalarFunctions().keys()) {
-    if (!seen.has(name)) {
-      seen.add(name);
-      push(name, NS_PG_CATALOG, "f", false, -1);
-    }
+  for (const p of builtinProcs()) {
+    // the engine does not model builtin signatures: no return type, argument count -1
+    rows.push([p.oid, p.name, NS_PG_CATALOG, p.kind, p.retset, -1, 10, 12, 0, false, false, "v", null]);
   }
-  for (const name of Object.keys(getAggregateFactories())) {
-    if (!seen.has(`agg:${name}`)) {
-      seen.add(`agg:${name}`);
-      push(name, NS_PG_CATALOG, "a", false, -1);
-    }
-  }
-  for (const name of WINDOW_FUNCTION_NAMES) push(name, NS_PG_CATALOG, "w", false, -1);
-  for (const name of getSrfFunctions().keys()) push(name, NS_PG_CATALOG, "f", true, -1);
   for (const schema of ctx.state.schemas.values()) {
     for (const fns of schema.functions.values()) {
       for (const f of fns) {
-        push(f.name, namespaceOid(ctx.state, f.schema), "f", f.returnsSet, f.argTypes.length, f.oid);
+        rows.push([
+          f.oid,
+          f.name,
+          namespaceOid(ctx.state, f.schema),
+          "f",
+          f.returnsSet,
+          f.argTypes.length,
+          10,
+          LANGUAGE_OIDS[f.language] ?? 12,
+          returnTypeOid(ctx.state, f),
+          false,
+          f.strict,
+          f.volatility === "immutable" ? "i" : f.volatility === "stable" ? "s" : "v",
+          f.rawBody,
+        ]);
       }
     }
   }
@@ -342,6 +363,13 @@ function pgProc(ctx: EngineCtx): Relation {
       ["prokind", "bpchar"],
       ["proretset", "bool"],
       ["pronargs", "int2"],
+      ["proowner", "oid"],
+      ["prolang", "oid"],
+      ["prorettype", "oid"],
+      ["prosecdef", "bool"],
+      ["proisstrict", "bool"],
+      ["provolatile", "bpchar"],
+      ["prosrc", "text"],
     ],
     rows,
     "pg_proc",
@@ -370,41 +398,59 @@ function pgEnum(ctx: EngineCtx): Relation {
   );
 }
 
+/** Columns a CHECK expression reads, in order of first appearance (pg_constraint.conkey). */
+function referencedColumns(table: TableData, expr: unknown, out: number[] = []): number[] {
+  if (Array.isArray(expr)) {
+    for (const item of expr) referencedColumns(table, item, out);
+  } else if (typeof expr === "object" && expr !== null) {
+    const node = expr as { type?: unknown; parts?: unknown };
+    if (node.type === "colref" && Array.isArray(node.parts)) {
+      const n = attnum(table, String(node.parts.at(-1)));
+      if (n > 0 && !out.includes(n)) out.push(n);
+    }
+    for (const value of Object.values(expr)) referencedColumns(table, value, out);
+  }
+  return out;
+}
+
+const int2Array = (items: number[]): Datum => makeArray("int2", items);
+
 function pgConstraint(ctx: EngineCtx): Relation {
+  const state = ctx.state;
   const rows: Datum[][] = [];
-  let oid = 30000;
-  for (const t of allTables(ctx.state)) {
-    for (const c of t.constraints) {
-      const contype = c.kind === "primary_key" ? "p" : c.kind === "unique" ? "u" : c.kind === "check" ? "c" : "f";
-      const refTable =
-        c.kind === "foreign_key" ? ctx.state.schemas.get(c.refSchema)?.tables.get(c.refTable) : undefined;
-      rows.push([
-        oid++,
-        c.name,
-        namespaceOid(ctx.state, t.schema),
-        contype,
-        false,
-        false,
-        t.oid,
-        refTable?.oid ?? 0,
-        isKeyConstraint(c) ? (c.indexOid ?? 0) : 0,
-      ]);
-    }
-    for (const col of t.columns) {
-      if (col.notNull) {
-        rows.push([
-          oid++,
-          `${t.name}_${col.name}_not_null`,
-          namespaceOid(ctx.state, t.schema),
-          "n",
-          false,
-          false,
-          t.oid,
-          0,
-          0,
-        ]);
-      }
-    }
+  for (const entry of constraintEntries(state)) {
+    const t = entry.table;
+    const c = entry.contype === "n" ? null : entry.constraint;
+    const fk = c?.kind === "foreign_key" ? c : null;
+    const refTable = fk ? state.schemas.get(fk.refSchema)?.tables.get(fk.refTable) : undefined;
+    const conkey =
+      entry.contype === "n"
+        ? [attnum(t, entry.column)]
+        : c!.kind === "check"
+          ? referencedColumns(t, c!.expr)
+          : c!.columns.map((name) => attnum(t, name));
+    rows.push([
+      entry.oid,
+      entry.name,
+      namespaceOid(state, t.schema),
+      entry.contype,
+      fk?.deferrable === true,
+      fk?.deferrable === true && fk.initiallyDeferred === true,
+      true,
+      t.oid,
+      0,
+      refTable?.oid ?? 0,
+      c && isKeyConstraint(c) ? (c.indexOid ?? 0) : 0,
+      fk ? actionCode(fk.onUpdate) : " ",
+      fk ? actionCode(fk.onDelete) : " ",
+      fk ? (fk.match === "full" ? "f" : "s") : " ",
+      true,
+      0,
+      false,
+      int2Array(conkey),
+      fk && refTable ? int2Array(fk.refColumns.map((name) => attnum(refTable, name))) : null,
+      c?.kind === "check" ? checkClause(ctx, t, c.expr, false) : null,
+    ]);
   }
   return rel(
     [
@@ -414,13 +460,34 @@ function pgConstraint(ctx: EngineCtx): Relation {
       ["contype", "bpchar"],
       ["condeferrable", "bool"],
       ["condeferred", "bool"],
+      ["convalidated", "bool"],
       ["conrelid", "oid"],
+      ["contypid", "oid"],
       ["confrelid", "oid"],
       ["conindid", "oid"],
+      ["confupdtype", "bpchar"],
+      ["confdeltype", "bpchar"],
+      ["confmatchtype", "bpchar"],
+      ["conislocal", "bool"],
+      ["coninhcount", "int2"],
+      ["connoinherit", "bool"],
+      ["conkey", "int2[]"],
+      ["confkey", "int2[]"],
+      // PostgreSQL stores a pg_node_tree here; this is the text pg_get_expr() returns
+      ["conbin", "text"],
     ],
     rows,
     "pg_constraint",
   );
+}
+
+/** pg_index.indkey: each key column's number (0 for an expression), then the INCLUDE columns. */
+function indexKey(table: TableData | undefined, index: IndexMeta): Datum {
+  const numbers = [
+    ...index.columns.map((column) => (column.column !== null && table ? attnum(table, column.column) : 0)),
+    ...(index.include ?? []).map((name) => (table ? attnum(table, name) : 0)),
+  ];
+  return makeArray("int2", numbers, [numbers.length], [0]);
 }
 
 function pgIndex(ctx: EngineCtx): Relation {
@@ -450,6 +517,7 @@ function pgIndex(ctx: EngineCtx): Relation {
         false,
         deparseIndexExpressions(ctx, i),
         deparseIndexPredicate(ctx, i),
+        indexKey(table, i),
       ]);
     }
   }
@@ -473,6 +541,8 @@ function pgIndex(ctx: EngineCtx): Relation {
       // PostgreSQL stores these two as pg_node_tree; here they are the text pg_get_expr() returns
       ["indexprs", "text"],
       ["indpred", "text"],
+      // int2vector in PostgreSQL: here an int2 array subscripted from 0 the way int2vector is
+      ["indkey", "int2[]"],
     ],
     rows,
     "pg_index",
@@ -594,13 +664,7 @@ function pgStatUserTables(ctx: EngineCtx): Relation {
 }
 
 function pgDescription(ctx: EngineCtx): Relation {
-  const rows: Datum[][] = [];
-  for (const schema of ctx.state.schemas.values()) {
-    for (const index of schema.indexes.values()) {
-      // classoid is pg_class: an index is a relation; objsubid 0 is the relation itself
-      if (index.comment) rows.push([index.oid ?? 0, 1259, 0, index.comment]);
-    }
-  }
+  const rows: Datum[][] = descriptions(ctx.state).map((d) => [d.objoid, d.classoid, d.objsubid, d.description]);
   return rel(
     [
       ["objoid", "oid"],
@@ -734,8 +798,9 @@ function pgViews(ctx: EngineCtx, materialized: boolean): Relation {
   for (const schema of ctx.state.schemas.values()) {
     for (const v of schema.views.values()) {
       if (v.materialized !== materialized) continue;
-      if (materialized) rows.push([v.schema, v.name, OWNER, null, v.matRows !== null, null]);
-      else rows.push([v.schema, v.name, OWNER, null]);
+      const definition = viewDefinition(ctx, v);
+      if (materialized) rows.push([v.schema, v.name, OWNER, null, v.matRows !== null, definition]);
+      else rows.push([v.schema, v.name, OWNER, definition]);
     }
   }
   if (materialized) {
@@ -785,15 +850,63 @@ function pgIndexesView(ctx: EngineCtx): Relation {
 }
 
 function pgSettings(ctx: EngineCtx): Relation {
+  const state = ctx.state;
   const rows: Datum[][] = [];
-  const keys = new Set([...ctx.state.settings.keys(), ...ctx.state.localSettings.keys()]);
-  for (const name of [...keys].sort()) {
-    rows.push([name, ctx.state.getSetting(name) ?? null]);
+  for (const { key, name, value } of allSettings(state)) {
+    const def = gucDef(key);
+    if (!def) {
+      // a custom (dotted) parameter: a placeholder string
+      rows.push([name, value, null, "Customized Options", null, null, "user", "string", "session"]);
+      rows[rows.length - 1]!.push(null, null, null, null, null, null, null, false);
+      continue;
+    }
+    const defaultShown = gucDefaultDisplay(def);
+    const reset = state.settingDefaults?.get(key);
+    const source =
+      state.localSettings.has(key) || (state.settings.has(key) && value !== (reset ?? defaultShown))
+        ? "session"
+        : reset !== undefined && reset !== defaultShown
+          ? "client"
+          : def.source;
+    rows.push([
+      def.name,
+      gucBaseSetting(def, value),
+      def.unit,
+      def.category,
+      def.shortDesc,
+      null,
+      def.context,
+      def.vartype,
+      source,
+      def.min,
+      def.max,
+      def.enumvals ? makeArray("text", [...def.enumvals]) : null,
+      def.bootVal,
+      gucBaseSetting(def, reset ?? defaultShown),
+      null,
+      null,
+      false,
+    ]);
   }
   return rel(
     [
       ["name", "text"],
       ["setting", "text"],
+      ["unit", "text"],
+      ["category", "text"],
+      ["short_desc", "text"],
+      ["extra_desc", "text"],
+      ["context", "text"],
+      ["vartype", "text"],
+      ["source", "text"],
+      ["min_val", "text"],
+      ["max_val", "text"],
+      ["enumvals", "text[]"],
+      ["boot_val", "text"],
+      ["reset_val", "text"],
+      ["sourcefile", "text"],
+      ["sourceline", "int4"],
+      ["pending_restart", "bool"],
     ],
     rows,
     "pg_settings",
@@ -806,11 +919,44 @@ function pgDatabase(ctx: EngineCtx): Relation {
     [
       ["oid", "oid"],
       ["datname", "name"],
+      ["datdba", "oid"],
       ["encoding", "int4"],
+      ["datlocprovider", "bpchar"],
       ["datistemplate", "bool"],
       ["datallowconn", "bool"],
+      ["dathasloginevt", "bool"],
+      ["datconnlimit", "int4"],
+      ["datfrozenxid", "xid"],
+      ["datminmxid", "xid"],
+      ["dattablespace", "oid"],
+      ["datcollate", "text"],
+      ["datctype", "text"],
+      ["datlocale", "text"],
+      ["daticurules", "text"],
+      ["datcollversion", "text"],
+      ["datacl", "text[]"],
     ],
-    names.map((name, index) => [5 + index, name, 6, false, true]),
+    // the engine compares and classifies text in the C locale
+    names.map((name, index) => [
+      5 + index,
+      name,
+      10,
+      6,
+      "c",
+      false,
+      true,
+      false,
+      -1,
+      1,
+      1,
+      1663,
+      "C",
+      "C",
+      null,
+      null,
+      null,
+      null,
+    ]),
     "pg_database",
   );
 }
@@ -830,18 +976,52 @@ function pgRoles(): Relation {
 
 function pgTrigger(ctx: EngineCtx): Relation {
   const rows: Datum[][] = [];
-  let oid = 40000;
-  for (const t of allTables(ctx.state)) {
-    for (const tr of t.triggers) {
-      rows.push([oid++, tr.name, t.oid, !tr.forEachRow, tr.oldTable ?? null, tr.newTable ?? null]);
-    }
+  for (const { oid, table, trigger } of triggerEntries(ctx.state)) {
+    const fn = ctx.state.schemas.get(trigger.funcSchema)?.functions.get(trigger.funcName)?.[0];
+    const updateColumns = trigger.events.find((e) => e.event === "update")?.columns ?? [];
+    rows.push([
+      oid,
+      table.oid,
+      0,
+      trigger.name,
+      fn?.oid ?? 0,
+      triggerType(trigger),
+      "O",
+      false,
+      0,
+      0,
+      0,
+      trigger.deferrable === true,
+      trigger.initiallyDeferred === true,
+      trigger.funcArgs.length,
+      makeArray(
+        "int2",
+        updateColumns.map((name) => attnum(table, name)),
+        [updateColumns.length],
+        [0],
+      ),
+      trigger.oldTable ?? null,
+      trigger.newTable ?? null,
+    ]);
   }
   return rel(
     [
       ["oid", "oid"],
-      ["tgname", "name"],
       ["tgrelid", "oid"],
+      ["tgparentid", "oid"],
+      ["tgname", "name"],
+      ["tgfoid", "oid"],
+      ["tgtype", "int2"],
+      ["tgenabled", "bpchar"],
+      // only user triggers are listed: foreign keys are enforced without RI triggers
       ["tgisinternal", "bool"],
+      ["tgconstrrelid", "oid"],
+      ["tgconstrindid", "oid"],
+      ["tgconstraint", "oid"],
+      ["tgdeferrable", "bool"],
+      ["tginitdeferred", "bool"],
+      ["tgnargs", "int2"],
+      ["tgattr", "int2[]"],
       ["tgoldtable", "name"],
       ["tgnewtable", "name"],
     ],
@@ -959,7 +1139,7 @@ function infoViews(ctx: EngineCtx): Relation {
   const rows: Datum[][] = [];
   for (const schema of ctx.state.schemas.values()) {
     for (const v of schema.views.values()) {
-      if (!v.materialized) rows.push([catalog, v.schema, v.name, null]);
+      if (!v.materialized) rows.push([catalog, v.schema, v.name, viewDefinition(ctx, v)]);
     }
   }
   return rel(
@@ -1010,18 +1190,34 @@ function infoSequences(ctx: EngineCtx): Relation {
 function infoTableConstraints(ctx: EngineCtx): Relation {
   const catalog = catalogName(ctx.state);
   const rows: Datum[][] = [];
-  for (const t of allTables(ctx.state)) {
-    for (const c of t.constraints) {
-      const type =
-        c.kind === "primary_key"
-          ? "PRIMARY KEY"
-          : c.kind === "unique"
-            ? "UNIQUE"
-            : c.kind === "check"
-              ? "CHECK"
-              : "FOREIGN KEY";
-      rows.push([catalog, t.schema, c.name, catalog, t.schema, t.name, type]);
-    }
+  for (const entry of constraintEntries(ctx.state)) {
+    const t = entry.table;
+    const c = entry.contype === "n" ? null : entry.constraint;
+    // PostgreSQL 18 lists each NOT NULL constraint as a CHECK
+    const type =
+      entry.contype === "p"
+        ? "PRIMARY KEY"
+        : entry.contype === "u"
+          ? "UNIQUE"
+          : entry.contype === "f"
+            ? "FOREIGN KEY"
+            : "CHECK";
+    const deferrable = c?.kind === "foreign_key" && c.deferrable === true;
+    const deferred = deferrable && c?.kind === "foreign_key" && c.initiallyDeferred === true;
+    const nullsDistinct = c?.kind === "unique" ? (c.nullsNotDistinct ? "NO" : "YES") : null;
+    rows.push([
+      catalog,
+      t.schema,
+      entry.name,
+      catalog,
+      t.schema,
+      t.name,
+      type,
+      deferrable ? "YES" : "NO",
+      deferred ? "YES" : "NO",
+      "YES",
+      nullsDistinct,
+    ]);
   }
   return rel(
     [
@@ -1032,9 +1228,178 @@ function infoTableConstraints(ctx: EngineCtx): Relation {
       ["table_schema", "name"],
       ["table_name", "name"],
       ["constraint_type", "text"],
+      ["is_deferrable", "text"],
+      ["initially_deferred", "text"],
+      ["enforced", "text"],
+      ["nulls_distinct", "text"],
     ],
     rows,
     "table_constraints",
+  );
+}
+
+/** information_schema.constraint_column_usage: the columns each constraint uses (a foreign key's referenced ones). */
+function infoConstraintColumnUsage(ctx: EngineCtx): Relation {
+  const catalog = catalogName(ctx.state);
+  const rows: Datum[][] = [];
+  for (const entry of constraintEntries(ctx.state)) {
+    const t = entry.table;
+    const push = (schema: string, table: string, column: string) =>
+      rows.push([catalog, schema, table, column, catalog, t.schema, entry.name]);
+    if (entry.contype === "n") {
+      push(t.schema, t.name, entry.column);
+      continue;
+    }
+    const c = entry.constraint;
+    if (c.kind === "foreign_key") {
+      for (const column of c.refColumns) push(c.refSchema, c.refTable, column);
+    } else if (c.kind === "check") {
+      for (const n of referencedColumns(t, c.expr)) push(t.schema, t.name, t.columns[n - 1]!.name);
+    } else {
+      for (const column of c.columns) push(t.schema, t.name, column);
+    }
+  }
+  return rel(
+    [
+      ["table_catalog", "name"],
+      ["table_schema", "name"],
+      ["table_name", "name"],
+      ["column_name", "name"],
+      ["constraint_catalog", "name"],
+      ["constraint_schema", "name"],
+      ["constraint_name", "name"],
+    ],
+    rows,
+    "constraint_column_usage",
+  );
+}
+
+/** information_schema.referential_constraints: each foreign key, the key it references and its rules. */
+function infoReferentialConstraints(ctx: EngineCtx): Relation {
+  const catalog = catalogName(ctx.state);
+  const rows: Datum[][] = [];
+  for (const entry of constraintEntries(ctx.state)) {
+    if (entry.contype !== "f" || entry.constraint.kind !== "foreign_key") continue;
+    const fk = entry.constraint;
+    const refTable = ctx.state.schemas.get(fk.refSchema)?.tables.get(fk.refTable);
+    const wanted = [...fk.refColumns].sort().join("\0");
+    const key = refTable?.constraints.find(
+      (c) => (c.kind === "primary_key" || c.kind === "unique") && [...c.columns].sort().join("\0") === wanted,
+    );
+    rows.push([
+      catalog,
+      entry.table.schema,
+      entry.name,
+      key ? catalog : null,
+      key ? fk.refSchema : null,
+      key?.name ?? null,
+      fk.match === "full" ? "FULL" : "NONE",
+      actionRule(fk.onUpdate),
+      actionRule(fk.onDelete),
+    ]);
+  }
+  return rel(
+    [
+      ["constraint_catalog", "name"],
+      ["constraint_schema", "name"],
+      ["constraint_name", "name"],
+      ["unique_constraint_catalog", "name"],
+      ["unique_constraint_schema", "name"],
+      ["unique_constraint_name", "name"],
+      ["match_option", "text"],
+      ["update_rule", "text"],
+      ["delete_rule", "text"],
+    ],
+    rows,
+    "referential_constraints",
+  );
+}
+
+/** information_schema.check_constraints: CHECK constraints and, as PostgreSQL 18 lists them, NOT NULLs. */
+function infoCheckConstraints(ctx: EngineCtx): Relation {
+  const catalog = catalogName(ctx.state);
+  const rows: Datum[][] = [];
+  for (const entry of constraintEntries(ctx.state)) {
+    if (entry.contype === "n") {
+      rows.push([catalog, entry.table.schema, entry.name, `${quoteIdentifier(entry.column)} IS NOT NULL`]);
+    } else if (entry.constraint.kind === "check") {
+      rows.push([catalog, entry.table.schema, entry.name, checkClause(ctx, entry.table, entry.constraint.expr, false)]);
+    }
+  }
+  return rel(
+    [
+      ["constraint_catalog", "name"],
+      ["constraint_schema", "name"],
+      ["constraint_name", "name"],
+      ["check_clause", "text"],
+    ],
+    rows,
+    "check_constraints",
+  );
+}
+
+/** information_schema.triggers: one row per trigger and event. */
+function infoTriggers(ctx: EngineCtx): Relation {
+  const catalog = catalogName(ctx.state);
+  const rows: Datum[][] = [];
+  const entries = triggerEntries(ctx.state);
+  for (const { table, trigger } of entries) {
+    const timing = trigger.timing === "instead_of" ? "INSTEAD OF" : trigger.timing.toUpperCase();
+    for (const { event } of triggerEvents(trigger)) {
+      // action_order: rank among the table's triggers for the same event, timing and level, by name
+      const order =
+        1 +
+        entries.filter(
+          (other) =>
+            other.table === table &&
+            other.trigger.timing === trigger.timing &&
+            other.trigger.forEachRow === trigger.forEachRow &&
+            other.trigger.events.some((e) => e.event.toUpperCase() === event) &&
+            other.trigger.name < trigger.name,
+        ).length;
+      rows.push([
+        catalog,
+        table.schema,
+        trigger.name,
+        event,
+        catalog,
+        table.schema,
+        table.name,
+        order,
+        triggerCondition(ctx, table, trigger, false),
+        triggerAction(ctx.state, trigger),
+        trigger.forEachRow ? "ROW" : "STATEMENT",
+        timing,
+        trigger.oldTable ?? null,
+        trigger.newTable ?? null,
+        null,
+        null,
+        null,
+      ]);
+    }
+  }
+  return rel(
+    [
+      ["trigger_catalog", "name"],
+      ["trigger_schema", "name"],
+      ["trigger_name", "name"],
+      ["event_manipulation", "text"],
+      ["event_object_catalog", "name"],
+      ["event_object_schema", "name"],
+      ["event_object_table", "name"],
+      ["action_order", "int4"],
+      ["action_condition", "text"],
+      ["action_statement", "text"],
+      ["action_orientation", "text"],
+      ["action_timing", "text"],
+      ["action_reference_old_table", "name"],
+      ["action_reference_new_table", "name"],
+      ["action_reference_old_row", "name"],
+      ["action_reference_new_row", "name"],
+      ["created", "timestamptz"],
+    ],
+    rows,
+    "triggers",
   );
 }
 
@@ -1170,9 +1535,23 @@ function buildCatalogRelation(ctx: EngineCtx, schema: string, name: string): Rel
       return infoKeyColumnUsage(ctx);
     case "routines":
       return infoRoutines(ctx);
+    case "triggers":
+      return infoTriggers(ctx);
+    case "constraint_column_usage":
+      return infoConstraintColumnUsage(ctx);
+    case "referential_constraints":
+      return infoReferentialConstraints(ctx);
+    case "check_constraints":
+      return infoCheckConstraints(ctx);
     default:
       return null;
   }
 }
 
 setCatalogBuilder(buildCatalogRelation);
+setRegResolver({
+  typeIn: regtypeIn,
+  procIn: regprocIn,
+  oid: (state, t, name) => (t === "regtype" ? regtypeOid(state, name) : regprocOid(state, name)),
+  name: (state, t, oid) => (t === "regtype" ? regtypeName(state, oid) : regprocName(state, oid)),
+});

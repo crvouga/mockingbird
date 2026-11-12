@@ -1,4 +1,4 @@
-import { pgError, unsupported } from "../errors/error.ts";
+import { pgError } from "../errors/error.ts";
 import { stemEnglish } from "./stem.ts";
 
 /**
@@ -300,8 +300,77 @@ export function phrasetoTsquery(config: string, text: string): string {
   return words.map((w) => `'${w.replaceAll("'", "''")}'`).join(" <-> ");
 }
 
-export function websearchToTsquery(_config: string, _text: string): string {
-  throw unsupported("websearch_to_tsquery");
+/**
+ * websearch_to_tsquery: unquoted words are ANDed, `"quoted text"` is a phrase (`<->`, a dropped
+ * stop word widening the distance), `or` between operands is `|`, and `-` negates the operand
+ * after it. Other punctuation only separates words; the input never raises a syntax error.
+ * Hyphenated compounds are split like to_tsvector here splits them (no `'foo-bar'` lexeme).
+ */
+export function websearchToTsquery(config: string, text: string): string {
+  // a run of words → their lexemes joined as a phrase; stop words only widen the distance
+  const phrase = (chunk: string): TsQueryNode | null => {
+    let node: TsQueryNode | null = null;
+    let gap = 0;
+    for (const { word } of tokenizeText(chunk)) {
+      const norm = normalizeWord(config, word);
+      if (norm === null) {
+        if (node !== null) gap++;
+        continue;
+      }
+      const lexeme: TsQueryNode = { kind: "lexeme", word: norm, prefix: false, weights: null };
+      node = node === null ? lexeme : { kind: "phrase", left: node, right: lexeme, distance: gap + 1 };
+      gap = 0;
+    }
+    return node;
+  };
+  const orGroups: TsQueryNode[][] = [[]];
+  let pendingOr = false;
+  let i = 0;
+  const push = (operand: TsQueryNode | null, negate: number) => {
+    if (operand === null) return;
+    let node: TsQueryNode = operand;
+    for (let k = 0; k < negate; k++) node = { kind: "not", operand: node };
+    if (pendingOr && orGroups[orGroups.length - 1]!.length > 0) orGroups.push([]);
+    pendingOr = false;
+    orGroups[orGroups.length - 1]!.push(node);
+  };
+  while (i < text.length) {
+    if (/\s/.test(text[i]!)) {
+      i++;
+      continue;
+    }
+    // each `-` negates the operand that follows it, even across blanks
+    let negate = 0;
+    while (text[i] === "-") {
+      negate++;
+      i++;
+      while (i < text.length && /\s/.test(text[i]!)) i++;
+    }
+    if (i >= text.length) break;
+    if (text[i] === '"') {
+      const end = text.indexOf('"', i + 1);
+      const chunk = end === -1 ? text.slice(i + 1) : text.slice(i + 1, end);
+      i = end === -1 ? text.length : end + 1;
+      push(phrase(chunk), negate);
+      continue;
+    }
+    let j = i;
+    while (j < text.length && !/\s/.test(text[j]!) && text[j] !== '"') j++;
+    const chunk = text.slice(i, Math.max(j, i + 1));
+    i = Math.max(j, i + 1);
+    if (negate === 0 && chunk.toLowerCase() === "or") {
+      pendingOr = true;
+      continue;
+    }
+    push(phrase(chunk), negate);
+  }
+  const and = (nodes: TsQueryNode[]): TsQueryNode | null =>
+    nodes.reduce<TsQueryNode | null>((acc, n) => (acc === null ? n : { kind: "and", left: acc, right: n }), null);
+  const result = orGroups
+    .map(and)
+    .filter((n): n is TsQueryNode => n !== null)
+    .reduce<TsQueryNode | null>((acc, n) => (acc === null ? n : { kind: "or", left: acc, right: n }), null);
+  return tsqueryText(result);
 }
 
 export function tsqueryText(node: TsQueryNode | null): string {
@@ -320,17 +389,20 @@ export function tsqueryText(node: TsQueryNode | null): string {
       case "not": {
         return `!${render(n.operand, 4)}`;
       }
+      // priorities | 1, & 2, <-> 3, ! 4 (tsquery.c infix()): a child is parenthesized when it binds
+      // looser than its parent; & and | chain without parentheses, a phrase on the right of a phrase
+      // keeps them
       case "phrase": {
-        const s = `${render(n.left, 3)} ${n.distance === 1 ? "<->" : `<${n.distance}>`} ${render(n.right, 3)}`;
-        return parentPrec > 2 ? `( ${s} )` : s;
+        const s = `${render(n.left, 3)} ${n.distance === 1 ? "<->" : `<${n.distance}>`} ${render(n.right, 3.5)}`;
+        return parentPrec > 3 ? `( ${s} )` : s;
       }
       case "and": {
         const s = `${render(n.left, 2)} & ${render(n.right, 2)}`;
-        return parentPrec > 1 ? `( ${s} )` : s;
+        return parentPrec > 2 ? `( ${s} )` : s;
       }
       case "or": {
         const s = `${render(n.left, 1)} | ${render(n.right, 1)}`;
-        return parentPrec > 0 ? `( ${s} )` : s;
+        return parentPrec > 1 ? `( ${s} )` : s;
       }
     }
   };
@@ -338,6 +410,8 @@ export function tsqueryText(node: TsQueryNode | null): string {
 }
 
 export function parseTsqueryText(text: string): TsQueryNode | null {
+  // the empty query (to_tsquery of nothing but stop words) matches nothing and ranks 0
+  if (text.trim() === "") return null;
   return new TsQueryParser(text, "simple").parse();
 }
 

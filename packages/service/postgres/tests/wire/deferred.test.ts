@@ -32,3 +32,34 @@ test("wire transaction defers constraint triggers until final commit (#432)", as
     await server.close();
   }
 });
+
+test("wire transaction checks deferred foreign keys at commit (#683)", async () => {
+  const server = await serve({ port: 0 });
+  const client = new pg.Client({ connectionString: `postgres://postgres@${server.host}:${server.port}/postgres` });
+  await client.connect();
+  try {
+    await client.query("CREATE TABLE parent (id int PRIMARY KEY)");
+    await client.query("CREATE TABLE child (pid int REFERENCES parent (id) DEFERRABLE INITIALLY DEFERRED)");
+    await client.query("BEGIN");
+    await client.query("INSERT INTO child VALUES (1)");
+    await client.query("INSERT INTO parent VALUES (1)");
+    await client.query("COMMIT");
+    expect((await client.query("SELECT count(*)::int AS children FROM child")).rows).toEqual([{ children: 1 }]);
+
+    await client.query("CREATE TABLE child2 (pid int REFERENCES parent (id) DEFERRABLE INITIALLY IMMEDIATE)");
+    await client.query("BEGIN");
+    await client.query("SET CONSTRAINTS ALL DEFERRED");
+    await client.query("INSERT INTO child2 VALUES (2)");
+    await client.query("INSERT INTO parent VALUES (2)");
+    await client.query("COMMIT");
+    expect((await client.query("SELECT count(*)::int AS children FROM child2")).rows).toEqual([{ children: 1 }]);
+
+    await client.query("BEGIN");
+    await client.query("INSERT INTO child VALUES (3)");
+    await expect(client.query("COMMIT")).rejects.toMatchObject({ code: "23503" });
+    expect((await client.query("SELECT count(*)::int AS children FROM child")).rows).toEqual([{ children: 1 }]);
+  } finally {
+    await client.end();
+    await server.close();
+  }
+});

@@ -1,7 +1,9 @@
 import { pgError } from "../errors/error.ts";
+import { flushDeferredForeignKeys } from "../constraints/enforce.ts";
 import { flushConstraintTriggers } from "../executor/triggers.ts";
 import { assert } from "../runtime/assert.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
+import { TRANSACTION_GUCS } from "../storage/guc-catalog.ts";
 
 interface Snapshot {
   state: DatabaseState;
@@ -17,11 +19,21 @@ export class TransactionManager {
   private base: Snapshot | null = null;
   private savepoints: Array<{ name: string; snap: Snapshot }> = [];
   private freezeDepth = 0;
+  /**
+   * Whether a statement of this transaction has read or written data yet (PostgreSQL's
+   * FirstSnapshotSet): after that, the transaction's isolation level and read-write mode are fixed.
+   */
+  snapshotTaken = false;
 
   constructor(private readonly state: DatabaseState) {}
 
   get inTransaction(): boolean {
     return this.base !== null;
+  }
+
+  /** Inside a SAVEPOINT. */
+  get inSubtransaction(): boolean {
+    return this.savepoints.length > 0;
   }
 
   private takeSnapshot(): Snapshot {
@@ -50,12 +62,19 @@ export class TransactionManager {
     }
     this.base = this.takeSnapshot();
     this.state.inTransaction = true;
+    this.snapshotTaken = false;
+    // the transaction's own characteristics start from the session's defaults
+    for (const [name, sessionDefault] of TRANSACTION_GUCS) {
+      const value = this.state.getSetting(sessionDefault);
+      if (value !== undefined) this.state.localSettings.set(name, value);
+    }
     assert(this.freezeDepth === 1, "BEGIN freeze depth");
   }
 
   commit(): void {
     try {
       flushConstraintTriggers(this.state, true);
+      flushDeferredForeignKeys(this.state, true);
     } catch (error) {
       this.rollback();
       throw error;
@@ -63,9 +82,11 @@ export class TransactionManager {
     this.base = null;
     this.savepoints = [];
     this.state.inTransaction = false;
+    this.snapshotTaken = false;
     this.state.transactionXid = null;
     this.state.localSettings.clear();
     this.state.pendingTriggers = [];
+    this.state.pendingForeignKeys = [];
     this.state.constraintModes.clear();
     while (this.freezeDepth > 0) this.thawOnce();
   }
@@ -77,9 +98,11 @@ export class TransactionManager {
     this.base = null;
     this.savepoints = [];
     this.state.inTransaction = false;
+    this.snapshotTaken = false;
     this.state.transactionXid = null;
     this.state.localSettings.clear();
     this.state.pendingTriggers = [];
+    this.state.pendingForeignKeys = [];
     this.state.constraintModes.clear();
     while (this.freezeDepth > 0) this.thawOnce();
   }
