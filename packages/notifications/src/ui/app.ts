@@ -22,6 +22,7 @@ import {
   type DeviceLayout,
   deviceScale,
   isCompact,
+  isPhoneWidth,
   moveTab,
   phoneFit,
   TAB_LABELS,
@@ -194,6 +195,8 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       ? initialView
       : null) as Channel | null,
     search: "",
+    /** Narrow screens: whether the rest of the top bar is open. */
+    menu: false,
     follow: params.get("follow") !== "0",
     connected: false,
     sms: {
@@ -266,12 +269,15 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     const width = root.clientWidth
     root.style.setProperty("--mbn-scale", String(scale))
     if (width > 0) root.style.setProperty("--mbn-fit", String(phoneFit(width, scale)))
+    const size = width > 0 ? (isPhoneWidth(width) ? "phone" : "wide") : root.dataset.size
+    const resized = size !== root.dataset.size
+    if (size) root.dataset.size = size
     const next = isCompact(
       options.tabs === false && layout === "auto" ? "grid" : layout,
       width,
       scale,
     )
-    if (next === compact) return false
+    if (next === compact) return resized
     compact = next
     return true
   }
@@ -748,18 +754,20 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     const namespaces = [...new Set([...state.namespaces, state.namespace])].sort()
     const searchFocused = document.activeElement === byTestId(TEST_IDS.search)
     bar.innerHTML = `
-    <div class="brand"><span class="brand-mark">${icons.bell()}</span><span>${esc(title())} <small>Mockingbird</small></span></div>
-    <label class="field">Namespace <select data-action="namespace" ${tid(TEST_IDS.namespace)} aria-label="Namespace">${namespaces
+    <div class="brand"><span class="brand-mark">${icons.bell()}</span><span class="brand-name">${esc(title())} <small>Mockingbird</small></span></div>
+    <div class="field search">${icons.search("#9aa1b1", 14)}<input type="search" data-action="search" ${tid(TEST_IDS.search)} aria-label="Filter notifications" placeholder="${root.dataset.size === "phone" ? "Filter notifications…" : "Filter by recipient, sender, text…"}" value="${esc(state.search)}"></div>
+    <span class="live" ${tid(TEST_IDS.connection)} data-state="${state.connected ? "live" : "reconnecting"}" role="status"><span class="dot ${state.connected ? "ok" : "bad"}"></span><span class="live-label">${state.connected ? "Live" : "Reconnecting"}</span></span>
+    <button class="menu-btn" data-action="menu" ${tid(TEST_IDS.menu)} aria-expanded="${state.menu}" aria-controls="${uid}-more" aria-label="More options">${state.menu ? icons.close(18) : icons.tune(20)}</button>
+    <div class="topbar-more" id="${uid}-more">
+    <label class="field namespace">Namespace <select data-action="namespace" ${tid(TEST_IDS.namespace)} aria-label="Namespace">${namespaces
       .map((ns) => `<option ${ns === state.namespace ? "selected" : ""}>${esc(ns)}</option>`)
       .join("")}</select></label>
-    <div class="field search">${icons.search("#9aa1b1", 14)}<input type="search" data-action="search" ${tid(TEST_IDS.search)} aria-label="Filter notifications" placeholder="Filter by recipient, sender, text…" value="${esc(state.search)}"></div>
     <div class="tabs" role="group" aria-label="View">
       <button data-action="view" data-value="devices" ${tid(TEST_IDS.viewDevices)} aria-pressed="${state.view === "devices"}">Devices</button>
       <button data-action="view" data-value="timeline" ${tid(TEST_IDS.viewTimeline)} aria-pressed="${state.view === "timeline"}">Timeline <span style="opacity:.6">${state.items.length}</span></button>
     </div>
     <label class="toggle" title="Jump each device to the newest arrival"><input type="checkbox" data-action="follow" ${tid(TEST_IDS.follow)} ${state.follow ? "checked" : ""}> Follow new</label>
     <button class="icon-toggle" data-action="sound" ${tid(TEST_IDS.sound)} aria-pressed="${sound.enabled}" title="Play alert sounds on arrivals">${sound.enabled ? icons.volumeOn() : icons.volumeOff()}<span>Sound</span></button>
-    <span class="live" ${tid(TEST_IDS.connection)} data-state="${state.connected ? "live" : "reconnecting"}" role="status"><span class="dot ${state.connected ? "ok" : "bad"}"></span>${state.connected ? "Live" : "Reconnecting"}</span>
     <div class="sources">${state.sources
       .map(
         (s) =>
@@ -769,7 +777,8 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
               : (SERVICE_LABEL[s.name] ?? s.name),
           )} <b>${s.count}</b></span>`,
       )
-      .join("")}</div>`
+      .join("")}</div>
+    </div>`
     if (searchFocused) {
       const input = byTestId<HTMLInputElement>(TEST_IDS.search)
       input?.focus()
@@ -1910,6 +1919,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     switch (action) {
       case "view":
         state.view = target.dataset.value === "timeline" ? "timeline" : "devices"
+        state.menu = false
         render()
         break
       case "tab":
@@ -1921,6 +1931,10 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
         break
       case "sound":
         handle.setSound(!sound.enabled)
+        break
+      case "menu":
+        state.menu = !state.menu
+        renderTopbar()
         break
       case "sms-open":
         state.sms.thread = from || null
