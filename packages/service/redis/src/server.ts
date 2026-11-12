@@ -1,22 +1,29 @@
-import { createConnection, createServer, type Server, type Socket } from "node:net"
+import { createConnection, createServer } from "node:net"
 import type { ConfigService, FleetChild } from "@crvouga/mockingbird-adapter-node"
 import {
   matchNamespacePath,
   normalizeBootControls,
   resolveAdminPrefix,
 } from "@crvouga/mockingbird-service"
-import { createRedis, type Redis, RedisConnectionError } from "./engine.ts"
-import { encodeReply, err, type Reply, RequestParser, RespParser } from "./protocol.ts"
+import { createRedis, type Redis } from "./engine.ts"
+import { RespParser } from "./protocol.ts"
+import { createRespServer, type RespServerOptions } from "./transport.ts"
+
+export {
+  type ByteStreamPair,
+  type ClientStream,
+  createRespServer,
+  type DuplexLike,
+  type RespServer,
+  type RespServerOptions,
+} from "./transport.ts"
 
 /** HTTP port for `serve --config`. The RESP socket binds an ephemeral port. */
 export const DEFAULT_PORT = 8827
 
-export interface ServeOptions {
+export interface ServeOptions extends RespServerOptions {
   port?: number
   host?: string
-  admit?: () => boolean
-  closeEngine?: boolean
-  controlPrivileged?: boolean
 }
 
 export interface RedisListening {
@@ -26,17 +33,20 @@ export interface RedisListening {
   close(): Promise<void>
 }
 
+/**
+ * Listen for RESP clients over TCP. Each socket is handed to a {@link createRespServer} server;
+ * where no listener can run, use that server from `/transport` directly.
+ */
 export function serve(redis: Redis, options: ServeOptions = {}): Promise<RedisListening> {
   const host = options.host ?? "127.0.0.1"
   const port = options.port ?? 6379
-  const sockets = new Set<Socket>()
+  const resp = createRespServer(redis, {
+    ...(options.admit ? { admit: options.admit } : {}),
+    controlPrivileged: options.controlPrivileged ?? false,
+    closeEngine: options.closeEngine !== false,
+  })
   const server = createServer({ keepAlive: true }, (socket) => {
-    if (options.admit && !options.admit()) {
-      socket.destroy()
-      return
-    }
-    sockets.add(socket)
-    attach(redis, socket, () => sockets.delete(socket), options.controlPrivileged ?? false)
+    void resp.accept(socket)
   })
   return new Promise((resolve, reject) => {
     const fail = (error: Error) => reject(error)
@@ -51,97 +61,13 @@ export function serve(redis: Redis, options: ServeOptions = {}): Promise<RedisLi
         },
         host,
         port: actual,
-        close: () => shutdown(server, sockets, redis, options.closeEngine !== false),
+        close: async () => {
+          const closing = resp.close()
+          await new Promise<void>((done) => server.close(() => done()))
+          await closing
+        },
       })
     })
-  })
-}
-
-function attach(redis: Redis, socket: Socket, onGone: () => void, controlPrivileged = false): void {
-  const session = redis.createSession()
-  session.controlPrivileged = controlPrivileged
-  session.localPort = socket.localPort
-  if (socket.remoteAddress)
-    session.remoteAddr = `${socket.remoteAddress.replace(/^::ffff:/, "")}:${socket.remotePort}`
-  const parser = new RequestParser()
-  // A protocol error is queued behind the commands before it, then closes the connection.
-  const pending: Array<{ name: string; args: Uint8Array[] } | { fatal: string }> = []
-  let pumping = false
-  // Set once the connection is closing after its last reply (QUIT or a protocol error). Redis
-  // stops reading input then, so nothing pipelined behind it may run.
-  let closing = false
-  const closeAfterReply = () => {
-    closing = true
-    pending.length = 0
-    socket.end()
-  }
-  const write = (reply: Reply) => {
-    if (!socket.destroyed && !socket.writableEnded)
-      socket.write(encodeReply(reply, session.protocol))
-  }
-  session.onPush = write
-  const stop = redis.onDisconnect((dropped) => {
-    if (dropped === session) socket.destroy()
-  })
-  const finish = () => {
-    redis.disconnect(session)
-    stop()
-    onGone()
-  }
-  socket.on("data", (chunk: Uint8Array) => {
-    if (closing) return
-    const { requests, error } = parser.push(chunk)
-    pending.push(...requests)
-    if (error !== null) pending.push({ fatal: error })
-    void pump()
-  })
-  const pump = async () => {
-    if (pumping) return
-    pumping = true
-    try {
-      while (pending.length > 0) {
-        const command = pending.shift()
-        if (!command) break
-        if ("fatal" in command) {
-          write(err(`ERR Protocol error: ${command.fatal}`))
-          closeAfterReply()
-          break
-        }
-        try {
-          const reply = await redis.perform(session, command.name, command.args)
-          write(reply)
-          if (session.quit) {
-            closeAfterReply()
-            break
-          }
-        } catch (error) {
-          if (error instanceof RedisConnectionError) {
-            socket.destroy()
-            break
-          }
-          socket.destroy()
-          break
-        }
-      }
-    } finally {
-      pumping = false
-      if (pending.length > 0 && !socket.destroyed) void pump()
-    }
-  }
-  socket.on("close", finish)
-  socket.on("error", finish)
-}
-
-function shutdown(
-  server: Server,
-  sockets: Set<Socket>,
-  redis: Redis,
-  closeEngine = true,
-): Promise<void> {
-  if (closeEngine) redis.close()
-  for (const socket of sockets) socket.destroy()
-  return new Promise((resolve) => {
-    server.close(() => resolve())
   })
 }
 

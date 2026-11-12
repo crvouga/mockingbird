@@ -89,6 +89,16 @@ run). Tests: `test/redis.commands.test.ts`.
 | `COMMAND`, `COMMAND COUNT`, `LIST` (incl. `FILTERBY`), `INFO`, `DOCS`, `GETKEYS` | Metadata for the commands the emulator implements (captured from redis-server 8.4.0 by `scripts/command-table.ts`). `COMMAND COUNT` is the number of those commands, not Redis's `272`. `GETKEYS` handles fixed key specs plus `EVAL`, `ZUNIONSTORE`-style `numkeys`, `LMPOP` and `XREAD`. Sub-command entries and key specifications inside `INFO` are empty arrays. |
 | `COMMAND GETKEYSANDFLAGS`, `COMMAND HELP` | **Unsupported**, explicit `ERR COMMAND <sub> is not supported by the Mockingbird Redis emulator`. |
 
+## Transports (#698)
+
+The RESP server runs over TCP (`serve` from `/server`, Node and Bun) or over any injected
+connection (`createRespServer` from `/transport`, no `node:` import: browser, worker, edge). Both
+paths run the same session code, so blocking commands, `MULTI`, pub/sub and `CLIENT` behave the
+same; a closed stream releases the session as a closed socket does. `test/redis.transport.test.ts`
+drives it with unmodified ioredis over in-memory web streams and over a Node `Duplex`. Not a
+vendor behaviour, so there is no oracle comparison; the in-process transport is a Mockingbird
+feature.
+
 ## Fleet controls
 
 The fleet adapter supports dynamic namespace listeners, finite numeric seeds, boot/reset clocks,

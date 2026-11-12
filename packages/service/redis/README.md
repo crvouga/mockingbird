@@ -26,10 +26,9 @@ import { Redis } from "ioredis"
 import { createRedis, manualClock } from "@crvouga/mockingbird-service-redis"
 import { serve } from "@crvouga/mockingbird-service-redis/server"
 
-// Test setup: an emulator on a manual clock, listening on a free port. `as never` is needed
-// because the two entry points bundle separate declarations of the `Redis` type.
+// Test setup: an emulator on a manual clock, listening on a free port.
 const emulator = createRedis({ clock: manualClock(1_700_000_000_000) })
-const server = await serve(emulator as never, { port: 0 })
+const server = await serve(emulator, { port: 0 })
 
 // Application code: the ioredis client it already uses, connected to the emulator.
 const redis = new Redis({ host: server.host, port: server.port })
@@ -51,6 +50,34 @@ are the test controls.
 `ioredis` connects to the TCP server unchanged. Cluster `MOVED` / `ASK` is not implemented:
 `CLUSTER` and `READONLY` answer that cluster support is disabled.
 
+### Without a listener (browser, worker, edge)
+
+`createRespServer(redis, options?)` from `@crvouga/mockingbird-service-redis/transport` is the same
+RESP server with no TCP listener and no `node:` import, so it bundles for a browser or worker.
+`server.accept(stream)` serves one client connection given as `{ readable, writable }` web byte
+streams or a Node `Duplex`, and resolves when that connection closes; the session's blocking
+waiters, `MULTI` state, subscriptions and `CLIENT` registration are then released. `serve()` is this
+server behind `net.createServer`. Options are `admit` and `controlPrivileged` as for `serve()`, plus
+`closeEngine` (default `true`) for `server.close()`. The connection shape is the same as
+`createWireServer` from `@crvouga/mockingbird-service-postgres/transport`.
+
+```ts
+import { createRedis } from "@crvouga/mockingbird-service-redis"
+import { createRespServer } from "@crvouga/mockingbird-service-redis/transport"
+
+const server = createRespServer(createRedis())
+const toServer = new TransformStream<Uint8Array, Uint8Array>()
+const toClient = new TransformStream<Uint8Array, Uint8Array>()
+void server.accept({ readable: toServer.readable, writable: toClient.writable })
+// Hand the other ends (toServer.writable, toClient.readable) to the client as a socket, e.g.
+// through ioredis's `Connector` option.
+```
+
+The server writes replies in the order it produces them. Your client-side socket must deliver
+chunks in order too: `ioredis` and BullMQ assume bytes written in one tick arrive before a timer of
+the next, so schedule delivery on a microtask or a `MessageChannel`, not `setTimeout(0)` (clamped to
+4 ms in a browser).
+
 `mockingbird-redis serve --config mockingbird.json` supervises mixed HTTP/Postgres/Redis fleets.
 See [fleet configuration and controls](../../../docs/FLEETS.md) for ephemeral discovery, namespace
 endpoints, readiness, shutdown and coordinated state controls.
@@ -65,6 +92,9 @@ endpoints, readiness, shutdown and coordinated state controls.
 - `RedisReplyError` is a Redis error reply raised by `call`.
 - `manualClock(start)` moves only when `advance` is called. `wallClock` follows `Date.now()`.
 - `encodeReply(reply, protocol)` writes a RESP2 or RESP3 frame.
+- `/server`: `serve(redis, options?)` listens over TCP; `serveTarget` boots it from `serve --config`.
+- `/transport`: `createRespServer(redis, options?)` returns `{ accept(stream), connections, close() }`
+  with no listener (see above).
 
 ## Deliberately not modelled
 
