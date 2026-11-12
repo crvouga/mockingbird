@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **14**
-- supported by the emulator: **14**
-- parity enabled: **14**
+- operations in spec: **15**
+- supported by the emulator: **15**
+- parity enabled: **15**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -13,6 +13,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `CdpBatch` | `POST /v1/batch` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `SendEmail` | `POST /v1/send/email` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `SendSms` | `POST /v1/send/sms` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `SendPush` | `POST /v1/send/push` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `SendInboxMessage` | `POST /v1/send/inbox_message` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `ListTransactionalMessages` | `GET /v1/transactional` | ✅ supported | ✅ |  |
 | `GetTransactionalMessage` | `GET /v1/transactional/{transactional_id}` | ✅ supported | ✅ |  |

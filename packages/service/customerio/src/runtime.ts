@@ -24,6 +24,8 @@ import {
 import {
   DELIVERY_STATES,
   type DeliveryState,
+  type Device,
+  MAX_DEVICES_PER_PERSON,
   type Settings,
   type TransactionalMessage,
 } from "./state.js"
@@ -35,7 +37,7 @@ export const REPORTING_WEBHOOK_PATH = "/v1/customer-io/reporting-webhook"
 export const signReporting = (secret: string, timestampSeconds: number, body: string) =>
   hmac("SHA-256", secret, `v0:${timestampSeconds}:${body}`, "hex")
 
-const SENDS = ["SendEmail", "SendSms", "SendInboxMessage"] as const
+const SENDS = ["SendEmail", "SendSms", "SendPush", "SendInboxMessage"] as const
 const CDP = ["CdpIdentify", "CdpTrack", "CdpBatch"] as const
 const onSends = (rule: Omit<NonNullable<FaultPreset["rules"]>[number], "operationId">) =>
   SENDS.map((operationId) => ({ operationId, ...rule }))
@@ -114,6 +116,11 @@ export const CUSTOMERIO_PRESETS: Record<string, FaultPreset> = {
     description:
       "Sends record the delivery, then drop the connection: ambiguous, exactly one delivery",
     rules: SENDS.map((operationId) => ({ operationId, effect: "send_drop_after_accept" })),
+  },
+  push_unknown_targets_rejected: {
+    description:
+      "Push sends answer 400 (no delivery) when `to` names a token not on the profile, the person has no profile, or no devices",
+    rules: [{ operationId: "SendPush", effect: "push_unknown_targets_rejected" }],
   },
   cdp_unavailable: {
     description: "CDP calls answer 503 (the SDK retries, then fails the callback)",
@@ -241,6 +248,41 @@ const adminRoutes = (runtime: ServiceRuntime<CustomerIoAPI>): AdminRoutes => ({
     const profile = runtime.instance(namespace).state.profile(params.id as string)
     return profile ? json(200, profile) : adminError(404, `no profile ${params.id}`)
   },
+  "GET /devices/:id": ({ params, namespace }) =>
+    json(200, {
+      userId: params.id,
+      devices: runtime.instance(namespace).state.devicesOf(params.id as string),
+    }),
+  "PUT /devices/:id": ({ params, body, namespace }) => {
+    const list = isRecord(body) ? body.devices : undefined
+    const usage = `expected {"devices": [{token, platform, last_used?, attributes?}]} (at most ${MAX_DEVICES_PER_PERSON})`
+    if (!Array.isArray(list) || list.length > MAX_DEVICES_PER_PERSON) return adminError(400, usage)
+    const api = runtime.instance(namespace)
+    const now = Math.floor(api.now() / 1000)
+    const devices: Device[] = []
+    for (const raw of list) {
+      const token = isRecord(raw) ? (raw.token ?? raw.id) : undefined
+      if (!isRecord(raw) || typeof token !== "string" || !token) return adminError(400, usage)
+      if (devices.some((device) => device.id === token))
+        return adminError(400, `duplicate token ${token}`)
+      devices.push({
+        id: token,
+        platform: typeof raw.platform === "string" ? raw.platform.toLowerCase() : "unknown",
+        last_used:
+          typeof raw.last_used === "number" && Number.isFinite(raw.last_used)
+            ? Math.floor(raw.last_used)
+            : now,
+        attributes: isRecord(raw.attributes) ? raw.attributes : {},
+      })
+    }
+    const userId = params.id as string
+    if (!api.state.profile(userId)) api.mergeProfile(userId, {})
+    api.state.releaseTokens(
+      userId,
+      devices.map((device) => device.id),
+    )
+    return json(200, { userId, devices: api.state.setDevices(userId, devices) })
+  },
   "PUT /profiles/:id": ({ params, body, namespace }) => {
     if (!isRecord(body)) return adminError(400, "expected a JSON object")
     const patch: {
@@ -367,6 +409,12 @@ const adminRoutes = (runtime: ServiceRuntime<CustomerIoAPI>): AdminRoutes => ({
     }
     if (body.transactionalListKey === "messages" || body.transactionalListKey === "transactional") {
       patch.transactionalListKey = body.transactionalListKey
+    }
+    if (body.pushUnknownTargets === "accept" || body.pushUnknownTargets === "reject") {
+      patch.pushUnknownTargets = body.pushUnknownTargets
+    }
+    if (body.deviceTokenOwnership === "move" || body.deviceTokenOwnership === "share") {
+      patch.deviceTokenOwnership = body.deviceTokenOwnership
     }
     return json(200, runtime.instance(namespace).state.update(patch))
   },

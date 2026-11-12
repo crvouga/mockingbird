@@ -4,8 +4,8 @@ info:
   description: |
     Stateful emulator subset of Customer.io: the Segment-compatible CDP ingestion endpoints
     (`identify`, `track`, `batch`, as `@customerio/cdp-analytics-node` posts them), the App API
-    transactional sends (email, SMS, inbox message), transactional-message catalog, profile
-    attribute reads, delivery-status reads, and the link-tracking click endpoint. One process
+    transactional sends (email, SMS, push, inbox message), transactional-message catalog, profile
+    attribute reads (with the device list the CDP device events build), delivery-status reads, and the link-tracking click endpoint. One process
     serves all three hosts (`cdp.customer.io`, `api.customer.io`, the tracking domain); their
     paths do not collide.
   version: "1"
@@ -180,6 +180,36 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/SendSmsRequest"
+      responses:
+        "200":
+          $ref: "#/components/responses/Queued"
+        "400":
+          $ref: "#/components/responses/AppError"
+        "401":
+          $ref: "#/components/responses/AppError"
+        "404":
+          $ref: "#/components/responses/AppError"
+  /v1/send/push:
+    post:
+      operationId: SendPush
+      description: |
+        Transactional push (https://docs.customer.io/messaging/send/transactional/push/,
+        App API `sendPush`). `to` is `all` (default), `last_used`, or one device token from the
+        person's device list. Behaviour for a token not on the profile, a person with no
+        profile, and non-string `custom_data` values is a best guess (see README).
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendPushRequest"
       responses:
         "200":
           $ref: "#/components/responses/Queued"
@@ -684,6 +714,74 @@ components:
           type: boolean
         disable_message_retention:
           type: boolean
+    SendPushRequest:
+      type: object
+      required: [transactional_message_id, identifiers]
+      properties:
+        transactional_message_id:
+          $ref: "#/components/schemas/TransactionalMessageId"
+        identifiers:
+          $ref: "#/components/schemas/Identifiers"
+        to:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        platform:
+          type: string
+          enum: [all, ios, android, web, all_and_web]
+        title:
+          type: string
+        message:
+          type: string
+        image_url:
+          type: string
+        link:
+          type: string
+        sound:
+          type: string
+          enum: [default, none]
+        language:
+          type: string
+        message_data:
+          type: object
+          additionalProperties: true
+        custom_data:
+          description: >-
+            Firebase only supports string values (vendor docs); the emulator answers 400 for
+            any other value type (best guess).
+          type: object
+          additionalProperties: true
+        custom_payload:
+          type: object
+          additionalProperties: true
+          properties:
+            ios:
+              type: object
+              additionalProperties: true
+            android:
+              type: object
+              additionalProperties: true
+        custom_device:
+          type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              minLength: 1
+              maxLength: 4096
+            platform:
+              type: string
+            last_used:
+              type: integer
+            attributes:
+              type: object
+              additionalProperties: true
+        send_to_unsubscribed:
+          type: boolean
+        disable_message_retention:
+          type: boolean
+        queue_draft:
+          type: boolean
     SendInboxRequest:
       type: object
       required: [transactional_message_id, identifiers]
@@ -750,7 +848,19 @@ components:
               type: array
               items:
                 type: object
+                required: [id, platform, last_used]
                 additionalProperties: true
+                properties:
+                  id:
+                    type: string
+                    description: The device token.
+                  platform:
+                    type: string
+                  last_used:
+                    type: integer
+                  attributes:
+                    type: object
+                    additionalProperties: true
     DeliveryMessage:
       type: object
       required: [message]

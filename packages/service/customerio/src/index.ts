@@ -26,8 +26,10 @@ import {
   DEFAULT_TRANSACTIONAL_MESSAGES,
   type Delivery,
   type DeliveryState,
+  type Device,
   FAILURE_STATES,
   type Profile,
+  type PushDetail,
   type Settings,
   type SubscriptionPreferences,
   type TransactionalMessage,
@@ -43,7 +45,10 @@ export type {
   CustomerOptOuts,
   Delivery,
   DeliveryState,
+  Device,
+  PersonDevices,
   Profile,
+  PushDetail,
   SenderOptOut,
   Settings,
   SubscriptionPreferences,
@@ -55,6 +60,7 @@ export {
   DEFAULT_TRANSACTIONAL_MESSAGES,
   DELIVERY_STATES,
   FAILURE_STATES,
+  MAX_DEVICES_PER_PERSON,
   TRANSACTIONAL_EMAIL_KEYS,
 } from "./state.js"
 
@@ -109,6 +115,7 @@ const CDP_OPERATIONS = new Set(["CdpIdentify", "CdpTrack", "CdpBatch"])
 const APP_OPERATIONS = new Set([
   "SendEmail",
   "SendSms",
+  "SendPush",
   "SendInboxMessage",
   "ListTransactionalMessages",
   "GetTransactionalMessage",
@@ -117,6 +124,17 @@ const APP_OPERATIONS = new Set([
   "GetCustomerOptOuts",
   "GetMessage",
 ])
+
+/** The CDP semantic events that maintain a person's device list. */
+export const DEVICE_UPSERT_EVENT = "Device Created or Updated"
+export const DEVICE_DELETE_EVENT = "Device Deleted"
+
+/** Unix seconds from an ISO timestamp, or undefined. */
+const unixSeconds = (value: unknown): number | undefined => {
+  if (typeof value !== "string") return undefined
+  const ms = Date.parse(value)
+  return Number.isNaN(ms) ? undefined : Math.floor(ms / 1000)
+}
 
 const E164 = /^\+[1-9]\d{1,14}$/
 
@@ -218,7 +236,8 @@ export class CustomerIoAPI implements FetchAPI {
   readonly state: CustomerIoState
   private readonly service: Service
   private readonly baseNow: () => number
-  private readonly now: () => number
+  /** The namespace clock (shared clock plus this namespace's offset), epoch ms. */
+  readonly now: () => number
   private readonly wallClock: () => number
   private readonly onReport: ((event: ReportingEvent) => void) | undefined
   /** Serializes handlers so concurrent identifies merge instead of dropping traits. */
@@ -241,6 +260,7 @@ export class CustomerIoAPI implements FetchAPI {
       CdpBatch: (context) => this.enqueue(() => this.cdp(context, "batch")),
       SendEmail: (context) => this.enqueue(() => this.send(context, "email")),
       SendSms: (context) => this.enqueue(() => this.send(context, "sms")),
+      SendPush: (context) => this.enqueue(() => this.sendPush(context)),
       SendInboxMessage: (context) => this.enqueue(() => this.send(context, "inbox")),
       ListTransactionalMessages: (context) => this.enqueue(() => this.listMessages(context)),
       GetTransactionalMessage: (context) => this.enqueue(() => this.oneMessage(context)),
@@ -357,6 +377,7 @@ export class CustomerIoAPI implements FetchAPI {
       duplicate,
     }
     this.state.cdp.insert(duplicate ? `${messageId}#${this.state.cdp.count()}` : messageId, event)
+    if (!duplicate && event.type === "track") this.applyDeviceEvent(item, event, at)
     if (duplicate || event.type !== "identify") return messageId
     const id = event.userId ?? event.anonymousId ?? ""
     const existing = this.state.profile(id)
@@ -377,7 +398,197 @@ export class CustomerIoAPI implements FetchAPI {
     return messageId
   }
 
+  /**
+   * `Device Created or Updated` upserts `context.device.token` on the event's `userId` (creating
+   * the person when needed) and refreshes `last_used`; `Device Deleted` removes it. Events
+   * without a `userId` or token change nothing.
+   */
+  private applyDeviceEvent(item: Json, event: CdpEvent, at: string): void {
+    if (event.event !== DEVICE_UPSERT_EVENT && event.event !== DEVICE_DELETE_EVENT) return
+    const userId = event.userId
+    const context = isRecord(item.context) ? item.context : {}
+    const device = isRecord(context.device) ? context.device : {}
+    const token =
+      typeof device.token === "string" && device.token
+        ? device.token
+        : typeof event.properties.device_id === "string" && event.properties.device_id
+          ? event.properties.device_id
+          : undefined
+    if (!userId || !token) return
+    if (event.event === DEVICE_DELETE_EVENT) {
+      this.state.removeDevice(userId, token)
+      return
+    }
+    const platform =
+      typeof device.type === "string" && device.type
+        ? device.type.toLowerCase()
+        : typeof event.properties.device_platform === "string"
+          ? event.properties.device_platform.toLowerCase()
+          : "unknown"
+    const lastUsed =
+      typeof event.properties.last_used === "number" && Number.isFinite(event.properties.last_used)
+        ? Math.floor(event.properties.last_used)
+        : (unixSeconds(event.timestamp) ?? Math.floor(this.now() / 1000))
+    if (!this.state.profile(userId)) this.state.upsertProfile(userId, {}, at)
+    this.state.upsertDevice(userId, {
+      id: token,
+      platform,
+      last_used: lastUsed,
+      attributes: { ...event.properties },
+    })
+  }
+
   // ---------------------------------------------------------------- App API sends
+
+  /**
+   * `POST /v1/send/push`. Targets come from the person's device list: `to` absent or `all` is
+   * every device, `last_used` the newest, otherwise the one token. Unknown targets follow the
+   * `pushUnknownTargets` setting (or the `push_unknown_targets_rejected` preset).
+   */
+  private sendPush(context: OperationContext): Response {
+    if (context.body.kind !== "json" || !isRecord(context.body.value)) {
+      return appError(400, "invalid JSON body")
+    }
+    const issue = bodyIssues(context)[0]
+    if (issue) {
+      const missing = /^missing required property (.+)$/.exec(issue.message)
+      return appError(
+        400,
+        missing
+          ? `${[issue.path, missing[1]].filter(Boolean).join(".")}: is required`
+          : `${issue.path || "body"}: ${issue.message}`,
+      )
+    }
+    const body = context.body.value
+    const identifiers = isRecord(body.identifiers)
+      ? (body.identifiers as { id?: string; email?: string; cio_id?: string })
+      : {}
+    const named = (["id", "email", "cio_id"] as const).filter(
+      (key) => typeof identifiers[key] === "string" && identifiers[key] !== "",
+    )
+    if (named.length !== 1) {
+      return appError(400, "identifiers: must contain exactly one of id, email or cio_id")
+    }
+    if (body.platform !== undefined && body.platform !== "all") {
+      return appError(400, "platform: values other than all require web push")
+    }
+    if (body.queue_draft === true) {
+      return appError(400, "queue_draft: drafts are not modelled by the Mockingbird emulator")
+    }
+    const customData = isRecord(body.custom_data) ? body.custom_data : null
+    for (const [key, value] of Object.entries(customData ?? {})) {
+      if (typeof value !== "string") {
+        return appError(
+          400,
+          `custom_data.${key}: must be a string (Firebase only supports strings)`,
+        )
+      }
+    }
+    const rawId = String(body.transactional_message_id)
+    const message = this.state.message(rawId)
+    if (!message && this.state.current().strictMessages) {
+      return appError(400, "transactional_message_id not found")
+    }
+    const before = this.state.profileFor(identifiers)
+    const reject =
+      this.state.current().pushUnknownTargets === "reject" ||
+      faultEffect(context.request, "push_unknown_targets_rejected") !== undefined
+    if (!before && reject) return appError(400, "identifiers: no person matches the identifiers")
+    if (identifiers.id && !before) this.state.upsertProfile(identifiers.id, {}, this.iso())
+    const profile = before ?? (identifiers.id ? this.state.profile(identifiers.id) : undefined)
+    if (profile && isRecord(body.custom_device) && typeof body.custom_device.token === "string") {
+      const device = body.custom_device
+      this.state.upsertDevice(profile.id, {
+        id: device.token as string,
+        platform: typeof device.platform === "string" ? device.platform.toLowerCase() : "unknown",
+        last_used:
+          typeof device.last_used === "number"
+            ? Math.floor(device.last_used)
+            : Math.floor(this.now() / 1000),
+        attributes: isRecord(device.attributes) ? { ...device.attributes } : {},
+      })
+    }
+    const devices = profile ? this.state.devicesOf(profile.id) : []
+    const to = typeof body.to === "string" ? body.to : "all"
+    let targets: string[]
+    let toOnProfile: boolean | null = null
+    if (to === "all") targets = devices.map((device) => device.id)
+    else if (to === "last_used") {
+      const newest = devices.reduce<Device | undefined>(
+        (best, device) => (!best || device.last_used >= best.last_used ? device : best),
+        undefined,
+      )
+      targets = newest ? [newest.id] : []
+    } else {
+      toOnProfile = devices.some((device) => device.id === to)
+      targets = [to]
+    }
+    if (reject && toOnProfile === false) return appError(400, "to: device not found on profile")
+    if (reject && targets.length === 0) return appError(400, "to: the person has no devices")
+    const sendToUnsubscribed =
+      body.send_to_unsubscribed === true ||
+      (body.send_to_unsubscribed === undefined && !!message?.send_to_unsubscribed)
+    const channelOff = profile?.preferences.channels.push === false
+    const suppressed = !sendToUnsubscribed && (!!profile?.unsubscribed || channelOff)
+    const retain = body.disable_message_retention !== true
+    const keepBody = retain || this.state.current().retainMessageDataForTests
+    const text = (key: string) => (typeof body[key] === "string" ? (body[key] as string) : null)
+    const push: PushDetail = {
+      to,
+      devices: targets,
+      to_on_profile: toOnProfile,
+      profile_found: !!before,
+      title: keepBody ? text("title") : null,
+      message: keepBody ? text("message") : null,
+      custom_data: keepBody ? (customData as Record<string, string> | null) : null,
+      custom_payload: keepBody && isRecord(body.custom_payload) ? body.custom_payload : null,
+      sound: text("sound"),
+      image_url: keepBody ? text("image_url") : null,
+      link: keepBody ? text("link") : null,
+    }
+    const deliveryId = this.state.deliveryId()
+    const queuedAt = Math.floor(this.now() / 1000)
+    const reason = suppressed ? (profile?.unsubscribed ? "unsubscribed" : "channel_off") : null
+    const delivery: Delivery = {
+      id: deliveryId,
+      to: targets.length ? targets : to,
+      createdAt: this.iso(),
+      channel: "push",
+      transactionalMessageId: rawId,
+      messageId: message?.id ?? null,
+      identifiers,
+      from: null,
+      subject: null,
+      messageData:
+        keepBody && isRecord(body.message_data) ? body.message_data : keepBody ? {} : null,
+      links: [],
+      originalLinks: [],
+      tracked: false,
+      sendToUnsubscribed,
+      disableMessageRetention: !retain,
+      headers: {},
+      attachments: [],
+      state: suppressed ? "suppressed" : "pending",
+      reason,
+      failureMessage: reason,
+      push,
+      metrics: suppressed ? { suppressed: queuedAt } : {},
+      visibleAt: this.now() + this.state.current().statusVisibleAfterMs,
+      queuedAt,
+      clicks: 0,
+    }
+    this.state.deliveries.record(delivery)
+    const ids = { deliveryId, transactionalMessageId: rawId }
+    if (faultEffect(context.request, "send_drop_after_accept") !== undefined) {
+      throw new DroppedConnectionError()
+    }
+    if (faultEffect(context.request, "accepted_but_500") !== undefined) {
+      return annotateResponse(appError(500, "internal server error"), { ids })
+    }
+    return annotateResponse(jsonRes(200, { delivery_id: deliveryId, queued_at: queuedAt }), {
+      ids,
+    })
+  }
 
   private send(context: OperationContext, channel: Channel): Response {
     if (context.body.kind !== "json" || !isRecord(context.body.value)) {
@@ -592,7 +803,10 @@ export class CustomerIoAPI implements FetchAPI {
             ...(profile.email ? { email: profile.email } : {}),
           },
           attributes,
-          devices: [],
+          devices: this.state.devicesOf(profile.id).map(({ attributes, ...device }) => ({
+            ...device,
+            ...(Object.keys(attributes).length ? { attributes } : {}),
+          })),
         },
       }),
       { ids: { userId: profile.id } },
