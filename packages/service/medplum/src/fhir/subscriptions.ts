@@ -8,7 +8,7 @@ import {
 import type { Resource, Subscription } from "@medplum/fhirtypes"
 import type { FhirStore } from "./store.js"
 
-type Delivery = {
+export type Delivery = {
   subscription: Subscription
   resource: Resource
   interaction: BackgroundJobInteraction
@@ -18,7 +18,13 @@ type Delivery = {
 export class RestHookSubscriptions {
   private readonly outbox: Collection<Delivery>
 
-  constructor(private readonly store: FhirStore) {
+  /** `runBot` takes deliveries whose endpoint is `Bot/<id>`, with the headers a hook would get. */
+  constructor(
+    private readonly store: FhirStore,
+    private readonly runBot: (
+      delivery: Delivery & { headers: Record<string, string> },
+    ) => Promise<void>,
+  ) {
     this.outbox = new Collection(store.sqlite, store.namespace, "medplum:rest-hooks")
   }
 
@@ -111,6 +117,12 @@ export class RestHookSubscriptions {
               ).join(""),
             )
           }
+          if (subscription.channel.endpoint?.startsWith("Bot/")) {
+            const record: Record<string, string> = {}
+            for (const [name, value] of headers) record[headerName(name)] = value
+            await this.runBot({ subscription, resource, interaction, headers: record })
+            return
+          }
           const response = await fetch(subscription.channel.endpoint as string, {
             method: "POST",
             headers,
@@ -125,3 +137,7 @@ export class RestHookSubscriptions {
     )
   }
 }
+
+/** `X-Medplum-Subscription`, not the `x-medplum-subscription` that `Headers` iterates. */
+const headerName = (name: string): string =>
+  name.replace(/(^|-)([a-z])/g, (_, dash: string, letter: string) => dash + letter.toUpperCase())
